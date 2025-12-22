@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAllKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI, KpiStatus } from '@/hooks/useKpis';
+import { useKpisByPeriod, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI, KpiStatus } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { useKpiFilters } from '@/hooks/useKpiFilters';
 import { KpiFilterBar } from '@/components/ui/KpiFilterBar';
@@ -88,9 +88,8 @@ export default function SelfReview() {
     isAdmin,
   } = useKpiFilters();
   
-  // Fetch all KPIs with employee info
-  const { data: allKpisRaw, isLoading: loadingAllKpis } = useAllKpis();
-  
+  // Fetch KPIs for selected review period (server-side filtered)
+  const { data: allKpisRaw, isLoading: loadingAllKpis } = useKpisByPeriod(selectedPeriod, selectedYear);
   const allKpis = useMemo(() => {
     if (!allKpisRaw) return [];
     return allKpisRaw.map(k => ({
