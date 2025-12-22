@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useMyKpis, useAllKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI } from '@/hooks/useKpis';
+import { useMyKpis, useAllKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI, KpiStatus } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
-import { Send, Eye, CheckCircle2, Clock, AlertCircle, Filter, User, Paperclip } from 'lucide-react';
+import { Send, Eye, CheckCircle2, Clock, AlertCircle, Filter, User, Paperclip, Lock } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -32,6 +32,20 @@ const statusLabels: Record<string, string> = {
   manager_check: 'Under Manager Review',
   audit: 'Under Audit',
   approved: 'Approved',
+};
+
+const kpiStatusColors: Record<KpiStatus, string> = {
+  open: 'bg-muted text-muted-foreground',
+  submitted: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  approved_by_manager: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+  locked: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+};
+
+const kpiStatusLabels: Record<KpiStatus, string> = {
+  open: 'Open',
+  submitted: 'Submitted',
+  approved_by_manager: 'Approved',
+  locked: 'Locked',
 };
 
 const ratingOptions: { value: RatingLevel; label: string; color: string; score: number }[] = [
@@ -316,7 +330,7 @@ export default function SelfReview() {
                 <TableHead>Weightage</TableHead>
                 <TableHead>Achieved</TableHead>
                 <TableHead>Self Rating</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>KPI Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -324,8 +338,11 @@ export default function SelfReview() {
               {filteredKpis?.map(kpi => {
                 const submission = submissionMap.get(kpi.id);
                 const employee = isAdmin && 'employee' in kpi ? (kpi as any).employee : null;
+                const kpiStatus = submission?.kpi_status || 'open';
+                const isLocked = kpiStatus === 'approved_by_manager' || kpiStatus === 'locked';
+                
                 return (
-                  <TableRow key={kpi.id}>
+                  <TableRow key={kpi.id} className={isLocked ? 'opacity-75 bg-muted/30' : ''}>
                     {isAdmin && (
                       <TableCell>
                         <div className="text-sm">
@@ -375,13 +392,17 @@ export default function SelfReview() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge className={statusColors[kpi.status]}>
-                        {statusLabels[kpi.status]}
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                        <Badge className={kpiStatusColors[kpiStatus]}>
+                          {kpiStatusLabels[kpiStatus]}
+                        </Badge>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        {kpi.status === 'kra_set' && (
+                        {/* Only allow editing if KPI is not locked */}
+                        {!isLocked && kpiStatus === 'open' && (
                           <Button
                             size="sm"
                             onClick={() => openReviewDialog(kpi)}
@@ -390,7 +411,7 @@ export default function SelfReview() {
                             Submit
                           </Button>
                         )}
-                        {kpi.status === 'self_review' && (
+                        {!isLocked && kpiStatus === 'submitted' && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -399,6 +420,12 @@ export default function SelfReview() {
                             <Send className="h-4 w-4 mr-1" />
                             Edit
                           </Button>
+                        )}
+                        {isLocked && (
+                          <Badge variant="outline" className="text-muted-foreground">
+                            <Lock className="h-3 w-3 mr-1" />
+                            Locked
+                          </Badge>
                         )}
                         <Button size="sm" variant="ghost" onClick={() => openViewDialog(kpi)}>
                           <Eye className="h-4 w-4" />

@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOpenQueryCount } from '@/hooks/useOpenQueryCount';
 import {
   Sidebar,
   SidebarContent,
@@ -14,6 +15,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   BarChart3,
   ClipboardList,
@@ -28,6 +30,7 @@ import {
   Target,
   CheckSquare,
   MessageSquare,
+  History,
 } from 'lucide-react';
 
 const menuItems = {
@@ -35,13 +38,14 @@ const menuItems = {
     { title: 'Dashboard', icon: Home, path: '/dashboard', roles: ['admin', 'manager', 'employee', 'auditor'] },
     { title: 'My KPIs', icon: Target, path: '/my-kpis', roles: ['employee', 'manager'] },
     { title: 'Self Review', icon: CheckSquare, path: '/self-review', roles: ['employee', 'manager', 'admin'] },
-    { title: 'Query Inbox', icon: MessageSquare, path: '/queries', roles: ['employee', 'manager', 'admin', 'auditor'] },
+    { title: 'Query Inbox', icon: MessageSquare, path: '/queries', roles: ['employee', 'manager', 'admin', 'auditor'], showBadge: true },
   ],
   manager: [
     { title: 'Team Review', icon: Users, path: '/team-review', roles: ['manager', 'admin'] },
   ],
   audit: [
     { title: 'Audit Panel', icon: Shield, path: '/audit', roles: ['auditor'] },
+    { title: 'Audit Logs', icon: History, path: '/audit-logs', roles: ['auditor'] },
   ],
   admin: [
     { title: 'User Management', icon: Users, path: '/admin/users', roles: ['admin'] },
@@ -49,6 +53,7 @@ const menuItems = {
     { title: 'Organization', icon: Building2, path: '/admin/organization', roles: ['admin'] },
     { title: 'KRA Categories', icon: ClipboardList, path: '/admin/categories', roles: ['admin'] },
     { title: 'Import Data', icon: Upload, path: '/admin/import', roles: ['admin'] },
+    { title: 'Audit Logs', icon: History, path: '/audit-logs', roles: ['admin'] },
   ],
   reports: [
     { title: 'Performance Report', icon: BarChart3, path: '/reports/performance', roles: ['admin', 'manager', 'auditor'] },
@@ -60,6 +65,7 @@ export function AppSidebar() {
   const { profile, role, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const { data: openQueryCount } = useOpenQueryCount();
 
   const filterByRole = (items: typeof menuItems.main) => {
     return items.filter(item => role && item.roles.includes(role));
@@ -102,6 +108,11 @@ export function AppSidebar() {
                   >
                     <item.icon className="h-4 w-4" />
                     <span>{item.title}</span>
+                    {'showBadge' in item && item.showBadge && openQueryCount && openQueryCount > 0 && (
+                      <Badge variant="destructive" className="ml-auto h-5 min-w-5 px-1 flex items-center justify-center text-xs">
+                        {openQueryCount}
+                      </Badge>
+                    )}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
