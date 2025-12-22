@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -115,6 +117,8 @@ export default function ImportData() {
   const [errors, setErrors] = useState<string[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [importSuccess, setImportSuccess] = useState(0);
+  const [useBackgroundImport, setUseBackgroundImport] = useState(true);
+  const [backgroundImportStarted, setBackgroundImportStarted] = useState(false);
   
   // Real-time progress tracking
   const [importProgress, setImportProgress] = useState({
@@ -335,6 +339,58 @@ export default function ImportData() {
   const handleImport = async () => {
     if (importData.length === 0) return;
 
+    // Background import mode - send to edge function
+    if (useBackgroundImport) {
+      setIsImporting(true);
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const authToken = sessionData?.session?.access_token;
+
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/import-kpis`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({ importData }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Import failed');
+        }
+
+        setBackgroundImportStarted(true);
+        toast({
+          title: 'Import Started',
+          description: `Processing ${importData.length} KPIs in background. You can continue working.`,
+        });
+        
+        // Clear the import data
+        setImportData([]);
+        
+        // Invalidate queries after a delay to pick up new data
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ['kpis'] });
+          queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
+          queryClient.invalidateQueries({ queryKey: ['profiles'] });
+          queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+        }, 5000);
+
+      } catch (error: any) {
+        toast({
+          title: 'Import Failed',
+          description: error.message,
+          variant: 'destructive',
+        });
+      } finally {
+        setIsImporting(false);
+      }
+      return;
+    }
+
+    // Foreground import mode - existing logic
     setIsImporting(true);
     let successCount = 0;
     let categoriesCreated = 0;
@@ -1088,7 +1144,7 @@ export default function ImportData() {
               <CardDescription>Upload an Excel file to bulk import employee KRAs and KPIs</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-4 items-center">
                 <Button variant="outline" onClick={downloadTemplate}>
                   <Download className="h-4 w-4 mr-2" />
                   Download Template
@@ -1101,7 +1157,27 @@ export default function ImportData() {
                     className="cursor-pointer"
                   />
                 </div>
+                <div className="flex items-center gap-2 ml-auto">
+                  <Checkbox
+                    id="background-import"
+                    checked={useBackgroundImport}
+                    onCheckedChange={(checked) => setUseBackgroundImport(checked === true)}
+                  />
+                  <Label htmlFor="background-import" className="text-sm cursor-pointer">
+                    Import in background (faster, no waiting)
+                  </Label>
+                </div>
               </div>
+
+              {backgroundImportStarted && (
+                <Alert className="border-green-200 bg-green-50 dark:bg-green-950/20">
+                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  <AlertTitle className="text-green-700 dark:text-green-300">Import Running in Background</AlertTitle>
+                  <AlertDescription className="text-green-600 dark:text-green-400">
+                    Your data is being imported. You can continue working. Refresh the page in a few minutes to see the imported data.
+                  </AlertDescription>
+                </Alert>
+              )}
 
               <div className="text-sm text-muted-foreground">
                 <p className="font-medium mb-2">Required columns:</p>
