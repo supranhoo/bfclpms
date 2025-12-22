@@ -275,8 +275,13 @@ export default function AuditPanel() {
               {filteredKpis?.map(kpi => {
                 const submission = submissionMap.get(kpi.id);
                 const employee = kpi.profiles as any;
+                const isNaKpi = submission?.is_na || false;
+                
                 return (
-                  <TableRow key={kpi.id}>
+                  <TableRow 
+                    key={kpi.id}
+                    className={isNaKpi ? 'opacity-60 bg-muted/20' : ''}
+                  >
                     <TableCell>
                       <div>
                         <p className="font-medium">{employee?.full_name || 'N/A'}</p>
@@ -306,9 +311,21 @@ export default function AuditPanel() {
                       </button>
                     </TableCell>
                     <TableCell>{kpi.target_value}</TableCell>
-                    <TableCell>{submission?.achieved_value || '-'}</TableCell>
                     <TableCell>
-                      {submission?.self_rating && (
+                      {isNaKpi ? (
+                        <Badge variant="outline" className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                          N/A
+                        </Badge>
+                      ) : (
+                        submission?.achieved_value || '-'
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {isNaKpi ? (
+                        <Badge variant="outline" className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                          N/A
+                        </Badge>
+                      ) : submission?.self_rating && (
                         <Badge
                           style={{ backgroundColor: ratingOptions.find(r => r.value === submission.self_rating)?.color }}
                           className="text-white"
@@ -318,7 +335,11 @@ export default function AuditPanel() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {submission?.manager_rating && (
+                      {isNaKpi ? (
+                        <Badge variant="outline" className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                          N/A
+                        </Badge>
+                      ) : submission?.manager_rating && (
                         <Badge
                           style={{ backgroundColor: ratingOptions.find(r => r.value === submission.manager_rating)?.color }}
                           className="text-white"
@@ -328,7 +349,11 @@ export default function AuditPanel() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {submission?.auditor_rating && (
+                      {isNaKpi ? (
+                        <Badge variant="outline" className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                          N/A
+                        </Badge>
+                      ) : submission?.auditor_rating && (
                         <Badge
                           style={{ backgroundColor: ratingOptions.find(r => r.value === submission.auditor_rating)?.color }}
                           className="text-white"
@@ -343,10 +368,15 @@ export default function AuditPanel() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {kpi.status === 'manager_check' && (
+                      {kpi.status === 'manager_check' && !isNaKpi && (
                         <Button size="sm" onClick={() => openReviewDialog(kpi)}>
                           Audit
                         </Button>
+                      )}
+                      {isNaKpi && (
+                        <Badge variant="outline" className="text-gray-500">
+                          Not Applicable
+                        </Badge>
                       )}
                     </TableCell>
                   </TableRow>

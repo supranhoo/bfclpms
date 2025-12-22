@@ -481,31 +481,36 @@ export default function ImportData() {
           const managerScore = row.managerRating;
           const auditorScore = row.auditRating;
           
-          // Parse achieved value
-          const parsedAchieved = achievedValue 
+          // Check if achieved value is N/A
+          const achievedStr = String(achievedValue || '').trim().toLowerCase();
+          const isNa = achievedStr === 'na' || achievedStr === 'n/a' || achievedStr === 'not applicable' || achievedStr === '-';
+          
+          // Parse achieved value (only if not N/A)
+          const parsedAchieved = isNa ? null : (achievedValue 
             ? parseFloat(String(achievedValue).replace('%', '').replace(/,/g, ''))
-            : null;
+            : null);
 
           const { error: submissionError } = await supabase
             .from('review_submissions')
             .insert({
               kpi_id: newKpi.id,
               achieved_value: parsedAchieved,
-              self_score: selfScore ? parseFloat(String(selfScore)) : null,
-              self_rating: mapScoreToRating(selfScore),
+              self_score: isNa ? null : (selfScore ? parseFloat(String(selfScore)) : null),
+              self_rating: isNa ? null : mapScoreToRating(selfScore),
               self_remarks: row.employeeRemarks || null,
-              manager_score: managerScore ? parseFloat(String(managerScore)) : null,
-              manager_rating: mapScoreToRating(managerScore),
+              manager_score: isNa ? null : (managerScore ? parseFloat(String(managerScore)) : null),
+              manager_rating: isNa ? null : mapScoreToRating(managerScore),
               manager_remarks: row.managerRemarks || null,
-              auditor_score: auditorScore ? parseFloat(String(auditorScore)) : null,
-              auditor_rating: mapScoreToRating(auditorScore),
+              auditor_score: isNa ? null : (auditorScore ? parseFloat(String(auditorScore)) : null),
+              auditor_rating: isNa ? null : mapScoreToRating(auditorScore),
               auditor_remarks: row.auditRemarks || null,
               kpi_status: determineKpiStatus(row),
+              is_na: isNa,
               // Use auditor score as final if available, else manager, else self
-              final_score: auditorScore ? parseFloat(String(auditorScore)) : 
+              final_score: isNa ? null : (auditorScore ? parseFloat(String(auditorScore)) : 
                 (managerScore ? parseFloat(String(managerScore)) : 
-                (selfScore ? parseFloat(String(selfScore)) : null)),
-              final_rating: mapScoreToRating(auditorScore || managerScore || selfScore),
+                (selfScore ? parseFloat(String(selfScore)) : null))),
+              final_rating: isNa ? null : mapScoreToRating(auditorScore || managerScore || selfScore),
             });
 
           if (submissionError) {

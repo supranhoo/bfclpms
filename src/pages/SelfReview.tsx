@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
@@ -114,6 +115,7 @@ export default function SelfReview() {
   const [selfRating, setSelfRating] = useState<RatingLevel | ''>('');
   const [selfRemarks, setSelfRemarks] = useState('');
   const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
+  const [isNa, setIsNa] = useState(false);
 
   const openLogicModal = (kpi: KPI) => {
     setSelectedKpi(kpi);
@@ -240,11 +242,13 @@ export default function SelfReview() {
       setSelfRating(existing.self_rating || '');
       setSelfRemarks(existing.self_remarks || '');
       setEvidenceUrl(existing.self_evidence_url || null);
+      setIsNa(existing.is_na || false);
     } else {
       setAchievedValue('');
       setSelfRating('');
       setSelfRemarks('');
       setEvidenceUrl(null);
+      setIsNa(false);
     }
     setReviewDialogOpen(true);
   };
@@ -287,7 +291,10 @@ export default function SelfReview() {
   };
 
   const handleSubmitReview = async () => {
-    if (!selectedKpi || !selfRating) return;
+    if (!selectedKpi) return;
+    
+    // For NA submissions, rating is not required
+    if (!isNa && !selfRating) return;
 
     const scoreMap: Record<RatingLevel, number> = {
       blue: 5,
@@ -298,11 +305,12 @@ export default function SelfReview() {
 
     await submitReview.mutateAsync({
       kpi_id: selectedKpi.id,
-      achieved_value: parseFloat(achievedValue) || 0,
-      self_rating: selfRating,
-      self_score: scoreMap[selfRating],
+      achieved_value: isNa ? null : (parseFloat(achievedValue) || 0),
+      self_rating: isNa ? null : (selfRating as RatingLevel),
+      self_score: isNa ? null : (selfRating ? scoreMap[selfRating as RatingLevel] : null),
       self_remarks: selfRemarks,
       self_evidence_url: evidenceUrl,
+      is_na: isNa,
     });
 
     setReviewDialogOpen(false);
@@ -508,9 +516,13 @@ export default function SelfReview() {
                 const kpiStatus = submission?.kpi_status || 'open';
                 const isLocked = kpiStatus === 'approved_by_manager' || kpiStatus === 'locked';
                 const canEdit = !isLocked && (isAdmin || kpi.employee_id === user?.id);
+                const isNaKpi = submission?.is_na || false;
                 
                 return (
-                  <TableRow key={kpi.id} className={isLocked ? 'opacity-75 bg-muted/30' : ''}>
+                  <TableRow 
+                    key={kpi.id} 
+                    className={`${isLocked ? 'opacity-75 bg-muted/30' : ''} ${isNaKpi ? 'opacity-60 bg-muted/20' : ''}`}
+                  >
                     <TableCell>
                       <div className="text-sm">
                         <div className="font-medium">{employee?.full_name || '-'}</div>
@@ -546,14 +558,22 @@ export default function SelfReview() {
                     </TableCell>
                     <TableCell>{kpi.weightage}%</TableCell>
                     <TableCell>
-                      {submission?.achieved_value !== null && submission?.achieved_value !== undefined ? (
+                      {isNaKpi ? (
+                        <Badge variant="outline" className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                          N/A
+                        </Badge>
+                      ) : submission?.achieved_value !== null && submission?.achieved_value !== undefined ? (
                         <span className="font-medium">{submission.achieved_value}</span>
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
                     <TableCell>
-                      {submission?.self_rating ? (
+                      {isNaKpi ? (
+                        <Badge variant="outline" className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                          N/A
+                        </Badge>
+                      ) : submission?.self_rating ? (
                         <Badge
                           style={{
                             backgroundColor: ratingOptions.find(r => r.value === submission.self_rating)?.color,
@@ -667,60 +687,91 @@ export default function SelfReview() {
               </div>
             )}
 
-            {/* Achieved Value */}
-            <div className="space-y-2">
-              <Label htmlFor="achieved">Achieved Value *</Label>
-              <Input
-                id="achieved"
-                type="number"
-                value={achievedValue}
-                onChange={(e) => handleAchievedChange(e.target.value)}
-                placeholder="Enter your achieved value"
+            {/* Mark as N/A Checkbox */}
+            <div className="flex items-center space-x-2 p-3 border rounded-lg bg-muted/30">
+              <Checkbox
+                id="is_na"
+                checked={isNa}
+                onCheckedChange={(checked) => {
+                  setIsNa(checked as boolean);
+                  if (checked) {
+                    setAchievedValue('');
+                    setSelfRating('');
+                  }
+                }}
               />
-              {achievedValue && selectedKpi?.target_value && (
-                <p className="text-sm text-muted-foreground">
-                  Achievement: {((parseFloat(achievedValue) / selectedKpi.target_value) * 100).toFixed(1)}% of target
-                </p>
-              )}
+              <Label htmlFor="is_na" className="cursor-pointer text-sm">
+                Mark as N/A (Not Applicable) - This KPI does not apply for this review period
+              </Label>
             </div>
+
+            {/* Achieved Value - Hidden when N/A */}
+            {!isNa && (
+              <div className="space-y-2">
+                <Label htmlFor="achieved">Achieved Value *</Label>
+                <Input
+                  id="achieved"
+                  type="number"
+                  value={achievedValue}
+                  onChange={(e) => handleAchievedChange(e.target.value)}
+                  placeholder="Enter your achieved value"
+                />
+                {achievedValue && selectedKpi?.target_value && (
+                  <p className="text-sm text-muted-foreground">
+                    Achievement: {((parseFloat(achievedValue) / selectedKpi.target_value) * 100).toFixed(1)}% of target
+                  </p>
+                )}
+              </div>
+            )}
             
-            {/* Self Rating */}
-            <div className="space-y-2">
-              <Label htmlFor="rating">Self Rating *</Label>
-              <Select value={selfRating} onValueChange={(v) => setSelfRating(v as RatingLevel)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select your rating" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ratingOptions.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: opt.color }}
-                        />
-                        {opt.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Self Rating - Hidden when N/A */}
+            {!isNa && (
+              <div className="space-y-2">
+                <Label htmlFor="rating">Self Rating *</Label>
+                <Select value={selfRating} onValueChange={(v) => setSelfRating(v as RatingLevel)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select your rating" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ratingOptions.map(opt => (
+                      <SelectItem key={`${opt.value}-${opt.score}`} value={opt.value}>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: opt.color }}
+                          />
+                          {opt.label}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* N/A Notice */}
+            {isNa && (
+              <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-900">
+                <p className="text-sm text-muted-foreground">
+                  This KPI will be marked as Not Applicable. It will be excluded from overall score calculations.
+                </p>
+              </div>
+            )}
 
             {/* Self Remarks */}
             <div className="space-y-2">
-              <Label htmlFor="remarks">Justification & Evidence</Label>
+              <Label htmlFor="remarks">{isNa ? 'Reason for N/A' : 'Justification & Evidence'}</Label>
               <Textarea
                 id="remarks"
                 value={selfRemarks}
                 onChange={(e) => setSelfRemarks(e.target.value)}
-                placeholder="Describe your achievements, provide evidence or justification for your rating..."
+                placeholder={isNa ? 'Explain why this KPI is not applicable...' : 'Describe your achievements, provide evidence or justification for your rating...'}
                 rows={4}
               />
             </div>
 
-            {/* Evidence File Upload */}
-            {user && selectedKpi && (
+            {/* Evidence File Upload - Hidden when N/A */}
+            {!isNa && user && selectedKpi && (
               <EvidenceUpload
                 userId={user.id}
                 kpiId={selectedKpi.id}
@@ -736,7 +787,7 @@ export default function SelfReview() {
             </Button>
             <Button 
               onClick={handleSubmitReview} 
-              disabled={!selfRating || !achievedValue || submitReview.isPending}
+              disabled={(!isNa && (!selfRating || !achievedValue)) || submitReview.isPending}
             >
               {submitReview.isPending ? 'Submitting...' : 'Submit Review'}
             </Button>
