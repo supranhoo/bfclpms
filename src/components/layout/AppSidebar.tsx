@@ -26,12 +26,14 @@ import {
   Building2,
   Upload,
   Target,
+  CheckSquare,
 } from 'lucide-react';
 
 const menuItems = {
   main: [
     { title: 'Dashboard', icon: Home, path: '/dashboard', roles: ['admin', 'manager', 'employee', 'auditor'] },
     { title: 'My KPIs', icon: Target, path: '/my-kpis', roles: ['employee', 'manager'] },
+    { title: 'Self Review', icon: CheckSquare, path: '/self-review', roles: ['employee', 'manager', 'admin'] },
   ],
   manager: [
     { title: 'Team Review', icon: Users, path: '/team-review', roles: ['manager'] },

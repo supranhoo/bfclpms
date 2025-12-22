@@ -8,6 +8,7 @@ import { DashboardLayout } from "./components/layout/DashboardLayout";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import MyKpis from "./pages/MyKpis";
+import SelfReview from "./pages/SelfReview";
 import TeamReview from "./pages/TeamReview";
 import AuditPanel from "./pages/AuditPanel";
 import UserManagement from "./pages/admin/UserManagement";
@@ -34,6 +35,7 @@ const App = () => (
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/my-kpis" element={<MyKpis />} />
+              <Route path="/self-review" element={<SelfReview />} />
               <Route path="/team-review" element={<TeamReview />} />
               <Route path="/audit" element={<AuditPanel />} />
               <Route path="/admin/users" element={<UserManagement />} />
