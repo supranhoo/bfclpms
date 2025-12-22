@@ -1,8 +1,16 @@
-import { useKpiFilters, KpiFilterState } from '@/hooks/useKpiFilters';
+import { KpiFilterState, ReviewStatus } from '@/hooks/useKpiFilters';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Building2, Users, User, Briefcase, RotateCcw, Filter } from 'lucide-react';
+import { Building2, Users, User, Briefcase, RotateCcw, Filter, CheckCircle2 } from 'lucide-react';
+
+const statusOptions: { value: ReviewStatus; label: string; color: string }[] = [
+  { value: 'kra_set', label: 'KRA Set', color: 'bg-muted' },
+  { value: 'self_review', label: 'Self Review', color: 'bg-blue-100' },
+  { value: 'manager_check', label: 'Manager Check', color: 'bg-yellow-100' },
+  { value: 'audit', label: 'Audit', color: 'bg-purple-100' },
+  { value: 'approved', label: 'Approved', color: 'bg-green-100' },
+];
 
 interface KpiFilterBarProps {
   filters: KpiFilterState;
@@ -15,6 +23,7 @@ interface KpiFilterBarProps {
   employees: { id: string; full_name: string | null; email: string; employee_code: string | null }[];
   categories?: { id: string; name: string; color: string | null }[];
   showCategoryFilter?: boolean;
+  showStatusFilter?: boolean;
   isLoading?: boolean;
 }
 
@@ -29,6 +38,7 @@ export function KpiFilterBar({
   employees,
   categories,
   showCategoryFilter = true,
+  showStatusFilter = true,
   isLoading,
 }: KpiFilterBarProps) {
   const activeFilterCount = [
@@ -38,6 +48,7 @@ export function KpiFilterBar({
     filters.managerId,
     filters.employeeId,
     filters.categoryId,
+    filters.status,
   ].filter(Boolean).length;
 
   return (
@@ -169,6 +180,28 @@ export function KpiFilterBar({
             ))}
           </SelectContent>
         </Select>
+
+        {/* Status Filter */}
+        {showStatusFilter && (
+          <Select 
+            value={filters.status || 'all'} 
+            onValueChange={(v) => updateFilter('status', v === 'all' ? null : v)}
+            disabled={isLoading}
+          >
+            <SelectTrigger className="w-[160px]">
+              <CheckCircle2 className="h-4 w-4 mr-2 text-muted-foreground" />
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              {statusOptions.map(opt => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         {/* Category Filter */}
         {showCategoryFilter && categories && categories.length > 0 && (
