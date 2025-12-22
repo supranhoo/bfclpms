@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useProfiles, useKraCategories, useDepartments, useDivisions, useBusinessUnits } from '@/hooks/useOrganization';
 import { useCreateKpi } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -1201,64 +1202,135 @@ export default function ImportData() {
           )}
 
           {importData.length > 0 && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Preview</CardTitle>
-                  <CardDescription>{importData.length} rows to import</CardDescription>
-                </div>
-                <Button onClick={handleImport} disabled={isImporting || errors.length > 0}>
-                  {isImporting ? 'Importing...' : `Import ${importData.length} KPIs`}
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Code</TableHead>
-                        <TableHead>Employee</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead>KRA</TableHead>
-                        <TableHead>KPI</TableHead>
-                        <TableHead>UOM</TableHead>
-                        <TableHead>Target</TableHead>
-                        <TableHead>Criteria</TableHead>
-                        <TableHead>R5</TableHead>
-                        <TableHead>R4</TableHead>
-                        <TableHead>R3</TableHead>
-                        <TableHead>Weight</TableHead>
-                        <TableHead>Month</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {importData.slice(0, 10).map((row, i) => (
-                        <TableRow key={i}>
-                          <TableCell>{row.newCode}</TableCell>
-                          <TableCell>{row.fullName}</TableCell>
-                          <TableCell>{row.category}</TableCell>
-                          <TableCell>{row.kra}</TableCell>
-                          <TableCell className="max-w-[150px] truncate">{row.kpi}</TableCell>
-                          <TableCell>{row.uom || '-'}</TableCell>
-                          <TableCell>{row.target}</TableCell>
-                          <TableCell className="text-xs">{row.criteria || 'Higher'}</TableCell>
-                          <TableCell>{row.r5 || '-'}</TableCell>
-                          <TableCell>{row.r4 || '-'}</TableCell>
-                          <TableCell>{row.r3 || '-'}</TableCell>
-                          <TableCell>{row.kpiWeightage || row.kpiWeightageScore || '-'}</TableCell>
-                          <TableCell>{row.month || '-'}</TableCell>
+            <>
+              {/* Data Summary - Debug Info */}
+              <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20">
+                <CardHeader>
+                  <CardTitle className="text-blue-700 dark:text-blue-300">📊 Data Summary</CardTitle>
+                  <CardDescription>Overview of employees and months in the uploaded file</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Months Summary */}
+                  <div>
+                    <p className="font-medium text-sm mb-2">Months Found:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from(new Set(importData.map(r => r.month || 'No Month'))).sort().map(month => {
+                        const count = importData.filter(r => (r.month || 'No Month') === month).length;
+                        return (
+                          <Badge key={month} variant="secondary" className="text-xs">
+                            {month} ({count} rows)
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  
+                  {/* Employee Summary per Month */}
+                  <div>
+                    <p className="font-medium text-sm mb-2">Employees per Month:</p>
+                    <div className="grid gap-2 md:grid-cols-3">
+                      {Array.from(new Set(importData.map(r => r.month || 'No Month'))).sort().map(month => {
+                        const monthRows = importData.filter(r => (r.month || 'No Month') === month);
+                        const employees = Array.from(new Set(monthRows.map(r => `${r.newCode}|${r.fullName}`)));
+                        return (
+                          <div key={month} className="rounded-lg border p-3 bg-background">
+                            <div className="font-medium text-sm">{month}</div>
+                            <div className="text-xs text-muted-foreground">{employees.length} unique employees, {monthRows.length} KPIs</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Search for specific employee */}
+                  <div>
+                    <p className="font-medium text-sm mb-2">Search for Employee (e.g., "Abhas" or "100856"):</p>
+                    <div className="max-h-48 overflow-auto rounded border p-2 bg-background text-xs font-mono">
+                      {importData
+                        .filter(r => 
+                          r.fullName?.toLowerCase().includes('abhas') || 
+                          r.newCode?.includes('100856') ||
+                          r.fullName?.toLowerCase().includes('luhar')
+                        )
+                        .map((r, i) => (
+                          <div key={i} className="py-1 border-b last:border-0">
+                            <span className="text-blue-600">{r.month}</span> | 
+                            Code: <span className="text-green-600">{r.newCode}</span> | 
+                            Name: <span className="text-purple-600">{r.fullName}</span> | 
+                            KPI: {r.kpi?.substring(0, 40)}...
+                          </div>
+                        ))}
+                      {importData.filter(r => 
+                        r.fullName?.toLowerCase().includes('abhas') || 
+                        r.newCode?.includes('100856') ||
+                        r.fullName?.toLowerCase().includes('luhar')
+                      ).length === 0 && (
+                        <div className="text-red-500">No rows found matching "Abhas", "100856", or "Luhar"</div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Preview</CardTitle>
+                    <CardDescription>{importData.length} rows to import</CardDescription>
+                  </div>
+                  <Button onClick={handleImport} disabled={isImporting || errors.length > 0}>
+                    {isImporting ? 'Importing...' : `Import ${importData.length} KPIs`}
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Code</TableHead>
+                          <TableHead>Employee</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>KRA</TableHead>
+                          <TableHead>KPI</TableHead>
+                          <TableHead>UOM</TableHead>
+                          <TableHead>Target</TableHead>
+                          <TableHead>Criteria</TableHead>
+                          <TableHead>R5</TableHead>
+                          <TableHead>R4</TableHead>
+                          <TableHead>R3</TableHead>
+                          <TableHead>Weight</TableHead>
+                          <TableHead>Month</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  {importData.length > 10 && (
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Showing first 10 of {importData.length} rows
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                      </TableHeader>
+                      <TableBody>
+                        {importData.slice(0, 10).map((row, i) => (
+                          <TableRow key={i}>
+                            <TableCell>{row.newCode}</TableCell>
+                            <TableCell>{row.fullName}</TableCell>
+                            <TableCell>{row.category}</TableCell>
+                            <TableCell>{row.kra}</TableCell>
+                            <TableCell className="max-w-[150px] truncate">{row.kpi}</TableCell>
+                            <TableCell>{row.uom || '-'}</TableCell>
+                            <TableCell>{row.target}</TableCell>
+                            <TableCell className="text-xs">{row.criteria || 'Higher'}</TableCell>
+                            <TableCell>{row.r5 || '-'}</TableCell>
+                            <TableCell>{row.r4 || '-'}</TableCell>
+                            <TableCell>{row.r3 || '-'}</TableCell>
+                            <TableCell>{row.kpiWeightage || row.kpiWeightageScore || '-'}</TableCell>
+                            <TableCell>{row.month || '-'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    {importData.length > 10 && (
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Showing first 10 of {importData.length} rows
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
           )}
         </TabsContent>
       </Tabs>
