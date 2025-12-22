@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useProfiles, useKraCategories, useDepartments, useDivisions, useBusinessUnits } from '@/hooks/useOrganization';
 import { useCreateKpi } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -53,8 +54,9 @@ interface EmployeeImportRow {
 }
 
 export default function ImportData() {
+  const queryClient = useQueryClient();
   const { data: profiles, refetch: refetchProfiles } = useProfiles();
-  const { data: categories } = useKraCategories();
+  const { data: categories, refetch: refetchCategories } = useKraCategories();
   const { data: divisions } = useDivisions();
   const { data: businessUnits } = useBusinessUnits();
   const { data: departments } = useDepartments();
@@ -157,7 +159,22 @@ export default function ImportData() {
 
     setIsImporting(true);
     let successCount = 0;
+    let categoriesCreated = 0;
     const importErrors: string[] = [];
+
+    // Cache for newly created categories during this import
+    const categoryCache = new Map<string, string>();
+    
+    // Pre-populate cache with existing categories
+    categories?.forEach(cat => {
+      categoryCache.set(cat.name.toLowerCase(), cat.id);
+    });
+
+    // Generate random color for new categories
+    const getRandomColor = () => {
+      const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
+      return colors[Math.floor(Math.random() * colors.length)];
+    };
 
     for (const row of importData) {
       try {
@@ -171,10 +188,34 @@ export default function ImportData() {
           continue;
         }
 
-        // Find category by name
-        const category = categories?.find(c => c.name.toLowerCase() === row.category?.toLowerCase());
-        if (!category) {
-          importErrors.push(`Category not found: ${row.category}`);
+        // Find category by name, or create it if it doesn't exist
+        let categoryId = categoryCache.get(row.category?.toLowerCase());
+        
+        if (!categoryId && row.category) {
+          // Create new category
+          const { data: newCategory, error: categoryError } = await supabase
+            .from('kra_categories')
+            .insert({
+              name: row.category,
+              weightage: 0,
+              color: getRandomColor(),
+              description: `Auto-created from import`,
+            })
+            .select()
+            .single();
+
+          if (categoryError) {
+            importErrors.push(`Failed to create category "${row.category}": ${categoryError.message}`);
+            continue;
+          }
+
+          categoryId = newCategory.id;
+          categoryCache.set(row.category.toLowerCase(), categoryId);
+          categoriesCreated++;
+        }
+
+        if (!categoryId) {
+          importErrors.push(`Category not found or could not be created: ${row.category}`);
           continue;
         }
 
@@ -196,7 +237,7 @@ export default function ImportData() {
 
         await createKpi.mutateAsync({
           employee_id: employee.id,
-          category_id: category.id,
+          category_id: categoryId,
           kra_name: row.kra,
           kpi_name: row.kpi,
           target_value: targetValue,
@@ -218,8 +259,18 @@ export default function ImportData() {
     setErrors(importErrors);
     setIsImporting(false);
 
+    // Refresh categories if any were created
+    if (categoriesCreated > 0) {
+      refetchCategories();
+      queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
+    }
+
     if (successCount > 0) {
-      toast({ title: `Successfully imported ${successCount} KPIs` });
+      let message = `Successfully imported ${successCount} KPIs`;
+      if (categoriesCreated > 0) {
+        message += ` and created ${categoriesCreated} new categories`;
+      }
+      toast({ title: message });
     }
   };
 
@@ -637,7 +688,7 @@ export default function ImportData() {
                 <ul className="list-disc list-inside space-y-1">
                   <li><code>newCode</code> - Employee Code</li>
                   <li><code>fullName</code> - Employee Full Name</li>
-                  <li><code>category</code> - KRA Category (must exist in system)</li>
+                  <li><code>category</code> - KRA Category (will be auto-created if doesn't exist)</li>
                   <li><code>kra</code> - Key Result Area</li>
                   <li><code>kpi</code> - KPI / Target Description</li>
                   <li><code>target</code> - Target Value</li>
@@ -649,6 +700,12 @@ export default function ImportData() {
                   <li><code>targetAchieved</code>, <code>rating</code> - Achievement data</li>
                   <li><code>employeeRemarks</code>, <code>managerRemarks</code>, <code>auditRemarks</code></li>
                 </ul>
+                <Alert className="mt-4">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <AlertDescription>
+                    New categories will be automatically created if they don't exist in the system.
+                  </AlertDescription>
+                </Alert>
               </div>
             </CardContent>
           </Card>
