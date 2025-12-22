@@ -202,12 +202,14 @@ export function useSubmitSelfReview() {
       self_rating,
       self_score,
       self_remarks,
+      self_evidence_url,
     }: {
       kpi_id: string;
       achieved_value: number;
       self_rating: RatingLevel;
       self_score: number;
       self_remarks: string;
+      self_evidence_url?: string | null;
     }) => {
       // First upsert the submission
       const { error: submissionError } = await supabase
@@ -218,6 +220,7 @@ export function useSubmitSelfReview() {
           self_rating,
           self_score,
           self_remarks,
+          self_evidence_url,
         }, {
           onConflict: 'kpi_id',
         });
