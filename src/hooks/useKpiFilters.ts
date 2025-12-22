@@ -18,6 +18,8 @@ export interface FilteredProfile {
   manager_name?: string | null;
 }
 
+export type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'audit' | 'approved';
+
 export interface KpiFilterState {
   divisionId: string | null;
   businessUnitId: string | null;
@@ -25,6 +27,7 @@ export interface KpiFilterState {
   managerId: string | null;
   employeeId: string | null;
   categoryId: string | null;
+  status: ReviewStatus | null;
 }
 
 // Fetch profiles with full organization hierarchy
@@ -101,6 +104,7 @@ export function useKpiFilters() {
     managerId: null,
     employeeId: null,
     categoryId: null,
+    status: null,
   });
 
   const { data: profiles, isLoading: loadingProfiles } = useProfilesWithHierarchy();
@@ -234,6 +238,7 @@ export function useKpiFilters() {
       managerId: null,
       employeeId: null,
       categoryId: null,
+      status: null,
     });
   }, []);
 

@@ -108,7 +108,7 @@ export default function SelfReview() {
   const [selfRemarks, setSelfRemarks] = useState('');
   const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
 
-  // Filter KPIs by period, category and employee hierarchy
+  // Filter KPIs by period, category, status and employee hierarchy
   const filteredKpis = useMemo(() => {
     let filtered = allKpis || [];
     
@@ -122,6 +122,11 @@ export default function SelfReview() {
       filtered = filtered.filter(k => k.category_id === filters.categoryId);
     }
     
+    // Filter by status
+    if (filters.status) {
+      filtered = filtered.filter(k => k.status === filters.status);
+    }
+    
     // Filter by employee hierarchy (Division > BU > Dept > Manager > Employee)
     if (filteredEmployeeIds.length > 0 && (filters.divisionId || filters.businessUnitId || filters.departmentId || filters.managerId || filters.employeeId)) {
       filtered = filtered.filter(k => filteredEmployeeIds.includes(k.employee_id));
@@ -132,8 +137,12 @@ export default function SelfReview() {
       filtered = filtered.filter(k => k.employee_id === user.id);
     }
     
-    // Only show KPIs that are pending self review or already submitted
-    return filtered.filter(k => k.status === 'kra_set' || k.status === 'self_review');
+    // If no status filter is applied, show KPIs pending self review or already submitted (default for self review page)
+    if (!filters.status) {
+      filtered = filtered.filter(k => k.status === 'kra_set' || k.status === 'self_review');
+    }
+    
+    return filtered;
   }, [allKpis, filters, filteredEmployeeIds, selectedPeriod, selectedYear, isAdmin, user?.id]);
 
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
