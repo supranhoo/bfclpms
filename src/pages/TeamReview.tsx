@@ -260,9 +260,13 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
             const openQueries = kpiQueries.filter((q: any) => q.status === 'open');
             const kpiStatus = submission?.kpi_status || 'open';
             const isLocked = kpiStatus === 'locked' || kpiStatus === 'approved_by_manager';
+            const isNaKpi = submission?.is_na || false;
             
             return (
-              <TableRow key={kpi.id} className={isLocked ? 'opacity-75 bg-muted/30' : ''}>
+              <TableRow 
+                key={kpi.id} 
+                className={`${isLocked ? 'opacity-75 bg-muted/30' : ''} ${isNaKpi ? 'opacity-60 bg-muted/20' : ''}`}
+              >
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <div
@@ -286,9 +290,21 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
                   </button>
                 </TableCell>
                 <TableCell>{kpi.target_value ?? '-'}</TableCell>
-                <TableCell>{submission?.achieved_value ?? '-'}</TableCell>
                 <TableCell>
-                  {submission?.self_rating ? (
+                  {isNaKpi ? (
+                    <Badge variant="outline" className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                      N/A
+                    </Badge>
+                  ) : (
+                    submission?.achieved_value ?? '-'
+                  )}
+                </TableCell>
+                <TableCell>
+                  {isNaKpi ? (
+                    <Badge variant="outline" className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                      N/A
+                    </Badge>
+                  ) : submission?.self_rating ? (
                     <Badge
                       style={{
                         backgroundColor: ratingOptions.find(r => r.value === submission.self_rating)?.color,
@@ -300,7 +316,11 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
                   ) : <span className="text-muted-foreground">-</span>}
                 </TableCell>
                 <TableCell>
-                  {submission?.manager_rating ? (
+                  {isNaKpi ? (
+                    <Badge variant="outline" className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                      N/A
+                    </Badge>
+                  ) : submission?.manager_rating ? (
                     <Badge
                       style={{
                         backgroundColor: ratingOptions.find(r => r.value === submission.manager_rating)?.color,

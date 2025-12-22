@@ -457,6 +457,7 @@ export type Database = {
           final_rating: Database["public"]["Enums"]["rating_level"] | null
           final_score: number | null
           id: string
+          is_na: boolean
           kpi_id: string
           kpi_status: Database["public"]["Enums"]["kpi_status"]
           manager_rating: Database["public"]["Enums"]["rating_level"] | null
@@ -478,6 +479,7 @@ export type Database = {
           final_rating?: Database["public"]["Enums"]["rating_level"] | null
           final_score?: number | null
           id?: string
+          is_na?: boolean
           kpi_id: string
           kpi_status?: Database["public"]["Enums"]["kpi_status"]
           manager_rating?: Database["public"]["Enums"]["rating_level"] | null
@@ -499,6 +501,7 @@ export type Database = {
           final_rating?: Database["public"]["Enums"]["rating_level"] | null
           final_score?: number | null
           id?: string
+          is_na?: boolean
           kpi_id?: string
           kpi_status?: Database["public"]["Enums"]["kpi_status"]
           manager_rating?: Database["public"]["Enums"]["rating_level"] | null

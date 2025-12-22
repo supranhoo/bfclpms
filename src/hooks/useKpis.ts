@@ -59,6 +59,7 @@ export interface ReviewSubmission {
   final_rating: RatingLevel | null;
   final_score: number | null;
   kpi_status: KpiStatus;
+  is_na: boolean;
 }
 
 export interface KpiQuery {
@@ -249,24 +250,27 @@ export function useSubmitSelfReview() {
       self_score,
       self_remarks,
       self_evidence_url,
+      is_na = false,
     }: {
       kpi_id: string;
-      achieved_value: number;
-      self_rating: RatingLevel;
-      self_score: number;
+      achieved_value: number | null;
+      self_rating: RatingLevel | null;
+      self_score: number | null;
       self_remarks: string;
       self_evidence_url?: string | null;
+      is_na?: boolean;
     }) => {
       // First upsert the submission
       const { error: submissionError } = await supabase
         .from('review_submissions')
         .upsert({
           kpi_id,
-          achieved_value,
-          self_rating,
-          self_score,
+          achieved_value: is_na ? null : achieved_value,
+          self_rating: is_na ? null : self_rating,
+          self_score: is_na ? null : self_score,
           self_remarks,
           self_evidence_url,
+          is_na,
         }, {
           onConflict: 'kpi_id',
         });
