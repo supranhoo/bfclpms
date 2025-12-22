@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useProfiles, useKraCategories, useDepartments } from '@/hooks/useOrganization';
+import { useProfiles, useKraCategories, useDepartments, useDivisions, useBusinessUnits } from '@/hooks/useOrganization';
 import { useCreateKpi } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -44,14 +44,18 @@ interface EmployeeImportRow {
   fullName: string;
   email: string;
   designation?: string;
+  division?: string;
+  businessUnit?: string;
   department?: string;
   pmsGrade?: string;
-  reportingManager?: string;
+  managerEmployeeId?: string;
 }
 
 export default function ImportData() {
   const { data: profiles, refetch: refetchProfiles } = useProfiles();
   const { data: categories } = useKraCategories();
+  const { data: divisions } = useDivisions();
+  const { data: businessUnits } = useBusinessUnits();
   const { data: departments } = useDepartments();
   const createKpi = useCreateKpi();
   const { toast } = useToast();
@@ -240,8 +244,7 @@ export default function ImportData() {
           )?.id || null;
 
           const managerId = profiles?.find(p => 
-            p.full_name?.toLowerCase() === row.reportingManager?.toLowerCase() ||
-            p.employee_code === row.reportingManager
+            p.employee_code === row.managerEmployeeId
           )?.id || null;
 
           const { error } = await supabase
@@ -292,8 +295,7 @@ export default function ImportData() {
           )?.id || null;
 
           const managerId = profiles?.find(p => 
-            p.full_name?.toLowerCase() === row.reportingManager?.toLowerCase() ||
-            p.employee_code === row.reportingManager
+            p.employee_code === row.managerEmployeeId
           )?.id || null;
 
           const { error: updateError } = await supabase
@@ -368,9 +370,11 @@ export default function ImportData() {
         fullName: 'John Doe',
         email: 'john.doe@company.com',
         designation: 'Manager',
+        division: 'Operations',
+        businessUnit: 'Plant',
         department: 'HR',
         pmsGrade: 'A',
-        reportingManager: 'Jane Smith',
+        managerEmployeeId: '100002',
       },
     ];
 
@@ -428,9 +432,11 @@ export default function ImportData() {
                 <p className="font-medium mt-4 mb-2">Optional columns:</p>
                 <ul className="list-disc list-inside space-y-1">
                   <li><code>designation</code> - Job Title</li>
+                  <li><code>division</code> - Division Name</li>
+                  <li><code>businessUnit</code> - Business Unit Name</li>
                   <li><code>department</code> - Department Name (must exist in system)</li>
                   <li><code>pmsGrade</code> - PMS Grade</li>
-                  <li><code>reportingManager</code> - Manager Name or Employee Code</li>
+                  <li><code>managerEmployeeId</code> - Manager's Employee Code</li>
                 </ul>
                 <Alert className="mt-4">
                   <AlertCircle className="h-4 w-4" />
@@ -486,9 +492,11 @@ export default function ImportData() {
                         <TableHead>Name</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Designation</TableHead>
+                        <TableHead>Division</TableHead>
+                        <TableHead>Business Unit</TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>Grade</TableHead>
-                        <TableHead>Manager</TableHead>
+                        <TableHead>Manager ID</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -498,9 +506,11 @@ export default function ImportData() {
                           <TableCell>{row.fullName}</TableCell>
                           <TableCell>{row.email}</TableCell>
                           <TableCell>{row.designation || '-'}</TableCell>
+                          <TableCell>{row.division || '-'}</TableCell>
+                          <TableCell>{row.businessUnit || '-'}</TableCell>
                           <TableCell>{row.department || '-'}</TableCell>
                           <TableCell>{row.pmsGrade || '-'}</TableCell>
-                          <TableCell>{row.reportingManager || '-'}</TableCell>
+                          <TableCell>{row.managerEmployeeId || '-'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
