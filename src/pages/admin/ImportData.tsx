@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useProfiles, useKraCategories } from '@/hooks/useOrganization';
+import { useProfiles, useKraCategories, useDepartments } from '@/hooks/useOrganization';
 import { useCreateKpi } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { FileSpreadsheet, AlertCircle, CheckCircle2, Download } from 'lucide-react';
+import { FileSpreadsheet, AlertCircle, CheckCircle2, Download, Users } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import * as XLSX from 'xlsx';
 
 interface KpiImportRow {
@@ -38,16 +39,34 @@ interface KpiImportRow {
   kpiStatus?: string;
 }
 
+interface EmployeeImportRow {
+  employeeCode: string;
+  fullName: string;
+  email: string;
+  designation?: string;
+  department?: string;
+  pmsGrade?: string;
+  reportingManager?: string;
+}
+
 export default function ImportData() {
-  const { data: profiles } = useProfiles();
+  const { data: profiles, refetch: refetchProfiles } = useProfiles();
   const { data: categories } = useKraCategories();
+  const { data: departments } = useDepartments();
   const createKpi = useCreateKpi();
   const { toast } = useToast();
 
+  // KPI Import State
   const [importData, setImportData] = useState<KpiImportRow[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [importSuccess, setImportSuccess] = useState(0);
+
+  // Employee Import State
+  const [employeeData, setEmployeeData] = useState<EmployeeImportRow[]>([]);
+  const [employeeErrors, setEmployeeErrors] = useState<string[]>([]);
+  const [isImportingEmployees, setIsImportingEmployees] = useState(false);
+  const [employeeImportSuccess, setEmployeeImportSuccess] = useState(0);
 
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -82,6 +101,45 @@ export default function ImportData() {
         setErrors(validationErrors);
         setImportData(jsonData);
         setImportSuccess(0);
+      } catch (error) {
+        toast({ title: 'Failed to parse file', description: 'Please upload a valid Excel file', variant: 'destructive' });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }, [toast]);
+
+  const handleEmployeeFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json<EmployeeImportRow>(worksheet);
+
+        // Validate data
+        const validationErrors: string[] = [];
+        jsonData.forEach((row, index) => {
+          if (!row.employeeCode) {
+            validationErrors.push(`Row ${index + 2}: Missing employee code`);
+          }
+          if (!row.fullName) {
+            validationErrors.push(`Row ${index + 2}: Missing full name`);
+          }
+          if (!row.email) {
+            validationErrors.push(`Row ${index + 2}: Missing email`);
+          } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
+            validationErrors.push(`Row ${index + 2}: Invalid email format`);
+          }
+        });
+
+        setEmployeeErrors(validationErrors);
+        setEmployeeData(jsonData);
+        setEmployeeImportSuccess(0);
       } catch (error) {
         toast({ title: 'Failed to parse file', description: 'Please upload a valid Excel file', variant: 'destructive' });
       }
@@ -160,6 +218,113 @@ export default function ImportData() {
     }
   };
 
+  const handleEmployeeImport = async () => {
+    if (employeeData.length === 0) return;
+
+    setIsImportingEmployees(true);
+    let successCount = 0;
+    const importErrors: string[] = [];
+
+    for (const row of employeeData) {
+      try {
+        // Check if employee already exists by email or code
+        const existingEmployee = profiles?.find(p => 
+          p.email.toLowerCase() === row.email.toLowerCase() ||
+          (p.employee_code && p.employee_code === String(row.employeeCode))
+        );
+
+        if (existingEmployee) {
+          // Update existing profile
+          const departmentId = departments?.find(d => 
+            d.name.toLowerCase() === row.department?.toLowerCase()
+          )?.id || null;
+
+          const managerId = profiles?.find(p => 
+            p.full_name?.toLowerCase() === row.reportingManager?.toLowerCase() ||
+            p.employee_code === row.reportingManager
+          )?.id || null;
+
+          const { error } = await supabase
+            .from('profiles')
+            .update({
+              employee_code: String(row.employeeCode),
+              full_name: row.fullName,
+              designation: row.designation || null,
+              department_id: departmentId,
+              pms_grade: row.pmsGrade || null,
+              reporting_manager_id: managerId,
+            })
+            .eq('id', existingEmployee.id);
+
+          if (error) throw error;
+          successCount++;
+        } else {
+          // Create new user via auth (this will trigger the profile creation)
+          const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+            email: row.email,
+            password: `Welcome@${row.employeeCode}`, // Default password
+            email_confirm: true,
+            user_metadata: {
+              full_name: row.fullName,
+            },
+          });
+
+          if (authError) {
+            // If admin API fails, try regular signup
+            const { error: signupError } = await supabase.auth.signUp({
+              email: row.email,
+              password: `Welcome@${row.employeeCode}`,
+              options: {
+                data: {
+                  full_name: row.fullName,
+                },
+              },
+            });
+            if (signupError) throw signupError;
+          }
+
+          // Wait a moment for the trigger to create the profile
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Update the profile with additional details
+          const departmentId = departments?.find(d => 
+            d.name.toLowerCase() === row.department?.toLowerCase()
+          )?.id || null;
+
+          const managerId = profiles?.find(p => 
+            p.full_name?.toLowerCase() === row.reportingManager?.toLowerCase() ||
+            p.employee_code === row.reportingManager
+          )?.id || null;
+
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({
+              employee_code: String(row.employeeCode),
+              designation: row.designation || null,
+              department_id: departmentId,
+              pms_grade: row.pmsGrade || null,
+              reporting_manager_id: managerId,
+            })
+            .eq('email', row.email);
+
+          if (updateError) throw updateError;
+          successCount++;
+        }
+      } catch (error: any) {
+        importErrors.push(`Failed to import ${row.fullName} (${row.email}): ${error.message}`);
+      }
+    }
+
+    setEmployeeImportSuccess(successCount);
+    setEmployeeErrors(importErrors);
+    setIsImportingEmployees(false);
+    refetchProfiles();
+
+    if (successCount > 0) {
+      toast({ title: `Successfully imported ${successCount} employees` });
+    }
+  };
+
   const downloadTemplate = () => {
     const template = [
       {
@@ -196,17 +361,160 @@ export default function ImportData() {
     XLSX.writeFile(wb, 'pms_import_template.xlsx');
   };
 
+  const downloadEmployeeTemplate = () => {
+    const template = [
+      {
+        employeeCode: '100001',
+        fullName: 'John Doe',
+        email: 'john.doe@company.com',
+        designation: 'Manager',
+        department: 'HR',
+        pmsGrade: 'A',
+        reportingManager: 'Jane Smith',
+      },
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(template);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Employee Template');
+    XLSX.writeFile(wb, 'employee_import_template.xlsx');
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Import Data</h1>
-        <p className="text-muted-foreground">Bulk import Employee KRAs and Performance Data from Excel</p>
+        <p className="text-muted-foreground">Bulk import Employees and KRAs from Excel</p>
       </div>
 
-      <Tabs defaultValue="kpis">
+      <Tabs defaultValue="employees">
         <TabsList>
+          <TabsTrigger value="employees">Import Employees</TabsTrigger>
           <TabsTrigger value="kpis">Import PMS Data</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="employees" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Employee Bulk Import
+              </CardTitle>
+              <CardDescription>Upload an Excel file to bulk import employees</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-4">
+                <Button variant="outline" onClick={downloadEmployeeTemplate}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Download Template
+                </Button>
+                <div className="relative">
+                  <Input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleEmployeeFileUpload}
+                    className="cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <div className="text-sm text-muted-foreground">
+                <p className="font-medium mb-2">Required columns:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li><code>employeeCode</code> - Unique Employee Code</li>
+                  <li><code>fullName</code> - Employee Full Name</li>
+                  <li><code>email</code> - Employee Email (used for login)</li>
+                </ul>
+                <p className="font-medium mt-4 mb-2">Optional columns:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li><code>designation</code> - Job Title</li>
+                  <li><code>department</code> - Department Name (must exist in system)</li>
+                  <li><code>pmsGrade</code> - PMS Grade</li>
+                  <li><code>reportingManager</code> - Manager Name or Employee Code</li>
+                </ul>
+                <Alert className="mt-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    New employees will be created with default password: <code>Welcome@[EmployeeCode]</code>
+                  </AlertDescription>
+                </Alert>
+              </div>
+            </CardContent>
+          </Card>
+
+          {employeeErrors.length > 0 && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Validation Errors</AlertTitle>
+              <AlertDescription>
+                <ul className="list-disc list-inside mt-2 max-h-32 overflow-auto">
+                  {employeeErrors.map((err, i) => (
+                    <li key={i}>{err}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {employeeImportSuccess > 0 && (
+            <Alert>
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertTitle>Import Complete</AlertTitle>
+              <AlertDescription>
+                Successfully imported {employeeImportSuccess} employees.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {employeeData.length > 0 && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Preview</CardTitle>
+                  <CardDescription>{employeeData.length} employees to import</CardDescription>
+                </div>
+                <Button onClick={handleEmployeeImport} disabled={isImportingEmployees || employeeErrors.length > 0}>
+                  {isImportingEmployees ? 'Importing...' : `Import ${employeeData.length} Employees`}
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Designation</TableHead>
+                        <TableHead>Department</TableHead>
+                        <TableHead>Grade</TableHead>
+                        <TableHead>Manager</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {employeeData.slice(0, 10).map((row, i) => (
+                        <TableRow key={i}>
+                          <TableCell>{row.employeeCode}</TableCell>
+                          <TableCell>{row.fullName}</TableCell>
+                          <TableCell>{row.email}</TableCell>
+                          <TableCell>{row.designation || '-'}</TableCell>
+                          <TableCell>{row.department || '-'}</TableCell>
+                          <TableCell>{row.pmsGrade || '-'}</TableCell>
+                          <TableCell>{row.reportingManager || '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {employeeData.length > 10 && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Showing first 10 of {employeeData.length} rows
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
 
         <TabsContent value="kpis" className="space-y-6">
           <Card>
