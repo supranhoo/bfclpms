@@ -115,17 +115,31 @@ export function useProfiles() {
   return useQuery({
     queryKey: ['profiles'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Fetch profiles with departments
+      const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select(`
           *,
-          departments (id, name, code),
-          user_roles (role)
+          departments (id, name, code)
         `)
         .order('full_name');
 
-      if (error) throw error;
-      return data;
+      if (profilesError) throw profilesError;
+
+      // Fetch all user roles separately (no FK relationship)
+      const { data: roles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('user_id, role');
+
+      if (rolesError) throw rolesError;
+
+      // Merge roles into profiles
+      const profilesWithRoles = profiles?.map(profile => ({
+        ...profile,
+        user_roles: roles?.filter(r => r.user_id === profile.id) || []
+      }));
+
+      return profilesWithRoles;
     },
   });
 }
