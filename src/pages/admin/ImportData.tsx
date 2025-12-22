@@ -49,6 +49,7 @@ interface EmployeeImportRow {
   department?: string;
   pmsGrade?: string;
   managerEmployeeId?: string;
+  managerName?: string;
 }
 
 export default function ImportData() {
@@ -244,7 +245,8 @@ export default function ImportData() {
           )?.id || null;
 
           const managerId = profiles?.find(p => 
-            p.employee_code === row.managerEmployeeId
+            p.employee_code === row.managerEmployeeId ||
+            (row.managerName && p.full_name?.toLowerCase() === row.managerName?.toLowerCase())
           )?.id || null;
 
           const { error } = await supabase
@@ -295,7 +297,8 @@ export default function ImportData() {
           )?.id || null;
 
           const managerId = profiles?.find(p => 
-            p.employee_code === row.managerEmployeeId
+            p.employee_code === row.managerEmployeeId ||
+            (row.managerName && p.full_name?.toLowerCase() === row.managerName?.toLowerCase())
           )?.id || null;
 
           const { error: updateError } = await supabase
@@ -375,6 +378,7 @@ export default function ImportData() {
         department: 'HR',
         pmsGrade: 'A',
         managerEmployeeId: '100002',
+        managerName: 'Jane Smith',
       },
     ];
 
@@ -437,6 +441,7 @@ export default function ImportData() {
                   <li><code>department</code> - Department Name (must exist in system)</li>
                   <li><code>pmsGrade</code> - PMS Grade</li>
                   <li><code>managerEmployeeId</code> - Manager's Employee Code</li>
+                  <li><code>managerName</code> - Manager's Full Name</li>
                 </ul>
                 <Alert className="mt-4">
                   <AlertCircle className="h-4 w-4" />
@@ -497,6 +502,7 @@ export default function ImportData() {
                         <TableHead>Department</TableHead>
                         <TableHead>Grade</TableHead>
                         <TableHead>Manager ID</TableHead>
+                        <TableHead>Manager Name</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -511,6 +517,7 @@ export default function ImportData() {
                           <TableCell>{row.department || '-'}</TableCell>
                           <TableCell>{row.pmsGrade || '-'}</TableCell>
                           <TableCell>{row.managerEmployeeId || '-'}</TableCell>
+                          <TableCell>{row.managerName || '-'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
