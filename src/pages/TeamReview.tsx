@@ -68,10 +68,12 @@ const ratingOptions: { value: RatingLevel; label: string; color: string }[] = [
 function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: { memberId: string; memberName: string; selectedPeriod: string; selectedYear: number }) {
   const { data: allKpis, isLoading } = useKpisByEmployee(memberId);
   
-  // Filter KPIs by period and year
-  const kpis = allKpis?.filter(k => 
-    k.review_period === selectedPeriod && k.review_year === selectedYear
-  );
+  // Filter KPIs by period and year - ensure proper string comparison
+  const kpis = allKpis?.filter(k => {
+    const periodMatch = k.review_period?.trim().toLowerCase() === selectedPeriod?.trim().toLowerCase();
+    const yearMatch = k.review_year === selectedYear;
+    return periodMatch && yearMatch;
+  });
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const { data: queries } = useKpiQueries(kpiIds);

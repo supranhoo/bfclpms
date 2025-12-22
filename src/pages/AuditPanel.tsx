@@ -69,10 +69,12 @@ export default function AuditPanel() {
 
   const filteredKpis = useMemo(() => {
     let filtered = allKpis || [];
-    // Filter by review period and year
-    filtered = filtered.filter(kpi => 
-      kpi.review_period === selectedPeriod && kpi.review_year === selectedYear
-    );
+    // Filter by review period and year - ensure proper string comparison
+    filtered = filtered.filter(kpi => {
+      const periodMatch = kpi.review_period?.trim().toLowerCase() === selectedPeriod?.trim().toLowerCase();
+      const yearMatch = kpi.review_year === selectedYear;
+      return periodMatch && yearMatch;
+    });
     if (selectedCategory) {
       filtered = filtered.filter(kpi => kpi.category_id === selectedCategory);
     }

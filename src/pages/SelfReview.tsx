@@ -126,10 +126,12 @@ export default function SelfReview() {
   const filteredKpis = useMemo(() => {
     let filtered = allKpis || [];
     
-    // Filter by review period and year
-    filtered = filtered.filter(k => 
-      k.review_period === selectedPeriod && k.review_year === selectedYear
-    );
+    // Filter by review period and year - ensure proper string comparison
+    filtered = filtered.filter(k => {
+      const periodMatch = k.review_period?.trim().toLowerCase() === selectedPeriod?.trim().toLowerCase();
+      const yearMatch = k.review_year === selectedYear;
+      return periodMatch && yearMatch;
+    });
     
     // Filter by category
     if (filters.categoryId) {

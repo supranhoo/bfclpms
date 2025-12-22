@@ -104,10 +104,12 @@ export default function AuditLogs() {
   const filteredLogs = useMemo(() => {
     let logs = auditLogs || [];
     
-    // Filter by period
-    logs = logs.filter(log => 
-      log.kpi?.review_period === selectedPeriod && log.kpi?.review_year === selectedYear
-    );
+    // Filter by period - ensure proper string comparison
+    logs = logs.filter(log => {
+      const periodMatch = log.kpi?.review_period?.trim().toLowerCase() === selectedPeriod?.trim().toLowerCase();
+      const yearMatch = log.kpi?.review_year === selectedYear;
+      return periodMatch && yearMatch;
+    });
     
     // Filter by action
     if (actionFilter !== 'all') {
