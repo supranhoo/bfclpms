@@ -142,7 +142,11 @@ export default function SelfReview() {
     }
     
     // Filter by employee hierarchy (Division > BU > Dept > Manager > Employee)
-    if (filteredEmployeeIds.length > 0 && (filters.divisionId || filters.businessUnitId || filters.departmentId || filters.managerId || filters.employeeId)) {
+    if (filters.divisionId || filters.businessUnitId || filters.departmentId || filters.managerId || filters.employeeId) {
+      // If filters are set but no matching employees, show no results
+      if (filteredEmployeeIds.length === 0) {
+        return [];
+      }
       filtered = filtered.filter(k => filteredEmployeeIds.includes(k.employee_id));
     }
     
