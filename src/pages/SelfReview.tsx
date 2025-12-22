@@ -144,10 +144,8 @@ export default function SelfReview() {
       filtered = filtered.filter(k => k.employee_id === user.id);
     }
     
-    // If no status filter is applied, show KPIs pending self review or already submitted (default for self review page)
-    if (!filters.status) {
-      filtered = filtered.filter(k => k.status === 'kra_set' || k.status === 'self_review');
-    }
+    // Show all KPIs regardless of status - Self Review page should show complete progress
+    // Status filter is still applied if explicitly selected
     
     return filtered;
   }, [allKpis, filters, filteredEmployeeIds, selectedPeriod, selectedYear, isAdmin, user?.id]);
