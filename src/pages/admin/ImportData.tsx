@@ -274,9 +274,11 @@ export default function ImportData() {
             },
           });
 
+          let newUserId: string | null = null;
+
           if (authError) {
             // If admin API fails, try regular signup
-            const { error: signupError } = await supabase.auth.signUp({
+            const { data: signupData, error: signupError } = await supabase.auth.signUp({
               email: row.email,
               password: `Welcome@${row.employeeCode}`,
               options: {
@@ -286,6 +288,9 @@ export default function ImportData() {
               },
             });
             if (signupError) throw signupError;
+            newUserId = signupData.user?.id || null;
+          } else {
+            newUserId = authData.user?.id || null;
           }
 
           // Wait a moment for the trigger to create the profile
@@ -313,6 +318,30 @@ export default function ImportData() {
             .eq('email', row.email);
 
           if (updateError) throw updateError;
+
+          // Assign default 'employee' role to new user
+          if (newUserId) {
+            // Check if role already exists
+            const { data: existingRole } = await supabase
+              .from('user_roles')
+              .select('id')
+              .eq('user_id', newUserId)
+              .maybeSingle();
+
+            if (!existingRole) {
+              const { error: roleError } = await supabase
+                .from('user_roles')
+                .insert({
+                  user_id: newUserId,
+                  role: 'employee',
+                });
+
+              if (roleError) {
+                console.error('Failed to assign role:', roleError);
+              }
+            }
+          }
+
           successCount++;
         }
       } catch (error: any) {
