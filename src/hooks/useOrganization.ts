@@ -111,6 +111,55 @@ export function useCreateKraCategory() {
   });
 }
 
+export function useUpdateKraCategory() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, ...category }: { id: string; name: string; weightage: number; color: string; description?: string }) => {
+      const { data, error } = await supabase
+        .from('kra_categories')
+        .update(category)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
+      toast({ title: 'Category updated successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to update category', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+export function useDeleteKraCategory() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('kra_categories')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
+      toast({ title: 'Category deleted successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to delete category', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
 export function useProfiles() {
   return useQuery({
     queryKey: ['profiles'],
