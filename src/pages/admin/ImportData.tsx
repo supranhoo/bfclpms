@@ -160,6 +160,34 @@ export default function ImportData() {
     reader.readAsArrayBuffer(file);
   }, [toast]);
 
+  // Normalize employee row to handle different column name variations
+  const normalizeEmployeeRow = (rawRow: Record<string, any>): EmployeeImportRow => {
+    // Helper to find value from multiple possible column names (case-insensitive)
+    const getValue = (possibleNames: string[]): string => {
+      for (const name of possibleNames) {
+        for (const key of Object.keys(rawRow)) {
+          if (key.toLowerCase().replace(/[\s_-]/g, '') === name.toLowerCase().replace(/[\s_-]/g, '')) {
+            return rawRow[key] ? String(rawRow[key]).trim() : '';
+          }
+        }
+      }
+      return '';
+    };
+
+    return {
+      employeeCode: getValue(['employeeCode', 'employeecode', 'employee_code', 'empCode', 'empcode', 'emp_code', 'newCode', 'newcode', 'new_code', 'code', 'id', 'empId', 'empid', 'emp_id']),
+      fullName: getValue(['fullName', 'fullname', 'full_name', 'name', 'employeeName', 'employeename', 'employee_name', 'empName', 'empname', 'emp_name']),
+      email: getValue(['email', 'emailAddress', 'emailaddress', 'email_address', 'mail', 'emailId', 'emailid', 'email_id']),
+      designation: getValue(['designation', 'title', 'position', 'role', 'jobTitle', 'jobtitle', 'job_title']),
+      division: getValue(['division', 'div']),
+      businessUnit: getValue(['businessUnit', 'businessunit', 'business_unit', 'bu', 'unit']),
+      department: getValue(['department', 'dept', 'dep', 'departmentName', 'departmentname', 'department_name']),
+      pmsGrade: getValue(['pmsGrade', 'pmsgrade', 'pms_grade', 'grade', 'level']),
+      managerEmployeeId: getValue(['managerEmployeeId', 'manageremployeeid', 'manager_employee_id', 'managerId', 'managerid', 'manager_id', 'reportingTo', 'reportingto', 'reporting_to', 'reportsTo', 'reportsto', 'reports_to']),
+      managerName: getValue(['managerName', 'managername', 'manager_name', 'reportingManager', 'reportingmanager', 'reporting_manager', 'supervisor']),
+    };
+  };
+
   const handleEmployeeFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -171,7 +199,10 @@ export default function ImportData() {
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json<EmployeeImportRow>(worksheet);
+        const rawData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet);
+        
+        // Normalize all rows
+        const jsonData = rawData.map(normalizeEmployeeRow);
 
         // Validate data
         const validationErrors: string[] = [];
