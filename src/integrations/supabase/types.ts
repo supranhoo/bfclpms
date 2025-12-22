@@ -99,6 +99,54 @@ export type Database = {
         }
         Relationships: []
       }
+      import_progress: {
+        Row: {
+          categories_created: number
+          completed_at: string | null
+          created_at: string
+          employees_created: number
+          errors: Json | null
+          id: string
+          kpis_imported: number
+          processed_rows: number
+          started_at: string
+          status: string
+          total_rows: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          categories_created?: number
+          completed_at?: string | null
+          created_at?: string
+          employees_created?: number
+          errors?: Json | null
+          id: string
+          kpis_imported?: number
+          processed_rows?: number
+          started_at?: string
+          status?: string
+          total_rows?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          categories_created?: number
+          completed_at?: string | null
+          created_at?: string
+          employees_created?: number
+          errors?: Json | null
+          id?: string
+          kpis_imported?: number
+          processed_rows?: number
+          started_at?: string
+          status?: string
+          total_rows?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       kpi_audit_logs: {
         Row: {
           action: string
