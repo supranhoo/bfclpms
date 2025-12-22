@@ -136,6 +136,45 @@ export function useAllKpis() {
   });
 }
 
+export function useKpisByPeriod(selectedPeriod: string | undefined, selectedYear: number | undefined) {
+  return useQuery({
+    queryKey: ['kpis-by-period', selectedPeriod, selectedYear],
+    enabled: !!selectedPeriod && !!selectedYear,
+    queryFn: async () => {
+      const allKpis: any[] = [];
+      let from = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('kpis')
+          .select(`
+            *,
+            kra_categories (id, name, color, weightage),
+            profiles:employee_id (id, full_name, email, employee_code)
+          `)
+          .eq('review_period', selectedPeriod as string)
+          .eq('review_year', selectedYear as number)
+          .order('created_at', { ascending: false })
+          .range(from, from + pageSize - 1);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          allKpis.push(...data);
+          from += pageSize;
+          hasMore = data.length === pageSize;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      return allKpis;
+    },
+  });
+}
+
 export function useKpisByEmployee(employeeId: string | undefined) {
   return useQuery({
     queryKey: ['kpis', employeeId],
