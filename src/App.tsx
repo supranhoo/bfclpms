@@ -8,6 +8,14 @@ import { DashboardLayout } from "./components/layout/DashboardLayout";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import MyKpis from "./pages/MyKpis";
+import TeamReview from "./pages/TeamReview";
+import AuditPanel from "./pages/AuditPanel";
+import UserManagement from "./pages/admin/UserManagement";
+import Organization from "./pages/admin/Organization";
+import Categories from "./pages/admin/Categories";
+import ImportData from "./pages/admin/ImportData";
+import PerformanceReport from "./pages/reports/PerformanceReport";
+import KRAIssuance from "./pages/reports/KRAIssuance";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,6 +33,14 @@ const App = () => (
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/my-kpis" element={<MyKpis />} />
+              <Route path="/team-review" element={<TeamReview />} />
+              <Route path="/audit" element={<AuditPanel />} />
+              <Route path="/admin/users" element={<UserManagement />} />
+              <Route path="/admin/organization" element={<Organization />} />
+              <Route path="/admin/categories" element={<Categories />} />
+              <Route path="/admin/import" element={<ImportData />} />
+              <Route path="/reports/performance" element={<PerformanceReport />} />
+              <Route path="/reports/kra-issuance" element={<KRAIssuance />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
