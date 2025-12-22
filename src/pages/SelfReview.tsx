@@ -20,7 +20,10 @@ import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
-import { Send, Eye, CheckCircle2, Clock, AlertCircle, Lock, Info } from 'lucide-react';
+import { KeyStatCard } from '@/components/dashboard/KeyStatCard';
+import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
+import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
+import { Send, Eye, CheckCircle2, Clock, AlertCircle, Lock, Info, Target, TrendingUp, Users } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -152,9 +155,79 @@ export default function SelfReview() {
 
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
 
-  // Calculate progress
+  // Calculate comprehensive metrics for Admin dashboard view
+  const metrics = useMemo(() => {
+    const total = filteredKpis?.length || 0;
+    const kraSet = filteredKpis?.filter(k => k.status === 'kra_set').length || 0;
+    const selfReview = filteredKpis?.filter(k => k.status === 'self_review').length || 0;
+    const managerCheck = filteredKpis?.filter(k => k.status === 'manager_check').length || 0;
+    const audit = filteredKpis?.filter(k => k.status === 'audit').length || 0;
+    const approved = filteredKpis?.filter(k => k.status === 'approved').length || 0;
+    
+    // Count unique employees
+    const uniqueEmployees = new Set(filteredKpis?.map(k => k.employee_id)).size;
+    
+    // Calculate overall scores
+    let totalScore = 0;
+    let totalWeight = 0;
+    let totalMaxScore = 0;
+    
+    filteredKpis?.forEach(kpi => {
+      const submission = submissionMap.get(kpi.id);
+      const score = submission?.final_score || submission?.self_score || 0;
+      const weight = kpi.weightage || 0;
+      totalScore += score * weight;
+      totalWeight += weight;
+      totalMaxScore += weight * 5;
+    });
+    
+    const overallRating = totalWeight > 0 ? totalScore / totalWeight : 0;
+    const overallPercentage = totalMaxScore > 0 ? (totalScore / totalMaxScore) * 100 : 0;
+    
+    return {
+      total,
+      kraSet,
+      selfReview,
+      managerCheck,
+      audit,
+      approved,
+      uniqueEmployees,
+      totalScore,
+      totalMaxScore,
+      overallRating,
+      overallPercentage,
+    };
+  }, [filteredKpis, submissionMap]);
+
+  // Category metrics for chart
+  const categoryMetrics = useMemo(() => {
+    if (!categories || !filteredKpis) return [];
+
+    return categories.map(cat => {
+      const catKpis = filteredKpis.filter(k => k.category_id === cat.id);
+      let achieved = 0;
+      let max = 0;
+
+      catKpis.forEach(kpi => {
+        const submission = submissionMap.get(kpi.id);
+        const score = submission?.final_score || submission?.self_score || 0;
+        const weight = kpi.weightage || 0;
+        achieved += score * weight;
+        max += weight * 5;
+      });
+
+      return {
+        name: cat.name,
+        percentage: max > 0 ? (achieved / max) * 100 : 0,
+        color: cat.color,
+        count: catKpis.length,
+      };
+    }).filter(c => c.count > 0).sort((a, b) => b.percentage - a.percentage);
+  }, [categories, filteredKpis, submissionMap]);
+
+  // Calculate progress (for non-admin view)
   const totalKpis = filteredKpis?.length || 0;
-  const submittedKpis = filteredKpis?.filter(k => k.status === 'self_review').length || 0;
+  const submittedKpis = filteredKpis?.filter(k => k.status !== 'kra_set').length || 0;
   const progressPercent = totalKpis > 0 ? (submittedKpis / totalKpis) * 100 : 0;
 
   const openReviewDialog = (kpi: KPI) => {
@@ -282,31 +355,126 @@ export default function SelfReview() {
         </CardContent>
       </Card>
 
-      {/* Progress Card */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-primary" />
-              <span className="font-medium">Review Progress</span>
-            </div>
-            <span className="text-sm text-muted-foreground">
-              {submittedKpis} of {totalKpis} KPIs reviewed
-            </span>
+      {/* Admin Dashboard Stats */}
+      {isAdmin && (
+        <>
+          {/* Key Stats Cards */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <KeyStatCard
+              title="Total KPIs"
+              value={metrics.total}
+              subtitle={`${metrics.uniqueEmployees} employees`}
+              icon={Target}
+            />
+            <KeyStatCard
+              title="Overall Rating"
+              value={`${metrics.overallRating.toFixed(2)} / 5.00`}
+              icon={TrendingUp}
+            />
+            <KeyStatCard
+              title="Completed"
+              value={metrics.approved}
+              subtitle={`${((metrics.approved / metrics.total) * 100 || 0).toFixed(0)}% of total`}
+              icon={CheckCircle2}
+              valueClassName="text-green-600"
+            />
+            <KeyStatCard
+              title="Pending Review"
+              value={metrics.kraSet}
+              subtitle="Not yet submitted"
+              icon={Clock}
+              valueClassName="text-yellow-600"
+            />
           </div>
-          <Progress value={progressPercent} className="h-2" />
-          <div className="flex gap-4 mt-4 text-sm">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span>{totalKpis - submittedKpis} Pending</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-primary" />
-              <span>{submittedKpis} Submitted</span>
-            </div>
+
+          {/* Performance Charts */}
+          <div className="grid gap-6 md:grid-cols-3">
+            <Card>
+              <CardHeader>
+                <CardTitle>Overall Performance</CardTitle>
+                <CardDescription>Achievement percentage</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[200px]">
+                <OverallScoreChart 
+                  percentage={metrics.overallPercentage} 
+                  rating={metrics.overallRating}
+                />
+              </CardContent>
+            </Card>
+
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle>Performance by Category</CardTitle>
+                <CardDescription>Score breakdown across KRA categories</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[200px]">
+                <CategoryScoreChart data={categoryMetrics} />
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Status Progress */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Review Status Overview</CardTitle>
+              <CardDescription>Progress across all review stages</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-5">
+                {[
+                  { key: 'kra_set', label: 'KRA Set', count: metrics.kraSet },
+                  { key: 'self_review', label: 'Self Review', count: metrics.selfReview },
+                  { key: 'manager_check', label: 'Manager Check', count: metrics.managerCheck },
+                  { key: 'audit', label: 'Audit', count: metrics.audit },
+                  { key: 'approved', label: 'Approved', count: metrics.approved },
+                ].map(({ key, label, count }) => {
+                  const percentage = metrics.total > 0 ? (count / metrics.total) * 100 : 0;
+                  
+                  return (
+                    <div key={key} className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <Badge variant="secondary" className={statusColors[key]}>
+                          {label}
+                        </Badge>
+                        <span className="font-medium">{count}</span>
+                      </div>
+                      <Progress value={percentage} className="h-2" />
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* Progress Card - For Non-Admin */}
+      {!isAdmin && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary" />
+                <span className="font-medium">Review Progress</span>
+              </div>
+              <span className="text-sm text-muted-foreground">
+                {submittedKpis} of {totalKpis} KPIs reviewed
+              </span>
+            </div>
+            <Progress value={progressPercent} className="h-2" />
+            <div className="flex gap-4 mt-4 text-sm">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span>{totalKpis - submittedKpis} Pending</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-primary" />
+                <span>{submittedKpis} Submitted</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* KPIs Table */}
       <Card>
