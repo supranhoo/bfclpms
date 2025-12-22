@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTeamMembers } from '@/hooks/useOrganization';
+import { useTeamMembers, useProfiles } from '@/hooks/useOrganization';
 import { useKpisByEmployee, useReviewSubmissions, RatingLevel } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Users, CheckCircle2, Clock, ArrowRight } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Search } from 'lucide-react';
 
 const statusColors = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -276,13 +276,33 @@ function TeamMemberKpis({ memberId, memberName }: { memberId: string; memberName
 }
 
 export default function TeamReview() {
-  const { user } = useAuth();
-  const { data: teamMembers, isLoading } = useTeamMembers(user?.id);
+  const { user, role } = useAuth();
+  const { data: teamMembers, isLoading: teamLoading } = useTeamMembers(user?.id);
+  const { data: allProfiles, isLoading: profilesLoading } = useProfiles();
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const isAdmin = role === 'admin';
+  const isLoading = isAdmin ? profilesLoading : teamLoading;
+
+  // For admin: show all employees with their managers
+  // For managers: show only their direct reports
+  const displayMembers = isAdmin 
+    ? allProfiles?.filter(p => 
+        p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.employee_code?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : teamMembers;
 
   const getInitials = (name: string | null) => {
     if (!name) return 'U';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  const getManagerName = (managerId: string | null) => {
+    if (!managerId || !allProfiles) return null;
+    return allProfiles.find(p => p.id === managerId)?.full_name || null;
   };
 
   if (isLoading) {
@@ -300,62 +320,97 @@ export default function TeamReview() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Team Review</h1>
-        <p className="text-muted-foreground">Review and manage your team's performance</p>
+        <p className="text-muted-foreground">
+          {isAdmin ? 'View all employees and their performance' : "Review and manage your team's performance"}
+        </p>
       </div>
 
       {/* Team Overview */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Team Size</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {isAdmin ? 'Total Employees' : 'Team Size'}
+            </CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{teamMembers?.length || 0}</div>
+            <div className="text-3xl font-bold">{displayMembers?.length || 0}</div>
           </CardContent>
         </Card>
       </div>
 
+      {/* Search (Admin only) */}
+      {isAdmin && (
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search employees..."
+              className="pl-10"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Team Members */}
       <Card>
         <CardHeader>
-          <CardTitle>Team Members</CardTitle>
-          <CardDescription>Select a team member to review their KPIs</CardDescription>
+          <CardTitle>{isAdmin ? 'All Employees' : 'Team Members'}</CardTitle>
+          <CardDescription>
+            {isAdmin 
+              ? 'Select an employee to review their KPIs' 
+              : 'Select a team member to review their KPIs'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {teamMembers && teamMembers.length > 0 ? (
+          {displayMembers && displayMembers.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {teamMembers.map(member => (
-                <Card
-                  key={member.id}
-                  className={`cursor-pointer transition-all hover:shadow-md ${
-                    selectedMember === member.id ? 'ring-2 ring-primary' : ''
-                  }`}
-                  onClick={() => setSelectedMember(member.id)}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarImage src={member.avatar_url || undefined} />
-                        <AvatarFallback>{getInitials(member.full_name)}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{member.full_name}</p>
-                        <p className="text-sm text-muted-foreground truncate">
-                          {member.designation || member.email}
-                        </p>
+              {displayMembers.map(member => {
+                const managerName = getManagerName(member.reporting_manager_id);
+                return (
+                  <Card
+                    key={member.id}
+                    className={`cursor-pointer transition-all hover:shadow-md ${
+                      selectedMember === member.id ? 'ring-2 ring-primary' : ''
+                    }`}
+                    onClick={() => setSelectedMember(member.id)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar>
+                          <AvatarImage src={member.avatar_url || undefined} />
+                          <AvatarFallback>{getInitials(member.full_name)}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{member.full_name}</p>
+                          <p className="text-sm text-muted-foreground truncate">
+                            {member.designation || member.email}
+                          </p>
+                          {isAdmin && managerName && (
+                            <p className="text-xs text-muted-foreground truncate">
+                              Manager: {managerName}
+                            </p>
+                          )}
+                        </div>
+                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
                       </div>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No team members found</p>
-              <p className="text-sm">You don't have any direct reports assigned</p>
+              <p>{isAdmin ? 'No employees found' : 'No team members found'}</p>
+              <p className="text-sm">
+                {isAdmin 
+                  ? 'Try adjusting your search criteria' 
+                  : "You don't have any direct reports assigned"}
+              </p>
             </div>
           )}
         </CardContent>
@@ -370,7 +425,7 @@ export default function TeamReview() {
           <CardContent>
             <TeamMemberKpis
               memberId={selectedMember}
-              memberName={teamMembers?.find(m => m.id === selectedMember)?.full_name || 'Team Member'}
+              memberName={displayMembers?.find(m => m.id === selectedMember)?.full_name || 'Team Member'}
             />
           </CardContent>
         </Card>
