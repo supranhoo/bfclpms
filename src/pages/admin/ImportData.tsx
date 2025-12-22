@@ -141,16 +141,31 @@ export default function ImportData() {
     };
 
     // Helper to format R values - handle % and decimal formats
+    // Excel stores percentages as decimals (100% = 1, 50% = 0.5)
+    // But users might also enter raw numbers like "100" meaning 100%
     const formatRatingThreshold = (value: any): string | undefined => {
       if (value === null || value === undefined || value === '') return undefined;
       const strValue = String(value).trim();
-      // If it's already a percentage string, keep it
+      
+      // If it's already a percentage string, keep it as-is
       if (strValue.includes('%')) return strValue;
-      // If it's a decimal < 2, convert to percentage for display
+      
       const numValue = parseFloat(strValue);
-      if (!isNaN(numValue) && numValue < 2 && numValue > 0) {
+      if (isNaN(numValue)) return strValue;
+      
+      // If value is between 0 and 1 (exclusive), treat as decimal percentage (Excel format)
+      // e.g., 0.5 → 50%, 0.85 → 85%, 1.0 → 100%
+      if (numValue > 0 && numValue <= 1) {
         return `${(numValue * 100).toFixed(0)}%`;
       }
+      
+      // If value is > 1 and <= 100, treat as already a percentage value
+      // e.g., 50 → 50%, 100 → 100%, 85 → 85%
+      if (numValue > 1 && numValue <= 100) {
+        return `${numValue.toFixed(0)}%`;
+      }
+      
+      // For values > 100, keep as-is (could be actual target numbers)
       return strValue;
     };
 
