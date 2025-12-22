@@ -18,6 +18,7 @@ import Categories from "./pages/admin/Categories";
 import ImportData from "./pages/admin/ImportData";
 import PerformanceReport from "./pages/reports/PerformanceReport";
 import KRAIssuance from "./pages/reports/KRAIssuance";
+import KRAAcceptance from "./pages/KRAAcceptance";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/my-kpis" element={<MyKpis />} />
               <Route path="/self-review" element={<SelfReview />} />
+              <Route path="/kra-acceptance" element={<KRAAcceptance />} />
               <Route path="/team-review" element={<TeamReview />} />
               <Route path="/audit" element={<AuditPanel />} />
               <Route path="/admin/users" element={<UserManagement />} />
