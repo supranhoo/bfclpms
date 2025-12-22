@@ -388,7 +388,7 @@ export type Database = {
           {
             foreignKeyName: "review_submissions_kpi_id_fkey"
             columns: ["kpi_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "kpis"
             referencedColumns: ["id"]
           },
