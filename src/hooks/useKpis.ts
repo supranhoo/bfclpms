@@ -21,6 +21,15 @@ export interface KPI {
   status: ReviewStatus;
   created_at: string;
   updated_at: string;
+  // Rating thresholds
+  r5: string | null;
+  r4: string | null;
+  r3: string | null;
+  r2: string | null;
+  r1: string | null;
+  r0: string | null;
+  frequency: string | null;
+  source_of_data: string | null;
   kra_categories?: {
     id: string;
     name: string;

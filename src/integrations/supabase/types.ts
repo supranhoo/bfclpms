@@ -105,11 +105,19 @@ export type Database = {
           created_at: string
           criteria: string | null
           employee_id: string
+          frequency: string | null
           id: string
           kpi_name: string
           kra_name: string
+          r0: string | null
+          r1: string | null
+          r2: string | null
+          r3: string | null
+          r4: string | null
+          r5: string | null
           review_period: string | null
           review_year: number | null
+          source_of_data: string | null
           status: Database["public"]["Enums"]["review_status"] | null
           target_value: number | null
           uom: string | null
@@ -121,11 +129,19 @@ export type Database = {
           created_at?: string
           criteria?: string | null
           employee_id: string
+          frequency?: string | null
           id?: string
           kpi_name: string
           kra_name: string
+          r0?: string | null
+          r1?: string | null
+          r2?: string | null
+          r3?: string | null
+          r4?: string | null
+          r5?: string | null
           review_period?: string | null
           review_year?: number | null
+          source_of_data?: string | null
           status?: Database["public"]["Enums"]["review_status"] | null
           target_value?: number | null
           uom?: string | null
@@ -137,11 +153,19 @@ export type Database = {
           created_at?: string
           criteria?: string | null
           employee_id?: string
+          frequency?: string | null
           id?: string
           kpi_name?: string
           kra_name?: string
+          r0?: string | null
+          r1?: string | null
+          r2?: string | null
+          r3?: string | null
+          r4?: string | null
+          r5?: string | null
           review_period?: string | null
           review_year?: number | null
+          source_of_data?: string | null
           status?: Database["public"]["Enums"]["review_status"] | null
           target_value?: number | null
           uom?: string | null

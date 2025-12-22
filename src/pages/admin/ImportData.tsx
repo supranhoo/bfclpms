@@ -23,16 +23,31 @@ interface KpiImportRow {
   kra: string;
   kpi: string;
   target: string | number;
+  uom?: string;
+  frequency?: string;
+  kpiWeightage?: number;
+  criteria?: string; // "Higher is Better" or "Lower is Better"
+  // Rating thresholds
+  r5?: string | number;
+  r4?: string | number;
+  r3?: string | number;
+  r2?: string | number;
+  r1?: string | number;
+  r0?: string | number;
+  // Achievement data
   targetAchieved?: string | number;
   achievedWeight?: string;
   rating?: number;
   kpiWeightageScore?: number;
+  // Self review
   employeeTargetAchieved?: string | number;
   employeeRating?: number;
   employeeRemarks?: string;
+  // Manager review
   managerTargetAchieved?: string | number;
   managerRating?: number;
   managerRemarks?: string;
+  // Audit review
   auditTargetAchieved?: string | number;
   auditRating?: number;
   auditRemarks?: string;
@@ -241,12 +256,21 @@ export default function ImportData() {
           kra_name: row.kra,
           kpi_name: row.kpi,
           target_value: targetValue,
-          uom: null,
-          weightage: row.kpiWeightageScore || 0,
-          criteria: null,
+          uom: row.uom || null,
+          weightage: row.kpiWeightage || row.kpiWeightageScore || 0,
+          criteria: row.criteria || 'Higher is Better',
           status: 'kra_set',
           review_period: reviewPeriod,
           review_year: reviewYear,
+          // Rating thresholds
+          r5: row.r5 ? String(row.r5) : null,
+          r4: row.r4 ? String(row.r4) : null,
+          r3: row.r3 ? String(row.r3) : null,
+          r2: row.r2 ? String(row.r2) : null,
+          r1: row.r1 ? String(row.r1) : null,
+          r0: row.r0 ? String(row.r0) : null,
+          frequency: row.frequency || null,
+          source_of_data: row.sourceOfData || null,
         });
 
         successCount++;
@@ -466,11 +490,21 @@ export default function ImportData() {
         category: 'Financial Performance',
         kra: 'Revenue Growth',
         kpi: 'Monthly Revenue Target',
-        target: '100000',
+        uom: '%',
+        frequency: 'Monthly',
+        kpiWeightage: 25,
+        criteria: 'Higher is Better',
+        target: '100',
+        r5: '120',
+        r4: '110',
+        r3: '100',
+        r2: '90',
+        r1: '80',
+        r0: '',
         targetAchieved: '',
         achievedWeight: '',
         rating: '',
-        kpiWeightageScore: 25,
+        kpiWeightageScore: '',
         employeeTargetAchieved: '',
         employeeRating: '',
         employeeRemarks: '',
@@ -480,8 +514,8 @@ export default function ImportData() {
         auditTargetAchieved: '',
         auditRating: '',
         auditRemarks: '',
-        sourceOfData: '',
-        kpiStatus: '',
+        sourceOfData: 'SAP',
+        kpiStatus: 'Active',
       },
     ];
 
@@ -694,16 +728,24 @@ export default function ImportData() {
                   <li><code>target</code> - Target Value</li>
                   <li><code>month</code> - Review Period (e.g., Sep-25)</li>
                 </ul>
+                <p className="font-medium mt-4 mb-2">Rating threshold columns (for auto-rating calculation):</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li><code>criteria</code> - "Higher is Better" or "Lower is Better"</li>
+                  <li><code>r5</code>, <code>r4</code>, <code>r3</code>, <code>r2</code>, <code>r1</code> - Rating thresholds (5=Exceptional, 1=Needs Improvement)</li>
+                  <li><code>uom</code> - Unit of Measure (%, ₹, units, etc.)</li>
+                  <li><code>kpiWeightage</code> - KPI Weightage (0-100)</li>
+                </ul>
                 <p className="font-medium mt-4 mb-2">Optional columns:</p>
                 <ul className="list-disc list-inside space-y-1">
-                  <li><code>kpiWeightageScore</code> - KPI Weightage</li>
+                  <li><code>frequency</code> - Review Frequency (Monthly, Quarterly, etc.)</li>
+                  <li><code>sourceOfData</code> - Data Source (SAP, Excel, etc.)</li>
                   <li><code>targetAchieved</code>, <code>rating</code> - Achievement data</li>
                   <li><code>employeeRemarks</code>, <code>managerRemarks</code>, <code>auditRemarks</code></li>
                 </ul>
                 <Alert className="mt-4">
                   <CheckCircle2 className="h-4 w-4" />
                   <AlertDescription>
-                    New categories will be automatically created if they don't exist in the system.
+                    New categories will be automatically created. Ratings are auto-calculated using R5-R0 thresholds.
                   </AlertDescription>
                 </Alert>
               </div>
@@ -755,9 +797,14 @@ export default function ImportData() {
                         <TableHead>Category</TableHead>
                         <TableHead>KRA</TableHead>
                         <TableHead>KPI</TableHead>
+                        <TableHead>UOM</TableHead>
                         <TableHead>Target</TableHead>
+                        <TableHead>Criteria</TableHead>
+                        <TableHead>R5</TableHead>
+                        <TableHead>R4</TableHead>
+                        <TableHead>R3</TableHead>
+                        <TableHead>Weight</TableHead>
                         <TableHead>Month</TableHead>
-                        <TableHead>Weightage</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -767,10 +814,15 @@ export default function ImportData() {
                           <TableCell>{row.fullName}</TableCell>
                           <TableCell>{row.category}</TableCell>
                           <TableCell>{row.kra}</TableCell>
-                          <TableCell className="max-w-[200px] truncate">{row.kpi}</TableCell>
+                          <TableCell className="max-w-[150px] truncate">{row.kpi}</TableCell>
+                          <TableCell>{row.uom || '-'}</TableCell>
                           <TableCell>{row.target}</TableCell>
-                          <TableCell>{row.month}</TableCell>
-                          <TableCell>{row.kpiWeightageScore || '-'}</TableCell>
+                          <TableCell className="text-xs">{row.criteria || 'Higher'}</TableCell>
+                          <TableCell>{row.r5 || '-'}</TableCell>
+                          <TableCell>{row.r4 || '-'}</TableCell>
+                          <TableCell>{row.r3 || '-'}</TableCell>
+                          <TableCell>{row.kpiWeightage || row.kpiWeightageScore || '-'}</TableCell>
+                          <TableCell>{row.month || '-'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
