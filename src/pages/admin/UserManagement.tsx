@@ -103,7 +103,7 @@ export default function UserManagement() {
     updateUser.mutate({
       userId: selectedUser.id,
       role: editRole,
-      reportingManagerId: editManagerId || null,
+      reportingManagerId: editManagerId === 'none' ? null : editManagerId || null,
       designation: editDesignation,
       pmsGrade: editPmsGrade,
     });
@@ -272,7 +272,7 @@ export default function UserManagement() {
                   <SelectValue placeholder="Select manager" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {profiles?.filter(p => p.id !== selectedUser?.id).map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
                   ))}
