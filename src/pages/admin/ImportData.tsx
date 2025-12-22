@@ -343,15 +343,88 @@ export default function ImportData() {
       return colors[Math.floor(Math.random() * colors.length)];
     };
 
+    // Cache for auto-created employees during this import
+    const employeeCache = new Map<string, { id: string }>();
+    
+    // Pre-populate cache with existing employees
+    profiles?.forEach(p => {
+      if (p.employee_code) {
+        employeeCache.set(p.employee_code.toLowerCase(), { id: p.id });
+      }
+      if (p.full_name) {
+        employeeCache.set(p.full_name.toLowerCase(), { id: p.id });
+      }
+    });
+
+    let employeesCreated = 0;
+
+    // Get auth token for edge function calls
+    const { data: sessionData } = await supabase.auth.getSession();
+    const authToken = sessionData?.session?.access_token;
+
     for (const row of importData) {
       try {
-        // Find employee by code or name
-        const employee = profiles?.find(p => 
+        // Find employee by code or name from cache
+        let employee = profiles?.find(p => 
           (p.employee_code && p.employee_code === String(row.newCode)) ||
           (p.full_name && p.full_name.toLowerCase() === row.fullName?.toLowerCase())
         );
+
+        // If not found in original profiles, check cache (for newly created employees)
+        if (!employee && row.newCode) {
+          const cached = employeeCache.get(String(row.newCode).toLowerCase());
+          if (cached) {
+            employee = { id: cached.id } as any;
+          }
+        }
+        if (!employee && row.fullName) {
+          const cached = employeeCache.get(row.fullName.toLowerCase());
+          if (cached) {
+            employee = { id: cached.id } as any;
+          }
+        }
+
+        // Auto-create employee if not found
+        if (!employee && (row.newCode || row.fullName)) {
+          try {
+            const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-employee`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`,
+              },
+              body: JSON.stringify({
+                employee_code: String(row.newCode || ''),
+                full_name: row.fullName || '',
+              }),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              importErrors.push(`Failed to create employee ${row.newCode} - ${row.fullName}: ${errorData.error}`);
+              continue;
+            }
+
+            const { profile: newProfile } = await response.json();
+            employee = { id: newProfile.id } as any;
+            
+            // Add to cache for subsequent rows
+            if (row.newCode) {
+              employeeCache.set(String(row.newCode).toLowerCase(), { id: newProfile.id });
+            }
+            if (row.fullName) {
+              employeeCache.set(row.fullName.toLowerCase(), { id: newProfile.id });
+            }
+            
+            employeesCreated++;
+          } catch (createError: any) {
+            importErrors.push(`Failed to create employee ${row.newCode} - ${row.fullName}: ${createError.message}`);
+            continue;
+          }
+        }
+        
         if (!employee) {
-          importErrors.push(`Employee not found: ${row.newCode} - ${row.fullName}`);
+          importErrors.push(`Employee not found and could not be created: ${row.newCode} - ${row.fullName}`);
           continue;
         }
 
@@ -556,7 +629,13 @@ export default function ImportData() {
     if (successCount > 0) {
       let message = `Successfully imported ${successCount} KPIs`;
       if (categoriesCreated > 0) {
-        message += ` and created ${categoriesCreated} new categories`;
+        message += `, created ${categoriesCreated} categories`;
+      }
+      if (employeesCreated > 0) {
+        message += `, auto-created ${employeesCreated} employees`;
+        // Refresh profiles since we created new employees
+        refetchProfiles();
+        queryClient.invalidateQueries({ queryKey: ['profiles'] });
       }
       toast({ title: message });
     }
