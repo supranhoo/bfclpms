@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useProfiles, useKraCategories, useDepartments, useDivisions, useBusinessUnits } from '@/hooks/useOrganization';
 import { useCreateKpi } from '@/hooks/useKpis';
@@ -16,6 +16,19 @@ import { FileSpreadsheet, AlertCircle, CheckCircle2, Download, Users, Loader2 } 
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import * as XLSX from 'xlsx';
+
+interface BackgroundImportProgress {
+  id: string;
+  status: 'running' | 'completed' | 'failed';
+  total_rows: number;
+  processed_rows: number;
+  kpis_imported: number;
+  employees_created: number;
+  categories_created: number;
+  errors: string[];
+  started_at: string;
+  completed_at: string | null;
+}
 
 type RatingLevel = 'red' | 'yellow' | 'green' | 'blue';
 
@@ -118,9 +131,10 @@ export default function ImportData() {
   const [isImporting, setIsImporting] = useState(false);
   const [importSuccess, setImportSuccess] = useState(0);
   const [useBackgroundImport, setUseBackgroundImport] = useState(true);
-  const [backgroundImportStarted, setBackgroundImportStarted] = useState(false);
+  const [backgroundImportId, setBackgroundImportId] = useState<string | null>(null);
+  const [backgroundProgress, setBackgroundProgress] = useState<BackgroundImportProgress | null>(null);
   
-  // Real-time progress tracking
+  // Real-time progress tracking (for foreground import)
   const [importProgress, setImportProgress] = useState({
     current: 0,
     total: 0,
@@ -128,6 +142,109 @@ export default function ImportData() {
     employeesCreated: 0,
     categoriesCreated: 0,
   });
+
+  // Subscribe to real-time updates for background import
+  useEffect(() => {
+    if (!backgroundImportId) return;
+
+    // Initial fetch
+    const fetchProgress = async () => {
+      const { data } = await supabase
+        .from('import_progress')
+        .select('*')
+        .eq('id', backgroundImportId)
+        .single();
+      
+      if (data) {
+        const progress: BackgroundImportProgress = {
+          id: data.id,
+          status: data.status as 'running' | 'completed' | 'failed',
+          total_rows: data.total_rows,
+          processed_rows: data.processed_rows,
+          kpis_imported: data.kpis_imported,
+          employees_created: data.employees_created,
+          categories_created: data.categories_created,
+          errors: typeof data.errors === 'string' ? JSON.parse(data.errors) : (data.errors || []),
+          started_at: data.started_at,
+          completed_at: data.completed_at,
+        };
+        setBackgroundProgress(progress);
+        
+        if (progress.status === 'completed' || progress.status === 'failed') {
+          // Refresh data when import completes
+          queryClient.invalidateQueries({ queryKey: ['kpis'] });
+          queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
+          queryClient.invalidateQueries({ queryKey: ['profiles'] });
+          queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+          
+          if (progress.status === 'completed') {
+            setImportSuccess(progress.kpis_imported);
+            toast({
+              title: 'Import Complete',
+              description: `Successfully imported ${progress.kpis_imported} KPIs, created ${progress.employees_created} employees and ${progress.categories_created} categories.`,
+            });
+          } else {
+            toast({
+              title: 'Import Failed',
+              description: progress.errors?.[0] || 'An error occurred during import',
+              variant: 'destructive',
+            });
+          }
+        }
+      }
+    };
+    
+    fetchProgress();
+
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel(`import-progress-${backgroundImportId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'import_progress',
+          filter: `id=eq.${backgroundImportId}`,
+        },
+        (payload) => {
+          const data = payload.new as any;
+          const progress: BackgroundImportProgress = {
+            id: data.id,
+            status: data.status as 'running' | 'completed' | 'failed',
+            total_rows: data.total_rows,
+            processed_rows: data.processed_rows,
+            kpis_imported: data.kpis_imported,
+            employees_created: data.employees_created,
+            categories_created: data.categories_created,
+            errors: typeof data.errors === 'string' ? JSON.parse(data.errors) : (data.errors || []),
+            started_at: data.started_at,
+            completed_at: data.completed_at,
+          };
+          setBackgroundProgress(progress);
+          
+          if (progress.status === 'completed' || progress.status === 'failed') {
+            queryClient.invalidateQueries({ queryKey: ['kpis'] });
+            queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
+            queryClient.invalidateQueries({ queryKey: ['profiles'] });
+            queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+            
+            if (progress.status === 'completed') {
+              setImportSuccess(progress.kpis_imported);
+              toast({
+                title: 'Import Complete',
+                description: `Successfully imported ${progress.kpis_imported} KPIs.`,
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [backgroundImportId, queryClient, toast]);
 
   // Employee Import State
   const [employeeData, setEmployeeData] = useState<EmployeeImportRow[]>([]);
@@ -361,22 +478,15 @@ export default function ImportData() {
           throw new Error(result.error || 'Import failed');
         }
 
-        setBackgroundImportStarted(true);
+        // Set the import ID to start tracking progress
+        setBackgroundImportId(result.importId);
         toast({
           title: 'Import Started',
-          description: `Processing ${importData.length} KPIs in background. You can continue working.`,
+          description: `Processing ${importData.length} KPIs in background. Progress will show below.`,
         });
         
-        // Clear the import data
+        // Clear the import data preview
         setImportData([]);
-        
-        // Invalidate queries after a delay to pick up new data
-        setTimeout(() => {
-          queryClient.invalidateQueries({ queryKey: ['kpis'] });
-          queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
-          queryClient.invalidateQueries({ queryKey: ['profiles'] });
-          queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
-        }, 5000);
 
       } catch (error: any) {
         toast({
@@ -1169,14 +1279,92 @@ export default function ImportData() {
                 </div>
               </div>
 
-              {backgroundImportStarted && (
-                <Alert className="border-green-200 bg-green-50 dark:bg-green-950/20">
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  <AlertTitle className="text-green-700 dark:text-green-300">Import Running in Background</AlertTitle>
-                  <AlertDescription className="text-green-600 dark:text-green-400">
-                    Your data is being imported. You can continue working. Refresh the page in a few minutes to see the imported data.
-                  </AlertDescription>
-                </Alert>
+              {/* Background Import Progress */}
+              {backgroundProgress && (
+                <Card className={`border-2 ${
+                  backgroundProgress.status === 'completed' ? 'border-green-200 bg-green-50/50 dark:bg-green-950/20' :
+                  backgroundProgress.status === 'failed' ? 'border-destructive/50 bg-destructive/10' :
+                  'border-primary/50 bg-primary/5'
+                }`}>
+                  <CardContent className="pt-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          {backgroundProgress.status === 'running' ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                              <span className="font-medium">Importing data in background...</span>
+                            </>
+                          ) : backgroundProgress.status === 'completed' ? (
+                            <>
+                              <CheckCircle2 className="h-4 w-4 text-green-600" />
+                              <span className="font-medium text-green-700 dark:text-green-300">Import Complete!</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle className="h-4 w-4 text-destructive" />
+                              <span className="font-medium text-destructive">Import Failed</span>
+                            </>
+                          )}
+                        </div>
+                        <span className="text-muted-foreground">
+                          {backgroundProgress.processed_rows} / {backgroundProgress.total_rows}
+                        </span>
+                      </div>
+                      
+                      <Progress 
+                        value={backgroundProgress.total_rows > 0 
+                          ? (backgroundProgress.processed_rows / backgroundProgress.total_rows) * 100 
+                          : 0
+                        } 
+                        className="h-2"
+                      />
+                      
+                      <div className="grid grid-cols-3 gap-4 text-center">
+                        <div className="rounded-lg bg-background p-3 border">
+                          <div className="text-2xl font-bold text-primary">{backgroundProgress.kpis_imported}</div>
+                          <div className="text-xs text-muted-foreground">KPIs Imported</div>
+                        </div>
+                        <div className="rounded-lg bg-background p-3 border">
+                          <div className="text-2xl font-bold text-green-600">{backgroundProgress.employees_created}</div>
+                          <div className="text-xs text-muted-foreground">Employees Created</div>
+                        </div>
+                        <div className="rounded-lg bg-background p-3 border">
+                          <div className="text-2xl font-bold text-blue-600">{backgroundProgress.categories_created}</div>
+                          <div className="text-xs text-muted-foreground">Categories Created</div>
+                        </div>
+                      </div>
+                      
+                      {backgroundProgress.errors && backgroundProgress.errors.length > 0 && (
+                        <div className="mt-4">
+                          <p className="text-sm font-medium text-destructive mb-2">Errors ({backgroundProgress.errors.length}):</p>
+                          <div className="max-h-24 overflow-auto bg-destructive/10 p-2 rounded text-xs">
+                            {backgroundProgress.errors.slice(0, 5).map((err, i) => (
+                              <div key={i} className="text-destructive">{err}</div>
+                            ))}
+                            {backgroundProgress.errors.length > 5 && (
+                              <div className="text-muted-foreground">...and {backgroundProgress.errors.length - 5} more</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {backgroundProgress.status !== 'running' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setBackgroundImportId(null);
+                            setBackgroundProgress(null);
+                          }}
+                          className="w-full"
+                        >
+                          Dismiss
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
               )}
 
               <div className="text-sm text-muted-foreground">
