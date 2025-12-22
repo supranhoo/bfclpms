@@ -99,6 +99,131 @@ export type Database = {
         }
         Relationships: []
       }
+      kpi_audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          kpi_id: string
+          metadata: Json | null
+          new_value: Json | null
+          old_value: Json | null
+          performed_by: string
+          submission_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          kpi_id: string
+          metadata?: Json | null
+          new_value?: Json | null
+          old_value?: Json | null
+          performed_by: string
+          submission_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          kpi_id?: string
+          metadata?: Json | null
+          new_value?: Json | null
+          old_value?: Json | null
+          performed_by?: string
+          submission_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_audit_logs_kpi_id_fkey"
+            columns: ["kpi_id"]
+            isOneToOne: false
+            referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_audit_logs_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_audit_logs_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "review_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kpi_queries: {
+        Row: {
+          created_at: string
+          entity_type: Database["public"]["Enums"]["query_entity_type"]
+          evidence_url: string | null
+          id: string
+          kpi_id: string
+          raised_by: string
+          raised_to: string
+          reason: string
+          resolution_notes: string | null
+          resolved_at: string | null
+          status: Database["public"]["Enums"]["query_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          entity_type?: Database["public"]["Enums"]["query_entity_type"]
+          evidence_url?: string | null
+          id?: string
+          kpi_id: string
+          raised_by: string
+          raised_to: string
+          reason: string
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["query_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          entity_type?: Database["public"]["Enums"]["query_entity_type"]
+          evidence_url?: string | null
+          id?: string
+          kpi_id?: string
+          raised_by?: string
+          raised_to?: string
+          reason?: string
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["query_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_queries_kpi_id_fkey"
+            columns: ["kpi_id"]
+            isOneToOne: false
+            referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_queries_raised_by_fkey"
+            columns: ["raised_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_queries_raised_to_fkey"
+            columns: ["raised_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpis: {
         Row: {
           category_id: string
@@ -333,6 +458,7 @@ export type Database = {
           final_score: number | null
           id: string
           kpi_id: string
+          kpi_status: Database["public"]["Enums"]["kpi_status"]
           manager_rating: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks: string | null
           manager_score: number | null
@@ -353,6 +479,7 @@ export type Database = {
           final_score?: number | null
           id?: string
           kpi_id: string
+          kpi_status?: Database["public"]["Enums"]["kpi_status"]
           manager_rating?: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks?: string | null
           manager_score?: number | null
@@ -373,6 +500,7 @@ export type Database = {
           final_score?: number | null
           id?: string
           kpi_id?: string
+          kpi_status?: Database["public"]["Enums"]["kpi_status"]
           manager_rating?: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks?: string | null
           manager_score?: number | null
@@ -470,6 +598,9 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "manager" | "employee" | "auditor"
+      kpi_status: "open" | "submitted" | "approved_by_manager" | "locked"
+      query_entity_type: "kra" | "kpi"
+      query_status: "open" | "resolved"
       rating_level: "red" | "yellow" | "green" | "blue"
       review_status:
         | "kra_set"
@@ -605,6 +736,9 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "manager", "employee", "auditor"],
+      kpi_status: ["open", "submitted", "approved_by_manager", "locked"],
+      query_entity_type: ["kra", "kpi"],
+      query_status: ["open", "resolved"],
       rating_level: ["red", "yellow", "green", "blue"],
       review_status: [
         "kra_set",
