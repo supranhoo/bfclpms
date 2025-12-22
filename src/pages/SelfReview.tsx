@@ -276,6 +276,7 @@ export default function SelfReview() {
             employees={employees}
             categories={categories}
             showCategoryFilter={true}
+            showStatusFilter={true}
             isLoading={loadingFilters}
           />
         </CardContent>
