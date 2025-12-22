@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useAllKpis, useReviewSubmissions, RatingLevel } from '@/hooks/useKpis';
+import { useAllKpis, useReviewSubmissions, RatingLevel, KPI } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,8 @@ import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/R
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Shield, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
+import { Shield, CheckCircle2, AlertTriangle, Clock, Info } from 'lucide-react';
+import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 
 const statusColors = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -54,9 +55,15 @@ export default function AuditPanel() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('manager_check');
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
-  const [selectedKpi, setSelectedKpi] = useState<typeof allKpis extends (infer T)[] ? T : never | null>(null);
+  const [logicModalOpen, setLogicModalOpen] = useState(false);
+  const [selectedKpi, setSelectedKpi] = useState<NonNullable<typeof allKpis>[number] | null>(null);
   const [auditorRating, setAuditorRating] = useState<RatingLevel | ''>('');
   const [auditorRemarks, setAuditorRemarks] = useState('');
+
+  const openLogicModal = (kpi: NonNullable<typeof allKpis>[number]) => {
+    setSelectedKpi(kpi);
+    setLogicModalOpen(true);
+  };
 
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
 
@@ -286,10 +293,17 @@ export default function AuditPanel() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div>
-                        <p className="font-medium">{kpi.kra_name}</p>
-                        <p className="text-sm text-muted-foreground">{kpi.kpi_name}</p>
-                      </div>
+                      <button
+                        onClick={() => openLogicModal(kpi)}
+                        className="text-left hover:bg-muted/50 p-1 -m-1 rounded transition-colors cursor-pointer group"
+                        title="Click to view KPI details"
+                      >
+                        <p className="font-medium text-primary group-hover:underline">{kpi.kra_name}</p>
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          {kpi.kpi_name}
+                          <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </p>
+                      </button>
                     </TableCell>
                     <TableCell>{kpi.target_value}</TableCell>
                     <TableCell>{submission?.achieved_value || '-'}</TableCell>
@@ -424,6 +438,13 @@ export default function AuditPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* KPI Logic Modal */}
+      <KpiLogicModal
+        isOpen={logicModalOpen}
+        onClose={() => setLogicModalOpen(false)}
+        kpi={selectedKpi as KPI | null}
+      />
     </div>
   );
 }
