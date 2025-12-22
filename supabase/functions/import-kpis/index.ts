@@ -261,8 +261,14 @@ async function processImport(
       ? parseReviewPeriod(String(row.month)) 
       : { period: null, year: new Date().getFullYear() };
     
-    const targetValue = typeof row.target === 'number' ? row.target :
+    const isPercentage = row.uom?.toLowerCase().includes('%') || row.uom?.toLowerCase() === 'percentage';
+    let targetValue = typeof row.target === 'number' ? row.target :
       row.target ? parseFloat(String(row.target).replace('%', '')) : null;
+    
+    // Convert decimal to percentage if UOM is % and value looks like a decimal (0-1 range)
+    if (isPercentage && targetValue !== null && targetValue > 0 && targetValue <= 1) {
+      targetValue = targetValue * 100;
+    }
     
     const kpiId = crypto.randomUUID();
     
@@ -300,8 +306,13 @@ async function processImport(
       
       const parseAchieved = (val: any): number | null => {
         if (val === null || val === undefined || val === '') return null;
-        const num = parseFloat(String(val).replace('%', '').trim());
-        return isNaN(num) ? null : num;
+        let num = parseFloat(String(val).replace('%', '').trim());
+        if (isNaN(num)) return null;
+        // Convert decimal to percentage if UOM is % and value looks like a decimal (0-1 range)
+        if (isPercentage && num > 0 && num <= 1) {
+          num = num * 100;
+        }
+        return num;
       };
       
       submissionRecords.push({
