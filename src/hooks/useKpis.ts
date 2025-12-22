@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { format, addMonths } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -243,6 +244,75 @@ export function useSubmitSelfReview() {
     },
     onError: (error: Error) => {
       toast({ title: 'Failed to submit review', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+// Hook for rolling over KPIs to next month/period
+export function useRolloverKpi() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ kpi, targetPeriod }: { kpi: KPI; targetPeriod: string }) => {
+      // Calculate the next year if rolling to a new year
+      const currentPeriod = kpi.review_period || '';
+      const currentYear = kpi.review_year || new Date().getFullYear();
+      
+      // Determine the target year
+      let targetYear = currentYear;
+      const periodMonths: Record<string, number> = {
+        'January': 0, 'February': 1, 'March': 2, 'April': 3, 'May': 4, 'June': 5,
+        'July': 6, 'August': 7, 'September': 8, 'October': 9, 'November': 10, 'December': 11,
+        'Q1': 0, 'Q2': 3, 'Q3': 6, 'Q4': 9
+      };
+      
+      // If current period is December and target is January, increment year
+      if (currentPeriod === 'December' && targetPeriod === 'January') {
+        targetYear = currentYear + 1;
+      }
+      
+      // If current quarter is Q4 and target is Q1, increment year
+      if (currentPeriod === 'Q4' && targetPeriod === 'Q1') {
+        targetYear = currentYear + 1;
+      }
+
+      const { data, error } = await supabase
+        .from('kpis')
+        .insert({
+          employee_id: kpi.employee_id,
+          category_id: kpi.category_id,
+          kra_name: kpi.kra_name,
+          kpi_name: kpi.kpi_name,
+          target_value: kpi.target_value,
+          weightage: kpi.weightage,
+          uom: kpi.uom,
+          frequency: kpi.frequency,
+          criteria: kpi.criteria,
+          source_of_data: kpi.source_of_data,
+          r0: kpi.r0,
+          r1: kpi.r1,
+          r2: kpi.r2,
+          r3: kpi.r3,
+          r4: kpi.r4,
+          r5: kpi.r5,
+          review_period: targetPeriod,
+          review_year: targetYear,
+          status: 'kra_set',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
+      toast({ title: 'KPI rolled over successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to rollover KPI', description: error.message, variant: 'destructive' });
     },
   });
 }

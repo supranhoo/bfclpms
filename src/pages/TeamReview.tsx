@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeamMembers, useProfiles } from '@/hooks/useOrganization';
-import { useKpisByEmployee, useReviewSubmissions, RatingLevel } from '@/hooks/useKpis';
+import { useKpisByEmployee, useReviewSubmissions, useRolloverKpi, RatingLevel, KPI } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +17,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Users, CheckCircle2, Clock, ArrowRight, Search } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Search, RefreshCw } from 'lucide-react';
+
+const reviewPeriods = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+  'Q1', 'Q2', 'Q3', 'Q4'
+];
 
 const statusColors = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -50,10 +56,13 @@ function TeamMemberKpis({ memberId, memberName }: { memberId: string; memberName
   const { toast } = useToast();
 
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [rolloverDialogOpen, setRolloverDialogOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<typeof kpis extends (infer T)[] ? T : never | null>(null);
   const [managerRating, setManagerRating] = useState<RatingLevel | ''>('');
   const [managerRemarks, setManagerRemarks] = useState('');
-
+  const [targetPeriod, setTargetPeriod] = useState('');
+  
+  const rolloverKpi = useRolloverKpi();
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
 
   const submitManagerReview = useMutation({
@@ -114,6 +123,29 @@ function TeamMemberKpis({ memberId, memberName }: { memberId: string; memberName
       manager_score: score,
       manager_remarks: managerRemarks,
     });
+  };
+
+  const openRolloverDialog = (kpi: NonNullable<typeof kpis>[number]) => {
+    setSelectedKpi(kpi);
+    // Set default target period to next month
+    const currentPeriod = kpi.review_period || '';
+    const currentIndex = reviewPeriods.indexOf(currentPeriod);
+    if (currentIndex !== -1 && currentIndex < 11) {
+      setTargetPeriod(reviewPeriods[currentIndex + 1]);
+    } else if (currentPeriod === 'December') {
+      setTargetPeriod('January');
+    } else {
+      setTargetPeriod('');
+    }
+    setRolloverDialogOpen(true);
+  };
+
+  const handleRollover = () => {
+    if (!selectedKpi || !targetPeriod) return;
+    rolloverKpi.mutate(
+      { kpi: selectedKpi as KPI, targetPeriod },
+      { onSuccess: () => setRolloverDialogOpen(false) }
+    );
   };
 
   const pendingReviewKpis = kpis?.filter(k => k.status === 'self_review') || [];
@@ -203,14 +235,24 @@ function TeamMemberKpis({ memberId, memberName }: { memberId: string; memberName
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  {status === 'self_review' && (
-                    <Button size="sm" onClick={() => openReviewDialog(kpi)}>
-                      Review
+                  <div className="flex gap-1">
+                    {status === 'self_review' && (
+                      <Button size="sm" onClick={() => openReviewDialog(kpi)}>
+                        Review
+                      </Button>
+                    )}
+                    {status === 'manager_check' && (
+                      <Badge variant="outline" className="text-primary">Reviewed</Badge>
+                    )}
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={() => openRolloverDialog(kpi)}
+                      title="Rollover to next period"
+                    >
+                      <RefreshCw className="h-4 w-4" />
                     </Button>
-                  )}
-                  {status === 'manager_check' && (
-                    <Badge variant="outline" className="text-primary">Reviewed</Badge>
-                  )}
+                  </div>
                 </TableCell>
               </TableRow>
             );
@@ -277,6 +319,59 @@ function TeamMemberKpis({ memberId, memberName }: { memberId: string; memberName
             <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleSubmitReview} disabled={!managerRating || submitManagerReview.isPending}>
               {submitManagerReview.isPending ? 'Submitting...' : 'Submit Review'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rollover Dialog */}
+      <Dialog open={rolloverDialogOpen} onOpenChange={setRolloverDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rollover KRA to Next Period</DialogTitle>
+            <DialogDescription>
+              Copy "{selectedKpi?.kra_name}" to a new review period
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+              <div>
+                <Label className="text-muted-foreground">Current Period</Label>
+                <p className="font-medium">{selectedKpi?.review_period || 'N/A'}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Current Year</Label>
+                <p className="font-medium">{selectedKpi?.review_year || 'N/A'}</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Target Period</Label>
+              <Select value={targetPeriod} onValueChange={setTargetPeriod}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select target period" />
+                </SelectTrigger>
+                <SelectContent>
+                  {reviewPeriods.map(period => (
+                    <SelectItem key={period} value={period}>
+                      {period}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+              <p>This will create a new KPI with the same settings for the selected period.</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRolloverDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleRollover} disabled={!targetPeriod || rolloverKpi.isPending}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              {rolloverKpi.isPending ? 'Rolling over...' : 'Rollover KRA'}
             </Button>
           </DialogFooter>
         </DialogContent>
