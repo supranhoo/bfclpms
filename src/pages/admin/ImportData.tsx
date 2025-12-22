@@ -238,15 +238,34 @@ export default function ImportData() {
         const targetValue = typeof row.target === 'number' ? row.target : 
           row.target ? parseFloat(String(row.target).replace('%', '')) : null;
 
-        // Parse review period from month (e.g., "Sep-25" -> "September")
+        // Parse review period and year from month (handles: "Dec-25", "Dec-2025", "December 2025", "December-2025")
         const reviewPeriod = row.month || null;
-
-        // Parse review year from month
         let reviewYear = new Date().getFullYear();
+        
         if (row.month) {
-          const yearPart = row.month.split('-')[1];
-          if (yearPart) {
-            reviewYear = 2000 + parseInt(yearPart);
+          const monthStr = String(row.month).trim();
+          
+          // Try "Dec-25" or "Dec-2025" format
+          if (monthStr.includes('-')) {
+            const yearPart = monthStr.split('-')[1];
+            if (yearPart) {
+              const yearNum = parseInt(yearPart);
+              reviewYear = yearNum < 100 ? 2000 + yearNum : yearNum;
+            }
+          }
+          // Try "December 2025" format (space separated)
+          else if (monthStr.includes(' ')) {
+            const yearPart = monthStr.split(' ').pop();
+            if (yearPart) {
+              const yearNum = parseInt(yearPart);
+              if (!isNaN(yearNum)) {
+                reviewYear = yearNum < 100 ? 2000 + yearNum : yearNum;
+              }
+            }
+          }
+          // Try pure number (Excel might pass year as number)
+          else if (!isNaN(parseInt(monthStr)) && monthStr.length === 4) {
+            reviewYear = parseInt(monthStr);
           }
         }
 
