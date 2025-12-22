@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
+import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { Send, Eye, CheckCircle2, Clock, AlertCircle, Filter, User, Paperclip } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
@@ -43,6 +44,11 @@ const ratingOptions: { value: RatingLevel; label: string; color: string; score: 
 export default function SelfReview() {
   const { role, user } = useAuth();
   const isAdmin = role === 'admin';
+  const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
+  
+  // Review period filter state
+  const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
+  const [selectedYear, setSelectedYear] = useState(defaultYear);
   
   // Fetch KPIs based on role
   const { data: myKpis, isLoading: loadingMyKpis } = useMyKpis();
@@ -92,9 +98,13 @@ export default function SelfReview() {
     return Array.from(employeeMap.values());
   }, [isAdmin, allKpis]);
 
-  // Filter KPIs
+  // Filter KPIs by period and category
   const filteredKpis = useMemo(() => {
     let filtered = kpis || [];
+    // Filter by review period and year
+    filtered = filtered.filter(k => 
+      k.review_period === selectedPeriod && k.review_year === selectedYear
+    );
     if (selectedCategory) {
       filtered = filtered.filter(k => k.category_id === selectedCategory);
     }
@@ -103,7 +113,7 @@ export default function SelfReview() {
     }
     // Only show KPIs that are pending self review or already submitted
     return filtered.filter(k => k.status === 'kra_set' || k.status === 'self_review');
-  }, [kpis, selectedCategory, selectedEmployee, isAdmin]);
+  }, [kpis, selectedCategory, selectedEmployee, isAdmin, selectedPeriod, selectedYear]);
 
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
 
@@ -195,11 +205,19 @@ export default function SelfReview() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Self Review</h1>
-        <p className="text-muted-foreground">
-          {isAdmin ? 'View and manage employee self-assessments' : 'Submit your self-assessment for each KPI'}
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Self Review</h1>
+          <p className="text-muted-foreground">
+            {isAdmin ? 'View and manage employee self-assessments' : 'Submit your self-assessment for each KPI'}
+          </p>
+        </div>
+        <ReviewPeriodSelector
+          selectedPeriod={selectedPeriod}
+          selectedYear={selectedYear}
+          onPeriodChange={setSelectedPeriod}
+          onYearChange={setSelectedYear}
+        />
       </div>
 
       {/* Progress Card */}

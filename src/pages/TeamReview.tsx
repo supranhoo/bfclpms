@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -48,8 +49,13 @@ const ratingOptions: { value: RatingLevel; label: string; color: string }[] = [
   { value: 'blue', label: 'Outstanding', color: '#3B82F6' },
 ];
 
-function TeamMemberKpis({ memberId, memberName }: { memberId: string; memberName: string }) {
-  const { data: kpis, isLoading } = useKpisByEmployee(memberId);
+function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: { memberId: string; memberName: string; selectedPeriod: string; selectedYear: number }) {
+  const { data: allKpis, isLoading } = useKpisByEmployee(memberId);
+  
+  // Filter KPIs by period and year
+  const kpis = allKpis?.filter(k => 
+    k.review_period === selectedPeriod && k.review_year === selectedYear
+  );
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const queryClient = useQueryClient();
@@ -386,6 +392,9 @@ export default function TeamReview() {
   const { data: allProfiles, isLoading: profilesLoading } = useProfiles();
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
+  const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
+  const [selectedYear, setSelectedYear] = useState(defaultYear);
 
   const isAdmin = role === 'admin';
   const isLoading = isAdmin ? profilesLoading : teamLoading;
@@ -423,11 +432,19 @@ export default function TeamReview() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Team Review</h1>
-        <p className="text-muted-foreground">
-          {isAdmin ? 'View all employees and their performance' : "Review and manage your team's performance"}
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Team Review</h1>
+          <p className="text-muted-foreground">
+            {isAdmin ? 'View all employees and their performance' : "Review and manage your team's performance"}
+          </p>
+        </div>
+        <ReviewPeriodSelector
+          selectedPeriod={selectedPeriod}
+          selectedYear={selectedYear}
+          onPeriodChange={setSelectedPeriod}
+          onYearChange={setSelectedYear}
+        />
       </div>
 
       {/* Team Overview */}
@@ -531,6 +548,8 @@ export default function TeamReview() {
             <TeamMemberKpis
               memberId={selectedMember}
               memberName={displayMembers?.find(m => m.id === selectedMember)?.full_name || 'Team Member'}
+              selectedPeriod={selectedPeriod}
+              selectedYear={selectedYear}
             />
           </CardContent>
         </Card>
