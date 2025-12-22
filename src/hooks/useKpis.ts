@@ -102,17 +102,35 @@ export function useAllKpis() {
   return useQuery({
     queryKey: ['all-kpis'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('kpis')
-        .select(`
-          *,
-          kra_categories (id, name, color, weightage),
-          profiles:employee_id (id, full_name, email, employee_code)
-        `)
-        .order('created_at', { ascending: false });
+      // Fetch all KPIs by paginating through results (Supabase default limit is 1000)
+      const allKpis: any[] = [];
+      let from = 0;
+      const pageSize = 1000;
+      let hasMore = true;
 
-      if (error) throw error;
-      return data;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('kpis')
+          .select(`
+            *,
+            kra_categories (id, name, color, weightage),
+            profiles:employee_id (id, full_name, email, employee_code)
+          `)
+          .order('created_at', { ascending: false })
+          .range(from, from + pageSize - 1);
+
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allKpis.push(...data);
+          from += pageSize;
+          hasMore = data.length === pageSize;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      return allKpis;
     },
   });
 }
