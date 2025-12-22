@@ -18,8 +18,9 @@ import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/R
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Users, CheckCircle2, Clock, ArrowRight, Search, RefreshCw, MessageSquare, Check, Lock } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Search, RefreshCw, MessageSquare, Check, Lock, Info } from 'lucide-react';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
+import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 
 const reviewPeriods = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -81,11 +82,17 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
   const [queryDialogOpen, setQueryDialogOpen] = useState(false);
   const [rolloverDialogOpen, setRolloverDialogOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [logicModalOpen, setLogicModalOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   const [managerRating, setManagerRating] = useState<RatingLevel | ''>('');
   const [managerRemarks, setManagerRemarks] = useState('');
   const [queryReason, setQueryReason] = useState('');
   const [targetPeriod, setTargetPeriod] = useState('');
+
+  const openLogicModal = (kpi: KPI) => {
+    setSelectedKpi(kpi);
+    setLogicModalOpen(true);
+  };
   
   const rolloverKpi = useRolloverKpi();
   const approveKpi = useApproveKpi();
@@ -266,10 +273,17 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div>
-                    <p className="font-medium">{kpi.kra_name}</p>
-                    <p className="text-sm text-muted-foreground">{kpi.kpi_name}</p>
-                  </div>
+                  <button
+                    onClick={() => openLogicModal(kpi)}
+                    className="text-left hover:bg-muted/50 p-1 -m-1 rounded transition-colors cursor-pointer group w-full"
+                    title="Click to view KPI details"
+                  >
+                    <p className="font-medium text-primary group-hover:underline">{kpi.kra_name}</p>
+                    <p className="text-sm text-muted-foreground flex items-center gap-1">
+                      {kpi.kpi_name}
+                      <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </p>
+                  </button>
                 </TableCell>
                 <TableCell>{kpi.target_value ?? '-'}</TableCell>
                 <TableCell>{submission?.achieved_value ?? '-'}</TableCell>
@@ -565,6 +579,13 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
       <KpiTimeline
         isOpen={timelineOpen}
         onClose={() => setTimelineOpen(false)}
+        kpi={selectedKpi}
+      />
+
+      {/* KPI Logic Modal */}
+      <KpiLogicModal
+        isOpen={logicModalOpen}
+        onClose={() => setLogicModalOpen(false)}
         kpi={selectedKpi}
       />
     </div>

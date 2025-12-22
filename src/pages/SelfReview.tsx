@@ -19,7 +19,8 @@ import { Progress } from '@/components/ui/progress';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
-import { Send, Eye, CheckCircle2, Clock, AlertCircle, Lock } from 'lucide-react';
+import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
+import { Send, Eye, CheckCircle2, Clock, AlertCircle, Lock, Info } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -100,6 +101,7 @@ export default function SelfReview() {
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [logicModalOpen, setLogicModalOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   
   // Review form state
@@ -107,6 +109,11 @@ export default function SelfReview() {
   const [selfRating, setSelfRating] = useState<RatingLevel | ''>('');
   const [selfRemarks, setSelfRemarks] = useState('');
   const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
+
+  const openLogicModal = (kpi: KPI) => {
+    setSelectedKpi(kpi);
+    setLogicModalOpen(true);
+  };
 
   // Filter KPIs by period, category, status and employee hierarchy
   const filteredKpis = useMemo(() => {
@@ -316,8 +323,7 @@ export default function SelfReview() {
               <TableRow>
                 <TableHead>Employee</TableHead>
                 <TableHead>Category</TableHead>
-                <TableHead>KRA</TableHead>
-                <TableHead>KPI</TableHead>
+                <TableHead>KRA / KPI</TableHead>
                 <TableHead>Target</TableHead>
                 <TableHead>Weightage</TableHead>
                 <TableHead>Achieved</TableHead>
@@ -351,11 +357,20 @@ export default function SelfReview() {
                         <span className="text-sm">{kpi.kra_categories?.name}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="font-medium max-w-[150px] truncate" title={kpi.kra_name}>
-                      {kpi.kra_name}
-                    </TableCell>
-                    <TableCell className="max-w-[150px] truncate" title={kpi.kpi_name}>
-                      {kpi.kpi_name}
+                    <TableCell className="max-w-[200px]">
+                      <button
+                        onClick={() => openLogicModal(kpi)}
+                        className="text-left hover:bg-muted/50 p-1 -m-1 rounded transition-colors cursor-pointer group w-full"
+                        title="Click to view KPI details"
+                      >
+                        <div className="font-medium text-primary group-hover:underline truncate">
+                          {kpi.kra_name}
+                        </div>
+                        <div className="text-sm text-muted-foreground truncate flex items-center gap-1">
+                          {kpi.kpi_name}
+                          <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </button>
                     </TableCell>
                     <TableCell>
                       {kpi.target_value} {kpi.uom && <span className="text-muted-foreground text-xs">({kpi.uom})</span>}
@@ -431,7 +446,7 @@ export default function SelfReview() {
               })}
               {(!filteredKpis || filteredKpis.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                     <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
                     No KPIs pending self review
                   </TableCell>
@@ -642,6 +657,13 @@ export default function SelfReview() {
       <KpiTimeline
         isOpen={timelineOpen}
         onClose={() => setTimelineOpen(false)}
+        kpi={selectedKpi}
+      />
+
+      {/* KPI Logic Modal */}
+      <KpiLogicModal
+        isOpen={logicModalOpen}
+        onClose={() => setLogicModalOpen(false)}
         kpi={selectedKpi}
       />
     </div>
