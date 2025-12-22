@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAllKpis, useReviewSubmissions, RatingLevel } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -46,7 +47,10 @@ export default function AuditPanel() {
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
 
+  const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
+  const [selectedYear, setSelectedYear] = useState(defaultYear);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('manager_check');
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
@@ -56,11 +60,20 @@ export default function AuditPanel() {
 
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
 
-  const filteredKpis = allKpis?.filter(kpi => {
-    if (selectedCategory && kpi.category_id !== selectedCategory) return false;
-    if (statusFilter && kpi.status !== statusFilter) return false;
-    return true;
-  });
+  const filteredKpis = useMemo(() => {
+    let filtered = allKpis || [];
+    // Filter by review period and year
+    filtered = filtered.filter(kpi => 
+      kpi.review_period === selectedPeriod && kpi.review_year === selectedYear
+    );
+    if (selectedCategory) {
+      filtered = filtered.filter(kpi => kpi.category_id === selectedCategory);
+    }
+    if (statusFilter) {
+      filtered = filtered.filter(kpi => kpi.status === statusFilter);
+    }
+    return filtered;
+  }, [allKpis, selectedCategory, statusFilter, selectedPeriod, selectedYear]);
 
   const submitAuditReview = useMutation({
     mutationFn: async ({
@@ -147,9 +160,17 @@ export default function AuditPanel() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Audit Panel</h1>
-        <p className="text-muted-foreground">Review and approve performance evaluations</p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Audit Panel</h1>
+          <p className="text-muted-foreground">Review and approve performance evaluations</p>
+        </div>
+        <ReviewPeriodSelector
+          selectedPeriod={selectedPeriod}
+          selectedYear={selectedYear}
+          onPeriodChange={setSelectedPeriod}
+          onYearChange={setSelectedYear}
+        />
       </div>
 
       {/* Stats */}
