@@ -349,6 +349,51 @@ export default function ImportData() {
       }
     }
 
+    // Second pass: Identify managers from import data and assign 'manager' role
+    // Collect all manager employee IDs/names from the import data
+    const managerIdentifiers = new Set<string>();
+    employeeData.forEach(row => {
+      if (row.managerEmployeeId) managerIdentifiers.add(row.managerEmployeeId.toLowerCase());
+      if (row.managerName) managerIdentifiers.add(row.managerName.toLowerCase());
+    });
+
+    // Refetch profiles to get latest data including newly created users
+    const { data: updatedProfiles } = await supabase
+      .from('profiles')
+      .select('id, employee_code, full_name, email');
+
+    if (updatedProfiles && managerIdentifiers.size > 0) {
+      for (const profile of updatedProfiles) {
+        const isManager = 
+          (profile.employee_code && managerIdentifiers.has(profile.employee_code.toLowerCase())) ||
+          (profile.full_name && managerIdentifiers.has(profile.full_name.toLowerCase()));
+
+        if (isManager) {
+          // Check current role
+          const { data: existingRole } = await supabase
+            .from('user_roles')
+            .select('id, role')
+            .eq('user_id', profile.id)
+            .maybeSingle();
+
+          if (existingRole) {
+            // Update to manager if currently employee
+            if (existingRole.role === 'employee') {
+              await supabase
+                .from('user_roles')
+                .update({ role: 'manager' })
+                .eq('id', existingRole.id);
+            }
+          } else {
+            // Insert manager role
+            await supabase
+              .from('user_roles')
+              .insert({ user_id: profile.id, role: 'manager' });
+          }
+        }
+      }
+    }
+
     setEmployeeImportSuccess(successCount);
     setEmployeeErrors(importErrors);
     setIsImportingEmployees(false);
