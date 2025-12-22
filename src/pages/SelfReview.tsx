@@ -358,7 +358,7 @@ export default function SelfReview() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        {kpi.status === 'kra_set' && !isAdmin && (
+                        {kpi.status === 'kra_set' && (
                           <Button
                             size="sm"
                             onClick={() => openReviewDialog(kpi)}
@@ -367,7 +367,7 @@ export default function SelfReview() {
                             Submit
                           </Button>
                         )}
-                        {kpi.status === 'self_review' && !isAdmin && (
+                        {kpi.status === 'self_review' && (
                           <Button
                             size="sm"
                             variant="outline"
