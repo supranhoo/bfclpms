@@ -204,18 +204,14 @@ export default function ImportData() {
         // Normalize all rows
         const jsonData = rawData.map(normalizeEmployeeRow);
 
-        // Validate data
+        // Validate data - email is only required for new users, not updates
         const validationErrors: string[] = [];
         jsonData.forEach((row, index) => {
-          if (!row.employeeCode) {
-            validationErrors.push(`Row ${index + 2}: Missing employee code`);
+          if (!row.employeeCode && !row.fullName) {
+            validationErrors.push(`Row ${index + 2}: Missing employee code and full name`);
           }
-          if (!row.fullName) {
-            validationErrors.push(`Row ${index + 2}: Missing full name`);
-          }
-          if (!row.email) {
-            validationErrors.push(`Row ${index + 2}: Missing email`);
-          } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
+          // Email validation only if provided (it's optional for updates)
+          if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
             validationErrors.push(`Row ${index + 2}: Invalid email format`);
           }
         });
@@ -443,10 +439,11 @@ export default function ImportData() {
 
     for (const row of employeeData) {
       try {
-        // Check if employee already exists by email or code
+        // Check if employee already exists by email or employee code or full name
         const existingEmployee = profiles?.find(p => 
-          p.email.toLowerCase() === row.email.toLowerCase() ||
-          (p.employee_code && p.employee_code === String(row.employeeCode))
+          (row.email && p.email.toLowerCase() === row.email.toLowerCase()) ||
+          (row.employeeCode && p.employee_code && p.employee_code === String(row.employeeCode)) ||
+          (row.fullName && p.full_name && p.full_name.toLowerCase() === row.fullName.toLowerCase())
         );
 
         if (existingEmployee) {
@@ -463,22 +460,22 @@ export default function ImportData() {
           const { error } = await supabase
             .from('profiles')
             .update({
-              employee_code: String(row.employeeCode),
-              full_name: row.fullName,
-              designation: row.designation || null,
-              department_id: departmentId,
-              pms_grade: row.pmsGrade || null,
-              reporting_manager_id: managerId,
+              employee_code: row.employeeCode ? String(row.employeeCode) : existingEmployee.employee_code,
+              full_name: row.fullName || existingEmployee.full_name,
+              designation: row.designation || existingEmployee.designation,
+              department_id: departmentId || existingEmployee.department_id,
+              pms_grade: row.pmsGrade || existingEmployee.pms_grade,
+              reporting_manager_id: managerId || existingEmployee.reporting_manager_id,
             })
             .eq('id', existingEmployee.id);
 
           if (error) throw error;
           successCount++;
-        } else {
-          // Create new user via auth (this will trigger the profile creation)
+        } else if (row.email) {
+          // Create new user only if email is provided
           const { data: authData, error: authError } = await supabase.auth.admin.createUser({
             email: row.email,
-            password: `Welcome@${row.employeeCode}`, // Default password
+            password: `Welcome@${row.employeeCode || 'User123'}`,
             email_confirm: true,
             user_metadata: {
               full_name: row.fullName,
@@ -491,7 +488,7 @@ export default function ImportData() {
             // If admin API fails, try regular signup
             const { data: signupData, error: signupError } = await supabase.auth.signUp({
               email: row.email,
-              password: `Welcome@${row.employeeCode}`,
+              password: `Welcome@${row.employeeCode || 'User123'}`,
               options: {
                 data: {
                   full_name: row.fullName,
@@ -554,9 +551,12 @@ export default function ImportData() {
           }
 
           successCount++;
+        } else {
+          // No email provided and employee not found - skip with warning
+          importErrors.push(`Skipped ${row.fullName || row.employeeCode}: Employee not found and no email provided to create new user`);
         }
       } catch (error: any) {
-        importErrors.push(`Failed to import ${row.fullName} (${row.email}): ${error.message}`);
+        importErrors.push(`Failed to import ${row.fullName || row.employeeCode}: ${error.message}`);
       }
     }
 
