@@ -1,21 +1,36 @@
 import { useState } from 'react';
-import { useKraCategories, useCreateKraCategory } from '@/hooks/useOrganization';
+import { useKraCategories, useCreateKraCategory, useUpdateKraCategory, useDeleteKraCategory } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
-import { ClipboardList, Plus } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
+
+interface Category {
+  id: string;
+  name: string;
+  weightage: number;
+  color: string | null;
+  description: string | null;
+}
 
 export default function Categories() {
   const { data: categories, isLoading } = useKraCategories();
   const createCategory = useCreateKraCategory();
+  const updateCategory = useUpdateKraCategory();
+  const deleteCategory = useDeleteKraCategory();
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
+
   const [formName, setFormName] = useState('');
   const [formWeightage, setFormWeightage] = useState('');
   const [formColor, setFormColor] = useState('#3B82F6');
@@ -23,15 +38,53 @@ export default function Categories() {
 
   const totalWeightage = categories?.reduce((sum, cat) => sum + (cat.weightage || 0), 0) || 0;
 
-  const handleCreate = async () => {
-    await createCategory.mutateAsync({
-      name: formName,
-      weightage: parseFloat(formWeightage) || 0,
-      color: formColor,
-      description: formDescription,
-    });
+  const openCreateDialog = () => {
+    setEditingCategory(null);
+    resetForm();
+    setDialogOpen(true);
+  };
+
+  const openEditDialog = (category: Category) => {
+    setEditingCategory(category);
+    setFormName(category.name);
+    setFormWeightage(category.weightage.toString());
+    setFormColor(category.color || '#3B82F6');
+    setFormDescription(category.description || '');
+    setDialogOpen(true);
+  };
+
+  const openDeleteDialog = (category: Category) => {
+    setDeletingCategory(category);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (editingCategory) {
+      await updateCategory.mutateAsync({
+        id: editingCategory.id,
+        name: formName,
+        weightage: parseFloat(formWeightage) || 0,
+        color: formColor,
+        description: formDescription,
+      });
+    } else {
+      await createCategory.mutateAsync({
+        name: formName,
+        weightage: parseFloat(formWeightage) || 0,
+        color: formColor,
+        description: formDescription,
+      });
+    }
     setDialogOpen(false);
     resetForm();
+  };
+
+  const handleDelete = async () => {
+    if (deletingCategory) {
+      await deleteCategory.mutateAsync(deletingCategory.id);
+      setDeleteDialogOpen(false);
+      setDeletingCategory(null);
+    }
   };
 
   const resetForm = () => {
@@ -39,6 +92,7 @@ export default function Categories() {
     setFormWeightage('');
     setFormColor('#3B82F6');
     setFormDescription('');
+    setEditingCategory(null);
   };
 
   if (isLoading) {
@@ -87,7 +141,7 @@ export default function Categories() {
             <CardTitle>Categories</CardTitle>
             <CardDescription>{categories?.length || 0} categories defined</CardDescription>
           </div>
-          <Button onClick={() => setDialogOpen(true)}>
+          <Button onClick={openCreateDialog}>
             <Plus className="h-4 w-4 mr-2" />
             Add Category
           </Button>
@@ -100,6 +154,7 @@ export default function Categories() {
                 <TableHead>Name</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Weightage</TableHead>
+                <TableHead className="w-24">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -119,6 +174,25 @@ export default function Categories() {
                       <span>{cat.weightage}%</span>
                     </div>
                   </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => openEditDialog(cat)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => openDeleteDialog(cat)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -126,12 +200,14 @@ export default function Categories() {
         </CardContent>
       </Card>
 
-      {/* Create Dialog */}
+      {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add KRA Category</DialogTitle>
-            <DialogDescription>Create a new performance review category</DialogDescription>
+            <DialogTitle>{editingCategory ? 'Edit KRA Category' : 'Add KRA Category'}</DialogTitle>
+            <DialogDescription>
+              {editingCategory ? 'Update the category details' : 'Create a new performance review category'}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
@@ -188,12 +264,38 @@ export default function Categories() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={!formName || !formWeightage || createCategory.isPending}>
-              {createCategory.isPending ? 'Creating...' : 'Create Category'}
+            <Button 
+              onClick={handleSave} 
+              disabled={!formName || !formWeightage || createCategory.isPending || updateCategory.isPending}
+            >
+              {(createCategory.isPending || updateCategory.isPending) 
+                ? 'Saving...' 
+                : (editingCategory ? 'Save Changes' : 'Create Category')}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Category</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deletingCategory?.name}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteCategory.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
