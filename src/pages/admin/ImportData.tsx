@@ -295,16 +295,40 @@ export default function ImportData() {
         const targetValue = typeof row.target === 'number' ? row.target : 
           row.target ? parseFloat(String(row.target).replace('%', '')) : null;
 
-        // Parse review period and year from month (handles: "Dec-25", "Dec-2025", "December 2025", "December-2025")
-        const reviewPeriod = row.month || null;
+        // Parse review period and year from month (handles: "Dec-25", "Dec-2025", "December 2025", "December-2025", Excel serial date)
+        let reviewPeriod: string | null = null;
         let reviewYear = new Date().getFullYear();
         
         if (row.month) {
           const monthStr = String(row.month).trim();
           
+          // Check if it's an Excel serial date number (e.g., 45901)
+          const serialNum = parseInt(monthStr);
+          if (!isNaN(serialNum) && serialNum > 40000 && serialNum < 60000) {
+            // Excel serial date: convert to JS Date
+            // Excel epoch is Dec 30, 1899, but we need to account for leap year bug
+            const excelEpoch = new Date(1899, 11, 30);
+            const date = new Date(excelEpoch.getTime() + serialNum * 24 * 60 * 60 * 1000);
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+              'July', 'August', 'September', 'October', 'November', 'December'];
+            reviewPeriod = monthNames[date.getMonth()];
+            reviewYear = date.getFullYear();
+          }
           // Try "Dec-25" or "Dec-2025" format
-          if (monthStr.includes('-')) {
-            const yearPart = monthStr.split('-')[1];
+          else if (monthStr.includes('-')) {
+            const parts = monthStr.split('-');
+            const monthPart = parts[0];
+            const yearPart = parts[1];
+            
+            // Map short month names to full names
+            const shortMonths: Record<string, string> = {
+              'jan': 'January', 'feb': 'February', 'mar': 'March', 'apr': 'April',
+              'may': 'May', 'jun': 'June', 'jul': 'July', 'aug': 'August',
+              'sep': 'September', 'oct': 'October', 'nov': 'November', 'dec': 'December'
+            };
+            const monthLower = monthPart.toLowerCase();
+            reviewPeriod = shortMonths[monthLower] || monthPart;
+            
             if (yearPart) {
               const yearNum = parseInt(yearPart);
               reviewYear = yearNum < 100 ? 2000 + yearNum : yearNum;
@@ -312,7 +336,9 @@ export default function ImportData() {
           }
           // Try "December 2025" format (space separated)
           else if (monthStr.includes(' ')) {
-            const yearPart = monthStr.split(' ').pop();
+            const parts = monthStr.split(' ');
+            reviewPeriod = parts[0]; // Month name
+            const yearPart = parts.pop();
             if (yearPart) {
               const yearNum = parseInt(yearPart);
               if (!isNaN(yearNum)) {
@@ -320,9 +346,15 @@ export default function ImportData() {
               }
             }
           }
-          // Try pure number (Excel might pass year as number)
-          else if (!isNaN(parseInt(monthStr)) && monthStr.length === 4) {
-            reviewYear = parseInt(monthStr);
+          // Try full month name
+          else {
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+              'July', 'August', 'September', 'October', 'November', 'December'];
+            const matchedMonth = monthNames.find(m => 
+              m.toLowerCase() === monthStr.toLowerCase() || 
+              m.toLowerCase().startsWith(monthStr.toLowerCase().substring(0, 3))
+            );
+            reviewPeriod = matchedMonth || monthStr;
           }
         }
 
