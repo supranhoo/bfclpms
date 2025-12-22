@@ -36,7 +36,7 @@ const menuItems = {
     { title: 'Self Review', icon: CheckSquare, path: '/self-review', roles: ['employee', 'manager', 'admin'] },
   ],
   manager: [
-    { title: 'Team Review', icon: Users, path: '/team-review', roles: ['manager'] },
+    { title: 'Team Review', icon: Users, path: '/team-review', roles: ['manager', 'admin'] },
   ],
   audit: [
     { title: 'Audit Panel', icon: Shield, path: '/audit', roles: ['auditor'] },
@@ -107,7 +107,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {role === 'manager' && (
+        {(role === 'manager' || role === 'admin') && (
           <SidebarGroup>
             <SidebarGroupLabel>Manager</SidebarGroupLabel>
             <SidebarGroupContent>
