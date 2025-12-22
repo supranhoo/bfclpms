@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { FileSpreadsheet, AlertCircle, CheckCircle2, Download, Users } from 'lucide-react';
+import { FileSpreadsheet, AlertCircle, CheckCircle2, Download, Users, Loader2 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import * as XLSX from 'xlsx';
 
@@ -113,6 +114,15 @@ export default function ImportData() {
   const [errors, setErrors] = useState<string[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [importSuccess, setImportSuccess] = useState(0);
+  
+  // Real-time progress tracking
+  const [importProgress, setImportProgress] = useState({
+    current: 0,
+    total: 0,
+    kpisImported: 0,
+    employeesCreated: 0,
+    categoriesCreated: 0,
+  });
 
   // Employee Import State
   const [employeeData, setEmployeeData] = useState<EmployeeImportRow[]>([]);
@@ -327,7 +337,17 @@ export default function ImportData() {
     setIsImporting(true);
     let successCount = 0;
     let categoriesCreated = 0;
+    let employeesCreated = 0;
     const importErrors: string[] = [];
+    
+    // Initialize progress tracking
+    setImportProgress({
+      current: 0,
+      total: importData.length,
+      kpisImported: 0,
+      employeesCreated: 0,
+      categoriesCreated: 0,
+    });
 
     // Cache for newly created categories during this import
     const categoryCache = new Map<string, string>();
@@ -356,13 +376,19 @@ export default function ImportData() {
       }
     });
 
-    let employeesCreated = 0;
-
     // Get auth token for edge function calls
     const { data: sessionData } = await supabase.auth.getSession();
     const authToken = sessionData?.session?.access_token;
 
-    for (const row of importData) {
+    for (let i = 0; i < importData.length; i++) {
+      const row = importData[i];
+      
+      // Update progress
+      setImportProgress(prev => ({
+        ...prev,
+        current: i + 1,
+      }));
+      
       try {
         // Find employee by code or name from cache
         let employee = profiles?.find(p => 
@@ -417,6 +443,10 @@ export default function ImportData() {
             }
             
             employeesCreated++;
+            setImportProgress(prev => ({
+              ...prev,
+              employeesCreated: prev.employeesCreated + 1,
+            }));
           } catch (createError: any) {
             importErrors.push(`Failed to create employee ${row.newCode} - ${row.fullName}: ${createError.message}`);
             continue;
@@ -452,6 +482,10 @@ export default function ImportData() {
           categoryId = newCategory.id;
           categoryCache.set(row.category.toLowerCase(), categoryId);
           categoriesCreated++;
+          setImportProgress(prev => ({
+            ...prev,
+            categoriesCreated: prev.categoriesCreated + 1,
+          }));
         }
 
         if (!categoryId) {
@@ -607,6 +641,10 @@ export default function ImportData() {
         }
 
         successCount++;
+        setImportProgress(prev => ({
+          ...prev,
+          kpisImported: prev.kpisImported + 1,
+        }));
       } catch (error: any) {
         importErrors.push(`Failed to import KPI for ${row.fullName}: ${error.message}`);
       }
@@ -1111,6 +1149,45 @@ export default function ImportData() {
                 </ul>
               </AlertDescription>
             </Alert>
+          )}
+
+          {/* Real-time Progress Bar */}
+          {isImporting && (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                      <span className="font-medium">Importing data...</span>
+                    </div>
+                    <span className="text-muted-foreground">
+                      {importProgress.current} / {importProgress.total}
+                    </span>
+                  </div>
+                  
+                  <Progress 
+                    value={importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0} 
+                    className="h-2"
+                  />
+                  
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div className="rounded-lg bg-muted p-3">
+                      <div className="text-2xl font-bold text-primary">{importProgress.kpisImported}</div>
+                      <div className="text-xs text-muted-foreground">KPIs Imported</div>
+                    </div>
+                    <div className="rounded-lg bg-muted p-3">
+                      <div className="text-2xl font-bold text-green-600">{importProgress.employeesCreated}</div>
+                      <div className="text-xs text-muted-foreground">Employees Created</div>
+                    </div>
+                    <div className="rounded-lg bg-muted p-3">
+                      <div className="text-2xl font-bold text-blue-600">{importProgress.categoriesCreated}</div>
+                      <div className="text-xs text-muted-foreground">Categories Created</div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {importSuccess > 0 && (
