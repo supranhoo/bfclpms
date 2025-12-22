@@ -13,6 +13,36 @@ import { FileSpreadsheet, AlertCircle, CheckCircle2, Download, Users } from 'luc
 import { supabase } from '@/integrations/supabase/client';
 import * as XLSX from 'xlsx';
 
+type RatingLevel = 'red' | 'yellow' | 'green' | 'blue';
+
+// Map numeric rating (0-5) to rating level enum
+const mapScoreToRating = (score: number | string | null | undefined): RatingLevel | null => {
+  if (score === null || score === undefined || score === '') return null;
+  const numScore = typeof score === 'string' ? parseFloat(score) : score;
+  if (isNaN(numScore)) return null;
+  
+  if (numScore >= 4.5) return 'blue';    // Exceptional (5)
+  if (numScore >= 3.5) return 'green';   // Good (4)
+  if (numScore >= 2.5) return 'yellow';  // Average (3)
+  return 'red';                           // Below (1-2)
+};
+
+// Determine KPI status based on review data
+const determineKpiStatus = (row: KpiImportRow): 'open' | 'submitted' | 'approved_by_manager' | 'locked' => {
+  if (row.auditRating || row.auditTargetAchieved) return 'locked';
+  if (row.managerRating || row.managerTargetAchieved) return 'approved_by_manager';
+  if (row.employeeRating || row.employeeTargetAchieved || row.targetAchieved) return 'submitted';
+  return 'open';
+};
+
+// Determine review status based on review data
+const determineReviewStatus = (row: KpiImportRow): 'kra_set' | 'self_review' | 'manager_check' | 'audit' | 'approved' => {
+  if (row.auditRating || row.auditTargetAchieved) return 'approved';
+  if (row.managerRating || row.managerTargetAchieved) return 'audit';
+  if (row.employeeRating || row.employeeTargetAchieved || row.targetAchieved) return 'manager_check';
+  return 'kra_set';
+};
+
 interface KpiImportRow {
   sNo?: number;
   month?: string;
@@ -269,28 +299,80 @@ export default function ImportData() {
           }
         }
 
-        await createKpi.mutateAsync({
-          employee_id: employee.id,
-          category_id: categoryId,
-          kra_name: row.kra,
-          kpi_name: row.kpi,
-          target_value: targetValue,
-          uom: row.uom || null,
-          weightage: row.kpiWeightage || row.kpiWeightageScore || 0,
-          criteria: row.criteria || 'Higher is Better',
-          status: 'kra_set',
-          review_period: reviewPeriod,
-          review_year: reviewYear,
-          // Rating thresholds
-          r5: row.r5 ? String(row.r5) : null,
-          r4: row.r4 ? String(row.r4) : null,
-          r3: row.r3 ? String(row.r3) : null,
-          r2: row.r2 ? String(row.r2) : null,
-          r1: row.r1 ? String(row.r1) : null,
-          r0: row.r0 ? String(row.r0) : null,
-          frequency: row.frequency || null,
-          source_of_data: row.sourceOfData || null,
-        });
+        // Determine status based on review data
+        const reviewStatus = determineReviewStatus(row);
+
+        const { data: newKpi, error: kpiError } = await supabase
+          .from('kpis')
+          .insert({
+            employee_id: employee.id,
+            category_id: categoryId,
+            kra_name: row.kra,
+            kpi_name: row.kpi,
+            target_value: targetValue,
+            uom: row.uom || null,
+            weightage: row.kpiWeightage || row.kpiWeightageScore || 0,
+            criteria: row.criteria || 'Higher is Better',
+            status: reviewStatus,
+            review_period: reviewPeriod,
+            review_year: reviewYear,
+            // Rating thresholds
+            r5: row.r5 ? String(row.r5) : null,
+            r4: row.r4 ? String(row.r4) : null,
+            r3: row.r3 ? String(row.r3) : null,
+            r2: row.r2 ? String(row.r2) : null,
+            r1: row.r1 ? String(row.r1) : null,
+            r0: row.r0 ? String(row.r0) : null,
+            frequency: row.frequency || null,
+            source_of_data: row.sourceOfData || null,
+          })
+          .select('id')
+          .single();
+
+        if (kpiError) throw kpiError;
+
+        // Create review_submission if there's any review data
+        const hasReviewData = row.targetAchieved || row.employeeTargetAchieved || 
+          row.employeeRating || row.managerRating || row.auditRating ||
+          row.rating || row.managerTargetAchieved || row.auditTargetAchieved;
+
+        if (hasReviewData && newKpi?.id) {
+          const achievedValue = row.targetAchieved || row.employeeTargetAchieved || row.auditTargetAchieved || row.managerTargetAchieved;
+          const selfScore = row.employeeRating || row.rating;
+          const managerScore = row.managerRating;
+          const auditorScore = row.auditRating;
+          
+          // Parse achieved value
+          const parsedAchieved = achievedValue 
+            ? parseFloat(String(achievedValue).replace('%', '').replace(/,/g, ''))
+            : null;
+
+          const { error: submissionError } = await supabase
+            .from('review_submissions')
+            .insert({
+              kpi_id: newKpi.id,
+              achieved_value: parsedAchieved,
+              self_score: selfScore ? parseFloat(String(selfScore)) : null,
+              self_rating: mapScoreToRating(selfScore),
+              self_remarks: row.employeeRemarks || null,
+              manager_score: managerScore ? parseFloat(String(managerScore)) : null,
+              manager_rating: mapScoreToRating(managerScore),
+              manager_remarks: row.managerRemarks || null,
+              auditor_score: auditorScore ? parseFloat(String(auditorScore)) : null,
+              auditor_rating: mapScoreToRating(auditorScore),
+              auditor_remarks: row.auditRemarks || null,
+              kpi_status: determineKpiStatus(row),
+              // Use auditor score as final if available, else manager, else self
+              final_score: auditorScore ? parseFloat(String(auditorScore)) : 
+                (managerScore ? parseFloat(String(managerScore)) : 
+                (selfScore ? parseFloat(String(selfScore)) : null)),
+              final_rating: mapScoreToRating(auditorScore || managerScore || selfScore),
+            });
+
+          if (submissionError) {
+            console.error('Failed to create review submission:', submissionError);
+          }
+        }
 
         successCount++;
       } catch (error: any) {
@@ -307,6 +389,10 @@ export default function ImportData() {
       refetchCategories();
       queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
     }
+
+    // Invalidate KPI queries to refresh data
+    queryClient.invalidateQueries({ queryKey: ['kpis'] });
+    queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
 
     if (successCount > 0) {
       let message = `Successfully imported ${successCount} KPIs`;
