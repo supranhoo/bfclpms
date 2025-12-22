@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeamMembers, useProfiles } from '@/hooks/useOrganization';
-import { useKpisByEmployee, useReviewSubmissions, useRolloverKpi, RatingLevel, KPI } from '@/hooks/useKpis';
+import { useKpisByEmployee, useReviewSubmissions, useRolloverKpi, useApproveKpi, useRaiseQuery, useKpiQueries, RatingLevel, KPI, KpiStatus } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +18,7 @@ import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/R
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Users, CheckCircle2, Clock, ArrowRight, Search, RefreshCw } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Search, RefreshCw, MessageSquare, Check, Lock } from 'lucide-react';
 
 const reviewPeriods = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -26,7 +26,7 @@ const reviewPeriods = [
   'Q1', 'Q2', 'Q3', 'Q4'
 ];
 
-const statusColors = {
+const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
   self_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
   manager_check: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
@@ -34,12 +34,26 @@ const statusColors = {
   approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
 };
 
-const statusLabels = {
+const statusLabels: Record<string, string> = {
   kra_set: 'KRA Set',
   self_review: 'Self Review',
   manager_check: 'Manager Check',
   audit: 'Audit',
   approved: 'Approved',
+};
+
+const kpiStatusColors: Record<KpiStatus, string> = {
+  open: 'bg-muted text-muted-foreground',
+  submitted: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  approved_by_manager: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+  locked: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+};
+
+const kpiStatusLabels: Record<KpiStatus, string> = {
+  open: 'Open',
+  submitted: 'Submitted',
+  approved_by_manager: 'Approved',
+  locked: 'Locked',
 };
 
 const ratingOptions: { value: RatingLevel; label: string; color: string }[] = [
@@ -58,18 +72,28 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
   );
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
+  const { data: queries } = useKpiQueries(kpiIds);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [queryDialogOpen, setQueryDialogOpen] = useState(false);
   const [rolloverDialogOpen, setRolloverDialogOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<typeof kpis extends (infer T)[] ? T : never | null>(null);
   const [managerRating, setManagerRating] = useState<RatingLevel | ''>('');
   const [managerRemarks, setManagerRemarks] = useState('');
+  const [queryReason, setQueryReason] = useState('');
   const [targetPeriod, setTargetPeriod] = useState('');
   
   const rolloverKpi = useRolloverKpi();
+  const approveKpi = useApproveKpi();
+  const raiseQuery = useRaiseQuery();
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
+  const queryMap = new Map<string, typeof queries>();
+  queries?.forEach(q => {
+    const existing = queryMap.get(q.kpi_id) || [];
+    queryMap.set(q.kpi_id, [...existing, q]);
+  });
 
   const submitManagerReview = useMutation({
     mutationFn: async ({
@@ -118,6 +142,37 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
     setManagerRating(existing?.manager_rating || '');
     setManagerRemarks(existing?.manager_remarks || '');
     setReviewDialogOpen(true);
+  };
+
+  const openQueryDialog = (kpi: NonNullable<typeof kpis>[number]) => {
+    setSelectedKpi(kpi);
+    setQueryReason('');
+    setQueryDialogOpen(true);
+  };
+
+  const handleApproveKpi = () => {
+    if (!selectedKpi || !managerRating) return;
+    const score = managerRating === 'blue' ? 100 : managerRating === 'green' ? 80 : managerRating === 'yellow' ? 60 : 40;
+    approveKpi.mutate({
+      kpi_id: selectedKpi.id,
+      manager_rating: managerRating,
+      manager_score: score,
+      manager_remarks: managerRemarks,
+    }, {
+      onSuccess: () => setReviewDialogOpen(false),
+    });
+  };
+
+  const handleRaiseQuery = () => {
+    if (!selectedKpi || !queryReason.trim()) return;
+    raiseQuery.mutate({
+      kpi_id: selectedKpi.id,
+      raised_to: memberId,
+      reason: queryReason,
+      entity_type: 'kpi',
+    }, {
+      onSuccess: () => setQueryDialogOpen(false),
+    });
   };
 
   const handleSubmitReview = () => {
@@ -184,16 +239,21 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
             <TableHead>Achieved</TableHead>
             <TableHead>Self Rating</TableHead>
             <TableHead>Manager Rating</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Action</TableHead>
+            <TableHead>KPI Status</TableHead>
+            <TableHead>Queries</TableHead>
+            <TableHead>Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {kpis?.map(kpi => {
             const submission = submissionMap.get(kpi.id);
-            const status = kpi.status || 'kra_set';
+            const kpiQueries = queryMap.get(kpi.id) || [];
+            const openQueries = kpiQueries.filter((q: any) => q.status === 'open');
+            const kpiStatus = submission?.kpi_status || 'open';
+            const isLocked = kpiStatus === 'locked' || kpiStatus === 'approved_by_manager';
+            
             return (
-              <TableRow key={kpi.id}>
+              <TableRow key={kpi.id} className={isLocked ? 'opacity-75 bg-muted/30' : ''}>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <div
@@ -236,23 +296,59 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
                   ) : <span className="text-muted-foreground">-</span>}
                 </TableCell>
                 <TableCell>
-                  <Badge className={statusColors[status]}>
-                    {statusLabels[status]}
-                  </Badge>
+                  <div className="flex items-center gap-1">
+                    {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                    <Badge className={kpiStatusColors[kpiStatus]}>
+                      {kpiStatusLabels[kpiStatus]}
+                    </Badge>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {openQueries.length > 0 ? (
+                    <Badge variant="outline" className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">
+                      <MessageSquare className="h-3 w-3 mr-1" />
+                      {openQueries.length} open
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">-</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
-                    {status === 'self_review' && (
-                      <Button size="sm" onClick={() => openReviewDialog(kpi)}>
-                        Review
-                      </Button>
+                    {/* Show approve/query buttons only for submitted KPIs that aren't locked */}
+                    {kpiStatus === 'submitted' && (
+                      <>
+                        <Button 
+                          size="sm" 
+                          variant="default"
+                          onClick={() => openReviewDialog(kpi)}
+                          title="Approve this KPI"
+                        >
+                          <Check className="h-4 w-4 mr-1" />
+                          Approve
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => openQueryDialog(kpi)}
+                          title="Raise a query"
+                        >
+                          <MessageSquare className="h-4 w-4" />
+                        </Button>
+                      </>
                     )}
-                    {status === 'manager_check' && (
-                      <Badge variant="outline" className="text-primary">Reviewed</Badge>
+                    {kpiStatus === 'approved_by_manager' && (
+                      <Badge variant="outline" className="text-green-600 border-green-600">
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        Approved
+                      </Badge>
+                    )}
+                    {kpiStatus === 'open' && (
+                      <span className="text-muted-foreground text-xs">Awaiting submission</span>
                     )}
                     <Button 
                       size="sm" 
-                      variant="outline" 
+                      variant="ghost" 
                       onClick={() => openRolloverDialog(kpi)}
                       title="Rollover to next period"
                     >
@@ -266,10 +362,11 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
         </TableBody>
       </Table>
 
+      {/* Approve KPI Dialog */}
       <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Manager Review</DialogTitle>
+            <DialogTitle>Approve KPI</DialogTitle>
             <DialogDescription>
               {selectedKpi?.kpi_name} - {selectedKpi?.kra_name}
             </DialogDescription>
@@ -284,6 +381,12 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
                 </p>
               </div>
               <div>
+                <Label className="text-muted-foreground">Achieved Value</Label>
+                <p className="font-medium">
+                  {submissionMap.get(selectedKpi?.id || '')?.achieved_value || 'N/A'}
+                </p>
+              </div>
+              <div className="col-span-2">
                 <Label className="text-muted-foreground">Self Remarks</Label>
                 <p className="text-sm">
                   {submissionMap.get(selectedKpi?.id || '')?.self_remarks || 'N/A'}
@@ -323,8 +426,70 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSubmitReview} disabled={!managerRating || submitManagerReview.isPending}>
-              {submitManagerReview.isPending ? 'Submitting...' : 'Submit Review'}
+            <Button 
+              onClick={handleApproveKpi} 
+              disabled={!managerRating || approveKpi.isPending}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <Check className="h-4 w-4 mr-1" />
+              {approveKpi.isPending ? 'Approving...' : 'Approve KPI'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Raise Query Dialog */}
+      <Dialog open={queryDialogOpen} onOpenChange={setQueryDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Raise Query</DialogTitle>
+            <DialogDescription>
+              Raise a query for: {selectedKpi?.kpi_name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="p-4 bg-muted rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <Label className="text-muted-foreground">KRA</Label>
+                  <p className="font-medium">{selectedKpi?.kra_name}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Target</Label>
+                  <p className="font-medium">{selectedKpi?.target_value} {selectedKpi?.uom}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Self Rating</Label>
+                  <p className="font-medium">{submissionMap.get(selectedKpi?.id || '')?.self_rating || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Achieved</Label>
+                  <p className="font-medium">{submissionMap.get(selectedKpi?.id || '')?.achieved_value || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Query Reason <span className="text-destructive">*</span></Label>
+              <Textarea
+                value={queryReason}
+                onChange={(e) => setQueryReason(e.target.value)}
+                placeholder="Describe your query or concern about this KPI..."
+                rows={4}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQueryDialogOpen(false)}>Cancel</Button>
+            <Button 
+              onClick={handleRaiseQuery} 
+              disabled={!queryReason.trim() || raiseQuery.isPending}
+              variant="destructive"
+            >
+              <MessageSquare className="h-4 w-4 mr-1" />
+              {raiseQuery.isPending ? 'Raising...' : 'Raise Query'}
             </Button>
           </DialogFooter>
         </DialogContent>

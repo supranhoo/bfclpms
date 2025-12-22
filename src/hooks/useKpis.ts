@@ -6,6 +6,8 @@ import { useToast } from '@/hooks/use-toast';
 
 export type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'audit' | 'approved';
 export type RatingLevel = 'red' | 'yellow' | 'green' | 'blue';
+export type KpiStatus = 'open' | 'submitted' | 'approved_by_manager' | 'locked';
+export type QueryStatus = 'open' | 'resolved';
 
 export interface KPI {
   id: string;
@@ -56,6 +58,22 @@ export interface ReviewSubmission {
   auditor_remarks: string | null;
   final_rating: RatingLevel | null;
   final_score: number | null;
+  kpi_status: KpiStatus;
+}
+
+export interface KpiQuery {
+  id: string;
+  kpi_id: string;
+  entity_type: 'kra' | 'kpi';
+  raised_by: string;
+  raised_to: string;
+  reason: string;
+  evidence_url: string | null;
+  resolution_notes: string | null;
+  status: QueryStatus;
+  created_at: string;
+  resolved_at: string | null;
+  updated_at: string;
 }
 
 export function useMyKpis() {
@@ -314,5 +332,174 @@ export function useRolloverKpi() {
     onError: (error: Error) => {
       toast({ title: 'Failed to rollover KPI', description: error.message, variant: 'destructive' });
     },
+  });
+}
+
+// Hook for approving a single KPI (manager level)
+export function useApproveKpi() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      kpi_id,
+      manager_rating,
+      manager_score,
+      manager_remarks,
+    }: {
+      kpi_id: string;
+      manager_rating: RatingLevel;
+      manager_score: number;
+      manager_remarks: string;
+    }) => {
+      // Update submission with manager rating and set kpi_status to approved_by_manager
+      const { error: submissionError } = await supabase
+        .from('review_submissions')
+        .update({
+          manager_rating,
+          manager_score,
+          manager_remarks,
+          kpi_status: 'approved_by_manager' as const,
+        })
+        .eq('kpi_id', kpi_id);
+
+      if (submissionError) throw submissionError;
+
+      // Log the approval action
+      if (user?.id) {
+        await supabase.from('kpi_audit_logs').insert({
+          kpi_id,
+          action: 'MANAGER_APPROVED',
+          performed_by: user.id,
+          new_value: { manager_rating, manager_score, manager_remarks },
+          metadata: { approved_at: new Date().toISOString() },
+        });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      toast({ title: 'KPI approved successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to approve KPI', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+// Hook for raising a query on a KPI
+export function useRaiseQuery() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      kpi_id,
+      raised_to,
+      reason,
+      entity_type = 'kpi',
+    }: {
+      kpi_id: string;
+      raised_to: string;
+      reason: string;
+      entity_type?: 'kra' | 'kpi';
+    }) => {
+      if (!user?.id) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase
+        .from('kpi_queries')
+        .insert({
+          kpi_id,
+          raised_by: user.id,
+          raised_to,
+          reason,
+          entity_type,
+          status: 'open',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Log the query action
+      await supabase.from('kpi_audit_logs').insert({
+        kpi_id,
+        action: 'QUERY_RAISED',
+        performed_by: user.id,
+        new_value: { reason, raised_to },
+        metadata: { query_id: data.id },
+      });
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kpi-queries'] });
+      queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      toast({ title: 'Query raised successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to raise query', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+// Hook for resolving a query
+export function useResolveQuery() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      query_id,
+      resolution_notes,
+    }: {
+      query_id: string;
+      resolution_notes: string;
+    }) => {
+      const { error } = await supabase
+        .from('kpi_queries')
+        .update({
+          status: 'resolved' as const,
+          resolution_notes,
+          resolved_at: new Date().toISOString(),
+        })
+        .eq('id', query_id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kpi-queries'] });
+      toast({ title: 'Query resolved successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to resolve query', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+// Hook to fetch queries for KPIs
+export function useKpiQueries(kpiIds: string[]) {
+  return useQuery({
+    queryKey: ['kpi-queries', kpiIds],
+    queryFn: async () => {
+      if (kpiIds.length === 0) return [];
+      
+      const { data, error } = await supabase
+        .from('kpi_queries')
+        .select(`
+          *,
+          raised_by_profile:raised_by(id, full_name, email),
+          raised_to_profile:raised_to(id, full_name, email)
+        `)
+        .in('kpi_id', kpiIds)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: kpiIds.length > 0,
   });
 }
