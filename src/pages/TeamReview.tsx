@@ -117,6 +117,7 @@ function TeamMemberKpis({ memberId, memberName }: { memberId: string; memberName
   };
 
   const pendingReviewKpis = kpis?.filter(k => k.status === 'self_review') || [];
+  const reviewedKpis = kpis?.filter(k => k.status === 'manager_check' || k.status === 'audit' || k.status === 'approved') || [];
 
   if (isLoading) {
     return <Skeleton className="h-48 w-full" />;
@@ -126,9 +127,14 @@ function TeamMemberKpis({ memberId, memberName }: { memberId: string; memberName
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">{memberName}'s KPIs</h3>
-        <Badge variant="outline">
-          {pendingReviewKpis.length} pending review
-        </Badge>
+        <div className="flex gap-2">
+          <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+            {pendingReviewKpis.length} pending review
+          </Badge>
+          <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+            {reviewedKpis.length} reviewed
+          </Badge>
+        </div>
       </div>
 
       <Table>
@@ -147,15 +153,16 @@ function TeamMemberKpis({ memberId, memberName }: { memberId: string; memberName
         <TableBody>
           {kpis?.map(kpi => {
             const submission = submissionMap.get(kpi.id);
+            const status = kpi.status || 'kra_set';
             return (
               <TableRow key={kpi.id}>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <div
                       className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: kpi.kra_categories?.color }}
+                      style={{ backgroundColor: kpi.kra_categories?.color || '#6B7280' }}
                     />
-                    <span className="text-sm">{kpi.kra_categories?.name}</span>
+                    <span className="text-sm">{kpi.kra_categories?.name || 'Uncategorized'}</span>
                   </div>
                 </TableCell>
                 <TableCell>
@@ -164,8 +171,8 @@ function TeamMemberKpis({ memberId, memberName }: { memberId: string; memberName
                     <p className="text-sm text-muted-foreground">{kpi.kpi_name}</p>
                   </div>
                 </TableCell>
-                <TableCell>{kpi.target_value}</TableCell>
-                <TableCell>{submission?.achieved_value || '-'}</TableCell>
+                <TableCell>{kpi.target_value ?? '-'}</TableCell>
+                <TableCell>{submission?.achieved_value ?? '-'}</TableCell>
                 <TableCell>
                   {submission?.self_rating ? (
                     <Badge
@@ -176,7 +183,7 @@ function TeamMemberKpis({ memberId, memberName }: { memberId: string; memberName
                     >
                       {ratingOptions.find(r => r.value === submission.self_rating)?.label}
                     </Badge>
-                  ) : '-'}
+                  ) : <span className="text-muted-foreground">-</span>}
                 </TableCell>
                 <TableCell>
                   {submission?.manager_rating ? (
@@ -188,18 +195,21 @@ function TeamMemberKpis({ memberId, memberName }: { memberId: string; memberName
                     >
                       {ratingOptions.find(r => r.value === submission.manager_rating)?.label}
                     </Badge>
-                  ) : '-'}
+                  ) : <span className="text-muted-foreground">-</span>}
                 </TableCell>
                 <TableCell>
-                  <Badge className={statusColors[kpi.status]}>
-                    {statusLabels[kpi.status]}
+                  <Badge className={statusColors[status]}>
+                    {statusLabels[status]}
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  {kpi.status === 'self_review' && (
+                  {status === 'self_review' && (
                     <Button size="sm" onClick={() => openReviewDialog(kpi)}>
                       Review
                     </Button>
+                  )}
+                  {status === 'manager_check' && (
+                    <Badge variant="outline" className="text-primary">Reviewed</Badge>
                   )}
                 </TableCell>
               </TableRow>
