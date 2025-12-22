@@ -14,7 +14,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
-import { Send, Eye, CheckCircle2, Clock, AlertCircle, Filter, User } from 'lucide-react';
+import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
+import { Send, Eye, CheckCircle2, Clock, AlertCircle, Filter, User, Paperclip } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -40,7 +41,7 @@ const ratingOptions: { value: RatingLevel; label: string; color: string; score: 
 ];
 
 export default function SelfReview() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const isAdmin = role === 'admin';
   
   // Fetch KPIs based on role
@@ -73,6 +74,7 @@ export default function SelfReview() {
   const [achievedValue, setAchievedValue] = useState('');
   const [selfRating, setSelfRating] = useState<RatingLevel | ''>('');
   const [selfRemarks, setSelfRemarks] = useState('');
+  const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
 
   // Get unique employees for admin filter
   const employees = useMemo(() => {
@@ -117,10 +119,12 @@ export default function SelfReview() {
       setAchievedValue(existing.achieved_value?.toString() || '');
       setSelfRating(existing.self_rating || '');
       setSelfRemarks(existing.self_remarks || '');
+      setEvidenceUrl(existing.self_evidence_url || null);
     } else {
       setAchievedValue('');
       setSelfRating('');
       setSelfRemarks('');
+      setEvidenceUrl(null);
     }
     setReviewDialogOpen(true);
   };
@@ -173,6 +177,7 @@ export default function SelfReview() {
       self_rating: selfRating,
       self_score: scoreMap[selfRating],
       self_remarks: selfRemarks,
+      self_evidence_url: evidenceUrl,
     });
 
     setReviewDialogOpen(false);
@@ -490,6 +495,16 @@ export default function SelfReview() {
                 rows={4}
               />
             </div>
+
+            {/* Evidence File Upload */}
+            {user && selectedKpi && (
+              <EvidenceUpload
+                userId={user.id}
+                kpiId={selectedKpi.id}
+                existingUrl={evidenceUrl}
+                onUploadComplete={(url) => setEvidenceUrl(url || null)}
+              />
+            )}
           </div>
 
           <DialogFooter>
