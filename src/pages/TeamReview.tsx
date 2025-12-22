@@ -19,6 +19,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Users, CheckCircle2, Clock, ArrowRight, Search, RefreshCw, MessageSquare, Check, Lock } from 'lucide-react';
+import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 
 const reviewPeriods = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -79,7 +80,8 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [queryDialogOpen, setQueryDialogOpen] = useState(false);
   const [rolloverDialogOpen, setRolloverDialogOpen] = useState(false);
-  const [selectedKpi, setSelectedKpi] = useState<typeof kpis extends (infer T)[] ? T : never | null>(null);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   const [managerRating, setManagerRating] = useState<RatingLevel | ''>('');
   const [managerRemarks, setManagerRemarks] = useState('');
   const [queryReason, setQueryReason] = useState('');
@@ -354,6 +356,17 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
                     >
                       <RefreshCw className="h-4 w-4" />
                     </Button>
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      onClick={() => {
+                        setSelectedKpi(kpi);
+                        setTimelineOpen(true);
+                      }}
+                      title="View Timeline"
+                    >
+                      <Clock className="h-4 w-4" />
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -547,6 +560,13 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Timeline Modal */}
+      <KpiTimeline
+        isOpen={timelineOpen}
+        onClose={() => setTimelineOpen(false)}
+        kpi={selectedKpi}
+      />
     </div>
   );
 }
