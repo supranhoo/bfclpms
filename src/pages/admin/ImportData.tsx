@@ -1,34 +1,46 @@
 import { useState, useCallback } from 'react';
-import { useProfiles, useKraCategories, useDepartments } from '@/hooks/useOrganization';
+import { useProfiles, useKraCategories } from '@/hooks/useOrganization';
 import { useCreateKpi } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Download } from 'lucide-react';
+import { FileSpreadsheet, AlertCircle, CheckCircle2, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface KpiImportRow {
-  employee_email: string;
-  category_name: string;
-  kra_name: string;
-  kpi_name: string;
-  target_value: number;
-  uom: string;
-  weightage: number;
-  criteria: string;
+  sNo?: number;
+  month?: string;
+  reviewStatus?: string;
+  newCode: string;
+  fullName: string;
+  category: string;
+  kra: string;
+  kpi: string;
+  target: string | number;
+  targetAchieved?: string | number;
+  achievedWeight?: string;
+  rating?: number;
+  kpiWeightageScore?: number;
+  employeeTargetAchieved?: string | number;
+  employeeRating?: number;
+  employeeRemarks?: string;
+  managerTargetAchieved?: string | number;
+  managerRating?: number;
+  managerRemarks?: string;
+  auditTargetAchieved?: string | number;
+  auditRating?: number;
+  auditRemarks?: string;
+  sourceOfData?: string;
+  kpiStatus?: string;
 }
 
 export default function ImportData() {
   const { data: profiles } = useProfiles();
   const { data: categories } = useKraCategories();
-  const { data: departments } = useDepartments();
   const createKpi = useCreateKpi();
   const { toast } = useToast();
 
@@ -53,17 +65,17 @@ export default function ImportData() {
         // Validate data
         const validationErrors: string[] = [];
         jsonData.forEach((row, index) => {
-          if (!row.employee_email) {
-            validationErrors.push(`Row ${index + 2}: Missing employee email`);
+          if (!row.newCode && !row.fullName) {
+            validationErrors.push(`Row ${index + 2}: Missing employee code or name`);
           }
-          if (!row.category_name) {
-            validationErrors.push(`Row ${index + 2}: Missing category name`);
+          if (!row.category) {
+            validationErrors.push(`Row ${index + 2}: Missing category`);
           }
-          if (!row.kra_name) {
-            validationErrors.push(`Row ${index + 2}: Missing KRA name`);
+          if (!row.kra) {
+            validationErrors.push(`Row ${index + 2}: Missing KRA`);
           }
-          if (!row.kpi_name) {
-            validationErrors.push(`Row ${index + 2}: Missing KPI name`);
+          if (!row.kpi) {
+            validationErrors.push(`Row ${index + 2}: Missing KPI`);
           }
         });
 
@@ -86,37 +98,56 @@ export default function ImportData() {
 
     for (const row of importData) {
       try {
-        // Find employee by email
-        const employee = profiles?.find(p => p.email.toLowerCase() === row.employee_email.toLowerCase());
+        // Find employee by code or name
+        const employee = profiles?.find(p => 
+          (p.employee_code && p.employee_code === String(row.newCode)) ||
+          (p.full_name && p.full_name.toLowerCase() === row.fullName?.toLowerCase())
+        );
         if (!employee) {
-          importErrors.push(`Employee not found: ${row.employee_email}`);
+          importErrors.push(`Employee not found: ${row.newCode} - ${row.fullName}`);
           continue;
         }
 
         // Find category by name
-        const category = categories?.find(c => c.name.toLowerCase() === row.category_name.toLowerCase());
+        const category = categories?.find(c => c.name.toLowerCase() === row.category?.toLowerCase());
         if (!category) {
-          importErrors.push(`Category not found: ${row.category_name}`);
+          importErrors.push(`Category not found: ${row.category}`);
           continue;
+        }
+
+        // Parse target value
+        const targetValue = typeof row.target === 'number' ? row.target : 
+          row.target ? parseFloat(String(row.target).replace('%', '')) : null;
+
+        // Parse review period from month (e.g., "Sep-25" -> "September")
+        const reviewPeriod = row.month || null;
+
+        // Parse review year from month
+        let reviewYear = new Date().getFullYear();
+        if (row.month) {
+          const yearPart = row.month.split('-')[1];
+          if (yearPart) {
+            reviewYear = 2000 + parseInt(yearPart);
+          }
         }
 
         await createKpi.mutateAsync({
           employee_id: employee.id,
           category_id: category.id,
-          kra_name: row.kra_name,
-          kpi_name: row.kpi_name,
-          target_value: row.target_value || null,
-          uom: row.uom || null,
-          weightage: row.weightage || 0,
-          criteria: row.criteria || null,
+          kra_name: row.kra,
+          kpi_name: row.kpi,
+          target_value: targetValue,
+          uom: null,
+          weightage: row.kpiWeightageScore || 0,
+          criteria: null,
           status: 'kra_set',
-          review_period: null,
-          review_year: new Date().getFullYear(),
+          review_period: reviewPeriod,
+          review_year: reviewYear,
         });
 
         successCount++;
       } catch (error: any) {
-        importErrors.push(`Failed to import KPI for ${row.employee_email}: ${error.message}`);
+        importErrors.push(`Failed to import KPI for ${row.fullName}: ${error.message}`);
       }
     }
 
@@ -132,44 +163,59 @@ export default function ImportData() {
   const downloadTemplate = () => {
     const template = [
       {
-        employee_email: 'john@example.com',
-        category_name: 'Financial Performance',
-        kra_name: 'Revenue Growth',
-        kpi_name: 'Monthly Revenue Target',
-        target_value: 100000,
-        uom: 'USD',
-        weightage: 25,
-        criteria: 'Achieve monthly revenue target',
+        sNo: 1,
+        month: 'Dec-25',
+        reviewStatus: 'Pending',
+        newCode: '100001',
+        fullName: 'John Doe',
+        category: 'Financial Performance',
+        kra: 'Revenue Growth',
+        kpi: 'Monthly Revenue Target',
+        target: '100000',
+        targetAchieved: '',
+        achievedWeight: '',
+        rating: '',
+        kpiWeightageScore: 25,
+        employeeTargetAchieved: '',
+        employeeRating: '',
+        employeeRemarks: '',
+        managerTargetAchieved: '',
+        managerRating: '',
+        managerRemarks: '',
+        auditTargetAchieved: '',
+        auditRating: '',
+        auditRemarks: '',
+        sourceOfData: '',
+        kpiStatus: '',
       },
     ];
 
     const ws = XLSX.utils.json_to_sheet(template);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'KPI Template');
-    XLSX.writeFile(wb, 'kpi_import_template.xlsx');
+    XLSX.utils.book_append_sheet(wb, ws, 'PMS Import Template');
+    XLSX.writeFile(wb, 'pms_import_template.xlsx');
   };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Import Data</h1>
-        <p className="text-muted-foreground">Bulk import KPIs and employee data from Excel</p>
+        <p className="text-muted-foreground">Bulk import Employee KRAs and Performance Data from Excel</p>
       </div>
 
       <Tabs defaultValue="kpis">
         <TabsList>
-          <TabsTrigger value="kpis">Import KPIs</TabsTrigger>
+          <TabsTrigger value="kpis">Import PMS Data</TabsTrigger>
         </TabsList>
 
         <TabsContent value="kpis" className="space-y-6">
-          {/* Instructions */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileSpreadsheet className="h-5 w-5" />
-                KPI Import
+                PMS Scorecard Import
               </CardTitle>
-              <CardDescription>Upload an Excel file to bulk import KPIs for employees</CardDescription>
+              <CardDescription>Upload an Excel file to bulk import employee KRAs and KPIs</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-4">
@@ -190,20 +236,24 @@ export default function ImportData() {
               <div className="text-sm text-muted-foreground">
                 <p className="font-medium mb-2">Required columns:</p>
                 <ul className="list-disc list-inside space-y-1">
-                  <li><code>employee_email</code> - Employee's email address</li>
-                  <li><code>category_name</code> - KRA category name (must exist)</li>
-                  <li><code>kra_name</code> - Key Result Area name</li>
-                  <li><code>kpi_name</code> - KPI name/description</li>
-                  <li><code>target_value</code> - Numeric target</li>
-                  <li><code>uom</code> - Unit of measurement</li>
-                  <li><code>weightage</code> - KPI weightage (0-100)</li>
-                  <li><code>criteria</code> - Evaluation criteria</li>
+                  <li><code>newCode</code> - Employee Code</li>
+                  <li><code>fullName</code> - Employee Full Name</li>
+                  <li><code>category</code> - KRA Category (must exist in system)</li>
+                  <li><code>kra</code> - Key Result Area</li>
+                  <li><code>kpi</code> - KPI / Target Description</li>
+                  <li><code>target</code> - Target Value</li>
+                  <li><code>month</code> - Review Period (e.g., Sep-25)</li>
+                </ul>
+                <p className="font-medium mt-4 mb-2">Optional columns:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li><code>kpiWeightageScore</code> - KPI Weightage</li>
+                  <li><code>targetAchieved</code>, <code>rating</code> - Achievement data</li>
+                  <li><code>employeeRemarks</code>, <code>managerRemarks</code>, <code>auditRemarks</code></li>
                 </ul>
               </div>
             </CardContent>
           </Card>
 
-          {/* Errors */}
           {errors.length > 0 && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
@@ -218,7 +268,6 @@ export default function ImportData() {
             </Alert>
           )}
 
-          {/* Success */}
           {importSuccess > 0 && (
             <Alert>
               <CheckCircle2 className="h-4 w-4" />
@@ -229,7 +278,6 @@ export default function ImportData() {
             </Alert>
           )}
 
-          {/* Preview */}
           {importData.length > 0 && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
@@ -246,25 +294,27 @@ export default function ImportData() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead>Code</TableHead>
                         <TableHead>Employee</TableHead>
                         <TableHead>Category</TableHead>
                         <TableHead>KRA</TableHead>
                         <TableHead>KPI</TableHead>
                         <TableHead>Target</TableHead>
-                        <TableHead>UOM</TableHead>
+                        <TableHead>Month</TableHead>
                         <TableHead>Weightage</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {importData.slice(0, 10).map((row, i) => (
                         <TableRow key={i}>
-                          <TableCell>{row.employee_email}</TableCell>
-                          <TableCell>{row.category_name}</TableCell>
-                          <TableCell>{row.kra_name}</TableCell>
-                          <TableCell>{row.kpi_name}</TableCell>
-                          <TableCell>{row.target_value}</TableCell>
-                          <TableCell>{row.uom}</TableCell>
-                          <TableCell>{row.weightage}%</TableCell>
+                          <TableCell>{row.newCode}</TableCell>
+                          <TableCell>{row.fullName}</TableCell>
+                          <TableCell>{row.category}</TableCell>
+                          <TableCell>{row.kra}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{row.kpi}</TableCell>
+                          <TableCell>{row.target}</TableCell>
+                          <TableCell>{row.month}</TableCell>
+                          <TableCell>{row.kpiWeightageScore || '-'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
