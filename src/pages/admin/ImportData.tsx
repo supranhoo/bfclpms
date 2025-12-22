@@ -120,6 +120,83 @@ export default function ImportData() {
   const [isImportingEmployees, setIsImportingEmployees] = useState(false);
   const [employeeImportSuccess, setEmployeeImportSuccess] = useState(0);
 
+  // Normalize KPI row to handle different column name variations
+  const normalizeKpiRow = (rawRow: Record<string, any>): KpiImportRow => {
+    // Helper to find value from multiple possible column names (case-insensitive)
+    const getValue = (possibleNames: string[]): any => {
+      for (const name of possibleNames) {
+        for (const key of Object.keys(rawRow)) {
+          if (key.toLowerCase().replace(/[\s_-]/g, '') === name.toLowerCase().replace(/[\s_-]/g, '')) {
+            return rawRow[key];
+          }
+        }
+      }
+      return undefined;
+    };
+
+    // Helper to parse percentage or number values - preserve original format for display
+    const parseNumericValue = (value: any): string | number | undefined => {
+      if (value === null || value === undefined || value === '') return undefined;
+      return value; // Keep original value
+    };
+
+    // Helper to format R values - handle % and decimal formats
+    const formatRatingThreshold = (value: any): string | undefined => {
+      if (value === null || value === undefined || value === '') return undefined;
+      const strValue = String(value).trim();
+      // If it's already a percentage string, keep it
+      if (strValue.includes('%')) return strValue;
+      // If it's a decimal < 2, convert to percentage for display
+      const numValue = parseFloat(strValue);
+      if (!isNaN(numValue) && numValue < 2 && numValue > 0) {
+        return `${(numValue * 100).toFixed(0)}%`;
+      }
+      return strValue;
+    };
+
+    return {
+      sNo: getValue(['sNo', 'sno', 's_no', 'sr', 'srNo', 'serialNo', 'serial']),
+      month: getValue(['month', 'reviewMonth', 'review_month', 'period']),
+      reviewStatus: getValue(['reviewStatus', 'review_status', 'status']),
+      newCode: String(getValue(['newCode', 'newcode', 'new_code', 'employeeCode', 'employee_code', 'empCode', 'code']) || ''),
+      fullName: String(getValue(['fullName', 'full_name', 'name', 'employeeName', 'employee_name']) || ''),
+      category: String(getValue(['category', 'kraCategory', 'kra_category', 'categoryName']) || ''),
+      kra: String(getValue(['kra', 'kraName', 'kra_name', 'keyResultArea']) || ''),
+      kpi: String(getValue(['kpi', 'kpiName', 'kpi_name', 'keyPerformanceIndicator']) || ''),
+      target: parseNumericValue(getValue(['target', 'targetValue', 'target_value', 'targetVal'])),
+      uom: getValue(['uom', 'unit', 'unitOfMeasure', 'unit_of_measure']),
+      frequency: getValue(['frequency', 'freq', 'reviewFrequency']),
+      kpiWeightage: getValue(['kpiWeightage', 'kpi_weightage', 'weightage', 'weight']),
+      criteria: getValue(['criteria', 'scoringCriteria', 'scoring_criteria']),
+      // Rating thresholds - format for display
+      r5: formatRatingThreshold(getValue(['r5', 'R5', 'rating5', 'outstanding'])),
+      r4: formatRatingThreshold(getValue(['r4', 'R4', 'rating4', 'exceeds'])),
+      r3: formatRatingThreshold(getValue(['r3', 'R3', 'rating3', 'meets'])),
+      r2: formatRatingThreshold(getValue(['r2', 'R2', 'rating2', 'below'])),
+      r1: formatRatingThreshold(getValue(['r1', 'R1', 'rating1', 'poor'])),
+      r0: formatRatingThreshold(getValue(['r0', 'R0', 'rating0'])),
+      // Achievement data - key fix: look for "Achieved" column
+      targetAchieved: parseNumericValue(getValue(['targetAchieved', 'target_achieved', 'achieved', 'achievedValue', 'achieved_value', 'actualValue', 'actual'])),
+      achievedWeight: getValue(['achievedWeight', 'achieved_weight', 'achievedWt']),
+      rating: getValue(['rating', 'selfRating', 'self_rating']),
+      kpiWeightageScore: getValue(['kpiWeightageScore', 'kpi_weightage_score', 'weightageScore']),
+      // Self review
+      employeeTargetAchieved: parseNumericValue(getValue(['employeeTargetAchieved', 'employee_target_achieved', 'empAchieved', 'selfAchieved'])),
+      employeeRating: getValue(['employeeRating', 'employee_rating', 'empRating', 'selfRating']),
+      employeeRemarks: getValue(['employeeRemarks', 'employee_remarks', 'empRemarks', 'selfRemarks']),
+      // Manager review
+      managerTargetAchieved: parseNumericValue(getValue(['managerTargetAchieved', 'manager_target_achieved', 'mgrAchieved'])),
+      managerRating: getValue(['managerRating', 'manager_rating', 'mgrRating']),
+      managerRemarks: getValue(['managerRemarks', 'manager_remarks', 'mgrRemarks']),
+      // Audit review
+      auditTargetAchieved: parseNumericValue(getValue(['auditTargetAchieved', 'audit_target_achieved', 'auditorAchieved'])),
+      auditRating: getValue(['auditRating', 'audit_rating', 'auditorRating']),
+      auditRemarks: getValue(['auditRemarks', 'audit_remarks', 'auditorRemarks']),
+      sourceOfData: getValue(['sourceOfData', 'source_of_data', 'dataSource', 'source']),
+      kpiStatus: getValue(['kpiStatus', 'kpi_status']),
+    };
+  };
+
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -131,7 +208,10 @@ export default function ImportData() {
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json<KpiImportRow>(worksheet);
+        const rawData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet);
+        
+        // Normalize all rows to handle column name variations
+        const jsonData = rawData.map(normalizeKpiRow);
 
         // Validate data
         const validationErrors: string[] = [];
