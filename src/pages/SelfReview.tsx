@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useMyKpis, useAllKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI, KpiStatus } from '@/hooks/useKpis';
+import { useAllKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI, KpiStatus } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
+import { useKpiFilters } from '@/hooks/useKpiFilters';
+import { KpiFilterBar } from '@/components/ui/KpiFilterBar';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,7 +19,7 @@ import { Progress } from '@/components/ui/progress';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
-import { Send, Eye, CheckCircle2, Clock, AlertCircle, Filter, User, Paperclip, Lock } from 'lucide-react';
+import { Send, Eye, CheckCircle2, Clock, AlertCircle, Lock } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -57,16 +59,29 @@ const ratingOptions: { value: RatingLevel; label: string; color: string; score: 
 ];
 
 export default function SelfReview() {
-  const { role, user } = useAuth();
-  const isAdmin = role === 'admin';
+  const { user } = useAuth();
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
   
   // Review period filter state
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
   const [selectedYear, setSelectedYear] = useState(defaultYear);
   
-  // Fetch KPIs based on role
-  const { data: myKpis, isLoading: loadingMyKpis } = useMyKpis();
+  // Use centralized KPI filters
+  const {
+    filters,
+    updateFilter,
+    resetFilters,
+    divisions,
+    businessUnits,
+    departments,
+    managers,
+    employees,
+    filteredEmployeeIds,
+    isLoading: loadingFilters,
+    isAdmin,
+  } = useKpiFilters();
+  
+  // Fetch all KPIs with employee info
   const { data: allKpisRaw, isLoading: loadingAllKpis } = useAllKpis();
   
   const allKpis = useMemo(() => {
@@ -77,16 +92,11 @@ export default function SelfReview() {
     }));
   }, [allKpisRaw]);
 
-  const kpis = isAdmin ? allKpis : myKpis;
-  const isLoading = isAdmin ? loadingAllKpis : loadingMyKpis;
-  
   const { data: categories } = useKraCategories();
-  const kpiIds = kpis?.map(k => k.id) || [];
+  const kpiIds = allKpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const submitReview = useSubmitSelfReview();
 
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
@@ -98,44 +108,39 @@ export default function SelfReview() {
   const [selfRemarks, setSelfRemarks] = useState('');
   const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
 
-  // Get unique employees for admin filter
-  const employees = useMemo(() => {
-    if (!isAdmin || !allKpis) return [];
-    const employeeMap = new Map<string, { id: string; name: string; code: string | null }>();
-    allKpis.forEach(k => {
-      if (k.employee && !employeeMap.has(k.employee.id)) {
-        employeeMap.set(k.employee.id, {
-          id: k.employee.id,
-          name: k.employee.full_name || k.employee.email,
-          code: k.employee.employee_code
-        });
-      }
-    });
-    return Array.from(employeeMap.values());
-  }, [isAdmin, allKpis]);
-
-  // Filter KPIs by period and category
+  // Filter KPIs by period, category and employee hierarchy
   const filteredKpis = useMemo(() => {
-    let filtered = kpis || [];
+    let filtered = allKpis || [];
+    
     // Filter by review period and year
     filtered = filtered.filter(k => 
       k.review_period === selectedPeriod && k.review_year === selectedYear
     );
-    if (selectedCategory) {
-      filtered = filtered.filter(k => k.category_id === selectedCategory);
+    
+    // Filter by category
+    if (filters.categoryId) {
+      filtered = filtered.filter(k => k.category_id === filters.categoryId);
     }
-    if (isAdmin && selectedEmployee) {
-      filtered = filtered.filter(k => k.employee_id === selectedEmployee);
+    
+    // Filter by employee hierarchy (Division > BU > Dept > Manager > Employee)
+    if (filteredEmployeeIds.length > 0 && (filters.divisionId || filters.businessUnitId || filters.departmentId || filters.managerId || filters.employeeId)) {
+      filtered = filtered.filter(k => filteredEmployeeIds.includes(k.employee_id));
     }
+    
+    // For non-admin users, only show their own KPIs
+    if (!isAdmin && user?.id) {
+      filtered = filtered.filter(k => k.employee_id === user.id);
+    }
+    
     // Only show KPIs that are pending self review or already submitted
     return filtered.filter(k => k.status === 'kra_set' || k.status === 'self_review');
-  }, [kpis, selectedCategory, selectedEmployee, isAdmin, selectedPeriod, selectedYear]);
+  }, [allKpis, filters, filteredEmployeeIds, selectedPeriod, selectedYear, isAdmin, user?.id]);
 
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
 
   // Calculate progress
-  const totalKpis = kpis?.filter(k => k.status === 'kra_set' || k.status === 'self_review').length || 0;
-  const submittedKpis = kpis?.filter(k => k.status === 'self_review').length || 0;
+  const totalKpis = filteredKpis?.length || 0;
+  const submittedKpis = filteredKpis?.filter(k => k.status === 'self_review').length || 0;
   const progressPercent = totalKpis > 0 ? (submittedKpis / totalKpis) * 100 : 0;
 
   const openReviewDialog = (kpi: KPI) => {
@@ -214,6 +219,8 @@ export default function SelfReview() {
     setReviewDialogOpen(false);
   };
 
+  const isLoading = loadingAllKpis || loadingFilters;
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -241,6 +248,25 @@ export default function SelfReview() {
         />
       </div>
 
+      {/* Hierarchical Filters */}
+      <Card>
+        <CardContent className="pt-6">
+          <KpiFilterBar
+            filters={filters}
+            updateFilter={updateFilter}
+            resetFilters={resetFilters}
+            divisions={divisions}
+            businessUnits={businessUnits}
+            departments={departments}
+            managers={managers}
+            employees={employees}
+            categories={categories}
+            showCategoryFilter={true}
+            isLoading={loadingFilters}
+          />
+        </CardContent>
+      </Card>
+
       {/* Progress Card */}
       <Card>
         <CardContent className="pt-6">
@@ -267,69 +293,19 @@ export default function SelfReview() {
         </CardContent>
       </Card>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-4">
-        {/* Category Filter */}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={selectedCategory === null ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setSelectedCategory(null)}
-          >
-            All Categories
-          </Button>
-          {categories?.map(cat => (
-            <Button
-              key={cat.id}
-              variant={selectedCategory === cat.id ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setSelectedCategory(cat.id)}
-              style={{
-                borderColor: selectedCategory === cat.id ? cat.color : undefined,
-                backgroundColor: selectedCategory === cat.id ? cat.color : undefined,
-              }}
-            >
-              <div
-                className="w-2 h-2 rounded-full mr-2"
-                style={{ backgroundColor: selectedCategory === cat.id ? 'white' : cat.color }}
-              />
-              {cat.name}
-            </Button>
-          ))}
-        </div>
-
-        {/* Employee Filter (Admin only) */}
-        {isAdmin && employees.length > 0 && (
-          <Select value={selectedEmployee || 'all'} onValueChange={(v) => setSelectedEmployee(v === 'all' ? null : v)}>
-            <SelectTrigger className="w-[250px]">
-              <User className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Filter by employee" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Employees</SelectItem>
-              {employees.map(emp => (
-                <SelectItem key={emp.id} value={emp.id}>
-                  {emp.name} {emp.code && `(${emp.code})`}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
-
       {/* KPIs Table */}
       <Card>
         <CardHeader>
           <CardTitle>KPIs for Self Review</CardTitle>
           <CardDescription>
-            {filteredKpis?.length || 0} KPIs {selectedCategory || selectedEmployee ? 'matching filters' : 'pending review'}
+            {filteredKpis?.length || 0} KPIs {(filters.categoryId || filters.employeeId || filters.departmentId) ? 'matching filters' : 'pending review'}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                {isAdmin && <TableHead>Employee</TableHead>}
+                <TableHead>Employee</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>KRA</TableHead>
                 <TableHead>KPI</TableHead>
@@ -344,20 +320,19 @@ export default function SelfReview() {
             <TableBody>
               {filteredKpis?.map(kpi => {
                 const submission = submissionMap.get(kpi.id);
-                const employee = isAdmin && 'employee' in kpi ? (kpi as any).employee : null;
+                const employee = 'employee' in kpi ? (kpi as any).employee : null;
                 const kpiStatus = submission?.kpi_status || 'open';
                 const isLocked = kpiStatus === 'approved_by_manager' || kpiStatus === 'locked';
+                const canEdit = !isLocked && (isAdmin || kpi.employee_id === user?.id);
                 
                 return (
                   <TableRow key={kpi.id} className={isLocked ? 'opacity-75 bg-muted/30' : ''}>
-                    {isAdmin && (
-                      <TableCell>
-                        <div className="text-sm">
-                          <div className="font-medium">{employee?.full_name || '-'}</div>
-                          <div className="text-muted-foreground text-xs">{employee?.employee_code}</div>
-                        </div>
-                      </TableCell>
-                    )}
+                    <TableCell>
+                      <div className="text-sm">
+                        <div className="font-medium">{employee?.full_name || '-'}</div>
+                        <div className="text-muted-foreground text-xs">{employee?.employee_code}</div>
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <div
@@ -409,7 +384,7 @@ export default function SelfReview() {
                     <TableCell>
                       <div className="flex gap-2">
                         {/* Only allow editing if KPI is not locked */}
-                        {!isLocked && kpiStatus === 'open' && (
+                        {canEdit && kpiStatus === 'open' && (
                           <Button
                             size="sm"
                             onClick={() => openReviewDialog(kpi)}
@@ -418,7 +393,7 @@ export default function SelfReview() {
                             Submit
                           </Button>
                         )}
-                        {!isLocked && kpiStatus === 'submitted' && (
+                        {canEdit && kpiStatus === 'submitted' && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -447,7 +422,7 @@ export default function SelfReview() {
               })}
               {(!filteredKpis || filteredKpis.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={isAdmin ? 10 : 9} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                     <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
                     No KPIs pending self review
                   </TableCell>
