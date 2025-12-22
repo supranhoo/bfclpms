@@ -56,10 +56,12 @@ const kpiStatusLabels: Record<KpiStatus, string> = {
 };
 
 const ratingOptions: { value: RatingLevel; label: string; color: string; score: number }[] = [
-  { value: 'blue', label: 'Outstanding (5)', color: '#3B82F6', score: 5 },
-  { value: 'green', label: 'Exceeds Expectations (4)', color: '#10B981', score: 4 },
-  { value: 'yellow', label: 'Meets Expectations (3)', color: '#F59E0B', score: 3 },
-  { value: 'red', label: 'Below Expectations (1-2)', color: '#EF4444', score: 2 },
+  { value: 'blue', label: '5 - Outstanding', color: '#3B82F6', score: 5 },
+  { value: 'green', label: '4 - Exceeds Expectations', color: '#10B981', score: 4 },
+  { value: 'yellow', label: '3 - Meets Expectations', color: '#F59E0B', score: 3 },
+  { value: 'red', label: '2 - Below Expectations', color: '#EF4444', score: 2 },
+  { value: 'red', label: '1 - Needs Improvement', color: '#DC2626', score: 1 },
+  { value: 'red', label: '0 - Not Achieved', color: '#991B1B', score: 0 },
 ];
 
 export default function SelfReview() {
