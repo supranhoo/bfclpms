@@ -11,6 +11,7 @@ import MyKpis from "./pages/MyKpis";
 import SelfReview from "./pages/SelfReview";
 import TeamReview from "./pages/TeamReview";
 import AuditPanel from "./pages/AuditPanel";
+import QueryInbox from "./pages/QueryInbox";
 import UserManagement from "./pages/admin/UserManagement";
 import AllKpis from "./pages/admin/AllKpis";
 import Organization from "./pages/admin/Organization";
@@ -38,6 +39,7 @@ const App = () => (
               <Route path="/my-kpis" element={<MyKpis />} />
               <Route path="/self-review" element={<SelfReview />} />
               <Route path="/kra-acceptance" element={<KRAAcceptance />} />
+              <Route path="/queries" element={<QueryInbox />} />
               <Route path="/team-review" element={<TeamReview />} />
               <Route path="/audit" element={<AuditPanel />} />
               <Route path="/admin/users" element={<UserManagement />} />
