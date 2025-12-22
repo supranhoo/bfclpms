@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useMyKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel } from '@/hooks/useKpis';
+import { useMyKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,8 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Filter, Send, Eye } from 'lucide-react';
-
+import { Filter, Send, Eye, Clock } from 'lucide-react';
+import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 const statusColors = {
   kra_set: 'bg-muted text-muted-foreground',
   self_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
@@ -46,20 +46,20 @@ export default function MyKpis() {
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
-  const [selectedKpi, setSelectedKpi] = useState<typeof kpis extends (infer T)[] ? T : never | null>(null);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   
   // Review form state
   const [achievedValue, setAchievedValue] = useState('');
   const [selfRating, setSelfRating] = useState<RatingLevel | ''>('');
   const [selfRemarks, setSelfRemarks] = useState('');
-
   const filteredKpis = selectedCategory
     ? kpis?.filter(k => k.category_id === selectedCategory)
     : kpis;
 
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
 
-  const openReviewDialog = (kpi: NonNullable<typeof kpis>[number]) => {
+  const openReviewDialog = (kpi: KPI) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
     if (existing) {
@@ -72,6 +72,11 @@ export default function MyKpis() {
       setSelfRemarks('');
     }
     setReviewDialogOpen(true);
+  };
+
+  const openTimeline = (kpi: KPI) => {
+    setSelectedKpi(kpi);
+    setTimelineOpen(true);
   };
 
   const handleSubmitReview = async () => {
@@ -202,21 +207,31 @@ export default function MyKpis() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {kpi.status === 'kra_set' || kpi.status === 'self_review' ? (
+                      <div className="flex items-center gap-1">
+                        {kpi.status === 'kra_set' || kpi.status === 'self_review' ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openReviewDialog(kpi)}
+                          >
+                            <Send className="h-4 w-4 mr-1" />
+                            {kpi.status === 'kra_set' ? 'Submit' : 'Edit'}
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="ghost">
+                            <Eye className="h-4 w-4 mr-1" />
+                            View
+                          </Button>
+                        )}
                         <Button
                           size="sm"
-                          variant="outline"
-                          onClick={() => openReviewDialog(kpi)}
+                          variant="ghost"
+                          onClick={() => openTimeline(kpi)}
+                          title="View Timeline"
                         >
-                          <Send className="h-4 w-4 mr-1" />
-                          {kpi.status === 'kra_set' ? 'Submit' : 'Edit'}
+                          <Clock className="h-4 w-4" />
                         </Button>
-                      ) : (
-                        <Button size="sm" variant="ghost">
-                          <Eye className="h-4 w-4 mr-1" />
-                          View
-                        </Button>
-                      )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -305,6 +320,13 @@ export default function MyKpis() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Timeline Modal */}
+      <KpiTimeline
+        isOpen={timelineOpen}
+        onClose={() => setTimelineOpen(false)}
+        kpi={selectedKpi}
+      />
     </div>
   );
 }

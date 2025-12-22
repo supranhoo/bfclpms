@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
+import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { Send, Eye, CheckCircle2, Clock, AlertCircle, Filter, User, Paperclip, Lock } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
@@ -88,6 +89,7 @@ export default function SelfReview() {
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   
   // Review form state
@@ -156,6 +158,11 @@ export default function SelfReview() {
   const openViewDialog = (kpi: KPI) => {
     setSelectedKpi(kpi);
     setViewDialogOpen(true);
+  };
+
+  const openTimeline = (kpi: KPI) => {
+    setSelectedKpi(kpi);
+    setTimelineOpen(true);
   };
 
   // Auto-calculate rating based on achieved value
@@ -430,6 +437,9 @@ export default function SelfReview() {
                         <Button size="sm" variant="ghost" onClick={() => openViewDialog(kpi)}>
                           <Eye className="h-4 w-4" />
                         </Button>
+                        <Button size="sm" variant="ghost" onClick={() => openTimeline(kpi)} title="View Timeline">
+                          <Clock className="h-4 w-4" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -643,6 +653,13 @@ export default function SelfReview() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Timeline Modal */}
+      <KpiTimeline
+        isOpen={timelineOpen}
+        onClose={() => setTimelineOpen(false)}
+        kpi={selectedKpi}
+      />
     </div>
   );
 }
