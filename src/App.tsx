@@ -11,6 +11,7 @@ import MyKpis from "./pages/MyKpis";
 import TeamReview from "./pages/TeamReview";
 import AuditPanel from "./pages/AuditPanel";
 import UserManagement from "./pages/admin/UserManagement";
+import AllKpis from "./pages/admin/AllKpis";
 import Organization from "./pages/admin/Organization";
 import Categories from "./pages/admin/Categories";
 import ImportData from "./pages/admin/ImportData";
@@ -36,6 +37,7 @@ const App = () => (
               <Route path="/team-review" element={<TeamReview />} />
               <Route path="/audit" element={<AuditPanel />} />
               <Route path="/admin/users" element={<UserManagement />} />
+              <Route path="/admin/kpis" element={<AllKpis />} />
               <Route path="/admin/organization" element={<Organization />} />
               <Route path="/admin/categories" element={<Categories />} />
               <Route path="/admin/import" element={<ImportData />} />
