@@ -444,9 +444,18 @@ export default function SelfReview() {
                   { key: 'approved', label: 'Approved', count: metrics.approved },
                 ].map(({ key, label, count }) => {
                   const percentage = metrics.total > 0 ? (count / metrics.total) * 100 : 0;
+                  const isActive = filters.status === key;
                   
                   return (
-                    <div key={key} className="space-y-2">
+                    <button
+                      key={key}
+                      onClick={() => updateFilter('status', isActive ? '' : key)}
+                      className={`space-y-2 text-left p-3 rounded-lg border transition-all hover:shadow-md ${
+                        isActive 
+                          ? 'ring-2 ring-primary border-primary bg-accent' 
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                    >
                       <div className="flex items-center justify-between text-sm">
                         <Badge variant="secondary" className={statusColors[key]}>
                           {label}
@@ -454,7 +463,7 @@ export default function SelfReview() {
                         <span className="font-medium">{count}</span>
                       </div>
                       <Progress value={percentage} className="h-2" />
-                    </div>
+                    </button>
                   );
                 })}
               </div>
