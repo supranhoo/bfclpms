@@ -161,13 +161,22 @@ export function useReviewSubmissions(kpiIds: string[]) {
     queryFn: async () => {
       if (kpiIds.length === 0) return [];
       
-      const { data, error } = await supabase
-        .from('review_submissions')
-        .select('*')
-        .in('kpi_id', kpiIds);
+      // Batch kpiIds to avoid hitting query limits (max ~100 items per IN clause is safe)
+      const batchSize = 100;
+      const allSubmissions: ReviewSubmission[] = [];
+      
+      for (let i = 0; i < kpiIds.length; i += batchSize) {
+        const batch = kpiIds.slice(i, i + batchSize);
+        const { data, error } = await supabase
+          .from('review_submissions')
+          .select('*')
+          .in('kpi_id', batch);
 
-      if (error) throw error;
-      return data as ReviewSubmission[];
+        if (error) throw error;
+        if (data) allSubmissions.push(...(data as ReviewSubmission[]));
+      }
+      
+      return allSubmissions;
     },
     enabled: kpiIds.length > 0,
   });
@@ -505,18 +514,30 @@ export function useKpiQueries(kpiIds: string[]) {
     queryFn: async () => {
       if (kpiIds.length === 0) return [];
       
-      const { data, error } = await supabase
-        .from('kpi_queries')
-        .select(`
-          *,
-          raised_by_profile:raised_by(id, full_name, email),
-          raised_to_profile:raised_to(id, full_name, email)
-        `)
-        .in('kpi_id', kpiIds)
-        .order('created_at', { ascending: false });
+      // Batch kpiIds to avoid hitting query limits
+      const batchSize = 100;
+      const allQueries: any[] = [];
+      
+      for (let i = 0; i < kpiIds.length; i += batchSize) {
+        const batch = kpiIds.slice(i, i + batchSize);
+        const { data, error } = await supabase
+          .from('kpi_queries')
+          .select(`
+            *,
+            raised_by_profile:raised_by(id, full_name, email),
+            raised_to_profile:raised_to(id, full_name, email)
+          `)
+          .in('kpi_id', batch)
+          .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      return data;
+        if (error) throw error;
+        if (data) allQueries.push(...data);
+      }
+      
+      // Sort all results by created_at descending
+      return allQueries.sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
     },
     enabled: kpiIds.length > 0,
   });
