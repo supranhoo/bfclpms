@@ -2,17 +2,18 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
+import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3 } from 'lucide-react';
@@ -33,12 +34,15 @@ const statusLabels: Record<string, string> = {
   approved: 'Approved',
 };
 
-const ratingOptions: { value: RatingLevel; label: string; color: string; score: number }[] = [
-  { value: 'blue', label: 'Outstanding', color: '#3B82F6', score: 5 },
-  { value: 'green', label: 'Exceeds Expectations', color: '#10B981', score: 4 },
-  { value: 'yellow', label: 'Meets Expectations', color: '#F59E0B', score: 3 },
-  { value: 'red', label: 'Below Expectations', color: '#EF4444', score: 2 },
-];
+// Score to display config
+const scoreDisplay: Record<number, { label: string; color: string; level: RatingLevel }> = {
+  5: { label: 'Outstanding', color: '#3B82F6', level: 'blue' },
+  4: { label: 'Exceeds Expectations', color: '#10B981', level: 'green' },
+  3: { label: 'Meets Expectations', color: '#F59E0B', level: 'yellow' },
+  2: { label: 'Below Expectations', color: '#EF4444', level: 'red' },
+  1: { label: 'Needs Improvement', color: '#DC2626', level: 'red' },
+  0: { label: 'Not Achieved', color: '#991B1B', level: 'red' },
+};
 
 export default function MyKpis() {
   const { profile } = useAuth();
@@ -67,8 +71,10 @@ export default function MyKpis() {
   
   // Review form state
   const [achievedValue, setAchievedValue] = useState('');
-  const [selfRating, setSelfRating] = useState<RatingLevel | ''>('');
+  const [calculatedScore, setCalculatedScore] = useState<number | null>(null);
+  const [calculatedPercentage, setCalculatedPercentage] = useState<number | null>(null);
   const [selfRemarks, setSelfRemarks] = useState('');
+  const [isNa, setIsNa] = useState(false);
 
   const filteredKpis = selectedCategory
     ? kpis?.filter(k => k.category_id === selectedCategory)
@@ -116,17 +122,54 @@ export default function MyKpis() {
     }).filter(c => c.total > 0);
   }, [categories, kpis]);
 
+  // Calculate score from achieved value using the formula
+  const calculateScoreFromAchieved = (achieved: number, kpi: KPI) => {
+    const thresholds: RatingThresholds = {
+      r5: kpi.r5,
+      r4: kpi.r4,
+      r3: kpi.r3,
+      r2: kpi.r2,
+      r1: kpi.r1,
+      r0: kpi.r0
+    };
+    
+    return calculateRating(achieved, kpi.target_value, thresholds, kpi.criteria || 'Higher is Better', kpi.weightage || 0);
+  };
+
+  const handleAchievedChange = (value: string) => {
+    setAchievedValue(value);
+    if (selectedKpi && value) {
+      const result = calculateScoreFromAchieved(parseFloat(value), selectedKpi);
+      setCalculatedScore(result.rating);
+      setCalculatedPercentage(result.percentage);
+    } else {
+      setCalculatedScore(null);
+      setCalculatedPercentage(null);
+    }
+  };
+
   const openReviewDialog = (kpi: KPI) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
     if (existing) {
       setAchievedValue(existing.achieved_value?.toString() || '');
-      setSelfRating(existing.self_rating || '');
+      // Re-calculate score from achieved value
+      if (existing.achieved_value !== null && existing.achieved_value !== undefined) {
+        const result = calculateScoreFromAchieved(existing.achieved_value, kpi);
+        setCalculatedScore(result.rating);
+        setCalculatedPercentage(result.percentage);
+      } else {
+        setCalculatedScore(existing.self_score || null);
+        setCalculatedPercentage(null);
+      }
       setSelfRemarks(existing.self_remarks || '');
+      setIsNa(existing.is_na || false);
     } else {
       setAchievedValue('');
-      setSelfRating('');
+      setCalculatedScore(null);
+      setCalculatedPercentage(null);
       setSelfRemarks('');
+      setIsNa(false);
     }
     setReviewDialogOpen(true);
   };
@@ -137,21 +180,27 @@ export default function MyKpis() {
   };
 
   const handleSubmitReview = async () => {
-    if (!selectedKpi || !selfRating) return;
+    if (!selectedKpi) return;
+    
+    // For NA submissions, score is not required
+    // For regular submissions, need achieved value (score is auto-calculated)
+    if (!isNa && !achievedValue) return;
 
-    const scoreMap: Record<RatingLevel, number> = {
-      blue: 5,
-      green: 4,
-      yellow: 3,
-      red: 2
+    // Convert numeric score to rating level for storage
+    const getRatingLevel = (score: number): RatingLevel => {
+      if (score >= 4) return 'blue';
+      if (score >= 3) return 'green';
+      if (score >= 2) return 'yellow';
+      return 'red';
     };
 
     await submitReview.mutateAsync({
       kpi_id: selectedKpi.id,
-      achieved_value: parseFloat(achievedValue) || 0,
-      self_rating: selfRating,
-      self_score: scoreMap[selfRating],
+      achieved_value: isNa ? null : (parseFloat(achievedValue) || 0),
+      self_rating: isNa ? null : (calculatedScore !== null ? getRatingLevel(calculatedScore) : null),
+      self_score: isNa ? null : calculatedScore,
       self_remarks: selfRemarks,
+      is_na: isNa,
     });
 
     setReviewDialogOpen(false);
@@ -341,8 +390,8 @@ export default function MyKpis() {
               <TableBody>
                 {filteredKpis?.map((kpi, index) => {
                   const submission = submissionMap.get(kpi.id);
-                  const rating = submission?.final_rating || submission?.self_rating;
-                  const ratingInfo = ratingOptions.find(r => r.value === rating);
+                  const score = submission?.final_score || submission?.self_score;
+                  const scoreInfo = score !== null && score !== undefined ? scoreDisplay[score] : null;
                   
                   return (
                     <TableRow 
@@ -382,12 +431,12 @@ export default function MyKpis() {
                         )}
                       </TableCell>
                       <TableCell className="text-center">
-                        {ratingInfo ? (
+                        {scoreInfo ? (
                           <Badge
-                            style={{ backgroundColor: ratingInfo.color }}
+                            style={{ backgroundColor: scoreInfo.color }}
                             className="text-white text-xs"
                           >
-                            {ratingInfo.label}
+                            {score} - {scoreInfo.label}
                           </Badge>
                         ) : (
                           <span className="text-muted-foreground">—</span>
@@ -458,52 +507,116 @@ export default function MyKpis() {
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Target</Label>
-                <Input value={selectedKpi?.target_value || ''} disabled />
+            {/* KPI Details */}
+            <div className="grid grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
+              <div>
+                <Label className="text-xs text-muted-foreground">Target</Label>
+                <p className="font-medium">{selectedKpi?.target_value} {selectedKpi?.uom}</p>
               </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Criteria</Label>
+                <p className="font-medium text-sm">{selectedKpi?.criteria || 'Higher is Better'}</p>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Weightage</Label>
+                <p className="font-medium">{selectedKpi?.weightage}%</p>
+              </div>
+            </div>
+
+            {/* Rating Scale Reference */}
+            {selectedKpi && (selectedKpi.r5 || selectedKpi.r4 || selectedKpi.r3) && (
+              <div className="p-4 border rounded-lg space-y-2">
+                <Label className="text-sm font-medium">Rating Scale</Label>
+                <div className="grid gap-1 text-sm">
+                  {selectedKpi.r5 && <div className="flex justify-between"><span className="text-blue-600">R5 (Outstanding):</span> <span>{selectedKpi.r5}</span></div>}
+                  {selectedKpi.r4 && <div className="flex justify-between"><span className="text-green-600">R4 (Exceeds):</span> <span>{selectedKpi.r4}</span></div>}
+                  {selectedKpi.r3 && <div className="flex justify-between"><span className="text-yellow-600">R3 (Meets):</span> <span>{selectedKpi.r3}</span></div>}
+                  {selectedKpi.r2 && <div className="flex justify-between"><span className="text-orange-600">R2 (Below):</span> <span>{selectedKpi.r2}</span></div>}
+                  {selectedKpi.r1 && <div className="flex justify-between"><span className="text-red-600">R1 (Poor):</span> <span>{selectedKpi.r1}</span></div>}
+                </div>
+              </div>
+            )}
+
+            {/* Mark as N/A Checkbox */}
+            <div className="flex items-center space-x-2 p-3 border rounded-lg bg-muted/30">
+              <Checkbox
+                id="is_na"
+                checked={isNa}
+                onCheckedChange={(checked) => {
+                  setIsNa(checked as boolean);
+                  if (checked) {
+                    setAchievedValue('');
+                    setCalculatedScore(null);
+                    setCalculatedPercentage(null);
+                  }
+                }}
+              />
+              <Label htmlFor="is_na" className="cursor-pointer text-sm">
+                Mark as N/A (Not Applicable) - This KPI does not apply for this review period
+              </Label>
+            </div>
+
+            {/* Achieved Value - Hidden when N/A */}
+            {!isNa && (
               <div className="space-y-2">
-                <Label htmlFor="achieved">Achieved Value</Label>
+                <Label htmlFor="achieved">Achieved Value *</Label>
                 <Input
                   id="achieved"
                   type="number"
                   value={achievedValue}
-                  onChange={(e) => setAchievedValue(e.target.value)}
-                  placeholder="Enter achieved value"
+                  onChange={(e) => handleAchievedChange(e.target.value)}
+                  placeholder="Enter your achieved value"
                 />
+                {achievedValue && selectedKpi?.target_value && (
+                  <p className="text-sm text-muted-foreground">
+                    Achievement: {((parseFloat(achievedValue) / selectedKpi.target_value) * 100).toFixed(1)}% of target
+                  </p>
+                )}
               </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="rating">Self Rating</Label>
-              <Select value={selfRating} onValueChange={(v) => setSelfRating(v as RatingLevel)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select your rating" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ratingOptions.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: opt.color }}
-                        />
-                        {opt.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            )}
 
+            {/* Calculated Score Display - Hidden when N/A */}
+            {!isNa && calculatedScore !== null && (
+              <div className="space-y-2">
+                <Label>Calculated Rating</Label>
+                <div className="p-4 border rounded-lg bg-muted/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Badge
+                        style={{ backgroundColor: scoreDisplay[calculatedScore]?.color || '#991B1B' }}
+                        className="text-white text-lg px-3 py-1"
+                      >
+                        {calculatedScore}
+                      </Badge>
+                      <span className="font-medium">{scoreDisplay[calculatedScore]?.label || 'Not Achieved'}</span>
+                    </div>
+                    {calculatedPercentage !== null && (
+                      <span className="text-sm text-muted-foreground">
+                        {calculatedPercentage.toFixed(1)}% achievement ratio
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* N/A Notice */}
+            {isNa && (
+              <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-900">
+                <p className="text-sm text-muted-foreground">
+                  This KPI will be marked as Not Applicable. It will be excluded from overall score calculations.
+                </p>
+              </div>
+            )}
+
+            {/* Self Remarks */}
             <div className="space-y-2">
-              <Label htmlFor="remarks">Self Remarks</Label>
+              <Label htmlFor="remarks">{isNa ? 'Reason for N/A' : 'Justification & Evidence'}</Label>
               <Textarea
                 id="remarks"
                 value={selfRemarks}
                 onChange={(e) => setSelfRemarks(e.target.value)}
-                placeholder="Describe your achievements and provide justification..."
+                placeholder={isNa ? 'Explain why this KPI is not applicable...' : 'Describe your achievements, provide evidence or justification...'}
                 rows={4}
               />
             </div>
@@ -513,7 +626,7 @@ export default function MyKpis() {
             <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSubmitReview} disabled={!selfRating || submitReview.isPending}>
+            <Button onClick={handleSubmitReview} disabled={(!isNa && !achievedValue) || submitReview.isPending}>
               {submitReview.isPending ? 'Submitting...' : 'Submit Review'}
             </Button>
           </DialogFooter>
