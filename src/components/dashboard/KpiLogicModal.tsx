@@ -12,9 +12,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Pencil, Save, X, Bug, ChevronDown } from 'lucide-react';
+import { Pencil, Save, X, Bug, ChevronDown, Calculator } from 'lucide-react';
 import type { KPI } from '@/hooks/useKpis';
-import { parseThreshold } from '@/lib/ratingCalculation';
+import { parseThreshold, calculateRating, ratingToLevel, levelToText } from '@/lib/ratingCalculation';
 
 interface KpiLogicModalProps {
   isOpen: boolean;
@@ -28,6 +28,7 @@ export function KpiLogicModal({ isOpen, onClose, kpi }: KpiLogicModalProps) {
   const queryClient = useQueryClient();
   
   const [isEditing, setIsEditing] = useState(false);
+  const [debugAchieved, setDebugAchieved] = useState('');
   const [editData, setEditData] = useState({
     kpi_name: '',
     kra_name: '',
@@ -407,6 +408,100 @@ export function KpiLogicModal({ isOpen, onClose, kpi }: KpiLogicModalProps) {
                       <br />
                       Compare achievedWeight against thresholds (higher = better rating)
                     </code>
+                  </div>
+
+                  {/* Live Calculation Preview */}
+                  <div className="border-t border-border pt-3 mt-3">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Calculator className="h-4 w-4 text-primary" />
+                      <span className="text-muted-foreground font-semibold">Live Calculation Preview</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 mb-3">
+                      <Label htmlFor="debug-achieved" className="text-muted-foreground whitespace-nowrap">
+                        Achieved Value:
+                      </Label>
+                      <Input
+                        id="debug-achieved"
+                        type="number"
+                        step="any"
+                        placeholder={`Enter value (${kpi.uom || 'number'})`}
+                        value={debugAchieved}
+                        onChange={(e) => setDebugAchieved(e.target.value)}
+                        className="h-8 w-40 font-mono"
+                      />
+                    </div>
+
+                    {debugAchieved && (() => {
+                      const achievedNum = parseFloat(debugAchieved);
+                      if (isNaN(achievedNum)) return (
+                        <div className="text-destructive text-xs">Invalid number</div>
+                      );
+
+                      const result = calculateRating(
+                        achievedNum,
+                        kpi.target_value,
+                        { r5: kpi.r5, r4: kpi.r4, r3: kpi.r3, r2: kpi.r2, r1: kpi.r1, r0: kpi.r0 },
+                        kpi.criteria || 'Higher is Better',
+                        kpi.weightage || 0
+                      );
+
+                      const targetVal = parseThreshold(kpi.target_value, false) ?? 0;
+                      const isLowerBetter = kpi.criteria?.toLowerCase().includes('lower');
+
+                      const ratingColors: Record<string, string> = {
+                        blue: 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/50 dark:text-blue-200 dark:border-blue-700',
+                        green: 'bg-green-100 text-green-700 border-green-300 dark:bg-green-900/50 dark:text-green-200 dark:border-green-700',
+                        yellow: 'bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-900/50 dark:text-yellow-200 dark:border-yellow-700',
+                        red: 'bg-red-100 text-red-700 border-red-300 dark:bg-red-900/50 dark:text-red-200 dark:border-red-700',
+                      };
+
+                      return (
+                        <div className="space-y-3">
+                          {/* Calculation Steps */}
+                          <div className="bg-background p-3 rounded border space-y-1 text-[11px]">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Achieved:</span>
+                              <span className="font-semibold">{achievedNum}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Target:</span>
+                              <span className="font-semibold">{targetVal}</span>
+                            </div>
+                            {targetVal !== 0 && (
+                              <>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Formula:</span>
+                                  <span>{isLowerBetter ? `${targetVal} / ${achievedNum}` : `${achievedNum} / ${targetVal}`}</span>
+                                </div>
+                                <div className="flex justify-between border-t border-dashed pt-1 mt-1">
+                                  <span className="text-muted-foreground">Achieved Weight:</span>
+                                  <span className="font-semibold">{result.achievedWeight.toFixed(6)}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Result */}
+                          <div className={`p-3 rounded border ${ratingColors[result.ratingLevel]}`}>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="text-xs opacity-75">Rating Result</span>
+                                <div className="text-2xl font-bold">{result.rating}</div>
+                              </div>
+                              <div className="text-right">
+                                <Badge className={ratingColors[result.ratingLevel]}>
+                                  {levelToText(result.ratingLevel)}
+                                </Badge>
+                                <div className="text-xs mt-1 opacity-75">
+                                  {result.percentage.toFixed(2)}% | Score: {result.weightedScore.toFixed(2)}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </CollapsibleContent>
