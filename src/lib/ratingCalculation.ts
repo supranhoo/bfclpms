@@ -39,14 +39,25 @@ export function parseThreshold(value: string | number | null | undefined, asRati
   const raw = String(value).trim();
   const hasPercent = raw.includes('%');
 
-  // Remove % sign and parse
-  const cleanValue = raw.replace('%', '').trim();
+  // Remove % sign and parse - handle both "99.95%" and "99,95%" formats
+  const cleanValue = raw.replace('%', '').replace(',', '.').trim();
   const parsed = parseFloat(cleanValue);
   if (isNaN(parsed)) return null;
 
-  // If asRatio=true and user entered "90%" we treat it as ratio 0.9 (matches Excel behavior)
-  // If asRatio=false, treat "90%" as absolute number 90
-  return (asRatio && hasPercent) ? parsed / 100 : parsed;
+  // If asRatio=true and value contains % OR looks like a percentage (>1), convert to ratio
+  // This handles "99.95%" → 0.9995 and also bare "99.95" when it should be a percentage
+  if (asRatio) {
+    // If has % sign, definitely a percentage - divide by 100
+    // If no % but value > 1, assume it's a percentage value like 99.95 → 0.9995
+    if (hasPercent || parsed > 1) {
+      return parsed / 100;
+    }
+    // Value is already a ratio (0-1 range)
+    return parsed;
+  }
+  
+  // asRatio=false: treat as absolute number
+  return parsed;
 }
 
 /**
