@@ -889,10 +889,13 @@ export default function ImportData() {
           successCount++;
         } else if (row.email) {
           // Create new user only if email is provided
+          // Generate a cryptographically random password for security
+          const randomPassword = crypto.randomUUID() + crypto.randomUUID().slice(0, 8) + 'Aa1!';
+          
           const { data: authData, error: authError } = await supabase.auth.admin.createUser({
             email: row.email,
-            password: `Welcome@${row.employeeCode || 'User123'}`,
-            email_confirm: true,
+            password: randomPassword,
+            email_confirm: false, // Require email confirmation to force password reset
             user_metadata: {
               full_name: row.fullName,
             },
@@ -901,10 +904,10 @@ export default function ImportData() {
           let newUserId: string | null = null;
 
           if (authError) {
-            // If admin API fails, try regular signup
+            // If admin API fails, try regular signup with random password
             const { data: signupData, error: signupError } = await supabase.auth.signUp({
               email: row.email,
-              password: `Welcome@${row.employeeCode || 'User123'}`,
+              password: randomPassword,
               options: {
                 data: {
                   full_name: row.fullName,
