@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
 
 declare const EdgeRuntime: {
   waitUntil: (promise: Promise<any>) => void;
@@ -11,42 +12,110 @@ const corsHeaders = {
 
 type RatingLevel = 'red' | 'yellow' | 'green' | 'blue';
 
-interface KpiImportRow {
-  sNo?: number;
-  month?: string;
-  reviewStatus?: string;
-  newCode: string;
-  fullName: string;
-  category: string;
-  kra: string;
-  kpi: string;
-  target: string | number;
-  uom?: string;
-  frequency?: string;
-  kpiWeightage?: number;
-  criteria?: string;
-  r5?: string | number;
-  r4?: string | number;
-  r3?: string | number;
-  r2?: string | number;
-  r1?: string | number;
-  r0?: string | number;
-  targetAchieved?: string | number;
-  achievedWeight?: string;
-  rating?: number;
-  kpiWeightageScore?: number;
-  employeeTargetAchieved?: string | number;
-  employeeRating?: number;
-  employeeRemarks?: string;
-  managerTargetAchieved?: string | number;
-  managerRating?: number;
-  managerRemarks?: string;
-  auditTargetAchieved?: string | number;
-  auditRating?: number;
-  auditRemarks?: string;
-  sourceOfData?: string;
-  kpiStatus?: string;
-}
+// Server-side validation schema matching client-side limits
+const MAX_TEXT_LENGTH = 500;
+const MAX_REMARKS_LENGTH = 1000;
+const MAX_ROWS = 10000;
+
+const KpiImportRowSchema = z.object({
+  sNo: z.number().optional(),
+  month: z.string().max(MAX_TEXT_LENGTH).optional(),
+  reviewStatus: z.string().max(100).optional(),
+  newCode: z.string().min(1).max(100),
+  fullName: z.string().min(1).max(MAX_TEXT_LENGTH),
+  category: z.string().min(1).max(MAX_TEXT_LENGTH),
+  kra: z.string().min(1).max(MAX_TEXT_LENGTH),
+  kpi: z.string().min(1).max(MAX_TEXT_LENGTH),
+  target: z.union([z.string(), z.number()]),
+  uom: z.string().max(100).optional(),
+  frequency: z.string().max(100).optional(),
+  kpiWeightage: z.number().min(0).max(100).optional(),
+  criteria: z.string().max(100).optional(),
+  r5: z.union([z.string(), z.number()]).optional(),
+  r4: z.union([z.string(), z.number()]).optional(),
+  r3: z.union([z.string(), z.number()]).optional(),
+  r2: z.union([z.string(), z.number()]).optional(),
+  r1: z.union([z.string(), z.number()]).optional(),
+  r0: z.union([z.string(), z.number()]).optional(),
+  targetAchieved: z.union([z.string(), z.number()]).optional(),
+  achievedWeight: z.string().max(100).optional(),
+  rating: z.number().min(0).max(10).optional(),
+  kpiWeightageScore: z.number().optional(),
+  employeeTargetAchieved: z.union([z.string(), z.number()]).optional(),
+  employeeRating: z.number().min(0).max(10).optional(),
+  employeeRemarks: z.string().max(MAX_REMARKS_LENGTH).optional(),
+  managerTargetAchieved: z.union([z.string(), z.number()]).optional(),
+  managerRating: z.number().min(0).max(10).optional(),
+  managerRemarks: z.string().max(MAX_REMARKS_LENGTH).optional(),
+  auditTargetAchieved: z.union([z.string(), z.number()]).optional(),
+  auditRating: z.number().min(0).max(10).optional(),
+  auditRemarks: z.string().max(MAX_REMARKS_LENGTH).optional(),
+  sourceOfData: z.string().max(MAX_TEXT_LENGTH).optional(),
+  kpiStatus: z.string().max(100).optional(),
+});
+
+type KpiImportRow = z.infer<typeof KpiImportRowSchema>;
+
+// Sanitize text to prevent XSS and Excel formula injection
+const sanitizeText = (text: string | undefined | null): string => {
+  if (!text) return '';
+  
+  let sanitized = String(text);
+  
+  // Remove leading characters that could trigger Excel formula execution
+  sanitized = sanitized.replace(/^[=+\-@\t\r]/, '');
+  
+  // Remove script tags and dangerous content
+  sanitized = sanitized.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  
+  // Remove event handlers
+  sanitized = sanitized.replace(/\s*on\w+\s*=\s*[\"'][^\"']*[\"']/gi, '');
+  
+  // Remove javascript: URIs
+  sanitized = sanitized.replace(/javascript\s*:/gi, '');
+  
+  return sanitized.trim();
+};
+
+// Truncate text to max length
+const truncateText = (text: string | undefined | null, maxLength: number): string => {
+  if (!text) return '';
+  const str = String(text);
+  return str.length > maxLength ? str.slice(0, maxLength).trim() : str.trim();
+};
+
+// Validate and sanitize a row, returns null if invalid
+const validateAndSanitizeRow = (row: unknown, index: number): { data: KpiImportRow | null; error: string | null } => {
+  try {
+    // First, parse with Zod for type validation
+    const parsed = KpiImportRowSchema.parse(row);
+    
+    // Then apply sanitization
+    const sanitized: KpiImportRow = {
+      ...parsed,
+      newCode: truncateText(sanitizeText(parsed.newCode), 100),
+      fullName: truncateText(sanitizeText(parsed.fullName), MAX_TEXT_LENGTH),
+      category: truncateText(sanitizeText(parsed.category), MAX_TEXT_LENGTH),
+      kra: truncateText(sanitizeText(parsed.kra), MAX_TEXT_LENGTH),
+      kpi: truncateText(sanitizeText(parsed.kpi), MAX_TEXT_LENGTH),
+      uom: parsed.uom ? truncateText(sanitizeText(parsed.uom), 100) : undefined,
+      frequency: parsed.frequency ? truncateText(sanitizeText(parsed.frequency), 100) : undefined,
+      criteria: parsed.criteria ? truncateText(sanitizeText(parsed.criteria), 100) : undefined,
+      employeeRemarks: parsed.employeeRemarks ? truncateText(sanitizeText(parsed.employeeRemarks), MAX_REMARKS_LENGTH) : undefined,
+      managerRemarks: parsed.managerRemarks ? truncateText(sanitizeText(parsed.managerRemarks), MAX_REMARKS_LENGTH) : undefined,
+      auditRemarks: parsed.auditRemarks ? truncateText(sanitizeText(parsed.auditRemarks), MAX_REMARKS_LENGTH) : undefined,
+      sourceOfData: parsed.sourceOfData ? truncateText(sanitizeText(parsed.sourceOfData), MAX_TEXT_LENGTH) : undefined,
+    };
+    
+    return { data: sanitized, error: null };
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      const issues = err.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ');
+      return { data: null, error: `Row ${index + 1}: Validation failed - ${issues}` };
+    }
+    return { data: null, error: `Row ${index + 1}: Unknown validation error` };
+  }
+};
 
 const mapScoreToRating = (score: number | string | null | undefined): RatingLevel | null => {
   if (score === null || score === undefined || score === '') return null;
@@ -506,14 +575,59 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { importData } = await req.json();
+    const { importData: rawImportData } = await req.json();
     
-    if (!importData || !Array.isArray(importData) || importData.length === 0) {
+    if (!rawImportData || !Array.isArray(rawImportData) || rawImportData.length === 0) {
       return new Response(JSON.stringify({ error: 'No import data provided' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    // Server-side row limit enforcement
+    if (rawImportData.length > MAX_ROWS) {
+      return new Response(JSON.stringify({ 
+        error: `Import exceeds maximum allowed rows (${MAX_ROWS}). Received: ${rawImportData.length}` 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Validate and sanitize all rows server-side
+    console.log(`Validating ${rawImportData.length} rows...`);
+    const validatedData: KpiImportRow[] = [];
+    const validationErrors: string[] = [];
+    
+    for (let i = 0; i < rawImportData.length; i++) {
+      const { data, error } = validateAndSanitizeRow(rawImportData[i], i);
+      if (data) {
+        validatedData.push(data);
+      } else if (error) {
+        validationErrors.push(error);
+        // Stop after 50 validation errors to avoid overwhelming response
+        if (validationErrors.length >= 50) {
+          validationErrors.push(`... and ${rawImportData.length - i - 1} more rows not validated`);
+          break;
+        }
+      }
+    }
+
+    // If more than 10% of rows failed validation, reject the import
+    const failureRate = validationErrors.length / rawImportData.length;
+    if (failureRate > 0.1 && validationErrors.length > 5) {
+      return new Response(JSON.stringify({ 
+        error: 'Too many validation errors in import data',
+        validationErrors: validationErrors.slice(0, 20),
+        totalErrors: validationErrors.length,
+        totalRows: rawImportData.length
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const importData = validatedData;
 
     const importId = `import-${Date.now()}`;
     console.log(`[${importId}] Received ${importData.length} rows for OPTIMIZED background import`);
