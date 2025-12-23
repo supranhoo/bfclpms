@@ -67,6 +67,20 @@ export function levelToText(level: RatingLevel): string {
  * @param criteria - "Higher is Better" or "Lower is Better"
  * @param weightage - KPI weightage (0-100)
  */
+/**
+ * Calculate rating based on achieved value, thresholds, and criteria
+ * 
+ * Logic matches Excel formula:
+ * - achievedWeight = (criteria == "Lower is Better") ? target/achieved : achieved/target
+ * - If target is 0: compare achieved directly against thresholds (lower = better)
+ * - Else: compare achievedWeight ratio against thresholds
+ * 
+ * @param achievedValue - The actual achieved value
+ * @param target - The target value
+ * @param thresholds - R5-R0 threshold values (as ratios like 1.0, 0.95, 0.9, etc.)
+ * @param criteria - "Higher is Better" or "Lower is Better"
+ * @param weightage - KPI weightage (0-100)
+ */
 export function calculateRating(
   achievedValue: number | null | undefined,
   target: number | null | undefined,
@@ -82,43 +96,54 @@ export function calculateRating(
   const achieved = parseThreshold(achievedValue) ?? 0;
   const targetVal = parseThreshold(target) ?? 0;
   
-  // Parse all thresholds
+  // Parse all thresholds (these are ratio values like 1.0, 0.95, 0.9, etc.)
   const r5 = parseThreshold(thresholds.r5);
   const r4 = parseThreshold(thresholds.r4);
   const r3 = parseThreshold(thresholds.r3);
   const r2 = parseThreshold(thresholds.r2);
   const r1 = parseThreshold(thresholds.r1);
-  const r0 = parseThreshold(thresholds.r0);
 
   let rating = 0;
   
-  const isHigherBetter = !criteria || 
-    criteria.toLowerCase().includes('higher') || 
-    criteria.toLowerCase().includes('more');
+  const isLowerBetter = criteria?.toLowerCase().includes('lower');
 
-  if (isHigherBetter) {
-    // Higher is Better: higher achieved = higher rating
-    if (r5 !== null && achieved >= r5) rating = 5;
-    else if (r4 !== null && achieved >= r4) rating = 4;
-    else if (r3 !== null && achieved >= r3) rating = 3;
-    else if (r2 !== null && achieved >= r2) rating = 2;
-    else if (r1 !== null && achieved >= r1) rating = 1;
-    else rating = 0;
-  } else {
-    // Lower is Better: lower achieved = higher rating
+  // Calculate achievedWeight ratio based on criteria
+  let achievedWeight = 0;
+  if (targetVal === 0) {
+    // Special case: when target is 0, we compare achieved directly against thresholds
+    // In this case, lower achieved = higher rating (used for "Lower is Better" scenarios)
     if (r5 !== null && achieved <= r5) rating = 5;
     else if (r4 !== null && achieved <= r4) rating = 4;
     else if (r3 !== null && achieved <= r3) rating = 3;
     else if (r2 !== null && achieved <= r2) rating = 2;
     else if (r1 !== null && achieved <= r1) rating = 1;
     else rating = 0;
+  } else {
+    // Calculate ratio based on criteria
+    if (isLowerBetter) {
+      // Lower is Better: ratio = target / achieved (lower achieved = higher ratio)
+      achievedWeight = achieved !== 0 ? targetVal / achieved : 0;
+    } else {
+      // Higher is Better: ratio = achieved / target (higher achieved = higher ratio)
+      achievedWeight = targetVal !== 0 ? achieved / targetVal : 0;
+    }
+
+    // Compare ratio against thresholds (higher ratio = higher rating)
+    if (r5 !== null && achievedWeight >= r5) rating = 5;
+    else if (r4 !== null && achievedWeight >= r4) rating = 4;
+    else if (r3 !== null && achievedWeight >= r3) rating = 3;
+    else if (r2 !== null && achievedWeight >= r2) rating = 2;
+    else if (r1 !== null && achievedWeight >= r1) rating = 1;
+    else rating = 0;
   }
 
   // Calculate percentage achievement
-  const percentage = targetVal > 0 ? (achieved / targetVal) * 100 : 0;
+  const percentage = targetVal > 0 
+    ? (isLowerBetter ? (targetVal / achieved) * 100 : (achieved / targetVal) * 100) 
+    : 0;
 
-  // Calculate weighted score
-  const weightedScore = (rating * weightage) / 100;
+  // Calculate weighted score: weightage * rating
+  const weightedScore = (weightage * rating);
 
   return {
     rating,
