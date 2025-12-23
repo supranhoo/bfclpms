@@ -27,7 +27,12 @@ export interface RatingResult {
 /**
  * Parse a threshold value to a number
  */
-export function parseThreshold(value: string | number | null | undefined): number | null {
+/**
+ * Parse a threshold value to a number
+ * @param value - The threshold value
+ * @param asRatio - If true, convert percentages to ratios (90% → 0.9). If false, treat as absolute.
+ */
+export function parseThreshold(value: string | number | null | undefined, asRatio: boolean = true): number | null {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'number') return value;
 
@@ -39,8 +44,9 @@ export function parseThreshold(value: string | number | null | undefined): numbe
   const parsed = parseFloat(cleanValue);
   if (isNaN(parsed)) return null;
 
-  // If user entered "90%" we treat it as ratio 0.9 (matches Excel behavior)
-  return hasPercent ? parsed / 100 : parsed;
+  // If asRatio=true and user entered "90%" we treat it as ratio 0.9 (matches Excel behavior)
+  // If asRatio=false, treat "90%" as absolute number 90
+  return (asRatio && hasPercent) ? parsed / 100 : parsed;
 }
 
 /**
@@ -100,15 +106,19 @@ export function calculateRating(
     return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0, achievedWeight: 0 };
   }
 
-  const achieved = parseThreshold(achievedValue) ?? 0;
-  const targetVal = parseThreshold(target) ?? 0;
+  const achieved = parseThreshold(achievedValue, false) ?? 0;
+  const targetVal = parseThreshold(target, false) ?? 0;
   
-  // Parse all thresholds (these are ratio values like 1.0, 0.95, 0.9, etc.)
-  const r5 = parseThreshold(thresholds.r5);
-  const r4 = parseThreshold(thresholds.r4);
-  const r3 = parseThreshold(thresholds.r3);
-  const r2 = parseThreshold(thresholds.r2);
-  const r1 = parseThreshold(thresholds.r1);
+  // When target is 0, thresholds are absolute numbers (not percentages)
+  // When target is not 0, thresholds are percentages/ratios
+  const thresholdsAsRatio = targetVal !== 0;
+  
+  // Parse all thresholds based on whether they should be treated as ratios
+  const r5 = parseThreshold(thresholds.r5, thresholdsAsRatio);
+  const r4 = parseThreshold(thresholds.r4, thresholdsAsRatio);
+  const r3 = parseThreshold(thresholds.r3, thresholdsAsRatio);
+  const r2 = parseThreshold(thresholds.r2, thresholdsAsRatio);
+  const r1 = parseThreshold(thresholds.r1, thresholdsAsRatio);
 
   let rating = 0;
   
