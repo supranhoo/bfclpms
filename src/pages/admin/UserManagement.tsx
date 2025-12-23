@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
+import { UserManagementSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -366,15 +366,7 @@ export default function UserManagement() {
   const managers = profiles?.filter(p => (p.user_roles as any)?.[0]?.role === 'manager').length || 0;
 
   if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid gap-4 md:grid-cols-3">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-32" />)}
-        </div>
-        <Skeleton className="h-96" />
-      </div>
-    );
+    return <UserManagementSkeleton />;
   }
 
   return (

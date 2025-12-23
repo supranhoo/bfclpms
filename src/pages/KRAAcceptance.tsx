@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ProfileCardSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeletons';
 import { ProfileCard } from '@/components/dashboard/ProfileCard';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
@@ -89,9 +89,9 @@ export default function KRAAcceptance() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-96 w-full" />
+      <div className="space-y-6 animate-fade-in">
+        <ProfileCardSkeleton />
+        <TableSkeleton rows={5} columns={6} />
       </div>
     );
   }

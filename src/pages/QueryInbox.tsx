@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Skeleton } from '@/components/ui/skeleton';
+import { StatsRowSkeleton, CategoryGridSkeleton } from '@/components/ui/LoadingSkeletons';
 import { format } from 'date-fns';
 import { MessageSquare, CheckCircle2, Clock, Send, User, Calendar, AlertCircle } from 'lucide-react';
 
@@ -157,12 +157,15 @@ export default function QueryInbox() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid gap-4 md:grid-cols-3">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-24" />)}
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex justify-between items-center">
+          <div className="space-y-2">
+            <div className="h-8 w-36 bg-muted animate-pulse rounded" />
+            <div className="h-4 w-56 bg-muted animate-pulse rounded" />
+          </div>
         </div>
-        <Skeleton className="h-96" />
+        <StatsRowSkeleton count={3} />
+        <CategoryGridSkeleton count={4} />
       </div>
     );
   }

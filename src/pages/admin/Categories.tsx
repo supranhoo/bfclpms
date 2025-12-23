@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
+import { TableSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Progress } from '@/components/ui/progress';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 
@@ -97,9 +97,12 @@ export default function Categories() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-96" />
+      <div className="space-y-6 animate-fade-in">
+        <div className="space-y-2">
+          <div className="h-8 w-40 bg-muted animate-pulse rounded" />
+          <div className="h-4 w-72 bg-muted animate-pulse rounded" />
+        </div>
+        <TableSkeleton rows={5} columns={5} />
       </div>
     );
   }

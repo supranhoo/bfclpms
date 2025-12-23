@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
+import { KpiPageSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
@@ -336,13 +336,7 @@ export default function SelfReview() {
   const isLoading = loadingAllKpis || loadingFilters;
 
   if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-96 w-full" />
-      </div>
-    );
+    return <KpiPageSkeleton />;
   }
 
   return (

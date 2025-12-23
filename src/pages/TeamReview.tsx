@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -224,7 +224,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
   const reviewedKpis = kpis?.filter(k => k.status === 'manager_check' || k.status === 'audit' || k.status === 'approved') || [];
 
   if (isLoading) {
-    return <Skeleton className="h-48 w-full" />;
+    return <ReviewPanelSkeleton />;
   }
 
   return (
@@ -648,14 +648,7 @@ export default function TeamReview() {
   };
 
   if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid gap-4 md:grid-cols-3">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-32" />)}
-        </div>
-      </div>
-    );
+    return <ReviewPanelSkeleton />;
   }
 
   return (

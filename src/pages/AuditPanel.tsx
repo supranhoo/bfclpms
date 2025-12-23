@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -156,15 +156,7 @@ export default function AuditPanel() {
   const approved = allKpis?.filter(k => k.status === 'approved').length || 0;
 
   if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid gap-4 md:grid-cols-3">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-32" />)}
-        </div>
-        <Skeleton className="h-96" />
-      </div>
-    );
+    return <ReviewPanelSkeleton />;
   }
 
   return (

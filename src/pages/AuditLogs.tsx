@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
+import { TableSkeleton, StatsRowSkeleton } from '@/components/ui/LoadingSkeletons';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { format } from 'date-fns';
 import { History, Search, User, CheckCircle2, MessageSquare, Lock, Edit, Send } from 'lucide-react';
@@ -145,12 +145,16 @@ export default function AuditLogs() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid gap-4 md:grid-cols-3">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-24" />)}
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex justify-between items-center">
+          <div className="space-y-2">
+            <div className="h-8 w-40 bg-muted animate-pulse rounded" />
+            <div className="h-4 w-60 bg-muted animate-pulse rounded" />
+          </div>
+          <div className="h-10 w-48 bg-muted animate-pulse rounded" />
         </div>
-        <Skeleton className="h-96" />
+        <StatsRowSkeleton count={3} />
+        <TableSkeleton rows={8} columns={6} />
       </div>
     );
   }
