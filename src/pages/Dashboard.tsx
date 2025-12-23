@@ -13,6 +13,7 @@ import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
 import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
 import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
+import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Target, TrendingUp, CheckCircle2, Clock, Eye, BarChart3, Info } from 'lucide-react';
 
@@ -49,6 +50,10 @@ export default function Dashboard() {
   const [selectedKpiTracker, setSelectedKpiTracker] = useState<KPI | null>(null);
   const [selectedKpiLogic, setSelectedKpiLogic] = useState<KPI | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>('All');
+  
+  const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(defaultPeriod);
+  const [selectedYear, setSelectedYear] = useState<number>(defaultYear);
 
   const isLoading = kpisLoading || categoriesLoading;
 
@@ -108,12 +113,19 @@ export default function Dashboard() {
     }).filter(c => c.count > 0).sort((a, b) => b.percentage - a.percentage);
   }, [categories, kpis, submissionMap]);
 
-  // Filtered KPIs
+  // Filtered KPIs by month/year and category
   const filteredKpis = useMemo(() => {
-    if (activeCategory === 'All') return kpis || [];
-    const cat = categories?.find(c => c.name === activeCategory);
-    return kpis?.filter(k => k.category_id === cat?.id) || [];
-  }, [kpis, activeCategory, categories]);
+    let filtered = kpis?.filter(k => 
+      k.review_period === selectedPeriod && k.review_year === selectedYear
+    ) || [];
+    
+    if (activeCategory !== 'All') {
+      const cat = categories?.find(c => c.name === activeCategory);
+      filtered = filtered.filter(k => k.category_id === cat?.id);
+    }
+    
+    return filtered;
+  }, [kpis, activeCategory, categories, selectedPeriod, selectedYear]);
 
   if (isLoading) {
     return (
@@ -230,10 +242,18 @@ export default function Dashboard() {
       {/* KPI Details Table */}
       <Card>
         <CardHeader>
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-              <CardTitle>Detailed KPI Review</CardTitle>
-              <CardDescription>{filteredKpis.length} KPIs {activeCategory !== 'All' ? `in ${activeCategory}` : ''}</CardDescription>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <CardTitle>Detailed KPI Review</CardTitle>
+                <CardDescription>{filteredKpis.length} KPIs {activeCategory !== 'All' ? `in ${activeCategory}` : ''}</CardDescription>
+              </div>
+              <ReviewPeriodSelector
+                selectedPeriod={selectedPeriod}
+                selectedYear={selectedYear}
+                onPeriodChange={setSelectedPeriod}
+                onYearChange={setSelectedYear}
+              />
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
