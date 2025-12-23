@@ -56,14 +56,15 @@ const kpiStatusLabels: Record<KpiStatus, string> = {
   locked: 'Locked',
 };
 
-const ratingOptions: { value: RatingLevel; label: string; color: string; score: number }[] = [
-  { value: 'blue', label: '5 - Outstanding', color: '#3B82F6', score: 5 },
-  { value: 'green', label: '4 - Exceeds Expectations', color: '#10B981', score: 4 },
-  { value: 'yellow', label: '3 - Meets Expectations', color: '#F59E0B', score: 3 },
-  { value: 'red', label: '2 - Below Expectations', color: '#EF4444', score: 2 },
-  { value: 'red', label: '1 - Needs Improvement', color: '#DC2626', score: 1 },
-  { value: 'red', label: '0 - Not Achieved', color: '#991B1B', score: 0 },
-];
+// Score to display config
+const scoreDisplay: Record<number, { label: string; color: string; level: RatingLevel }> = {
+  5: { label: '5 - Outstanding', color: '#3B82F6', level: 'blue' },
+  4: { label: '4 - Exceeds Expectations', color: '#10B981', level: 'green' },
+  3: { label: '3 - Meets Expectations', color: '#F59E0B', level: 'yellow' },
+  2: { label: '2 - Below Expectations', color: '#EF4444', level: 'red' },
+  1: { label: '1 - Needs Improvement', color: '#DC2626', level: 'red' },
+  0: { label: '0 - Not Achieved', color: '#991B1B', level: 'red' },
+};
 
 export default function SelfReview() {
   const { user } = useAuth();
@@ -111,7 +112,8 @@ export default function SelfReview() {
   
   // Review form state
   const [achievedValue, setAchievedValue] = useState('');
-  const [selfRating, setSelfRating] = useState<RatingLevel | ''>('');
+  const [calculatedScore, setCalculatedScore] = useState<number | null>(null);
+  const [calculatedPercentage, setCalculatedPercentage] = useState<number | null>(null);
   const [selfRemarks, setSelfRemarks] = useState('');
   const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
   const [isNa, setIsNa] = useState(false);
@@ -244,13 +246,22 @@ export default function SelfReview() {
     const existing = submissionMap.get(kpi.id);
     if (existing) {
       setAchievedValue(existing.achieved_value?.toString() || '');
-      setSelfRating(existing.self_rating || '');
+      // Re-calculate score from achieved value
+      if (existing.achieved_value !== null && existing.achieved_value !== undefined) {
+        const result = calculateScoreFromAchieved(existing.achieved_value, kpi);
+        setCalculatedScore(result.rating);
+        setCalculatedPercentage(result.percentage);
+      } else {
+        setCalculatedScore(existing.self_score || null);
+        setCalculatedPercentage(null);
+      }
       setSelfRemarks(existing.self_remarks || '');
       setEvidenceUrl(existing.self_evidence_url || null);
       setIsNa(existing.is_na || false);
     } else {
       setAchievedValue('');
-      setSelfRating('');
+      setCalculatedScore(null);
+      setCalculatedPercentage(null);
       setSelfRemarks('');
       setEvidenceUrl(null);
       setIsNa(false);
@@ -268,10 +279,8 @@ export default function SelfReview() {
     setTimelineOpen(true);
   };
 
-  // Auto-calculate rating based on achieved value
-  const calculateSuggestedRating = (achieved: number, kpi: KPI): RatingLevel | null => {
-    if (!kpi.target_value) return null;
-    
+  // Calculate score from achieved value using the formula
+  const calculateScoreFromAchieved = (achieved: number, kpi: KPI) => {
     const thresholds: RatingThresholds = {
       r5: kpi.r5,
       r4: kpi.r4,
@@ -281,38 +290,41 @@ export default function SelfReview() {
       r0: kpi.r0
     };
     
-    const result = calculateRating(achieved, kpi.target_value, thresholds, kpi.criteria || 'Higher is Better', kpi.weightage || 0);
-    return result.ratingLevel;
+    return calculateRating(achieved, kpi.target_value, thresholds, kpi.criteria || 'Higher is Better', kpi.weightage || 0);
   };
 
   const handleAchievedChange = (value: string) => {
     setAchievedValue(value);
     if (selectedKpi && value) {
-      const suggested = calculateSuggestedRating(parseFloat(value), selectedKpi);
-      if (suggested) {
-        setSelfRating(suggested);
-      }
+      const result = calculateScoreFromAchieved(parseFloat(value), selectedKpi);
+      setCalculatedScore(result.rating);
+      setCalculatedPercentage(result.percentage);
+    } else {
+      setCalculatedScore(null);
+      setCalculatedPercentage(null);
     }
   };
 
   const handleSubmitReview = async () => {
     if (!selectedKpi) return;
     
-    // For NA submissions, rating is not required
-    if (!isNa && !selfRating) return;
+    // For NA submissions, score is not required
+    // For regular submissions, need achieved value (score is auto-calculated)
+    if (!isNa && !achievedValue) return;
 
-    const scoreMap: Record<RatingLevel, number> = {
-      blue: 5,
-      green: 4,
-      yellow: 3,
-      red: 2
+    // Convert numeric score to rating level for storage
+    const getRatingLevel = (score: number): RatingLevel => {
+      if (score >= 4) return 'blue';
+      if (score >= 3) return 'green';
+      if (score >= 2) return 'yellow';
+      return 'red';
     };
 
     await submitReview.mutateAsync({
       kpi_id: selectedKpi.id,
       achieved_value: isNa ? null : (parseFloat(achievedValue) || 0),
-      self_rating: isNa ? null : (selfRating as RatingLevel),
-      self_score: isNa ? null : (selfRating ? scoreMap[selfRating as RatingLevel] : null),
+      self_rating: isNa ? null : (calculatedScore !== null ? getRatingLevel(calculatedScore) : null),
+      self_score: isNa ? null : calculatedScore,
       self_remarks: selfRemarks,
       self_evidence_url: evidenceUrl,
       is_na: isNa,
@@ -587,14 +599,14 @@ export default function SelfReview() {
                         <Badge variant="outline" className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
                           N/A
                         </Badge>
-                      ) : submission?.self_rating ? (
+                      ) : submission?.self_score !== null && submission?.self_score !== undefined ? (
                         <Badge
                           style={{
-                            backgroundColor: ratingOptions.find(r => r.value === submission.self_rating)?.color,
+                            backgroundColor: scoreDisplay[submission.self_score]?.color || '#991B1B',
                           }}
                           className="text-white"
                         >
-                          {ratingOptions.find(r => r.value === submission.self_rating)?.label.split(' ')[0]}
+                          {submission.self_score}
                         </Badge>
                       ) : (
                         <span className="text-muted-foreground">-</span>
@@ -710,7 +722,8 @@ export default function SelfReview() {
                   setIsNa(checked as boolean);
                   if (checked) {
                     setAchievedValue('');
-                    setSelfRating('');
+                    setCalculatedScore(null);
+                    setCalculatedPercentage(null);
                   }
                 }}
               />
@@ -738,28 +751,28 @@ export default function SelfReview() {
               </div>
             )}
             
-            {/* Self Rating - Hidden when N/A */}
-            {!isNa && (
+            {/* Calculated Score Display - Hidden when N/A */}
+            {!isNa && calculatedScore !== null && (
               <div className="space-y-2">
-                <Label htmlFor="rating">Self Rating *</Label>
-                <Select value={selfRating} onValueChange={(v) => setSelfRating(v as RatingLevel)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select your rating" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ratingOptions.map(opt => (
-                      <SelectItem key={`${opt.value}-${opt.score}`} value={opt.value}>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: opt.color }}
-                          />
-                          {opt.label}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Calculated Rating</Label>
+                <div className="p-4 border rounded-lg bg-muted/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Badge
+                        style={{ backgroundColor: scoreDisplay[calculatedScore]?.color || '#991B1B' }}
+                        className="text-white text-lg px-3 py-1"
+                      >
+                        {calculatedScore}
+                      </Badge>
+                      <span className="font-medium">{scoreDisplay[calculatedScore]?.label || 'Not Achieved'}</span>
+                    </div>
+                    {calculatedPercentage !== null && (
+                      <span className="text-sm text-muted-foreground">
+                        {calculatedPercentage.toFixed(1)}% achievement ratio
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -801,7 +814,7 @@ export default function SelfReview() {
             </Button>
             <Button 
               onClick={handleSubmitReview} 
-              disabled={(!isNa && (!selfRating || !achievedValue)) || submitReview.isPending}
+              disabled={(!isNa && !achievedValue) || submitReview.isPending}
             >
               {submitReview.isPending ? 'Submitting...' : 'Submit Review'}
             </Button>
@@ -858,14 +871,16 @@ export default function SelfReview() {
                     </div>
                     <div>
                       <Label className="text-xs text-muted-foreground">Self Rating</Label>
-                      <Badge
-                        style={{
-                          backgroundColor: ratingOptions.find(r => r.value === submissionMap.get(selectedKpi.id)?.self_rating)?.color,
-                        }}
-                        className="text-white"
-                      >
-                        {ratingOptions.find(r => r.value === submissionMap.get(selectedKpi.id)?.self_rating)?.label}
-                      </Badge>
+                      {submissionMap.get(selectedKpi.id)?.self_score !== null && (
+                        <Badge
+                          style={{
+                            backgroundColor: scoreDisplay[submissionMap.get(selectedKpi.id)?.self_score || 0]?.color || '#991B1B',
+                          }}
+                          className="text-white"
+                        >
+                          {submissionMap.get(selectedKpi.id)?.self_score} - {scoreDisplay[submissionMap.get(selectedKpi.id)?.self_score || 0]?.label?.split(' - ')[1] || 'Not Achieved'}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   {submissionMap.get(selectedKpi.id)?.self_remarks && (

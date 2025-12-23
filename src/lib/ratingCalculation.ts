@@ -19,8 +19,9 @@ export interface RatingThresholds {
 export interface RatingResult {
   rating: number; // 0-5 numeric rating
   ratingLevel: RatingLevel; // Color-based rating
-  weightedScore: number; // rating * weightage / 100
-  percentage: number; // achievement percentage
+  weightedScore: number; // weightage * rating
+  percentage: number; // achievement percentage (achievedWeight * 100)
+  achievedWeight: number; // ratio value used for rating calculation
 }
 
 /**
@@ -90,7 +91,7 @@ export function calculateRating(
 ): RatingResult {
   // If no achieved value, return zero rating
   if (achievedValue === null || achievedValue === undefined) {
-    return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0 };
+    return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0, achievedWeight: 0 };
   }
 
   const achieved = parseThreshold(achievedValue) ?? 0;
@@ -137,10 +138,8 @@ export function calculateRating(
     else rating = 0;
   }
 
-  // Calculate percentage achievement
-  const percentage = targetVal > 0 
-    ? (isLowerBetter ? (targetVal / achieved) * 100 : (achieved / targetVal) * 100) 
-    : 0;
+  // Calculate percentage (achievedWeight * 100)
+  const percentage = achievedWeight * 100;
 
   // Calculate weighted score: weightage * rating
   const weightedScore = (weightage * rating);
@@ -150,6 +149,7 @@ export function calculateRating(
     ratingLevel: ratingToLevel(rating),
     weightedScore,
     percentage,
+    achievedWeight,
   };
 }
 
