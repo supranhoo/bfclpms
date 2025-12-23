@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
@@ -12,9 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Filter, Send, Eye, Clock } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
-const statusColors = {
+import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3 } from 'lucide-react';
+
+const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
   self_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
   manager_check: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
@@ -22,24 +25,37 @@ const statusColors = {
   approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
 };
 
-const statusLabels = {
-  kra_set: 'KRA Set',
-  self_review: 'Self Review',
-  manager_check: 'Manager Check',
+const statusLabels: Record<string, string> = {
+  kra_set: 'Pending',
+  self_review: 'Submitted',
+  manager_check: 'Manager Review',
   audit: 'Audit',
   approved: 'Approved',
 };
 
-const ratingOptions: { value: RatingLevel; label: string; color: string }[] = [
-  { value: 'red', label: 'Below Expectations', color: '#EF4444' },
-  { value: 'yellow', label: 'Meets Expectations', color: '#F59E0B' },
-  { value: 'green', label: 'Exceeds Expectations', color: '#10B981' },
-  { value: 'blue', label: 'Outstanding', color: '#3B82F6' },
+const ratingOptions: { value: RatingLevel; label: string; color: string; score: number }[] = [
+  { value: 'blue', label: 'Outstanding', color: '#3B82F6', score: 5 },
+  { value: 'green', label: 'Exceeds Expectations', color: '#10B981', score: 4 },
+  { value: 'yellow', label: 'Meets Expectations', color: '#F59E0B', score: 3 },
+  { value: 'red', label: 'Below Expectations', color: '#EF4444', score: 2 },
 ];
 
 export default function MyKpis() {
-  const { data: kpis, isLoading } = useMyKpis();
+  const { profile } = useAuth();
+  const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
+  const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
+  const [selectedYear, setSelectedYear] = useState(defaultYear);
+  
+  const { data: allKpis, isLoading } = useMyKpis();
   const { data: categories } = useKraCategories();
+  
+  // Filter KPIs by selected period
+  const kpis = useMemo(() => {
+    return allKpis?.filter(k => 
+      k.review_period === selectedPeriod && k.review_year === selectedYear
+    ) || [];
+  }, [allKpis, selectedPeriod, selectedYear]);
+  
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const submitReview = useSubmitSelfReview();
@@ -53,11 +69,52 @@ export default function MyKpis() {
   const [achievedValue, setAchievedValue] = useState('');
   const [selfRating, setSelfRating] = useState<RatingLevel | ''>('');
   const [selfRemarks, setSelfRemarks] = useState('');
+
   const filteredKpis = selectedCategory
     ? kpis?.filter(k => k.category_id === selectedCategory)
     : kpis;
 
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
+
+  // Calculate metrics
+  const metrics = useMemo(() => {
+    const total = kpis?.length || 0;
+    const pending = kpis?.filter(k => k.status === 'kra_set').length || 0;
+    const submitted = kpis?.filter(k => k.status !== 'kra_set').length || 0;
+    const approved = kpis?.filter(k => k.status === 'approved').length || 0;
+    
+    let totalWeightedScore = 0;
+    let totalWeight = 0;
+    
+    kpis?.forEach(kpi => {
+      const submission = submissionMap.get(kpi.id);
+      const score = submission?.final_score || submission?.self_score || 0;
+      const weight = kpi.weightage || 0;
+      totalWeightedScore += score * weight;
+      totalWeight += weight;
+    });
+    
+    const avgRating = totalWeight > 0 ? totalWeightedScore / totalWeight : 0;
+    const progressPercent = total > 0 ? (submitted / total) * 100 : 0;
+    
+    return { total, pending, submitted, approved, avgRating, progressPercent };
+  }, [kpis, submissionMap]);
+
+  // Category breakdown
+  const categoryBreakdown = useMemo(() => {
+    if (!categories || !kpis) return [];
+    
+    return categories.map(cat => {
+      const catKpis = kpis.filter(k => k.category_id === cat.id);
+      const completed = catKpis.filter(k => k.status !== 'kra_set').length;
+      return {
+        ...cat,
+        total: catKpis.length,
+        completed,
+        percentage: catKpis.length > 0 ? (completed / catKpis.length) * 100 : 0,
+      };
+    }).filter(c => c.total > 0);
+  }, [categories, kpis]);
 
   const openReviewDialog = (kpi: KPI) => {
     setSelectedKpi(kpi);
@@ -82,13 +139,18 @@ export default function MyKpis() {
   const handleSubmitReview = async () => {
     if (!selectedKpi || !selfRating) return;
 
-    const score = selfRating === 'blue' ? 100 : selfRating === 'green' ? 80 : selfRating === 'yellow' ? 60 : 40;
+    const scoreMap: Record<RatingLevel, number> = {
+      blue: 5,
+      green: 4,
+      yellow: 3,
+      red: 2
+    };
 
     await submitReview.mutateAsync({
       kpi_id: selectedKpi.id,
       achieved_value: parseFloat(achievedValue) || 0,
       self_rating: selfRating,
-      self_score: score,
+      self_score: scoreMap[selfRating],
       self_remarks: selfRemarks,
     });
 
@@ -99,7 +161,11 @@ export default function MyKpis() {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-12 w-full" />
+        <div className="grid gap-4 md:grid-cols-4">
+          {[1, 2, 3, 4].map(i => (
+            <Skeleton key={i} className="h-28" />
+          ))}
+        </div>
         <Skeleton className="h-96 w-full" />
       </div>
     );
@@ -107,144 +173,277 @@ export default function MyKpis() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">My KPIs</h1>
-        <p className="text-muted-foreground">View and manage your performance indicators</p>
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">My KPIs</h1>
+          <p className="text-muted-foreground">
+            Track and manage your performance indicators for {selectedPeriod} {selectedYear}
+          </p>
+        </div>
+        <ReviewPeriodSelector
+          selectedPeriod={selectedPeriod}
+          selectedYear={selectedYear}
+          onPeriodChange={setSelectedPeriod}
+          onYearChange={setSelectedYear}
+        />
       </div>
 
-      {/* Category Filters */}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant={selectedCategory === null ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setSelectedCategory(null)}
-        >
-          All
-        </Button>
-        {categories?.map(cat => (
-          <Button
-            key={cat.id}
-            variant={selectedCategory === cat.id ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setSelectedCategory(cat.id)}
-            style={{
-              borderColor: selectedCategory === cat.id ? cat.color : undefined,
-              backgroundColor: selectedCategory === cat.id ? cat.color : undefined,
-            }}
-          >
-            <div
-              className="w-2 h-2 rounded-full mr-2"
-              style={{ backgroundColor: selectedCategory === cat.id ? 'white' : cat.color }}
-            />
-            {cat.name}
-          </Button>
-        ))}
+      {/* Summary Stats */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-l-4 border-l-primary">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total KPIs</p>
+                <p className="text-3xl font-bold">{metrics.total}</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Target className="h-6 w-6 text-primary" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="border-l-4 border-l-yellow-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Pending Review</p>
+                <p className="text-3xl font-bold text-yellow-600">{metrics.pending}</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                <AlertCircle className="h-6 w-6 text-yellow-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="border-l-4 border-l-green-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Completed</p>
+                <p className="text-3xl font-bold text-green-600">{metrics.approved}</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                <CheckCircle2 className="h-6 w-6 text-green-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="border-l-4 border-l-blue-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Avg. Rating</p>
+                <p className="text-3xl font-bold text-blue-600">{metrics.avgRating.toFixed(2)}</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+                <TrendingUp className="h-6 w-6 text-blue-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Progress & Category Breakdown */}
+      <div className="grid gap-6 md:grid-cols-3">
+        {/* Overall Progress */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Review Progress</CardTitle>
+            <CardDescription>Your submission status</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Submitted</span>
+              <span className="font-medium">{metrics.submitted} / {metrics.total}</span>
+            </div>
+            <Progress value={metrics.progressPercent} className="h-3" />
+            <p className="text-xs text-muted-foreground text-center">
+              {metrics.progressPercent.toFixed(0)}% complete
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Category Breakdown */}
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">KPIs by Category</CardTitle>
+            <CardDescription>Click to filter by category</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {categoryBreakdown.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(selectedCategory === cat.id ? null : cat.id)}
+                  className={`flex items-center gap-3 p-3 rounded-lg border transition-all hover:shadow-sm ${
+                    selectedCategory === cat.id 
+                      ? 'ring-2 ring-primary border-primary bg-accent' 
+                      : 'border-border hover:border-primary/50'
+                  }`}
+                >
+                  <div
+                    className="w-3 h-3 rounded-full shrink-0"
+                    style={{ backgroundColor: cat.color || '#6B7280' }}
+                  />
+                  <div className="flex-1 text-left min-w-0">
+                    <p className="text-sm font-medium truncate">{cat.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {cat.completed}/{cat.total} submitted
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* KPIs Table */}
       <Card>
         <CardHeader>
-          <CardTitle>KPI Details</CardTitle>
-          <CardDescription>
-            {filteredKpis?.length || 0} KPIs found
-          </CardDescription>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                KPI Details
+              </CardTitle>
+              <CardDescription>
+                {filteredKpis?.length || 0} KPIs {selectedCategory ? 'in selected category' : 'found'}
+              </CardDescription>
+            </div>
+            {selectedCategory && (
+              <Button variant="ghost" size="sm" onClick={() => setSelectedCategory(null)}>
+                Clear filter
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Category</TableHead>
-                <TableHead>KRA</TableHead>
-                <TableHead>KPI</TableHead>
-                <TableHead>Target</TableHead>
-                <TableHead>UOM</TableHead>
-                <TableHead>Achieved</TableHead>
-                <TableHead>Rating</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredKpis?.map(kpi => {
-                const submission = submissionMap.get(kpi.id);
-                return (
-                  <TableRow key={kpi.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: kpi.kra_categories?.color }}
-                        />
-                        <span className="text-sm">{kpi.kra_categories?.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-medium">{kpi.kra_name}</TableCell>
-                    <TableCell>{kpi.kpi_name}</TableCell>
-                    <TableCell>{kpi.target_value}</TableCell>
-                    <TableCell>{kpi.uom || '-'}</TableCell>
-                    <TableCell>{submission?.achieved_value || '-'}</TableCell>
-                    <TableCell>
-                      {submission?.final_rating || submission?.self_rating ? (
-                        <Badge
-                          style={{
-                            backgroundColor: ratingOptions.find(
-                              r => r.value === (submission?.final_rating || submission?.self_rating)
-                            )?.color,
-                          }}
-                          className="text-white"
-                        >
-                          {ratingOptions.find(
-                            r => r.value === (submission?.final_rating || submission?.self_rating)
-                          )?.label}
+          <div className="rounded-lg border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="font-semibold">Category</TableHead>
+                  <TableHead className="font-semibold">KRA</TableHead>
+                  <TableHead className="font-semibold">KPI</TableHead>
+                  <TableHead className="font-semibold text-center">Target</TableHead>
+                  <TableHead className="font-semibold text-center">Achieved</TableHead>
+                  <TableHead className="font-semibold text-center">Rating</TableHead>
+                  <TableHead className="font-semibold text-center">Status</TableHead>
+                  <TableHead className="font-semibold text-center">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredKpis?.map((kpi, index) => {
+                  const submission = submissionMap.get(kpi.id);
+                  const rating = submission?.final_rating || submission?.self_rating;
+                  const ratingInfo = ratingOptions.find(r => r.value === rating);
+                  
+                  return (
+                    <TableRow 
+                      key={kpi.id}
+                      className={index % 2 === 0 ? 'bg-background' : 'bg-muted/20'}
+                    >
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: kpi.kra_categories?.color }}
+                          />
+                          <span className="text-xs text-muted-foreground truncate max-w-[100px]">
+                            {kpi.kra_categories?.name}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-medium text-sm line-clamp-2">{kpi.kra_name}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm line-clamp-2">{kpi.kpi_name}</span>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className="font-mono text-sm">{kpi.target_value}</span>
+                        {kpi.uom && (
+                          <span className="text-xs text-muted-foreground ml-1">{kpi.uom}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {submission?.achieved_value != null ? (
+                          <span className="font-mono text-sm font-medium">
+                            {submission.achieved_value}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {ratingInfo ? (
+                          <Badge
+                            style={{ backgroundColor: ratingInfo.color }}
+                            className="text-white text-xs"
+                          >
+                            {ratingInfo.label}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="secondary" className={statusColors[kpi.status]}>
+                          {statusLabels[kpi.status]}
                         </Badge>
-                      ) : (
-                        '-'
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={statusColors[kpi.status]}>
-                        {statusLabels[kpi.status]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        {kpi.status === 'kra_set' || kpi.status === 'self_review' ? (
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-center gap-1">
+                          {kpi.status === 'kra_set' || kpi.status === 'self_review' ? (
+                            <Button
+                              size="sm"
+                              variant={kpi.status === 'kra_set' ? 'default' : 'outline'}
+                              onClick={() => openReviewDialog(kpi)}
+                              className="h-8"
+                            >
+                              <Send className="h-3.5 w-3.5 mr-1" />
+                              {kpi.status === 'kra_set' ? 'Submit' : 'Edit'}
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="ghost" className="h-8">
+                              <Eye className="h-3.5 w-3.5 mr-1" />
+                              View
+                            </Button>
+                          )}
                           <Button
                             size="sm"
-                            variant="outline"
-                            onClick={() => openReviewDialog(kpi)}
+                            variant="ghost"
+                            onClick={() => openTimeline(kpi)}
+                            title="View Timeline"
+                            className="h-8 w-8 p-0"
                           >
-                            <Send className="h-4 w-4 mr-1" />
-                            {kpi.status === 'kra_set' ? 'Submit' : 'Edit'}
+                            <Clock className="h-3.5 w-3.5" />
                           </Button>
-                        ) : (
-                          <Button size="sm" variant="ghost">
-                            <Eye className="h-4 w-4 mr-1" />
-                            View
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => openTimeline(kpi)}
-                          title="View Timeline"
-                        >
-                          <Clock className="h-4 w-4" />
-                        </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {(!filteredKpis || filteredKpis.length === 0) && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <Target className="h-8 w-8" />
+                        <p className="font-medium">No KPIs found</p>
+                        <p className="text-sm">Try selecting a different period or category</p>
                       </div>
                     </TableCell>
                   </TableRow>
-                );
-              })}
-              {(!filteredKpis || filteredKpis.length === 0) && (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                    No KPIs found
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
