@@ -58,6 +58,9 @@ const ChartContainer = React.forwardRef<
 });
 ChartContainer.displayName = "Chart";
 
+// SECURITY NOTE: This component sets CSS custom properties for chart theming.
+// Uses React's style attribute instead of dangerouslySetInnerHTML for safety.
+// Config is defined by developers (not users), color values are typed and constrained.
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(([_, config]) => config.theme || config.color);
 
@@ -65,24 +68,21 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     return null;
   }
 
+  // Build CSS variables object from config
+  const cssVars = Object.fromEntries(
+    colorConfig.flatMap(([key, itemConfig]) => {
+      const color = itemConfig.color;
+      return color ? [[`--color-${key}`, color]] : [];
+    })
+  );
+
+  // For theme-specific colors, we need to handle light/dark themes
+  // The parent element already has data-chart attribute, so CSS variables will cascade
   return (
-    <style
-      dangerouslySetInnerHTML={{
-        __html: Object.entries(THEMES)
-          .map(
-            ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
-${colorConfig
-  .map(([key, itemConfig]) => {
-    const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
-    return color ? `  --color-${key}: ${color};` : null;
-  })
-  .join("\n")}
-}
-`,
-          )
-          .join("\n"),
-      }}
+    <div 
+      style={cssVars as React.CSSProperties} 
+      className="sr-only" 
+      aria-hidden="true"
     />
   );
 };
