@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useProfiles } from '@/hooks/useOrganization';
+import { useState, useMemo } from 'react';
+import { useProfiles, useDepartments } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,67 +10,125 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Search, Shield, Edit2 } from 'lucide-react';
+import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus } from 'lucide-react';
 
 type AppRole = 'admin' | 'manager' | 'employee' | 'auditor';
 
-const roleColors = {
-  admin: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-  manager: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  employee: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-  auditor: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+const roleColors: Record<AppRole, string> = {
+  admin: 'bg-destructive/10 text-destructive',
+  manager: 'bg-primary/10 text-primary',
+  employee: 'bg-secondary text-secondary-foreground',
+  auditor: 'bg-accent text-accent-foreground',
 };
+
+const ITEMS_PER_PAGE = 10;
 
 export default function UserManagement() {
   const { data: profiles, isLoading } = useProfiles();
+  const { data: departments } = useDepartments();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Selection
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+
+  // Edit Dialog
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<typeof profiles extends (infer T)[] ? T : never | null>(null);
+  const [selectedUser, setSelectedUser] = useState<NonNullable<typeof profiles>[number] | null>(null);
   const [editRole, setEditRole] = useState<AppRole>('employee');
   const [editManagerId, setEditManagerId] = useState<string>('');
   const [editDepartmentId, setEditDepartmentId] = useState<string>('');
   const [editDesignation, setEditDesignation] = useState('');
   const [editPmsGrade, setEditPmsGrade] = useState('');
+  const [editEmployeeCode, setEditEmployeeCode] = useState('');
 
-  const filteredProfiles = profiles?.filter(p => 
-    p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.employee_code?.toLowerCase().includes(searchQuery.toLowerCase())
+  // Create Dialog
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [newFullName, setNewFullName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newEmployeeCode, setNewEmployeeCode] = useState('');
+  const [newRole, setNewRole] = useState<AppRole>('employee');
+  const [newDepartmentId, setNewDepartmentId] = useState('');
+  const [newDesignation, setNewDesignation] = useState('');
+  const [newPmsGrade, setNewPmsGrade] = useState('');
+  const [newManagerId, setNewManagerId] = useState('');
+
+  // Bulk Action Dialog
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [bulkRole, setBulkRole] = useState<string>('');
+  const [bulkManagerId, setBulkManagerId] = useState<string>('');
+
+  // Filtered and paginated profiles
+  const filteredProfiles = useMemo(() => {
+    return profiles?.filter(p => {
+      const matchesSearch = 
+        p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.employee_code?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const role = (p.user_roles as any)?.[0]?.role || 'employee';
+      const matchesRole = roleFilter === 'all' || role === roleFilter;
+      
+      const matchesDepartment = departmentFilter === 'all' || p.department_id === departmentFilter;
+      
+      return matchesSearch && matchesRole && matchesDepartment;
+    }) || [];
+  }, [profiles, searchQuery, roleFilter, departmentFilter]);
+
+  const totalPages = Math.ceil(filteredProfiles.length / ITEMS_PER_PAGE);
+  const paginatedProfiles = filteredProfiles.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
   );
 
+  // Reset to first page when filters change
+  const handleFilterChange = () => {
+    setCurrentPage(1);
+    setSelectedUserIds(new Set());
+  };
+
+  // Update user mutation
   const updateUser = useMutation({
     mutationFn: async ({
       userId,
       role,
       reportingManagerId,
+      departmentId,
       designation,
       pmsGrade,
+      employeeCode,
     }: {
       userId: string;
       role: AppRole;
       reportingManagerId: string | null;
+      departmentId: string | null;
       designation: string;
       pmsGrade: string;
+      employeeCode: string;
     }) => {
-      // Update profile
       const { error: profileError } = await supabase
         .from('profiles')
         .update({
           reporting_manager_id: reportingManagerId || null,
+          department_id: departmentId || null,
           designation,
           pms_grade: pmsGrade,
+          employee_code: employeeCode || null,
         })
         .eq('id', userId);
 
       if (profileError) throw profileError;
 
-      // Update role
       const { error: roleError } = await supabase
         .from('user_roles')
         .update({ role })
@@ -88,13 +146,99 @@ export default function UserManagement() {
     },
   });
 
+  // Create user mutation
+  const createUser = useMutation({
+    mutationFn: async (data: {
+      full_name: string;
+      email: string;
+      employee_code: string;
+      role: AppRole;
+      department_id?: string;
+      designation?: string;
+      pms_grade?: string;
+      reporting_manager_id?: string;
+    }) => {
+      const { data: session } = await supabase.auth.getSession();
+      
+      const response = await supabase.functions.invoke('create-employee', {
+        body: {
+          full_name: data.full_name,
+          email: data.email || undefined,
+          employee_code: data.employee_code,
+          department_id: data.department_id || undefined,
+          designation: data.designation || undefined,
+          pms_grade: data.pms_grade || undefined,
+          reporting_manager_id: data.reporting_manager_id || undefined,
+        },
+      });
+
+      if (response.error) throw new Error(response.error.message);
+      
+      // Update role if not employee (default)
+      if (data.role !== 'employee' && response.data?.profile?.id) {
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .update({ role: data.role })
+          .eq('user_id', response.data.profile.id);
+        
+        if (roleError) throw roleError;
+      }
+
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      toast({ title: 'User created successfully' });
+      setCreateDialogOpen(false);
+      resetCreateForm();
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to create user', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Bulk update mutation
+  const bulkUpdateUsers = useMutation({
+    mutationFn: async ({ userIds, role, managerId }: { userIds: string[]; role?: AppRole; managerId?: string | null }) => {
+      for (const userId of userIds) {
+        if (role) {
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .update({ role })
+            .eq('user_id', userId);
+          if (roleError) throw roleError;
+        }
+        if (managerId !== undefined) {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .update({ reporting_manager_id: managerId || null })
+            .eq('id', userId);
+          if (profileError) throw profileError;
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      toast({ title: `Updated ${selectedUserIds.size} users successfully` });
+      setBulkDialogOpen(false);
+      setSelectedUserIds(new Set());
+      setBulkRole('');
+      setBulkManagerId('');
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Bulk update failed', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const openEditDialog = (user: NonNullable<typeof profiles>[number]) => {
     setSelectedUser(user);
     const userRole = (user.user_roles as any)?.[0]?.role || 'employee';
     setEditRole(userRole);
     setEditManagerId(user.reporting_manager_id || '');
+    setEditDepartmentId(user.department_id || '');
     setEditDesignation(user.designation || '');
     setEditPmsGrade(user.pms_grade || '');
+    setEditEmployeeCode(user.employee_code || '');
     setEditDialogOpen(true);
   };
 
@@ -104,9 +248,66 @@ export default function UserManagement() {
       userId: selectedUser.id,
       role: editRole,
       reportingManagerId: editManagerId === 'none' ? null : editManagerId || null,
+      departmentId: editDepartmentId === 'none' ? null : editDepartmentId || null,
       designation: editDesignation,
       pmsGrade: editPmsGrade,
+      employeeCode: editEmployeeCode,
     });
+  };
+
+  const handleCreateUser = () => {
+    if (!newFullName || !newEmployeeCode) {
+      toast({ title: 'Full name and employee code are required', variant: 'destructive' });
+      return;
+    }
+    createUser.mutate({
+      full_name: newFullName,
+      email: newEmail,
+      employee_code: newEmployeeCode,
+      role: newRole,
+      department_id: newDepartmentId || undefined,
+      designation: newDesignation || undefined,
+      pms_grade: newPmsGrade || undefined,
+      reporting_manager_id: newManagerId || undefined,
+    });
+  };
+
+  const resetCreateForm = () => {
+    setNewFullName('');
+    setNewEmail('');
+    setNewEmployeeCode('');
+    setNewRole('employee');
+    setNewDepartmentId('');
+    setNewDesignation('');
+    setNewPmsGrade('');
+    setNewManagerId('');
+  };
+
+  const handleBulkUpdate = () => {
+    if (selectedUserIds.size === 0) return;
+    bulkUpdateUsers.mutate({
+      userIds: Array.from(selectedUserIds),
+      role: bulkRole as AppRole || undefined,
+      managerId: bulkManagerId === 'none' ? null : bulkManagerId || undefined,
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedUserIds.size === paginatedProfiles.length) {
+      setSelectedUserIds(new Set());
+    } else {
+      setSelectedUserIds(new Set(paginatedProfiles.map(p => p.id)));
+    }
+  };
+
+  const toggleSelectUser = (userId: string) => {
+    const newSet = new Set(selectedUserIds);
+    if (newSet.has(userId)) {
+      newSet.delete(userId);
+    } else {
+      newSet.add(userId);
+    }
+    setSelectedUserIds(newSet);
   };
 
   const getInitials = (name: string | null) => {
@@ -133,9 +334,15 @@ export default function UserManagement() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">User Management</h1>
-        <p className="text-muted-foreground">Manage users, roles, and reporting structure</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">User Management</h1>
+          <p className="text-muted-foreground">Manage users, roles, and reporting structure</p>
+        </div>
+        <Button onClick={() => setCreateDialogOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add User
+        </Button>
       </div>
 
       {/* Stats */}
@@ -152,46 +359,84 @@ export default function UserManagement() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Admins</CardTitle>
-            <Shield className="h-4 w-4 text-red-500" />
+            <Shield className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-red-600">{admins}</div>
+            <div className="text-3xl font-bold text-destructive">{admins}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Managers</CardTitle>
-            <Users className="h-4 w-4 text-blue-500" />
+            <Users className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-blue-600">{managers}</div>
+            <div className="text-3xl font-bold text-primary">{managers}</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Search */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search users..."
             className="pl-10"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => { setSearchQuery(e.target.value); handleFilterChange(); }}
           />
         </div>
+        <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); handleFilterChange(); }}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Filter by role" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Roles</SelectItem>
+            <SelectItem value="admin">Admin</SelectItem>
+            <SelectItem value="manager">Manager</SelectItem>
+            <SelectItem value="employee">Employee</SelectItem>
+            <SelectItem value="auditor">Auditor</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={departmentFilter} onValueChange={(v) => { setDepartmentFilter(v); handleFilterChange(); }}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by department" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Departments</SelectItem>
+            {departments?.map(d => (
+              <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {selectedUserIds.size > 0 && (
+          <Button variant="secondary" onClick={() => setBulkDialogOpen(true)}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Bulk Update ({selectedUserIds.size})
+          </Button>
+        )}
       </div>
 
       {/* Users Table */}
       <Card>
         <CardHeader>
           <CardTitle>All Users</CardTitle>
-          <CardDescription>{filteredProfiles?.length || 0} users found</CardDescription>
+          <CardDescription>
+            Showing {paginatedProfiles.length} of {filteredProfiles.length} users
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={paginatedProfiles.length > 0 && selectedUserIds.size === paginatedProfiles.length}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                </TableHead>
                 <TableHead>User</TableHead>
                 <TableHead>Employee Code</TableHead>
                 <TableHead>Department</TableHead>
@@ -203,11 +448,17 @@ export default function UserManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProfiles?.map(profile => {
+              {paginatedProfiles.map(profile => {
                 const role = (profile.user_roles as any)?.[0]?.role || 'employee';
                 const manager = profiles?.find(p => p.id === profile.reporting_manager_id);
                 return (
                   <TableRow key={profile.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedUserIds.has(profile.id)}
+                        onCheckedChange={() => toggleSelectUser(profile.id)}
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
@@ -238,6 +489,33 @@ export default function UserManagement() {
               })}
             </TableBody>
           </Table>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -251,6 +529,15 @@ export default function UserManagement() {
 
           <div className="space-y-4 py-4">
             <div className="space-y-2">
+              <Label>Employee Code</Label>
+              <Input
+                value={editEmployeeCode}
+                onChange={(e) => setEditEmployeeCode(e.target.value)}
+                placeholder="e.g. EMP001"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label>Role</Label>
               <Select value={editRole} onValueChange={(v) => setEditRole(v as AppRole)}>
                 <SelectTrigger>
@@ -261,6 +548,21 @@ export default function UserManagement() {
                   <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="auditor">Auditor</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Department</Label>
+              <Select value={editDepartmentId} onValueChange={setEditDepartmentId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select department" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {departments?.map(d => (
+                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -303,6 +605,166 @@ export default function UserManagement() {
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleSaveUser} disabled={updateUser.isPending}>
               {updateUser.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Dialog */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add New User</DialogTitle>
+            <DialogDescription>Create a new user account</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+            <div className="space-y-2">
+              <Label>Full Name *</Label>
+              <Input
+                value={newFullName}
+                onChange={(e) => setNewFullName(e.target.value)}
+                placeholder="John Doe"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="john@example.com"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Employee Code *</Label>
+              <Input
+                value={newEmployeeCode}
+                onChange={(e) => setNewEmployeeCode(e.target.value)}
+                placeholder="EMP001"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={newRole} onValueChange={(v) => setNewRole(v as AppRole)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="employee">Employee</SelectItem>
+                  <SelectItem value="manager">Manager</SelectItem>
+                  <SelectItem value="auditor">Auditor</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Department</Label>
+              <Select value={newDepartmentId} onValueChange={setNewDepartmentId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {departments?.map(d => (
+                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Designation</Label>
+              <Input
+                value={newDesignation}
+                onChange={(e) => setNewDesignation(e.target.value)}
+                placeholder="e.g. Senior Developer"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>PMS Grade</Label>
+              <Input
+                value={newPmsGrade}
+                onChange={(e) => setNewPmsGrade(e.target.value)}
+                placeholder="e.g. L4"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Reporting Manager</Label>
+              <Select value={newManagerId} onValueChange={setNewManagerId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select manager" />
+                </SelectTrigger>
+                <SelectContent>
+                  {profiles?.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCreateDialogOpen(false); resetCreateForm(); }}>Cancel</Button>
+            <Button onClick={handleCreateUser} disabled={createUser.isPending}>
+              {createUser.isPending ? 'Creating...' : 'Create User'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Update Dialog */}
+      <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk Update Users</DialogTitle>
+            <DialogDescription>Update {selectedUserIds.size} selected users</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Change Role (optional)</Label>
+              <Select value={bulkRole} onValueChange={setBulkRole}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Keep existing roles" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="employee">Employee</SelectItem>
+                  <SelectItem value="manager">Manager</SelectItem>
+                  <SelectItem value="auditor">Auditor</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Change Reporting Manager (optional)</Label>
+              <Select value={bulkManagerId} onValueChange={setBulkManagerId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Keep existing managers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Remove Manager</SelectItem>
+                  {profiles?.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDialogOpen(false)}>Cancel</Button>
+            <Button 
+              onClick={handleBulkUpdate} 
+              disabled={bulkUpdateUsers.isPending || (!bulkRole && !bulkManagerId)}
+            >
+              {bulkUpdateUsers.isPending ? 'Updating...' : 'Update Users'}
             </Button>
           </DialogFooter>
         </DialogContent>
