@@ -251,34 +251,46 @@ export default function QueryInbox() {
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Open Queries</CardTitle>
-            <Clock className="h-4 w-4 text-orange-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-orange-600">{openQueries.length}</div>
-            <p className="text-xs text-muted-foreground">Awaiting your response</p>
+        <Card className="border-l-4 border-l-orange-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Open Queries</p>
+                <p className="text-3xl font-bold text-orange-600">{openQueries.length}</p>
+                <p className="text-xs text-muted-foreground">Awaiting your response</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-orange-500/10 flex items-center justify-center">
+                <Clock className="h-6 w-6 text-orange-500" />
+              </div>
+            </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Resolved</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600">{resolvedQueries.length}</div>
-            <p className="text-xs text-muted-foreground">Queries you've resolved</p>
+        <Card className="border-l-4 border-l-green-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Resolved</p>
+                <p className="text-3xl font-bold text-green-600">{resolvedQueries.length}</p>
+                <p className="text-xs text-muted-foreground">Queries you've resolved</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                <CheckCircle2 className="h-6 w-6 text-green-500" />
+              </div>
+            </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Sent Queries</CardTitle>
-            <Send className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-600">{sentQueries.length}</div>
-            <p className="text-xs text-muted-foreground">Queries you've raised</p>
+        <Card className="border-l-4 border-l-blue-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Sent Queries</p>
+                <p className="text-3xl font-bold text-blue-600">{sentQueries.length}</p>
+                <p className="text-xs text-muted-foreground">Queries you've raised</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+                <Send className="h-6 w-6 text-blue-500" />
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

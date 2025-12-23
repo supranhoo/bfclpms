@@ -184,31 +184,46 @@ export default function AuditPanel() {
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Pending Audit</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-yellow-600">{pendingAudit}</div>
+        <Card className="border-l-4 border-l-yellow-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Pending Audit</p>
+                <p className="text-3xl font-bold text-yellow-600">{pendingAudit}</p>
+                <p className="text-xs text-muted-foreground">Awaiting review</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                <Clock className="h-6 w-6 text-yellow-500" />
+              </div>
+            </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">In Audit</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-purple-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-purple-600">{inAudit}</div>
+        <Card className="border-l-4 border-l-purple-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">In Audit</p>
+                <p className="text-3xl font-bold text-purple-600">{inAudit}</p>
+                <p className="text-xs text-muted-foreground">Currently reviewing</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-purple-500/10 flex items-center justify-center">
+                <AlertTriangle className="h-6 w-6 text-purple-500" />
+              </div>
+            </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Approved</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600">{approved}</div>
+        <Card className="border-l-4 border-l-green-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Approved</p>
+                <p className="text-3xl font-bold text-green-600">{approved}</p>
+                <p className="text-xs text-muted-foreground">Fully completed</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                <CheckCircle2 className="h-6 w-6 text-green-500" />
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

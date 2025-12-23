@@ -172,36 +172,48 @@ export default function AuditLogs() {
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Actions</CardTitle>
-            <History className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{filteredLogs.length}</div>
-            <p className="text-xs text-muted-foreground">For {selectedPeriod} {selectedYear}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Today's Actions</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600">{todayLogs.length}</div>
-            <p className="text-xs text-muted-foreground">Actions recorded today</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Approvals</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-600">
-              {filteredLogs.filter(l => l.action === 'MANAGER_APPROVED').length}
+        <Card className="border-l-4 border-l-primary">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total Actions</p>
+                <p className="text-3xl font-bold">{filteredLogs.length}</p>
+                <p className="text-xs text-muted-foreground">For {selectedPeriod} {selectedYear}</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <History className="h-6 w-6 text-primary" />
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">KPIs approved this period</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-green-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Today's Actions</p>
+                <p className="text-3xl font-bold text-green-600">{todayLogs.length}</p>
+                <p className="text-xs text-muted-foreground">Actions recorded today</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                <CheckCircle2 className="h-6 w-6 text-green-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-blue-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Approvals</p>
+                <p className="text-3xl font-bold text-blue-600">
+                  {filteredLogs.filter(l => l.action === 'MANAGER_APPROVED').length}
+                </p>
+                <p className="text-xs text-muted-foreground">KPIs approved this period</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+                <CheckCircle2 className="h-6 w-6 text-blue-500" />
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
