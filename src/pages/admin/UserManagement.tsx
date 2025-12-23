@@ -14,7 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus } from 'lucide-react';
+import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check } from 'lucide-react';
 
 type AppRole = 'admin' | 'manager' | 'employee' | 'auditor';
 
@@ -67,6 +67,13 @@ export default function UserManagement() {
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [bulkRole, setBulkRole] = useState<string>('');
   const [bulkManagerId, setBulkManagerId] = useState<string>('');
+
+  // Password Reset Dialog
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [resetUserEmail, setResetUserEmail] = useState('');
+  const [resetUserName, setResetUserName] = useState('');
+  const [resetLink, setResetLink] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
 
   // Filtered and paginated profiles
   const filteredProfiles = useMemo(() => {
@@ -230,6 +237,26 @@ export default function UserManagement() {
     },
   });
 
+  // Password reset mutation
+  const resetPassword = useMutation({
+    mutationFn: async (email: string) => {
+      const response = await supabase.functions.invoke('reset-password', {
+        body: { email },
+      });
+      if (response.error) throw new Error(response.error.message);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      if (data.resetLink) {
+        setResetLink(data.resetLink);
+      }
+      toast({ title: 'Password reset link generated' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to generate reset link', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const openEditDialog = (user: NonNullable<typeof profiles>[number]) => {
     setSelectedUser(user);
     const userRole = (user.user_roles as any)?.[0]?.role || 'employee';
@@ -290,6 +317,24 @@ export default function UserManagement() {
       role: bulkRole as AppRole || undefined,
       managerId: bulkManagerId === 'none' ? null : bulkManagerId || undefined,
     });
+  };
+
+  const openResetDialog = (user: NonNullable<typeof profiles>[number]) => {
+    setResetUserEmail(user.email);
+    setResetUserName(user.full_name || user.email);
+    setResetLink('');
+    setLinkCopied(false);
+    setResetDialogOpen(true);
+  };
+
+  const handleResetPassword = () => {
+    resetPassword.mutate(resetUserEmail);
+  };
+
+  const copyResetLink = async () => {
+    await navigator.clipboard.writeText(resetLink);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
   };
 
   const toggleSelectAll = () => {
@@ -480,9 +525,14 @@ export default function UserManagement() {
                     </TableCell>
                     <TableCell>{manager?.full_name || '-'}</TableCell>
                     <TableCell>
-                      <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)}>
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)}>
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => openResetDialog(profile)} title="Reset Password">
+                          <KeyRound className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -766,6 +816,46 @@ export default function UserManagement() {
             >
               {bulkUpdateUsers.isPending ? 'Updating...' : 'Update Users'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Reset Dialog */}
+      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>Generate a password reset link for {resetUserName}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {!resetLink ? (
+              <p className="text-sm text-muted-foreground">
+                Click the button below to generate a one-time password reset link for this user.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <Label>Reset Link</Label>
+                <div className="flex gap-2">
+                  <Input value={resetLink} readOnly className="text-xs" />
+                  <Button size="icon" variant="outline" onClick={copyResetLink}>
+                    {linkCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Share this link with the user. It can only be used once.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetDialogOpen(false)}>Close</Button>
+            {!resetLink && (
+              <Button onClick={handleResetPassword} disabled={resetPassword.isPending}>
+                {resetPassword.isPending ? 'Generating...' : 'Generate Reset Link'}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
