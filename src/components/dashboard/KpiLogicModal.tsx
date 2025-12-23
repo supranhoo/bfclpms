@@ -6,12 +6,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Pencil, Save, X } from 'lucide-react';
+import { Pencil, Save, X, Bug, ChevronDown } from 'lucide-react';
 import type { KPI } from '@/hooks/useKpis';
+import { parseThreshold } from '@/lib/ratingCalculation';
 
 interface KpiLogicModalProps {
   isOpen: boolean;
@@ -287,33 +290,128 @@ export function KpiLogicModal({ isOpen, onClose, kpi }: KpiLogicModalProps) {
                     <TableHead className="w-[80px]">Rating</TableHead>
                     <TableHead>Level</TableHead>
                     <TableHead>Threshold Value</TableHead>
+                    {!isEditing && (
+                      <TableHead className="w-[100px] text-right">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-1 cursor-help text-muted-foreground">
+                                <Bug className="h-3.5 w-3.5" />
+                                Parsed
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="max-w-xs">
+                              <p className="text-xs">Shows how thresholds are parsed for calculation. Ratios are used when target ≠ 0.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {thresholds.map((t) => (
-                    <TableRow key={t.rating}>
-                      <TableCell>
-                        <Badge className={t.color}>{t.rating}</Badge>
-                      </TableCell>
-                      <TableCell className="font-medium">{t.label}</TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input
-                            value={t.value || ''}
-                            onChange={(e) => setEditData({ ...editData, [t.key]: e.target.value })}
-                            placeholder={`R${t.rating} threshold`}
-                            className="h-8 w-32"
-                          />
-                        ) : (
-                          t.value ? `${t.value} ${kpi.uom || ''}` : <span className="text-muted-foreground">-</span>
+                  {thresholds.map((t) => {
+                    const targetVal = parseThreshold(kpi.target_value, false) ?? 0;
+                    const thresholdsAsRatio = targetVal !== 0;
+                    const parsedValue = parseThreshold(t.value, thresholdsAsRatio);
+                    
+                    return (
+                      <TableRow key={t.rating}>
+                        <TableCell>
+                          <Badge className={t.color}>{t.rating}</Badge>
+                        </TableCell>
+                        <TableCell className="font-medium">{t.label}</TableCell>
+                        <TableCell>
+                          {isEditing ? (
+                            <Input
+                              value={t.value || ''}
+                              onChange={(e) => setEditData({ ...editData, [t.key]: e.target.value })}
+                              placeholder={`R${t.rating} threshold`}
+                              className="h-8 w-32"
+                            />
+                          ) : (
+                            t.value ? `${t.value} ${kpi.uom || ''}` : <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        {!isEditing && (
+                          <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                            {parsedValue !== null ? parsedValue.toFixed(6) : '-'}
+                          </TableCell>
                         )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
           </div>
+
+          {/* Debug Info Collapsible */}
+          {!isEditing && (
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-full justify-between text-muted-foreground hover:text-foreground">
+                  <span className="flex items-center gap-2">
+                    <Bug className="h-4 w-4" />
+                    Debug: Calculation Details
+                  </span>
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-2 p-4 bg-muted/50 rounded-lg border text-xs font-mono space-y-2">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <span className="text-muted-foreground">Target (raw):</span>
+                    <span>{kpi.target_value ?? 'null'}</span>
+                    
+                    <span className="text-muted-foreground">Target (parsed):</span>
+                    <span>{parseThreshold(kpi.target_value, false) ?? 'null'}</span>
+                    
+                    <span className="text-muted-foreground">Criteria:</span>
+                    <span>{kpi.criteria || 'Higher is Better'}</span>
+                    
+                    <span className="text-muted-foreground">Thresholds mode:</span>
+                    <span>{(parseThreshold(kpi.target_value, false) ?? 0) !== 0 ? 'Ratio (÷100)' : 'Absolute'}</span>
+                  </div>
+                  
+                  <div className="border-t border-border pt-2 mt-2">
+                    <span className="text-muted-foreground block mb-1">Parsed Thresholds:</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { key: 'r5', label: 'R5', val: kpi.r5 },
+                        { key: 'r4', label: 'R4', val: kpi.r4 },
+                        { key: 'r3', label: 'R3', val: kpi.r3 },
+                        { key: 'r2', label: 'R2', val: kpi.r2 },
+                        { key: 'r1', label: 'R1', val: kpi.r1 },
+                        { key: 'r0', label: 'R0', val: kpi.r0 },
+                      ].map(item => {
+                        const targetVal = parseThreshold(kpi.target_value, false) ?? 0;
+                        const asRatio = targetVal !== 0;
+                        const parsed = parseThreshold(item.val, asRatio);
+                        return (
+                          <div key={item.key} className="flex justify-between">
+                            <span className="text-muted-foreground">{item.label}:</span>
+                            <span>{item.val ? `"${item.val}" → ${parsed?.toFixed(6) ?? 'null'}` : '-'}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  
+                  <div className="border-t border-border pt-2 mt-2">
+                    <span className="text-muted-foreground block mb-1">Calculation Formula:</span>
+                    <code className="block bg-background p-2 rounded text-[10px]">
+                      {kpi.criteria?.toLowerCase().includes('lower') 
+                        ? 'achievedWeight = target / achieved'
+                        : 'achievedWeight = achieved / target'}
+                      <br />
+                      Compare achievedWeight against thresholds (higher = better rating)
+                    </code>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
         </div>
 
         {isEditing && (
