@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
+import { StatsRowSkeleton, TableSkeleton, FilterBarSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Search, Users, Target, Filter } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
@@ -58,14 +58,14 @@ export default function AllKpis() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-3 gap-4">
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
+      <div className="space-y-6 animate-fade-in">
+        <div className="space-y-2">
+          <div className="h-8 w-32 bg-muted animate-pulse rounded" />
+          <div className="h-4 w-64 bg-muted animate-pulse rounded" />
         </div>
-        <Skeleton className="h-96" />
+        <StatsRowSkeleton count={3} />
+        <FilterBarSkeleton />
+        <TableSkeleton rows={8} columns={7} />
       </div>
     );
   }

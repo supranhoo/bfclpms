@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Skeleton } from '@/components/ui/skeleton';
+import { TableSkeleton } from '@/components/ui/LoadingSkeletons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -93,9 +93,13 @@ export default function Organization() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-96" />
+      <div className="space-y-6 animate-fade-in">
+        <div className="space-y-2">
+          <div className="h-8 w-52 bg-muted animate-pulse rounded" />
+          <div className="h-4 w-80 bg-muted animate-pulse rounded" />
+        </div>
+        <div className="h-10 w-full max-w-lg bg-muted animate-pulse rounded" />
+        <TableSkeleton rows={6} columns={4} />
       </div>
     );
   }

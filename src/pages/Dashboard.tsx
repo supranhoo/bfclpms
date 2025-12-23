@@ -5,7 +5,7 @@ import { useKraCategories } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { DashboardSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Progress } from '@/components/ui/progress';
 import { ProfileCard } from '@/components/dashboard/ProfileCard';
 import { KeyStatCard } from '@/components/dashboard/KeyStatCard';
@@ -128,18 +128,7 @@ export default function Dashboard() {
   }, [kpis, activeCategory, categories, selectedPeriod, selectedYear]);
 
   if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-32 w-full" />
-        <div className="grid gap-4 md:grid-cols-4">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28" />)}
-        </div>
-        <div className="grid gap-6 md:grid-cols-2">
-          <Skeleton className="h-80" />
-          <Skeleton className="h-80" />
-        </div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   return (
