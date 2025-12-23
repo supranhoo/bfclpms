@@ -30,11 +30,17 @@ export interface RatingResult {
 export function parseThreshold(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'number') return value;
-  
+
+  const raw = String(value).trim();
+  const hasPercent = raw.includes('%');
+
   // Remove % sign and parse
-  const cleanValue = String(value).replace('%', '').trim();
+  const cleanValue = raw.replace('%', '').trim();
   const parsed = parseFloat(cleanValue);
-  return isNaN(parsed) ? null : parsed;
+  if (isNaN(parsed)) return null;
+
+  // If user entered "90%" we treat it as ratio 0.9 (matches Excel behavior)
+  return hasPercent ? parsed / 100 : parsed;
 }
 
 /**
