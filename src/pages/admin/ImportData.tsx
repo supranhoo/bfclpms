@@ -16,6 +16,7 @@ import { FileSpreadsheet, AlertCircle, CheckCircle2, Download, Users, Loader2 } 
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import * as XLSX from 'xlsx';
+import { validateFileSize, IMPORT_LIMITS, sanitizeText } from '@/lib/importValidation';
 
 interface BackgroundImportProgress {
   id: string;
@@ -348,6 +349,13 @@ export default function ImportData() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // Validate file size
+    const fileSizeValidation = validateFileSize(file);
+    if (!fileSizeValidation.valid) {
+      toast({ title: 'File too large', description: fileSizeValidation.error, variant: 'destructive' });
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -357,10 +365,20 @@ export default function ImportData() {
         const worksheet = workbook.Sheets[sheetName];
         const rawData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet);
         
+        // Check row count limit
+        if (rawData.length > IMPORT_LIMITS.MAX_ROWS) {
+          toast({ 
+            title: 'Too many rows', 
+            description: `File contains ${rawData.length} rows, maximum allowed is ${IMPORT_LIMITS.MAX_ROWS}`, 
+            variant: 'destructive' 
+          });
+          return;
+        }
+        
         // Normalize all rows to handle column name variations
         const jsonData = rawData.map(normalizeKpiRow);
 
-        // Validate data
+        // Validate data with length limits
         const validationErrors: string[] = [];
         jsonData.forEach((row, index) => {
           if (!row.newCode && !row.fullName) {
@@ -374,6 +392,17 @@ export default function ImportData() {
           }
           if (!row.kpi) {
             validationErrors.push(`Row ${index + 2}: Missing KPI`);
+          }
+          // Add length validation
+          if (row.kra && String(row.kra).length > IMPORT_LIMITS.MAX_STRING_LENGTH) {
+            validationErrors.push(`Row ${index + 2}: KRA exceeds ${IMPORT_LIMITS.MAX_STRING_LENGTH} characters`);
+          }
+          if (row.kpi && String(row.kpi).length > IMPORT_LIMITS.MAX_STRING_LENGTH) {
+            validationErrors.push(`Row ${index + 2}: KPI exceeds ${IMPORT_LIMITS.MAX_STRING_LENGTH} characters`);
+          }
+          // Validate weightage range
+          if (row.kpiWeightage !== undefined && (row.kpiWeightage < 0 || row.kpiWeightage > 100)) {
+            validationErrors.push(`Row ${index + 2}: Weightage must be between 0 and 100`);
           }
         });
 
@@ -419,6 +448,13 @@ export default function ImportData() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // Validate file size
+    const fileSizeValidation = validateFileSize(file);
+    if (!fileSizeValidation.valid) {
+      toast({ title: 'File too large', description: fileSizeValidation.error, variant: 'destructive' });
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -427,6 +463,16 @@ export default function ImportData() {
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const rawData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet);
+        
+        // Check row count limit
+        if (rawData.length > IMPORT_LIMITS.MAX_ROWS) {
+          toast({ 
+            title: 'Too many rows', 
+            description: `File contains ${rawData.length} rows, maximum allowed is ${IMPORT_LIMITS.MAX_ROWS}`, 
+            variant: 'destructive' 
+          });
+          return;
+        }
         
         // Normalize all rows
         const jsonData = rawData.map(normalizeEmployeeRow);
@@ -440,6 +486,13 @@ export default function ImportData() {
           // Email validation only if provided (it's optional for updates)
           if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
             validationErrors.push(`Row ${index + 2}: Invalid email format`);
+          }
+          // Length validations
+          if (row.fullName && row.fullName.length > 200) {
+            validationErrors.push(`Row ${index + 2}: Full name exceeds 200 characters`);
+          }
+          if (row.designation && row.designation.length > 100) {
+            validationErrors.push(`Row ${index + 2}: Designation exceeds 100 characters`);
           }
         });
 
@@ -892,33 +945,19 @@ export default function ImportData() {
           // Generate a cryptographically random password for security
           const randomPassword = crypto.randomUUID() + crypto.randomUUID().slice(0, 8) + 'Aa1!';
           
-          const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-            email: row.email,
+          // Use regular signUp - admin API should only be called from edge functions
+          const { data: signupData, error: signupError } = await supabase.auth.signUp({
+            email: sanitizeText(row.email),
             password: randomPassword,
-            email_confirm: false, // Require email confirmation to force password reset
-            user_metadata: {
-              full_name: row.fullName,
+            options: {
+              data: {
+                full_name: sanitizeText(row.fullName),
+              },
             },
           });
-
-          let newUserId: string | null = null;
-
-          if (authError) {
-            // If admin API fails, try regular signup with random password
-            const { data: signupData, error: signupError } = await supabase.auth.signUp({
-              email: row.email,
-              password: randomPassword,
-              options: {
-                data: {
-                  full_name: row.fullName,
-                },
-              },
-            });
-            if (signupError) throw signupError;
-            newUserId = signupData.user?.id || null;
-          } else {
-            newUserId = authData.user?.id || null;
-          }
+          
+          if (signupError) throw signupError;
+          const newUserId = signupData.user?.id || null;
 
           // Wait a moment for the trigger to create the profile
           await new Promise(resolve => setTimeout(resolve, 500));
@@ -937,9 +976,9 @@ export default function ImportData() {
             .from('profiles')
             .update({
               employee_code: String(row.employeeCode),
-              designation: row.designation || null,
+              designation: sanitizeText(row.designation) || null,
               department_id: departmentId,
-              pms_grade: row.pmsGrade || null,
+              pms_grade: sanitizeText(row.pmsGrade) || null,
               reporting_manager_id: managerId,
             })
             .eq('email', row.email);
