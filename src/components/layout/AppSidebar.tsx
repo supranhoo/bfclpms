@@ -36,8 +36,9 @@ import {
 const menuItems = {
   main: [
     { title: 'Dashboard', icon: Home, path: '/dashboard', roles: ['admin', 'manager', 'employee', 'auditor'] },
-    { title: 'My KPIs', icon: Target, path: '/my-kpis', roles: ['employee', 'manager'] },
-    { title: 'Self Review', icon: CheckSquare, path: '/self-review', roles: ['employee', 'manager', 'admin'] },
+    // Some users can be both an employee (have their own KPIs) and hold additional roles (auditor/admin).
+    { title: 'My KPIs', icon: Target, path: '/my-kpis', roles: ['employee', 'manager', 'auditor', 'admin'] },
+    { title: 'Self Review', icon: CheckSquare, path: '/self-review', roles: ['employee', 'manager', 'admin', 'auditor'] },
     { title: 'Query Inbox', icon: MessageSquare, path: '/queries', roles: ['employee', 'manager', 'admin', 'auditor'], showBadge: true },
   ],
   manager: [
