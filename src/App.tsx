@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { DashboardLayout } from "./components/layout/DashboardLayout";
+import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import MyKpis from "./pages/MyKpis";
@@ -41,16 +42,64 @@ const App = () => (
               <Route path="/self-review" element={<SelfReview />} />
               <Route path="/kra-acceptance" element={<KRAAcceptance />} />
               <Route path="/queries" element={<QueryInbox />} />
-              <Route path="/team-review" element={<TeamReview />} />
-              <Route path="/audit" element={<AuditPanel />} />
-              <Route path="/audit-logs" element={<AuditLogs />} />
-              <Route path="/admin/users" element={<UserManagement />} />
-              <Route path="/admin/kpis" element={<AllKpis />} />
-              <Route path="/admin/organization" element={<Organization />} />
-              <Route path="/admin/categories" element={<Categories />} />
-              <Route path="/admin/import" element={<ImportData />} />
-              <Route path="/reports/performance" element={<PerformanceReport />} />
-              <Route path="/reports/kra-issuance" element={<KRAIssuance />} />
+              
+              {/* Manager-protected routes */}
+              <Route path="/team-review" element={
+                <ProtectedRoute allowedRoles={['manager', 'admin']}>
+                  <TeamReview />
+                </ProtectedRoute>
+              } />
+              
+              {/* Auditor-protected routes */}
+              <Route path="/audit" element={
+                <ProtectedRoute allowedRoles={['auditor', 'admin']}>
+                  <AuditPanel />
+                </ProtectedRoute>
+              } />
+              <Route path="/audit-logs" element={
+                <ProtectedRoute allowedRoles={['auditor', 'admin']}>
+                  <AuditLogs />
+                </ProtectedRoute>
+              } />
+              
+              {/* Admin-protected routes */}
+              <Route path="/admin/users" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <UserManagement />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/kpis" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AllKpis />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/organization" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <Organization />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/categories" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <Categories />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/import" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <ImportData />
+                </ProtectedRoute>
+              } />
+              
+              {/* Report routes - accessible to managers and admins */}
+              <Route path="/reports/performance" element={
+                <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor']}>
+                  <PerformanceReport />
+                </ProtectedRoute>
+              } />
+              <Route path="/reports/kra-issuance" element={
+                <ProtectedRoute allowedRoles={['manager', 'admin']}>
+                  <KRAIssuance />
+                </ProtectedRoute>
+              } />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
