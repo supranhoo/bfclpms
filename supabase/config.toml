@@ -5,3 +5,6 @@ verify_jwt = true
 
 [functions.import-kpis]
 verify_jwt = true
+
+[functions.reset-password]
+verify_jwt = true
