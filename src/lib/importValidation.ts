@@ -148,12 +148,54 @@ export function validateFileSize(file: File): { valid: boolean; error?: string }
   return { valid: true };
 }
 
-// Sanitize text to prevent XSS (removes script tags and dangerous attributes)
+/**
+ * Sanitize text to prevent XSS attacks.
+ * This function removes dangerous HTML content and encodes entities.
+ * Note: React's JSX escaping provides additional protection for display contexts.
+ * For rendering HTML content, use a proper library like DOMPurify instead.
+ */
 export function sanitizeText(text: string | undefined | null): string {
+  if (!text) return '';
+  
+  let sanitized = String(text);
+  
+  // Remove script tags and their content
+  sanitized = sanitized.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  
+  // Remove dangerous tags (iframe, object, embed, form, etc.)
+  sanitized = sanitized.replace(/<(iframe|object|embed|form|input|button|link|meta|base|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+  sanitized = sanitized.replace(/<(iframe|object|embed|form|input|button|link|meta|base|style|img)\b[^>]*\/?>/gi, '');
+  
+  // Remove event handlers (onclick, onerror, onload, etc.)
+  sanitized = sanitized.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '');
+  sanitized = sanitized.replace(/\s*on\w+\s*=\s*[^\s>]*/gi, '');
+  
+  // Remove javascript: and data: URIs
+  sanitized = sanitized.replace(/javascript\s*:/gi, '');
+  sanitized = sanitized.replace(/data\s*:\s*text\/html/gi, '');
+  sanitized = sanitized.replace(/vbscript\s*:/gi, '');
+  
+  // Encode HTML entities to prevent tag injection
+  sanitized = sanitized
+    .replace(/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[\da-f]+);)/gi, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+  
+  return sanitized.trim();
+}
+
+/**
+ * Basic script tag removal without HTML encoding.
+ * Use this when you need to remove dangerous scripts but preserve HTML structure.
+ * For display in React components, prefer sanitizeText() or rely on JSX escaping.
+ */
+export function removeScriptTags(text: string | undefined | null): string {
   if (!text) return '';
   return String(text)
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/on\w+\s*=/gi, '')
-    .replace(/javascript:/gi, '')
+    .replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/javascript\s*:/gi, '')
     .trim();
 }
