@@ -15,7 +15,7 @@ import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { ReviewDetailsCard } from '@/components/review/ReviewDetailsCard';
 import { ReviewTrailCard, getRatingColor, getRatingLabel } from '@/components/review/ReviewTrailCard';
-import { RatingSelector, getRatingScore } from '@/components/review/RatingSelector';
+import { ScoreSelector, scoreToRating } from '@/components/review/ScoreSelector';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -72,6 +72,7 @@ export default function ManagementReview() {
   const [sendBackDialogOpen, setSendBackDialogOpen] = useState(false);
   const [logicModalOpen, setLogicModalOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<NonNullable<typeof allKpis>[number] | null>(null);
+  const [managementScore, setManagementScore] = useState<number | null>(null);
   const [managementRating, setManagementRating] = useState<RatingLevel | ''>('');
   const [managementRemarks, setManagementRemarks] = useState('');
   const [sendBackReason, setSendBackReason] = useState('');
@@ -231,6 +232,7 @@ export default function ManagementReview() {
   const openReviewDialog = (kpi: NonNullable<typeof allKpis>[number]) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
+    setManagementScore((existing as any)?.management_score || existing?.auditor_score || null);
     setManagementRating((existing as any)?.management_rating || existing?.auditor_rating || '');
     setManagementRemarks((existing as any)?.management_remarks || '');
     setReviewDialogOpen(true);
@@ -249,12 +251,12 @@ export default function ManagementReview() {
   };
 
   const handleSubmitReview = (approve: boolean) => {
-    if (!selectedKpi || !managementRating) return;
-    const score = getRatingScore(managementRating);
+    if (!selectedKpi || managementScore === null) return;
+    const rating = scoreToRating(managementScore);
     submitManagementReview.mutate({
       kpi_id: selectedKpi.id,
-      management_rating: managementRating,
-      management_score: score,
+      management_rating: rating,
+      management_score: managementScore,
       management_remarks: managementRemarks,
       approve,
     });
@@ -637,10 +639,13 @@ export default function ManagementReview() {
                   <p className="text-sm font-medium">Your Management Review</p>
                 </div>
 
-                <RatingSelector
-                  value={managementRating}
-                  onChange={setManagementRating}
-                  label="Final Rating"
+                <ScoreSelector
+                  value={managementScore}
+                  onChange={(score, rating) => {
+                    setManagementScore(score);
+                    setManagementRating(rating);
+                  }}
+                  label="Final Score"
                 />
 
                 <div className="space-y-2">
@@ -664,13 +669,13 @@ export default function ManagementReview() {
             <Button
               variant="secondary"
               onClick={() => handleSubmitReview(false)}
-              disabled={!managementRating || submitManagementReview.isPending}
+              disabled={managementScore === null || submitManagementReview.isPending}
             >
               Save Draft
             </Button>
             <Button
               onClick={() => handleSubmitReview(true)}
-              disabled={!managementRating || submitManagementReview.isPending}
+              disabled={managementScore === null || submitManagementReview.isPending}
               className="bg-green-600 hover:bg-green-700"
             >
               <CheckCircle2 className="h-4 w-4 mr-1.5" />

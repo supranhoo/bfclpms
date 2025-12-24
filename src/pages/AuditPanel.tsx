@@ -16,7 +16,7 @@ import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { ReviewDetailsCard } from '@/components/review/ReviewDetailsCard';
 import { ReviewTrailCard, getRatingColor, getRatingLabel } from '@/components/review/ReviewTrailCard';
-import { RatingSelector, getRatingScore } from '@/components/review/RatingSelector';
+import { ScoreSelector, scoreToRating } from '@/components/review/ScoreSelector';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -39,6 +39,7 @@ import {
   Briefcase
 } from 'lucide-react';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -66,6 +67,7 @@ const ratingOptions: { value: RatingLevel; label: string; color: string; score: 
 ];
 
 export default function AuditPanel() {
+  const { user } = useAuth();
   const { data: allKpis, isLoading } = useAllKpis();
   const { data: categories } = useKraCategories();
   const kpiIds = allKpis?.map(k => k.id) || [];
@@ -81,10 +83,14 @@ export default function AuditPanel() {
   const [searchQuery, setSearchQuery] = useState('');
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [sendBackDialogOpen, setSendBackDialogOpen] = useState(false);
   const [logicModalOpen, setLogicModalOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<NonNullable<typeof allKpis>[number] | null>(null);
+  const [auditorScore, setAuditorScore] = useState<number | null>(null);
   const [auditorRating, setAuditorRating] = useState<RatingLevel | ''>('');
   const [auditorRemarks, setAuditorRemarks] = useState('');
+  const [sendBackReason, setSendBackReason] = useState('');
+  const [sendBackTarget, setSendBackTarget] = useState<'manager' | 'employee'>('manager');
 
   const openLogicModal = (kpi: NonNullable<typeof allKpis>[number]) => {
     setSelectedKpi(kpi);
@@ -179,6 +185,7 @@ export default function AuditPanel() {
   const openReviewDialog = (kpi: NonNullable<typeof allKpis>[number]) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
+    setAuditorScore(existing?.auditor_score || existing?.manager_score || null);
     setAuditorRating(existing?.auditor_rating || existing?.manager_rating || '');
     setAuditorRemarks(existing?.auditor_remarks || '');
     setReviewDialogOpen(true);
@@ -189,13 +196,86 @@ export default function AuditPanel() {
     setViewDialogOpen(true);
   };
 
+  const openSendBackDialog = (kpi: NonNullable<typeof allKpis>[number]) => {
+    setSelectedKpi(kpi);
+    setSendBackReason('');
+    setSendBackTarget('manager');
+    setSendBackDialogOpen(true);
+  };
+
+  const sendBack = useMutation({
+    mutationFn: async ({
+      kpi_id,
+      target,
+      reason,
+    }: {
+      kpi_id: string;
+      target: 'manager' | 'employee';
+      reason: string;
+    }) => {
+      const statusMap = {
+        manager: 'self_review',
+        employee: 'kra_set',
+      };
+
+      const { error: kpiError } = await supabase
+        .from('kpis')
+        .update({ status: statusMap[target] as any })
+        .eq('id', kpi_id);
+
+      if (kpiError) throw kpiError;
+
+      // Reset auditor fields
+      const { error: submissionError } = await supabase
+        .from('review_submissions')
+        .update({
+          auditor_rating: null,
+          auditor_score: null,
+          auditor_remarks: null,
+          kpi_status: 'sent_back' as any,
+        })
+        .eq('kpi_id', kpi_id);
+
+      if (submissionError) throw submissionError;
+
+      // Log the action
+      if (user?.id) {
+        await supabase.from('kpi_audit_logs').insert({
+          kpi_id,
+          action: `AUDITOR_SENT_BACK_TO_${target.toUpperCase()}`,
+          performed_by: user.id,
+          new_value: { reason, target },
+          metadata: { sent_back_at: new Date().toISOString() },
+        });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      toast({ title: 'KPI sent back successfully' });
+      setSendBackDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to send back', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const handleSendBack = () => {
+    if (!selectedKpi || !sendBackReason.trim()) return;
+    sendBack.mutate({
+      kpi_id: selectedKpi.id,
+      target: sendBackTarget,
+      reason: sendBackReason,
+    });
+  };
+
   const handleSubmitAudit = (approve: boolean) => {
-    if (!selectedKpi || !auditorRating) return;
-    const score = ratingOptions.find(r => r.value === auditorRating)?.score || 0;
+    if (!selectedKpi || auditorScore === null) return;
+    const rating = scoreToRating(auditorScore);
     submitAuditReview.mutate({
       kpi_id: selectedKpi.id,
-      auditor_rating: auditorRating,
-      auditor_score: score,
+      auditor_rating: rating,
+      auditor_score: auditorScore,
       auditor_remarks: auditorRemarks,
       approve,
     });
@@ -599,10 +679,13 @@ export default function AuditPanel() {
                   <p className="text-sm font-medium">Your Audit Review</p>
                 </div>
 
-                <RatingSelector
-                  value={auditorRating}
-                  onChange={setAuditorRating}
-                  label="Auditor Rating"
+                <ScoreSelector
+                  value={auditorScore}
+                  onChange={(score, rating) => {
+                    setAuditorScore(score);
+                    setAuditorRating(rating);
+                  }}
+                  label="Auditor Score"
                 />
 
                 <div className="space-y-2">
@@ -624,15 +707,26 @@ export default function AuditPanel() {
               Cancel
             </Button>
             <Button
+              variant="outline"
+              onClick={() => {
+                if (selectedKpi) openSendBackDialog(selectedKpi);
+                setReviewDialogOpen(false);
+              }}
+              className="text-orange-600 border-orange-300 hover:bg-orange-50"
+            >
+              <Undo2 className="h-4 w-4 mr-1.5" />
+              Send Back
+            </Button>
+            <Button
               variant="secondary"
               onClick={() => handleSubmitAudit(false)}
-              disabled={!auditorRating || submitAuditReview.isPending}
+              disabled={auditorScore === null || submitAuditReview.isPending}
             >
               Save Draft
             </Button>
             <Button
               onClick={() => handleSubmitAudit(true)}
-              disabled={!auditorRating || submitAuditReview.isPending}
+              disabled={auditorScore === null || submitAuditReview.isPending}
               className="bg-green-600 hover:bg-green-700"
             >
               <CheckCircle2 className="h-4 w-4 mr-1.5" />
@@ -695,6 +789,61 @@ export default function AuditPanel() {
 
           <DialogFooter>
             <Button onClick={() => setViewDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Back Dialog */}
+      <Dialog open={sendBackDialogOpen} onOpenChange={setSendBackDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Back for Revision</DialogTitle>
+            <DialogDescription>
+              Send "{selectedKpi?.kpi_name}" back for revision
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="p-4 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-200 dark:border-orange-800">
+              <p className="text-sm text-orange-800 dark:text-orange-200">
+                <strong>Note:</strong> This will reset the review status and notify the recipient to revise their submission.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Send Back To</Label>
+              <Select value={sendBackTarget} onValueChange={(v) => setSendBackTarget(v as 'manager' | 'employee')}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manager">Manager (for re-review)</SelectItem>
+                  <SelectItem value="employee">Employee (for revision)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Reason for Sending Back <span className="text-destructive">*</span></Label>
+              <Textarea
+                value={sendBackReason}
+                onChange={(e) => setSendBackReason(e.target.value)}
+                placeholder="Explain why this KPI needs to be revised..."
+                rows={4}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSendBackDialogOpen(false)}>Cancel</Button>
+            <Button 
+              onClick={handleSendBack} 
+              disabled={!sendBackReason.trim() || sendBack.isPending}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              <Undo2 className="h-4 w-4 mr-1" />
+              {sendBack.isPending ? 'Sending...' : 'Send Back'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
