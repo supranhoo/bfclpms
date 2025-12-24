@@ -15,10 +15,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
+import { ReviewDetailsCard } from '@/components/review/ReviewDetailsCard';
+import { ReviewTrailCard } from '@/components/review/ReviewTrailCard';
+import { RatingSelector, getRatingScore } from '@/components/review/RatingSelector';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Users, CheckCircle2, Clock, ArrowRight, Search, RefreshCw, MessageSquare, Check, Lock, Info, User, Undo2 } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Search, RefreshCw, MessageSquare, Check, Lock, Info, User, Undo2, Briefcase } from 'lucide-react';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 
@@ -33,6 +36,7 @@ const statusColors: Record<string, string> = {
   self_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
   manager_check: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
   audit: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  management_review: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
   approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
 };
 
@@ -41,6 +45,7 @@ const statusLabels: Record<string, string> = {
   self_review: 'Self Review',
   manager_check: 'Manager Check',
   audit: 'Audit',
+  management_review: 'Management Review',
   approved: 'Approved',
 };
 
@@ -442,69 +447,70 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
         </TableBody>
       </Table>
 
-      {/* Approve KPI Dialog */}
+      {/* Approve KPI Dialog - Enhanced */}
       <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Approve KPI</DialogTitle>
-            <DialogDescription>
-              {selectedKpi?.kpi_name} - {selectedKpi?.kra_name}
-            </DialogDescription>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <Briefcase className="h-5 w-5 text-amber-500" />
+              </div>
+              <div>
+                <DialogTitle>Manager Review</DialogTitle>
+                <DialogDescription>
+                  Review and approve KPI for {memberName}
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
-              <div>
-                <Label className="text-muted-foreground">Self Rating</Label>
-                <p className="font-medium">
-                  {submissionMap.get(selectedKpi?.id || '')?.self_rating || 'N/A'}
-                </p>
-              </div>
-              <div>
-                <Label className="text-muted-foreground">Achieved Value</Label>
-                <p className="font-medium">
-                  {submissionMap.get(selectedKpi?.id || '')?.achieved_value || 'N/A'}
-                </p>
-              </div>
-              <div className="col-span-2">
-                <Label className="text-muted-foreground">Self Remarks</Label>
-                <p className="text-sm">
-                  {submissionMap.get(selectedKpi?.id || '')?.self_remarks || 'N/A'}
-                </p>
-              </div>
-            </div>
+          <div className="space-y-6 py-4">
+            {/* Full KPI Details */}
+            {selectedKpi && (
+              <ReviewDetailsCard kpi={selectedKpi} />
+            )}
 
-            <div className="space-y-2">
-              <Label>Manager Rating</Label>
-              <Select value={managerRating} onValueChange={(v) => setManagerRating(v as RatingLevel)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select rating" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ratingOptions.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: opt.color }} />
-                        {opt.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Manager Remarks</Label>
-              <Textarea
-                value={managerRemarks}
-                onChange={(e) => setManagerRemarks(e.target.value)}
-                placeholder="Enter your remarks..."
-                rows={3}
+            {/* Self Review Trail */}
+            {selectedKpi && (
+              <ReviewTrailCard 
+                submission={submissionMap.get(selectedKpi.id)}
+                achievedValue={selectedKpi.target_value}
+                showSelf={true}
+                showManager={false}
               />
-            </div>
+            )}
+
+            {/* Manager Input */}
+            <Card className="border-amber-200 dark:border-amber-800">
+              <CardContent className="pt-4 space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-6 w-6 rounded-full bg-amber-500/10 flex items-center justify-center">
+                    <Briefcase className="h-3.5 w-3.5 text-amber-500" />
+                  </div>
+                  <p className="text-sm font-medium">Your Manager Review</p>
+                </div>
+
+                <RatingSelector
+                  value={managerRating}
+                  onChange={setManagerRating}
+                  label="Manager Rating"
+                />
+
+                <div className="space-y-2">
+                  <Label>Manager Remarks</Label>
+                  <Textarea
+                    value={managerRemarks}
+                    onChange={(e) => setManagerRemarks(e.target.value)}
+                    placeholder="Enter your review remarks and observations..."
+                    rows={3}
+                    className="resize-none"
+                  />
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-2">
             <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>Cancel</Button>
             <Button 
               onClick={handleApproveKpi} 

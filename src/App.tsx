@@ -12,6 +12,7 @@ import MyKpis from "./pages/MyKpis";
 import SelfReview from "./pages/SelfReview";
 import TeamReview from "./pages/TeamReview";
 import AuditPanel from "./pages/AuditPanel";
+import ManagementReview from "./pages/ManagementReview";
 import AuditLogs from "./pages/AuditLogs";
 import QueryInbox from "./pages/QueryInbox";
 import UserManagement from "./pages/admin/UserManagement";
@@ -47,6 +48,13 @@ const App = () => (
               <Route path="/team-review" element={
                 <ProtectedRoute allowedRoles={['manager', 'admin']}>
                   <TeamReview />
+                </ProtectedRoute>
+              } />
+              
+              {/* Management-protected routes */}
+              <Route path="/management-review" element={
+                <ProtectedRoute allowedRoles={['management', 'admin']}>
+                  <ManagementReview />
                 </ProtectedRoute>
               } />
               
