@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { ReviewDetailsCard } from '@/components/review/ReviewDetailsCard';
 import { ReviewTrailCard } from '@/components/review/ReviewTrailCard';
-import { RatingSelector, getRatingScore } from '@/components/review/RatingSelector';
+import { ScoreSelector, scoreToRating } from '@/components/review/ScoreSelector';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -94,6 +94,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [logicModalOpen, setLogicModalOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
+  const [managerScore, setManagerScore] = useState<number | null>(null);
   const [managerRating, setManagerRating] = useState<RatingLevel | ''>('');
   const [managerRemarks, setManagerRemarks] = useState('');
   const [queryReason, setQueryReason] = useState('');
@@ -160,6 +161,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
   const openReviewDialog = (kpi: NonNullable<typeof kpis>[number]) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
+    setManagerScore(existing?.manager_score || null);
     setManagerRating(existing?.manager_rating || '');
     setManagerRemarks(existing?.manager_remarks || '');
     setReviewDialogOpen(true);
@@ -172,12 +174,12 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
   };
 
   const handleApproveKpi = () => {
-    if (!selectedKpi || !managerRating) return;
-    const score = managerRating === 'blue' ? 100 : managerRating === 'green' ? 80 : managerRating === 'yellow' ? 60 : 40;
+    if (!selectedKpi || managerScore === null) return;
+    const rating = scoreToRating(managerScore);
     approveKpi.mutate({
       kpi_id: selectedKpi.id,
-      manager_rating: managerRating,
-      manager_score: score,
+      manager_rating: rating,
+      manager_score: managerScore,
       manager_remarks: managerRemarks,
     }, {
       onSuccess: () => setReviewDialogOpen(false),
@@ -214,12 +216,12 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
   };
 
   const handleSubmitReview = () => {
-    if (!selectedKpi || !managerRating) return;
-    const score = managerRating === 'blue' ? 100 : managerRating === 'green' ? 80 : managerRating === 'yellow' ? 60 : 40;
+    if (!selectedKpi || managerScore === null) return;
+    const rating = scoreToRating(managerScore);
     submitManagerReview.mutate({
       kpi_id: selectedKpi.id,
-      manager_rating: managerRating,
-      manager_score: score,
+      manager_rating: rating,
+      manager_score: managerScore,
       manager_remarks: managerRemarks,
     });
   };
@@ -490,10 +492,13 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
                   <p className="text-sm font-medium">Your Manager Review</p>
                 </div>
 
-                <RatingSelector
-                  value={managerRating}
-                  onChange={setManagerRating}
-                  label="Manager Rating"
+                <ScoreSelector
+                  value={managerScore}
+                  onChange={(score, rating) => {
+                    setManagerScore(score);
+                    setManagerRating(rating);
+                  }}
+                  label="Manager Score"
                 />
 
                 <div className="space-y-2">
@@ -514,7 +519,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
             <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>Cancel</Button>
             <Button 
               onClick={handleApproveKpi} 
-              disabled={!managerRating || approveKpi.isPending}
+              disabled={managerScore === null || approveKpi.isPending}
               className="bg-green-600 hover:bg-green-700"
             >
               <Check className="h-4 w-4 mr-1" />
