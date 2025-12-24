@@ -14,7 +14,9 @@ import {
   AlertCircle,
   Shield,
   Edit,
-  Send
+  Send,
+  Briefcase,
+  Undo2
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import type { KPI } from '@/hooks/useKpis';
@@ -49,9 +51,18 @@ const actionConfig: Record<string, { icon: React.ElementType; color: string; lab
   'QUERY_RAISED': { icon: MessageSquare, color: 'bg-amber-500', label: 'Query Raised' },
   'QUERY_RESOLVED': { icon: CheckCircle, color: 'bg-emerald-500', label: 'Query Resolved' },
   'AUDITOR_REVIEWED': { icon: Shield, color: 'bg-indigo-500', label: 'Auditor Reviewed' },
+  'AUDITOR_APPROVED': { icon: CheckCircle, color: 'bg-indigo-500', label: 'Auditor Approved' },
+  'AUDITOR_SENT_BACK_TO_MANAGER': { icon: Undo2, color: 'bg-orange-500', label: 'Sent Back to Manager' },
+  'AUDITOR_SENT_BACK_TO_EMPLOYEE': { icon: Undo2, color: 'bg-orange-500', label: 'Sent Back to Employee' },
+  'MANAGEMENT_REVIEWED': { icon: Briefcase, color: 'bg-emerald-500', label: 'Management Reviewed' },
+  'MANAGEMENT_APPROVED': { icon: CheckCircle, color: 'bg-emerald-600', label: 'Management Approved' },
+  'MANAGEMENT_SENT_BACK_TO_AUDITOR': { icon: Undo2, color: 'bg-orange-500', label: 'Sent Back to Auditor' },
+  'MANAGEMENT_SENT_BACK_TO_MANAGER': { icon: Undo2, color: 'bg-orange-500', label: 'Sent Back to Manager' },
+  'MANAGEMENT_SENT_BACK_TO_EMPLOYEE': { icon: Undo2, color: 'bg-orange-500', label: 'Sent Back to Employee' },
   'KPI_CREATED': { icon: FileText, color: 'bg-sky-500', label: 'KPI Created' },
   'KPI_UPDATED': { icon: Edit, color: 'bg-slate-500', label: 'KPI Updated' },
   'STATUS_CHANGED': { icon: AlertCircle, color: 'bg-orange-500', label: 'Status Changed' },
+  'STATUS_TRANSITION': { icon: AlertCircle, color: 'bg-blue-400', label: 'Status Changed' },
 };
 
 export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
@@ -115,14 +126,31 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
       if (log.new_value.self_score) details.push(`Self Score: ${log.new_value.self_score}`);
       if (log.new_value.manager_score) details.push(`Manager Score: ${log.new_value.manager_score}`);
       if (log.new_value.auditor_score) details.push(`Auditor Score: ${log.new_value.auditor_score}`);
+      if (log.new_value.management_score) details.push(`Management Score: ${log.new_value.management_score}`);
       if (log.new_value.self_rating) details.push(`Rating: ${log.new_value.self_rating}`);
       if (log.new_value.manager_rating) details.push(`Rating: ${log.new_value.manager_rating}`);
+      if (log.new_value.auditor_rating) details.push(`Rating: ${log.new_value.auditor_rating}`);
+      if (log.new_value.management_rating) details.push(`Rating: ${log.new_value.management_rating}`);
       if (log.new_value.reason) details.push(`Reason: ${log.new_value.reason}`);
       if (log.new_value.resolution_notes) details.push(`Resolution: ${log.new_value.resolution_notes}`);
+      if (log.new_value.target) details.push(`Sent to: ${log.new_value.target}`);
+      if (log.new_value.status) details.push(`New Status: ${log.new_value.status}`);
     }
     
     return details;
   };
+
+  // Workflow stages
+  const workflowStages = [
+    { key: 'kra_set', label: 'KRA Set', icon: FileText },
+    { key: 'self_review', label: 'Self Review', icon: Send },
+    { key: 'manager_check', label: 'Manager', icon: User },
+    { key: 'audit', label: 'Audit', icon: Shield },
+    { key: 'management_review', label: 'Management', icon: Briefcase },
+    { key: 'approved', label: 'Approved', icon: CheckCircle },
+  ];
+
+  const currentStageIndex = workflowStages.findIndex(s => s.key === kpi?.status);
 
   if (!kpi) return null;
 
@@ -140,6 +168,43 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
         </DialogHeader>
 
         <div className="py-2">
+          {/* Workflow Progress */}
+          <div className="mb-6 p-4 bg-muted/50 rounded-lg">
+            <p className="text-xs font-medium text-muted-foreground mb-3">Workflow Progress</p>
+            <div className="flex items-center justify-between gap-1">
+              {workflowStages.map((stage, index) => {
+                const StageIcon = stage.icon;
+                const isCompleted = index < currentStageIndex;
+                const isCurrent = index === currentStageIndex;
+                const isPending = index > currentStageIndex;
+                
+                return (
+                  <div key={stage.key} className="flex items-center flex-1">
+                    <div className="flex flex-col items-center flex-1">
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                          isCompleted
+                            ? 'bg-green-500 text-white'
+                            : isCurrent
+                            ? 'bg-primary text-primary-foreground ring-2 ring-primary/30'
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        <StageIcon className="h-4 w-4" />
+                      </div>
+                      <span className={`text-xs mt-1 text-center ${isCurrent ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
+                        {stage.label}
+                      </span>
+                    </div>
+                    {index < workflowStages.length - 1 && (
+                      <div className={`h-0.5 flex-1 mx-1 ${isCompleted ? 'bg-green-500' : 'bg-muted'}`} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="flex items-center gap-2 mb-4">
             <Badge variant="outline">{kpi.kra_name}</Badge>
             <Badge variant="secondary">{kpi.review_period} {kpi.review_year}</Badge>
