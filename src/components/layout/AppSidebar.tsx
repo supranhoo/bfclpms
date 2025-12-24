@@ -31,6 +31,7 @@ import {
   CheckSquare,
   MessageSquare,
   History,
+  Briefcase,
 } from 'lucide-react';
 
 const menuItems = {
@@ -43,6 +44,9 @@ const menuItems = {
   ],
   manager: [
     { title: 'Team Review', icon: Users, path: '/team-review', roles: ['manager', 'admin'] },
+  ],
+  management: [
+    { title: 'Management Review', icon: Briefcase, path: '/management-review', roles: ['management', 'admin'] },
   ],
   audit: [
     { title: 'Audit Panel', icon: Shield, path: '/audit', roles: ['auditor'] },

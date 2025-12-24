@@ -4,9 +4,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
-export type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'audit' | 'approved';
+export type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'audit' | 'management_review' | 'approved';
 export type RatingLevel = 'red' | 'yellow' | 'green' | 'blue';
-export type KpiStatus = 'open' | 'submitted' | 'approved_by_manager' | 'locked';
+export type KpiStatus = 'open' | 'submitted' | 'approved_by_manager' | 'locked' | 'sent_back';
 export type QueryStatus = 'open' | 'resolved';
 
 export interface KPI {
@@ -56,6 +56,9 @@ export interface ReviewSubmission {
   auditor_rating: RatingLevel | null;
   auditor_score: number | null;
   auditor_remarks: string | null;
+  management_rating: RatingLevel | null;
+  management_score: number | null;
+  management_remarks: string | null;
   final_rating: RatingLevel | null;
   final_score: number | null;
   kpi_status: KpiStatus;
