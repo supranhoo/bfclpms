@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useAllKpis, useReviewSubmissions, useRaiseQuery, useSendBackKpi, RatingLevel, KPI } from '@/hooks/useKpis';
+import { useAllKpis, useReviewSubmissions, useRaiseQuery, useSendBackKpi, useKpiQueries, RatingLevel, KPI } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -72,6 +73,7 @@ export default function AuditPanel() {
   const { data: categories } = useKraCategories();
   const kpiIds = allKpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
+  const { data: queries } = useKpiQueries(kpiIds);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
@@ -89,8 +91,16 @@ export default function AuditPanel() {
   const [auditorScore, setAuditorScore] = useState<number | null>(null);
   const [auditorRating, setAuditorRating] = useState<RatingLevel | ''>('');
   const [auditorRemarks, setAuditorRemarks] = useState('');
+  const [auditorEvidenceUrl, setAuditorEvidenceUrl] = useState<string | null>(null);
   const [sendBackReason, setSendBackReason] = useState('');
   const [sendBackTarget, setSendBackTarget] = useState<'manager' | 'employee'>('manager');
+
+  // Build query map
+  const queryMap = new Map<string, typeof queries>();
+  queries?.forEach(q => {
+    const existing = queryMap.get(q.kpi_id) || [];
+    queryMap.set(q.kpi_id, [...existing, q]);
+  });
 
   const openLogicModal = (kpi: NonNullable<typeof allKpis>[number]) => {
     setSelectedKpi(kpi);
@@ -659,13 +669,14 @@ export default function AuditPanel() {
               <ReviewDetailsCard kpi={selectedKpi as unknown as KPI} />
             )}
 
-            {/* Complete Review Trail */}
+            {/* Complete Review Trail with Queries */}
             {selectedKpi && (
               <ReviewTrailCard 
                 submission={submissionMap.get(selectedKpi.id)}
                 achievedValue={selectedKpi.target_value}
                 showSelf={true}
                 showManager={true}
+                queries={queryMap.get(selectedKpi.id) || []}
               />
             )}
 
@@ -689,15 +700,25 @@ export default function AuditPanel() {
                 />
 
                 <div className="space-y-2">
-                  <Label>Audit Remarks</Label>
+                  <Label>Justification & Remarks</Label>
                   <Textarea
                     value={auditorRemarks}
                     onChange={(e) => setAuditorRemarks(e.target.value)}
-                    placeholder="Enter your audit observations and remarks..."
+                    placeholder="Provide justification for your score and any audit observations..."
                     rows={3}
                     className="resize-none"
                   />
                 </div>
+
+                {/* Evidence Upload for Auditor */}
+                {user && selectedKpi && (
+                  <EvidenceUpload
+                    userId={user.id}
+                    kpiId={selectedKpi.id}
+                    existingUrl={auditorEvidenceUrl}
+                    onUploadComplete={(url) => setAuditorEvidenceUrl(url || null)}
+                  />
+                )}
               </CardContent>
             </Card>
           </div>

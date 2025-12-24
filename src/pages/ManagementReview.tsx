@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useAllKpis, useReviewSubmissions, RatingLevel, KPI } from '@/hooks/useKpis';
+import { useAllKpis, useReviewSubmissions, useKpiQueries, RatingLevel, KPI } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,7 @@ import {
   Shield
 } from 'lucide-react';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
+import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -59,6 +60,7 @@ export default function ManagementReview() {
   const { data: categories } = useKraCategories();
   const kpiIds = allKpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
+  const { data: queries } = useKpiQueries(kpiIds);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
@@ -77,8 +79,16 @@ export default function ManagementReview() {
   const [managementRemarks, setManagementRemarks] = useState('');
   const [sendBackReason, setSendBackReason] = useState('');
   const [sendBackTarget, setSendBackTarget] = useState<'auditor' | 'manager' | 'employee'>('auditor');
+  const [managementEvidenceUrl, setManagementEvidenceUrl] = useState<string | null>(null);
 
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
+
+  // Build query map
+  const queryMap = new Map<string, typeof queries>();
+  queries?.forEach(q => {
+    const existing = queryMap.get(q.kpi_id) || [];
+    queryMap.set(q.kpi_id, [...existing, q]);
+  });
 
   // Period-filtered KPIs
   const periodFilteredKpis = useMemo(() => {
@@ -618,7 +628,7 @@ export default function ManagementReview() {
               <ReviewDetailsCard kpi={selectedKpi as unknown as KPI} />
             )}
 
-            {/* Complete Review Trail */}
+            {/* Complete Review Trail with Queries */}
             {selectedKpi && (
               <ReviewTrailCard 
                 submission={submissionMap.get(selectedKpi.id)}
@@ -626,6 +636,7 @@ export default function ManagementReview() {
                 showSelf={true}
                 showManager={true}
                 showAuditor={true}
+                queries={queryMap.get(selectedKpi.id) || []}
               />
             )}
 
@@ -649,15 +660,25 @@ export default function ManagementReview() {
                 />
 
                 <div className="space-y-2">
-                  <Label>Management Remarks</Label>
+                  <Label>Justification & Remarks</Label>
                   <Textarea
                     value={managementRemarks}
                     onChange={(e) => setManagementRemarks(e.target.value)}
-                    placeholder="Enter your final observations and remarks..."
+                    placeholder="Provide justification for your final score and any observations..."
                     rows={3}
                     className="resize-none"
                   />
                 </div>
+
+                {/* Evidence Upload for Management */}
+                {user && selectedKpi && (
+                  <EvidenceUpload
+                    userId={user.id}
+                    kpiId={selectedKpi.id}
+                    existingUrl={managementEvidenceUrl}
+                    onUploadComplete={(url) => setManagementEvidenceUrl(url || null)}
+                  />
+                )}
               </CardContent>
             </Card>
           </div>

@@ -1,7 +1,8 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { User, Shield, Briefcase } from 'lucide-react';
-import { RatingLevel, ReviewSubmission } from '@/hooks/useKpis';
+import { Button } from '@/components/ui/button';
+import { User, Shield, Briefcase, FileText, ExternalLink, MessageSquare, AlertCircle } from 'lucide-react';
+import { RatingLevel, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
 
 const ratingOptions: { value: RatingLevel; label: string; color: string; score: number }[] = [
   { value: 'blue', label: 'Outstanding', color: '#3B82F6', score: 5 },
@@ -25,6 +26,7 @@ interface ReviewTrailCardProps {
   showManager?: boolean;
   showAuditor?: boolean;
   showManagement?: boolean;
+  queries?: KpiQuery[];
 }
 
 export function ReviewTrailCard({ 
@@ -33,12 +35,44 @@ export function ReviewTrailCard({
   showSelf = true, 
   showManager = true, 
   showAuditor = false,
-  showManagement = false 
+  showManagement = false,
+  queries = []
 }: ReviewTrailCardProps) {
   if (!submission) return null;
 
+  const openQueries = queries.filter(q => q.status === 'open');
+  const resolvedQueries = queries.filter(q => q.status === 'resolved');
+
   return (
     <div className="space-y-4">
+      {/* Query Alert if any open queries */}
+      {openQueries.length > 0 && (
+        <Card className="border-orange-300 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800">
+          <CardContent className="pt-4">
+            <div className="flex items-start gap-3">
+              <div className="h-8 w-8 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-orange-800 dark:text-orange-200">
+                  {openQueries.length} Open {openQueries.length === 1 ? 'Query' : 'Queries'}
+                </p>
+                <div className="mt-2 space-y-2">
+                  {openQueries.map(q => (
+                    <div key={q.id} className="p-2 bg-white/50 dark:bg-black/20 rounded text-sm">
+                      <p className="text-orange-900 dark:text-orange-100">{q.reason}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Raised on {new Date(q.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Achievement Info */}
       {achievedValue !== undefined && (
         <Card className="border-primary/20 bg-primary/5">
@@ -50,7 +84,7 @@ export function ReviewTrailCard({
                   {submission?.is_na ? 'N/A' : (submission?.achieved_value ?? '-')}
                 </p>
               </div>
-              {submission?.achieved_value && achievedValue && (
+              {submission?.achieved_value && achievedValue && !submission?.is_na && (
                 <Badge variant="outline" className="text-sm">
                   {((submission.achieved_value / achievedValue) * 100).toFixed(1)}% of target
                 </Badge>
@@ -73,7 +107,7 @@ export function ReviewTrailCard({
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Rating</span>
+                  <span className="text-xs text-muted-foreground">Score</span>
                   {submission?.is_na ? (
                     <Badge variant="outline">N/A</Badge>
                   ) : (
@@ -86,11 +120,26 @@ export function ReviewTrailCard({
                   )}
                 </div>
                 <div>
-                  <span className="text-xs text-muted-foreground">Remarks</span>
+                  <span className="text-xs text-muted-foreground">Justification</span>
                   <p className="text-sm mt-1 line-clamp-3">
                     {submission?.self_remarks || 'No remarks'}
                   </p>
                 </div>
+                {/* Evidence Link */}
+                {submission?.self_evidence_url && (
+                  <div className="pt-2 border-t">
+                    <a 
+                      href={submission.self_evidence_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                    >
+                      <FileText className="h-3 w-3" />
+                      View Evidence
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -108,7 +157,7 @@ export function ReviewTrailCard({
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Rating</span>
+                  <span className="text-xs text-muted-foreground">Score</span>
                   {submission?.is_na ? (
                     <Badge variant="outline">N/A</Badge>
                   ) : submission?.manager_rating ? (
@@ -123,7 +172,7 @@ export function ReviewTrailCard({
                   )}
                 </div>
                 <div>
-                  <span className="text-xs text-muted-foreground">Remarks</span>
+                  <span className="text-xs text-muted-foreground">Justification</span>
                   <p className="text-sm mt-1 line-clamp-3">
                     {submission?.manager_remarks || 'No remarks'}
                   </p>
@@ -148,7 +197,7 @@ export function ReviewTrailCard({
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Rating</span>
+                    <span className="text-xs text-muted-foreground">Score</span>
                     {submission?.is_na ? (
                       <Badge variant="outline">N/A</Badge>
                     ) : submission?.auditor_rating ? (
@@ -163,7 +212,7 @@ export function ReviewTrailCard({
                     )}
                   </div>
                   <div>
-                    <span className="text-xs text-muted-foreground">Remarks</span>
+                    <span className="text-xs text-muted-foreground">Justification</span>
                     <p className="text-sm mt-1 line-clamp-3">
                       {submission?.auditor_remarks || 'No remarks'}
                     </p>
@@ -184,7 +233,7 @@ export function ReviewTrailCard({
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Rating</span>
+                    <span className="text-xs text-muted-foreground">Score</span>
                     {submission?.is_na ? (
                       <Badge variant="outline">N/A</Badge>
                     ) : (submission as any)?.management_rating ? (
@@ -199,7 +248,7 @@ export function ReviewTrailCard({
                     )}
                   </div>
                   <div>
-                    <span className="text-xs text-muted-foreground">Remarks</span>
+                    <span className="text-xs text-muted-foreground">Justification</span>
                     <p className="text-sm mt-1 line-clamp-3">
                       {(submission as any)?.management_remarks || 'No remarks'}
                     </p>
@@ -209,6 +258,41 @@ export function ReviewTrailCard({
             </Card>
           )}
         </div>
+      )}
+
+      {/* Query History */}
+      {resolvedQueries.length > 0 && (
+        <Card className="border-muted">
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 mb-3">
+              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+              <p className="text-sm font-medium">Query History</p>
+            </div>
+            <div className="space-y-2">
+              {resolvedQueries.map(q => (
+                <div key={q.id} className="p-3 bg-muted/50 rounded-lg text-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium">Query: {q.reason}</p>
+                      {q.resolution_notes && (
+                        <p className="text-muted-foreground mt-1">
+                          Resolution: {q.resolution_notes}
+                        </p>
+                      )}
+                    </div>
+                    <Badge variant="outline" className="text-green-600 border-green-300 flex-shrink-0">
+                      Resolved
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Raised: {new Date(q.created_at).toLocaleDateString()}
+                    {q.resolved_at && ` • Resolved: ${new Date(q.resolved_at).toLocaleDateString()}`}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

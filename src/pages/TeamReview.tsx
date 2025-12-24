@@ -22,6 +22,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Users, CheckCircle2, Clock, ArrowRight, Search, RefreshCw, MessageSquare, Check, Lock, Info, User, Undo2, Briefcase } from 'lucide-react';
+import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 
@@ -97,6 +98,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
   const [managerScore, setManagerScore] = useState<number | null>(null);
   const [managerRating, setManagerRating] = useState<RatingLevel | ''>('');
   const [managerRemarks, setManagerRemarks] = useState('');
+  const [managerEvidenceUrl, setManagerEvidenceUrl] = useState<string | null>(null);
   const [queryReason, setQueryReason] = useState('');
   const [sendBackReason, setSendBackReason] = useState('');
   const [targetPeriod, setTargetPeriod] = useState('');
@@ -472,13 +474,14 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
               <ReviewDetailsCard kpi={selectedKpi} />
             )}
 
-            {/* Self Review Trail */}
+            {/* Self Review Trail with Queries */}
             {selectedKpi && (
               <ReviewTrailCard 
                 submission={submissionMap.get(selectedKpi.id)}
                 achievedValue={selectedKpi.target_value}
                 showSelf={true}
                 showManager={false}
+                queries={queryMap.get(selectedKpi.id) || []}
               />
             )}
 
@@ -502,15 +505,25 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
                 />
 
                 <div className="space-y-2">
-                  <Label>Manager Remarks</Label>
+                  <Label>Justification & Remarks</Label>
                   <Textarea
                     value={managerRemarks}
                     onChange={(e) => setManagerRemarks(e.target.value)}
-                    placeholder="Enter your review remarks and observations..."
+                    placeholder="Provide justification for your score and any observations..."
                     rows={3}
                     className="resize-none"
                   />
                 </div>
+
+                {/* Evidence Upload for Manager */}
+                {selectedKpi && (
+                  <EvidenceUpload
+                    userId={memberId}
+                    kpiId={selectedKpi.id}
+                    existingUrl={managerEvidenceUrl}
+                    onUploadComplete={(url) => setManagerEvidenceUrl(url || null)}
+                  />
+                )}
               </CardContent>
             </Card>
           </div>
