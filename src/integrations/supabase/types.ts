@@ -555,6 +555,9 @@ export type Database = {
           is_na: boolean
           kpi_id: string
           kpi_status: Database["public"]["Enums"]["kpi_status"]
+          management_rating: Database["public"]["Enums"]["rating_level"] | null
+          management_remarks: string | null
+          management_score: number | null
           manager_rating: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks: string | null
           manager_score: number | null
@@ -577,6 +580,9 @@ export type Database = {
           is_na?: boolean
           kpi_id: string
           kpi_status?: Database["public"]["Enums"]["kpi_status"]
+          management_rating?: Database["public"]["Enums"]["rating_level"] | null
+          management_remarks?: string | null
+          management_score?: number | null
           manager_rating?: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks?: string | null
           manager_score?: number | null
@@ -599,6 +605,9 @@ export type Database = {
           is_na?: boolean
           kpi_id?: string
           kpi_status?: Database["public"]["Enums"]["kpi_status"]
+          management_rating?: Database["public"]["Enums"]["rating_level"] | null
+          management_remarks?: string | null
+          management_score?: number | null
           manager_rating?: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks?: string | null
           manager_score?: number | null
@@ -699,7 +708,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "manager" | "employee" | "auditor"
+      app_role: "admin" | "manager" | "employee" | "auditor" | "management"
       kpi_status: "open" | "submitted" | "approved_by_manager" | "locked"
       query_entity_type: "kra" | "kpi"
       query_status: "open" | "resolved"
@@ -710,6 +719,7 @@ export type Database = {
         | "manager_check"
         | "audit"
         | "approved"
+        | "management_review"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -837,7 +847,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "manager", "employee", "auditor"],
+      app_role: ["admin", "manager", "employee", "auditor", "management"],
       kpi_status: ["open", "submitted", "approved_by_manager", "locked"],
       query_entity_type: ["kra", "kpi"],
       query_status: ["open", "resolved"],
@@ -848,6 +858,7 @@ export const Constants = {
         "manager_check",
         "audit",
         "approved",
+        "management_review",
       ],
     },
   },
