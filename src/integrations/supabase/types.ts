@@ -496,6 +496,53 @@ export type Database = {
           },
         ]
       }
+      review_periods: {
+        Row: {
+          created_at: string
+          end_date: string | null
+          id: string
+          is_locked: boolean
+          locked_at: string | null
+          locked_by: string | null
+          period_name: string
+          review_year: number
+          start_date: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          is_locked?: boolean
+          locked_at?: string | null
+          locked_by?: string | null
+          period_name: string
+          review_year: number
+          start_date?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          is_locked?: boolean
+          locked_at?: string | null
+          locked_by?: string | null
+          period_name?: string
+          review_year?: number
+          start_date?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_periods_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       review_submissions: {
         Row: {
           achieved_value: number | null
@@ -644,6 +691,10 @@ export type Database = {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      is_period_locked: {
+        Args: { _period_name: string; _review_year: number }
         Returns: boolean
       }
     }

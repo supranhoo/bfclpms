@@ -550,6 +550,84 @@ export function useResolveQuery() {
   });
 }
 
+// Hook for sending back a KPI to employee (rejection)
+export function useSendBackKpi() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      kpi_id,
+      employee_id,
+      reason,
+    }: {
+      kpi_id: string;
+      employee_id: string;
+      reason: string;
+    }) => {
+      if (!user?.id) throw new Error('User not authenticated');
+
+      // Reset kpi_status back to 'open' so employee can resubmit
+      const { error: submissionError } = await supabase
+        .from('review_submissions')
+        .update({
+          kpi_status: 'open' as const,
+          manager_rating: null,
+          manager_score: null,
+          manager_remarks: null,
+        })
+        .eq('kpi_id', kpi_id);
+
+      if (submissionError) throw submissionError;
+
+      // Reset KPI status to kra_set so employee needs to resubmit
+      const { error: kpiError } = await supabase
+        .from('kpis')
+        .update({ status: 'kra_set' as const })
+        .eq('id', kpi_id);
+
+      if (kpiError) throw kpiError;
+
+      // Create a query to notify employee
+      const { data: queryData, error: queryError } = await supabase
+        .from('kpi_queries')
+        .insert({
+          kpi_id,
+          raised_by: user.id,
+          raised_to: employee_id,
+          reason: `[SENT BACK] ${reason}`,
+          entity_type: 'kpi',
+          status: 'open',
+        })
+        .select()
+        .single();
+
+      if (queryError) throw queryError;
+
+      // Log the action
+      await supabase.from('kpi_audit_logs').insert({
+        kpi_id,
+        action: 'MANAGER_SENT_BACK',
+        performed_by: user.id,
+        new_value: { reason },
+        metadata: { query_id: queryData.id },
+      });
+
+      return queryData;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      queryClient.invalidateQueries({ queryKey: ['kpi-queries'] });
+      toast({ title: 'KPI sent back to employee' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to send back KPI', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
 // Hook to fetch queries for KPIs
 export function useKpiQueries(kpiIds: string[]) {
   return useQuery({
@@ -583,5 +661,68 @@ export function useKpiQueries(kpiIds: string[]) {
       );
     },
     enabled: kpiIds.length > 0,
+  });
+}
+
+// Hook for review period management
+export function useReviewPeriods() {
+  return useQuery({
+    queryKey: ['review-periods'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('review_periods')
+        .select('*')
+        .order('review_year', { ascending: false })
+        .order('period_name', { ascending: true });
+
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export function useLockPeriod() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      period_name,
+      review_year,
+      is_locked,
+    }: {
+      period_name: string;
+      review_year: number;
+      is_locked: boolean;
+    }) => {
+      // Upsert the period lock status
+      const { data, error } = await supabase
+        .from('review_periods')
+        .upsert({
+          period_name,
+          review_year,
+          is_locked,
+          locked_at: is_locked ? new Date().toISOString() : null,
+          locked_by: is_locked ? user?.id : null,
+        }, {
+          onConflict: 'period_name,review_year',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['review-periods'] });
+      toast({ 
+        title: variables.is_locked ? 'Period locked' : 'Period unlocked',
+        description: `${variables.period_name} ${variables.review_year} has been ${variables.is_locked ? 'locked' : 'unlocked'}.`
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to update period', description: error.message, variant: 'destructive' });
+    },
   });
 }

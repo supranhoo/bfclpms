@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeamMembers, useProfiles } from '@/hooks/useOrganization';
-import { useKpisByEmployee, useReviewSubmissions, useRolloverKpi, useApproveKpi, useRaiseQuery, useKpiQueries, RatingLevel, KPI, KpiStatus } from '@/hooks/useKpis';
+import { useKpisByEmployee, useReviewSubmissions, useRolloverKpi, useApproveKpi, useRaiseQuery, useKpiQueries, useSendBackKpi, RatingLevel, KPI, KpiStatus } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +18,7 @@ import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/R
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Users, CheckCircle2, Clock, ArrowRight, Search, RefreshCw, MessageSquare, Check, Lock, Info, User } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Search, RefreshCw, MessageSquare, Check, Lock, Info, User, Undo2 } from 'lucide-react';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 
@@ -82,6 +82,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
 
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [queryDialogOpen, setQueryDialogOpen] = useState(false);
+  const [sendBackDialogOpen, setSendBackDialogOpen] = useState(false);
   const [rolloverDialogOpen, setRolloverDialogOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [logicModalOpen, setLogicModalOpen] = useState(false);
@@ -89,6 +90,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
   const [managerRating, setManagerRating] = useState<RatingLevel | ''>('');
   const [managerRemarks, setManagerRemarks] = useState('');
   const [queryReason, setQueryReason] = useState('');
+  const [sendBackReason, setSendBackReason] = useState('');
   const [targetPeriod, setTargetPeriod] = useState('');
 
   const openLogicModal = (kpi: KPI) => {
@@ -99,6 +101,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
   const rolloverKpi = useRolloverKpi();
   const approveKpi = useApproveKpi();
   const raiseQuery = useRaiseQuery();
+  const sendBackKpi = useSendBackKpi();
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
   const queryMap = new Map<string, typeof queries>();
   queries?.forEach(q => {
@@ -183,6 +186,23 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
       entity_type: 'kpi',
     }, {
       onSuccess: () => setQueryDialogOpen(false),
+    });
+  };
+
+  const openSendBackDialog = (kpi: NonNullable<typeof kpis>[number]) => {
+    setSelectedKpi(kpi);
+    setSendBackReason('');
+    setSendBackDialogOpen(true);
+  };
+
+  const handleSendBack = () => {
+    if (!selectedKpi || !sendBackReason.trim()) return;
+    sendBackKpi.mutate({
+      kpi_id: selectedKpi.id,
+      employee_id: memberId,
+      reason: sendBackReason,
+    }, {
+      onSuccess: () => setSendBackDialogOpen(false),
     });
   };
 
@@ -353,7 +373,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
-                    {/* Show approve/query buttons only for submitted KPIs that aren't locked */}
+                    {/* Show approve/query/send-back buttons only for submitted KPIs that aren't locked */}
                     {kpiStatus === 'submitted' && (
                       <>
                         <Button 
@@ -372,6 +392,15 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
                           title="Raise a query"
                         >
                           <MessageSquare className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => openSendBackDialog(kpi)}
+                          title="Send back to employee for revision"
+                          className="text-orange-600 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950"
+                        >
+                          <Undo2 className="h-4 w-4" />
                         </Button>
                       </>
                     )}
@@ -539,6 +568,67 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
             >
               <MessageSquare className="h-4 w-4 mr-1" />
               {raiseQuery.isPending ? 'Raising...' : 'Raise Query'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Back Dialog */}
+      <Dialog open={sendBackDialogOpen} onOpenChange={setSendBackDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send Back to Employee</DialogTitle>
+            <DialogDescription>
+              Send "{selectedKpi?.kpi_name}" back to the employee for revision
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="p-4 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-200 dark:border-orange-800">
+              <p className="text-sm text-orange-800 dark:text-orange-200">
+                <strong>Note:</strong> This will reset the KPI status and notify the employee to resubmit their self-review.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+              <div>
+                <Label className="text-muted-foreground">KRA</Label>
+                <p className="font-medium">{selectedKpi?.kra_name}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Target</Label>
+                <p className="font-medium">{selectedKpi?.target_value} {selectedKpi?.uom}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Self Rating</Label>
+                <p className="font-medium">{submissionMap.get(selectedKpi?.id || '')?.self_rating || 'N/A'}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Achieved</Label>
+                <p className="font-medium">{submissionMap.get(selectedKpi?.id || '')?.achieved_value || 'N/A'}</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Reason for Sending Back <span className="text-destructive">*</span></Label>
+              <Textarea
+                value={sendBackReason}
+                onChange={(e) => setSendBackReason(e.target.value)}
+                placeholder="Explain why this KPI needs to be revised..."
+                rows={4}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSendBackDialogOpen(false)}>Cancel</Button>
+            <Button 
+              onClick={handleSendBack} 
+              disabled={!sendBackReason.trim() || sendBackKpi.isPending}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              <Undo2 className="h-4 w-4 mr-1" />
+              {sendBackKpi.isPending ? 'Sending...' : 'Send Back'}
             </Button>
           </DialogFooter>
         </DialogContent>
