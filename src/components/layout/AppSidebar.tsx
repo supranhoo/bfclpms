@@ -146,6 +146,27 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
+        {(role === 'management' || role === 'admin') && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Management</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filterByRole(menuItems.management).map((item) => (
+                  <SidebarMenuItem key={item.path}>
+                    <SidebarMenuButton
+                      isActive={location.pathname === item.path}
+                      onClick={() => navigate(item.path)}
+                    >
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
         {role === 'auditor' && (
           <SidebarGroup>
             <SidebarGroupLabel>Audit</SidebarGroupLabel>

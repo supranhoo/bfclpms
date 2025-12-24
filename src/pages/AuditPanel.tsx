@@ -1,19 +1,22 @@
 import { useState, useMemo } from 'react';
-import { useAllKpis, useReviewSubmissions, RatingLevel, KPI } from '@/hooks/useKpis';
+import { useAllKpis, useReviewSubmissions, useRaiseQuery, useSendBackKpi, RatingLevel, KPI } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
+import { ReviewDetailsCard } from '@/components/review/ReviewDetailsCard';
+import { ReviewTrailCard, getRatingColor, getRatingLabel } from '@/components/review/ReviewTrailCard';
+import { RatingSelector, getRatingScore } from '@/components/review/RatingSelector';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -30,7 +33,10 @@ import {
   TrendingUp,
   FileCheck,
   ClipboardCheck,
-  Eye
+  Eye,
+  Undo2,
+  MessageSquare,
+  Briefcase
 } from 'lucide-react';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 
@@ -39,6 +45,7 @@ const statusColors: Record<string, string> = {
   self_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
   manager_check: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
   audit: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  management_review: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
   approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
 };
 
@@ -47,6 +54,7 @@ const statusLabels: Record<string, string> = {
   self_review: 'Self Review',
   manager_check: 'Pending Audit',
   audit: 'In Audit',
+  management_review: 'Management Review',
   approved: 'Approved',
 };
 
@@ -56,14 +64,6 @@ const ratingOptions: { value: RatingLevel; label: string; color: string; score: 
   { value: 'yellow', label: 'Meets Expectations', color: '#F59E0B', score: 3 },
   { value: 'red', label: 'Below Expectations', color: '#EF4444', score: 2 },
 ];
-
-const getRatingLabel = (rating: RatingLevel | null | undefined) => {
-  return ratingOptions.find(r => r.value === rating)?.label || 'N/A';
-};
-
-const getRatingColor = (rating: RatingLevel | null | undefined) => {
-  return ratingOptions.find(r => r.value === rating)?.color || '#6B7280';
-};
 
 export default function AuditPanel() {
   const { data: allKpis, isLoading } = useAllKpis();
@@ -148,14 +148,13 @@ export default function AuditPanel() {
           auditor_rating,
           auditor_score,
           auditor_remarks,
-          final_rating: auditor_rating,
-          final_score: auditor_score,
         })
         .eq('kpi_id', kpi_id);
 
       if (submissionError) throw submissionError;
 
-      const newStatus = approve ? 'approved' : 'audit';
+      // Auditor approval moves to management_review, not directly to approved
+      const newStatus = approve ? 'management_review' : 'audit';
       const { error: kpiError } = await supabase
         .from('kpis')
         .update({ status: newStatus as any })
@@ -163,10 +162,13 @@ export default function AuditPanel() {
 
       if (kpiError) throw kpiError;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
-      toast({ title: 'Audit review submitted successfully' });
+      toast({ 
+        title: variables.approve ? 'Forwarded to Management Review' : 'Audit review saved',
+        description: variables.approve ? 'KPI has been sent for management approval' : undefined
+      });
       setReviewDialogOpen(false);
     },
     onError: (error: Error) => {
@@ -554,13 +556,13 @@ export default function AuditPanel() {
         </CardContent>
       </Card>
 
-      {/* Audit Review Dialog */}
+      {/* Audit Review Dialog - Enhanced */}
       <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <ClipboardCheck className="h-5 w-5 text-purple-500" />
+                <Shield className="h-5 w-5 text-purple-500" />
               </div>
               <div>
                 <DialogTitle>Audit Review</DialogTitle>
@@ -572,93 +574,20 @@ export default function AuditPanel() {
           </DialogHeader>
 
           <div className="space-y-6 py-4">
-            {/* KPI Info */}
-            <div className="p-4 bg-muted/50 rounded-lg border space-y-2">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">KRA</p>
-                  <p className="font-semibold text-primary">{selectedKpi?.kra_name}</p>
-                </div>
-                <Badge 
-                  variant="outline" 
-                  className="flex items-center gap-1.5"
-                  style={{ borderColor: selectedKpi?.kra_categories?.color }}
-                >
-                  <div 
-                    className="w-2 h-2 rounded-full" 
-                    style={{ backgroundColor: selectedKpi?.kra_categories?.color }} 
-                  />
-                  {selectedKpi?.kra_categories?.name}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">KPI</p>
-                <p className="text-sm">{selectedKpi?.kpi_name}</p>
-              </div>
-              <div className="grid grid-cols-3 gap-4 pt-2 border-t">
-                <div>
-                  <p className="text-xs text-muted-foreground">Target</p>
-                  <p className="font-semibold">{selectedKpi?.target_value} {selectedKpi?.uom}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Achieved</p>
-                  <p className="font-semibold">{submissionMap.get(selectedKpi?.id || '')?.achieved_value ?? '-'} {selectedKpi?.uom}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Weightage</p>
-                  <p className="font-semibold">{selectedKpi?.weightage}%</p>
-                </div>
-              </div>
-            </div>
+            {/* Full KPI Details */}
+            {selectedKpi && (
+              <ReviewDetailsCard kpi={selectedKpi as unknown as KPI} />
+            )}
 
-            {/* Previous Reviews */}
-            <div className="grid grid-cols-2 gap-4">
-              <Card className="border-blue-200 dark:border-blue-800">
-                <CardContent className="pt-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="h-6 w-6 rounded-full bg-blue-500/10 flex items-center justify-center">
-                      <User className="h-3.5 w-3.5 text-blue-500" />
-                    </div>
-                    <p className="text-sm font-medium">Self Review</p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Rating</span>
-                      <Badge style={{ backgroundColor: getRatingColor(submissionMap.get(selectedKpi?.id || '')?.self_rating) }} className="text-white">
-                        {getRatingLabel(submissionMap.get(selectedKpi?.id || '')?.self_rating)}
-                      </Badge>
-                    </div>
-                    <div>
-                      <span className="text-xs text-muted-foreground">Remarks</span>
-                      <p className="text-sm mt-1">{submissionMap.get(selectedKpi?.id || '')?.self_remarks || 'No remarks'}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-amber-200 dark:border-amber-800">
-                <CardContent className="pt-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="h-6 w-6 rounded-full bg-amber-500/10 flex items-center justify-center">
-                      <User className="h-3.5 w-3.5 text-amber-500" />
-                    </div>
-                    <p className="text-sm font-medium">Manager Review</p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Rating</span>
-                      <Badge style={{ backgroundColor: getRatingColor(submissionMap.get(selectedKpi?.id || '')?.manager_rating) }} className="text-white">
-                        {getRatingLabel(submissionMap.get(selectedKpi?.id || '')?.manager_rating)}
-                      </Badge>
-                    </div>
-                    <div>
-                      <span className="text-xs text-muted-foreground">Remarks</span>
-                      <p className="text-sm mt-1">{submissionMap.get(selectedKpi?.id || '')?.manager_remarks || 'No remarks'}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            {/* Complete Review Trail */}
+            {selectedKpi && (
+              <ReviewTrailCard 
+                submission={submissionMap.get(selectedKpi.id)}
+                achievedValue={selectedKpi.target_value}
+                showSelf={true}
+                showManager={true}
+              />
+            )}
 
             {/* Auditor Input */}
             <Card className="border-purple-200 dark:border-purple-800">
@@ -670,34 +599,18 @@ export default function AuditPanel() {
                   <p className="text-sm font-medium">Your Audit Review</p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Final Rating</Label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {ratingOptions.map(opt => (
-                      <Button
-                        key={opt.value}
-                        type="button"
-                        variant={auditorRating === opt.value ? 'default' : 'outline'}
-                        className="h-auto py-3 flex flex-col gap-1"
-                        style={auditorRating === opt.value ? { backgroundColor: opt.color, borderColor: opt.color } : {}}
-                        onClick={() => setAuditorRating(opt.value)}
-                      >
-                        <div 
-                          className="w-4 h-4 rounded-full border-2 border-current" 
-                          style={{ backgroundColor: auditorRating === opt.value ? 'white' : opt.color }}
-                        />
-                        <span className="text-xs">{opt.label}</span>
-                      </Button>
-                    ))}
-                  </div>
-                </div>
+                <RatingSelector
+                  value={auditorRating}
+                  onChange={setAuditorRating}
+                  label="Auditor Rating"
+                />
 
                 <div className="space-y-2">
                   <Label>Audit Remarks</Label>
                   <Textarea
                     value={auditorRemarks}
                     onChange={(e) => setAuditorRemarks(e.target.value)}
-                    placeholder="Enter your audit observations and final remarks..."
+                    placeholder="Enter your audit observations and remarks..."
                     rows={3}
                     className="resize-none"
                   />
@@ -723,7 +636,7 @@ export default function AuditPanel() {
               className="bg-green-600 hover:bg-green-700"
             >
               <CheckCircle2 className="h-4 w-4 mr-1.5" />
-              Approve
+              Forward to Management
             </Button>
           </DialogFooter>
         </DialogContent>
