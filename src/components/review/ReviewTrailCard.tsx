@@ -177,6 +177,21 @@ export function ReviewTrailCard({
                     {submission?.manager_remarks || 'No remarks'}
                   </p>
                 </div>
+                {/* Evidence Link */}
+                {submission?.manager_evidence_url && (
+                  <div className="pt-2 border-t">
+                    <a 
+                      href={submission.manager_evidence_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                    >
+                      <FileText className="h-3 w-3" />
+                      View Evidence
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -217,6 +232,21 @@ export function ReviewTrailCard({
                       {submission?.auditor_remarks || 'No remarks'}
                     </p>
                   </div>
+                  {/* Evidence Link */}
+                  {submission?.auditor_evidence_url && (
+                    <div className="pt-2 border-t">
+                      <a 
+                        href={submission.auditor_evidence_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                      >
+                        <FileText className="h-3 w-3" />
+                        View Evidence
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -236,12 +266,12 @@ export function ReviewTrailCard({
                     <span className="text-xs text-muted-foreground">Score</span>
                     {submission?.is_na ? (
                       <Badge variant="outline">N/A</Badge>
-                    ) : (submission as any)?.management_rating ? (
+                    ) : submission?.management_rating ? (
                       <Badge 
-                        style={{ backgroundColor: getRatingColor((submission as any)?.management_rating) }} 
+                        style={{ backgroundColor: getRatingColor(submission?.management_rating) }} 
                         className="text-white"
                       >
-                        {(submission as any)?.management_score} - {getRatingLabel((submission as any)?.management_rating)}
+                        {submission?.management_score} - {getRatingLabel(submission?.management_rating)}
                       </Badge>
                     ) : (
                       <Badge variant="outline">Pending</Badge>
@@ -250,9 +280,24 @@ export function ReviewTrailCard({
                   <div>
                     <span className="text-xs text-muted-foreground">Justification</span>
                     <p className="text-sm mt-1 line-clamp-3">
-                      {(submission as any)?.management_remarks || 'No remarks'}
+                      {submission?.management_remarks || 'No remarks'}
                     </p>
                   </div>
+                  {/* Evidence Link */}
+                  {submission?.management_evidence_url && (
+                    <div className="pt-2 border-t">
+                      <a 
+                        href={submission.management_evidence_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                      >
+                        <FileText className="h-3 w-3" />
+                        View Evidence
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

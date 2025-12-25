@@ -546,6 +546,7 @@ export type Database = {
       review_submissions: {
         Row: {
           achieved_value: number | null
+          auditor_evidence_url: string | null
           auditor_rating: Database["public"]["Enums"]["rating_level"] | null
           auditor_remarks: string | null
           auditor_score: number | null
@@ -555,9 +556,11 @@ export type Database = {
           is_na: boolean
           kpi_id: string
           kpi_status: Database["public"]["Enums"]["kpi_status"]
+          management_evidence_url: string | null
           management_rating: Database["public"]["Enums"]["rating_level"] | null
           management_remarks: string | null
           management_score: number | null
+          manager_evidence_url: string | null
           manager_rating: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks: string | null
           manager_score: number | null
@@ -571,6 +574,7 @@ export type Database = {
         }
         Insert: {
           achieved_value?: number | null
+          auditor_evidence_url?: string | null
           auditor_rating?: Database["public"]["Enums"]["rating_level"] | null
           auditor_remarks?: string | null
           auditor_score?: number | null
@@ -580,9 +584,11 @@ export type Database = {
           is_na?: boolean
           kpi_id: string
           kpi_status?: Database["public"]["Enums"]["kpi_status"]
+          management_evidence_url?: string | null
           management_rating?: Database["public"]["Enums"]["rating_level"] | null
           management_remarks?: string | null
           management_score?: number | null
+          manager_evidence_url?: string | null
           manager_rating?: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks?: string | null
           manager_score?: number | null
@@ -596,6 +602,7 @@ export type Database = {
         }
         Update: {
           achieved_value?: number | null
+          auditor_evidence_url?: string | null
           auditor_rating?: Database["public"]["Enums"]["rating_level"] | null
           auditor_remarks?: string | null
           auditor_score?: number | null
@@ -605,9 +612,11 @@ export type Database = {
           is_na?: boolean
           kpi_id?: string
           kpi_status?: Database["public"]["Enums"]["kpi_status"]
+          management_evidence_url?: string | null
           management_rating?: Database["public"]["Enums"]["rating_level"] | null
           management_remarks?: string | null
           management_score?: number | null
+          manager_evidence_url?: string | null
           manager_rating?: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks?: string | null
           manager_score?: number | null

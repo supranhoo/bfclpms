@@ -53,12 +53,15 @@ export interface ReviewSubmission {
   manager_rating: RatingLevel | null;
   manager_score: number | null;
   manager_remarks: string | null;
+  manager_evidence_url: string | null;
   auditor_rating: RatingLevel | null;
   auditor_score: number | null;
   auditor_remarks: string | null;
+  auditor_evidence_url: string | null;
   management_rating: RatingLevel | null;
   management_score: number | null;
   management_remarks: string | null;
+  management_evidence_url: string | null;
   final_rating: RatingLevel | null;
   final_score: number | null;
   kpi_status: KpiStatus;
@@ -420,11 +423,13 @@ export function useApproveKpi() {
       manager_rating,
       manager_score,
       manager_remarks,
+      manager_evidence_url,
     }: {
       kpi_id: string;
       manager_rating: RatingLevel;
       manager_score: number;
       manager_remarks: string;
+      manager_evidence_url?: string | null;
     }) => {
       // Update submission with manager rating and set kpi_status to approved_by_manager
       const { error: submissionError } = await supabase
@@ -433,6 +438,7 @@ export function useApproveKpi() {
           manager_rating,
           manager_score,
           manager_remarks,
+          manager_evidence_url,
           kpi_status: 'approved_by_manager' as const,
         })
         .eq('kpi_id', kpi_id);

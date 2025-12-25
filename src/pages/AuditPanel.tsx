@@ -150,12 +150,14 @@ export default function AuditPanel() {
       auditor_rating,
       auditor_score,
       auditor_remarks,
+      auditor_evidence_url,
       approve,
     }: {
       kpi_id: string;
       auditor_rating: RatingLevel;
       auditor_score: number;
       auditor_remarks: string;
+      auditor_evidence_url?: string | null;
       approve: boolean;
     }) => {
       const { error: submissionError } = await supabase
@@ -164,6 +166,7 @@ export default function AuditPanel() {
           auditor_rating,
           auditor_score,
           auditor_remarks,
+          auditor_evidence_url,
         })
         .eq('kpi_id', kpi_id);
 
@@ -287,6 +290,7 @@ export default function AuditPanel() {
       auditor_rating: rating,
       auditor_score: auditorScore,
       auditor_remarks: auditorRemarks,
+      auditor_evidence_url: auditorEvidenceUrl,
       approve,
     });
   };
