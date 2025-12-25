@@ -131,12 +131,14 @@ export default function ManagementReview() {
       management_rating,
       management_score,
       management_remarks,
+      management_evidence_url,
       approve,
     }: {
       kpi_id: string;
       management_rating: RatingLevel;
       management_score: number;
       management_remarks: string;
+      management_evidence_url?: string | null;
       approve: boolean;
     }) => {
       const { error: submissionError } = await supabase
@@ -145,6 +147,7 @@ export default function ManagementReview() {
           management_rating,
           management_score,
           management_remarks,
+          management_evidence_url,
           final_rating: management_rating,
           final_score: management_score,
         })
@@ -268,6 +271,7 @@ export default function ManagementReview() {
       management_rating: rating,
       management_score: managementScore,
       management_remarks: managementRemarks,
+      management_evidence_url: managementEvidenceUrl,
       approve,
     });
   };

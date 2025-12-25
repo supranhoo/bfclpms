@@ -125,11 +125,13 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
       manager_rating,
       manager_score,
       manager_remarks,
+      manager_evidence_url,
     }: {
       kpi_id: string;
       manager_rating: RatingLevel;
       manager_score: number;
       manager_remarks: string;
+      manager_evidence_url?: string | null;
     }) => {
       const { error: submissionError } = await supabase
         .from('review_submissions')
@@ -137,6 +139,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
           manager_rating,
           manager_score,
           manager_remarks,
+          manager_evidence_url,
         })
         .eq('kpi_id', kpi_id);
 
@@ -183,6 +186,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
       manager_rating: rating,
       manager_score: managerScore,
       manager_remarks: managerRemarks,
+      manager_evidence_url: managerEvidenceUrl,
     }, {
       onSuccess: () => setReviewDialogOpen(false),
     });
