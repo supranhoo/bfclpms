@@ -245,9 +245,10 @@ export default function ManagementReview() {
   const openReviewDialog = (kpi: NonNullable<typeof allKpis>[number]) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
-    setManagementScore((existing as any)?.management_score || existing?.auditor_score || null);
-    setManagementRating((existing as any)?.management_rating || existing?.auditor_rating || '');
-    setManagementRemarks((existing as any)?.management_remarks || '');
+    setManagementScore(existing?.management_score || existing?.auditor_score || null);
+    setManagementRating(existing?.management_rating || existing?.auditor_rating || '');
+    setManagementRemarks(existing?.management_remarks || '');
+    setManagementEvidenceUrl(existing?.management_evidence_url || null);
     setReviewDialogOpen(true);
   };
 
