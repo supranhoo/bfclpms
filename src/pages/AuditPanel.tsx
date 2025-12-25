@@ -201,6 +201,7 @@ export default function AuditPanel() {
     setAuditorScore(existing?.auditor_score || existing?.manager_score || null);
     setAuditorRating(existing?.auditor_rating || existing?.manager_rating || '');
     setAuditorRemarks(existing?.auditor_remarks || '');
+    setAuditorEvidenceUrl(existing?.auditor_evidence_url || null);
     setReviewDialogOpen(true);
   };
 

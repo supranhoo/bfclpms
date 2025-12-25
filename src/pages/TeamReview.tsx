@@ -169,6 +169,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
     setManagerScore(existing?.manager_score || null);
     setManagerRating(existing?.manager_rating || '');
     setManagerRemarks(existing?.manager_remarks || '');
+    setManagerEvidenceUrl(existing?.manager_evidence_url || null);
     setReviewDialogOpen(true);
   };
 
@@ -534,6 +535,17 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
 
           <DialogFooter className="gap-2 sm:gap-2">
             <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>Cancel</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (selectedKpi) openSendBackDialog(selectedKpi);
+                setReviewDialogOpen(false);
+              }}
+              className="text-orange-600 border-orange-300 hover:bg-orange-50"
+            >
+              <Undo2 className="h-4 w-4 mr-1.5" />
+              Send Back
+            </Button>
             <Button 
               onClick={handleApproveKpi} 
               disabled={managerScore === null || approveKpi.isPending}
