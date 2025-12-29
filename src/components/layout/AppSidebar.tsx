@@ -49,8 +49,7 @@ const menuItems = {
     { title: 'Management Review', icon: Briefcase, path: '/management-review', roles: ['management', 'admin'] },
   ],
   audit: [
-    { title: 'Audit Panel', icon: Shield, path: '/audit', roles: ['auditor'] },
-    { title: 'Audit Logs', icon: History, path: '/audit-logs', roles: ['auditor'] },
+    { title: 'Audit Panel', icon: Shield, path: '/audit', roles: ['auditor', 'admin'] },
   ],
   admin: [
     { title: 'User Management', icon: Users, path: '/admin/users', roles: ['admin'] },
@@ -167,7 +166,7 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {role === 'auditor' && (
+        {(role === 'auditor' || role === 'admin') && (
           <SidebarGroup>
             <SidebarGroupLabel>Audit</SidebarGroupLabel>
             <SidebarGroupContent>
