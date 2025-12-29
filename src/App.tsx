@@ -19,6 +19,7 @@ import UserManagement from "./pages/admin/UserManagement";
 import AllKpis from "./pages/admin/AllKpis";
 import Organization from "./pages/admin/Organization";
 import Categories from "./pages/admin/Categories";
+import ReviewPeriods from "./pages/admin/ReviewPeriods";
 import ImportData from "./pages/admin/ImportData";
 import PerformanceReport from "./pages/reports/PerformanceReport";
 import KRAIssuance from "./pages/reports/KRAIssuance";
@@ -89,6 +90,11 @@ const App = () => (
               <Route path="/admin/categories" element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <Categories />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/review-periods" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <ReviewPeriods />
                 </ProtectedRoute>
               } />
               <Route path="/admin/import" element={

@@ -32,6 +32,7 @@ import {
   MessageSquare,
   History,
   Briefcase,
+  Calendar,
 } from 'lucide-react';
 
 const menuItems = {
@@ -56,6 +57,7 @@ const menuItems = {
     { title: 'All KRAs', icon: Target, path: '/admin/kpis', roles: ['admin'] },
     { title: 'Organization', icon: Building2, path: '/admin/organization', roles: ['admin'] },
     { title: 'KRA Categories', icon: ClipboardList, path: '/admin/categories', roles: ['admin'] },
+    { title: 'Review Periods', icon: Calendar, path: '/admin/review-periods', roles: ['admin'] },
     { title: 'Import Data', icon: Upload, path: '/admin/import', roles: ['admin'] },
     { title: 'Audit Logs', icon: History, path: '/audit-logs', roles: ['admin'] },
   ],
