@@ -13,8 +13,8 @@ const corsHeaders = {
 type RatingLevel = 'red' | 'yellow' | 'green' | 'blue';
 
 // Server-side validation schema matching client-side limits
-const MAX_TEXT_LENGTH = 500;
-const MAX_REMARKS_LENGTH = 1000;
+const MAX_TEXT_LENGTH = 1000;
+const MAX_REMARKS_LENGTH = 2000;
 const MAX_ROWS = 10000;
 
 const KpiImportRowSchema = z.object({

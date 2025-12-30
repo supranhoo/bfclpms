@@ -4,8 +4,8 @@ import { z } from 'zod';
 export const IMPORT_LIMITS = {
   MAX_FILE_SIZE_MB: 10,
   MAX_ROWS: 10000,
-  MAX_STRING_LENGTH: 500,
-  MAX_REMARKS_LENGTH: 1000,
+  MAX_STRING_LENGTH: 1000,
+  MAX_REMARKS_LENGTH: 2000,
 };
 
 // Schema for KPI import row validation
