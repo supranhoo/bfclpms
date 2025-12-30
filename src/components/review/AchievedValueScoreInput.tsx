@@ -60,6 +60,9 @@ export function AchievedValueScoreInput({
   );
   const [isOverriding, setIsOverriding] = useState(false);
 
+  // Debug log
+  console.log('AchievedValueScoreInput mode:', mode, 'isLoading:', isLoading);
+
   useEffect(() => {
     setLocalAchievedValue(achievedValue?.toString() || '');
   }, [achievedValue]);
