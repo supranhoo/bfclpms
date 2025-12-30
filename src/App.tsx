@@ -21,6 +21,7 @@ import Organization from "./pages/admin/Organization";
 import Categories from "./pages/admin/Categories";
 import ReviewPeriods from "./pages/admin/ReviewPeriods";
 import ImportData from "./pages/admin/ImportData";
+import SystemSettings from "./pages/admin/SystemSettings";
 import PerformanceReport from "./pages/reports/PerformanceReport";
 import KRAIssuance from "./pages/reports/KRAIssuance";
 import KRAAcceptance from "./pages/KRAAcceptance";
@@ -100,6 +101,11 @@ const App = () => (
               <Route path="/admin/import" element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <ImportData />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/settings" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <SystemSettings />
                 </ProtectedRoute>
               } />
               

@@ -59,6 +59,7 @@ const menuItems = {
     { title: 'KRA Categories', icon: ClipboardList, path: '/admin/categories', roles: ['admin'] },
     { title: 'Review Periods', icon: Calendar, path: '/admin/review-periods', roles: ['admin'] },
     { title: 'Import Data', icon: Upload, path: '/admin/import', roles: ['admin'] },
+    { title: 'System Settings', icon: Settings, path: '/admin/settings', roles: ['admin'] },
     { title: 'Audit Logs', icon: History, path: '/audit-logs', roles: ['admin'] },
   ],
   reports: [

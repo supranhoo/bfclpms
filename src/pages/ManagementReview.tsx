@@ -15,7 +15,8 @@ import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { ReviewDetailsCard } from '@/components/review/ReviewDetailsCard';
 import { ReviewTrailCard, getRatingColor, getRatingLabel } from '@/components/review/ReviewTrailCard';
-import { ScoreSelector, scoreToRating } from '@/components/review/ScoreSelector';
+import { scoreToRating } from '@/components/review/ScoreSelector';
+import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -80,6 +81,7 @@ export default function ManagementReview() {
   const [sendBackReason, setSendBackReason] = useState('');
   const [sendBackTarget, setSendBackTarget] = useState<'auditor' | 'manager' | 'employee'>('auditor');
   const [managementEvidenceUrl, setManagementEvidenceUrl] = useState<string | null>(null);
+  const [managementAchievedValue, setManagementAchievedValue] = useState<number | null>(null);
 
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
 
@@ -249,6 +251,7 @@ export default function ManagementReview() {
     setManagementRating(existing?.management_rating || existing?.auditor_rating || '');
     setManagementRemarks(existing?.management_remarks || '');
     setManagementEvidenceUrl(existing?.management_evidence_url || null);
+    setManagementAchievedValue((existing as any)?.management_achieved_value || existing?.achieved_value || null);
     setReviewDialogOpen(true);
   };
 
@@ -655,14 +658,19 @@ export default function ManagementReview() {
                   <p className="text-sm font-medium">Your Management Review</p>
                 </div>
 
-                <ScoreSelector
-                  value={managementScore}
-                  onChange={(score, rating) => {
-                    setManagementScore(score);
-                    setManagementRating(rating);
-                  }}
-                  label="Final Score"
-                />
+                {selectedKpi && (
+                  <AchievedValueScoreInput
+                    kpi={selectedKpi as any}
+                    score={managementScore}
+                    achievedValue={managementAchievedValue}
+                    onScoreChange={(score, rating) => {
+                      setManagementScore(score);
+                      setManagementRating(rating);
+                    }}
+                    onAchievedValueChange={setManagementAchievedValue}
+                    label="Final Score"
+                  />
+                )}
 
                 <div className="space-y-2">
                   <Label>Justification & Remarks</Label>

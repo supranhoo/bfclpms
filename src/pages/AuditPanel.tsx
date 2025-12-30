@@ -16,7 +16,8 @@ import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { ReviewDetailsCard } from '@/components/review/ReviewDetailsCard';
 import { ReviewTrailCard, getRatingColor, getRatingLabel } from '@/components/review/ReviewTrailCard';
-import { ScoreSelector, scoreToRating } from '@/components/review/ScoreSelector';
+import { scoreToRating } from '@/components/review/ScoreSelector';
+import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -92,6 +93,7 @@ export default function AuditPanel() {
   const [auditorRating, setAuditorRating] = useState<RatingLevel | ''>('');
   const [auditorRemarks, setAuditorRemarks] = useState('');
   const [auditorEvidenceUrl, setAuditorEvidenceUrl] = useState<string | null>(null);
+  const [auditorAchievedValue, setAuditorAchievedValue] = useState<number | null>(null);
   const [sendBackReason, setSendBackReason] = useState('');
   const [sendBackTarget, setSendBackTarget] = useState<'manager' | 'employee'>('manager');
 
@@ -202,6 +204,7 @@ export default function AuditPanel() {
     setAuditorRating(existing?.auditor_rating || existing?.manager_rating || '');
     setAuditorRemarks(existing?.auditor_remarks || '');
     setAuditorEvidenceUrl(existing?.auditor_evidence_url || null);
+    setAuditorAchievedValue((existing as any)?.auditor_achieved_value || existing?.achieved_value || null);
     setReviewDialogOpen(true);
   };
 
@@ -695,14 +698,19 @@ export default function AuditPanel() {
                   <p className="text-sm font-medium">Your Audit Review</p>
                 </div>
 
-                <ScoreSelector
-                  value={auditorScore}
-                  onChange={(score, rating) => {
-                    setAuditorScore(score);
-                    setAuditorRating(rating);
-                  }}
-                  label="Auditor Score"
-                />
+                {selectedKpi && (
+                  <AchievedValueScoreInput
+                    kpi={selectedKpi as any}
+                    score={auditorScore}
+                    achievedValue={auditorAchievedValue}
+                    onScoreChange={(score, rating) => {
+                      setAuditorScore(score);
+                      setAuditorRating(rating);
+                    }}
+                    onAchievedValueChange={setAuditorAchievedValue}
+                    label="Auditor Score"
+                  />
+                )}
 
                 <div className="space-y-2">
                   <Label>Justification & Remarks</Label>
