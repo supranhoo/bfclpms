@@ -287,15 +287,19 @@ export default function ImportData() {
       if (isNaN(numValue)) return strValue;
       
       // If value is between 0 and 1 (exclusive), treat as decimal percentage (Excel format)
-      // e.g., 0.5 → 50%, 0.85 → 85%, 1.0 → 100%
+      // e.g., 0.5 → 50%, 0.85 → 85%, 0.9999 → 99.99%
       if (numValue > 0 && numValue <= 1) {
-        return `${(numValue * 100).toFixed(0)}%`;
+        // Preserve decimal precision - remove trailing zeros
+        const percentValue = numValue * 100;
+        const formatted = percentValue % 1 === 0 ? percentValue.toFixed(0) : percentValue.toFixed(2).replace(/\.?0+$/, '');
+        return `${formatted}%`;
       }
       
       // If value is > 1 and <= 100, treat as already a percentage value
-      // e.g., 50 → 50%, 100 → 100%, 85 → 85%
+      // e.g., 50 → 50%, 99.99 → 99.99%, 85 → 85%
       if (numValue > 1 && numValue <= 100) {
-        return `${numValue.toFixed(0)}%`;
+        const formatted = numValue % 1 === 0 ? numValue.toFixed(0) : numValue.toFixed(2).replace(/\.?0+$/, '');
+        return `${formatted}%`;
       }
       
       // For values > 100, keep as-is (could be actual target numbers)
