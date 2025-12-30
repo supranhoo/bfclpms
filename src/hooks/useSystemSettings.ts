@@ -46,8 +46,16 @@ export function useSystemSetting(key: string) {
 export function useScoreCalculationMode() {
   const { data, isLoading } = useSystemSetting('score_calculation_mode');
   
-  // Default to 'manual' if not loaded yet
-  const mode: ScoreCalculationMode = data?.setting_value as ScoreCalculationMode || 'manual';
+  // Parse the setting value - it might be stored as a JSON string
+  let mode: ScoreCalculationMode = 'manual';
+  if (data?.setting_value) {
+    const value = data.setting_value;
+    // Handle both direct string and JSON-encoded string
+    if (typeof value === 'string') {
+      // Remove quotes if it's a JSON string like '"auto_calculate"'
+      mode = value.replace(/^"|"$/g, '') as ScoreCalculationMode;
+    }
+  }
   
   return { mode, isLoading };
 }
