@@ -546,6 +546,7 @@ export type Database = {
       review_submissions: {
         Row: {
           achieved_value: number | null
+          auditor_achieved_value: number | null
           auditor_evidence_url: string | null
           auditor_rating: Database["public"]["Enums"]["rating_level"] | null
           auditor_remarks: string | null
@@ -556,10 +557,12 @@ export type Database = {
           is_na: boolean
           kpi_id: string
           kpi_status: Database["public"]["Enums"]["kpi_status"]
+          management_achieved_value: number | null
           management_evidence_url: string | null
           management_rating: Database["public"]["Enums"]["rating_level"] | null
           management_remarks: string | null
           management_score: number | null
+          manager_achieved_value: number | null
           manager_evidence_url: string | null
           manager_rating: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks: string | null
@@ -574,6 +577,7 @@ export type Database = {
         }
         Insert: {
           achieved_value?: number | null
+          auditor_achieved_value?: number | null
           auditor_evidence_url?: string | null
           auditor_rating?: Database["public"]["Enums"]["rating_level"] | null
           auditor_remarks?: string | null
@@ -584,10 +588,12 @@ export type Database = {
           is_na?: boolean
           kpi_id: string
           kpi_status?: Database["public"]["Enums"]["kpi_status"]
+          management_achieved_value?: number | null
           management_evidence_url?: string | null
           management_rating?: Database["public"]["Enums"]["rating_level"] | null
           management_remarks?: string | null
           management_score?: number | null
+          manager_achieved_value?: number | null
           manager_evidence_url?: string | null
           manager_rating?: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks?: string | null
@@ -602,6 +608,7 @@ export type Database = {
         }
         Update: {
           achieved_value?: number | null
+          auditor_achieved_value?: number | null
           auditor_evidence_url?: string | null
           auditor_rating?: Database["public"]["Enums"]["rating_level"] | null
           auditor_remarks?: string | null
@@ -612,10 +619,12 @@ export type Database = {
           is_na?: boolean
           kpi_id?: string
           kpi_status?: Database["public"]["Enums"]["kpi_status"]
+          management_achieved_value?: number | null
           management_evidence_url?: string | null
           management_rating?: Database["public"]["Enums"]["rating_level"] | null
           management_remarks?: string | null
           management_score?: number | null
+          manager_achieved_value?: number | null
           manager_evidence_url?: string | null
           manager_rating?: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks?: string | null
@@ -676,6 +685,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      system_settings: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          setting_key: string
+          setting_value: Json
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          setting_key: string
+          setting_value: Json
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          setting_key?: string
+          setting_value?: Json
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {

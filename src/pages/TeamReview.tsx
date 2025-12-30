@@ -17,7 +17,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { ReviewDetailsCard } from '@/components/review/ReviewDetailsCard';
 import { ReviewTrailCard } from '@/components/review/ReviewTrailCard';
-import { ScoreSelector, scoreToRating } from '@/components/review/ScoreSelector';
+import { scoreToRating } from '@/components/review/ScoreSelector';
+import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -99,6 +100,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
   const [managerRating, setManagerRating] = useState<RatingLevel | ''>('');
   const [managerRemarks, setManagerRemarks] = useState('');
   const [managerEvidenceUrl, setManagerEvidenceUrl] = useState<string | null>(null);
+  const [managerAchievedValue, setManagerAchievedValue] = useState<number | null>(null);
   const [queryReason, setQueryReason] = useState('');
   const [sendBackReason, setSendBackReason] = useState('');
   const [targetPeriod, setTargetPeriod] = useState('');
@@ -170,6 +172,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
     setManagerRating(existing?.manager_rating || '');
     setManagerRemarks(existing?.manager_remarks || '');
     setManagerEvidenceUrl(existing?.manager_evidence_url || null);
+    setManagerAchievedValue((existing as any)?.manager_achieved_value || existing?.achieved_value || null);
     setReviewDialogOpen(true);
   };
 
@@ -501,14 +504,19 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
                   <p className="text-sm font-medium">Your Manager Review</p>
                 </div>
 
-                <ScoreSelector
-                  value={managerScore}
-                  onChange={(score, rating) => {
-                    setManagerScore(score);
-                    setManagerRating(rating);
-                  }}
-                  label="Manager Score"
-                />
+                {selectedKpi && (
+                  <AchievedValueScoreInput
+                    kpi={selectedKpi}
+                    score={managerScore}
+                    achievedValue={managerAchievedValue}
+                    onScoreChange={(score, rating) => {
+                      setManagerScore(score);
+                      setManagerRating(rating);
+                    }}
+                    onAchievedValueChange={setManagerAchievedValue}
+                    label="Manager Score"
+                  />
+                )}
 
                 <div className="space-y-2">
                   <Label>Justification & Remarks</Label>
