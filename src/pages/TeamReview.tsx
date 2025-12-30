@@ -230,6 +230,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
       manager_rating: rating,
       manager_score: managerScore,
       manager_remarks: managerRemarks,
+      manager_evidence_url: managerEvidenceUrl,
     });
   };
 
@@ -485,7 +486,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
                 submission={submissionMap.get(selectedKpi.id)}
                 achievedValue={selectedKpi.target_value}
                 showSelf={true}
-                showManager={false}
+                showManager={!!submissionMap.get(selectedKpi.id)?.manager_rating}
                 queries={queryMap.get(selectedKpi.id) || []}
               />
             )}
