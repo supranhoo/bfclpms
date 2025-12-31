@@ -1,150 +1,93 @@
-import { useState, useMemo } from 'react';
-import { useAllKpis, useReviewSubmissions, useRaiseQuery, useSendBackKpi, useKpiQueries, RatingLevel, KPI } from '@/hooks/useKpis';
-import { useKraCategories } from '@/hooks/useOrganization';
 import { useAuth } from '@/contexts/AuthContext';
+import { useKraCategories } from '@/hooks/useOrganization';
+import { useReviewPageState } from '@/hooks/useReviewPageState';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Progress } from '@/components/ui/progress';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
-import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { ReviewDetailsCard } from '@/components/review/ReviewDetailsCard';
-import { ReviewTrailCard, getRatingColor, getRatingLabel } from '@/components/review/ReviewTrailCard';
+import { ReviewTrailCard } from '@/components/review/ReviewTrailCard';
 import { scoreToRating } from '@/components/review/ScoreSelector';
 import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
+import { ReviewPageHeader } from '@/components/review/ReviewPageHeader';
+import { ReviewStatsCards, StatCardConfig } from '@/components/review/ReviewStatsCards';
+import { ReviewFilters } from '@/components/review/ReviewFilters';
+import { SendBackDialog } from '@/components/review/SendBackDialog';
+import { statusColors, statusLabels, ratingOptions } from '@/lib/reviewConstants';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Shield, 
   CheckCircle2, 
-  AlertTriangle, 
   Clock, 
   Info, 
-  Search,
-  ArrowUpDown,
   User,
-  Target,
   TrendingUp,
   FileCheck,
   ClipboardCheck,
   Eye,
-  Undo2,
-  MessageSquare,
-  Briefcase
 } from 'lucide-react';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
-
-const statusColors: Record<string, string> = {
-  kra_set: 'bg-muted text-muted-foreground',
-  self_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  manager_check: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
-  audit: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  management_review: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
-  approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-};
-
-const statusLabels: Record<string, string> = {
-  kra_set: 'KRA Set',
-  self_review: 'Self Review',
-  manager_check: 'Pending Audit',
-  audit: 'In Audit',
-  management_review: 'Management Review',
-  approved: 'Approved',
-};
-
-const ratingOptions: { value: RatingLevel; label: string; color: string; score: number }[] = [
-  { value: 'blue', label: 'Outstanding', color: '#3B82F6', score: 5 },
-  { value: 'green', label: 'Exceeds Expectations', color: '#10B981', score: 4 },
-  { value: 'yellow', label: 'Meets Expectations', color: '#F59E0B', score: 3 },
-  { value: 'red', label: 'Below Expectations', color: '#EF4444', score: 2 },
-];
+import { RatingLevel } from '@/hooks/useKpis';
 
 export default function AuditPanel() {
   const { user } = useAuth();
-  const { data: allKpis, isLoading } = useAllKpis();
   const { data: categories } = useKraCategories();
-  const kpiIds = allKpis?.map(k => k.id) || [];
-  const { data: submissions } = useReviewSubmissions(kpiIds);
-  const { data: queries } = useKpiQueries(kpiIds);
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
 
-  const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
-  const [selectedYear, setSelectedYear] = useState(defaultYear);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>('manager_check');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
-  const [viewDialogOpen, setViewDialogOpen] = useState(false);
-  const [sendBackDialogOpen, setSendBackDialogOpen] = useState(false);
-  const [logicModalOpen, setLogicModalOpen] = useState(false);
-  const [selectedKpi, setSelectedKpi] = useState<NonNullable<typeof allKpis>[number] | null>(null);
-  const [auditorScore, setAuditorScore] = useState<number | null>(null);
-  const [auditorRating, setAuditorRating] = useState<RatingLevel | ''>('');
-  const [auditorRemarks, setAuditorRemarks] = useState('');
-  const [auditorEvidenceUrl, setAuditorEvidenceUrl] = useState<string | null>(null);
-  const [auditorAchievedValue, setAuditorAchievedValue] = useState<number | null>(null);
-  const [sendBackReason, setSendBackReason] = useState('');
-  const [sendBackTarget, setSendBackTarget] = useState<'manager' | 'employee'>('manager');
-
-  // Build query map
-  const queryMap = new Map<string, typeof queries>();
-  queries?.forEach(q => {
-    const existing = queryMap.get(q.kpi_id) || [];
-    queryMap.set(q.kpi_id, [...existing, q]);
+  const {
+    selectedPeriod,
+    setSelectedPeriod,
+    selectedYear,
+    setSelectedYear,
+    selectedCategory,
+    setSelectedCategory,
+    statusFilter,
+    setStatusFilter,
+    searchQuery,
+    setSearchQuery,
+    reviewDialogOpen,
+    setReviewDialogOpen,
+    viewDialogOpen,
+    setViewDialogOpen,
+    sendBackDialogOpen,
+    setSendBackDialogOpen,
+    logicModalOpen,
+    setLogicModalOpen,
+    selectedKpi,
+    score,
+    setScore,
+    remarks,
+    setRemarks,
+    evidenceUrl,
+    setEvidenceUrl,
+    achievedValue,
+    setAchievedValue,
+    sendBackReason,
+    setSendBackReason,
+    sendBackTarget,
+    setSendBackTarget,
+    allKpis,
+    isLoading,
+    periodFilteredKpis,
+    filteredKpis,
+    submissionMap,
+    queryMap,
+    openReviewDialog,
+    openSendBackDialog,
+    openLogicModal,
+    openViewDialog,
+  } = useReviewPageState({
+    defaultStatusFilter: 'manager_check',
+    defaultSendBackTarget: 'manager',
   });
-
-  const openLogicModal = (kpi: NonNullable<typeof allKpis>[number]) => {
-    setSelectedKpi(kpi);
-    setLogicModalOpen(true);
-  };
-
-  const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
-
-  // Period-filtered KPIs for stats
-  const periodFilteredKpis = useMemo(() => {
-    let filtered = allKpis || [];
-    filtered = filtered.filter(kpi => {
-      const periodMatch = kpi.review_period?.trim().toLowerCase() === selectedPeriod?.trim().toLowerCase();
-      const yearMatch = kpi.review_year === selectedYear;
-      return periodMatch && yearMatch;
-    });
-    return filtered;
-  }, [allKpis, selectedPeriod, selectedYear]);
-
-  const filteredKpis = useMemo(() => {
-    let filtered = periodFilteredKpis;
-    
-    if (selectedCategory) {
-      filtered = filtered.filter(kpi => kpi.category_id === selectedCategory);
-    }
-    if (statusFilter) {
-      filtered = filtered.filter(kpi => kpi.status === statusFilter);
-    }
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(kpi => {
-        const employee = kpi.profiles as any;
-        return (
-          kpi.kpi_name?.toLowerCase().includes(query) ||
-          kpi.kra_name?.toLowerCase().includes(query) ||
-          employee?.full_name?.toLowerCase().includes(query) ||
-          employee?.employee_code?.toLowerCase().includes(query)
-        );
-      });
-    }
-    return filtered;
-  }, [periodFilteredKpis, selectedCategory, statusFilter, searchQuery]);
 
   const submitAuditReview = useMutation({
     mutationFn: async ({
@@ -174,7 +117,6 @@ export default function AuditPanel() {
 
       if (submissionError) throw submissionError;
 
-      // Auditor approval moves to management_review, not directly to approved
       const newStatus = approve ? 'management_review' : 'audit';
       const { error: kpiError } = await supabase
         .from('kpis')
@@ -197,29 +139,6 @@ export default function AuditPanel() {
     },
   });
 
-  const openReviewDialog = (kpi: NonNullable<typeof allKpis>[number]) => {
-    setSelectedKpi(kpi);
-    const existing = submissionMap.get(kpi.id);
-    setAuditorScore(existing?.auditor_score || existing?.manager_score || null);
-    setAuditorRating(existing?.auditor_rating || existing?.manager_rating || '');
-    setAuditorRemarks(existing?.auditor_remarks || '');
-    setAuditorEvidenceUrl(existing?.auditor_evidence_url || null);
-    setAuditorAchievedValue((existing as any)?.auditor_achieved_value || existing?.achieved_value || null);
-    setReviewDialogOpen(true);
-  };
-
-  const openViewDialog = (kpi: NonNullable<typeof allKpis>[number]) => {
-    setSelectedKpi(kpi);
-    setViewDialogOpen(true);
-  };
-
-  const openSendBackDialog = (kpi: NonNullable<typeof allKpis>[number]) => {
-    setSelectedKpi(kpi);
-    setSendBackReason('');
-    setSendBackTarget('manager');
-    setSendBackDialogOpen(true);
-  };
-
   const sendBack = useMutation({
     mutationFn: async ({
       kpi_id,
@@ -227,10 +146,10 @@ export default function AuditPanel() {
       reason,
     }: {
       kpi_id: string;
-      target: 'manager' | 'employee';
+      target: string;
       reason: string;
     }) => {
-      const statusMap = {
+      const statusMap: Record<string, string> = {
         manager: 'self_review',
         employee: 'kra_set',
       };
@@ -242,7 +161,6 @@ export default function AuditPanel() {
 
       if (kpiError) throw kpiError;
 
-      // Reset auditor fields
       const { error: submissionError } = await supabase
         .from('review_submissions')
         .update({
@@ -255,7 +173,6 @@ export default function AuditPanel() {
 
       if (submissionError) throw submissionError;
 
-      // Log the action
       if (user?.id) {
         await supabase.from('kpi_audit_logs').insert({
           kpi_id,
@@ -287,24 +204,31 @@ export default function AuditPanel() {
   };
 
   const handleSubmitAudit = (approve: boolean) => {
-    if (!selectedKpi || auditorScore === null) return;
-    const rating = scoreToRating(auditorScore);
+    if (!selectedKpi || score === null) return;
+    const rating = scoreToRating(score);
     submitAuditReview.mutate({
       kpi_id: selectedKpi.id,
       auditor_rating: rating,
-      auditor_score: auditorScore,
-      auditor_remarks: auditorRemarks,
-      auditor_evidence_url: auditorEvidenceUrl,
+      auditor_score: score,
+      auditor_remarks: remarks,
+      auditor_evidence_url: evidenceUrl,
       approve,
     });
   };
 
-  // Stats from period-filtered KPIs
+  // Stats
   const pendingAudit = periodFilteredKpis?.filter(k => k.status === 'manager_check').length || 0;
   const inAudit = periodFilteredKpis?.filter(k => k.status === 'audit').length || 0;
   const approved = periodFilteredKpis?.filter(k => k.status === 'approved').length || 0;
   const total = pendingAudit + inAudit + approved;
   const completionRate = total > 0 ? Math.round((approved / total) * 100) : 0;
+
+  const statsConfig: StatCardConfig[] = [
+    { label: 'Pending Audit', value: pendingAudit, description: 'Awaiting your review', icon: Clock, color: 'amber' },
+    { label: 'In Audit', value: inAudit, description: 'Currently reviewing', icon: FileCheck, color: 'purple' },
+    { label: 'Approved', value: approved, description: 'Fully completed', icon: CheckCircle2, color: 'green' },
+    { label: 'Completion Rate', value: completionRate, description: '', icon: TrendingUp, color: 'blue', showProgress: true, progressValue: completionRate },
+  ];
 
   if (isLoading) {
     return <ReviewPanelSkeleton />;
@@ -312,581 +236,298 @@ export default function AuditPanel() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg">
-            <Shield className="h-6 w-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Audit Panel</h1>
-            <p className="text-muted-foreground">Review and approve performance evaluations</p>
-          </div>
-        </div>
-        <ReviewPeriodSelector
-          selectedPeriod={selectedPeriod}
-          selectedYear={selectedYear}
-          onPeriodChange={setSelectedPeriod}
-          onYearChange={setSelectedYear}
-        />
-      </div>
+      <ReviewPageHeader
+        title="Audit Panel"
+        description="Review and approve performance evaluations"
+        icon={Shield}
+        iconGradient="bg-gradient-to-br from-purple-500 to-indigo-600"
+        selectedPeriod={selectedPeriod}
+        selectedYear={selectedYear}
+        onPeriodChange={setSelectedPeriod}
+        onYearChange={setSelectedYear}
+      />
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-amber-500/10 rounded-full -mr-10 -mt-10" />
-          <CardContent className="pt-6">
-            <div className="flex items-start justify-between">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Pending Audit</p>
-                <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">{pendingAudit}</p>
-                <p className="text-xs text-muted-foreground">Awaiting your review</p>
-              </div>
-              <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                <Clock className="h-5 w-5 text-amber-500" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <ReviewStatsCards stats={statsConfig} />
 
-        <Card className="relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/10 rounded-full -mr-10 -mt-10" />
-          <CardContent className="pt-6">
-            <div className="flex items-start justify-between">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">In Audit</p>
-                <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">{inAudit}</p>
-                <p className="text-xs text-muted-foreground">Currently reviewing</p>
-              </div>
-              <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <FileCheck className="h-5 w-5 text-purple-500" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-green-500/10 rounded-full -mr-10 -mt-10" />
-          <CardContent className="pt-6">
-            <div className="flex items-start justify-between">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Approved</p>
-                <p className="text-3xl font-bold text-green-600 dark:text-green-400">{approved}</p>
-                <p className="text-xs text-muted-foreground">Fully completed</p>
-              </div>
-              <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-blue-500/10 rounded-full -mr-10 -mt-10" />
-          <CardContent className="pt-6">
-            <div className="flex items-start justify-between">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Completion Rate</p>
-                <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{completionRate}%</p>
-                <Progress value={completionRate} className="h-1.5 mt-2" />
-              </div>
-              <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-blue-500" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters Section */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* Search */}
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search employee, KRA, or KPI..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-
-            {/* Status Tabs */}
-            <Tabs value={statusFilter} onValueChange={setStatusFilter} className="flex-1">
-              <TabsList className="grid w-full grid-cols-3 max-w-md">
-                <TabsTrigger value="manager_check" className="gap-2">
-                  <Clock className="h-4 w-4" />
-                  <span className="hidden sm:inline">Pending</span>
-                  <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                    {pendingAudit}
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger value="audit" className="gap-2">
-                  <FileCheck className="h-4 w-4" />
-                  <span className="hidden sm:inline">In Audit</span>
-                  <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                    {inAudit}
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger value="approved" className="gap-2">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Approved</span>
-                  <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                    {approved}
-                  </Badge>
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-
-          {/* Category Pills */}
-          <div className="flex flex-wrap gap-2 mt-4">
-            <Button
-              variant={selectedCategory === null ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setSelectedCategory(null)}
-              className="h-8"
-            >
-              All Categories
-            </Button>
-            {categories?.map(cat => (
-              <Button
-                key={cat.id}
-                variant={selectedCategory === cat.id ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSelectedCategory(cat.id)}
-                className="h-8"
-              >
-                <div
-                  className="w-2 h-2 rounded-full mr-2"
-                  style={{ backgroundColor: cat.color }}
-                />
-                {cat.name}
-              </Button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <ReviewFilters
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        tabs={[
+          { value: 'manager_check', label: 'Pending', icon: Clock, count: pendingAudit },
+          { value: 'audit', label: 'In Audit', icon: FileCheck, count: inAudit },
+          { value: 'management_review', label: 'In Mgmt Review', icon: CheckCircle2, count: periodFilteredKpis?.filter(k => k.status === 'management_review').length || 0 },
+        ]}
+        activeTab={statusFilter}
+        onTabChange={setStatusFilter}
+        categories={categories}
+        selectedCategory={selectedCategory}
+        onCategoryChange={setSelectedCategory}
+      />
 
       {/* KPIs Table */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <ClipboardCheck className="h-5 w-5 text-muted-foreground" />
-                KPIs for Audit
-              </CardTitle>
-              <CardDescription>{filteredKpis?.length || 0} KPIs found</CardDescription>
-            </div>
-          </div>
+          <CardTitle className="flex items-center gap-2">
+            <ClipboardCheck className="h-5 w-5 text-muted-foreground" />
+            KPIs for Audit
+          </CardTitle>
+          <CardDescription>{filteredKpis?.length || 0} KPIs found</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-lg border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="font-semibold">
-                    <div className="flex items-center gap-1">
-                      <User className="h-4 w-4" />
-                      Employee
-                    </div>
-                  </TableHead>
-                  <TableHead className="font-semibold">Category</TableHead>
-                  <TableHead className="font-semibold">KRA / KPI</TableHead>
-                  <TableHead className="font-semibold text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <Target className="h-4 w-4" />
-                      Target
-                    </div>
-                  </TableHead>
-                  <TableHead className="font-semibold text-center">Achieved</TableHead>
-                  <TableHead className="font-semibold text-center">Self</TableHead>
-                  <TableHead className="font-semibold text-center">Manager</TableHead>
-                  <TableHead className="font-semibold text-center">Auditor</TableHead>
-                  <TableHead className="font-semibold text-center">Status</TableHead>
-                  <TableHead className="font-semibold text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredKpis?.map(kpi => {
-                  const submission = submissionMap.get(kpi.id);
-                  const employee = kpi.profiles as any;
-                  const isNaKpi = submission?.is_na || false;
-                  
-                  return (
-                    <TableRow 
-                      key={kpi.id}
-                      className={`hover:bg-muted/30 transition-colors ${isNaKpi ? 'opacity-60 bg-muted/10' : ''}`}
-                    >
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
-                            <span className="text-sm font-medium text-primary">
-                              {employee?.full_name?.charAt(0) || 'U'}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="font-medium text-sm">{employee?.full_name || 'N/A'}</p>
-                            <p className="text-xs text-muted-foreground">{employee?.employee_code}</p>
-                          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>KRA / KPI</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>Achieved</TableHead>
+                <TableHead>Manager Rating</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredKpis?.map(kpi => {
+                const submission = submissionMap.get(kpi.id);
+                const employee = kpi.profiles as any;
+                const kpiQueries = queryMap.get(kpi.id) || [];
+                const openQueries = kpiQueries.filter((q: any) => q.status === 'open');
+                
+                return (
+                  <TableRow key={kpi.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                          <User className="h-4 w-4 text-primary" />
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-2.5 h-2.5 rounded-full ring-2 ring-offset-1 ring-offset-background"
-                            style={{ backgroundColor: kpi.kra_categories?.color }}
-                          />
-                          <span className="text-sm">{kpi.kra_categories?.name}</span>
+                        <div>
+                          <p className="font-medium text-sm">{employee?.full_name || 'Unknown'}</p>
+                          <p className="text-xs text-muted-foreground">{employee?.employee_code || '-'}</p>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <button
-                          onClick={() => openLogicModal(kpi)}
-                          className="text-left hover:bg-muted/50 p-1.5 -m-1.5 rounded-lg transition-colors cursor-pointer group max-w-xs"
-                          title="Click to view KPI details"
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: kpi.kra_categories?.color || '#6B7280' }}
+                        />
+                        <span className="text-sm">{kpi.kra_categories?.name || 'Uncategorized'}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <button
+                        onClick={() => openLogicModal(kpi)}
+                        className="text-left hover:bg-muted/50 p-1 -m-1 rounded transition-colors cursor-pointer group w-full"
+                        title="Click to view KPI details"
+                      >
+                        <p className="font-medium text-primary group-hover:underline">{kpi.kra_name}</p>
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          {kpi.kpi_name}
+                          <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </p>
+                      </button>
+                    </TableCell>
+                    <TableCell>{kpi.target_value ?? '-'}</TableCell>
+                    <TableCell>{submission?.achieved_value ?? '-'}</TableCell>
+                    <TableCell>
+                      {submission?.manager_rating ? (
+                        <Badge
+                          style={{
+                            backgroundColor: ratingOptions.find(r => r.value === submission.manager_rating)?.color,
+                          }}
+                          className="text-white"
                         >
-                          <p className="font-medium text-primary group-hover:underline text-sm">{kpi.kra_name}</p>
-                          <p className="text-xs text-muted-foreground line-clamp-1 flex items-center gap-1">
-                            {kpi.kpi_name}
-                            <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                          </p>
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className="font-mono text-sm">{kpi.target_value ?? '-'}</span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {isNaKpi ? (
-                          <Badge variant="outline" className="bg-muted/50">N/A</Badge>
-                        ) : (
-                          <span className="font-mono text-sm">{submission?.achieved_value ?? '-'}</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {isNaKpi ? (
-                          <Badge variant="outline" className="bg-muted/50">N/A</Badge>
-                        ) : submission?.self_rating ? (
-                          <Badge
-                            style={{ backgroundColor: getRatingColor(submission.self_rating) }}
-                            className="text-white font-medium"
-                          >
-                            {submission.self_score}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {isNaKpi ? (
-                          <Badge variant="outline" className="bg-muted/50">N/A</Badge>
-                        ) : submission?.manager_rating ? (
-                          <Badge
-                            style={{ backgroundColor: getRatingColor(submission.manager_rating) }}
-                            className="text-white font-medium"
-                          >
-                            {submission.manager_score}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {isNaKpi ? (
-                          <Badge variant="outline" className="bg-muted/50">N/A</Badge>
-                        ) : submission?.auditor_rating ? (
-                          <Badge
-                            style={{ backgroundColor: getRatingColor(submission.auditor_rating) }}
-                            className="text-white font-medium"
-                          >
-                            {submission.auditor_score}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge className={statusColors[kpi.status || 'kra_set']}>
-                          {statusLabels[kpi.status || 'kra_set']}
+                          {ratingOptions.find(r => r.value === submission.manager_rating)?.label}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {kpi.status === 'manager_check' && !isNaKpi && (
-                            <Button size="sm" onClick={() => openReviewDialog(kpi)} className="gap-1.5">
-                              <ClipboardCheck className="h-4 w-4" />
+                      ) : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={statusColors[kpi.status || 'kra_set']}>
+                        {statusLabels[kpi.status || 'kra_set']}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        {kpi.status === 'manager_check' && (
+                          <>
+                            <Button 
+                              size="sm" 
+                              onClick={() => openReviewDialog(kpi, 'auditor', 'manager')}
+                            >
                               Audit
                             </Button>
-                          )}
-                          {kpi.status === 'approved' && (
-                            <Button size="sm" variant="outline" onClick={() => openViewDialog(kpi)} className="gap-1.5">
-                              <Eye className="h-4 w-4" />
-                              View
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => openSendBackDialog(kpi, 'manager')}
+                            >
+                              Send Back
                             </Button>
-                          )}
-                          {isNaKpi && (
-                            <Badge variant="outline" className="text-muted-foreground">
-                              Not Applicable
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {(!filteredKpis || filteredKpis.length === 0) && (
-                  <TableRow>
-                    <TableCell colSpan={10} className="h-32 text-center">
-                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                        <ClipboardCheck className="h-8 w-8 opacity-50" />
-                        <p>No KPIs found matching the filters</p>
-                        <p className="text-xs">Try adjusting your search or filter criteria</p>
+                          </>
+                        )}
+                        {kpi.status === 'audit' && (
+                          <Button 
+                            size="sm" 
+                            onClick={() => openReviewDialog(kpi, 'auditor', 'manager')}
+                          >
+                            Continue
+                          </Button>
+                        )}
+                        {(kpi.status === 'management_review' || kpi.status === 'approved') && (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => openViewDialog(kpi)}
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            View
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                );
+              })}
+              {filteredKpis?.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    No KPIs found matching your filters.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
-      {/* Audit Review Dialog - Enhanced */}
+      {/* Audit Review Dialog */}
       <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <Shield className="h-5 w-5 text-purple-500" />
-              </div>
-              <div>
-                <DialogTitle>Audit Review</DialogTitle>
-                <DialogDescription>
-                  {(selectedKpi?.profiles as any)?.full_name} - {(selectedKpi?.profiles as any)?.employee_code}
-                </DialogDescription>
-              </div>
-            </div>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-purple-500" />
+              Audit Review
+            </DialogTitle>
+            <DialogDescription>
+              Review and verify the KPI evaluation
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6 py-4">
-            {/* Full KPI Details */}
-            {selectedKpi && (
-              <ReviewDetailsCard kpi={selectedKpi as unknown as KPI} />
-            )}
-
-            {/* Complete Review Trail with Queries */}
-            {selectedKpi && (
-              <ReviewTrailCard 
+          {selectedKpi && (
+            <div className="space-y-6">
+              <ReviewDetailsCard kpi={selectedKpi} />
+              
+              <ReviewTrailCard
                 submission={submissionMap.get(selectedKpi.id)}
-                achievedValue={selectedKpi.target_value}
-                showSelf={true}
-                showManager={true}
-                queries={queryMap.get(selectedKpi.id) || []}
+                achievedValue={submissionMap.get(selectedKpi.id)?.achieved_value}
+                showSelf
+                showManager
               />
-            )}
 
-            {/* Auditor Input */}
-            <Card className="border-purple-200 dark:border-purple-800">
-              <CardContent className="pt-4 space-y-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="h-6 w-6 rounded-full bg-purple-500/10 flex items-center justify-center">
-                    <Shield className="h-3.5 w-3.5 text-purple-500" />
-                  </div>
-                  <p className="text-sm font-medium">Your Audit Review</p>
-                </div>
-
-                {selectedKpi && (
-                  <AchievedValueScoreInput
-                    kpi={selectedKpi as any}
-                    score={auditorScore}
-                    achievedValue={auditorAchievedValue}
-                    onScoreChange={(score, rating) => {
-                      setAuditorScore(score);
-                      setAuditorRating(rating);
-                    }}
-                    onAchievedValueChange={setAuditorAchievedValue}
-                    label="Auditor Score"
-                  />
-                )}
+              <div className="space-y-4 border-t pt-4">
+                <h4 className="font-medium">Auditor Assessment</h4>
+                
+                <AchievedValueScoreInput
+                  kpi={selectedKpi}
+                  achievedValue={achievedValue}
+                  onAchievedValueChange={setAchievedValue}
+                  score={score}
+                  onScoreChange={setScore}
+                />
 
                 <div className="space-y-2">
-                  <Label>Justification & Remarks</Label>
+                  <Label>Auditor Remarks</Label>
                   <Textarea
-                    value={auditorRemarks}
-                    onChange={(e) => setAuditorRemarks(e.target.value)}
-                    placeholder="Provide justification for your score and any audit observations..."
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                    placeholder="Enter your audit remarks..."
                     rows={3}
-                    className="resize-none"
                   />
                 </div>
 
-                {/* Evidence Upload for Auditor */}
-                {user && selectedKpi && (
-                  <EvidenceUpload
-                    userId={user.id}
-                    kpiId={selectedKpi.id}
-                    existingUrl={auditorEvidenceUrl}
-                    onUploadComplete={(url) => setAuditorEvidenceUrl(url || null)}
+                {/* Evidence URL input - simplified */}
+                <div className="space-y-2">
+                  <Label>Evidence URL</Label>
+                  <input
+                    type="url"
+                    value={evidenceUrl || ''}
+                    onChange={(e) => setEvidenceUrl(e.target.value || null)}
+                    placeholder="https://..."
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   />
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                </div>
+              </div>
+            </div>
+          )}
 
-          <DialogFooter className="gap-2 sm:gap-2">
+          <DialogFooter>
             <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>
               Cancel
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (selectedKpi) openSendBackDialog(selectedKpi);
-                setReviewDialogOpen(false);
-              }}
-              className="text-orange-600 border-orange-300 hover:bg-orange-50"
-            >
-              <Undo2 className="h-4 w-4 mr-1.5" />
-              Send Back
-            </Button>
-            <Button
+            <Button 
               variant="secondary"
               onClick={() => handleSubmitAudit(false)}
-              disabled={auditorScore === null || submitAuditReview.isPending}
+              disabled={score === null}
             >
               Save Draft
             </Button>
-            <Button
+            <Button 
               onClick={() => handleSubmitAudit(true)}
-              disabled={auditorScore === null || submitAuditReview.isPending}
-              className="bg-green-600 hover:bg-green-700"
+              disabled={score === null}
             >
-              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+              <CheckCircle2 className="h-4 w-4 mr-2" />
               Forward to Management
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* View Dialog for Approved KPIs */}
+      {/* View Dialog */}
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
-              </div>
-              <div>
-                <DialogTitle>Approved Review</DialogTitle>
-                <DialogDescription>
-                  {(selectedKpi?.profiles as any)?.full_name} - {selectedKpi?.kpi_name}
-                </DialogDescription>
-              </div>
-            </div>
+            <DialogTitle>Review Details</DialogTitle>
           </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-3 gap-4">
-              <Card>
-                <CardContent className="pt-4 text-center">
-                  <p className="text-xs text-muted-foreground mb-1">Self Rating</p>
-                  <Badge style={{ backgroundColor: getRatingColor(submissionMap.get(selectedKpi?.id || '')?.self_rating) }} className="text-white">
-                    {getRatingLabel(submissionMap.get(selectedKpi?.id || '')?.self_rating)}
-                  </Badge>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-4 text-center">
-                  <p className="text-xs text-muted-foreground mb-1">Manager Rating</p>
-                  <Badge style={{ backgroundColor: getRatingColor(submissionMap.get(selectedKpi?.id || '')?.manager_rating) }} className="text-white">
-                    {getRatingLabel(submissionMap.get(selectedKpi?.id || '')?.manager_rating)}
-                  </Badge>
-                </CardContent>
-              </Card>
-              <Card className="border-green-200 dark:border-green-800">
-                <CardContent className="pt-4 text-center">
-                  <p className="text-xs text-muted-foreground mb-1">Final Rating</p>
-                  <Badge style={{ backgroundColor: getRatingColor(submissionMap.get(selectedKpi?.id || '')?.final_rating) }} className="text-white">
-                    {getRatingLabel(submissionMap.get(selectedKpi?.id || '')?.final_rating)}
-                  </Badge>
-                </CardContent>
-              </Card>
+          {selectedKpi && (
+            <div className="space-y-6">
+              <ReviewDetailsCard kpi={selectedKpi} />
+              <ReviewTrailCard
+                submission={submissionMap.get(selectedKpi.id)}
+                achievedValue={submissionMap.get(selectedKpi.id)?.achieved_value}
+                showSelf
+                showManager
+                showAuditor
+                showManagement={selectedKpi.status === 'approved'}
+              />
             </div>
-
-            <div className="p-4 bg-muted/50 rounded-lg">
-              <p className="text-xs text-muted-foreground mb-1">Auditor Remarks</p>
-              <p className="text-sm">{submissionMap.get(selectedKpi?.id || '')?.auditor_remarks || 'No remarks provided'}</p>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button onClick={() => setViewDialogOpen(false)}>Close</Button>
-          </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
       {/* Send Back Dialog */}
-      <Dialog open={sendBackDialogOpen} onOpenChange={setSendBackDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Send Back for Revision</DialogTitle>
-            <DialogDescription>
-              Send "{selectedKpi?.kpi_name}" back for revision
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="p-4 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-200 dark:border-orange-800">
-              <p className="text-sm text-orange-800 dark:text-orange-200">
-                <strong>Note:</strong> This will reset the review status and notify the recipient to revise their submission.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Send Back To</Label>
-              <Select value={sendBackTarget} onValueChange={(v) => setSendBackTarget(v as 'manager' | 'employee')}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="manager">Manager (for re-review)</SelectItem>
-                  <SelectItem value="employee">Employee (for revision)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Reason for Sending Back <span className="text-destructive">*</span></Label>
-              <Textarea
-                value={sendBackReason}
-                onChange={(e) => setSendBackReason(e.target.value)}
-                placeholder="Explain why this KPI needs to be revised..."
-                rows={4}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSendBackDialogOpen(false)}>Cancel</Button>
-            <Button 
-              onClick={handleSendBack} 
-              disabled={!sendBackReason.trim() || sendBack.isPending}
-              className="bg-orange-600 hover:bg-orange-700"
-            >
-              <Undo2 className="h-4 w-4 mr-1" />
-              {sendBack.isPending ? 'Sending...' : 'Send Back'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SendBackDialog
+        open={sendBackDialogOpen}
+        onOpenChange={setSendBackDialogOpen}
+        kpi={selectedKpi}
+        reason={sendBackReason}
+        onReasonChange={setSendBackReason}
+        target={sendBackTarget}
+        onTargetChange={setSendBackTarget}
+        targets={[
+          { value: 'manager', label: 'Send to Manager' },
+          { value: 'employee', label: 'Send to Employee' },
+        ]}
+        onSubmit={handleSendBack}
+        isLoading={sendBack.isPending}
+      />
 
       {/* KPI Logic Modal */}
       <KpiLogicModal
         isOpen={logicModalOpen}
         onClose={() => setLogicModalOpen(false)}
-        kpi={selectedKpi as KPI | null}
+        kpi={selectedKpi}
       />
     </div>
   );
