@@ -211,7 +211,8 @@ export const REVIEW_STATUS_FLOW: Record<string, { next: string | null; label: st
   'kra_set': { next: 'self_review', label: 'KRA Set' },
   'self_review': { next: 'manager_check', label: 'Self Review' },
   'manager_check': { next: 'audit', label: 'Manager Review' },
-  'audit': { next: 'approved', label: 'Audit Review' },
+  'audit': { next: 'management_review', label: 'Audit Review' },
+  'management_review': { next: 'approved', label: 'Management Review' },
   'approved': { next: null, label: 'Approved' },
 };
 
