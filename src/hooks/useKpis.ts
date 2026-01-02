@@ -283,6 +283,7 @@ export function useUpdateKpi() {
   });
 }
 
+// Self review submission with optimistic updates
 export function useSubmitSelfReview() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -316,6 +317,7 @@ export function useSubmitSelfReview() {
           self_remarks,
           self_evidence_url,
           is_na,
+          kpi_status: 'submitted' as const,
         }, {
           onConflict: 'kpi_id',
         });
@@ -329,15 +331,70 @@ export function useSubmitSelfReview() {
         .eq('id', kpi_id);
 
       if (kpiError) throw kpiError;
+      
+      return { kpi_id, achieved_value, self_rating, self_score, self_remarks, self_evidence_url, is_na };
+    },
+    onMutate: async (variables) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['review-submissions'] });
+      await queryClient.cancelQueries({ queryKey: ['my-kpis'] });
+      
+      // Snapshot previous values
+      const previousSubmissions = queryClient.getQueryData(['review-submissions']);
+      const previousKpis = queryClient.getQueryData(['my-kpis']);
+      
+      // Optimistically update submissions
+      queryClient.setQueriesData({ queryKey: ['review-submissions'] }, (old: ReviewSubmission[] | undefined) => {
+        if (!old) return old;
+        const exists = old.some(s => s.kpi_id === variables.kpi_id);
+        if (exists) {
+          return old.map(sub => 
+            sub.kpi_id === variables.kpi_id 
+              ? { 
+                  ...sub,
+                  achieved_value: variables.is_na ? null : variables.achieved_value,
+                  self_rating: variables.is_na ? null : variables.self_rating,
+                  self_score: variables.is_na ? null : variables.self_score,
+                  self_remarks: variables.self_remarks,
+                  self_evidence_url: variables.self_evidence_url,
+                  is_na: variables.is_na,
+                  kpi_status: 'submitted' as KpiStatus,
+                }
+              : sub
+          );
+        }
+        return old;
+      });
+      
+      // Optimistically update KPI status
+      queryClient.setQueriesData({ queryKey: ['my-kpis'] }, (old: KPI[] | undefined) => {
+        if (!old) return old;
+        return old.map(kpi => 
+          kpi.id === variables.kpi_id 
+            ? { ...kpi, status: 'self_review' as ReviewStatus }
+            : kpi
+        );
+      });
+      
+      return { previousSubmissions, previousKpis };
+    },
+    onError: (error: Error, _, context) => {
+      // Rollback on error
+      if (context?.previousSubmissions) {
+        queryClient.setQueriesData({ queryKey: ['review-submissions'] }, context.previousSubmissions);
+      }
+      if (context?.previousKpis) {
+        queryClient.setQueriesData({ queryKey: ['my-kpis'] }, context.previousKpis);
+      }
+      toast({ title: 'Failed to submit review', description: error.message, variant: 'destructive' });
     },
     onSuccess: () => {
+      toast({ title: 'Self review submitted successfully' });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
-      toast({ title: 'Self review submitted successfully' });
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Failed to submit review', description: error.message, variant: 'destructive' });
     },
   });
 }
@@ -411,7 +468,7 @@ export function useRolloverKpi() {
   });
 }
 
-// Hook for approving a single KPI (manager level)
+// Hook for approving a single KPI (manager level) - with optimistic updates
 export function useApproveKpi() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -455,14 +512,48 @@ export function useApproveKpi() {
           metadata: { approved_at: new Date().toISOString() },
         });
       }
+      
+      return { kpi_id, manager_rating, manager_score, manager_remarks, manager_evidence_url };
+    },
+    onMutate: async (variables) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['review-submissions'] });
+      
+      // Snapshot previous value
+      const previousSubmissions = queryClient.getQueryData(['review-submissions']);
+      
+      // Optimistically update submissions cache
+      queryClient.setQueriesData({ queryKey: ['review-submissions'] }, (old: ReviewSubmission[] | undefined) => {
+        if (!old) return old;
+        return old.map(sub => 
+          sub.kpi_id === variables.kpi_id 
+            ? { 
+                ...sub, 
+                manager_rating: variables.manager_rating,
+                manager_score: variables.manager_score,
+                manager_remarks: variables.manager_remarks,
+                manager_evidence_url: variables.manager_evidence_url,
+                kpi_status: 'approved_by_manager' as KpiStatus,
+              }
+            : sub
+        );
+      });
+      
+      return { previousSubmissions };
+    },
+    onError: (error: Error, _, context) => {
+      // Rollback on error
+      if (context?.previousSubmissions) {
+        queryClient.setQueriesData({ queryKey: ['review-submissions'] }, context.previousSubmissions);
+      }
+      toast({ title: 'Failed to approve KPI', description: error.message, variant: 'destructive' });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kpis'] });
-      queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       toast({ title: 'KPI approved successfully' });
     },
-    onError: (error: Error) => {
-      toast({ title: 'Failed to approve KPI', description: error.message, variant: 'destructive' });
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
     },
   });
 }
