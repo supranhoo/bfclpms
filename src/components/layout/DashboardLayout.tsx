@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/s
 import { AppSidebar } from './AppSidebar';
 import { Separator } from '@/components/ui/separator';
 import { Loader2 } from 'lucide-react';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
 export function DashboardLayout() {
   const { user, loading } = useAuth();
@@ -30,7 +31,9 @@ export function DashboardLayout() {
           <div className="flex-1" />
         </header>
         <main className="flex-1 overflow-auto p-6 bg-muted/30">
-          <Outlet />
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </SidebarInset>
     </SidebarProvider>
