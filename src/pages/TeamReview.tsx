@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeamMembers, useProfiles } from '@/hooks/useOrganization';
-import { useKpisByEmployee, useReviewSubmissions, useRolloverKpi, useApproveKpi, useRaiseQuery, useKpiQueries, useSendBackKpi, RatingLevel, KPI, KpiStatus } from '@/hooks/useKpis';
+import { useKpisByEmployee, useReviewSubmissions, useRolloverKpi, useApproveKpi, useRaiseQuery, useKpiQueries, useSendBackKpi, RatingLevel, KPI } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { ReviewDetailsCard } from '@/components/review/ReviewDetailsCard';
 import { ReviewTrailCard } from '@/components/review/ReviewTrailCard';
@@ -26,53 +25,12 @@ import { Users, CheckCircle2, Clock, ArrowRight, Search, RefreshCw, MessageSquar
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
-
-const reviewPeriods = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-  'Q1', 'Q2', 'Q3', 'Q4'
-];
-
-const statusColors: Record<string, string> = {
-  kra_set: 'bg-muted text-muted-foreground',
-  self_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  manager_check: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-  audit: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  management_review: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
-  approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-};
-
-const statusLabels: Record<string, string> = {
-  kra_set: 'KRA Set',
-  self_review: 'Self Review',
-  manager_check: 'Manager Check',
-  audit: 'Audit',
-  management_review: 'Management Review',
-  approved: 'Approved',
-};
-
-const kpiStatusColors: Record<KpiStatus, string> = {
-  open: 'bg-muted text-muted-foreground',
-  submitted: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  approved_by_manager: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-  locked: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  sent_back: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
-};
-
-const kpiStatusLabels: Record<KpiStatus, string> = {
-  open: 'Open',
-  submitted: 'Submitted',
-  approved_by_manager: 'Approved',
-  locked: 'Locked',
-  sent_back: 'Sent Back',
-};
-
-const ratingOptions: { value: RatingLevel; label: string; color: string }[] = [
-  { value: 'red', label: 'Below Expectations', color: '#EF4444' },
-  { value: 'yellow', label: 'Meets Expectations', color: '#F59E0B' },
-  { value: 'green', label: 'Exceeds Expectations', color: '#10B981' },
-  { value: 'blue', label: 'Outstanding', color: '#3B82F6' },
-];
+import { 
+  reviewPeriods, 
+  kpiStatusColors, 
+  kpiStatusLabels, 
+  ratingOptions 
+} from '@/lib/reviewConstants';
 
 function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: { memberId: string; memberName: string; selectedPeriod: string; selectedYear: number }) {
   const { data: allKpis, isLoading } = useKpisByEmployee(memberId);
