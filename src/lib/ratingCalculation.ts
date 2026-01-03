@@ -205,13 +205,14 @@ export function calculateOverallScore(
 }
 
 /**
- * Get status flow for review process
+ * Get status flow for review process (static default)
  */
 export const REVIEW_STATUS_FLOW: Record<string, { next: string | null; label: string }> = {
   'kra_set': { next: 'self_review', label: 'KRA Set' },
   'self_review': { next: 'manager_check', label: 'Self Review' },
   'manager_check': { next: 'audit', label: 'Manager Review' },
   'audit': { next: 'management_review', label: 'Audit Review' },
+  'admin_review': { next: 'approved', label: 'Admin Review' },
   'management_review': { next: 'approved', label: 'Management Review' },
   'approved': { next: null, label: 'Approved' },
 };
@@ -222,4 +223,22 @@ export function getNextStatus(currentStatus: string): string | null {
 
 export function getStatusLabel(status: string): string {
   return REVIEW_STATUS_FLOW[status]?.label || status;
+}
+
+/**
+ * Get next status based on employee's dynamic workflow
+ */
+export function getNextStatusForWorkflow(currentStatus: string, workflowStages: string[]): string | null {
+  const currentIndex = workflowStages.indexOf(currentStatus);
+  if (currentIndex === -1 || currentIndex >= workflowStages.length - 1) {
+    return null;
+  }
+  return workflowStages[currentIndex + 1];
+}
+
+/**
+ * Check if a stage is part of the workflow
+ */
+export function isStageInWorkflow(stage: string, workflowStages: string[]): boolean {
+  return workflowStages.includes(stage);
 }

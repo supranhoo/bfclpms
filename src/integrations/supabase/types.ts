@@ -731,11 +731,97 @@ export type Database = {
         }
         Relationships: []
       }
+      workflow_config: {
+        Row: {
+          config_type: string
+          config_value: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          updated_at: string | null
+          workflow_template_id: string
+        }
+        Insert: {
+          config_type: string
+          config_value: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          updated_at?: string | null
+          workflow_template_id: string
+        }
+        Update: {
+          config_type?: string
+          config_value?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          updated_at?: string | null
+          workflow_template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_config_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_config_workflow_template_id_fkey"
+            columns: ["workflow_template_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_templates: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          display_name: string
+          id: string
+          is_default: boolean | null
+          name: string
+          stages: Json
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          display_name: string
+          id?: string
+          is_default?: boolean | null
+          name: string
+          stages: Json
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          display_name?: string
+          id?: string
+          is_default?: boolean | null
+          name?: string
+          stages?: Json
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      get_employee_workflow: { Args: { employee_uuid: string }; Returns: Json }
+      get_employee_workflow_info: {
+        Args: { employee_uuid: string }
+        Returns: {
+          config_source: string
+          display_name: string
+          stages: Json
+          template_id: string
+          template_name: string
+        }[]
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]

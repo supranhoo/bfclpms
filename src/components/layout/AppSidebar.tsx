@@ -33,6 +33,7 @@ import {
   History,
   Briefcase,
   Calendar,
+  GitBranch,
 } from 'lucide-react';
 
 const menuItems = {
@@ -55,6 +56,7 @@ const menuItems = {
   admin: [
     { title: 'User Management', icon: Users, path: '/admin/users', roles: ['admin'] },
     { title: 'All KRAs', icon: Target, path: '/admin/kpis', roles: ['admin'] },
+    { title: 'Workflow Config', icon: GitBranch, path: '/admin/workflow-config', roles: ['admin'] },
     { title: 'Organization', icon: Building2, path: '/admin/organization', roles: ['admin'] },
     { title: 'KRA Categories', icon: ClipboardList, path: '/admin/categories', roles: ['admin'] },
     { title: 'Review Periods', icon: Calendar, path: '/admin/review-periods', roles: ['admin'] },
