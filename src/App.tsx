@@ -22,6 +22,7 @@ import Categories from "./pages/admin/Categories";
 import ReviewPeriods from "./pages/admin/ReviewPeriods";
 import ImportData from "./pages/admin/ImportData";
 import SystemSettings from "./pages/admin/SystemSettings";
+import WorkflowConfig from "./pages/admin/WorkflowConfig";
 import PerformanceReport from "./pages/reports/PerformanceReport";
 import KRAIssuance from "./pages/reports/KRAIssuance";
 import KRAAcceptance from "./pages/KRAAcceptance";
@@ -106,6 +107,11 @@ const App = () => (
               <Route path="/admin/settings" element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <SystemSettings />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/workflow-config" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <WorkflowConfig />
                 </ProtectedRoute>
               } />
               
