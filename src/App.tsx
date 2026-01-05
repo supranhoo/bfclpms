@@ -49,7 +49,7 @@ const App = () => (
               
               {/* Manager-protected routes */}
               <Route path="/team-review" element={
-                <ProtectedRoute allowedRoles={['manager', 'admin']}>
+                <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>
                   <TeamReview />
                 </ProtectedRoute>
               } />
