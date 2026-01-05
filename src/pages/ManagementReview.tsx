@@ -35,6 +35,7 @@ import {
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { RatingLevel } from '@/hooks/useKpis';
+import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
 
 export default function ManagementReview() {
   const { user } = useAuth();
@@ -430,9 +431,12 @@ export default function ManagementReview() {
                       <span className="text-muted-foreground">Weightage:</span>
                       <p className="font-medium">{selectedKpi.weightage}%</p>
                     </div>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+                
+                {/* Rating Scale */}
+                <RatingScaleDisplay kpi={selectedKpi} compact />
 
               {/* Previous Reviews - Compact 3-column */}
               {selectedKpi && submissionMap.get(selectedKpi.id) && (
