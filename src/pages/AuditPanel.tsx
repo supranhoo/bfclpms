@@ -405,7 +405,7 @@ export default function AuditPanel() {
 
       {/* Audit Review Sheet */}
       <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <SheetContent size="2xl" className="overflow-y-auto">
+        <SheetContent size="full" className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-purple-500" />
