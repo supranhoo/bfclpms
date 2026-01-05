@@ -28,6 +28,7 @@ import ReportsHub from "./pages/reports/ReportsHub";
 import QueryReport from "./pages/reports/QueryReport";
 import DepartmentReport from "./pages/reports/DepartmentReport";
 import CompletionReport from "./pages/reports/CompletionReport";
+import AuditTrailReport from "./pages/reports/AuditTrailReport";
 import KRAAcceptance from "./pages/KRAAcceptance";
 import NotFound from "./pages/NotFound";
 
@@ -148,6 +149,11 @@ const App = () => (
               <Route path="/reports/completion" element={
                 <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>
                   <CompletionReport />
+                </ProtectedRoute>
+              } />
+              <Route path="/reports/audit-trail" element={
+                <ProtectedRoute allowedRoles={['admin', 'auditor']}>
+                  <AuditTrailReport />
                 </ProtectedRoute>
               } />
             </Route>
