@@ -393,8 +393,10 @@ export function useSubmitSelfReview() {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['review-submissions'] });
       await queryClient.cancelQueries({ queryKey: ['my-kpis'] });
+      await queryClient.cancelQueries({ queryKey: ['all-kpis'] });
+      await queryClient.cancelQueries({ queryKey: ['kpis-by-period'] });
       
-      // Snapshot previous values
+      // Snapshot previous values (best-effort)
       const previousSubmissions = queryClient.getQueryData(['review-submissions']);
       const previousKpis = queryClient.getQueryData(['my-kpis']);
       
@@ -421,20 +423,24 @@ export function useSubmitSelfReview() {
         return old;
       });
       
-      // Optimistically update KPI status
-      queryClient.setQueriesData({ queryKey: ['my-kpis'] }, (old: KPI[] | undefined) => {
+      // Optimistically update KPI status across commonly used KPI caches
+      const applyKpiStatus = <T extends { id: string; status?: any }>(old: T[] | undefined) => {
         if (!old) return old;
-        return old.map(kpi => 
-          kpi.id === variables.kpi_id 
+        return old.map(kpi => (
+          kpi.id === variables.kpi_id
             ? { ...kpi, status: 'self_review' as ReviewStatus }
             : kpi
-        );
-      });
+        ));
+      };
+
+      queryClient.setQueriesData({ queryKey: ['my-kpis'] }, applyKpiStatus);
+      queryClient.setQueriesData({ queryKey: ['all-kpis'] }, applyKpiStatus as any);
+      queryClient.setQueriesData({ queryKey: ['kpis-by-period'] }, applyKpiStatus as any);
       
       return { previousSubmissions, previousKpis };
     },
     onError: (error: Error, _, context) => {
-      // Rollback on error
+      // Rollback on error (partial)
       if (context?.previousSubmissions) {
         queryClient.setQueriesData({ queryKey: ['review-submissions'] }, context.previousSubmissions);
       }
@@ -449,6 +455,8 @@ export function useSubmitSelfReview() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
     },
   });
