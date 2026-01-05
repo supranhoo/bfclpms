@@ -38,10 +38,10 @@ import {
 
 const menuItems = {
   main: [
-    { title: 'Dashboard', icon: Home, path: '/dashboard', roles: ['admin', 'manager', 'employee', 'auditor'] },
+    { title: 'Dashboard', icon: Home, path: '/dashboard', roles: ['admin', 'manager', 'employee', 'auditor', 'management'] },
     // My KPIs combines KPI viewing and self-review submission
-    { title: 'My KPIs', icon: Target, path: '/my-kpis', roles: ['employee', 'manager', 'auditor', 'admin'] },
-    { title: 'Inbox', icon: MessageSquare, path: '/queries', roles: ['employee', 'manager', 'admin', 'auditor'], showBadge: true },
+    { title: 'My KPIs', icon: Target, path: '/my-kpis', roles: ['employee', 'manager', 'auditor', 'admin', 'management'] },
+    { title: 'Inbox', icon: MessageSquare, path: '/queries', roles: ['employee', 'manager', 'admin', 'auditor', 'management'], showBadge: true },
   ],
   manager: [
     { title: 'Team Review', icon: Users, path: '/team-review', roles: ['manager', 'admin'] },
