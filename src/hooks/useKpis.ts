@@ -283,6 +283,61 @@ export function useUpdateKpi() {
   });
 }
 
+// Admin update hook with audit logging
+export function useAdminUpdateKpi() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({ id, reason, ...updates }: Partial<KPI> & { id: string; reason?: string }) => {
+      // Get old values for audit
+      const { data: oldKpi, error: fetchError } = await supabase
+        .from('kpis')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Update KPI
+      const { data, error } = await supabase
+        .from('kpis')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Create audit log entry
+      await supabase.from('kpi_audit_logs').insert({
+        kpi_id: id,
+        action: 'ADMIN_OVERRIDE',
+        performed_by: user?.id,
+        old_value: oldKpi,
+        new_value: data,
+        metadata: { 
+          reason: reason || null, 
+          source: 'admin_edit_dialog',
+          changed_fields: Object.keys(updates).filter(k => k !== 'id' && k !== 'reason'),
+        },
+      });
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      toast({ title: 'KPI updated by admin' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to update KPI', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
 // Self review submission with optimistic updates
 export function useSubmitSelfReview() {
   const queryClient = useQueryClient();
