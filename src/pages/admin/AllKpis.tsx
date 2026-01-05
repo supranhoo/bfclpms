@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAllKpis } from '@/hooks/useKpis';
+import { useAllKpis, KPI } from '@/hooks/useKpis';
 import { useKraCategories, useProfiles } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { StatsRowSkeleton, TableSkeleton, FilterBarSkeleton } from '@/components/ui/LoadingSkeletons';
-import { Search, Users, Target, Filter } from 'lucide-react';
+import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
+import { Search, Users, Target, Filter, Pencil } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -35,6 +36,7 @@ export default function AllKpis() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
+  const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
 
   const filteredKpis = kpis?.filter(kpi => {
     const employee = kpi.profiles as { full_name: string; email: string; employee_code: string } | null;
@@ -187,6 +189,7 @@ export default function AllKpis() {
                   <TableHead>Target</TableHead>
                   <TableHead>Weightage</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="w-[80px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -225,12 +228,22 @@ export default function AllKpis() {
                           {statusLabels[kpi.status || 'kra_set']}
                         </Badge>
                       </TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditingKpi(kpi as KPI)}
+                          title="Edit KPI"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
                 {(!filteredKpis || filteredKpis.length === 0) && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       No KPIs found
                     </TableCell>
                   </TableRow>
@@ -240,6 +253,12 @@ export default function AllKpis() {
           </div>
         </CardContent>
       </Card>
+
+      <AdminKpiEditDialog
+        isOpen={!!editingKpi}
+        onClose={() => setEditingKpi(null)}
+        kpi={editingKpi}
+      />
     </div>
   );
 }
