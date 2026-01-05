@@ -13,6 +13,20 @@ interface SystemSetting {
   updated_at: string;
 }
 
+interface RolloverLog {
+  id: string;
+  source_period: string;
+  source_year: number;
+  target_period: string;
+  target_year: number;
+  kpis_copied: number;
+  employees_affected: number;
+  triggered_by: string;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+}
+
 export function useSystemSettings() {
   return useQuery({
     queryKey: ['system-settings'],
@@ -58,6 +72,75 @@ export function useScoreCalculationMode() {
   }
   
   return { mode, isLoading };
+}
+
+export function useAutoRolloverSetting() {
+  const { data, isLoading } = useSystemSetting('auto_kra_rollover');
+  
+  let enabled = true; // Default to enabled
+  if (data?.setting_value) {
+    const value = data.setting_value;
+    if (typeof value === 'string') {
+      enabled = value.replace(/^"|"$/g, '') === 'enabled';
+    }
+  }
+  
+  return { enabled, isLoading };
+}
+
+export function useRolloverLogs() {
+  return useQuery({
+    queryKey: ['rollover-logs'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kra_rollover_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      
+      if (error) throw error;
+      return data as RolloverLog[];
+    },
+  });
+}
+
+export function useTriggerRollover() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
+  return useMutation({
+    mutationFn: async (force: boolean = false) => {
+      const { data, error } = await supabase.functions.invoke('auto-rollover-kpis', {
+        body: { triggered_by: 'admin_manual', force },
+      });
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['rollover-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      
+      if (data.skipped) {
+        toast({
+          title: 'Rollover Skipped',
+          description: data.reason,
+        });
+      } else {
+        toast({
+          title: 'Rollover Complete',
+          description: `Copied ${data.kpis_copied} KPIs for ${data.employees_affected} employees.`,
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Rollover Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
 }
 
 export function useUpdateSystemSetting() {
