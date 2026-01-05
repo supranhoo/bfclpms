@@ -44,7 +44,7 @@ const menuItems = {
     { title: 'Inbox', icon: MessageSquare, path: '/queries', roles: ['employee', 'manager', 'admin', 'auditor', 'management'], showBadge: true },
   ],
   manager: [
-    { title: 'Team Review', icon: Users, path: '/team-review', roles: ['manager', 'admin'] },
+    { title: 'Team Review', icon: Users, path: '/team-review', roles: ['manager', 'admin', 'management'] },
   ],
   management: [
     { title: 'Management Review', icon: Briefcase, path: '/management-review', roles: ['management', 'admin'] },
@@ -131,7 +131,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {(role === 'manager' || role === 'admin') && (
+        {(role === 'manager' || role === 'management' || role === 'admin') && (
           <SidebarGroup>
             <SidebarGroupLabel>Manager</SidebarGroupLabel>
             <SidebarGroupContent>

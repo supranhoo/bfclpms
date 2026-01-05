@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeamMembers, useProfiles } from '@/hooks/useOrganization';
 import { useKpisByEmployee, useReviewSubmissions, useRolloverKpi, useApproveKpi, useRaiseQuery, useKpiQueries, useSendBackKpi, RatingLevel, KPI } from '@/hooks/useKpis';
@@ -33,7 +34,7 @@ import {
   ratingOptions 
 } from '@/lib/reviewConstants';
 
-function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: { memberId: string; memberName: string; selectedPeriod: string; selectedYear: number }) {
+function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear, autoOpenKpiId }: { memberId: string; memberName: string; selectedPeriod: string; selectedYear: number; autoOpenKpiId?: string | null }) {
   const { data: allKpis, isLoading } = useKpisByEmployee(memberId);
   
   // Filter KPIs by period and year - ensure proper string comparison
@@ -56,6 +57,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [logicModalOpen, setLogicModalOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
+  const [didAutoOpen, setDidAutoOpen] = useState(false);
   const [managerScore, setManagerScore] = useState<number | null>(null);
   const [managerRating, setManagerRating] = useState<RatingLevel | ''>('');
   const [managerRemarks, setManagerRemarks] = useState('');
@@ -138,6 +140,15 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
     setManagerAchievedValue((existing as any)?.manager_achieved_value || existing?.achieved_value || null);
     setReviewDialogOpen(true);
   };
+
+  useEffect(() => {
+    if (!autoOpenKpiId || didAutoOpen) return;
+    const target = kpis?.find(k => k.id === autoOpenKpiId);
+    if (target) {
+      openReviewDialog(target);
+      setDidAutoOpen(true);
+    }
+  }, [autoOpenKpiId, didAutoOpen, kpis]);
 
   const openQueryDialog = (kpi: NonNullable<typeof kpis>[number]) => {
     setSelectedKpi(kpi);
@@ -950,6 +961,26 @@ export default function TeamReview() {
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
   const [selectedYear, setSelectedYear] = useState(defaultYear);
+  const [searchParams] = useSearchParams();
+  const autoOpenKpiId = searchParams.get('kpi');
+
+  useEffect(() => {
+    if (!autoOpenKpiId) return;
+
+    (async () => {
+      const { data, error } = await supabase
+        .from('kpis')
+        .select('employee_id, review_period, review_year')
+        .eq('id', autoOpenKpiId)
+        .maybeSingle();
+
+      if (error || !data) return;
+
+      setSelectedMember(data.employee_id);
+      if (data.review_period) setSelectedPeriod(data.review_period);
+      if (data.review_year) setSelectedYear(data.review_year);
+    })();
+  }, [autoOpenKpiId]);
 
   const isAdmin = role === 'admin';
   const isLoading = isAdmin ? profilesLoading : teamLoading;
@@ -1148,6 +1179,7 @@ export default function TeamReview() {
               memberName={displayMembers?.find(m => m.id === selectedMember)?.full_name || 'Team Member'}
               selectedPeriod={selectedPeriod}
               selectedYear={selectedYear}
+              autoOpenKpiId={autoOpenKpiId}
             />
           </CardContent>
         </Card>
