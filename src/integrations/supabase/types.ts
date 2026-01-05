@@ -389,6 +389,48 @@ export type Database = {
         }
         Relationships: []
       }
+      kra_rollover_logs: {
+        Row: {
+          created_at: string | null
+          employees_affected: number
+          error_message: string | null
+          id: string
+          kpis_copied: number
+          source_period: string
+          source_year: number
+          status: string
+          target_period: string
+          target_year: number
+          triggered_by: string
+        }
+        Insert: {
+          created_at?: string | null
+          employees_affected?: number
+          error_message?: string | null
+          id?: string
+          kpis_copied?: number
+          source_period: string
+          source_year: number
+          status?: string
+          target_period: string
+          target_year: number
+          triggered_by?: string
+        }
+        Update: {
+          created_at?: string | null
+          employees_affected?: number
+          error_message?: string | null
+          id?: string
+          kpis_copied?: number
+          source_period?: string
+          source_year?: number
+          status?: string
+          target_period?: string
+          target_year?: number
+          triggered_by?: string
+        }
+        Relationships: []
+      }
       performance_reviews: {
         Row: {
           auditor_remarks: string | null

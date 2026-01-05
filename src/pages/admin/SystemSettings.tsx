@@ -3,9 +3,12 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Settings, Calculator, Edit3, Lightbulb, Save } from 'lucide-react';
-import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode } from '@/hooks/useSystemSettings';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
+import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle } from 'lucide-react';
+import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useTriggerRollover } from '@/hooks/useSystemSettings';
 import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 
 const scoreCalculationOptions: { 
   value: ScoreCalculationMode; 
@@ -34,8 +37,12 @@ const scoreCalculationOptions: {
 ];
 
 export default function SystemSettings() {
-  const { mode, isLoading } = useScoreCalculationMode();
+  const { mode, isLoading: modeLoading } = useScoreCalculationMode();
+  const { enabled: rolloverEnabled, isLoading: rolloverLoading } = useAutoRolloverSetting();
+  const { data: rolloverLogs, isLoading: logsLoading } = useRolloverLogs();
   const updateSetting = useUpdateSystemSetting();
+  const triggerRollover = useTriggerRollover();
+  
   const [selectedMode, setSelectedMode] = useState<ScoreCalculationMode>(mode);
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -57,24 +64,38 @@ export default function SystemSettings() {
     );
   };
 
-  if (isLoading) {
+  const handleRolloverToggle = (checked: boolean) => {
+    updateSetting.mutate({
+      key: 'auto_kra_rollover',
+      value: checked ? 'enabled' : 'disabled',
+    });
+  };
+
+  const handleManualRollover = (force: boolean = false) => {
+    triggerRollover.mutate(force);
+  };
+
+  const lastRollover = rolloverLogs?.[0];
+
+  if (modeLoading || rolloverLoading) {
     return (
       <div className="container mx-auto p-6 max-w-4xl">
         <div className="flex items-center gap-3 mb-6">
           <Settings className="h-8 w-8 text-primary" />
           <h1 className="text-3xl font-bold">System Settings</h1>
         </div>
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-48" />
-            <Skeleton className="h-4 w-96 mt-2" />
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-24 w-full" />
-          </CardContent>
-        </Card>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-4 w-96 mt-2" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
@@ -86,66 +107,155 @@ export default function SystemSettings() {
         <h1 className="text-3xl font-bold">System Settings</h1>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calculator className="h-5 w-5" />
-            Score Calculation Mode
-          </CardTitle>
-          <CardDescription>
-            Configure how scores are calculated during the review process (Manager, Auditor, and Management stages).
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <RadioGroup
-            value={selectedMode}
-            onValueChange={(value) => handleModeChange(value as ScoreCalculationMode)}
-            className="space-y-4"
-          >
-            {scoreCalculationOptions.map((option) => (
-              <div
-                key={option.value}
-                className={`flex items-start space-x-4 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                  selectedMode === option.value
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-muted-foreground/30'
-                }`}
-                onClick={() => handleModeChange(option.value)}
-              >
-                <RadioGroupItem value={option.value} id={option.value} className="mt-1" />
-                <div className="flex-1">
-                  <Label
-                    htmlFor={option.value}
-                    className="flex items-center gap-2 text-base font-medium cursor-pointer"
-                  >
-                    {option.icon}
-                    {option.label}
-                  </Label>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {option.description}
-                  </p>
-                </div>
+      <div className="space-y-6">
+        {/* Auto KRA Rollover Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5" />
+              Auto KRA Rollover
+            </CardTitle>
+            <CardDescription>
+              Automatically copy KRA definitions from the previous month to the new month on the 1st of each month.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center justify-between p-4 rounded-lg border">
+              <div className="space-y-1">
+                <Label htmlFor="auto-rollover" className="text-base font-medium">
+                  Enable Auto-Rollover
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  When enabled, KPIs will be automatically copied on the 1st of each month.
+                </p>
               </div>
-            ))}
-          </RadioGroup>
+              <Switch
+                id="auto-rollover"
+                checked={rolloverEnabled}
+                onCheckedChange={handleRolloverToggle}
+                disabled={updateSetting.isPending}
+              />
+            </div>
 
-          <div className="mt-6 flex items-center justify-between border-t pt-4">
-            <p className="text-sm text-muted-foreground">
-              Current mode: <span className="font-medium text-foreground">{
-                scoreCalculationOptions.find(o => o.value === mode)?.label || mode
-              }</span>
-            </p>
-            <Button 
-              onClick={handleSave} 
-              disabled={!hasChanges || updateSetting.isPending}
-              className="gap-2"
+            {lastRollover && (
+              <div className="p-4 rounded-lg bg-muted/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Last Rollover</span>
+                  <Badge variant={lastRollover.status === 'completed' ? 'default' : 'destructive'}>
+                    {lastRollover.status}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span>{format(new Date(lastRollover.created_at), 'MMM d, yyyy HH:mm')}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span>{lastRollover.kpis_copied} KPIs copied</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <span>{lastRollover.employees_affected} employees</span>
+                  </div>
+                  <div className="text-muted-foreground">
+                    {lastRollover.source_period} {lastRollover.source_year} → {lastRollover.target_period} {lastRollover.target_year}
+                  </div>
+                </div>
+                {lastRollover.error_message && (
+                  <div className="flex items-center gap-2 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>{lastRollover.error_message}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 border-t pt-4">
+              <Button
+                variant="outline"
+                onClick={() => handleManualRollover(false)}
+                disabled={triggerRollover.isPending}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${triggerRollover.isPending ? 'animate-spin' : ''}`} />
+                {triggerRollover.isPending ? 'Rolling Over...' : 'Rollover Now'}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => handleManualRollover(true)}
+                disabled={triggerRollover.isPending}
+              >
+                Force Rollover
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Force will copy even if target period already has KPIs.
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Score Calculation Mode Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5" />
+              Score Calculation Mode
+            </CardTitle>
+            <CardDescription>
+              Configure how scores are calculated during the review process (Manager, Auditor, and Management stages).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RadioGroup
+              value={selectedMode}
+              onValueChange={(value) => handleModeChange(value as ScoreCalculationMode)}
+              className="space-y-4"
             >
-              <Save className="h-4 w-4" />
-              {updateSetting.isPending ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+              {scoreCalculationOptions.map((option) => (
+                <div
+                  key={option.value}
+                  className={`flex items-start space-x-4 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    selectedMode === option.value
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-muted-foreground/30'
+                  }`}
+                  onClick={() => handleModeChange(option.value)}
+                >
+                  <RadioGroupItem value={option.value} id={option.value} className="mt-1" />
+                  <div className="flex-1">
+                    <Label
+                      htmlFor={option.value}
+                      className="flex items-center gap-2 text-base font-medium cursor-pointer"
+                    >
+                      {option.icon}
+                      {option.label}
+                    </Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {option.description}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </RadioGroup>
+
+            <div className="mt-6 flex items-center justify-between border-t pt-4">
+              <p className="text-sm text-muted-foreground">
+                Current mode: <span className="font-medium text-foreground">{
+                  scoreCalculationOptions.find(o => o.value === mode)?.label || mode
+                }</span>
+              </p>
+              <Button 
+                onClick={handleSave} 
+                disabled={!hasChanges || updateSetting.isPending}
+                className="gap-2"
+              >
+                <Save className="h-4 w-4" />
+                {updateSetting.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
