@@ -52,6 +52,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
   const [queryDialogOpen, setQueryDialogOpen] = useState(false);
   const [sendBackDialogOpen, setSendBackDialogOpen] = useState(false);
   const [rolloverDialogOpen, setRolloverDialogOpen] = useState(false);
+  const [bulkRolloverDialogOpen, setBulkRolloverDialogOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [logicModalOpen, setLogicModalOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
@@ -63,6 +64,9 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
   const [queryReason, setQueryReason] = useState('');
   const [sendBackReason, setSendBackReason] = useState('');
   const [targetPeriod, setTargetPeriod] = useState('');
+  const [bulkTargetPeriod, setBulkTargetPeriod] = useState('');
+  const [bulkTargetYear, setBulkTargetYear] = useState(selectedYear);
+  const [isBulkRollingOver, setIsBulkRollingOver] = useState(false);
 
   const openLogicModal = (kpi: KPI) => {
     setSelectedKpi(kpi);
@@ -219,6 +223,81 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
     );
   };
 
+  // Bulk rollover - calculate next period
+  const openBulkRolloverDialog = () => {
+    const currentIndex = reviewPeriods.indexOf(selectedPeriod);
+    if (currentIndex !== -1 && currentIndex < 11) {
+      setBulkTargetPeriod(reviewPeriods[currentIndex + 1]);
+      setBulkTargetYear(selectedYear);
+    } else if (selectedPeriod === 'December') {
+      setBulkTargetPeriod('January');
+      setBulkTargetYear(selectedYear + 1);
+    } else {
+      setBulkTargetPeriod('');
+      setBulkTargetYear(selectedYear);
+    }
+    setBulkRolloverDialogOpen(true);
+  };
+
+  const handleBulkRollover = async () => {
+    if (!kpis || kpis.length === 0 || !bulkTargetPeriod) return;
+    
+    setIsBulkRollingOver(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const kpi of kpis) {
+      try {
+        // Create new KPI for target period
+        const { error } = await supabase.from('kpis').insert({
+          employee_id: kpi.employee_id,
+          category_id: kpi.category_id,
+          kra_name: kpi.kra_name,
+          kpi_name: kpi.kpi_name,
+          target_value: kpi.target_value,
+          weightage: kpi.weightage,
+          uom: kpi.uom,
+          criteria: kpi.criteria,
+          frequency: kpi.frequency,
+          source_of_data: kpi.source_of_data,
+          r0: kpi.r0,
+          r1: kpi.r1,
+          r2: kpi.r2,
+          r3: kpi.r3,
+          r4: kpi.r4,
+          r5: kpi.r5,
+          review_period: bulkTargetPeriod,
+          review_year: bulkTargetYear,
+          status: 'kra_set',
+        });
+        
+        if (error) throw error;
+        successCount++;
+      } catch (err) {
+        errorCount++;
+        console.error('Failed to rollover KPI:', kpi.id, err);
+      }
+    }
+
+    setIsBulkRollingOver(false);
+    setBulkRolloverDialogOpen(false);
+    
+    queryClient.invalidateQueries({ queryKey: ['kpis'] });
+    
+    if (errorCount === 0) {
+      toast({
+        title: 'Rollover Complete',
+        description: `Successfully rolled over ${successCount} KPIs to ${bulkTargetPeriod} ${bulkTargetYear}`,
+      });
+    } else {
+      toast({
+        title: 'Rollover Partially Complete',
+        description: `Rolled over ${successCount} KPIs, ${errorCount} failed`,
+        variant: 'destructive',
+      });
+    }
+  };
+
   const pendingReviewKpis = kpis?.filter(k => k.status === 'self_review') || [];
   const reviewedKpis = kpis?.filter(k => k.status === 'manager_check' || k.status === 'audit' || k.status === 'approved') || [];
 
@@ -230,13 +309,24 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">{memberName}'s KPIs</h3>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
             {pendingReviewKpis.length} pending review
           </Badge>
           <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
             {reviewedKpis.length} reviewed
           </Badge>
+          {kpis && kpis.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={openBulkRolloverDialog}
+              className="ml-2"
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Rollover All to Next Period
+            </Button>
+          )}
         </div>
       </div>
 
@@ -748,6 +838,87 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
             <Button onClick={handleRollover} disabled={!targetPeriod || rolloverKpi.isPending}>
               <RefreshCw className="h-4 w-4 mr-2" />
               {rolloverKpi.isPending ? 'Rolling over...' : 'Rollover KRA'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Rollover Dialog */}
+      <Dialog open={bulkRolloverDialogOpen} onOpenChange={setBulkRolloverDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rollover All KPIs to Next Period</DialogTitle>
+            <DialogDescription>
+              Copy all {kpis?.length || 0} KPIs from {selectedPeriod} {selectedYear} to the selected target period
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+              <div>
+                <Label className="text-muted-foreground">Current Period</Label>
+                <p className="font-medium">{selectedPeriod}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Current Year</Label>
+                <p className="font-medium">{selectedYear}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Target Period</Label>
+                <Select value={bulkTargetPeriod} onValueChange={setBulkTargetPeriod}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select target period" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {reviewPeriods.slice(0, 12).map(period => (
+                      <SelectItem key={period} value={period}>
+                        {period}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Target Year</Label>
+                <Select value={bulkTargetYear.toString()} onValueChange={(v) => setBulkTargetYear(parseInt(v))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[selectedYear, selectedYear + 1].map(year => (
+                      <SelectItem key={year} value={year.toString()}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5" />
+                <div className="text-sm text-amber-800 dark:text-amber-200">
+                  <p className="font-medium">This will create {kpis?.length || 0} new KPIs</p>
+                  <p className="text-amber-600 dark:text-amber-400">All KPI definitions will be copied, but achieved values and scores will be reset.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkRolloverDialogOpen(false)} disabled={isBulkRollingOver}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleBulkRollover} 
+              disabled={!bulkTargetPeriod || isBulkRollingOver || !kpis?.length}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isBulkRollingOver ? 'animate-spin' : ''}`} />
+              {isBulkRollingOver ? 'Rolling over...' : `Rollover ${kpis?.length || 0} KPIs`}
             </Button>
           </DialogFooter>
         </DialogContent>
