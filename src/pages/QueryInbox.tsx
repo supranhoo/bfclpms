@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { StatsRowSkeleton, CategoryGridSkeleton } from '@/components/ui/LoadingSkeletons';
 import { format } from 'date-fns';
-import { MessageSquare, CheckCircle2, Clock, Send, User, Calendar, AlertCircle, Bell, BellOff, CheckCheck } from 'lucide-react';
+import { MessageSquare, CheckCircle2, Clock, Send, User, Calendar, AlertCircle, Bell, BellOff, CheckCheck, ExternalLink } from 'lucide-react';
 
 interface QueryWithDetails {
   id: string;
@@ -45,6 +46,7 @@ export default function QueryInbox() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   
   const [selectedQuery, setSelectedQuery] = useState<QueryWithDetails | null>(null);
   const [responseDialogOpen, setResponseDialogOpen] = useState(false);
@@ -274,37 +276,104 @@ export default function QueryInbox() {
     }
   };
 
-  const renderNotificationCard = (notification: Notification) => (
-    <Card 
-      key={notification.id} 
-      className={`cursor-pointer transition-all hover:shadow-md ${notification.is_read ? 'opacity-60' : 'border-l-4 border-l-primary'}`}
-      onClick={() => {
-        if (!notification.is_read) {
-          markNotificationRead.mutate(notification.id);
-        }
-      }}
-    >
-      <CardContent className="pt-4 pb-4">
-        <div className="flex items-start gap-3">
-          <div className="mt-1">
-            {getNotificationIcon(notification.type)}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <p className="font-medium text-sm truncate">{notification.title}</p>
-              {!notification.is_read && (
-                <Badge variant="default" className="shrink-0 h-5 text-xs">New</Badge>
-              )}
+  // Get navigation path based on notification type
+  const getNotificationLink = (notification: Notification): string | null => {
+    switch (notification.type) {
+      case 'kpi_submitted':
+        // Manager should go to Team Review to review submitted KPIs
+        return '/team-review';
+      case 'kpi_approved':
+      case 'kpi_finalized':
+        // Employee should go to My KPIs to see their approved KPI
+        return '/my-kpis';
+      case 'kpi_ready_for_audit':
+        // Auditor should go to Audit Panel
+        return '/audit';
+      case 'kpi_ready_for_management':
+        // Management should go to Management Review
+        return '/management-review';
+      case 'query_raised':
+      case 'query_resolved':
+        // Stay on queries page but switch to queries tab
+        return null; // Handle separately
+      default:
+        return '/my-kpis';
+    }
+  };
+
+  const handleNotificationClick = (notification: Notification) => {
+    // Mark as read
+    if (!notification.is_read) {
+      markNotificationRead.mutate(notification.id);
+    }
+  };
+
+  const handleOpenNotification = (e: React.MouseEvent, notification: Notification) => {
+    e.stopPropagation(); // Prevent card click
+    
+    // Mark as read
+    if (!notification.is_read) {
+      markNotificationRead.mutate(notification.id);
+    }
+
+    // Handle query notifications - switch to queries tab
+    if (notification.type === 'query_raised' || notification.type === 'query_resolved') {
+      setActiveTab('received');
+      return;
+    }
+
+    // Navigate to appropriate page
+    const link = getNotificationLink(notification);
+    if (link) {
+      navigate(link);
+    }
+  };
+
+  const renderNotificationCard = (notification: Notification) => {
+    const link = getNotificationLink(notification);
+    const isQueryNotification = notification.type === 'query_raised' || notification.type === 'query_resolved';
+    
+    return (
+      <Card 
+        key={notification.id} 
+        className={`transition-all hover:shadow-md ${notification.is_read ? 'opacity-60' : 'border-l-4 border-l-primary'}`}
+        onClick={() => handleNotificationClick(notification)}
+      >
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-1">
+              {getNotificationIcon(notification.type)}
             </div>
-            <p className="text-sm text-muted-foreground mt-1">{notification.message}</p>
-            <p className="text-xs text-muted-foreground mt-2">
-              {format(new Date(notification.created_at), 'MMM d, yyyy h:mm a')}
-            </p>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-medium text-sm truncate">{notification.title}</p>
+                <div className="flex items-center gap-2 shrink-0">
+                  {!notification.is_read && (
+                    <Badge variant="default" className="h-5 text-xs">New</Badge>
+                  )}
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">{notification.message}</p>
+              <div className="flex items-center justify-between mt-3">
+                <p className="text-xs text-muted-foreground">
+                  {format(new Date(notification.created_at), 'MMM d, yyyy h:mm a')}
+                </p>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-7 text-xs"
+                  onClick={(e) => handleOpenNotification(e, notification)}
+                >
+                  <ExternalLink className="h-3 w-3 mr-1" />
+                  {isQueryNotification ? 'View Query' : 'Open'}
+                </Button>
+              </div>
+            </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-6">
