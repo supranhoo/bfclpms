@@ -1,599 +1,318 @@
+import { useEffect, useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useKraCategories } from '@/hooks/useOrganization';
-import { useReviewPageState } from '@/hooks/useReviewPageState';
+import { useProfiles } from '@/hooks/useOrganization';
+import { useKpisByPeriod } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
-import { ReviewDetailsCard } from '@/components/review/ReviewDetailsCard';
-import { ReviewTrailCard } from '@/components/review/ReviewTrailCard';
-import { scoreToRating } from '@/components/review/ScoreSelector';
-import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
-import { ReviewPageHeader } from '@/components/review/ReviewPageHeader';
-import { ReviewStatsCards, StatCardConfig } from '@/components/review/ReviewStatsCards';
-import { ReviewFilters } from '@/components/review/ReviewFilters';
-import { SendBackDialog } from '@/components/review/SendBackDialog';
-import { statusColors, statusLabels, ratingOptions } from '@/lib/reviewConstants';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
+import { ManagementScorecard } from '@/components/review/ManagementScorecard';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
-import { 
-  Briefcase, 
-  CheckCircle2, 
-  Clock, 
-  Info, 
-  User,
-  TrendingUp,
-  ClipboardCheck,
-  Shield,
-} from 'lucide-react';
-import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
-import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
-import { RatingLevel } from '@/hooks/useKpis';
-import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
+import { Users, CheckCircle2, Clock, ArrowRight, Search, Target, Briefcase } from 'lucide-react';
 
 export default function ManagementReview() {
   const { user } = useAuth();
-  const { data: categories } = useKraCategories();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { data: allProfiles, isLoading: profilesLoading } = useProfiles();
+  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
+  const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
+  const [selectedYear, setSelectedYear] = useState(defaultYear);
+  const [searchParams] = useSearchParams();
+  const autoOpenKpiId = searchParams.get('kpi');
 
-  const {
-    selectedPeriod,
-    setSelectedPeriod,
-    selectedYear,
-    setSelectedYear,
-    selectedCategory,
-    setSelectedCategory,
-    statusFilter,
-    setStatusFilter,
-    searchQuery,
-    setSearchQuery,
-    reviewDialogOpen,
-    setReviewDialogOpen,
-    sendBackDialogOpen,
-    setSendBackDialogOpen,
-    logicModalOpen,
-    setLogicModalOpen,
-    selectedKpi,
-    score,
-    setScore,
-    remarks,
-    setRemarks,
-    evidenceUrl,
-    setEvidenceUrl,
-    achievedValue,
-    setAchievedValue,
-    sendBackReason,
-    setSendBackReason,
-    sendBackTarget,
-    setSendBackTarget,
-    isLoading,
-    periodFilteredKpis,
-    filteredKpis,
-    submissionMap,
-    queryMap,
-    openReviewDialog,
-    openSendBackDialog,
-    openLogicModal,
-  } = useReviewPageState({
-    defaultStatusFilter: 'management_review',
-    defaultSendBackTarget: 'auditor',
-  });
+  // Fetch KPIs for stats calculation
+  const { data: periodKpis } = useKpisByPeriod(selectedPeriod, selectedYear);
 
-  const submitManagementReview = useMutation({
-    mutationFn: async ({
-      kpi_id,
-      management_rating,
-      management_score,
-      management_remarks,
-      management_evidence_url,
-      approve,
-    }: {
-      kpi_id: string;
-      management_rating: RatingLevel;
-      management_score: number;
-      management_remarks: string;
-      management_evidence_url?: string | null;
-      approve: boolean;
-    }) => {
-      const { error: submissionError } = await supabase
-        .from('review_submissions')
-        .update({
-          management_rating,
-          management_score,
-          management_remarks,
-          management_evidence_url,
-          final_rating: management_rating,
-          final_score: management_score,
-        })
-        .eq('kpi_id', kpi_id);
+  // Filter members by search
+  const displayMembers = useMemo(() => {
+    let filtered = allProfiles?.filter(p => 
+      p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.employee_code?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
-      if (submissionError) throw submissionError;
+    // Filter by status if needed
+    if (statusFilter !== 'all' && periodKpis) {
+      const employeeIds = new Set<string>();
+      periodKpis.forEach(kpi => {
+        if (statusFilter === 'pending' && kpi.status === 'management_review') {
+          employeeIds.add(kpi.employee_id);
+        } else if (statusFilter === 'approved' && kpi.status === 'approved') {
+          employeeIds.add(kpi.employee_id);
+        }
+      });
+      filtered = filtered?.filter(m => employeeIds.has(m.id));
+    }
 
-      const newStatus = approve ? 'approved' : 'management_review';
-      const { error: kpiError } = await supabase
+    return filtered;
+  }, [allProfiles, searchQuery, statusFilter, periodKpis]);
+
+  // Calculate stats
+  const stats = useMemo(() => {
+    if (!periodKpis || !allProfiles) {
+      return { totalEmployees: 0, pendingReview: 0, approved: 0, totalKpis: 0 };
+    }
+
+    const pendingReview = periodKpis.filter(k => k.status === 'management_review').length;
+    const approved = periodKpis.filter(k => k.status === 'approved').length;
+
+    return {
+      totalEmployees: allProfiles.length,
+      pendingReview,
+      approved,
+      totalKpis: periodKpis.length,
+    };
+  }, [periodKpis, allProfiles]);
+
+  // Auto-open KPI from URL
+  useEffect(() => {
+    if (!autoOpenKpiId || !allProfiles) return;
+
+    (async () => {
+      const { data, error } = await supabase
         .from('kpis')
-        .update({ status: newStatus as any })
-        .eq('id', kpi_id);
+        .select('employee_id, review_period, review_year')
+        .eq('id', autoOpenKpiId)
+        .maybeSingle();
 
-      if (kpiError) throw kpiError;
+      if (error || !data) return;
 
-      if (user?.id) {
-        await supabase.from('kpi_audit_logs').insert({
-          kpi_id,
-          action: approve ? 'MANAGEMENT_APPROVED' : 'MANAGEMENT_REVIEWED',
-          performed_by: user.id,
-          new_value: { management_rating, management_score, management_remarks },
-          metadata: { approved_at: approve ? new Date().toISOString() : null },
-        });
+      const targetEmployee = allProfiles.find(p => p.id === data.employee_id);
+      if (targetEmployee) {
+        setSelectedMember(targetEmployee);
+        if (data.review_period) setSelectedPeriod(data.review_period);
+        if (data.review_year) setSelectedYear(data.review_year);
       }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
-      queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
-      toast({ title: 'Management review submitted successfully' });
-      setReviewDialogOpen(false);
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Failed to submit review', description: error.message, variant: 'destructive' });
-    },
-  });
+    })();
+  }, [autoOpenKpiId, allProfiles]);
 
-  const sendBack = useMutation({
-    mutationFn: async ({
-      kpi_id,
-      target,
-      reason,
-    }: {
-      kpi_id: string;
-      target: string;
-      reason: string;
-    }) => {
-      const statusMap: Record<string, string> = {
-        auditor: 'audit',
-        manager: 'manager_check', 
-        employee: 'kra_set',
-      };
-
-      const { error: kpiError } = await supabase
-        .from('kpis')
-        .update({ status: statusMap[target] as any })
-        .eq('id', kpi_id);
-
-      if (kpiError) throw kpiError;
-
-      const { error: submissionError } = await supabase
-        .from('review_submissions')
-        .update({
-          management_rating: null,
-          management_score: null,
-          management_remarks: null,
-        })
-        .eq('kpi_id', kpi_id);
-
-      if (submissionError) throw submissionError;
-
-      if (user?.id) {
-        await supabase.from('kpi_audit_logs').insert({
-          kpi_id,
-          action: `MANAGEMENT_SENT_BACK_TO_${target.toUpperCase()}`,
-          performed_by: user.id,
-          new_value: { reason, target },
-          metadata: { sent_back_at: new Date().toISOString() },
-        });
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
-      queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
-      toast({ title: 'KPI sent back successfully' });
-      setSendBackDialogOpen(false);
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Failed to send back', description: error.message, variant: 'destructive' });
-    },
-  });
-
-  const handleSubmitReview = (approve: boolean) => {
-    if (!selectedKpi || score === null) return;
-    const rating = scoreToRating(score);
-    submitManagementReview.mutate({
-      kpi_id: selectedKpi.id,
-      management_rating: rating,
-      management_score: score,
-      management_remarks: remarks,
-      management_evidence_url: evidenceUrl,
-      approve,
-    });
+  const getInitials = (name: string | null) => {
+    if (!name) return 'U';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  const handleSendBack = () => {
-    if (!selectedKpi || !sendBackReason.trim()) return;
-    sendBack.mutate({
-      kpi_id: selectedKpi.id,
-      target: sendBackTarget,
-      reason: sendBackReason,
-    });
+  const getManagerName = (managerId: string | null) => {
+    if (!managerId || !allProfiles) return null;
+    return allProfiles.find(p => p.id === managerId)?.full_name || null;
   };
 
-  // Stats
-  const pendingReview = periodFilteredKpis?.filter(k => k.status === 'management_review').length || 0;
-  const approved = periodFilteredKpis?.filter(k => k.status === 'approved').length || 0;
-  const total = pendingReview + approved;
-  const completionRate = total > 0 ? Math.round((approved / total) * 100) : 0;
+  const getEmployeeKpiStats = (employeeId: string) => {
+    if (!periodKpis) return { pending: 0, approved: 0, total: 0 };
+    const empKpis = periodKpis.filter(k => k.employee_id === employeeId);
+    return {
+      pending: empKpis.filter(k => k.status === 'management_review').length,
+      approved: empKpis.filter(k => k.status === 'approved').length,
+      total: empKpis.length,
+    };
+  };
 
-  const statsConfig: StatCardConfig[] = [
-    { label: 'Pending Review', value: pendingReview, description: 'Awaiting your approval', icon: Clock, color: 'emerald' },
-    { label: 'Approved', value: approved, description: 'Fully completed', icon: CheckCircle2, color: 'green' },
-    { label: 'Completion Rate', value: completionRate, description: '', icon: TrendingUp, color: 'blue', showProgress: true, progressValue: completionRate },
-  ];
-
-  if (isLoading) {
+  if (profilesLoading) {
     return <ReviewPanelSkeleton />;
+  }
+
+  // Show scorecard view when employee is selected
+  if (selectedMember) {
+    return (
+      <ManagementScorecard
+        employee={selectedMember}
+        selectedPeriod={selectedPeriod}
+        selectedYear={selectedYear}
+        onBack={() => setSelectedMember(null)}
+        autoOpenKpiId={autoOpenKpiId}
+      />
+    );
   }
 
   return (
     <div className="space-y-6">
-      <ReviewPageHeader
-        title="Management Review"
-        description="Final review and approval of performance evaluations"
-        icon={Briefcase}
-        iconGradient="bg-gradient-to-br from-emerald-500 to-teal-600"
-        selectedPeriod={selectedPeriod}
-        selectedYear={selectedYear}
-        onPeriodChange={setSelectedPeriod}
-        onYearChange={setSelectedYear}
-      />
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+            <Briefcase className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Management Review</h1>
+            <p className="text-muted-foreground">Final review and approval of performance evaluations</p>
+          </div>
+        </div>
+        <ReviewPeriodSelector
+          selectedPeriod={selectedPeriod}
+          selectedYear={selectedYear}
+          onPeriodChange={setSelectedPeriod}
+          onYearChange={setSelectedYear}
+        />
+      </div>
 
-      <ReviewStatsCards stats={statsConfig} />
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-l-4 border-l-primary">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total Employees</p>
+                <p className="text-3xl font-bold">{stats.totalEmployees}</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Users className="h-6 w-6 text-primary" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-emerald-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Pending Review</p>
+                <p className="text-3xl font-bold text-emerald-600">{stats.pendingReview}</p>
+                <p className="text-xs text-muted-foreground">KPIs awaiting approval</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                <Clock className="h-6 w-6 text-emerald-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-green-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Approved</p>
+                <p className="text-3xl font-bold text-green-600">{stats.approved}</p>
+                <p className="text-xs text-muted-foreground">KPIs completed</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                <CheckCircle2 className="h-6 w-6 text-green-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-blue-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total KPIs</p>
+                <p className="text-3xl font-bold text-blue-600">{stats.totalKpis}</p>
+                <p className="text-xs text-muted-foreground">This period</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+                <Target className="h-6 w-6 text-blue-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-      <ReviewFilters
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        tabs={[
-          { value: 'management_review', label: 'Pending', icon: Clock, count: pendingReview },
-          { value: 'approved', label: 'Approved', icon: CheckCircle2, count: approved },
-        ]}
-        activeTab={statusFilter}
-        onTabChange={setStatusFilter}
-        categories={categories}
-        selectedCategory={selectedCategory}
-        onCategoryChange={setSelectedCategory}
-      />
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search employees..."
+            className="pl-10"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Employees</SelectItem>
+            <SelectItem value="pending">With Pending Reviews</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
-      {/* KPIs Table */}
+      {/* Employees Grid */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2">
-            <ClipboardCheck className="h-5 w-5 text-muted-foreground" />
-            KPIs for Management Review
-          </CardTitle>
-          <CardDescription>{filteredKpis?.length || 0} KPIs found</CardDescription>
+        <CardHeader>
+          <CardTitle>All Employees</CardTitle>
+          <CardDescription>
+            Select an employee to view their scorecard and complete management review
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>KRA / KPI</TableHead>
-                <TableHead>Target</TableHead>
-                <TableHead>Achieved</TableHead>
-                <TableHead>Auditor Rating</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredKpis?.map(kpi => {
-                const submission = submissionMap.get(kpi.id);
-                const employee = kpi.profiles as any;
+          {displayMembers && displayMembers.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {displayMembers.map(member => {
+                const managerName = getManagerName(member.reporting_manager_id);
+                const kpiStats = getEmployeeKpiStats(member.id);
                 
                 return (
-                  <TableRow key={kpi.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                          <User className="h-4 w-4 text-primary" />
+                  <Card
+                    key={member.id}
+                    className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50 group"
+                    onClick={() => setSelectedMember(member)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        <Avatar className="h-12 w-12">
+                          <AvatarImage src={member.avatar_url || undefined} />
+                          <AvatarFallback>{getInitials(member.full_name)}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <p className="font-medium truncate group-hover:text-primary transition-colors">
+                              {member.full_name || member.email}
+                            </p>
+                            <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                          </div>
+                          <p className="text-sm text-muted-foreground truncate">
+                            {member.designation || member.email}
+                          </p>
+                          {managerName && (
+                            <p className="text-xs text-muted-foreground truncate mt-1">
+                              Manager: {managerName}
+                            </p>
+                          )}
+                          {/* KPI Status Badges */}
+                          <div className="flex items-center gap-2 mt-2">
+                            {kpiStats.pending > 0 && (
+                              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800">
+                                {kpiStats.pending} pending
+                              </Badge>
+                            )}
+                            {kpiStats.approved > 0 && (
+                              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                                {kpiStats.approved} approved
+                              </Badge>
+                            )}
+                            {kpiStats.total === 0 && (
+                              <Badge variant="outline" className="bg-muted text-muted-foreground border-muted text-xs">
+                                No KPIs
+                              </Badge>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-sm">{employee?.full_name || 'Unknown'}</p>
-                          <p className="text-xs text-muted-foreground">{employee?.employee_code || '-'}</p>
-                        </div>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: kpi.kra_categories?.color || '#6B7280' }}
-                        />
-                        <span className="text-sm">{kpi.kra_categories?.name || 'Uncategorized'}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <button
-                        onClick={() => openLogicModal(kpi)}
-                        className="text-left hover:bg-muted/50 p-1 -m-1 rounded transition-colors cursor-pointer group w-full"
-                        title="Click to view KPI details"
-                      >
-                        <p className="font-medium text-primary group-hover:underline">{kpi.kra_name}</p>
-                        <p className="text-sm text-muted-foreground flex items-center gap-1">
-                          {kpi.kpi_name}
-                          <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </p>
-                      </button>
-                    </TableCell>
-                    <TableCell>{kpi.target_value ?? '-'}</TableCell>
-                    <TableCell>{submission?.achieved_value ?? '-'}</TableCell>
-                    <TableCell>
-                      {submission?.auditor_rating ? (
-                        <Badge
-                          style={{
-                            backgroundColor: ratingOptions.find(r => r.value === submission.auditor_rating)?.color,
-                          }}
-                          className="text-white"
-                        >
-                          {ratingOptions.find(r => r.value === submission.auditor_rating)?.label}
-                        </Badge>
-                      ) : <span className="text-muted-foreground">-</span>}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={statusColors[kpi.status || 'kra_set']}>
-                        {statusLabels[kpi.status || 'kra_set']}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        {kpi.status === 'management_review' && (
-                          <>
-                            <Button 
-                              size="sm" 
-                              onClick={() => openReviewDialog(kpi, 'management', 'auditor')}
-                            >
-                              Review
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => openSendBackDialog(kpi, 'auditor')}
-                            >
-                              Send Back
-                            </Button>
-                          </>
-                        )}
-                        {kpi.status === 'approved' && (
-                          <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                            Completed
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                    </CardContent>
+                  </Card>
                 );
               })}
-              {filteredKpis?.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                    No KPIs found matching your filters.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="font-medium">No employees found</p>
+              <p className="text-sm mt-1">
+                {searchQuery 
+                  ? 'Try adjusting your search criteria' 
+                  : 'No employees in the system yet'}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
-
-      {/* Management Review Sheet - Compact No-Scroll Layout */}
-      <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <SheetContent size="full" className="flex flex-col h-full p-4">
-          {/* Compact Header */}
-          <SheetHeader className="pb-3 border-b flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                <Briefcase className="h-4 w-4 text-emerald-500" />
-              </div>
-              <div className="flex-1">
-                <SheetTitle className="text-lg">Management Review</SheetTitle>
-                <SheetDescription className="text-sm">
-                  Final review and approval
-                </SheetDescription>
-              </div>
-              <Badge variant="outline">{selectedKpi?.kra_name}</Badge>
-            </div>
-          </SheetHeader>
-
-          {/* Main Content - Grid Layout */}
-          <div className="flex-1 grid grid-cols-12 gap-4 py-4 min-h-0">
-            {/* Left Section - KPI Details & Review Trail (5 cols) */}
-            <div className="col-span-5 space-y-3 overflow-hidden">
-              {/* KPI Details - Compact */}
-              {selectedKpi && (
-                <div className="p-3 bg-muted/50 rounded-lg space-y-2">
-                  <p className="text-sm font-medium text-primary truncate">{selectedKpi.kpi_name}</p>
-                  <div className="grid grid-cols-3 gap-2 text-xs">
-                    <div>
-                      <span className="text-muted-foreground">Target:</span>
-                      <p className="font-medium">{selectedKpi.target_value} {selectedKpi.uom}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Criteria:</span>
-                      <p className="font-medium">{selectedKpi.criteria || 'Higher is Better'}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Weightage:</span>
-                      <p className="font-medium">{selectedKpi.weightage}%</p>
-                    </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Rating Scale */}
-                <RatingScaleDisplay kpi={selectedKpi} compact />
-
-              {/* Previous Reviews - Compact 3-column */}
-              {selectedKpi && submissionMap.get(selectedKpi.id) && (
-                <div className="grid grid-cols-3 gap-2">
-                  {/* Self Review */}
-                  <div className="p-2 border border-blue-200 dark:border-blue-800 rounded-lg">
-                    <div className="flex items-center gap-1 mb-1">
-                      <div className="h-4 w-4 rounded-full bg-blue-500/10 flex items-center justify-center">
-                        <User className="h-2.5 w-2.5 text-blue-500" />
-                      </div>
-                      <span className="text-xs font-medium">Self</span>
-                      {submissionMap.get(selectedKpi.id)?.self_score && (
-                        <Badge variant="outline" className="ml-auto text-xs px-1 py-0">
-                          {submissionMap.get(selectedKpi.id)?.self_score}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-1">
-                      {submissionMap.get(selectedKpi.id)?.self_remarks || 'No remarks'}
-                    </p>
-                  </div>
-                  {/* Manager Review */}
-                  <div className="p-2 border border-amber-200 dark:border-amber-800 rounded-lg">
-                    <div className="flex items-center gap-1 mb-1">
-                      <div className="h-4 w-4 rounded-full bg-amber-500/10 flex items-center justify-center">
-                        <Briefcase className="h-2.5 w-2.5 text-amber-500" />
-                      </div>
-                      <span className="text-xs font-medium">Mgr</span>
-                      {submissionMap.get(selectedKpi.id)?.manager_score && (
-                        <Badge variant="outline" className="ml-auto text-xs px-1 py-0">
-                          {submissionMap.get(selectedKpi.id)?.manager_score}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-1">
-                      {submissionMap.get(selectedKpi.id)?.manager_remarks || 'No remarks'}
-                    </p>
-                  </div>
-                  {/* Auditor Review */}
-                  <div className="p-2 border border-purple-200 dark:border-purple-800 rounded-lg">
-                    <div className="flex items-center gap-1 mb-1">
-                      <div className="h-4 w-4 rounded-full bg-purple-500/10 flex items-center justify-center">
-                        <Shield className="h-2.5 w-2.5 text-purple-500" />
-                      </div>
-                      <span className="text-xs font-medium">Audit</span>
-                      {submissionMap.get(selectedKpi.id)?.auditor_score && (
-                        <Badge variant="outline" className="ml-auto text-xs px-1 py-0">
-                          {submissionMap.get(selectedKpi.id)?.auditor_score}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-1">
-                      {submissionMap.get(selectedKpi.id)?.auditor_remarks || 'No remarks'}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Right Section - Management Input (7 cols) */}
-            <div className="col-span-7 flex flex-col gap-3">
-              <div className="p-3 border border-emerald-200 dark:border-emerald-800 rounded-lg flex-1 flex flex-col">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="h-5 w-5 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                    <Briefcase className="h-3 w-3 text-emerald-500" />
-                  </div>
-                  <span className="text-sm font-medium">Management Assessment</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 flex-1">
-                  {/* Left - Score Input */}
-                  <div className="space-y-3">
-                    {selectedKpi && (
-                      <AchievedValueScoreInput
-                        kpi={selectedKpi}
-                        achievedValue={achievedValue}
-                        onAchievedValueChange={setAchievedValue}
-                        score={score}
-                        onScoreChange={setScore}
-                      />
-                    )}
-                    {/* Evidence URL */}
-                    <div className="space-y-1">
-                      <Label className="text-xs">Evidence URL</Label>
-                      <input
-                        type="url"
-                        value={evidenceUrl || ''}
-                        onChange={(e) => setEvidenceUrl(e.target.value || null)}
-                        placeholder="https://..."
-                        className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Right - Remarks */}
-                  <div className="flex flex-col">
-                    <Label className="text-sm mb-2">Management Remarks</Label>
-                    <Textarea
-                      value={remarks}
-                      onChange={(e) => setRemarks(e.target.value)}
-                      placeholder="Enter your management remarks..."
-                      className="flex-1 resize-none min-h-[100px]"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <SheetFooter className="pt-3 border-t flex-shrink-0 gap-2">
-            <Button variant="outline" size="sm" onClick={() => setReviewDialogOpen(false)}>Cancel</Button>
-            <Button 
-              variant="secondary"
-              size="sm"
-              onClick={() => handleSubmitReview(false)}
-              disabled={score === null}
-            >
-              Save Draft
-            </Button>
-            <Button 
-              size="sm"
-              onClick={() => handleSubmitReview(true)}
-              disabled={score === null}
-              className="bg-emerald-600 hover:bg-emerald-700"
-            >
-              <CheckCircle2 className="h-4 w-4 mr-1" />
-              Approve
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
-
-      {/* Send Back Dialog */}
-      <SendBackDialog
-        open={sendBackDialogOpen}
-        onOpenChange={setSendBackDialogOpen}
-        kpi={selectedKpi}
-        reason={sendBackReason}
-        onReasonChange={setSendBackReason}
-        target={sendBackTarget}
-        onTargetChange={setSendBackTarget}
-        targets={[
-          { value: 'auditor', label: 'Send to Auditor' },
-          { value: 'manager', label: 'Send to Manager' },
-          { value: 'employee', label: 'Send to Employee' },
-        ]}
-        onSubmit={handleSendBack}
-        isLoading={sendBack.isPending}
-      />
-
-      {/* KPI Logic Modal */}
-      <KpiLogicModal
-        isOpen={logicModalOpen}
-        onClose={() => setLogicModalOpen(false)}
-        kpi={selectedKpi}
-      />
     </div>
   );
 }
