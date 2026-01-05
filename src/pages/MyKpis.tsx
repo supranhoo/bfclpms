@@ -16,6 +16,7 @@ import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
+import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3 } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
@@ -74,6 +75,7 @@ export default function MyKpis() {
   const [calculatedScore, setCalculatedScore] = useState<number | null>(null);
   const [calculatedPercentage, setCalculatedPercentage] = useState<number | null>(null);
   const [selfRemarks, setSelfRemarks] = useState('');
+  const [selfEvidenceUrl, setSelfEvidenceUrl] = useState<string | null>(null);
   const [isNa, setIsNa] = useState(false);
 
   const filteredKpis = selectedCategory
@@ -163,12 +165,14 @@ export default function MyKpis() {
         setCalculatedPercentage(null);
       }
       setSelfRemarks(existing.self_remarks || '');
+      setSelfEvidenceUrl(existing.self_evidence_url || null);
       setIsNa(existing.is_na || false);
     } else {
       setAchievedValue('');
       setCalculatedScore(null);
       setCalculatedPercentage(null);
       setSelfRemarks('');
+      setSelfEvidenceUrl(null);
       setIsNa(false);
     }
     setReviewDialogOpen(true);
@@ -200,6 +204,7 @@ export default function MyKpis() {
       self_rating: isNa ? null : (calculatedScore !== null ? getRatingLevel(calculatedScore) : null),
       self_score: isNa ? null : calculatedScore,
       self_remarks: selfRemarks,
+      self_evidence_url: selfEvidenceUrl,
       is_na: isNa,
     });
 
@@ -489,14 +494,27 @@ export default function MyKpis() {
       {/* Self Review Sheet - Compact No-Scroll Layout */}
       <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
         <SheetContent size="full" className="flex flex-col h-full p-4">
-          {/* Compact Header */}
+          {/* Header with Category, KRA, KPI */}
           <SheetHeader className="pb-3 border-b flex-shrink-0">
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
                 <SheetTitle className="text-lg">Submit Self Review</SheetTitle>
+                <Badge 
+                  variant="outline" 
+                  className="flex items-center gap-1.5"
+                  style={{ borderColor: selectedKpi?.kra_categories?.color }}
+                >
+                  <div 
+                    className="w-2 h-2 rounded-full" 
+                    style={{ backgroundColor: selectedKpi?.kra_categories?.color }} 
+                  />
+                  {selectedKpi?.kra_categories?.name}
+                </Badge>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">{selectedKpi?.kra_name}</p>
                 <SheetDescription className="text-sm">{selectedKpi?.kpi_name}</SheetDescription>
               </div>
-              <Badge variant="outline">{selectedKpi?.kra_name}</Badge>
             </div>
           </SheetHeader>
           
@@ -601,18 +619,30 @@ export default function MyKpis() {
               )}
             </div>
 
-            {/* Right Column - Remarks */}
-            <div className="flex flex-col">
-              <Label htmlFor="remarks" className="text-sm mb-2">
-                {isNa ? 'Reason for N/A' : 'Justification & Evidence'}
-              </Label>
-              <Textarea
-                id="remarks"
-                value={selfRemarks}
-                onChange={(e) => setSelfRemarks(e.target.value)}
-                placeholder={isNa ? 'Explain why this KPI is not applicable...' : 'Describe your achievements...'}
-                className="flex-1 resize-none min-h-[120px]"
-              />
+            {/* Right Column - Remarks & Evidence */}
+            <div className="flex flex-col space-y-4">
+              <div className="flex-1">
+                <Label htmlFor="remarks" className="text-sm mb-2 block">
+                  {isNa ? 'Reason for N/A' : 'Justification'}
+                </Label>
+                <Textarea
+                  id="remarks"
+                  value={selfRemarks}
+                  onChange={(e) => setSelfRemarks(e.target.value)}
+                  placeholder={isNa ? 'Explain why this KPI is not applicable...' : 'Describe your achievements...'}
+                  className="resize-none min-h-[100px]"
+                />
+              </div>
+              
+              {/* Evidence Upload */}
+              {profile?.id && selectedKpi && (
+                <EvidenceUpload
+                  userId={profile.id}
+                  kpiId={selectedKpi.id}
+                  existingUrl={selfEvidenceUrl}
+                  onUploadComplete={(url) => setSelfEvidenceUrl(url || null)}
+                />
+              )}
             </div>
           </div>
 
