@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useAllKpis, useKpiQueries, KPI } from '@/hooks/useKpis';
 import { useKraCategories, useProfiles, useDivisions, useDepartments } from '@/hooks/useOrganization';
-import { useWorkflowTemplates, getStageLabel } from '@/hooks/useWorkflowConfig';
-import { useReviewPeriods } from '@/hooks/useKpis';
+import { getStageLabel } from '@/hooks/useWorkflowConfig';
+// Removed useReviewPeriods import - deriving periods from KPIs
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,7 +34,7 @@ export default function AllKpis() {
   const { data: profiles, isLoading: profilesLoading } = useProfiles();
   const { data: divisions } = useDivisions();
   const { data: departments } = useDepartments();
-  const { data: reviewPeriods } = useReviewPeriods();
+  // Removed useReviewPeriods - derive periods from KPIs instead
 
   // Fetch all queries for KPIs
   const kpiIds = useMemo(() => kpis?.map(k => k.id) || [], [kpis]);
@@ -65,11 +65,14 @@ export default function AllKpis() {
     return years.sort((a, b) => (b || 0) - (a || 0));
   }, [kpis]);
 
-  // Get unique periods from review_periods table
+  // Get unique periods from KPIs directly (ordered by calendar month)
   const availablePeriods = useMemo(() => {
-    if (!reviewPeriods) return [];
-    return [...new Set(reviewPeriods.map(p => p.period_name))];
-  }, [reviewPeriods]);
+    if (!kpis) return [];
+    const monthOrder = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    const periods = [...new Set(kpis.map(k => k.review_period).filter(Boolean))];
+    return periods.sort((a, b) => monthOrder.indexOf(a!) - monthOrder.indexOf(b!));
+  }, [kpis]);
 
   // Create a map of kpi_id to open query count
   const openQueryCountByKpi = useMemo(() => {
