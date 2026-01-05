@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { StatsRowSkeleton, TableSkeleton, FilterBarSkeleton } from '@/components/ui/LoadingSkeletons';
 import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
-import { Search, Users, Target, Filter, Pencil } from 'lucide-react';
+import { AdminKpiCreateDialog } from '@/components/admin/AdminKpiCreateDialog';
+import { Search, Users, Target, Filter, Pencil, Plus } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -37,6 +38,7 @@ export default function AllKpis() {
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   const filteredKpis = kpis?.filter(kpi => {
     const employee = kpi.profiles as { full_name: string; email: string; employee_code: string } | null;
@@ -74,9 +76,15 @@ export default function AllKpis() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">All Employee KRAs</h1>
-        <p className="text-muted-foreground">View and manage KRAs across all employees</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">All Employee KRAs</h1>
+          <p className="text-muted-foreground">View and manage KRAs across all employees</p>
+        </div>
+        <Button onClick={() => setIsCreateDialogOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Assign KRA
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -258,6 +266,11 @@ export default function AllKpis() {
         isOpen={!!editingKpi}
         onClose={() => setEditingKpi(null)}
         kpi={editingKpi}
+      />
+
+      <AdminKpiCreateDialog
+        isOpen={isCreateDialogOpen}
+        onClose={() => setIsCreateDialogOpen(false)}
       />
     </div>
   );
