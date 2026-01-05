@@ -32,6 +32,7 @@ import {
   FileCheck,
   ClipboardCheck,
   Eye,
+  Briefcase,
 } from 'lucide-react';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
@@ -403,82 +404,158 @@ export default function AuditPanel() {
         </CardContent>
       </Card>
 
-      {/* Audit Review Sheet */}
+      {/* Audit Review Sheet - Compact No-Scroll Layout */}
       <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <SheetContent size="full" className="overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-purple-500" />
-              Audit Review
-            </SheetTitle>
-            <SheetDescription>
-              Review and verify the KPI evaluation
-            </SheetDescription>
+        <SheetContent size="full" className="flex flex-col h-full p-4">
+          {/* Compact Header */}
+          <SheetHeader className="pb-3 border-b flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <Shield className="h-4 w-4 text-purple-500" />
+              </div>
+              <div className="flex-1">
+                <SheetTitle className="text-lg">Audit Review</SheetTitle>
+                <SheetDescription className="text-sm">
+                  Review and verify KPI evaluation
+                </SheetDescription>
+              </div>
+              <Badge variant="outline">{selectedKpi?.kra_name}</Badge>
+            </div>
           </SheetHeader>
 
-          {selectedKpi && (
-            <div className="space-y-6">
-              <ReviewDetailsCard kpi={selectedKpi} />
-              
-              <ReviewTrailCard
-                submission={submissionMap.get(selectedKpi.id)}
-                achievedValue={submissionMap.get(selectedKpi.id)?.achieved_value}
-                showSelf
-                showManager
-              />
+          {/* Main Content - Grid Layout */}
+          <div className="flex-1 grid grid-cols-12 gap-4 py-4 min-h-0">
+            {/* Left Section - KPI Details & Review Trail (5 cols) */}
+            <div className="col-span-5 space-y-3 overflow-hidden">
+              {/* KPI Details - Compact */}
+              {selectedKpi && (
+                <div className="p-3 bg-muted/50 rounded-lg space-y-2">
+                  <p className="text-sm font-medium text-primary truncate">{selectedKpi.kpi_name}</p>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Target:</span>
+                      <p className="font-medium">{selectedKpi.target_value} {selectedKpi.uom}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Criteria:</span>
+                      <p className="font-medium">{selectedKpi.criteria || 'Higher is Better'}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Weightage:</span>
+                      <p className="font-medium">{selectedKpi.weightage}%</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-              <div className="space-y-4 border-t pt-4">
-                <h4 className="font-medium">Auditor Assessment</h4>
-                
-                <AchievedValueScoreInput
-                  kpi={selectedKpi}
-                  achievedValue={achievedValue}
-                  onAchievedValueChange={setAchievedValue}
-                  score={score}
-                  onScoreChange={setScore}
-                />
+              {/* Previous Reviews - Compact 2-column */}
+              {selectedKpi && submissionMap.get(selectedKpi.id) && (
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Self Review */}
+                  <div className="p-2 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <div className="h-4 w-4 rounded-full bg-blue-500/10 flex items-center justify-center">
+                        <User className="h-2.5 w-2.5 text-blue-500" />
+                      </div>
+                      <span className="text-xs font-medium">Self</span>
+                      {submissionMap.get(selectedKpi.id)?.self_score && (
+                        <Badge variant="outline" className="ml-auto text-xs px-1 py-0">
+                          {submissionMap.get(selectedKpi.id)?.self_score}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2">
+                      {submissionMap.get(selectedKpi.id)?.self_remarks || 'No remarks'}
+                    </p>
+                  </div>
+                  {/* Manager Review */}
+                  <div className="p-2 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <div className="h-4 w-4 rounded-full bg-amber-500/10 flex items-center justify-center">
+                        <Briefcase className="h-2.5 w-2.5 text-amber-500" />
+                      </div>
+                      <span className="text-xs font-medium">Manager</span>
+                      {submissionMap.get(selectedKpi.id)?.manager_score && (
+                        <Badge variant="outline" className="ml-auto text-xs px-1 py-0">
+                          {submissionMap.get(selectedKpi.id)?.manager_score}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2">
+                      {submissionMap.get(selectedKpi.id)?.manager_remarks || 'No remarks'}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
 
-                <div className="space-y-2">
-                  <Label>Auditor Remarks</Label>
-                  <Textarea
-                    value={remarks}
-                    onChange={(e) => setRemarks(e.target.value)}
-                    placeholder="Enter your audit remarks..."
-                    rows={3}
-                  />
+            {/* Right Section - Auditor Input (7 cols) */}
+            <div className="col-span-7 flex flex-col gap-3">
+              <div className="p-3 border border-purple-200 dark:border-purple-800 rounded-lg flex-1 flex flex-col">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-5 w-5 rounded-full bg-purple-500/10 flex items-center justify-center">
+                    <Shield className="h-3 w-3 text-purple-500" />
+                  </div>
+                  <span className="text-sm font-medium">Auditor Assessment</span>
                 </div>
 
-                {/* Evidence URL input - simplified */}
-                <div className="space-y-2">
-                  <Label>Evidence URL</Label>
-                  <input
-                    type="url"
-                    value={evidenceUrl || ''}
-                    onChange={(e) => setEvidenceUrl(e.target.value || null)}
-                    placeholder="https://..."
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  />
+                <div className="grid grid-cols-2 gap-4 flex-1">
+                  {/* Left - Score Input */}
+                  <div className="space-y-3">
+                    {selectedKpi && (
+                      <AchievedValueScoreInput
+                        kpi={selectedKpi}
+                        achievedValue={achievedValue}
+                        onAchievedValueChange={setAchievedValue}
+                        score={score}
+                        onScoreChange={setScore}
+                      />
+                    )}
+                    {/* Evidence URL */}
+                    <div className="space-y-1">
+                      <Label className="text-xs">Evidence URL</Label>
+                      <input
+                        type="url"
+                        value={evidenceUrl || ''}
+                        onChange={(e) => setEvidenceUrl(e.target.value || null)}
+                        placeholder="https://..."
+                        className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Right - Remarks */}
+                  <div className="flex flex-col">
+                    <Label className="text-sm mb-2">Auditor Remarks</Label>
+                    <Textarea
+                      value={remarks}
+                      onChange={(e) => setRemarks(e.target.value)}
+                      placeholder="Enter your audit remarks..."
+                      className="flex-1 resize-none min-h-[100px]"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          )}
+          </div>
 
-          <SheetFooter className="mt-4">
-            <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>
-              Cancel
-            </Button>
+          {/* Footer */}
+          <SheetFooter className="pt-3 border-t flex-shrink-0 gap-2">
+            <Button variant="outline" size="sm" onClick={() => setReviewDialogOpen(false)}>Cancel</Button>
             <Button 
               variant="secondary"
+              size="sm"
               onClick={() => handleSubmitAudit(false)}
               disabled={score === null}
             >
               Save Draft
             </Button>
             <Button 
+              size="sm"
               onClick={() => handleSubmitAudit(true)}
               disabled={score === null}
             >
-              <CheckCircle2 className="h-4 w-4 mr-2" />
+              <CheckCircle2 className="h-4 w-4 mr-1" />
               Forward to Management
             </Button>
           </SheetFooter>
