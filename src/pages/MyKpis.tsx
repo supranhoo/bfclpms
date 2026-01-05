@@ -17,6 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
+import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
 import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3 } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
@@ -538,19 +539,8 @@ export default function MyKpis() {
                 </div>
               </div>
 
-              {/* Rating Scale - Compact */}
-              {selectedKpi && (selectedKpi.r5 || selectedKpi.r4 || selectedKpi.r3) && (
-                <div className="p-3 border rounded-lg space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">Rating Scale</Label>
-                  <div className="space-y-1 text-xs">
-                    {selectedKpi.r5 && <div className="flex justify-between"><span className="text-blue-600 font-medium">R5:</span><span className="text-muted-foreground truncate ml-2">{selectedKpi.r5}</span></div>}
-                    {selectedKpi.r4 && <div className="flex justify-between"><span className="text-green-600 font-medium">R4:</span><span className="text-muted-foreground truncate ml-2">{selectedKpi.r4}</span></div>}
-                    {selectedKpi.r3 && <div className="flex justify-between"><span className="text-yellow-600 font-medium">R3:</span><span className="text-muted-foreground truncate ml-2">{selectedKpi.r3}</span></div>}
-                    {selectedKpi.r2 && <div className="flex justify-between"><span className="text-orange-600 font-medium">R2:</span><span className="text-muted-foreground truncate ml-2">{selectedKpi.r2}</span></div>}
-                    {selectedKpi.r1 && <div className="flex justify-between"><span className="text-red-600 font-medium">R1:</span><span className="text-muted-foreground truncate ml-2">{selectedKpi.r1}</span></div>}
-                  </div>
-                </div>
-              )}
+              {/* Rating Scale */}
+              <RatingScaleDisplay kpi={selectedKpi} />
             </div>
 
             {/* Middle Column - Score Input */}

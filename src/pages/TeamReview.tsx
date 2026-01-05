@@ -27,6 +27,7 @@ import { Users, CheckCircle2, Clock, ArrowRight, Search, RefreshCw, MessageSquar
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
+import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
 import { 
   reviewPeriods, 
   kpiStatusColors, 
@@ -561,6 +562,9 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear, au
                       <p className="font-medium">{selectedKpi.weightage}%</p>
                     </div>
                   </div>
+                  
+                  {/* Rating Scale */}
+                  <RatingScaleDisplay kpi={selectedKpi} compact />
                 </div>
               )}
 
