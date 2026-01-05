@@ -278,20 +278,22 @@ export default function QueryInbox() {
 
   // Get navigation path based on notification type
   const getNotificationLink = (notification: Notification): string | null => {
+    const kpiId = notification.kpi_id;
+    
     switch (notification.type) {
       case 'kpi_submitted':
-        // Manager should go to Team Review to review submitted KPIs
-        return '/team-review';
+        // Manager should go to Team Review to review the submitted KPI
+        return kpiId ? `/team-review?kpi=${kpiId}` : '/team-review';
       case 'kpi_approved':
       case 'kpi_finalized':
         // Employee should go to My KPIs to see their approved KPI
-        return '/my-kpis';
+        return kpiId ? `/my-kpis?kpi=${kpiId}` : '/my-kpis';
       case 'kpi_ready_for_audit':
         // Auditor should go to Audit Panel
-        return '/audit';
+        return kpiId ? `/audit?kpi=${kpiId}` : '/audit';
       case 'kpi_ready_for_management':
         // Management should go to Management Review
-        return '/management-review';
+        return kpiId ? `/management-review?kpi=${kpiId}` : '/management-review';
       case 'query_raised':
       case 'query_resolved':
         // Stay on queries page but switch to queries tab
