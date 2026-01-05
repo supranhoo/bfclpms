@@ -16,13 +16,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check } from 'lucide-react';
 
-type AppRole = 'admin' | 'manager' | 'employee' | 'auditor';
+type AppRole = 'admin' | 'manager' | 'employee' | 'auditor' | 'management';
 
 const roleColors: Record<AppRole, string> = {
   admin: 'bg-destructive/10 text-destructive',
   manager: 'bg-primary/10 text-primary',
   employee: 'bg-secondary text-secondary-foreground',
   auditor: 'bg-accent text-accent-foreground',
+  management: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
 };
 
 const ITEMS_PER_PAGE = 10;
@@ -434,6 +435,7 @@ export default function UserManagement() {
             <SelectItem value="manager">Manager</SelectItem>
             <SelectItem value="employee">Employee</SelectItem>
             <SelectItem value="auditor">Auditor</SelectItem>
+            <SelectItem value="management">Management</SelectItem>
           </SelectContent>
         </Select>
         <Select value={departmentFilter} onValueChange={(v) => { setDepartmentFilter(v); handleFilterChange(); }}>
@@ -589,6 +591,7 @@ export default function UserManagement() {
                   <SelectItem value="employee">Employee</SelectItem>
                   <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="auditor">Auditor</SelectItem>
+                  <SelectItem value="management">Management</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
@@ -699,6 +702,7 @@ export default function UserManagement() {
                   <SelectItem value="employee">Employee</SelectItem>
                   <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="auditor">Auditor</SelectItem>
+                  <SelectItem value="management">Management</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
@@ -779,6 +783,7 @@ export default function UserManagement() {
                   <SelectItem value="employee">Employee</SelectItem>
                   <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="auditor">Auditor</SelectItem>
+                  <SelectItem value="management">Management</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
