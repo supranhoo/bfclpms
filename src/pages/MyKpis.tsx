@@ -486,137 +486,142 @@ export default function MyKpis() {
         </CardContent>
       </Card>
 
-      {/* Self Review Sheet */}
+      {/* Self Review Sheet - Compact No-Scroll Layout */}
       <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <SheetContent size="full" className="overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Submit Self Review</SheetTitle>
-            <SheetDescription>
-              {selectedKpi?.kpi_name} - {selectedKpi?.kra_name}
-            </SheetDescription>
+        <SheetContent size="full" className="flex flex-col h-full p-4">
+          {/* Compact Header */}
+          <SheetHeader className="pb-3 border-b flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <SheetTitle className="text-lg">Submit Self Review</SheetTitle>
+                <SheetDescription className="text-sm">{selectedKpi?.kpi_name}</SheetDescription>
+              </div>
+              <Badge variant="outline">{selectedKpi?.kra_name}</Badge>
+            </div>
           </SheetHeader>
           
-          <div className="space-y-4 py-4">
-            {/* KPI Details */}
-            <div className="grid grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
-              <div>
-                <Label className="text-xs text-muted-foreground">Target</Label>
-                <p className="font-medium">{selectedKpi?.target_value} {selectedKpi?.uom}</p>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Criteria</Label>
-                <p className="font-medium text-sm">{selectedKpi?.criteria || 'Higher is Better'}</p>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Weightage</Label>
-                <p className="font-medium">{selectedKpi?.weightage}%</p>
-              </div>
-            </div>
-
-            {/* Rating Scale Reference */}
-            {selectedKpi && (selectedKpi.r5 || selectedKpi.r4 || selectedKpi.r3) && (
-              <div className="p-4 border rounded-lg space-y-2">
-                <Label className="text-sm font-medium">Rating Scale</Label>
-                <div className="grid gap-1 text-sm">
-                  {selectedKpi.r5 && <div className="flex justify-between"><span className="text-blue-600">R5 (Outstanding):</span> <span>{selectedKpi.r5}</span></div>}
-                  {selectedKpi.r4 && <div className="flex justify-between"><span className="text-green-600">R4 (Exceeds):</span> <span>{selectedKpi.r4}</span></div>}
-                  {selectedKpi.r3 && <div className="flex justify-between"><span className="text-yellow-600">R3 (Meets):</span> <span>{selectedKpi.r3}</span></div>}
-                  {selectedKpi.r2 && <div className="flex justify-between"><span className="text-orange-600">R2 (Below):</span> <span>{selectedKpi.r2}</span></div>}
-                  {selectedKpi.r1 && <div className="flex justify-between"><span className="text-red-600">R1 (Poor):</span> <span>{selectedKpi.r1}</span></div>}
+          {/* Main Content - Grid Layout */}
+          <div className="flex-1 grid grid-cols-3 gap-4 py-4 min-h-0">
+            {/* Left Column - KPI Details */}
+            <div className="space-y-4">
+              {/* Key Metrics */}
+              <div className="p-3 bg-muted/50 rounded-lg space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground">Target</span>
+                  <span className="font-medium">{selectedKpi?.target_value} {selectedKpi?.uom}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground">Criteria</span>
+                  <span className="font-medium text-sm">{selectedKpi?.criteria || 'Higher is Better'}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground">Weightage</span>
+                  <span className="font-medium">{selectedKpi?.weightage}%</span>
                 </div>
               </div>
-            )}
 
-            {/* Mark as N/A Checkbox */}
-            <div className="flex items-center space-x-2 p-3 border rounded-lg bg-muted/30">
-              <Checkbox
-                id="is_na"
-                checked={isNa}
-                onCheckedChange={(checked) => {
-                  setIsNa(checked as boolean);
-                  if (checked) {
-                    setAchievedValue('');
-                    setCalculatedScore(null);
-                    setCalculatedPercentage(null);
-                  }
-                }}
-              />
-              <Label htmlFor="is_na" className="cursor-pointer text-sm">
-                Mark as N/A (Not Applicable) - This KPI does not apply for this review period
-              </Label>
-            </div>
-
-            {/* Achieved Value - Hidden when N/A */}
-            {!isNa && (
-              <div className="space-y-2">
-                <Label htmlFor="achieved">Achieved Value *</Label>
-                <Input
-                  id="achieved"
-                  type="number"
-                  value={achievedValue}
-                  onChange={(e) => handleAchievedChange(e.target.value)}
-                  placeholder="Enter your achieved value"
-                />
-                {achievedValue && selectedKpi?.target_value && (
-                  <p className="text-sm text-muted-foreground">
-                    Achievement: {((parseFloat(achievedValue) / selectedKpi.target_value) * 100).toFixed(1)}% of target
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Calculated Score Display - Hidden when N/A */}
-            {!isNa && calculatedScore !== null && (
-              <div className="space-y-2">
-                <Label>Calculated Rating</Label>
-                <div className="p-4 border rounded-lg bg-muted/50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Badge
-                        style={{ backgroundColor: scoreDisplay[calculatedScore]?.color || '#991B1B' }}
-                        className="text-white text-lg px-3 py-1"
-                      >
-                        {calculatedScore}
-                      </Badge>
-                      <span className="font-medium">{scoreDisplay[calculatedScore]?.label || 'Not Achieved'}</span>
-                    </div>
-                    {calculatedPercentage !== null && (
-                      <span className="text-sm text-muted-foreground">
-                        {calculatedPercentage.toFixed(1)}% achievement ratio
-                      </span>
-                    )}
+              {/* Rating Scale - Compact */}
+              {selectedKpi && (selectedKpi.r5 || selectedKpi.r4 || selectedKpi.r3) && (
+                <div className="p-3 border rounded-lg space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground">Rating Scale</Label>
+                  <div className="space-y-1 text-xs">
+                    {selectedKpi.r5 && <div className="flex justify-between"><span className="text-blue-600 font-medium">R5:</span><span className="text-muted-foreground truncate ml-2">{selectedKpi.r5}</span></div>}
+                    {selectedKpi.r4 && <div className="flex justify-between"><span className="text-green-600 font-medium">R4:</span><span className="text-muted-foreground truncate ml-2">{selectedKpi.r4}</span></div>}
+                    {selectedKpi.r3 && <div className="flex justify-between"><span className="text-yellow-600 font-medium">R3:</span><span className="text-muted-foreground truncate ml-2">{selectedKpi.r3}</span></div>}
+                    {selectedKpi.r2 && <div className="flex justify-between"><span className="text-orange-600 font-medium">R2:</span><span className="text-muted-foreground truncate ml-2">{selectedKpi.r2}</span></div>}
+                    {selectedKpi.r1 && <div className="flex justify-between"><span className="text-red-600 font-medium">R1:</span><span className="text-muted-foreground truncate ml-2">{selectedKpi.r1}</span></div>}
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
-            {/* N/A Notice */}
-            {isNa && (
-              <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-900">
-                <p className="text-sm text-muted-foreground">
-                  This KPI will be marked as Not Applicable. It will be excluded from overall score calculations.
-                </p>
+            {/* Middle Column - Score Input */}
+            <div className="space-y-4">
+              {/* N/A Toggle */}
+              <div className="flex items-center space-x-2 p-2 border rounded-lg bg-muted/30">
+                <Checkbox
+                  id="is_na"
+                  checked={isNa}
+                  onCheckedChange={(checked) => {
+                    setIsNa(checked as boolean);
+                    if (checked) {
+                      setAchievedValue('');
+                      setCalculatedScore(null);
+                      setCalculatedPercentage(null);
+                    }
+                  }}
+                />
+                <Label htmlFor="is_na" className="cursor-pointer text-xs">
+                  Mark as N/A (Not Applicable)
+                </Label>
               </div>
-            )}
 
-            {/* Self Remarks */}
-            <div className="space-y-2">
-              <Label htmlFor="remarks">{isNa ? 'Reason for N/A' : 'Justification & Evidence'}</Label>
+              {/* Achieved Value */}
+              {!isNa && (
+                <div className="space-y-2">
+                  <Label htmlFor="achieved" className="text-sm">Achieved Value *</Label>
+                  <Input
+                    id="achieved"
+                    type="number"
+                    value={achievedValue}
+                    onChange={(e) => handleAchievedChange(e.target.value)}
+                    placeholder="Enter value"
+                    className="h-9"
+                  />
+                  {achievedValue && selectedKpi?.target_value && (
+                    <p className="text-xs text-muted-foreground">
+                      {((parseFloat(achievedValue) / selectedKpi.target_value) * 100).toFixed(1)}% of target
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Calculated Rating Display */}
+              {!isNa && calculatedScore !== null && (
+                <div className="p-3 border rounded-lg bg-muted/50">
+                  <Label className="text-xs text-muted-foreground">Calculated Rating</Label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge
+                      style={{ backgroundColor: scoreDisplay[calculatedScore]?.color || '#991B1B' }}
+                      className="text-white px-2 py-0.5"
+                    >
+                      {calculatedScore}
+                    </Badge>
+                    <span className="text-sm font-medium">{scoreDisplay[calculatedScore]?.label || 'Not Achieved'}</span>
+                  </div>
+                </div>
+              )}
+
+              {isNa && (
+                <div className="p-3 border rounded-lg bg-muted/50">
+                  <p className="text-xs text-muted-foreground">
+                    This KPI will be excluded from overall score calculations.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Right Column - Remarks */}
+            <div className="flex flex-col">
+              <Label htmlFor="remarks" className="text-sm mb-2">
+                {isNa ? 'Reason for N/A' : 'Justification & Evidence'}
+              </Label>
               <Textarea
                 id="remarks"
                 value={selfRemarks}
                 onChange={(e) => setSelfRemarks(e.target.value)}
-                placeholder={isNa ? 'Explain why this KPI is not applicable...' : 'Describe your achievements, provide evidence or justification...'}
-                rows={4}
+                placeholder={isNa ? 'Explain why this KPI is not applicable...' : 'Describe your achievements...'}
+                className="flex-1 resize-none min-h-[120px]"
               />
             </div>
           </div>
 
-          <SheetFooter className="mt-4">
-            <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>
+          {/* Footer - Fixed at bottom */}
+          <SheetFooter className="pt-3 border-t flex-shrink-0">
+            <Button variant="outline" size="sm" onClick={() => setReviewDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSubmitReview} disabled={(!isNa && !achievedValue) || submitReview.isPending}>
+            <Button size="sm" onClick={handleSubmitReview} disabled={(!isNa && !achievedValue) || submitReview.isPending}>
               {submitReview.isPending ? 'Submitting...' : 'Submit Review'}
             </Button>
           </SheetFooter>

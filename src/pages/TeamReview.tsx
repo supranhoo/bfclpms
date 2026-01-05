@@ -22,7 +22,7 @@ import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreI
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Users, CheckCircle2, Clock, ArrowRight, Search, RefreshCw, MessageSquare, Check, Lock, Info, User, Undo2, Briefcase } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Search, RefreshCw, MessageSquare, Check, Lock, Info, User, Undo2, Briefcase, AlertCircle } from 'lucide-react';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
@@ -419,108 +419,164 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
         </TableBody>
       </Table>
 
-      {/* Approve KPI Sheet - Enhanced */}
+      {/* Manager Review Sheet - Compact No-Scroll Layout */}
       <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <SheetContent size="full" className="overflow-y-auto">
-          <SheetHeader>
+        <SheetContent size="full" className="flex flex-col h-full p-4">
+          {/* Compact Header */}
+          <SheetHeader className="pb-3 border-b flex-shrink-0">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                <Briefcase className="h-5 w-5 text-amber-500" />
+              <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <Briefcase className="h-4 w-4 text-amber-500" />
               </div>
-              <div>
-                <SheetTitle>Manager Review</SheetTitle>
-                <SheetDescription>
-                  Review and approve KPI for {memberName}
+              <div className="flex-1">
+                <SheetTitle className="text-lg">Manager Review</SheetTitle>
+                <SheetDescription className="text-sm">
+                  Review KPI for {memberName}
                 </SheetDescription>
               </div>
+              <Badge variant="outline">{selectedKpi?.kra_name}</Badge>
             </div>
           </SheetHeader>
 
-          <div className="space-y-6 py-4">
-            {/* Full KPI Details */}
-            {selectedKpi && (
-              <ReviewDetailsCard kpi={selectedKpi} />
-            )}
-
-            {/* Self Review Trail with Queries */}
-            {selectedKpi && (
-              <ReviewTrailCard 
-                submission={submissionMap.get(selectedKpi.id)}
-                achievedValue={selectedKpi.target_value}
-                showSelf={true}
-                showManager={!!submissionMap.get(selectedKpi.id)?.manager_rating}
-                queries={queryMap.get(selectedKpi.id) || []}
-              />
-            )}
-
-            {/* Manager Input */}
-            <Card className="border-amber-200 dark:border-amber-800">
-              <CardContent className="pt-4 space-y-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="h-6 w-6 rounded-full bg-amber-500/10 flex items-center justify-center">
-                    <Briefcase className="h-3.5 w-3.5 text-amber-500" />
+          {/* Main Content - Grid Layout */}
+          <div className="flex-1 grid grid-cols-12 gap-4 py-4 min-h-0">
+            {/* Left Section - KPI Details & Review Trail (5 cols) */}
+            <div className="col-span-5 space-y-3 overflow-hidden">
+              {/* KPI Details - Compact */}
+              {selectedKpi && (
+                <div className="p-3 bg-muted/50 rounded-lg space-y-2">
+                  <p className="text-sm font-medium text-primary truncate">{selectedKpi.kpi_name}</p>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Target:</span>
+                      <p className="font-medium">{selectedKpi.target_value} {selectedKpi.uom}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Criteria:</span>
+                      <p className="font-medium">{selectedKpi.criteria || 'Higher is Better'}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Weightage:</span>
+                      <p className="font-medium">{selectedKpi.weightage}%</p>
+                    </div>
                   </div>
-                  <p className="text-sm font-medium">Your Manager Review</p>
+                </div>
+              )}
+
+              {/* Self Review Summary - Compact */}
+              {selectedKpi && submissionMap.get(selectedKpi.id) && (
+                <div className="p-3 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="h-5 w-5 rounded-full bg-blue-500/10 flex items-center justify-center">
+                      <User className="h-3 w-3 text-blue-500" />
+                    </div>
+                    <span className="text-xs font-medium">Self Review</span>
+                    {submissionMap.get(selectedKpi.id)?.self_rating && (
+                      <Badge 
+                        style={{ backgroundColor: submissionMap.get(selectedKpi.id)?.self_rating === 'blue' ? '#3B82F6' : submissionMap.get(selectedKpi.id)?.self_rating === 'green' ? '#10B981' : submissionMap.get(selectedKpi.id)?.self_rating === 'yellow' ? '#F59E0B' : '#EF4444' }} 
+                        className="text-white ml-auto text-xs px-1.5 py-0"
+                      >
+                        {submissionMap.get(selectedKpi.id)?.self_score}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Achieved:</span>
+                      <span className="font-medium">{submissionMap.get(selectedKpi.id)?.achieved_value ?? 'N/A'}</span>
+                    </div>
+                    <p className="text-muted-foreground line-clamp-2">{submissionMap.get(selectedKpi.id)?.self_remarks || 'No remarks'}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Open Queries Alert */}
+              {selectedKpi && queryMap.get(selectedKpi.id)?.some(q => q.status === 'open') && (
+                <div className="flex items-center gap-2 p-2 border border-orange-300 bg-orange-50 dark:bg-orange-950/30 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                  <span className="text-xs font-medium text-orange-800 dark:text-orange-200">
+                    {queryMap.get(selectedKpi.id)?.filter(q => q.status === 'open').length} Open Query
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Right Section - Manager Input (7 cols) */}
+            <div className="col-span-7 flex flex-col gap-3">
+              <div className="p-3 border border-amber-200 dark:border-amber-800 rounded-lg flex-1 flex flex-col">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-5 w-5 rounded-full bg-amber-500/10 flex items-center justify-center">
+                    <Briefcase className="h-3 w-3 text-amber-500" />
+                  </div>
+                  <span className="text-sm font-medium">Your Manager Review</span>
                 </div>
 
-                {selectedKpi && (
-                  <AchievedValueScoreInput
-                    kpi={selectedKpi}
-                    score={managerScore}
-                    achievedValue={managerAchievedValue}
-                    onScoreChange={(score, rating) => {
-                      setManagerScore(score);
-                      setManagerRating(rating);
-                    }}
-                    onAchievedValueChange={setManagerAchievedValue}
-                    label="Manager Score"
-                  />
-                )}
+                <div className="grid grid-cols-2 gap-4 flex-1">
+                  {/* Left - Score Input */}
+                  <div className="space-y-3">
+                    {selectedKpi && (
+                      <AchievedValueScoreInput
+                        kpi={selectedKpi}
+                        score={managerScore}
+                        achievedValue={managerAchievedValue}
+                        onScoreChange={(score, rating) => {
+                          setManagerScore(score);
+                          setManagerRating(rating);
+                        }}
+                        onAchievedValueChange={setManagerAchievedValue}
+                        label="Manager Score"
+                      />
+                    )}
 
-                <div className="space-y-2">
-                  <Label>Justification & Remarks</Label>
-                  <Textarea
-                    value={managerRemarks}
-                    onChange={(e) => setManagerRemarks(e.target.value)}
-                    placeholder="Provide justification for your score and any observations..."
-                    rows={3}
-                    className="resize-none"
-                  />
+                    {/* Evidence Upload */}
+                    {selectedKpi && (
+                      <EvidenceUpload
+                        userId={memberId}
+                        kpiId={selectedKpi.id}
+                        existingUrl={managerEvidenceUrl}
+                        onUploadComplete={(url) => setManagerEvidenceUrl(url || null)}
+                      />
+                    )}
+                  </div>
+
+                  {/* Right - Remarks */}
+                  <div className="flex flex-col">
+                    <Label className="text-sm mb-2">Justification & Remarks</Label>
+                    <Textarea
+                      value={managerRemarks}
+                      onChange={(e) => setManagerRemarks(e.target.value)}
+                      placeholder="Provide justification for your score..."
+                      className="flex-1 resize-none min-h-[100px]"
+                    />
+                  </div>
                 </div>
-
-                {/* Evidence Upload for Manager */}
-                {selectedKpi && (
-                  <EvidenceUpload
-                    userId={memberId}
-                    kpiId={selectedKpi.id}
-                    existingUrl={managerEvidenceUrl}
-                    onUploadComplete={(url) => setManagerEvidenceUrl(url || null)}
-                  />
-                )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
 
-          <SheetFooter className="gap-2 sm:gap-2 mt-4">
-            <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>Cancel</Button>
+          {/* Footer */}
+          <SheetFooter className="pt-3 border-t flex-shrink-0 gap-2">
+            <Button variant="outline" size="sm" onClick={() => setReviewDialogOpen(false)}>Cancel</Button>
             <Button
               variant="outline"
+              size="sm"
               onClick={() => {
                 if (selectedKpi) openSendBackDialog(selectedKpi);
                 setReviewDialogOpen(false);
               }}
               className="text-orange-600 border-orange-300 hover:bg-orange-50"
             >
-              <Undo2 className="h-4 w-4 mr-1.5" />
+              <Undo2 className="h-4 w-4 mr-1" />
               Send Back
             </Button>
             <Button 
+              size="sm"
               onClick={handleApproveKpi} 
               disabled={managerScore === null || approveKpi.isPending}
               className="bg-green-600 hover:bg-green-700"
             >
               <Check className="h-4 w-4 mr-1" />
-              {approveKpi.isPending ? 'Approving...' : 'Approve KPI'}
+              {approveKpi.isPending ? 'Approving...' : 'Approve'}
             </Button>
           </SheetFooter>
         </SheetContent>
