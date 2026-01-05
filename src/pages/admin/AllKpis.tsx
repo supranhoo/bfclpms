@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useAllKpis, useKpiQueries, KPI } from '@/hooks/useKpis';
 import { useKraCategories, useProfiles, useDivisions, useDepartments } from '@/hooks/useOrganization';
 import { getStageLabel } from '@/hooks/useWorkflowConfig';
-// Removed useReviewPeriods import - deriving periods from KPIs
+import * as XLSX from 'xlsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,8 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { StatsRowSkeleton, TableSkeleton, FilterBarSkeleton } from '@/components/ui/LoadingSkeletons';
 import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
 import { AdminKpiCreateDialog } from '@/components/admin/AdminKpiCreateDialog';
-import { Users, Target, CheckCircle, AlertTriangle, Plus, PercentIcon, Building2, UserCheck } from 'lucide-react';
+import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useToast } from '@/hooks/use-toast';
 
 // Define the workflow stages for columns
 const WORKFLOW_STAGES = ['kra_set', 'self_review', 'manager_check', 'audit', 'management_review', 'approved'];
@@ -200,6 +201,52 @@ export default function AllKpis() {
     setSelectedYear('all');
   };
 
+  const { toast } = useToast();
+
+  // Export to Excel
+  const handleExportExcel = useCallback(() => {
+    if (employeeData.length === 0) {
+      toast({ title: 'No data to export', variant: 'destructive' });
+      return;
+    }
+
+    // Build export data
+    const exportData = employeeData.map(emp => {
+      const row: Record<string, string | number> = {
+        'Employee Name': emp.employeeName,
+        'Employee Code': emp.employeeCode,
+        'Department': emp.departmentName,
+        'Manager': emp.managerName,
+        'Total KPIs': emp.totalKpis,
+      };
+
+      // Add stage columns with query indicators
+      WORKFLOW_STAGES.forEach(stage => {
+        const count = emp.stageCounts[stage] || 0;
+        const queryCount = emp.stageQueryCounts[stage] || 0;
+        const label = getStageLabel(stage);
+        row[label] = queryCount > 0 ? `${count} (${queryCount} Query)` : count;
+      });
+
+      return row;
+    });
+
+    // Create workbook
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'KPI Status');
+
+    // Generate filename with filters
+    const filterParts = [];
+    if (selectedPeriod !== 'all') filterParts.push(selectedPeriod);
+    if (selectedYear !== 'all') filterParts.push(selectedYear);
+    const filterSuffix = filterParts.length > 0 ? `_${filterParts.join('_')}` : '';
+    const filename = `KPI_Status_Report${filterSuffix}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    XLSX.writeFile(wb, filename);
+    toast({ title: 'Report downloaded successfully' });
+  }, [employeeData, selectedPeriod, selectedYear, toast]);
+
   const isLoading = kpisLoading || profilesLoading;
 
   if (isLoading) {
@@ -224,10 +271,16 @@ export default function AllKpis() {
           <h1 className="text-2xl font-bold text-foreground">Admin KPI Dashboard</h1>
           <p className="text-muted-foreground">Monitor KPI status across all employees and workflow stages</p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Assign KRA
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleExportExcel}>
+            <Download className="h-4 w-4 mr-2" />
+            Export Excel
+          </Button>
+          <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Assign KRA
+          </Button>
+        </div>
       </div>
 
       {/* Summary Widgets */}

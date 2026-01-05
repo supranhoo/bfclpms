@@ -1,0 +1,262 @@
+import { useState, useMemo, useCallback } from 'react';
+import { useAllKpis, useKpiQueries } from '@/hooks/useKpis';
+import { useProfiles } from '@/hooks/useOrganization';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
+import { AlertTriangle, CheckCircle, Clock, Download, MessageSquare } from 'lucide-react';
+import { format, differenceInDays } from 'date-fns';
+import * as XLSX from 'xlsx';
+import { useToast } from '@/hooks/use-toast';
+
+export default function QueryReport() {
+  const { data: allKpis, isLoading: kpisLoading } = useAllKpis();
+  const { data: profiles } = useProfiles();
+  const kpiIds = useMemo(() => allKpis?.map(k => k.id) || [], [allKpis]);
+  const { data: queries, isLoading: queriesLoading } = useKpiQueries(kpiIds);
+  const { toast } = useToast();
+
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Create lookup maps
+  const profileMap = useMemo(() => {
+    return new Map(profiles?.map(p => [p.id, p]) || []);
+  }, [profiles]);
+
+  const kpiMap = useMemo(() => {
+    return new Map(allKpis?.map(k => [k.id, k]) || []);
+  }, [allKpis]);
+
+  // Filter and enrich queries
+  const enrichedQueries = useMemo(() => {
+    if (!queries) return [];
+
+    return queries
+      .filter(q => statusFilter === 'all' || q.status === statusFilter)
+      .map(q => {
+        const kpi = kpiMap.get(q.kpi_id);
+        const raisedBy = profileMap.get(q.raised_by);
+        const raisedTo = profileMap.get(q.raised_to);
+        const daysSinceCreated = differenceInDays(new Date(), new Date(q.created_at));
+        const daysToResolve = q.resolved_at 
+          ? differenceInDays(new Date(q.resolved_at), new Date(q.created_at))
+          : null;
+
+        return {
+          ...q,
+          kpiName: kpi?.kpi_name || 'Unknown',
+          kraName: kpi?.kra_name || 'Unknown',
+          employeeName: kpi?.profiles?.full_name || 'Unknown',
+          raisedByName: raisedBy?.full_name || 'Unknown',
+          raisedToName: raisedTo?.full_name || 'Unknown',
+          daysSinceCreated,
+          daysToResolve,
+        };
+      });
+  }, [queries, statusFilter, kpiMap, profileMap]);
+
+  // Stats
+  const stats = useMemo(() => {
+    const total = queries?.length || 0;
+    const open = queries?.filter(q => q.status === 'open').length || 0;
+    const resolved = queries?.filter(q => q.status === 'resolved').length || 0;
+    
+    // Average resolution time
+    const resolvedQueries = queries?.filter(q => q.resolved_at) || [];
+    const totalResolutionDays = resolvedQueries.reduce((sum, q) => {
+      return sum + differenceInDays(new Date(q.resolved_at!), new Date(q.created_at));
+    }, 0);
+    const avgResolutionTime = resolvedQueries.length > 0 
+      ? Math.round(totalResolutionDays / resolvedQueries.length) 
+      : 0;
+
+    return { total, open, resolved, avgResolutionTime };
+  }, [queries]);
+
+  const handleExportExcel = useCallback(() => {
+    if (enrichedQueries.length === 0) {
+      toast({ title: 'No data to export', variant: 'destructive' });
+      return;
+    }
+
+    const exportData = enrichedQueries.map(q => ({
+      'KPI': q.kpiName,
+      'KRA': q.kraName,
+      'Employee': q.employeeName,
+      'Raised By': q.raisedByName,
+      'Raised To': q.raisedToName,
+      'Reason': q.reason,
+      'Status': q.status === 'open' ? 'Open' : 'Resolved',
+      'Created Date': format(new Date(q.created_at), 'dd/MM/yyyy'),
+      'Days Open': q.status === 'open' ? q.daysSinceCreated : q.daysToResolve,
+      'Resolution Notes': q.resolution_notes || '',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Queries');
+    XLSX.writeFile(wb, `Query_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast({ title: 'Report downloaded successfully' });
+  }, [enrichedQueries, toast]);
+
+  const isLoading = kpisLoading || queriesLoading;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid gap-4 md:grid-cols-4">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-24" />)}
+        </div>
+        <Skeleton className="h-96" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Query & Issues Report</h1>
+          <p className="text-muted-foreground">Track all queries raised during the review process</p>
+        </div>
+        <Button variant="outline" onClick={handleExportExcel}>
+          <Download className="h-4 w-4 mr-2" />
+          Export Excel
+        </Button>
+      </div>
+
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Queries</CardTitle>
+            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{stats.total}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Open</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-warning" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-warning">{stats.open}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Resolved</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-green-600">{stats.resolved}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Avg Resolution Time</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{stats.avgResolutionTime} days</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filter */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Filters</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Queries</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="resolved">Resolved</SelectItem>
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
+
+      {/* Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Query Details</CardTitle>
+          <CardDescription>{enrichedQueries.length} queries found</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>KPI</TableHead>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Raised By</TableHead>
+                  <TableHead>Raised To</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Days</TableHead>
+                  <TableHead>Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {enrichedQueries.map(q => (
+                  <TableRow key={q.id}>
+                    <TableCell>
+                      <div className="max-w-[200px]">
+                        <div className="font-medium truncate">{q.kpiName}</div>
+                        <div className="text-xs text-muted-foreground truncate">{q.kraName}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{q.employeeName}</TableCell>
+                    <TableCell>{q.raisedByName}</TableCell>
+                    <TableCell>{q.raisedToName}</TableCell>
+                    <TableCell>
+                      <div className="max-w-[200px] truncate" title={q.reason}>
+                        {q.reason}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={q.status === 'open' ? 'destructive' : 'default'}>
+                        {q.status === 'open' ? 'Open' : 'Resolved'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {q.status === 'open' ? (
+                        <span className={q.daysSinceCreated > 7 ? 'text-destructive font-medium' : ''}>
+                          {q.daysSinceCreated}d
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">{q.daysToResolve}d</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {format(new Date(q.created_at), 'dd MMM yyyy')}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {enrichedQueries.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      No queries found
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

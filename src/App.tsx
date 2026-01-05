@@ -24,6 +24,10 @@ import SystemSettings from "./pages/admin/SystemSettings";
 import WorkflowConfig from "./pages/admin/WorkflowConfig";
 import PerformanceReport from "./pages/reports/PerformanceReport";
 import KRAIssuance from "./pages/reports/KRAIssuance";
+import ReportsHub from "./pages/reports/ReportsHub";
+import QueryReport from "./pages/reports/QueryReport";
+import DepartmentReport from "./pages/reports/DepartmentReport";
+import CompletionReport from "./pages/reports/CompletionReport";
 import KRAAcceptance from "./pages/KRAAcceptance";
 import NotFound from "./pages/NotFound";
 
@@ -116,14 +120,34 @@ const App = () => (
               } />
               
               {/* Report routes - accessible to managers and admins */}
+              <Route path="/reports" element={
+                <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management']}>
+                  <ReportsHub />
+                </ProtectedRoute>
+              } />
               <Route path="/reports/performance" element={
-                <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor']}>
+                <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management']}>
                   <PerformanceReport />
                 </ProtectedRoute>
               } />
               <Route path="/reports/kra-issuance" element={
-                <ProtectedRoute allowedRoles={['manager', 'admin']}>
+                <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>
                   <KRAIssuance />
+                </ProtectedRoute>
+              } />
+              <Route path="/reports/queries" element={
+                <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management']}>
+                  <QueryReport />
+                </ProtectedRoute>
+              } />
+              <Route path="/reports/department" element={
+                <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>
+                  <DepartmentReport />
+                </ProtectedRoute>
+              } />
+              <Route path="/reports/completion" element={
+                <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>
+                  <CompletionReport />
                 </ProtectedRoute>
               } />
             </Route>

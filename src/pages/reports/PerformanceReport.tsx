@@ -1,11 +1,13 @@
+import { useMemo, useCallback } from 'react';
 import { useAllKpis, useReviewSubmissions } from '@/hooks/useKpis';
 import { useProfiles, useKraCategories } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Progress } from '@/components/ui/progress';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { BarChart3, Users, Target, TrendingUp } from 'lucide-react';
+import { BarChart3, Users, Target, TrendingUp, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { useToast } from '@/hooks/use-toast';
 
 const ratingColors = {
   red: '#EF4444',
@@ -61,15 +63,37 @@ export default function PerformanceReport() {
   const approvedKpis = allKpis?.filter(k => k.status === 'approved').length || 0;
   const avgScore = submissions?.length ? Math.round(submissions.reduce((sum, s) => sum + (s.final_score || s.self_score || 0), 0) / submissions.length) : 0;
 
+  const { toast } = useToast();
+
+  const handleExportExcel = useCallback(() => {
+    const exportData = categoryPerformance.map(cat => ({
+      'Category': cat.name,
+      'KPI Count': cat.kpiCount,
+      'Average Score': `${cat.avgScore}%`,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Performance Report');
+    XLSX.writeFile(wb, `Performance_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast({ title: 'Report downloaded successfully' });
+  }, [categoryPerformance, toast]);
+
   if (kpisLoading) {
     return <div className="space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-96" /></div>;
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Performance Report</h1>
-        <p className="text-muted-foreground">Organization-wide performance analytics</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Performance Report</h1>
+          <p className="text-muted-foreground">Organization-wide performance analytics</p>
+        </div>
+        <Button variant="outline" onClick={handleExportExcel}>
+          <Download className="h-4 w-4 mr-2" />
+          Export Excel
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
