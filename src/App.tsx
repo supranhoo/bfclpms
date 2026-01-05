@@ -9,7 +9,6 @@ import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import MyKpis from "./pages/MyKpis";
-import SelfReview from "./pages/SelfReview";
 import TeamReview from "./pages/TeamReview";
 import AuditPanel from "./pages/AuditPanel";
 import ManagementReview from "./pages/ManagementReview";
@@ -43,7 +42,8 @@ const App = () => (
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/my-kpis" element={<MyKpis />} />
-              <Route path="/self-review" element={<SelfReview />} />
+              {/* Redirect old self-review route to my-kpis for backward compatibility */}
+              <Route path="/self-review" element={<Navigate to="/my-kpis" replace />} />
               <Route path="/kra-acceptance" element={<KRAAcceptance />} />
               <Route path="/queries" element={<QueryInbox />} />
               
