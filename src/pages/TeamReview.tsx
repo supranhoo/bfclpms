@@ -421,7 +421,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
 
       {/* Approve KPI Sheet - Enhanced */}
       <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <SheetContent size="2xl" className="overflow-y-auto">
+        <SheetContent size="full" className="overflow-y-auto">
           <SheetHeader>
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center">

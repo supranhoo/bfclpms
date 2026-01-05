@@ -47,7 +47,10 @@ const sheetVariants = cva(
         lg: "sm:max-w-lg",
         xl: "sm:max-w-xl",
         "2xl": "sm:max-w-2xl",
-        full: "sm:max-w-full w-full",
+        "3xl": "sm:max-w-3xl",
+        "4xl": "sm:max-w-4xl",
+        "5xl": "sm:max-w-5xl",
+        full: "sm:max-w-[90vw] w-[90vw]",
       },
     },
     defaultVariants: {

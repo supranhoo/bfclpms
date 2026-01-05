@@ -488,7 +488,7 @@ export default function MyKpis() {
 
       {/* Self Review Sheet */}
       <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <SheetContent size="xl" className="overflow-y-auto">
+        <SheetContent size="full" className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Submit Self Review</SheetTitle>
             <SheetDescription>
