@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
@@ -388,18 +389,18 @@ export default function ManagementReview() {
         </CardContent>
       </Card>
 
-      {/* Management Review Dialog */}
-      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+      {/* Management Review Sheet */}
+      <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+        <SheetContent size="2xl" className="overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
               <Briefcase className="h-5 w-5 text-emerald-500" />
               Management Review
-            </DialogTitle>
-            <DialogDescription>
+            </SheetTitle>
+            <SheetDescription>
               Final review and approval of KPI evaluation
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
 
           {selectedKpi && (
             <div className="space-y-6">
@@ -448,7 +449,7 @@ export default function ManagementReview() {
             </div>
           )}
 
-          <DialogFooter>
+          <SheetFooter className="mt-4">
             <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>
               Cancel
             </Button>
@@ -466,9 +467,9 @@ export default function ManagementReview() {
               <CheckCircle2 className="h-4 w-4 mr-2" />
               Approve
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       {/* Send Back Dialog */}
       <SendBackDialog

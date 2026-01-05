@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { KpiPageSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Progress } from '@/components/ui/progress';
@@ -486,15 +486,15 @@ export default function MyKpis() {
         </CardContent>
       </Card>
 
-      {/* Self Review Dialog */}
-      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Submit Self Review</DialogTitle>
-            <DialogDescription>
+      {/* Self Review Sheet */}
+      <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+        <SheetContent size="xl" className="overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Submit Self Review</SheetTitle>
+            <SheetDescription>
               {selectedKpi?.kpi_name} - {selectedKpi?.kra_name}
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
           
           <div className="space-y-4 py-4">
             {/* KPI Details */}
@@ -612,16 +612,16 @@ export default function MyKpis() {
             </div>
           </div>
 
-          <DialogFooter>
+          <SheetFooter className="mt-4">
             <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSubmitReview} disabled={(!isNa && !achievedValue) || submitReview.isPending}>
               {submitReview.isPending ? 'Submitting...' : 'Submit Review'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       {/* Timeline Modal */}
       <KpiTimeline

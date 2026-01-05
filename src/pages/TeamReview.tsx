@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
@@ -418,22 +419,22 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
         </TableBody>
       </Table>
 
-      {/* Approve KPI Dialog - Enhanced */}
-      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+      {/* Approve KPI Sheet - Enhanced */}
+      <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+        <SheetContent size="2xl" className="overflow-y-auto">
+          <SheetHeader>
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
                 <Briefcase className="h-5 w-5 text-amber-500" />
               </div>
               <div>
-                <DialogTitle>Manager Review</DialogTitle>
-                <DialogDescription>
+                <SheetTitle>Manager Review</SheetTitle>
+                <SheetDescription>
                   Review and approve KPI for {memberName}
-                </DialogDescription>
+                </SheetDescription>
               </div>
             </div>
-          </DialogHeader>
+          </SheetHeader>
 
           <div className="space-y-6 py-4">
             {/* Full KPI Details */}
@@ -500,7 +501,7 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
             </Card>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-2">
+          <SheetFooter className="gap-2 sm:gap-2 mt-4">
             <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>Cancel</Button>
             <Button
               variant="outline"
@@ -521,9 +522,9 @@ function TeamMemberKpis({ memberId, memberName, selectedPeriod, selectedYear }: 
               <Check className="h-4 w-4 mr-1" />
               {approveKpi.isPending ? 'Approving...' : 'Approve KPI'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       {/* Raise Query Dialog */}
       <Dialog open={queryDialogOpen} onOpenChange={setQueryDialogOpen}>
