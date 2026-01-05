@@ -29,7 +29,6 @@ import {
   Building2,
   Upload,
   Target,
-  CheckSquare,
   MessageSquare,
   History,
   Briefcase,
@@ -40,10 +39,9 @@ import {
 const menuItems = {
   main: [
     { title: 'Dashboard', icon: Home, path: '/dashboard', roles: ['admin', 'manager', 'employee', 'auditor'] },
-    // Some users can be both an employee (have their own KPIs) and hold additional roles (auditor/admin).
+    // My KPIs combines KPI viewing and self-review submission
     { title: 'My KPIs', icon: Target, path: '/my-kpis', roles: ['employee', 'manager', 'auditor', 'admin'] },
-    { title: 'Self Review', icon: CheckSquare, path: '/self-review', roles: ['employee', 'manager', 'admin', 'auditor'] },
-    { title: 'Query Inbox', icon: MessageSquare, path: '/queries', roles: ['employee', 'manager', 'admin', 'auditor'], showBadge: true },
+    { title: 'Inbox', icon: MessageSquare, path: '/queries', roles: ['employee', 'manager', 'admin', 'auditor'], showBadge: true },
   ],
   manager: [
     { title: 'Team Review', icon: Users, path: '/team-review', roles: ['manager', 'admin'] },
