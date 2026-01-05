@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead, Notification } from '@/hooks/useNotifications';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { StatsRowSkeleton, CategoryGridSkeleton } from '@/components/ui/LoadingSkeletons';
 import { format } from 'date-fns';
-import { MessageSquare, CheckCircle2, Clock, Send, User, Calendar, AlertCircle } from 'lucide-react';
+import { MessageSquare, CheckCircle2, Clock, Send, User, Calendar, AlertCircle, Bell, BellOff, CheckCheck } from 'lucide-react';
 
 interface QueryWithDetails {
   id: string;
@@ -48,7 +49,21 @@ export default function QueryInbox() {
   const [selectedQuery, setSelectedQuery] = useState<QueryWithDetails | null>(null);
   const [responseDialogOpen, setResponseDialogOpen] = useState(false);
   const [resolutionNotes, setResolutionNotes] = useState('');
-  const [activeTab, setActiveTab] = useState<'received' | 'sent'>('received');
+  const [activeTab, setActiveTab] = useState<'notifications' | 'received' | 'sent'>('notifications');
+
+  // Fetch notifications
+  const { data: notifications, isLoading: loadingNotifications } = useNotifications();
+  const markNotificationRead = useMarkNotificationRead();
+  const markAllRead = useMarkAllNotificationsRead();
+  
+  const unreadNotifications = useMemo(() => 
+    notifications?.filter(n => !n.is_read) || [], 
+    [notifications]
+  );
+  const readNotifications = useMemo(() => 
+    notifications?.filter(n => n.is_read) || [], 
+    [notifications]
+  );
 
   // Fetch all queries for current user (both received and sent)
   const { data: allQueries, isLoading } = useQuery({
@@ -245,22 +260,95 @@ export default function QueryInbox() {
     </Card>
   );
 
+  // Notification type icons and colors
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'kpi_submitted': return <Send className="h-4 w-4 text-blue-500" />;
+      case 'kpi_approved': return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+      case 'kpi_finalized': return <CheckCheck className="h-4 w-4 text-purple-500" />;
+      case 'kpi_ready_for_audit':
+      case 'kpi_ready_for_management': return <Bell className="h-4 w-4 text-yellow-500" />;
+      case 'query_raised': return <AlertCircle className="h-4 w-4 text-orange-500" />;
+      case 'query_resolved': return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+      default: return <Bell className="h-4 w-4 text-muted-foreground" />;
+    }
+  };
+
+  const renderNotificationCard = (notification: Notification) => (
+    <Card 
+      key={notification.id} 
+      className={`cursor-pointer transition-all hover:shadow-md ${notification.is_read ? 'opacity-60' : 'border-l-4 border-l-primary'}`}
+      onClick={() => {
+        if (!notification.is_read) {
+          markNotificationRead.mutate(notification.id);
+        }
+      }}
+    >
+      <CardContent className="pt-4 pb-4">
+        <div className="flex items-start gap-3">
+          <div className="mt-1">
+            {getNotificationIcon(notification.type)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-medium text-sm truncate">{notification.title}</p>
+              {!notification.is_read && (
+                <Badge variant="default" className="shrink-0 h-5 text-xs">New</Badge>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">{notification.message}</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              {format(new Date(notification.created_at), 'MMM d, yyyy h:mm a')}
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Query Inbox</h1>
-        <p className="text-muted-foreground">View and respond to queries raised on your KPIs</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Inbox</h1>
+          <p className="text-muted-foreground">Notifications and queries for your KPIs</p>
+        </div>
+        {unreadNotifications.length > 0 && (
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => markAllRead.mutate()}
+            disabled={markAllRead.isPending}
+          >
+            <CheckCheck className="h-4 w-4 mr-2" />
+            Mark all as read
+          </Button>
+        )}
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card className="border-l-4 border-l-primary">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Unread</p>
+                <p className="text-3xl font-bold text-primary">{unreadNotifications.length}</p>
+                <p className="text-xs text-muted-foreground">New notifications</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Bell className="h-6 w-6 text-primary" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         <Card className="border-l-4 border-l-orange-500">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Open Queries</p>
                 <p className="text-3xl font-bold text-orange-600">{openQueries.length}</p>
-                <p className="text-xs text-muted-foreground">Awaiting your response</p>
+                <p className="text-xs text-muted-foreground">Awaiting response</p>
               </div>
               <div className="h-12 w-12 rounded-full bg-orange-500/10 flex items-center justify-center">
                 <Clock className="h-6 w-6 text-orange-500" />
@@ -274,7 +362,7 @@ export default function QueryInbox() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Resolved</p>
                 <p className="text-3xl font-bold text-green-600">{resolvedQueries.length}</p>
-                <p className="text-xs text-muted-foreground">Queries you've resolved</p>
+                <p className="text-xs text-muted-foreground">Queries resolved</p>
               </div>
               <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
                 <CheckCircle2 className="h-6 w-6 text-green-500" />
@@ -286,9 +374,9 @@ export default function QueryInbox() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Sent Queries</p>
+                <p className="text-sm font-medium text-muted-foreground">Sent</p>
                 <p className="text-3xl font-bold text-blue-600">{sentQueries.length}</p>
-                <p className="text-xs text-muted-foreground">Queries you've raised</p>
+                <p className="text-xs text-muted-foreground">Queries raised</p>
               </div>
               <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center">
                 <Send className="h-6 w-6 text-blue-500" />
@@ -299,13 +387,22 @@ export default function QueryInbox() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'received' | 'sent')}>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'notifications' | 'received' | 'sent')}>
         <TabsList>
+          <TabsTrigger value="notifications" className="flex items-center gap-2">
+            <Bell className="h-4 w-4" />
+            Notifications
+            {unreadNotifications.length > 0 && (
+              <Badge variant="destructive" className="ml-1 h-5 min-w-5 px-1 flex items-center justify-center text-xs">
+                {unreadNotifications.length}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="received" className="flex items-center gap-2">
             <MessageSquare className="h-4 w-4" />
-            Received
+            Queries
             {openQueries.length > 0 && (
-              <Badge variant="destructive" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+              <Badge variant="destructive" className="ml-1 h-5 min-w-5 px-1 flex items-center justify-center text-xs">
                 {openQueries.length}
               </Badge>
             )}
@@ -315,6 +412,44 @@ export default function QueryInbox() {
             Sent
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="notifications" className="mt-6">
+          {(notifications?.length || 0) === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <BellOff className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                <p className="text-muted-foreground">No notifications yet</p>
+                <p className="text-xs text-muted-foreground mt-1">You'll receive notifications when there are updates to your KPIs</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-6">
+              {unreadNotifications.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Bell className="h-5 w-5 text-primary" />
+                    New ({unreadNotifications.length})
+                  </h3>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {unreadNotifications.map(n => renderNotificationCard(n))}
+                  </div>
+                </div>
+              )}
+              
+              {readNotifications.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-muted-foreground">
+                    <BellOff className="h-5 w-5" />
+                    Earlier ({readNotifications.length})
+                  </h3>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {readNotifications.slice(0, 10).map(n => renderNotificationCard(n))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </TabsContent>
 
         <TabsContent value="received" className="mt-6">
           {receivedQueries.length === 0 ? (

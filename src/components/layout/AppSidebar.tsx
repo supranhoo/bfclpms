@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOpenQueryCount } from '@/hooks/useOpenQueryCount';
+import { useUnreadNotificationCount } from '@/hooks/useNotifications';
 import {
   Sidebar,
   SidebarContent,
@@ -75,7 +76,10 @@ export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: openQueryCount } = useOpenQueryCount();
-
+  const { data: unreadNotificationCount } = useUnreadNotificationCount();
+  
+  // Combine query count and notification count for inbox badge
+  const inboxBadgeCount = (openQueryCount || 0) + (unreadNotificationCount || 0);
   const filterByRole = (items: typeof menuItems.main) => {
     return items.filter(item => role && item.roles.includes(role));
   };
@@ -117,9 +121,9 @@ export function AppSidebar() {
                   >
                     <item.icon className="h-4 w-4" />
                     <span>{item.title}</span>
-                    {'showBadge' in item && item.showBadge && openQueryCount && openQueryCount > 0 && (
+                    {'showBadge' in item && item.showBadge && inboxBadgeCount > 0 && (
                       <Badge variant="destructive" className="ml-auto h-5 min-w-5 px-1 flex items-center justify-center text-xs">
-                        {openQueryCount}
+                        {inboxBadgeCount}
                       </Badge>
                     )}
                   </SidebarMenuButton>

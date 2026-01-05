@@ -431,6 +431,53 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          kpi_id: string | null
+          message: string
+          metadata: Json | null
+          related_user_id: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          kpi_id?: string | null
+          message: string
+          metadata?: Json | null
+          related_user_id?: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          kpi_id?: string | null
+          message?: string
+          metadata?: Json | null
+          related_user_id?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_kpi_id_fkey"
+            columns: ["kpi_id"]
+            isOneToOne: false
+            referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       performance_reviews: {
         Row: {
           auditor_remarks: string | null
