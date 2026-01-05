@@ -1,11 +1,15 @@
+import { useMemo, useCallback } from 'react';
 import { useAllKpis } from '@/hooks/useKpis';
-import { useKraCategories, useDepartments } from '@/hooks/useOrganization';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useKraCategories } from '@/hooks/useOrganization';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { FileText, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { FileText, CheckCircle2, Clock, AlertCircle, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { useToast } from '@/hooks/use-toast';
 
 const statusColors = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -46,15 +50,49 @@ export default function KRAIssuance() {
     approved: allKpis?.filter(k => k.category_id === cat.id && k.status === 'approved').length || 0,
   })) || [];
 
+  const { toast } = useToast();
+
+  const handleExportExcel = useCallback(() => {
+    const exportData = categoryBreakdown.map(cat => ({
+      'Category': cat.name,
+      'Total KPIs': cat.total,
+      'Approved': cat.approved,
+      'Completion': cat.total > 0 ? `${Math.round((cat.approved / cat.total) * 100)}%` : '0%',
+    }));
+
+    // Add status summary
+    const statusData = [
+      { Status: 'KRA Set', Count: statusCounts.kra_set },
+      { Status: 'Self Review', Count: statusCounts.self_review },
+      { Status: 'Manager Check', Count: statusCounts.manager_check },
+      { Status: 'Audit', Count: statusCounts.audit },
+      { Status: 'Approved', Count: statusCounts.approved },
+    ];
+
+    const ws1 = XLSX.utils.json_to_sheet(exportData);
+    const ws2 = XLSX.utils.json_to_sheet(statusData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws1, 'By Category');
+    XLSX.utils.book_append_sheet(wb, ws2, 'By Status');
+    XLSX.writeFile(wb, `KRA_Issuance_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast({ title: 'Report downloaded successfully' });
+  }, [categoryBreakdown, statusCounts, toast]);
+
   if (isLoading) {
     return <div className="space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-96" /></div>;
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">KRA Issuance Report</h1>
-        <p className="text-muted-foreground">Track KPI issuance and completion status</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">KRA Issuance Report</h1>
+          <p className="text-muted-foreground">Track KPI issuance and completion status</p>
+        </div>
+        <Button variant="outline" onClick={handleExportExcel}>
+          <Download className="h-4 w-4 mr-2" />
+          Export Excel
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
