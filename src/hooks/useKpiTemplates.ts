@@ -1,0 +1,126 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+
+export interface KpiTemplate {
+  id: string;
+  title: string;
+  description: string | null;
+  category_id: string | null;
+  kra_name: string;
+  kpi_name: string;
+  uom: string | null;
+  target_value: number | null;
+  weightage: number | null;
+  criteria: string | null;
+  frequency: string | null;
+  source_of_data: string | null;
+  r5: string | null;
+  r4: string | null;
+  r3: string | null;
+  r2: string | null;
+  r1: string | null;
+  r0: string | null;
+  applicable_roles: string[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  kra_categories?: {
+    id: string;
+    name: string;
+    color: string | null;
+  } | null;
+}
+
+export function useKpiTemplates() {
+  return useQuery({
+    queryKey: ['kpi-templates'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kpi_templates')
+        .select(`
+          *,
+          kra_categories (id, name, color)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data as KpiTemplate[];
+    },
+  });
+}
+
+export function useCreateKpiTemplate() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (template: Omit<KpiTemplate, 'id' | 'created_at' | 'updated_at' | 'kra_categories'>) => {
+      const { data, error } = await supabase
+        .from('kpi_templates')
+        .insert(template)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kpi-templates'] });
+      toast({ title: 'Template created successfully' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to create template', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+export function useUpdateKpiTemplate() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, ...template }: Partial<KpiTemplate> & { id: string }) => {
+      const { data, error } = await supabase
+        .from('kpi_templates')
+        .update(template)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kpi-templates'] });
+      toast({ title: 'Template updated successfully' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to update template', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+export function useDeleteKpiTemplate() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('kpi_templates')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kpi-templates'] });
+      toast({ title: 'Template deleted successfully' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to delete template', description: error.message, variant: 'destructive' });
+    },
+  });
+}
