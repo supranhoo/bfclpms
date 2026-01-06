@@ -1,17 +1,12 @@
-import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Calendar, Lock, Unlock, Plus, Settings, AlertTriangle } from 'lucide-react';
+import { Calendar, Lock, Unlock, AlertTriangle, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 
 const MONTHS = [
@@ -19,76 +14,110 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-interface ReviewPeriod {
-  id: string;
+interface ReviewPeriodData {
   period_name: string;
   review_year: number;
+  kpi_count: number;
   is_locked: boolean;
   locked_at: string | null;
-  locked_by: string | null;
-  start_date: string | null;
-  end_date: string | null;
-  created_at: string;
+  period_id: string | null;
 }
 
 export default function ReviewPeriods() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [newPeriodMonth, setNewPeriodMonth] = useState('');
-  const [newPeriodYear, setNewPeriodYear] = useState(new Date().getFullYear().toString());
-  const [newStartDate, setNewStartDate] = useState('');
-  const [newEndDate, setNewEndDate] = useState('');
 
-  // Fetch review periods
-  const { data: periods, isLoading } = useQuery({
+  // Fetch distinct periods from KPIs table
+  const { data: kpiPeriods, isLoading: loadingKpis } = useQuery({
+    queryKey: ['kpi-periods'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kpis')
+        .select('review_period, review_year')
+        .not('review_period', 'is', null)
+        .not('review_year', 'is', null);
+      
+      if (error) throw error;
+      
+      // Count KPIs per period
+      const periodCounts: Record<string, number> = {};
+      data?.forEach(kpi => {
+        const key = `${kpi.review_period}-${kpi.review_year}`;
+        periodCounts[key] = (periodCounts[key] || 0) + 1;
+      });
+      
+      // Get unique periods
+      const uniquePeriods = Object.keys(periodCounts).map(key => {
+        const [period, year] = key.split('-');
+        return {
+          period_name: period,
+          review_year: parseInt(year),
+          kpi_count: periodCounts[key]
+        };
+      });
+      
+      return uniquePeriods;
+    },
+  });
+
+  // Fetch existing review_periods for lock status
+  const { data: reviewPeriods, isLoading: loadingPeriods } = useQuery({
     queryKey: ['review-periods-admin'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('review_periods')
-        .select('*')
-        .order('review_year', { ascending: false })
-        .order('period_name', { ascending: false });
+        .select('*');
       
       if (error) throw error;
-      return data as ReviewPeriod[];
+      return data;
     },
   });
 
-  // Create period mutation
-  const createPeriod = useMutation({
-    mutationFn: async (period: { period_name: string; review_year: number; start_date?: string; end_date?: string }) => {
-      const { error } = await supabase
-        .from('review_periods')
-        .insert(period);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['review-periods-admin'] });
-      toast({ title: 'Review period created' });
-      setCreateDialogOpen(false);
-      resetForm();
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Failed to create period', description: error.message, variant: 'destructive' });
-    },
+  // Combine KPI periods with lock status from review_periods
+  const combinedPeriods: ReviewPeriodData[] = (kpiPeriods || []).map(kp => {
+    const existing = reviewPeriods?.find(
+      rp => rp.period_name === kp.period_name && rp.review_year === kp.review_year
+    );
+    return {
+      period_name: kp.period_name,
+      review_year: kp.review_year,
+      kpi_count: kp.kpi_count,
+      is_locked: existing?.is_locked || false,
+      locked_at: existing?.locked_at || null,
+      period_id: existing?.id || null
+    };
   });
 
-  // Toggle lock mutation
+  // Toggle lock mutation - creates review_period record if it doesn't exist
   const toggleLock = useMutation({
-    mutationFn: async ({ id, lock }: { id: string; lock: boolean }) => {
-      const updateData = lock
-        ? { is_locked: true, locked_at: new Date().toISOString(), locked_by: user?.id }
-        : { is_locked: false, locked_at: null, locked_by: null };
-      
-      const { error } = await supabase
-        .from('review_periods')
-        .update(updateData)
-        .eq('id', id);
-      
-      if (error) throw error;
+    mutationFn: async ({ periodName, year, lock, periodId }: { periodName: string; year: number; lock: boolean; periodId: string | null }) => {
+      if (periodId) {
+        // Update existing record
+        const updateData = lock
+          ? { is_locked: true, locked_at: new Date().toISOString(), locked_by: user?.id }
+          : { is_locked: false, locked_at: null, locked_by: null };
+        
+        const { error } = await supabase
+          .from('review_periods')
+          .update(updateData)
+          .eq('id', periodId);
+        
+        if (error) throw error;
+      } else {
+        // Create new record with lock status
+        const { error } = await supabase
+          .from('review_periods')
+          .insert({
+            period_name: periodName,
+            review_year: year,
+            is_locked: lock,
+            locked_at: lock ? new Date().toISOString() : null,
+            locked_by: lock ? user?.id : null
+          });
+        
+        if (error) throw error;
+      }
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['review-periods-admin'] });
@@ -99,41 +128,16 @@ export default function ReviewPeriods() {
     },
   });
 
-  const resetForm = () => {
-    setNewPeriodMonth('');
-    setNewPeriodYear(new Date().getFullYear().toString());
-    setNewStartDate('');
-    setNewEndDate('');
-  };
-
-  const handleCreatePeriod = () => {
-    if (!newPeriodMonth || !newPeriodYear) return;
-    
-    createPeriod.mutate({
-      period_name: newPeriodMonth,
-      review_year: parseInt(newPeriodYear),
-      start_date: newStartDate || undefined,
-      end_date: newEndDate || undefined,
-    });
-  };
-
   // Group periods by year
-  const periodsByYear = periods?.reduce((acc, period) => {
+  const periodsByYear = combinedPeriods.reduce((acc, period) => {
     const year = period.review_year;
     if (!acc[year]) acc[year] = [];
     acc[year].push(period);
     return acc;
-  }, {} as Record<number, ReviewPeriod[]>) || {};
+  }, {} as Record<number, ReviewPeriodData[]>);
 
   const years = Object.keys(periodsByYear).map(Number).sort((a, b) => b - a);
-
-  const currentYear = new Date().getFullYear();
-  const yearOptions = [currentYear - 1, currentYear, currentYear + 1];
-
-  // Check if period already exists
-  const periodExists = (month: string, year: string) => {
-    return periods?.some(p => p.period_name === month && p.review_year === parseInt(year));
-  };
+  const isLoading = loadingKpis || loadingPeriods;
 
   return (
     <div className="space-y-6">
@@ -145,91 +149,9 @@ export default function ReviewPeriods() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-foreground">Review Periods</h1>
-            <p className="text-muted-foreground">Configure and manage monthly review periods</p>
+            <p className="text-muted-foreground">All months with KRAs assigned</p>
           </div>
         </div>
-
-        <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Period
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create Review Period</DialogTitle>
-              <DialogDescription>Add a new monthly review period</DialogDescription>
-            </DialogHeader>
-            
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label>Month</Label>
-                <Select value={newPeriodMonth} onValueChange={setNewPeriodMonth}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select month" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MONTHS.map(month => (
-                      <SelectItem 
-                        key={month} 
-                        value={month}
-                        disabled={periodExists(month, newPeriodYear)}
-                      >
-                        {month} {periodExists(month, newPeriodYear) && '(exists)'}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-2">
-                <Label>Year</Label>
-                <Select value={newPeriodYear} onValueChange={setNewPeriodYear}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {yearOptions.map(year => (
-                      <SelectItem key={year} value={year.toString()}>
-                        {year}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>Start Date (Optional)</Label>
-                  <Input 
-                    type="date" 
-                    value={newStartDate}
-                    onChange={(e) => setNewStartDate(e.target.value)}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>End Date (Optional)</Label>
-                  <Input 
-                    type="date" 
-                    value={newEndDate}
-                    onChange={(e) => setNewEndDate(e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
-              <Button 
-                onClick={handleCreatePeriod}
-                disabled={!newPeriodMonth || !newPeriodYear || createPeriod.isPending}
-              >
-                Create Period
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
 
       {/* Info Card */}
@@ -260,7 +182,9 @@ export default function ReviewPeriods() {
       ) : years.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-muted-foreground">
-            No review periods configured. Create your first period to get started.
+            <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
+            <p>No KRAs found in the system.</p>
+            <p className="text-sm mt-1">Review periods will appear here once KRAs are assigned to employees.</p>
           </CardContent>
         </Card>
       ) : (
@@ -270,7 +194,8 @@ export default function ReviewPeriods() {
               <CardTitle className="text-lg">{year}</CardTitle>
               <CardDescription>
                 {periodsByYear[year].length} period(s) • 
-                {periodsByYear[year].filter(p => p.is_locked).length} locked
+                {periodsByYear[year].filter(p => p.is_locked).length} locked • 
+                {periodsByYear[year].reduce((sum, p) => sum + p.kpi_count, 0)} total KRAs
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -278,9 +203,8 @@ export default function ReviewPeriods() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Period</TableHead>
+                    <TableHead>KRAs</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Start Date</TableHead>
-                    <TableHead>End Date</TableHead>
                     <TableHead>Locked At</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -289,8 +213,11 @@ export default function ReviewPeriods() {
                   {periodsByYear[year]
                     .sort((a, b) => MONTHS.indexOf(b.period_name) - MONTHS.indexOf(a.period_name))
                     .map(period => (
-                    <TableRow key={period.id}>
+                    <TableRow key={`${period.period_name}-${period.review_year}`}>
                       <TableCell className="font-medium">{period.period_name}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{period.kpi_count} KRAs</Badge>
+                      </TableCell>
                       <TableCell>
                         {period.is_locked ? (
                           <Badge variant="secondary" className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
@@ -305,19 +232,18 @@ export default function ReviewPeriods() {
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {period.start_date ? format(new Date(period.start_date), 'MMM d, yyyy') : '—'}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {period.end_date ? format(new Date(period.end_date), 'MMM d, yyyy') : '—'}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
                         {period.locked_at ? format(new Date(period.locked_at), 'MMM d, yyyy h:mm a') : '—'}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
                           variant={period.is_locked ? 'outline' : 'destructive'}
                           size="sm"
-                          onClick={() => toggleLock.mutate({ id: period.id, lock: !period.is_locked })}
+                          onClick={() => toggleLock.mutate({ 
+                            periodName: period.period_name, 
+                            year: period.review_year, 
+                            lock: !period.is_locked,
+                            periodId: period.period_id 
+                          })}
                           disabled={toggleLock.isPending}
                         >
                           {period.is_locked ? (
