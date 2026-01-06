@@ -21,6 +21,7 @@ interface Category {
   color: string | null;
   description: string | null;
   is_org_level: boolean;
+  org_scoring_mode: string | null;
 }
 
 export default function Categories() {
@@ -39,6 +40,7 @@ export default function Categories() {
   const [formColor, setFormColor] = useState('#3B82F6');
   const [formDescription, setFormDescription] = useState('');
   const [formIsOrgLevel, setFormIsOrgLevel] = useState(false);
+  const [formOrgScoringMode, setFormOrgScoringMode] = useState<'individual' | 'uniform'>('individual');
 
   const totalWeightage = categories?.reduce((sum, cat) => sum + (cat.weightage || 0), 0) || 0;
 
@@ -55,6 +57,7 @@ export default function Categories() {
     setFormColor(category.color || '#3B82F6');
     setFormDescription(category.description || '');
     setFormIsOrgLevel(category.is_org_level || false);
+    setFormOrgScoringMode((category.org_scoring_mode as 'individual' | 'uniform') || 'individual');
     setDialogOpen(true);
   };
 
@@ -72,6 +75,7 @@ export default function Categories() {
         color: formColor,
         description: formDescription,
         is_org_level: formIsOrgLevel,
+        org_scoring_mode: formIsOrgLevel ? formOrgScoringMode : null,
       });
     } else {
       await createCategory.mutateAsync({
@@ -80,6 +84,7 @@ export default function Categories() {
         color: formColor,
         description: formDescription,
         is_org_level: formIsOrgLevel,
+        org_scoring_mode: formIsOrgLevel ? formOrgScoringMode : null,
       });
     }
     setDialogOpen(false);
@@ -100,6 +105,7 @@ export default function Categories() {
     setFormColor('#3B82F6');
     setFormDescription('');
     setFormIsOrgLevel(false);
+    setFormOrgScoringMode('individual');
     setEditingCategory(null);
   };
 
@@ -166,6 +172,7 @@ export default function Categories() {
                 <TableHead>Description</TableHead>
                 <TableHead>Weightage</TableHead>
                 <TableHead className="text-center">Type</TableHead>
+                <TableHead className="text-center">Scoring Mode</TableHead>
                 <TableHead className="w-24">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -191,6 +198,13 @@ export default function Categories() {
                       <Badge variant="outline" className="gap-1">
                         <Building2 className="h-3 w-3" />
                         Org Level
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {cat.is_org_level && (
+                      <Badge variant={cat.org_scoring_mode === 'uniform' ? 'default' : 'secondary'}>
+                        {cat.org_scoring_mode === 'uniform' ? 'Uniform' : 'Individual'}
                       </Badge>
                     )}
                   </TableCell>
@@ -296,6 +310,50 @@ export default function Categories() {
                 onCheckedChange={setFormIsOrgLevel}
               />
             </div>
+
+            {/* Scoring Mode - only visible when org-level is enabled */}
+            {formIsOrgLevel && (
+              <div className="p-3 border rounded-lg bg-muted/30 space-y-3">
+                <div className="space-y-0.5">
+                  <Label className="font-medium">Scoring Mode</Label>
+                  <p className="text-xs text-muted-foreground">
+                    How scores are calculated for employees
+                  </p>
+                </div>
+                <div className="flex gap-4">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="scoring_mode"
+                      checked={formOrgScoringMode === 'individual'}
+                      onChange={() => setFormOrgScoringMode('individual')}
+                      className="mt-1"
+                    />
+                    <div>
+                      <span className="text-sm font-medium">Individual</span>
+                      <p className="text-xs text-muted-foreground">
+                        Each employee's KPI uses its own thresholds (R5-R1)
+                      </p>
+                    </div>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="scoring_mode"
+                      checked={formOrgScoringMode === 'uniform'}
+                      onChange={() => setFormOrgScoringMode('uniform')}
+                      className="mt-1"
+                    />
+                    <div>
+                      <span className="text-sm font-medium">Uniform</span>
+                      <p className="text-xs text-muted-foreground">
+                        All employees get the same score using org-level thresholds
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
 
           <DialogFooter>

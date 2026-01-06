@@ -391,6 +391,7 @@ export type Database = {
           id: string
           is_org_level: boolean
           name: string
+          org_scoring_mode: string | null
           weightage: number
         }
         Insert: {
@@ -400,6 +401,7 @@ export type Database = {
           id?: string
           is_org_level?: boolean
           name: string
+          org_scoring_mode?: string | null
           weightage?: number
         }
         Update: {
@@ -409,6 +411,7 @@ export type Database = {
           id?: string
           is_org_level?: boolean
           name?: string
+          org_scoring_mode?: string | null
           weightage?: number
         }
         Relationships: []
@@ -507,42 +510,66 @@ export type Database = {
           achieved_value: number | null
           category_id: string
           created_at: string
+          criteria: string | null
           data_source: string | null
           entered_by: string | null
           id: string
           kpi_name: string
           kra_name: string
+          r0: string | null
+          r1: string | null
+          r2: string | null
+          r3: string | null
+          r4: string | null
+          r5: string | null
           remarks: string | null
           review_period: string
           review_year: number
+          target_value: number | null
           updated_at: string
         }
         Insert: {
           achieved_value?: number | null
           category_id: string
           created_at?: string
+          criteria?: string | null
           data_source?: string | null
           entered_by?: string | null
           id?: string
           kpi_name: string
           kra_name: string
+          r0?: string | null
+          r1?: string | null
+          r2?: string | null
+          r3?: string | null
+          r4?: string | null
+          r5?: string | null
           remarks?: string | null
           review_period: string
           review_year: number
+          target_value?: number | null
           updated_at?: string
         }
         Update: {
           achieved_value?: number | null
           category_id?: string
           created_at?: string
+          criteria?: string | null
           data_source?: string | null
           entered_by?: string | null
           id?: string
           kpi_name?: string
           kra_name?: string
+          r0?: string | null
+          r1?: string | null
+          r2?: string | null
+          r3?: string | null
+          r4?: string | null
+          r5?: string | null
           remarks?: string | null
           review_period?: string
           review_year?: number
+          target_value?: number | null
           updated_at?: string
         }
         Relationships: [

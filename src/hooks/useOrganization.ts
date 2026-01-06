@@ -121,7 +121,7 @@ export function useCreateKraCategory() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (category: { name: string; weightage: number; color: string; description?: string; is_org_level?: boolean }) => {
+    mutationFn: async (category: { name: string; weightage: number; color: string; description?: string; is_org_level?: boolean; org_scoring_mode?: string | null }) => {
       const { data, error } = await supabase
         .from('kra_categories')
         .insert(category)
@@ -147,7 +147,7 @@ export function useUpdateKraCategory() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ id, ...category }: { id: string; name: string; weightage: number; color: string; description?: string; is_org_level?: boolean }) => {
+    mutationFn: async ({ id, ...category }: { id: string; name: string; weightage: number; color: string; description?: string; is_org_level?: boolean; org_scoring_mode?: string | null }) => {
       const { data, error } = await supabase
         .from('kra_categories')
         .update(category)
