@@ -5,9 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useKraCategories, useProfiles } from '@/hooks/useOrganization';
 import { useAdminUpdateKpi, ReviewStatus, KPI } from '@/hooks/useKpis';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Building2 } from 'lucide-react';
 
 interface AdminKpiEditDialogProps {
   isOpen: boolean;
@@ -37,7 +38,7 @@ export function AdminKpiEditDialog({ isOpen, onClose, kpi }: AdminKpiEditDialogP
   const { data: profiles } = useProfiles();
   const updateKpi = useAdminUpdateKpi();
 
-  const [formData, setFormData] = useState({
+const [formData, setFormData] = useState({
     employee_id: '',
     category_id: '',
     kra_name: '',
@@ -57,6 +58,7 @@ export function AdminKpiEditDialog({ isOpen, onClose, kpi }: AdminKpiEditDialogP
     r2: '',
     r1: '',
     r0: '',
+    is_org_level: false,
   });
   const [reason, setReason] = useState('');
 
@@ -82,6 +84,7 @@ export function AdminKpiEditDialog({ isOpen, onClose, kpi }: AdminKpiEditDialogP
         r2: kpi.r2 || '',
         r1: kpi.r1 || '',
         r0: kpi.r0 || '',
+        is_org_level: kpi.is_org_level || false,
       });
       setReason('');
     }
@@ -111,6 +114,7 @@ export function AdminKpiEditDialog({ isOpen, onClose, kpi }: AdminKpiEditDialogP
       r2: formData.r2 || null,
       r1: formData.r1 || null,
       r0: formData.r0 || null,
+      is_org_level: formData.is_org_level,
       reason,
     });
 
@@ -255,6 +259,23 @@ export function AdminKpiEditDialog({ isOpen, onClose, kpi }: AdminKpiEditDialogP
             <Input
               value={formData.source_of_data}
               onChange={(e) => setFormData(prev => ({ ...prev, source_of_data: e.target.value }))}
+            />
+          </div>
+
+          {/* Organization-Level KPI Toggle */}
+          <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">
+            <div className="flex items-center gap-3">
+              <Building2 className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <Label className="text-base font-medium">Organization-Level KPI</Label>
+                <p className="text-sm text-muted-foreground">
+                  Achieved value will be centrally managed via Org KPI Data Entry
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={formData.is_org_level}
+              onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_org_level: checked }))}
             />
           </div>
 
