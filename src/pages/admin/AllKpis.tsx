@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { StatsRowSkeleton, TableSkeleton, FilterBarSkeleton } from '@/components/ui/LoadingSkeletons';
 import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
 import { AdminKpiCreateDialog } from '@/components/admin/AdminKpiCreateDialog';
-import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download } from 'lucide-react';
+import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 
@@ -25,6 +25,7 @@ interface EmployeeKpiData {
   departmentName: string;
   managerName: string;
   totalKpis: number;
+  orgLevelKpis: number;
   stageCounts: Record<string, number>;
   stageQueryCounts: Record<string, number>;
 }
@@ -148,6 +149,7 @@ export default function AllKpis() {
           departmentName: dept?.name || '-',
           managerName: manager?.full_name || '-',
           totalKpis: 0,
+          orgLevelKpis: 0,
           stageCounts: {},
           stageQueryCounts: {},
         });
@@ -155,6 +157,9 @@ export default function AllKpis() {
 
       const data = employeeMap.get(employee.id)!;
       data.totalKpis++;
+      if (kpi.is_org_level) {
+        data.orgLevelKpis++;
+      }
 
       // Count by stage
       const stage = kpi.status || 'kra_set';
@@ -441,6 +446,17 @@ export default function AllKpis() {
                 <TableRow>
                   <TableHead className="min-w-[200px]">Employee Name</TableHead>
                   <TableHead className="text-center w-[80px]">Total KPIs</TableHead>
+                  <TableHead className="text-center w-[80px]">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center gap-1 cursor-help">
+                          <Building className="h-3.5 w-3.5" />
+                          Org-Level
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>Organization-level KPIs with centralized values</TooltipContent>
+                    </Tooltip>
+                  </TableHead>
                   {WORKFLOW_STAGES.map(stage => (
                     <TableHead key={stage} className="text-center min-w-[100px]">
                       {getStageLabel(stage)}
@@ -464,6 +480,15 @@ export default function AllKpis() {
                       <Badge variant="secondary" className="font-mono">
                         {emp.totalKpis}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {emp.orgLevelKpis > 0 ? (
+                        <Badge variant="outline" className="font-mono text-primary border-primary/50">
+                          {emp.orgLevelKpis}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
                     </TableCell>
                     {WORKFLOW_STAGES.map(stage => {
                       const count = emp.stageCounts[stage] || 0;
@@ -502,7 +527,7 @@ export default function AllKpis() {
                 ))}
                 {employeeData.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={2 + WORKFLOW_STAGES.length} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={3 + WORKFLOW_STAGES.length} className="text-center py-8 text-muted-foreground">
                       No employees found matching the selected filters
                     </TableCell>
                   </TableRow>
