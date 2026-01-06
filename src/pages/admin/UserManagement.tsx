@@ -14,7 +14,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check } from 'lucide-react';
+import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2 } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 type AppRole = 'admin' | 'manager' | 'employee' | 'auditor' | 'management';
 
@@ -75,6 +76,10 @@ export default function UserManagement() {
   const [resetUserName, setResetUserName] = useState('');
   const [resetLink, setResetLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+
+  // Delete Dialog
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   // Filtered and paginated profiles
   const filteredProfiles = useMemo(() => {
@@ -258,6 +263,34 @@ export default function UserManagement() {
     },
   });
 
+  // Delete user mutation
+  const deleteUser = useMutation({
+    mutationFn: async (userId: string) => {
+      // Delete user roles first
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', userId);
+      if (roleError) throw roleError;
+
+      // Delete profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', userId);
+      if (profileError) throw profileError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      toast({ title: 'Employee removed successfully' });
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to remove employee', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const openEditDialog = (user: NonNullable<typeof profiles>[number]) => {
     setSelectedUser(user);
     const userRole = (user.user_roles as any)?.[0]?.role || 'employee';
@@ -336,6 +369,17 @@ export default function UserManagement() {
     await navigator.clipboard.writeText(resetLink);
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
+  };
+
+  const confirmDelete = (userId: string, name: string) => {
+    setDeleteTarget({ id: userId, name });
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = () => {
+    if (deleteTarget) {
+      deleteUser.mutate(deleteTarget.id);
+    }
   };
 
   const toggleSelectAll = () => {
@@ -520,11 +564,19 @@ export default function UserManagement() {
                     <TableCell>{manager?.full_name || '-'}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)}>
+                        <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} title="Edit">
                           <Edit2 className="h-4 w-4" />
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => openResetDialog(profile)} title="Reset Password">
                           <KeyRound className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => confirmDelete(profile.id, profile.full_name || profile.email)}
+                          title="Remove Employee"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
                     </TableCell>
@@ -856,6 +908,27 @@ export default function UserManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Employee</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove <strong>{deleteTarget?.name}</strong>? This action cannot be undone and will also delete all associated KPIs, reviews, and audit logs.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteUser.isPending ? 'Removing...' : 'Remove'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
