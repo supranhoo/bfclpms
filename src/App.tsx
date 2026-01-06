@@ -22,6 +22,7 @@ import ReviewPeriods from "./pages/admin/ReviewPeriods";
 import ImportData from "./pages/admin/ImportData";
 import SystemSettings from "./pages/admin/SystemSettings";
 import WorkflowConfig from "./pages/admin/WorkflowConfig";
+import OrgKpiDataEntry from "./pages/admin/OrgKpiDataEntry";
 import PerformanceReport from "./pages/reports/PerformanceReport";
 import KRAIssuance from "./pages/reports/KRAIssuance";
 import ReportsHub from "./pages/reports/ReportsHub";
@@ -118,6 +119,11 @@ const App = () => (
               <Route path="/admin/workflow-config" element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <WorkflowConfig />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/org-kpi-data" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <OrgKpiDataEntry />
                 </ProtectedRoute>
               } />
               
