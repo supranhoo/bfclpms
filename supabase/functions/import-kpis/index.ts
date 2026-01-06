@@ -214,6 +214,40 @@ const parseReviewPeriod = (monthStr: string): { period: string | null; year: num
   return { period: reviewPeriod, year: reviewYear };
 };
 
+// Format rating threshold values (R1-R5) from Excel
+// Excel may provide: 1.05 (meaning 105%), 0.9995 (meaning 99.95%), "99.95%", etc.
+const formatRatingThreshold = (value: string | number | null | undefined): string | null => {
+  if (value === null || value === undefined || value === '') return null;
+  
+  const strValue = String(value).trim();
+  
+  // If already has % sign, preserve it with decimal precision
+  if (strValue.includes('%')) {
+    const numPart = parseFloat(strValue.replace('%', '').replace(',', '.'));
+    if (isNaN(numPart)) return strValue;
+    // Keep decimal precision (e.g., 99.95%)
+    return Number.isInteger(numPart) ? `${numPart}%` : `${numPart.toFixed(2).replace(/\.?0+$/, '')}%`;
+  }
+  
+  // It's a number - check if it's a ratio or percentage
+  const num = typeof value === 'number' ? value : parseFloat(strValue.replace(',', '.'));
+  if (isNaN(num)) return strValue;
+  
+  // Heuristic: If value is between 0 and 2 (exclusive of exactly 0), 
+  // it's likely a ratio (e.g., 1.05 = 105%, 0.9995 = 99.95%)
+  // Values >= 2 are likely already percentages (e.g., 100, 99.95)
+  if (num > 0 && num < 2) {
+    const percentValue = num * 100;
+    return Number.isInteger(percentValue) ? `${percentValue}%` : `${percentValue.toFixed(2).replace(/\.?0+$/, '')}%`;
+  }
+  
+  // If it's 0, store as "0" (absolute mode)
+  if (num === 0) return '0';
+  
+  // Otherwise treat as already a percentage
+  return Number.isInteger(num) ? `${num}%` : `${num.toFixed(2).replace(/\.?0+$/, '')}%`;
+};
+
 const getRandomColor = () => {
   const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
   return colors[Math.floor(Math.random() * colors.length)];
@@ -568,12 +602,12 @@ async function processImport(
         status: determineReviewStatus(row),
         review_period: reviewPeriod,
         review_year: reviewYear,
-        r5: row.r5 ? String(row.r5) : null,
-        r4: row.r4 ? String(row.r4) : null,
-        r3: row.r3 ? String(row.r3) : null,
-        r2: row.r2 ? String(row.r2) : null,
-        r1: row.r1 ? String(row.r1) : null,
-        r0: row.r0 ? String(row.r0) : null,
+        r5: formatRatingThreshold(row.r5),
+        r4: formatRatingThreshold(row.r4),
+        r3: formatRatingThreshold(row.r3),
+        r2: formatRatingThreshold(row.r2),
+        r1: formatRatingThreshold(row.r1),
+        r0: formatRatingThreshold(row.r0),
         frequency: row.frequency || null,
         source_of_data: row.sourceOfData || null,
       });
