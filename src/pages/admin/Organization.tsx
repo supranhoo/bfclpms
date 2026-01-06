@@ -1,24 +1,27 @@
-import { useState } from 'react';
-import { useDivisions, useBusinessUnits, useDepartments, useSubBranches } from '@/hooks/useOrganization';
+import { useState, useMemo } from 'react';
+import { useDivisions, useBusinessUnits, useDepartments, useSubBranches, useProfiles } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TableSkeleton } from '@/components/ui/LoadingSkeletons';
+import { Badge } from '@/components/ui/badge';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Building2, Plus, Edit2, Trash2 } from 'lucide-react';
+import { Building2, Plus, Trash2 } from 'lucide-react';
 
 export default function Organization() {
   const { data: divisions, isLoading: divisionsLoading } = useDivisions();
   const { data: businessUnits, isLoading: busLoading } = useBusinessUnits();
   const { data: departments, isLoading: deptsLoading } = useDepartments();
   const { data: subBranches, isLoading: subLoading } = useSubBranches();
+  const { data: profiles } = useProfiles();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -27,6 +30,46 @@ export default function Organization() {
   const [formName, setFormName] = useState('');
   const [formCode, setFormCode] = useState('');
   const [formParentId, setFormParentId] = useState('');
+
+  // Delete confirmation state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; name: string } | null>(null);
+
+  // Calculate employee counts per department
+  const employeeCountByDept = useMemo(() => {
+    const counts = new Map<string, number>();
+    profiles?.forEach(p => {
+      if (p.department_id) {
+        counts.set(p.department_id, (counts.get(p.department_id) || 0) + 1);
+      }
+    });
+    return counts;
+  }, [profiles]);
+
+  // Calculate which departments have employees (directly)
+  const deptsWithEmployees = useMemo(() => new Set(employeeCountByDept.keys()), [employeeCountByDept]);
+
+  // Calculate which business units have employees (through departments)
+  const busWithEmployees = useMemo(() => {
+    const set = new Set<string>();
+    departments?.forEach(d => {
+      if (deptsWithEmployees.has(d.id) && d.business_unit_id) {
+        set.add(d.business_unit_id);
+      }
+    });
+    return set;
+  }, [departments, deptsWithEmployees]);
+
+  // Calculate which divisions have employees (through business units)
+  const divsWithEmployees = useMemo(() => {
+    const set = new Set<string>();
+    businessUnits?.forEach(bu => {
+      if (busWithEmployees.has(bu.id) && bu.division_id) {
+        set.add(bu.division_id);
+      }
+    });
+    return set;
+  }, [businessUnits, busWithEmployees]);
 
   const createEntity = useMutation({
     mutationFn: async ({ type, name, code, parentId }: { type: string; name: string; code: string; parentId?: string }) => {
@@ -68,6 +111,41 @@ export default function Organization() {
     },
   });
 
+  const deleteEntity = useMutation({
+    mutationFn: async ({ type, id }: { type: string; id: string }) => {
+      let table = '';
+      switch (type) {
+        case 'division':
+          table = 'divisions';
+          break;
+        case 'bu':
+          table = 'business_units';
+          break;
+        case 'department':
+          table = 'departments';
+          break;
+        case 'sub-branch':
+          table = 'sub_branches';
+          break;
+      }
+
+      const { error } = await supabase.from(table as any).delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['divisions'] });
+      queryClient.invalidateQueries({ queryKey: ['business-units'] });
+      queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ['sub-branches'] });
+      toast({ title: 'Deleted successfully' });
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to delete', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const resetForm = () => {
     setFormName('');
     setFormCode('');
@@ -87,6 +165,17 @@ export default function Organization() {
       code: formCode,
       parentId: formParentId || undefined,
     });
+  };
+
+  const confirmDelete = (type: string, id: string, name: string) => {
+    setDeleteTarget({ type, id, name });
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = () => {
+    if (deleteTarget) {
+      deleteEntity.mutate({ type: deleteTarget.type, id: deleteTarget.id });
+    }
   };
 
   const isLoading = divisionsLoading || busLoading || deptsLoading || subLoading;
@@ -138,16 +227,40 @@ export default function Organization() {
                     <TableHead>Name</TableHead>
                     <TableHead>Code</TableHead>
                     <TableHead>Business Units</TableHead>
+                    <TableHead>Employees</TableHead>
+                    <TableHead className="w-[80px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {divisions?.map(div => (
-                    <TableRow key={div.id}>
-                      <TableCell className="font-medium">{div.name}</TableCell>
-                      <TableCell>{div.code || '-'}</TableCell>
-                      <TableCell>{businessUnits?.filter(bu => bu.division_id === div.id).length || 0}</TableCell>
-                    </TableRow>
-                  ))}
+                  {divisions?.map(div => {
+                    const hasEmployees = divsWithEmployees.has(div.id);
+                    const buCount = businessUnits?.filter(bu => bu.division_id === div.id).length || 0;
+                    return (
+                      <TableRow key={div.id}>
+                        <TableCell className="font-medium">{div.name}</TableCell>
+                        <TableCell>{div.code || '-'}</TableCell>
+                        <TableCell>{buCount}</TableCell>
+                        <TableCell>
+                          {hasEmployees ? (
+                            <Badge variant="secondary">In Use</Badge>
+                          ) : (
+                            <Badge variant="outline">Unused</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {!hasEmployees && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => confirmDelete('division', div.id, div.name)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -174,17 +287,41 @@ export default function Organization() {
                     <TableHead>Code</TableHead>
                     <TableHead>Division</TableHead>
                     <TableHead>Departments</TableHead>
+                    <TableHead>Employees</TableHead>
+                    <TableHead className="w-[80px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {businessUnits?.map(bu => (
-                    <TableRow key={bu.id}>
-                      <TableCell className="font-medium">{bu.name}</TableCell>
-                      <TableCell>{bu.code || '-'}</TableCell>
-                      <TableCell>{(bu.divisions as any)?.name || '-'}</TableCell>
-                      <TableCell>{departments?.filter(d => d.business_unit_id === bu.id).length || 0}</TableCell>
-                    </TableRow>
-                  ))}
+                  {businessUnits?.map(bu => {
+                    const hasEmployees = busWithEmployees.has(bu.id);
+                    const deptCount = departments?.filter(d => d.business_unit_id === bu.id).length || 0;
+                    return (
+                      <TableRow key={bu.id}>
+                        <TableCell className="font-medium">{bu.name}</TableCell>
+                        <TableCell>{bu.code || '-'}</TableCell>
+                        <TableCell>{(bu.divisions as any)?.name || '-'}</TableCell>
+                        <TableCell>{deptCount}</TableCell>
+                        <TableCell>
+                          {hasEmployees ? (
+                            <Badge variant="secondary">In Use</Badge>
+                          ) : (
+                            <Badge variant="outline">Unused</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {!hasEmployees && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => confirmDelete('bu', bu.id, bu.name)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -211,17 +348,42 @@ export default function Organization() {
                     <TableHead>Code</TableHead>
                     <TableHead>Business Unit</TableHead>
                     <TableHead>Sub-Branches</TableHead>
+                    <TableHead>Employees</TableHead>
+                    <TableHead className="w-[80px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {departments?.map(dept => (
-                    <TableRow key={dept.id}>
-                      <TableCell className="font-medium">{dept.name}</TableCell>
-                      <TableCell>{dept.code || '-'}</TableCell>
-                      <TableCell>{(dept.business_units as any)?.name || '-'}</TableCell>
-                      <TableCell>{subBranches?.filter(sb => sb.department_id === dept.id).length || 0}</TableCell>
-                    </TableRow>
-                  ))}
+                  {departments?.map(dept => {
+                    const empCount = employeeCountByDept.get(dept.id) || 0;
+                    const hasEmployees = empCount > 0;
+                    const sbCount = subBranches?.filter(sb => sb.department_id === dept.id).length || 0;
+                    return (
+                      <TableRow key={dept.id}>
+                        <TableCell className="font-medium">{dept.name}</TableCell>
+                        <TableCell>{dept.code || '-'}</TableCell>
+                        <TableCell>{(dept.business_units as any)?.name || '-'}</TableCell>
+                        <TableCell>{sbCount}</TableCell>
+                        <TableCell>
+                          {hasEmployees ? (
+                            <Badge variant="secondary">{empCount} employees</Badge>
+                          ) : (
+                            <Badge variant="outline">Unused</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {!hasEmployees && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => confirmDelete('department', dept.id, dept.name)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -247,6 +409,7 @@ export default function Organization() {
                     <TableHead>Name</TableHead>
                     <TableHead>Code</TableHead>
                     <TableHead>Department</TableHead>
+                    <TableHead className="w-[80px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -255,6 +418,15 @@ export default function Organization() {
                       <TableCell className="font-medium">{sb.name}</TableCell>
                       <TableCell>{sb.code || '-'}</TableCell>
                       <TableCell>{(sb.departments as any)?.name || '-'}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => confirmDelete('sub-branch', sb.id, sb.name)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -349,6 +521,27 @@ export default function Organization() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deleteTarget?.type === 'bu' ? 'Business Unit' : deleteTarget?.type}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deleteTarget?.name}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteEntity.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
