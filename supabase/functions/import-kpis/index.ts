@@ -214,34 +214,68 @@ const parseReviewPeriod = (monthStr: string): { period: string | null; year: num
   return { period: reviewPeriod, year: reviewYear };
 };
 
-// Format rating threshold values (R1-R5) from Excel
-// Excel percentage cells are read as decimals: 140% -> 1.4, 99.95% -> 0.9995
-// We need to convert these back to percentage format for display
-const formatRatingThreshold = (value: string | number | null | undefined): string | null => {
+// Format rating threshold values (R0-R5) from Excel
+// Excel percentage cells can arrive as:
+// - 140%   -> 1.4
+// - 99.95% -> 0.9995
+// In some pipelines values can be divided once more (e.g., 140% -> 0.014).
+// We normalize these to stored strings like "140%" while preserving precision.
+const formatRatingThreshold = (
+  value: string | number | null | undefined,
+  opts: { mode: 'absolute' | 'percentage'; factor?: number }
+): string | null => {
   if (value === null || value === undefined || value === '') return null;
-  
+
   const strValue = String(value).trim();
-  
-  // If already has % sign, it's already formatted - just preserve it
+
+  // Absolute mode (target = 0): store as a plain number string (no %)
+  if (opts.mode === 'absolute') {
+    if (strValue.includes('%')) {
+      const n = parseFloat(strValue.replace('%', '').replace(',', '.'));
+      if (!Number.isFinite(n)) return strValue.replace('%', '');
+      return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(2)).toString());
+    }
+
+    const n = typeof value === 'number' ? value : parseFloat(strValue.replace(',', '.'));
+    if (!Number.isFinite(n)) return strValue;
+    return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '');
+  }
+
+  // Percentage mode: store as "xx%" string
   if (strValue.includes('%')) {
     const numPart = parseFloat(strValue.replace('%', '').replace(',', '.'));
-    if (isNaN(numPart)) return strValue;
-    return Number.isInteger(numPart) ? `${numPart}%` : `${numPart.toFixed(2).replace(/\.?0+$/, '')}%`;
+    if (!Number.isFinite(numPart)) return strValue;
+    return Number.isInteger(numPart)
+      ? `${numPart}%`
+      : `${numPart.toFixed(2).replace(/\.?0+$/, '')}%`;
   }
-  
-  // Parse the numeric value
+
   const num = typeof value === 'number' ? value : parseFloat(strValue.replace(',', '.'));
-  if (isNaN(num)) return strValue;
-  
-  // If it's 0, store as "0" (absolute mode for target=0 KPIs)
+  if (!Number.isFinite(num)) return strValue;
   if (num === 0) return '0';
-  
-  // Excel sends percentage-formatted cells as decimals:
-  // 140% -> 1.4, 100% -> 1.0, 99.95% -> 0.9995, 77.78% -> 0.7778
-  // So we multiply by 100 to get the actual percentage value
-  // This applies to ALL decimal values from Excel percentage cells
-  const percentValue = num * 100;
-  return Number.isInteger(percentValue) ? `${percentValue}%` : `${percentValue.toFixed(2).replace(/\.?0+$/, '')}%`;
+
+  const factor = opts.factor ?? 100;
+  const percentValue = num * factor;
+  return Number.isInteger(percentValue)
+    ? `${percentValue}%`
+    : `${percentValue.toFixed(2).replace(/\.?0+$/, '')}%`;
+};
+
+const getThresholdScaleFactor = (row: KpiImportRow): number => {
+  const rawVals = [row.r1, row.r2, row.r3, row.r4, row.r5]
+    .filter((v) => v !== null && v !== undefined && v !== '' && !String(v).includes('%'))
+    .map((v) => (typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'))))
+    .filter((n) => Number.isFinite(n) && n > 0);
+
+  if (rawVals.length === 0) return 100;
+
+  const max = Math.max(...rawVals);
+
+  // If the largest threshold is extremely small, it likely got divided once too many times
+  // e.g. 140% -> 0.014 (instead of 1.4). In that case multiply by 10000 (0.014 -> 140).
+  if (max <= 0.02) return 10000;
+
+  return 100;
 };
 
 const getRandomColor = () => {
@@ -582,6 +616,26 @@ async function processImport(
       if (isPercentage && targetValue !== null && targetValue > 0 && targetValue <= 1) {
         targetValue = targetValue * 100;
       }
+
+      // Threshold formatting mode:
+      // - target=0 => absolute thresholds (store as plain numbers)
+      // - otherwise => percentage thresholds (store as "xx%")
+      const thresholdMode: 'absolute' | 'percentage' = targetValue === 0 ? 'absolute' : 'percentage';
+      const thresholdFactor = thresholdMode === 'percentage' ? getThresholdScaleFactor(row) : 1;
+
+      if (thresholdMode === 'percentage' && thresholdFactor === 10000) {
+        console.log(`[${importId}] Detected double-normalized thresholds on row ${i + 1}`, {
+          fullName: row.fullName,
+          kra: row.kra,
+          kpi: row.kpi,
+          r5: row.r5,
+          r4: row.r4,
+          r3: row.r3,
+          r2: row.r2,
+          r1: row.r1,
+          r0: row.r0,
+        });
+      }
       
       const kpiId = crypto.randomUUID();
       
@@ -598,12 +652,12 @@ async function processImport(
         status: determineReviewStatus(row),
         review_period: reviewPeriod,
         review_year: reviewYear,
-        r5: formatRatingThreshold(row.r5),
-        r4: formatRatingThreshold(row.r4),
-        r3: formatRatingThreshold(row.r3),
-        r2: formatRatingThreshold(row.r2),
-        r1: formatRatingThreshold(row.r1),
-        r0: formatRatingThreshold(row.r0),
+        r5: formatRatingThreshold(row.r5, { mode: thresholdMode, factor: thresholdFactor }),
+        r4: formatRatingThreshold(row.r4, { mode: thresholdMode, factor: thresholdFactor }),
+        r3: formatRatingThreshold(row.r3, { mode: thresholdMode, factor: thresholdFactor }),
+        r2: formatRatingThreshold(row.r2, { mode: thresholdMode, factor: thresholdFactor }),
+        r1: formatRatingThreshold(row.r1, { mode: thresholdMode, factor: thresholdFactor }),
+        r0: formatRatingThreshold(row.r0, { mode: thresholdMode, factor: thresholdFactor }),
         frequency: row.frequency || null,
         source_of_data: row.sourceOfData || null,
       });
