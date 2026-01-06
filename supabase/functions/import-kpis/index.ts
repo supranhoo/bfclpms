@@ -215,37 +215,33 @@ const parseReviewPeriod = (monthStr: string): { period: string | null; year: num
 };
 
 // Format rating threshold values (R1-R5) from Excel
-// Excel may provide: 1.05 (meaning 105%), 0.9995 (meaning 99.95%), "99.95%", etc.
+// Excel percentage cells are read as decimals: 140% -> 1.4, 99.95% -> 0.9995
+// We need to convert these back to percentage format for display
 const formatRatingThreshold = (value: string | number | null | undefined): string | null => {
   if (value === null || value === undefined || value === '') return null;
   
   const strValue = String(value).trim();
   
-  // If already has % sign, preserve it with decimal precision
+  // If already has % sign, it's already formatted - just preserve it
   if (strValue.includes('%')) {
     const numPart = parseFloat(strValue.replace('%', '').replace(',', '.'));
     if (isNaN(numPart)) return strValue;
-    // Keep decimal precision (e.g., 99.95%)
     return Number.isInteger(numPart) ? `${numPart}%` : `${numPart.toFixed(2).replace(/\.?0+$/, '')}%`;
   }
   
-  // It's a number - check if it's a ratio or percentage
+  // Parse the numeric value
   const num = typeof value === 'number' ? value : parseFloat(strValue.replace(',', '.'));
   if (isNaN(num)) return strValue;
   
-  // Heuristic: If value is between 0 and 2 (exclusive of exactly 0), 
-  // it's likely a ratio (e.g., 1.05 = 105%, 0.9995 = 99.95%)
-  // Values >= 2 are likely already percentages (e.g., 100, 99.95)
-  if (num > 0 && num < 2) {
-    const percentValue = num * 100;
-    return Number.isInteger(percentValue) ? `${percentValue}%` : `${percentValue.toFixed(2).replace(/\.?0+$/, '')}%`;
-  }
-  
-  // If it's 0, store as "0" (absolute mode)
+  // If it's 0, store as "0" (absolute mode for target=0 KPIs)
   if (num === 0) return '0';
   
-  // Otherwise treat as already a percentage
-  return Number.isInteger(num) ? `${num}%` : `${num.toFixed(2).replace(/\.?0+$/, '')}%`;
+  // Excel sends percentage-formatted cells as decimals:
+  // 140% -> 1.4, 100% -> 1.0, 99.95% -> 0.9995, 77.78% -> 0.7778
+  // So we multiply by 100 to get the actual percentage value
+  // This applies to ALL decimal values from Excel percentage cells
+  const percentValue = num * 100;
+  return Number.isInteger(percentValue) ? `${percentValue}%` : `${percentValue.toFixed(2).replace(/\.?0+$/, '')}%`;
 };
 
 const getRandomColor = () => {
