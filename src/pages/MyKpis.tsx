@@ -64,15 +64,9 @@ export default function MyKpis() {
     ) || [];
   }, [allKpis, selectedPeriod, selectedYear]);
   
-  // Get org-level category IDs
-  const orgLevelCategoryIds = useMemo(() => {
-    return new Set(categories?.filter(c => c.is_org_level).map(c => c.id) || []);
-  }, [categories]);
-
-  // Fetch org KPI values for all org-level categories in this period
-  const orgLevelCategoryIdsArray = useMemo(() => Array.from(orgLevelCategoryIds), [orgLevelCategoryIds]);
+  // Fetch org KPI values for this period (for org-level KPIs)
   const { data: orgKpiValues } = useOrgKpiValues(
-    orgLevelCategoryIdsArray.length > 0 ? undefined : undefined, // We'll use period/year filtering
+    undefined, // category_id - we'll filter client-side by kpi's is_org_level
     selectedPeriod,
     selectedYear
   );
@@ -180,8 +174,8 @@ export default function MyKpis() {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
     
-    // Check if this is an org-level KPI with verified data
-    const isOrgLevel = orgLevelCategoryIds.has(kpi.category_id);
+    // Check if this is an org-level KPI (at KPI level now, not category level)
+    const isOrgLevel = kpi.is_org_level;
     const orgValue = isOrgLevel 
       ? orgKpiValuesMap.get(`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`)
       : null;
@@ -411,11 +405,12 @@ export default function MyKpis() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredKpis?.map((kpi, index) => {
+              {filteredKpis?.map((kpi, index) => {
                   const submission = submissionMap.get(kpi.id);
                   const score = submission?.final_score || submission?.self_score;
                   const scoreInfo = score !== null && score !== undefined ? scoreDisplay[score] : null;
-                  const isOrgLevel = orgLevelCategoryIds.has(kpi.category_id);
+                  // Check org-level at KPI level now
+                  const isOrgLevel = kpi.is_org_level;
                   const orgValue = isOrgLevel 
                     ? orgKpiValuesMap.get(`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`)
                     : null;
@@ -546,8 +541,8 @@ export default function MyKpis() {
       <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
         <SheetContent size="full" className="flex flex-col h-full p-4">
           {(() => {
-            // Compute org-level state for the selected KPI
-            const isSelectedKpiOrgLevel = selectedKpi ? orgLevelCategoryIds.has(selectedKpi.category_id) : false;
+            // Compute org-level state for the selected KPI (at KPI level now)
+            const isSelectedKpiOrgLevel = selectedKpi?.is_org_level || false;
             const selectedKpiOrgValue = isSelectedKpiOrgLevel && selectedKpi
               ? orgKpiValuesMap.get(`${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}`)
               : null;

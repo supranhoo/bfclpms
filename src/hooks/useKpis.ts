@@ -33,6 +33,8 @@ export interface KPI {
   r0: string | null;
   frequency: string | null;
   source_of_data: string | null;
+  // Organization-level KPI flag
+  is_org_level: boolean;
   kra_categories?: {
     id: string;
     name: string;

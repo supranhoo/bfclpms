@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKraCategories } from '@/hooks/useOrganization';
-import { useOrgKpiValues, useBulkUpsertOrgKpiValues, useOrgLevelCategories, OrgKpiValue } from '@/hooks/useOrgKpiValues';
-import { useKpisByPeriod } from '@/hooks/useKpis';
+import { useOrgKpiValues, useBulkUpsertOrgKpiValues, OrgKpiValue } from '@/hooks/useOrgKpiValues';
+import { useOrgLevelKpis } from '@/hooks/useOrgLevelKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/LoadingSkeletons';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
-import { Building2, Save, AlertTriangle } from 'lucide-react';
+import { Building2, Save, AlertTriangle, Filter } from 'lucide-react';
 
 interface EditableKpi {
   category_id: string;
@@ -38,52 +38,51 @@ export default function OrgKpiDataEntry() {
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
   const [selectedYear, setSelectedYear] = useState(defaultYear);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [editedValues, setEditedValues] = useState<Map<string, EditableKpi>>(new Map());
   const [globalDataSource, setGlobalDataSource] = useState('');
 
-  const { data: orgLevelCategories, isLoading: categoriesLoading } = useOrgLevelCategories();
-  const { data: kpis, isLoading: kpisLoading } = useKpisByPeriod(selectedPeriod, selectedYear);
-  const { data: existingOrgValues } = useOrgKpiValues(selectedCategoryId, selectedPeriod, selectedYear);
+  // Fetch org-level KPIs (where is_org_level = true at KPI level)
+  const { data: orgLevelKpis, isLoading: kpisLoading } = useOrgLevelKpis(selectedPeriod, selectedYear);
+  const { data: categories } = useKraCategories();
+  const { data: existingOrgValues } = useOrgKpiValues(
+    selectedCategoryId !== 'all' ? selectedCategoryId : undefined, 
+    selectedPeriod, 
+    selectedYear
+  );
   const bulkUpsert = useBulkUpsertOrgKpiValues();
 
-  // Get unique KPI definitions for the selected org-level category
-  const uniqueKpis = useMemo(() => {
-    if (!kpis || !selectedCategoryId) return [];
+  // Get unique categories from org-level KPIs
+  const orgLevelCategories = useMemo(() => {
+    if (!orgLevelKpis || !categories) return [];
+    const categoryIds = new Set(orgLevelKpis.map(k => k.category_id));
+    return categories.filter(c => categoryIds.has(c.id));
+  }, [orgLevelKpis, categories]);
 
-    const categoryKpis = kpis.filter(k => k.category_id === selectedCategoryId);
-    const uniqueMap = new Map<string, { kra_name: string; kpi_name: string; target_value: number | null; uom: string | null }>();
-
-    categoryKpis.forEach(kpi => {
-      const key = `${kpi.kra_name}||${kpi.kpi_name}`;
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, {
-          kra_name: kpi.kra_name,
-          kpi_name: kpi.kpi_name,
-          target_value: kpi.target_value,
-          uom: kpi.uom,
-        });
-      }
-    });
-
-    return Array.from(uniqueMap.values());
-  }, [kpis, selectedCategoryId]);
+  // Filter KPIs by selected category
+  const filteredKpis = useMemo(() => {
+    if (!orgLevelKpis) return [];
+    if (selectedCategoryId === 'all') return orgLevelKpis;
+    return orgLevelKpis.filter(k => k.category_id === selectedCategoryId);
+  }, [orgLevelKpis, selectedCategoryId]);
 
   // Create a map of existing org values for quick lookup
   const existingValuesMap = useMemo(() => {
     const map = new Map<string, OrgKpiValue>();
     existingOrgValues?.forEach(v => {
-      const key = `${v.kra_name}||${v.kpi_name}`;
+      const key = `${v.category_id}||${v.kra_name}||${v.kpi_name}`;
       map.set(key, v);
     });
     return map;
   }, [existingOrgValues]);
 
-  const selectedCategory = orgLevelCategories?.find(c => c.id === selectedCategoryId);
-  const isUniformScoring = selectedCategory?.org_scoring_mode === 'uniform';
+  // Check if any category uses uniform scoring
+  const getCategoryScoringMode = (categoryId: string) => {
+    return categories?.find(c => c.id === categoryId)?.org_scoring_mode || 'individual';
+  };
 
-  const getDisplayValue = (kraName: string, kpiName: string) => {
-    const key = `${kraName}||${kpiName}`;
+  const getDisplayValue = (categoryId: string, kraName: string, kpiName: string) => {
+    const key = `${categoryId}||${kraName}||${kpiName}`;
     const edited = editedValues.get(key);
     const existing = existingValuesMap.get(key);
     
@@ -116,17 +115,16 @@ export default function OrgKpiDataEntry() {
     };
   };
 
-  const handleValueChange = (kraName: string, kpiName: string, field: keyof EditableKpi, value: string) => {
-    const key = `${kraName}||${kpiName}`;
+  const handleValueChange = (categoryId: string, kraName: string, kpiName: string, field: keyof EditableKpi, value: string, kpi: typeof filteredKpis[0]) => {
+    const key = `${categoryId}||${kraName}||${kpiName}`;
     const existing = existingValuesMap.get(key);
-    const kpiDef = uniqueKpis.find(k => k.kra_name === kraName && k.kpi_name === kpiName);
     
     const current = editedValues.get(key) || {
-      category_id: selectedCategoryId,
+      category_id: categoryId,
       kra_name: kraName,
       kpi_name: kpiName,
-      target_value: existing?.target_value ?? kpiDef?.target_value ?? null,
-      uom: kpiDef?.uom ?? null,
+      target_value: existing?.target_value ?? kpi?.target_value ?? null,
+      uom: kpi?.uom ?? null,
       achieved_value: existing?.achieved_value ?? null,
       data_source: existing?.data_source ?? '',
       isModified: false,
@@ -157,11 +155,11 @@ export default function OrgKpiDataEntry() {
     if (!globalDataSource) return;
     
     const newEdited = new Map(editedValues);
-    uniqueKpis.forEach(kpi => {
-      const key = `${kpi.kra_name}||${kpi.kpi_name}`;
+    filteredKpis.forEach(kpi => {
+      const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
       const existing = existingValuesMap.get(key);
       const current = newEdited.get(key) || {
-        category_id: selectedCategoryId,
+        category_id: kpi.category_id,
         kra_name: kpi.kra_name,
         kpi_name: kpi.kpi_name,
         target_value: existing?.target_value ?? kpi.target_value,
@@ -185,27 +183,32 @@ export default function OrgKpiDataEntry() {
   const handleSaveAll = async () => {
     const valuesToSave = Array.from(editedValues.values())
       .filter(v => v.isModified)
-      .map(v => ({
-        category_id: v.category_id,
-        kra_name: v.kra_name,
-        kpi_name: v.kpi_name,
-        review_period: selectedPeriod,
-        review_year: selectedYear,
-        achieved_value: v.achieved_value,
-        data_source: v.data_source || undefined,
-        entered_by: profile?.id,
-        // Include threshold fields for uniform scoring
-        ...(isUniformScoring && {
-          target_value: v.target_value,
-          r5: v.r5 || undefined,
-          r4: v.r4 || undefined,
-          r3: v.r3 || undefined,
-          r2: v.r2 || undefined,
-          r1: v.r1 || undefined,
-          r0: v.r0 || undefined,
-          criteria: v.criteria || 'Higher is Better',
-        }),
-      }));
+      .map(v => {
+        const scoringMode = getCategoryScoringMode(v.category_id);
+        const isUniform = scoringMode === 'uniform';
+        
+        return {
+          category_id: v.category_id,
+          kra_name: v.kra_name,
+          kpi_name: v.kpi_name,
+          review_period: selectedPeriod,
+          review_year: selectedYear,
+          achieved_value: v.achieved_value,
+          data_source: v.data_source || undefined,
+          entered_by: profile?.id,
+          // Include threshold fields for uniform scoring
+          ...(isUniform && {
+            target_value: v.target_value,
+            r5: v.r5 || undefined,
+            r4: v.r4 || undefined,
+            r3: v.r3 || undefined,
+            r2: v.r2 || undefined,
+            r1: v.r1 || undefined,
+            r0: v.r0 || undefined,
+            criteria: v.criteria || 'Higher is Better',
+          }),
+        };
+      });
 
     if (valuesToSave.length === 0) return;
 
@@ -215,7 +218,7 @@ export default function OrgKpiDataEntry() {
 
   const modifiedCount = Array.from(editedValues.values()).filter(v => v.isModified).length;
 
-  if (categoriesLoading) {
+  if (kpisLoading) {
     return <TableSkeleton rows={5} columns={5} />;
   }
 
@@ -224,20 +227,20 @@ export default function OrgKpiDataEntry() {
       <div>
         <h1 className="text-2xl font-bold text-foreground">Organization KPI Data Entry</h1>
         <p className="text-muted-foreground">
-          Enter verified organizational data for org-level KPI categories
+          Enter verified organizational data for KPIs marked as organization-level
         </p>
       </div>
 
-      {/* No org-level categories warning */}
-      {(!orgLevelCategories || orgLevelCategories.length === 0) && (
+      {/* No org-level KPIs warning */}
+      {(!orgLevelKpis || orgLevelKpis.length === 0) && (
         <Card className="border-yellow-500/50 bg-yellow-50/50 dark:bg-yellow-950/20">
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
               <div>
-                <p className="font-medium text-yellow-800 dark:text-yellow-200">No Organization-Level Categories</p>
+                <p className="font-medium text-yellow-800 dark:text-yellow-200">No Organization-Level KPIs Found</p>
                 <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-                  To use this feature, mark categories as "Organization-Level" in the KRA Categories settings.
+                  To use this feature, mark individual KPIs as "Organization-Level" in the Admin KPI Editor or when assigning KRAs.
                 </p>
               </div>
             </div>
@@ -248,7 +251,10 @@ export default function OrgKpiDataEntry() {
       {/* Filters */}
       <Card>
         <CardHeader className="pb-4">
-          <CardTitle className="text-lg">Filters</CardTitle>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Filter className="h-4 w-4" />
+            Filters
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-end gap-4">
@@ -259,12 +265,13 @@ export default function OrgKpiDataEntry() {
               onYearChange={setSelectedYear}
             />
             <div className="space-y-2">
-              <Label>Organization-Level Category</Label>
+              <Label>Filter by Category</Label>
               <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
                 <SelectTrigger className="w-[250px]">
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
                   {orgLevelCategories?.map(cat => (
                     <SelectItem key={cat.id} value={cat.id}>
                       <div className="flex items-center gap-2">
@@ -284,24 +291,19 @@ export default function OrgKpiDataEntry() {
       </Card>
 
       {/* Data Entry Table */}
-      {selectedCategoryId && (
+      {orgLevelKpis && orgLevelKpis.length > 0 && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Building2 className="h-5 w-5" />
-                {selectedCategory?.name} - Data Entry
+                Organization-Level KPIs - Data Entry
               </CardTitle>
               <CardDescription>
-                {uniqueKpis.length} unique KPIs found for {selectedPeriod} {selectedYear}
+                {filteredKpis.length} org-level KPIs found for {selectedPeriod} {selectedYear}
               </CardDescription>
             </div>
             <div className="flex items-center gap-3">
-              {isUniformScoring && (
-                <Badge variant="outline" className="text-xs">
-                  Uniform Scoring Mode
-                </Badge>
-              )}
               {modifiedCount > 0 && (
                 <Badge variant="secondary">
                   {modifiedCount} unsaved changes
@@ -335,42 +337,44 @@ export default function OrgKpiDataEntry() {
 
             {kpisLoading ? (
               <TableSkeleton rows={5} columns={5} />
-            ) : uniqueKpis.length === 0 ? (
+            ) : filteredKpis.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Building2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>No KPIs found for this category in the selected period</p>
+                <p>No org-level KPIs found for the selected filters</p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
+                    <TableHead className="font-semibold">Category</TableHead>
                     <TableHead className="font-semibold">KRA</TableHead>
                     <TableHead className="font-semibold">KPI</TableHead>
                     <TableHead className="font-semibold text-center w-28">Target</TableHead>
                     <TableHead className="font-semibold text-center w-36">Achieved Value</TableHead>
-                    {isUniformScoring && (
-                      <>
-                        <TableHead className="font-semibold text-center w-20">R5</TableHead>
-                        <TableHead className="font-semibold text-center w-20">R4</TableHead>
-                        <TableHead className="font-semibold text-center w-20">R3</TableHead>
-                        <TableHead className="font-semibold text-center w-20">R2</TableHead>
-                        <TableHead className="font-semibold text-center w-20">R1</TableHead>
-                      </>
-                    )}
                     <TableHead className="font-semibold w-48">Data Source</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {uniqueKpis.map((kpi, idx) => {
-                    const display = getDisplayValue(kpi.kra_name, kpi.kpi_name);
-                    const key = `${kpi.kra_name}||${kpi.kpi_name}`;
+                  {filteredKpis.map((kpi, idx) => {
+                    const display = getDisplayValue(kpi.category_id, kpi.kra_name, kpi.kpi_name);
+                    const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
                     const isModified = editedValues.get(key)?.isModified;
+                    const isUniformScoring = getCategoryScoringMode(kpi.category_id) === 'uniform';
                     
                     return (
                       <TableRow 
                         key={key} 
                         className={`${idx % 2 === 0 ? 'bg-background' : 'bg-muted/20'} ${isModified ? 'ring-1 ring-primary/30' : ''}`}
                       >
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-2.5 h-2.5 rounded-full" 
+                              style={{ backgroundColor: kpi.kra_categories?.color || '#6B7280' }} 
+                            />
+                            <span className="text-sm">{kpi.kra_categories?.name}</span>
+                          </div>
+                        </TableCell>
                         <TableCell className="font-medium">{kpi.kra_name}</TableCell>
                         <TableCell>{kpi.kpi_name}</TableCell>
                         <TableCell className="text-center">
@@ -378,7 +382,7 @@ export default function OrgKpiDataEntry() {
                             <Input
                               type="number"
                               value={display.target_value ?? ''}
-                              onChange={(e) => handleValueChange(kpi.kra_name, kpi.kpi_name, 'target_value', e.target.value)}
+                              onChange={(e) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'target_value', e.target.value, kpi)}
                               placeholder="Target"
                               className="h-8 text-center"
                             />
@@ -393,59 +397,15 @@ export default function OrgKpiDataEntry() {
                           <Input
                             type="number"
                             value={display.achieved_value ?? ''}
-                            onChange={(e) => handleValueChange(kpi.kra_name, kpi.kpi_name, 'achieved_value', e.target.value)}
+                            onChange={(e) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'achieved_value', e.target.value, kpi)}
                             placeholder="Enter value"
                             className="h-8 text-center"
                           />
                         </TableCell>
-                        {isUniformScoring && (
-                          <>
-                            <TableCell>
-                              <Input
-                                value={display.r5 ?? ''}
-                                onChange={(e) => handleValueChange(kpi.kra_name, kpi.kpi_name, 'r5', e.target.value)}
-                                placeholder="R5"
-                                className="h-8 text-center text-xs"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                value={display.r4 ?? ''}
-                                onChange={(e) => handleValueChange(kpi.kra_name, kpi.kpi_name, 'r4', e.target.value)}
-                                placeholder="R4"
-                                className="h-8 text-center text-xs"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                value={display.r3 ?? ''}
-                                onChange={(e) => handleValueChange(kpi.kra_name, kpi.kpi_name, 'r3', e.target.value)}
-                                placeholder="R3"
-                                className="h-8 text-center text-xs"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                value={display.r2 ?? ''}
-                                onChange={(e) => handleValueChange(kpi.kra_name, kpi.kpi_name, 'r2', e.target.value)}
-                                placeholder="R2"
-                                className="h-8 text-center text-xs"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                value={display.r1 ?? ''}
-                                onChange={(e) => handleValueChange(kpi.kra_name, kpi.kpi_name, 'r1', e.target.value)}
-                                placeholder="R1"
-                                className="h-8 text-center text-xs"
-                              />
-                            </TableCell>
-                          </>
-                        )}
                         <TableCell>
                           <Input
                             value={display.data_source || ''}
-                            onChange={(e) => handleValueChange(kpi.kra_name, kpi.kpi_name, 'data_source', e.target.value)}
+                            onChange={(e) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'data_source', e.target.value, kpi)}
                             placeholder="Source"
                             className="h-8"
                           />

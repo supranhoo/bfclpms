@@ -301,6 +301,7 @@ export type Database = {
           employee_id: string
           frequency: string | null
           id: string
+          is_org_level: boolean | null
           kpi_name: string
           kra_name: string
           r0: string | null
@@ -325,6 +326,7 @@ export type Database = {
           employee_id: string
           frequency?: string | null
           id?: string
+          is_org_level?: boolean | null
           kpi_name: string
           kra_name: string
           r0?: string | null
@@ -349,6 +351,7 @@ export type Database = {
           employee_id?: string
           frequency?: string | null
           id?: string
+          is_org_level?: boolean | null
           kpi_name?: string
           kra_name?: string
           r0?: string | null

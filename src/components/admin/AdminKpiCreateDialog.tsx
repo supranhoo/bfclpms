@@ -126,6 +126,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
       review_period: reviewPeriod,
       review_year: reviewYear,
       status: 'kra_set' as ReviewStatus,
+      is_org_level: false,
     });
 
     handleClose();
