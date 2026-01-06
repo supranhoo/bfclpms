@@ -17,7 +17,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import * as XLSX from 'xlsx';
-import { validateFileSize, IMPORT_LIMITS, sanitizeText } from '@/lib/importValidation';
+import { validateFileSize, IMPORT_LIMITS, sanitizeText, normalizeRole, VALID_ROLES } from '@/lib/importValidation';
 
 interface BackgroundImportProgress {
   id: string;
@@ -120,6 +120,7 @@ interface EmployeeImportRow {
   pmsGrade?: string;
   managerEmployeeId?: string;
   managerName?: string;
+  role?: string;
 }
 
 export default function ImportData() {
@@ -518,13 +519,14 @@ export default function ImportData() {
       employeeCode: getValue(['employeeCode', 'employeecode', 'employee_code', 'empCode', 'empcode', 'emp_code', 'newCode', 'newcode', 'new_code', 'code', 'id', 'empId', 'empid', 'emp_id']),
       fullName: getValue(['fullName', 'fullname', 'full_name', 'name', 'employeeName', 'employeename', 'employee_name', 'empName', 'empname', 'emp_name']),
       email: getValue(['email', 'emailAddress', 'emailaddress', 'email_address', 'mail', 'emailId', 'emailid', 'email_id']),
-      designation: getValue(['designation', 'title', 'position', 'role', 'jobTitle', 'jobtitle', 'job_title']),
+      designation: getValue(['designation', 'title', 'position', 'jobTitle', 'jobtitle', 'job_title']),
       division: getValue(['division', 'div']),
       businessUnit: getValue(['businessUnit', 'businessunit', 'business_unit', 'bu', 'unit']),
       department: getValue(['department', 'dept', 'dep', 'departmentName', 'departmentname', 'department_name']),
       pmsGrade: getValue(['pmsGrade', 'pmsgrade', 'pms_grade', 'grade', 'level']),
       managerEmployeeId: getValue(['managerEmployeeId', 'manageremployeeid', 'manager_employee_id', 'managerId', 'managerid', 'manager_id', 'reportingTo', 'reportingto', 'reporting_to', 'reportsTo', 'reportsto', 'reports_to']),
       managerName: getValue(['managerName', 'managername', 'manager_name', 'reportingManager', 'reportingmanager', 'reporting_manager', 'supervisor']),
+      role: getValue(['role', 'appRole', 'approle', 'app_role', 'userRole', 'userrole', 'user_role', 'systemRole', 'systemrole', 'system_role']),
     };
   };
 
@@ -1075,8 +1077,10 @@ export default function ImportData() {
 
           if (updateError) throw updateError;
 
-          // Assign default 'employee' role to new user
+          // Assign role to new user (use explicit role from Excel or default to 'employee')
           if (newUserId) {
+            const assignedRole = normalizeRole(row.role);
+            
             // Check if role already exists
             const { data: existingRole } = await supabase
               .from('user_roles')
@@ -1089,7 +1093,7 @@ export default function ImportData() {
                 .from('user_roles')
                 .insert({
                   user_id: newUserId,
-                  role: 'employee',
+                  role: assignedRole,
                 });
 
               if (roleError) {
@@ -1107,6 +1111,15 @@ export default function ImportData() {
         importErrors.push(`Failed to import ${row.fullName || row.employeeCode}: ${error.message}`);
       }
     }
+
+    // Track users with explicit roles from import (non-employee roles)
+    const explicitRoleUsers = new Set<string>();
+    employeeData.forEach(row => {
+      if (row.role && normalizeRole(row.role) !== 'employee') {
+        if (row.employeeCode) explicitRoleUsers.add(row.employeeCode.toLowerCase());
+        if (row.email) explicitRoleUsers.add(row.email.toLowerCase());
+      }
+    });
 
     // Second pass: Identify managers from import data and assign 'manager' role
     // Collect all manager employee IDs/names from the import data
@@ -1128,6 +1141,16 @@ export default function ImportData() {
           (profile.full_name && managerIdentifiers.has(profile.full_name.toLowerCase()));
 
         if (isManager) {
+          // Skip auto-promotion if user has an explicit role from import
+          const hasExplicitRole = 
+            (profile.employee_code && explicitRoleUsers.has(profile.employee_code.toLowerCase())) ||
+            (profile.email && explicitRoleUsers.has(profile.email.toLowerCase()));
+
+          if (hasExplicitRole) {
+            // User has an explicit role - don't auto-promote
+            continue;
+          }
+
           // Check current role
           const { data: existingRole } = await supabase
             .from('user_roles')
@@ -1216,6 +1239,7 @@ export default function ImportData() {
         fullName: 'John Doe',
         email: 'john.doe@company.com',
         designation: 'Manager',
+        role: 'employee',
         division: 'Operations',
         businessUnit: 'Plant',
         department: 'HR',
@@ -1279,6 +1303,7 @@ export default function ImportData() {
                 <p className="font-medium mt-4 mb-2">Optional columns:</p>
                 <ul className="list-disc list-inside space-y-1">
                   <li><code>designation</code> - Job Title</li>
+                  <li><code>role</code> - System Role: <span className="text-xs ml-1 text-muted-foreground">(admin | manager | employee | auditor | management)</span></li>
                   <li><code>division</code> - Division Name</li>
                   <li><code>businessUnit</code> - Business Unit Name</li>
                   <li><code>department</code> - Department Name (must exist in system)</li>
@@ -1289,7 +1314,8 @@ export default function ImportData() {
                 <Alert className="mt-4">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    New employees will be created with default password: <code>Welcome@[EmployeeCode]</code>
+                    <strong>Role behavior:</strong> If no role is specified, employees default to <code>employee</code>. 
+                    Explicit roles take precedence over auto-promotion based on reporting lines.
                   </AlertDescription>
                 </Alert>
               </div>
