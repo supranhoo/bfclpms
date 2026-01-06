@@ -293,6 +293,92 @@ export type Database = {
           },
         ]
       }
+      kpi_templates: {
+        Row: {
+          applicable_roles: string[] | null
+          category_id: string | null
+          created_at: string
+          created_by: string | null
+          criteria: string | null
+          description: string | null
+          frequency: string | null
+          id: string
+          is_active: boolean | null
+          kpi_name: string
+          kra_name: string
+          r0: string | null
+          r1: string | null
+          r2: string | null
+          r3: string | null
+          r4: string | null
+          r5: string | null
+          source_of_data: string | null
+          target_value: number | null
+          title: string
+          uom: string | null
+          updated_at: string
+          weightage: number | null
+        }
+        Insert: {
+          applicable_roles?: string[] | null
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          criteria?: string | null
+          description?: string | null
+          frequency?: string | null
+          id?: string
+          is_active?: boolean | null
+          kpi_name: string
+          kra_name: string
+          r0?: string | null
+          r1?: string | null
+          r2?: string | null
+          r3?: string | null
+          r4?: string | null
+          r5?: string | null
+          source_of_data?: string | null
+          target_value?: number | null
+          title: string
+          uom?: string | null
+          updated_at?: string
+          weightage?: number | null
+        }
+        Update: {
+          applicable_roles?: string[] | null
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          criteria?: string | null
+          description?: string | null
+          frequency?: string | null
+          id?: string
+          is_active?: boolean | null
+          kpi_name?: string
+          kra_name?: string
+          r0?: string | null
+          r1?: string | null
+          r2?: string | null
+          r3?: string | null
+          r4?: string | null
+          r5?: string | null
+          source_of_data?: string | null
+          target_value?: number | null
+          title?: string
+          uom?: string | null
+          updated_at?: string
+          weightage?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_templates_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpis: {
         Row: {
           category_id: string
