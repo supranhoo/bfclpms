@@ -18,7 +18,7 @@ const MAX_REMARKS_LENGTH = 2000;
 const MAX_ROWS = 10000;
 
 const KpiImportRowSchema = z.object({
-  sNo: z.number().optional(),
+  sNo: z.union([z.number(), z.string()]).optional(),
   month: z.string().max(MAX_TEXT_LENGTH).optional(),
   reviewStatus: z.string().max(100).optional(),
   newCode: z.string().min(1).max(100),
@@ -26,7 +26,7 @@ const KpiImportRowSchema = z.object({
   category: z.string().min(1).max(MAX_TEXT_LENGTH),
   kra: z.string().min(1).max(MAX_TEXT_LENGTH),
   kpi: z.string().min(1).max(MAX_TEXT_LENGTH),
-  target: z.union([z.string(), z.number()]),
+  target: z.union([z.string(), z.number()]).optional(),
   uom: z.string().max(100).optional(),
   frequency: z.string().max(100).optional(),
   kpiWeightage: z.number().min(0).max(100).optional(),
