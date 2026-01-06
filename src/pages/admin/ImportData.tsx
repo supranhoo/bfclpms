@@ -12,7 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { FileSpreadsheet, AlertCircle, CheckCircle2, Download, Users, Loader2 } from 'lucide-react';
+import { FileSpreadsheet, AlertCircle, CheckCircle2, Download, Users, Loader2, Trash2 } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import * as XLSX from 'xlsx';
@@ -148,6 +149,69 @@ export default function ImportData() {
     employeesCreated: 0,
     categoriesCreated: 0,
   });
+  
+  // Clear data state
+  const [isClearing, setIsClearing] = useState(false);
+
+  // Clear KPI data function
+  const handleClearKpiData = async () => {
+    setIsClearing(true);
+    try {
+      // Delete in order: review_submissions → kpis → performance_reviews → import_progress
+      const { error: submissionsError } = await supabase
+        .from('review_submissions')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+      
+      if (submissionsError) throw submissionsError;
+
+      const { error: kpisError } = await supabase
+        .from('kpis')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+      
+      if (kpisError) throw kpisError;
+
+      const { error: reviewsError } = await supabase
+        .from('performance_reviews')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+      
+      if (reviewsError) throw reviewsError;
+
+      const { error: progressError } = await supabase
+        .from('import_progress')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+      
+      if (progressError) throw progressError;
+
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      queryClient.invalidateQueries({ queryKey: ['performance-reviews'] });
+      
+      toast({
+        title: 'Data Cleared',
+        description: 'All KPI and review data has been deleted. You can now import fresh data.',
+      });
+      
+      // Reset import state
+      setImportData([]);
+      setImportSuccess(0);
+      setBackgroundImportId(null);
+      setBackgroundProgress(null);
+    } catch (error: any) {
+      console.error('Error clearing data:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to clear data',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   // Subscribe to real-time updates for background import
   useEffect(() => {
@@ -1335,6 +1399,29 @@ export default function ImportData() {
                     className="cursor-pointer"
                   />
                 </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" disabled={isClearing}>
+                      {isClearing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                      Clear All KPI Data
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Clear All KPI Data?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete all KPIs, review submissions, and performance reviews. 
+                        This action cannot be undone. Use this before importing fresh data.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleClearKpiData} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        Yes, Clear All Data
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
                 <div className="flex items-center gap-2 ml-auto">
                   <Checkbox
                     id="background-import"
