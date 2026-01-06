@@ -37,7 +37,7 @@ export const KpiImportRowSchema = z.object({
   targetAchieved: z.union([z.number().min(0), z.string().max(100)]).optional(),
   achievedWeight: z.string().max(50).optional(),
   rating: z.number().min(0).max(5).optional(),
-  kpiWeightageScore: z.number().min(0).max(100).optional(),
+  kpiWeightageScore: z.number().min(0).max(500).optional(),
   // Self review
   employeeTargetAchieved: z.union([z.number().min(0), z.string().max(100)]).optional(),
   employeeRating: z.number().min(0).max(5).optional(),

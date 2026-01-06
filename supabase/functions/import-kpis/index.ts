@@ -59,7 +59,7 @@ const KpiImportRowSchema = z.object({
   targetAchieved: z.union([z.string(), z.number()]).optional(),
   achievedWeight: optionalString(100),
   rating: optionalNumber({ min: 0, max: 10 }),
-  kpiWeightageScore: optionalNumber({ min: 0, max: 100 }),
+  kpiWeightageScore: optionalNumber({ min: 0, max: 500 }),
   employeeTargetAchieved: z.union([z.string(), z.number()]).optional(),
   employeeRating: optionalNumber({ min: 0, max: 10 }),
   employeeRemarks: optionalString(MAX_REMARKS_LENGTH),
