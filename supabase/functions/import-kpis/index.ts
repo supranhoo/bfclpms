@@ -17,20 +17,39 @@ const MAX_TEXT_LENGTH = 1000;
 const MAX_REMARKS_LENGTH = 2000;
 const MAX_ROWS = 10000;
 
+const optionalNumber = (opts?: { min?: number; max?: number }) => {
+  let base = z.number();
+  if (opts?.min !== undefined) base = base.min(opts.min);
+  if (opts?.max !== undefined) base = base.max(opts.max);
+
+  return z.preprocess((v) => {
+    if (v === '' || v === null || v === undefined) return undefined;
+    if (typeof v === 'number') return v;
+    const n = parseFloat(String(v).replace('%', '').trim());
+    return Number.isFinite(n) ? n : v;
+  }, base.optional());
+};
+
+const optionalString = (max: number) =>
+  z.preprocess((v) => {
+    if (v === '' || v === null || v === undefined) return undefined;
+    return String(v);
+  }, z.string().max(max).optional());
+
 const KpiImportRowSchema = z.object({
   sNo: z.union([z.number(), z.string()]).optional(),
-  month: z.string().max(MAX_TEXT_LENGTH).optional(),
-  reviewStatus: z.string().max(100).optional(),
+  month: optionalString(MAX_TEXT_LENGTH),
+  reviewStatus: optionalString(100),
   newCode: z.string().min(1).max(100),
   fullName: z.string().min(1).max(MAX_TEXT_LENGTH),
   category: z.string().min(1).max(MAX_TEXT_LENGTH),
   kra: z.string().min(1).max(MAX_TEXT_LENGTH),
   kpi: z.string().min(1).max(MAX_TEXT_LENGTH),
   target: z.union([z.string(), z.number()]).optional(),
-  uom: z.string().max(100).optional(),
-  frequency: z.string().max(100).optional(),
-  kpiWeightage: z.number().min(0).max(100).optional(),
-  criteria: z.string().max(100).optional(),
+  uom: optionalString(100),
+  frequency: optionalString(100),
+  kpiWeightage: optionalNumber({ min: 0, max: 100 }),
+  criteria: optionalString(100),
   r5: z.union([z.string(), z.number()]).optional(),
   r4: z.union([z.string(), z.number()]).optional(),
   r3: z.union([z.string(), z.number()]).optional(),
@@ -38,25 +57,25 @@ const KpiImportRowSchema = z.object({
   r1: z.union([z.string(), z.number()]).optional(),
   r0: z.union([z.string(), z.number()]).optional(),
   targetAchieved: z.union([z.string(), z.number()]).optional(),
-  achievedWeight: z.string().max(100).optional(),
-  rating: z.number().min(0).max(10).optional(),
-  kpiWeightageScore: z.number().optional(),
+  achievedWeight: optionalString(100),
+  rating: optionalNumber({ min: 0, max: 10 }),
+  kpiWeightageScore: optionalNumber({ min: 0, max: 100 }),
   employeeTargetAchieved: z.union([z.string(), z.number()]).optional(),
-  employeeRating: z.number().min(0).max(10).optional(),
-  employeeRemarks: z.string().max(MAX_REMARKS_LENGTH).optional(),
+  employeeRating: optionalNumber({ min: 0, max: 10 }),
+  employeeRemarks: optionalString(MAX_REMARKS_LENGTH),
   managerTargetAchieved: z.union([z.string(), z.number()]).optional(),
-  managerRating: z.number().min(0).max(10).optional(),
-  managerRemarks: z.string().max(MAX_REMARKS_LENGTH).optional(),
+  managerRating: optionalNumber({ min: 0, max: 10 }),
+  managerRemarks: optionalString(MAX_REMARKS_LENGTH),
   auditTargetAchieved: z.union([z.string(), z.number()]).optional(),
-  auditRating: z.number().min(0).max(10).optional(),
-  auditRemarks: z.string().max(MAX_REMARKS_LENGTH).optional(),
-  sourceOfData: z.string().max(MAX_TEXT_LENGTH).optional(),
-  kpiStatus: z.string().max(100).optional(),
+  auditRating: optionalNumber({ min: 0, max: 10 }),
+  auditRemarks: optionalString(MAX_REMARKS_LENGTH),
+  sourceOfData: optionalString(MAX_TEXT_LENGTH),
+  kpiStatus: optionalString(100),
   // Organization structure fields
-  division: z.string().max(MAX_TEXT_LENGTH).optional(),
-  businessUnit: z.string().max(MAX_TEXT_LENGTH).optional(),
-  department: z.string().max(MAX_TEXT_LENGTH).optional(),
-  subBranch: z.string().max(MAX_TEXT_LENGTH).optional(),
+  division: optionalString(MAX_TEXT_LENGTH),
+  businessUnit: optionalString(MAX_TEXT_LENGTH),
+  department: optionalString(MAX_TEXT_LENGTH),
+  subBranch: optionalString(MAX_TEXT_LENGTH),
 });
 
 type KpiImportRow = z.infer<typeof KpiImportRowSchema>;
@@ -64,21 +83,21 @@ type KpiImportRow = z.infer<typeof KpiImportRowSchema>;
 // Sanitize text to prevent XSS and Excel formula injection
 const sanitizeText = (text: string | undefined | null): string => {
   if (!text) return '';
-  
+
   let sanitized = String(text);
-  
+
   // Remove leading characters that could trigger Excel formula execution
   sanitized = sanitized.replace(/^[=+\-@\t\r]/, '');
-  
+
   // Remove script tags and dangerous content
   sanitized = sanitized.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-  
+
   // Remove event handlers
   sanitized = sanitized.replace(/\s*on\w+\s*=\s*[\"'][^\"']*[\"']/gi, '');
-  
+
   // Remove javascript: URIs
   sanitized = sanitized.replace(/javascript\s*:/gi, '');
-  
+
   return sanitized.trim();
 };
 
@@ -94,10 +113,11 @@ const validateAndSanitizeRow = (row: unknown, index: number): { data: KpiImportR
   try {
     // First, parse with Zod for type validation
     const parsed = KpiImportRowSchema.parse(row);
-    
+
     // Then apply sanitization
     const sanitized: KpiImportRow = {
       ...parsed,
+      month: parsed.month ? truncateText(sanitizeText(parsed.month), MAX_TEXT_LENGTH) : undefined,
       newCode: truncateText(sanitizeText(parsed.newCode), 100),
       fullName: truncateText(sanitizeText(parsed.fullName), MAX_TEXT_LENGTH),
       category: truncateText(sanitizeText(parsed.category), MAX_TEXT_LENGTH),
@@ -110,8 +130,12 @@ const validateAndSanitizeRow = (row: unknown, index: number): { data: KpiImportR
       managerRemarks: parsed.managerRemarks ? truncateText(sanitizeText(parsed.managerRemarks), MAX_REMARKS_LENGTH) : undefined,
       auditRemarks: parsed.auditRemarks ? truncateText(sanitizeText(parsed.auditRemarks), MAX_REMARKS_LENGTH) : undefined,
       sourceOfData: parsed.sourceOfData ? truncateText(sanitizeText(parsed.sourceOfData), MAX_TEXT_LENGTH) : undefined,
+      division: parsed.division ? truncateText(sanitizeText(parsed.division), MAX_TEXT_LENGTH) : undefined,
+      businessUnit: parsed.businessUnit ? truncateText(sanitizeText(parsed.businessUnit), MAX_TEXT_LENGTH) : undefined,
+      department: parsed.department ? truncateText(sanitizeText(parsed.department), MAX_TEXT_LENGTH) : undefined,
+      subBranch: parsed.subBranch ? truncateText(sanitizeText(parsed.subBranch), MAX_TEXT_LENGTH) : undefined,
     };
-    
+
     return { data: sanitized, error: null };
   } catch (err) {
     if (err instanceof z.ZodError) {
