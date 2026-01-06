@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Building2, Plus, Trash2 } from 'lucide-react';
+import { Building2, Plus, Trash2, Pencil, Check, X } from 'lucide-react';
 
 export default function Organization() {
   const { data: divisions, isLoading: divisionsLoading } = useDivisions();
@@ -34,6 +34,9 @@ export default function Organization() {
   // Delete confirmation state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; name: string } | null>(null);
+
+  // Inline code editing state
+  const [editingCode, setEditingCode] = useState<{ type: string; id: string; code: string } | null>(null);
 
   // Calculate employee counts per department
   const employeeCountByDept = useMemo(() => {
@@ -146,6 +149,40 @@ export default function Organization() {
     },
   });
 
+  const updateCode = useMutation({
+    mutationFn: async ({ type, id, code }: { type: string; id: string; code: string }) => {
+      let table = '';
+      switch (type) {
+        case 'division':
+          table = 'divisions';
+          break;
+        case 'bu':
+          table = 'business_units';
+          break;
+        case 'department':
+          table = 'departments';
+          break;
+        case 'sub-branch':
+          table = 'sub_branches';
+          break;
+      }
+
+      const { error } = await supabase.from(table as any).update({ code }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['divisions'] });
+      queryClient.invalidateQueries({ queryKey: ['business-units'] });
+      queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ['sub-branches'] });
+      toast({ title: 'Code updated successfully' });
+      setEditingCode(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to update code', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const resetForm = () => {
     setFormName('');
     setFormCode('');
@@ -176,6 +213,58 @@ export default function Organization() {
     if (deleteTarget) {
       deleteEntity.mutate({ type: deleteTarget.type, id: deleteTarget.id });
     }
+  };
+
+  const startEditCode = (type: string, id: string, currentCode: string | null) => {
+    setEditingCode({ type, id, code: currentCode || '' });
+  };
+
+  const cancelEditCode = () => {
+    setEditingCode(null);
+  };
+
+  const saveCode = () => {
+    if (editingCode) {
+      updateCode.mutate({ type: editingCode.type, id: editingCode.id, code: editingCode.code });
+    }
+  };
+
+  const renderCodeCell = (type: string, id: string, currentCode: string | null) => {
+    if (editingCode?.type === type && editingCode?.id === id) {
+      return (
+        <div className="flex items-center gap-1">
+          <Input
+            value={editingCode.code}
+            onChange={(e) => setEditingCode({ ...editingCode, code: e.target.value })}
+            className="h-7 w-24"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') saveCode();
+              if (e.key === 'Escape') cancelEditCode();
+            }}
+          />
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={saveCode} disabled={updateCode.isPending}>
+            <Check className="h-3.5 w-3.5 text-green-600" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={cancelEditCode}>
+            <X className="h-3.5 w-3.5 text-muted-foreground" />
+          </Button>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center gap-1 group">
+        <span>{currentCode || '-'}</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={() => startEditCode(type, id, currentCode)}
+        >
+          <Pencil className="h-3 w-3 text-muted-foreground" />
+        </Button>
+      </div>
+    );
   };
 
   const isLoading = divisionsLoading || busLoading || deptsLoading || subLoading;
@@ -238,7 +327,7 @@ export default function Organization() {
                     return (
                       <TableRow key={div.id}>
                         <TableCell className="font-medium">{div.name}</TableCell>
-                        <TableCell>{div.code || '-'}</TableCell>
+                        <TableCell>{renderCodeCell('division', div.id, div.code)}</TableCell>
                         <TableCell>{buCount}</TableCell>
                         <TableCell>
                           {hasEmployees ? (
@@ -298,7 +387,7 @@ export default function Organization() {
                     return (
                       <TableRow key={bu.id}>
                         <TableCell className="font-medium">{bu.name}</TableCell>
-                        <TableCell>{bu.code || '-'}</TableCell>
+                        <TableCell>{renderCodeCell('bu', bu.id, bu.code)}</TableCell>
                         <TableCell>{(bu.divisions as any)?.name || '-'}</TableCell>
                         <TableCell>{deptCount}</TableCell>
                         <TableCell>
@@ -360,7 +449,7 @@ export default function Organization() {
                     return (
                       <TableRow key={dept.id}>
                         <TableCell className="font-medium">{dept.name}</TableCell>
-                        <TableCell>{dept.code || '-'}</TableCell>
+                        <TableCell>{renderCodeCell('department', dept.id, dept.code)}</TableCell>
                         <TableCell>{(dept.business_units as any)?.name || '-'}</TableCell>
                         <TableCell>{sbCount}</TableCell>
                         <TableCell>
@@ -416,7 +505,7 @@ export default function Organization() {
                   {subBranches?.map(sb => (
                     <TableRow key={sb.id}>
                       <TableCell className="font-medium">{sb.name}</TableCell>
-                      <TableCell>{sb.code || '-'}</TableCell>
+                      <TableCell>{renderCodeCell('sub-branch', sb.id, sb.code)}</TableCell>
                       <TableCell>{(sb.departments as any)?.name || '-'}</TableCell>
                       <TableCell>
                         <Button
