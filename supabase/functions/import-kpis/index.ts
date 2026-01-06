@@ -737,18 +737,44 @@ Deno.serve(async (req) => {
     const validatedData: KpiImportRow[] = [];
     const validationErrors: string[] = [];
     
+    // Log first row structure for debugging
+    if (rawImportData.length > 0) {
+      console.log('First row keys:', Object.keys(rawImportData[0]));
+      console.log('First row sample:', JSON.stringify(rawImportData[0]).slice(0, 500));
+    }
+    
     for (let i = 0; i < rawImportData.length; i++) {
       const { data, error } = validateAndSanitizeRow(rawImportData[i], i);
       if (data) {
         validatedData.push(data);
       } else if (error) {
         validationErrors.push(error);
+        // Log first few errors for debugging
+        if (validationErrors.length <= 5) {
+          console.log(`Validation error: ${error}`);
+        }
         // Stop after 50 validation errors to avoid overwhelming response
         if (validationErrors.length >= 50) {
           validationErrors.push(`... and ${rawImportData.length - i - 1} more rows not validated`);
           break;
         }
       }
+    }
+    
+    console.log(`Validation complete: ${validatedData.length} valid, ${validationErrors.length} errors`);
+
+    // If no valid rows, reject the import
+    if (validatedData.length === 0) {
+      return new Response(JSON.stringify({ 
+        error: 'All rows failed validation. Check column names match expected format.',
+        validationErrors: validationErrors.slice(0, 20),
+        totalErrors: validationErrors.length,
+        totalRows: rawImportData.length,
+        expectedColumns: ['newCode', 'fullName', 'category', 'kra', 'kpi']
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // If more than 10% of rows failed validation, reject the import
