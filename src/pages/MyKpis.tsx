@@ -179,28 +179,30 @@ export default function MyKpis() {
   const openReviewDialog = (kpi: KPI) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
-    if (existing) {
-      setAchievedValue(existing.achieved_value?.toString() || '');
-      // Re-calculate score from achieved value
-      if (existing.achieved_value !== null && existing.achieved_value !== undefined) {
-        const result = calculateScoreFromAchieved(existing.achieved_value, kpi);
-        setCalculatedScore(result.rating);
-        setCalculatedPercentage(result.percentage);
-      } else {
-        setCalculatedScore(existing.self_score || null);
-        setCalculatedPercentage(null);
-      }
-      setSelfRemarks(existing.self_remarks || '');
-      setSelfEvidenceUrl(existing.self_evidence_url || null);
-      setIsNa(existing.is_na || false);
+    
+    // Check if this is an org-level KPI with verified data
+    const isOrgLevel = orgLevelCategoryIds.has(kpi.category_id);
+    const orgValue = isOrgLevel 
+      ? orgKpiValuesMap.get(`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`)
+      : null;
+    
+    // Pre-fill with org value if available, otherwise use existing submission
+    const prefilledValue = orgValue?.achieved_value ?? existing?.achieved_value;
+    
+    if (prefilledValue !== null && prefilledValue !== undefined) {
+      setAchievedValue(prefilledValue.toString());
+      const result = calculateScoreFromAchieved(prefilledValue, kpi);
+      setCalculatedScore(result.rating);
+      setCalculatedPercentage(result.percentage);
     } else {
       setAchievedValue('');
       setCalculatedScore(null);
       setCalculatedPercentage(null);
-      setSelfRemarks('');
-      setSelfEvidenceUrl(null);
-      setIsNa(false);
     }
+    
+    setSelfRemarks(existing?.self_remarks || '');
+    setSelfEvidenceUrl(existing?.self_evidence_url || null);
+    setIsNa(existing?.is_na || false);
     setReviewDialogOpen(true);
   };
 
@@ -543,29 +545,63 @@ export default function MyKpis() {
       {/* Self Review Sheet - Compact No-Scroll Layout */}
       <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
         <SheetContent size="full" className="flex flex-col h-full p-4">
-          {/* Header with Category, KRA, KPI */}
-          <SheetHeader className="pb-3 border-b flex-shrink-0">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <SheetTitle className="text-lg">Submit Self Review</SheetTitle>
-                <Badge 
-                  variant="outline" 
-                  className="flex items-center gap-1.5"
-                  style={{ borderColor: selectedKpi?.kra_categories?.color }}
-                >
-                  <div 
-                    className="w-2 h-2 rounded-full" 
-                    style={{ backgroundColor: selectedKpi?.kra_categories?.color }} 
-                  />
-                  {selectedKpi?.kra_categories?.name}
-                </Badge>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">{selectedKpi?.kra_name}</p>
-                <SheetDescription className="text-sm">{selectedKpi?.kpi_name}</SheetDescription>
-              </div>
-            </div>
-          </SheetHeader>
+          {(() => {
+            // Compute org-level state for the selected KPI
+            const isSelectedKpiOrgLevel = selectedKpi ? orgLevelCategoryIds.has(selectedKpi.category_id) : false;
+            const selectedKpiOrgValue = isSelectedKpiOrgLevel && selectedKpi
+              ? orgKpiValuesMap.get(`${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}`)
+              : null;
+            const hasOrgData = isSelectedKpiOrgLevel && selectedKpiOrgValue?.achieved_value != null;
+            
+            return (
+              <>
+                {/* Header with Category, KRA, KPI */}
+                <SheetHeader className="pb-3 border-b flex-shrink-0">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <SheetTitle className="text-lg">Submit Self Review</SheetTitle>
+                        {hasOrgData && (
+                          <Badge variant="secondary" className="flex items-center gap-1">
+                            <Building2 className="h-3 w-3" />
+                            Organization Data
+                          </Badge>
+                        )}
+                      </div>
+                      <Badge 
+                        variant="outline" 
+                        className="flex items-center gap-1.5"
+                        style={{ borderColor: selectedKpi?.kra_categories?.color }}
+                      >
+                        <div 
+                          className="w-2 h-2 rounded-full" 
+                          style={{ backgroundColor: selectedKpi?.kra_categories?.color }} 
+                        />
+                        {selectedKpi?.kra_categories?.name}
+                      </Badge>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-foreground">{selectedKpi?.kra_name}</p>
+                      <SheetDescription className="text-sm">{selectedKpi?.kpi_name}</SheetDescription>
+                    </div>
+                  </div>
+                </SheetHeader>
+                
+                {/* Org-Level Info Banner */}
+                {hasOrgData && (
+                  <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg mt-3">
+                    <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                    <div className="text-sm">
+                      <span className="font-medium text-blue-800 dark:text-blue-200">
+                        Organization-Level KPI
+                      </span>
+                      <span className="text-blue-600 dark:text-blue-400 ml-1">
+                        - Achieved value is pre-filled from verified organizational data
+                        {selectedKpiOrgValue?.data_source && ` (Source: ${selectedKpiOrgValue.data_source})`}
+                      </span>
+                    </div>
+                  </div>
+                )}
           
           {/* Main Content - Grid Layout */}
           <div className="flex-1 grid grid-cols-3 gap-4 py-4 min-h-0">
@@ -606,25 +642,49 @@ export default function MyKpis() {
                       setCalculatedPercentage(null);
                     }
                   }}
+                  disabled={hasOrgData}
                 />
                 <Label htmlFor="is_na" className="cursor-pointer text-xs">
                   Mark as N/A (Not Applicable)
+                  {hasOrgData && (
+                    <span className="text-muted-foreground ml-1">(disabled for org data)</span>
+                  )}
                 </Label>
               </div>
 
               {/* Achieved Value */}
               {!isNa && (
                 <div className="space-y-2">
-                  <Label htmlFor="achieved" className="text-sm">Achieved Value *</Label>
+                  <Label htmlFor="achieved" className="text-sm flex items-center gap-2">
+                    Achieved Value *
+                    {hasOrgData && (
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Lock className="h-3 w-3 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          Verified organization data{selectedKpiOrgValue?.data_source && ` from ${selectedKpiOrgValue.data_source}`}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </Label>
                   <Input
                     id="achieved"
                     type="number"
                     value={achievedValue}
                     onChange={(e) => handleAchievedChange(e.target.value)}
                     placeholder="Enter value"
-                    className="h-9"
+                    className={`h-9 ${hasOrgData ? 'bg-muted cursor-not-allowed' : ''}`}
+                    readOnly={hasOrgData}
+                    disabled={hasOrgData}
                   />
-                  {achievedValue && selectedKpi?.target_value && (
+                  {hasOrgData && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Building2 className="h-3 w-3" />
+                      Verified data - cannot be modified
+                    </p>
+                  )}
+                  {!hasOrgData && achievedValue && selectedKpi?.target_value && (
                     <p className="text-xs text-muted-foreground">
                       {((parseFloat(achievedValue) / selectedKpi.target_value) * 100).toFixed(1)}% of target
                     </p>
@@ -684,15 +744,18 @@ export default function MyKpis() {
             </div>
           </div>
 
-          {/* Footer - Fixed at bottom */}
-          <SheetFooter className="pt-3 border-t flex-shrink-0">
-            <Button variant="outline" size="sm" onClick={() => setReviewDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button size="sm" onClick={handleSubmitReview} disabled={(!isNa && !achievedValue) || submitReview.isPending}>
-              {submitReview.isPending ? 'Submitting...' : 'Submit Review'}
-            </Button>
-          </SheetFooter>
+                {/* Footer - Fixed at bottom */}
+                <SheetFooter className="pt-3 border-t flex-shrink-0">
+                  <Button variant="outline" size="sm" onClick={() => setReviewDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={handleSubmitReview} disabled={(!isNa && !achievedValue) || submitReview.isPending}>
+                    {submitReview.isPending ? 'Submitting...' : 'Submit Review'}
+                  </Button>
+                </SheetFooter>
+              </>
+            );
+          })()}
         </SheetContent>
       </Sheet>
 
