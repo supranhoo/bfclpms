@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKraCategories } from '@/hooks/useOrganization';
-import { useOrgKpiValues, useBulkUpsertOrgKpiValues, useOrgLevelCategories } from '@/hooks/useOrgKpiValues';
+import { useOrgKpiValues, useBulkUpsertOrgKpiValues, useOrgLevelCategories, OrgKpiValue } from '@/hooks/useOrgKpiValues';
 import { useKpisByPeriod } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,14 @@ interface EditableKpi {
   achieved_value: number | null;
   data_source: string;
   isModified: boolean;
+  // Threshold fields for uniform scoring mode
+  r5: string;
+  r4: string;
+  r3: string;
+  r2: string;
+  r1: string;
+  r0: string;
+  criteria: string;
 }
 
 export default function OrgKpiDataEntry() {
@@ -63,40 +71,82 @@ export default function OrgKpiDataEntry() {
 
   // Create a map of existing org values for quick lookup
   const existingValuesMap = useMemo(() => {
-    const map = new Map<string, { achieved_value: number | null; data_source: string | null }>();
+    const map = new Map<string, OrgKpiValue>();
     existingOrgValues?.forEach(v => {
       const key = `${v.kra_name}||${v.kpi_name}`;
-      map.set(key, { achieved_value: v.achieved_value, data_source: v.data_source });
+      map.set(key, v);
     });
     return map;
   }, [existingOrgValues]);
 
+  const selectedCategory = orgLevelCategories?.find(c => c.id === selectedCategoryId);
+  const isUniformScoring = selectedCategory?.org_scoring_mode === 'uniform';
+
   const getDisplayValue = (kraName: string, kpiName: string) => {
     const key = `${kraName}||${kpiName}`;
     const edited = editedValues.get(key);
-    if (edited) {
-      return { achieved_value: edited.achieved_value, data_source: edited.data_source };
-    }
     const existing = existingValuesMap.get(key);
-    return { achieved_value: existing?.achieved_value ?? null, data_source: existing?.data_source ?? '' };
+    
+    if (edited) {
+      return {
+        achieved_value: edited.achieved_value,
+        data_source: edited.data_source,
+        target_value: edited.target_value,
+        r5: edited.r5,
+        r4: edited.r4,
+        r3: edited.r3,
+        r2: edited.r2,
+        r1: edited.r1,
+        r0: edited.r0,
+        criteria: edited.criteria,
+      };
+    }
+    
+    return {
+      achieved_value: existing?.achieved_value ?? null,
+      data_source: existing?.data_source ?? '',
+      target_value: existing?.target_value ?? null,
+      r5: existing?.r5 ?? '',
+      r4: existing?.r4 ?? '',
+      r3: existing?.r3 ?? '',
+      r2: existing?.r2 ?? '',
+      r1: existing?.r1 ?? '',
+      r0: existing?.r0 ?? '',
+      criteria: existing?.criteria ?? 'Higher is Better',
+    };
   };
 
-  const handleValueChange = (kraName: string, kpiName: string, field: 'achieved_value' | 'data_source', value: string) => {
+  const handleValueChange = (kraName: string, kpiName: string, field: keyof EditableKpi, value: string) => {
     const key = `${kraName}||${kpiName}`;
+    const existing = existingValuesMap.get(key);
+    const kpiDef = uniqueKpis.find(k => k.kra_name === kraName && k.kpi_name === kpiName);
+    
     const current = editedValues.get(key) || {
       category_id: selectedCategoryId,
       kra_name: kraName,
       kpi_name: kpiName,
-      target_value: uniqueKpis.find(k => k.kra_name === kraName && k.kpi_name === kpiName)?.target_value ?? null,
-      uom: uniqueKpis.find(k => k.kra_name === kraName && k.kpi_name === kpiName)?.uom ?? null,
-      achieved_value: existingValuesMap.get(key)?.achieved_value ?? null,
-      data_source: existingValuesMap.get(key)?.data_source ?? '',
+      target_value: existing?.target_value ?? kpiDef?.target_value ?? null,
+      uom: kpiDef?.uom ?? null,
+      achieved_value: existing?.achieved_value ?? null,
+      data_source: existing?.data_source ?? '',
       isModified: false,
+      r5: existing?.r5 ?? '',
+      r4: existing?.r4 ?? '',
+      r3: existing?.r3 ?? '',
+      r2: existing?.r2 ?? '',
+      r1: existing?.r1 ?? '',
+      r0: existing?.r0 ?? '',
+      criteria: existing?.criteria ?? 'Higher is Better',
     };
+
+    let parsedValue: string | number | null = value;
+    if (field === 'achieved_value' || field === 'target_value') {
+      parsedValue = value === '' ? null : parseFloat(value);
+    }
 
     const updated = {
       ...current,
-      [field]: field === 'achieved_value' ? (value === '' ? null : parseFloat(value)) : value,
+      [field]: parsedValue,
       isModified: true,
     };
 
@@ -109,15 +159,23 @@ export default function OrgKpiDataEntry() {
     const newEdited = new Map(editedValues);
     uniqueKpis.forEach(kpi => {
       const key = `${kpi.kra_name}||${kpi.kpi_name}`;
+      const existing = existingValuesMap.get(key);
       const current = newEdited.get(key) || {
         category_id: selectedCategoryId,
         kra_name: kpi.kra_name,
         kpi_name: kpi.kpi_name,
-        target_value: kpi.target_value,
+        target_value: existing?.target_value ?? kpi.target_value,
         uom: kpi.uom,
-        achieved_value: existingValuesMap.get(key)?.achieved_value ?? null,
+        achieved_value: existing?.achieved_value ?? null,
         data_source: '',
         isModified: false,
+        r5: existing?.r5 ?? '',
+        r4: existing?.r4 ?? '',
+        r3: existing?.r3 ?? '',
+        r2: existing?.r2 ?? '',
+        r1: existing?.r1 ?? '',
+        r0: existing?.r0 ?? '',
+        criteria: existing?.criteria ?? 'Higher is Better',
       };
       newEdited.set(key, { ...current, data_source: globalDataSource, isModified: true });
     });
@@ -136,6 +194,17 @@ export default function OrgKpiDataEntry() {
         achieved_value: v.achieved_value,
         data_source: v.data_source || undefined,
         entered_by: profile?.id,
+        // Include threshold fields for uniform scoring
+        ...(isUniformScoring && {
+          target_value: v.target_value,
+          r5: v.r5 || undefined,
+          r4: v.r4 || undefined,
+          r3: v.r3 || undefined,
+          r2: v.r2 || undefined,
+          r1: v.r1 || undefined,
+          r0: v.r0 || undefined,
+          criteria: v.criteria || 'Higher is Better',
+        }),
       }));
 
     if (valuesToSave.length === 0) return;
@@ -145,7 +214,6 @@ export default function OrgKpiDataEntry() {
   };
 
   const modifiedCount = Array.from(editedValues.values()).filter(v => v.isModified).length;
-  const selectedCategory = orgLevelCategories?.find(c => c.id === selectedCategoryId);
 
   if (categoriesLoading) {
     return <TableSkeleton rows={5} columns={5} />;
@@ -229,6 +297,11 @@ export default function OrgKpiDataEntry() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-3">
+              {isUniformScoring && (
+                <Badge variant="outline" className="text-xs">
+                  Uniform Scoring Mode
+                </Badge>
+              )}
               {modifiedCount > 0 && (
                 <Badge variant="secondary">
                   {modifiedCount} unsaved changes
@@ -275,6 +348,15 @@ export default function OrgKpiDataEntry() {
                     <TableHead className="font-semibold">KPI</TableHead>
                     <TableHead className="font-semibold text-center w-28">Target</TableHead>
                     <TableHead className="font-semibold text-center w-36">Achieved Value</TableHead>
+                    {isUniformScoring && (
+                      <>
+                        <TableHead className="font-semibold text-center w-20">R5</TableHead>
+                        <TableHead className="font-semibold text-center w-20">R4</TableHead>
+                        <TableHead className="font-semibold text-center w-20">R3</TableHead>
+                        <TableHead className="font-semibold text-center w-20">R2</TableHead>
+                        <TableHead className="font-semibold text-center w-20">R1</TableHead>
+                      </>
+                    )}
                     <TableHead className="font-semibold w-48">Data Source</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -292,8 +374,20 @@ export default function OrgKpiDataEntry() {
                         <TableCell className="font-medium">{kpi.kra_name}</TableCell>
                         <TableCell>{kpi.kpi_name}</TableCell>
                         <TableCell className="text-center">
-                          <span className="font-mono">{kpi.target_value}</span>
-                          {kpi.uom && <span className="text-xs text-muted-foreground ml-1">{kpi.uom}</span>}
+                          {isUniformScoring ? (
+                            <Input
+                              type="number"
+                              value={display.target_value ?? ''}
+                              onChange={(e) => handleValueChange(kpi.kra_name, kpi.kpi_name, 'target_value', e.target.value)}
+                              placeholder="Target"
+                              className="h-8 text-center"
+                            />
+                          ) : (
+                            <>
+                              <span className="font-mono">{kpi.target_value}</span>
+                              {kpi.uom && <span className="text-xs text-muted-foreground ml-1">{kpi.uom}</span>}
+                            </>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Input
@@ -304,6 +398,50 @@ export default function OrgKpiDataEntry() {
                             className="h-8 text-center"
                           />
                         </TableCell>
+                        {isUniformScoring && (
+                          <>
+                            <TableCell>
+                              <Input
+                                value={display.r5 ?? ''}
+                                onChange={(e) => handleValueChange(kpi.kra_name, kpi.kpi_name, 'r5', e.target.value)}
+                                placeholder="R5"
+                                className="h-8 text-center text-xs"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                value={display.r4 ?? ''}
+                                onChange={(e) => handleValueChange(kpi.kra_name, kpi.kpi_name, 'r4', e.target.value)}
+                                placeholder="R4"
+                                className="h-8 text-center text-xs"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                value={display.r3 ?? ''}
+                                onChange={(e) => handleValueChange(kpi.kra_name, kpi.kpi_name, 'r3', e.target.value)}
+                                placeholder="R3"
+                                className="h-8 text-center text-xs"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                value={display.r2 ?? ''}
+                                onChange={(e) => handleValueChange(kpi.kra_name, kpi.kpi_name, 'r2', e.target.value)}
+                                placeholder="R2"
+                                className="h-8 text-center text-xs"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                value={display.r1 ?? ''}
+                                onChange={(e) => handleValueChange(kpi.kra_name, kpi.kpi_name, 'r1', e.target.value)}
+                                placeholder="R1"
+                                className="h-8 text-center text-xs"
+                              />
+                            </TableCell>
+                          </>
+                        )}
                         <TableCell>
                           <Input
                             value={display.data_source || ''}

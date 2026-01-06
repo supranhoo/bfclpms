@@ -15,6 +15,15 @@ export interface OrgKpiValue {
   remarks: string | null;
   created_at: string;
   updated_at: string;
+  // Threshold fields for uniform scoring mode
+  target_value: number | null;
+  r5: string | null;
+  r4: string | null;
+  r3: string | null;
+  r2: string | null;
+  r1: string | null;
+  r0: string | null;
+  criteria: string | null;
 }
 
 export function useOrgKpiValues(categoryId?: string, reviewPeriod?: string, reviewYear?: number) {
