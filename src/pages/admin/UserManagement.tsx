@@ -16,6 +16,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2 } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { useKpiTemplates, KpiTemplate } from '@/hooks/useKpiTemplates';
+import { TemplateAssignmentDialog } from '@/components/admin/TemplateAssignmentDialog';
 
 type AppRole = 'admin' | 'manager' | 'employee' | 'auditor' | 'management';
 
@@ -32,6 +34,7 @@ const ITEMS_PER_PAGE = 10;
 export default function UserManagement() {
   const { data: profiles, isLoading } = useProfiles();
   const { data: departments } = useDepartments();
+  const { data: templates } = useKpiTemplates();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -80,6 +83,11 @@ export default function UserManagement() {
   // Delete Dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+
+  // Template Assignment Dialog (after user creation)
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [newCreatedUser, setNewCreatedUser] = useState<{ id: string; name: string; role: AppRole } | null>(null);
+  const [matchingTemplates, setMatchingTemplates] = useState<KpiTemplate[]>([]);
 
   // Filtered and paginated profiles
   const filteredProfiles = useMemo(() => {
@@ -199,10 +207,27 @@ export default function UserManagement() {
 
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
       toast({ title: 'User created successfully' });
       setCreateDialogOpen(false);
+      
+      // Check for matching templates based on role
+      const matchedTemplates = templates?.filter(t => 
+        t.is_active && 
+        (t.applicable_roles.length === 0 || t.applicable_roles.includes(newRole))
+      ) || [];
+      
+      if (matchedTemplates.length > 0 && data?.profile?.id) {
+        setNewCreatedUser({ 
+          id: data.profile.id, 
+          name: newFullName,
+          role: newRole 
+        });
+        setMatchingTemplates(matchedTemplates);
+        setTemplateDialogOpen(true);
+      }
+      
       resetCreateForm();
     },
     onError: (error: Error) => {
@@ -929,6 +954,21 @@ export default function UserManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Template Assignment Dialog (after user creation) */}
+      {newCreatedUser && (
+        <TemplateAssignmentDialog
+          isOpen={templateDialogOpen}
+          onClose={() => {
+            setTemplateDialogOpen(false);
+            setNewCreatedUser(null);
+            setMatchingTemplates([]);
+          }}
+          templates={matchingTemplates}
+          employeeId={newCreatedUser.id}
+          employeeName={newCreatedUser.name}
+        />
+      )}
     </div>
   );
 }

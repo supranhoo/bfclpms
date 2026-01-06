@@ -11,7 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { StatsRowSkeleton, TableSkeleton, FilterBarSkeleton } from '@/components/ui/LoadingSkeletons';
 import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
 import { AdminKpiCreateDialog } from '@/components/admin/AdminKpiCreateDialog';
-import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building } from 'lucide-react';
+import { BulkTemplateAssignDialog } from '@/components/admin/BulkTemplateAssignDialog';
+import { ScoringSimulatorPopover } from '@/components/admin/ScoringSimulatorPopover';
+import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 
@@ -52,6 +54,7 @@ export default function AllKpis() {
   // Dialog states
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false);
 
   // Get unique managers (profiles who have reports)
   const managers = useMemo(() => {
@@ -280,6 +283,10 @@ export default function AllKpis() {
           <Button variant="outline" onClick={handleExportExcel}>
             <Download className="h-4 w-4 mr-2" />
             Export Excel
+          </Button>
+          <Button variant="outline" onClick={() => setIsBulkAssignOpen(true)}>
+            <Library className="h-4 w-4 mr-2" />
+            Bulk Assign
           </Button>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -548,6 +555,11 @@ export default function AllKpis() {
       <AdminKpiCreateDialog
         isOpen={isCreateDialogOpen}
         onClose={() => setIsCreateDialogOpen(false)}
+      />
+
+      <BulkTemplateAssignDialog
+        isOpen={isBulkAssignOpen}
+        onClose={() => setIsBulkAssignOpen(false)}
       />
     </div>
   );
