@@ -121,7 +121,7 @@ export function useCreateKraCategory() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (category: { name: string; weightage: number; color: string; description?: string }) => {
+    mutationFn: async (category: { name: string; weightage: number; color: string; description?: string; is_org_level?: boolean }) => {
       const { data, error } = await supabase
         .from('kra_categories')
         .insert(category)
@@ -133,6 +133,7 @@ export function useCreateKraCategory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['org-level-categories'] });
       toast({ title: 'Category created successfully' });
     },
     onError: (error: Error) => {
@@ -146,7 +147,7 @@ export function useUpdateKraCategory() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ id, ...category }: { id: string; name: string; weightage: number; color: string; description?: string }) => {
+    mutationFn: async ({ id, ...category }: { id: string; name: string; weightage: number; color: string; description?: string; is_org_level?: boolean }) => {
       const { data, error } = await supabase
         .from('kra_categories')
         .update(category)
@@ -159,6 +160,7 @@ export function useUpdateKraCategory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['org-level-categories'] });
       toast({ title: 'Category updated successfully' });
     },
     onError: (error: Error) => {

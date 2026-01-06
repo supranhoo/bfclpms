@@ -5,12 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Progress } from '@/components/ui/progress';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2, Building2 } from 'lucide-react';
 
 interface Category {
   id: string;
@@ -18,6 +20,7 @@ interface Category {
   weightage: number;
   color: string | null;
   description: string | null;
+  is_org_level: boolean;
 }
 
 export default function Categories() {
@@ -35,6 +38,7 @@ export default function Categories() {
   const [formWeightage, setFormWeightage] = useState('');
   const [formColor, setFormColor] = useState('#3B82F6');
   const [formDescription, setFormDescription] = useState('');
+  const [formIsOrgLevel, setFormIsOrgLevel] = useState(false);
 
   const totalWeightage = categories?.reduce((sum, cat) => sum + (cat.weightage || 0), 0) || 0;
 
@@ -50,6 +54,7 @@ export default function Categories() {
     setFormWeightage(category.weightage.toString());
     setFormColor(category.color || '#3B82F6');
     setFormDescription(category.description || '');
+    setFormIsOrgLevel(category.is_org_level || false);
     setDialogOpen(true);
   };
 
@@ -66,6 +71,7 @@ export default function Categories() {
         weightage: parseFloat(formWeightage) || 0,
         color: formColor,
         description: formDescription,
+        is_org_level: formIsOrgLevel,
       });
     } else {
       await createCategory.mutateAsync({
@@ -73,6 +79,7 @@ export default function Categories() {
         weightage: parseFloat(formWeightage) || 0,
         color: formColor,
         description: formDescription,
+        is_org_level: formIsOrgLevel,
       });
     }
     setDialogOpen(false);
@@ -92,6 +99,7 @@ export default function Categories() {
     setFormWeightage('');
     setFormColor('#3B82F6');
     setFormDescription('');
+    setFormIsOrgLevel(false);
     setEditingCategory(null);
   };
 
@@ -157,6 +165,7 @@ export default function Categories() {
                 <TableHead>Name</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Weightage</TableHead>
+                <TableHead className="text-center">Type</TableHead>
                 <TableHead className="w-24">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -176,6 +185,14 @@ export default function Categories() {
                       <Progress value={cat.weightage} className="w-20 h-2" />
                       <span>{cat.weightage}%</span>
                     </div>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {cat.is_org_level && (
+                      <Badge variant="outline" className="gap-1">
+                        <Building2 className="h-3 w-3" />
+                        Org Level
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
@@ -261,6 +278,22 @@ export default function Categories() {
                 onChange={(e) => setFormDescription(e.target.value)}
                 placeholder="Brief description of this category..."
                 rows={3}
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+              <div className="space-y-0.5">
+                <Label htmlFor="is_org_level" className="cursor-pointer font-medium">
+                  Organization-Level KPI
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Data is centrally managed; employees see read-only verified values
+                </p>
+              </div>
+              <Switch
+                id="is_org_level"
+                checked={formIsOrgLevel}
+                onCheckedChange={setFormIsOrgLevel}
               />
             </div>
           </div>

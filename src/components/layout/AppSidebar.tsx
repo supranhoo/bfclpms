@@ -55,6 +55,7 @@ const menuItems = {
   admin: [
     { title: 'User Management', icon: Users, path: '/admin/users', roles: ['admin'] },
     { title: 'All KRAs', icon: Target, path: '/admin/kpis', roles: ['admin'] },
+    { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', roles: ['admin'] },
     { title: 'Workflow Config', icon: GitBranch, path: '/admin/workflow-config', roles: ['admin'] },
     { title: 'Organization', icon: Building2, path: '/admin/organization', roles: ['admin'] },
     { title: 'KRA Categories', icon: ClipboardList, path: '/admin/categories', roles: ['admin'] },

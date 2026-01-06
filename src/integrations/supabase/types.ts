@@ -389,6 +389,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          is_org_level: boolean
           name: string
           weightage: number
         }
@@ -397,6 +398,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_org_level?: boolean
           name: string
           weightage?: number
         }
@@ -405,6 +407,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_org_level?: boolean
           name?: string
           weightage?: number
         }
@@ -495,6 +498,66 @@ export type Database = {
             columns: ["kpi_id"]
             isOneToOne: false
             referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_kpi_values: {
+        Row: {
+          achieved_value: number | null
+          category_id: string
+          created_at: string
+          data_source: string | null
+          entered_by: string | null
+          id: string
+          kpi_name: string
+          kra_name: string
+          remarks: string | null
+          review_period: string
+          review_year: number
+          updated_at: string
+        }
+        Insert: {
+          achieved_value?: number | null
+          category_id: string
+          created_at?: string
+          data_source?: string | null
+          entered_by?: string | null
+          id?: string
+          kpi_name: string
+          kra_name: string
+          remarks?: string | null
+          review_period: string
+          review_year: number
+          updated_at?: string
+        }
+        Update: {
+          achieved_value?: number | null
+          category_id?: string
+          created_at?: string
+          data_source?: string | null
+          entered_by?: string | null
+          id?: string
+          kpi_name?: string
+          kra_name?: string
+          remarks?: string | null
+          review_period?: string
+          review_year?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_kpi_values_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_values_entered_by_fkey"
+            columns: ["entered_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

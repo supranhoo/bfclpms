@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
+import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,11 +15,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { KpiPageSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
-import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3 } from 'lucide-react';
+import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -62,6 +64,29 @@ export default function MyKpis() {
     ) || [];
   }, [allKpis, selectedPeriod, selectedYear]);
   
+  // Get org-level category IDs
+  const orgLevelCategoryIds = useMemo(() => {
+    return new Set(categories?.filter(c => c.is_org_level).map(c => c.id) || []);
+  }, [categories]);
+
+  // Fetch org KPI values for all org-level categories in this period
+  const orgLevelCategoryIdsArray = useMemo(() => Array.from(orgLevelCategoryIds), [orgLevelCategoryIds]);
+  const { data: orgKpiValues } = useOrgKpiValues(
+    orgLevelCategoryIdsArray.length > 0 ? undefined : undefined, // We'll use period/year filtering
+    selectedPeriod,
+    selectedYear
+  );
+
+  // Create a map for org KPI values lookup
+  const orgKpiValuesMap = useMemo(() => {
+    const map = new Map<string, { achieved_value: number | null; data_source: string | null }>();
+    orgKpiValues?.forEach(v => {
+      const key = `${v.category_id}||${v.kra_name}||${v.kpi_name}`;
+      map.set(key, { achieved_value: v.achieved_value, data_source: v.data_source });
+    });
+    return map;
+  }, [orgKpiValues]);
+
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const submitReview = useSubmitSelfReview();
@@ -388,6 +413,13 @@ export default function MyKpis() {
                   const submission = submissionMap.get(kpi.id);
                   const score = submission?.final_score || submission?.self_score;
                   const scoreInfo = score !== null && score !== undefined ? scoreDisplay[score] : null;
+                  const isOrgLevel = orgLevelCategoryIds.has(kpi.category_id);
+                  const orgValue = isOrgLevel 
+                    ? orgKpiValuesMap.get(`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`)
+                    : null;
+                  const displayAchieved = isOrgLevel && orgValue?.achieved_value != null 
+                    ? orgValue.achieved_value 
+                    : submission?.achieved_value;
                   
                   return (
                     <TableRow 
@@ -403,6 +435,17 @@ export default function MyKpis() {
                           <span className="text-xs text-muted-foreground truncate max-w-[100px]">
                             {kpi.kra_categories?.name}
                           </span>
+                          {isOrgLevel && (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Building2 className="h-3 w-3 text-muted-foreground" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Organization-level KPI</p>
+                                {orgValue?.data_source && <p className="text-xs">Source: {orgValue.data_source}</p>}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -418,10 +461,15 @@ export default function MyKpis() {
                         )}
                       </TableCell>
                       <TableCell className="text-center">
-                        {submission?.achieved_value != null ? (
-                          <span className="font-mono text-sm font-medium">
-                            {submission.achieved_value}
-                          </span>
+                        {displayAchieved != null ? (
+                          <div className="flex items-center justify-center gap-1">
+                            <span className="font-mono text-sm font-medium">
+                              {displayAchieved}
+                            </span>
+                            {isOrgLevel && orgValue && (
+                              <Lock className="h-3 w-3 text-muted-foreground" />
+                            )}
+                          </div>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
