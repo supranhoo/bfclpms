@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useDivisions, useBusinessUnits, useDepartments, useSubBranches, useProfiles } from '@/hooks/useOrganization';
+import { useDivisions, useBusinessUnits, useDepartments, useSubBranches, useProfiles, useDesignations, usePmsGrades } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,12 +21,14 @@ export default function Organization() {
   const { data: businessUnits, isLoading: busLoading } = useBusinessUnits();
   const { data: departments, isLoading: deptsLoading } = useDepartments();
   const { data: subBranches, isLoading: subLoading } = useSubBranches();
+  const { data: designations, isLoading: designationsLoading } = useDesignations();
+  const { data: pmsGrades, isLoading: pmsGradesLoading } = usePmsGrades();
   const { data: profiles } = useProfiles();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogType, setDialogType] = useState<'division' | 'bu' | 'department' | 'sub-branch'>('division');
+  const [dialogType, setDialogType] = useState<'division' | 'bu' | 'department' | 'sub-branch' | 'designation' | 'pms-grade'>('division');
   const [formName, setFormName] = useState('');
   const [formCode, setFormCode] = useState('');
   const [formParentId, setFormParentId] = useState('');
@@ -77,7 +79,7 @@ export default function Organization() {
   const createEntity = useMutation({
     mutationFn: async ({ type, name, code, parentId }: { type: string; name: string; code: string; parentId?: string }) => {
       let table = '';
-      let data: any = { name, code };
+      let data: any = { name, code: code || null };
 
       switch (type) {
         case 'division':
@@ -95,6 +97,12 @@ export default function Organization() {
           table = 'sub_branches';
           data.department_id = parentId;
           break;
+        case 'designation':
+          table = 'designations';
+          break;
+        case 'pms-grade':
+          table = 'pms_grades';
+          break;
       }
 
       const { error } = await supabase.from(table as any).insert(data);
@@ -105,6 +113,8 @@ export default function Organization() {
       queryClient.invalidateQueries({ queryKey: ['business-units'] });
       queryClient.invalidateQueries({ queryKey: ['departments'] });
       queryClient.invalidateQueries({ queryKey: ['sub-branches'] });
+      queryClient.invalidateQueries({ queryKey: ['designations'] });
+      queryClient.invalidateQueries({ queryKey: ['pms-grades'] });
       toast({ title: 'Created successfully' });
       setDialogOpen(false);
       resetForm();
@@ -130,6 +140,12 @@ export default function Organization() {
         case 'sub-branch':
           table = 'sub_branches';
           break;
+        case 'designation':
+          table = 'designations';
+          break;
+        case 'pms-grade':
+          table = 'pms_grades';
+          break;
       }
 
       const { error } = await supabase.from(table as any).delete().eq('id', id);
@@ -140,6 +156,8 @@ export default function Organization() {
       queryClient.invalidateQueries({ queryKey: ['business-units'] });
       queryClient.invalidateQueries({ queryKey: ['departments'] });
       queryClient.invalidateQueries({ queryKey: ['sub-branches'] });
+      queryClient.invalidateQueries({ queryKey: ['designations'] });
+      queryClient.invalidateQueries({ queryKey: ['pms-grades'] });
       toast({ title: 'Deleted successfully' });
       setDeleteDialogOpen(false);
       setDeleteTarget(null);
@@ -165,6 +183,12 @@ export default function Organization() {
         case 'sub-branch':
           table = 'sub_branches';
           break;
+        case 'designation':
+          table = 'designations';
+          break;
+        case 'pms-grade':
+          table = 'pms_grades';
+          break;
       }
 
       const { error } = await supabase.from(table as any).update({ code }).eq('id', id);
@@ -175,6 +199,8 @@ export default function Organization() {
       queryClient.invalidateQueries({ queryKey: ['business-units'] });
       queryClient.invalidateQueries({ queryKey: ['departments'] });
       queryClient.invalidateQueries({ queryKey: ['sub-branches'] });
+      queryClient.invalidateQueries({ queryKey: ['designations'] });
+      queryClient.invalidateQueries({ queryKey: ['pms-grades'] });
       toast({ title: 'Code updated successfully' });
       setEditingCode(null);
     },
@@ -267,7 +293,7 @@ export default function Organization() {
     );
   };
 
-  const isLoading = divisionsLoading || busLoading || deptsLoading || subLoading;
+  const isLoading = divisionsLoading || busLoading || deptsLoading || subLoading || designationsLoading || pmsGradesLoading;
 
   if (isLoading) {
     return (
@@ -286,15 +312,17 @@ export default function Organization() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Organization Structure</h1>
-        <p className="text-muted-foreground">Manage divisions, business units, departments, and sub-branches</p>
+        <p className="text-muted-foreground">Manage divisions, business units, departments, sub-branches, designations and PMS grades</p>
       </div>
 
       <Tabs defaultValue="divisions">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="divisions">Divisions ({divisions?.length || 0})</TabsTrigger>
           <TabsTrigger value="business-units">Business Units ({businessUnits?.length || 0})</TabsTrigger>
           <TabsTrigger value="departments">Departments ({departments?.length || 0})</TabsTrigger>
           <TabsTrigger value="sub-branches">Sub-Branches ({subBranches?.length || 0})</TabsTrigger>
+          <TabsTrigger value="designations">Designations ({designations?.length || 0})</TabsTrigger>
+          <TabsTrigger value="pms-grades">PMS Grades ({pmsGrades?.length || 0})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="divisions">
@@ -523,6 +551,92 @@ export default function Organization() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="designations">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Designations</CardTitle>
+                <CardDescription>Job titles and designations</CardDescription>
+              </div>
+              <Button onClick={() => openCreateDialog('designation')}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Designation
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead className="w-[80px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {designations?.map(d => (
+                    <TableRow key={d.id}>
+                      <TableCell className="font-medium">{d.name}</TableCell>
+                      <TableCell>{renderCodeCell('designation', d.id, d.code)}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => confirmDelete('designation', d.id, d.name)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="pms-grades">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>PMS Grades</CardTitle>
+                <CardDescription>Performance management system grades</CardDescription>
+              </div>
+              <Button onClick={() => openCreateDialog('pms-grade')}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add PMS Grade
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead className="w-[80px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pmsGrades?.map(g => (
+                    <TableRow key={g.id}>
+                      <TableCell className="font-medium">{g.name}</TableCell>
+                      <TableCell>{renderCodeCell('pms-grade', g.id, g.code)}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => confirmDelete('pms-grade', g.id, g.name)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Create Dialog */}
@@ -530,7 +644,7 @@ export default function Organization() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Add {dialogType === 'bu' ? 'Business Unit' : dialogType === 'sub-branch' ? 'Sub-Branch' : dialogType.charAt(0).toUpperCase() + dialogType.slice(1)}
+              Add {dialogType === 'bu' ? 'Business Unit' : dialogType === 'sub-branch' ? 'Sub-Branch' : dialogType === 'pms-grade' ? 'PMS Grade' : dialogType.charAt(0).toUpperCase() + dialogType.slice(1)}
             </DialogTitle>
           </DialogHeader>
 
