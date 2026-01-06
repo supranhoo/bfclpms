@@ -78,6 +78,27 @@ export type Database = {
           },
         ]
       }
+      designations: {
+        Row: {
+          code: string | null
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          code?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       divisions: {
         Row: {
           code: string | null
@@ -527,6 +548,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      pms_grades: {
+        Row: {
+          code: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          code?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {

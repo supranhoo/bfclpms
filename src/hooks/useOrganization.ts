@@ -71,6 +71,36 @@ export function useSubBranches() {
   });
 }
 
+export function useDesignations() {
+  return useQuery({
+    queryKey: ['designations'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('designations')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export function usePmsGrades() {
+  return useQuery({
+    queryKey: ['pms-grades'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pms_grades')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
 export function useKraCategories() {
   return useQuery({
     queryKey: ['kra-categories'],
