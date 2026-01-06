@@ -29,11 +29,18 @@ const reports: ReportCard[] = [
     color: 'text-primary',
   },
   {
+    title: 'Monthly Scorecard',
+    description: 'Employee performance scorecards with scores from each review stage',
+    icon: FileText,
+    path: '/reports/monthly-scorecard',
+    color: 'text-blue-500',
+  },
+  {
     title: 'KRA Issuance Report',
     description: 'Track KPI issuance status, completion rates, and category-wise breakdown',
     icon: FileText,
     path: '/reports/kra-issuance',
-    color: 'text-blue-500',
+    color: 'text-cyan-500',
   },
   {
     title: 'Query & Issues Report',

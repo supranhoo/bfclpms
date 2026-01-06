@@ -29,6 +29,7 @@ import QueryReport from "./pages/reports/QueryReport";
 import DepartmentReport from "./pages/reports/DepartmentReport";
 import CompletionReport from "./pages/reports/CompletionReport";
 import AuditTrailReport from "./pages/reports/AuditTrailReport";
+import MonthlyScorecardReport from "./pages/reports/MonthlyScorecardReport";
 import KRAAcceptance from "./pages/KRAAcceptance";
 import NotFound from "./pages/NotFound";
 
@@ -154,6 +155,11 @@ const App = () => (
               <Route path="/reports/audit-trail" element={
                 <ProtectedRoute allowedRoles={['admin', 'auditor']}>
                   <AuditTrailReport />
+                </ProtectedRoute>
+              } />
+              <Route path="/reports/monthly-scorecard" element={
+                <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management']}>
+                  <MonthlyScorecardReport />
                 </ProtectedRoute>
               } />
             </Route>
