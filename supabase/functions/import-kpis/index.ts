@@ -52,6 +52,11 @@ const KpiImportRowSchema = z.object({
   auditRemarks: z.string().max(MAX_REMARKS_LENGTH).optional(),
   sourceOfData: z.string().max(MAX_TEXT_LENGTH).optional(),
   kpiStatus: z.string().max(100).optional(),
+  // Organization structure fields
+  division: z.string().max(MAX_TEXT_LENGTH).optional(),
+  businessUnit: z.string().max(MAX_TEXT_LENGTH).optional(),
+  department: z.string().max(MAX_TEXT_LENGTH).optional(),
+  subBranch: z.string().max(MAX_TEXT_LENGTH).optional(),
 });
 
 type KpiImportRow = z.infer<typeof KpiImportRowSchema>;
@@ -254,15 +259,21 @@ async function processImport(
   });
   
   try {
-    // 1. Fetch all existing data upfront
-    console.log(`[${importId}] Fetching existing profiles and categories...`);
-    const [profilesResult, categoriesResult] = await Promise.all([
-      supabaseAdmin.from('profiles').select('id, employee_code, full_name'),
-      supabaseAdmin.from('kra_categories').select('id, name')
+    // 1. Fetch all existing data upfront (including org structure)
+    console.log(`[${importId}] Fetching existing profiles, categories, and org structure...`);
+    const [profilesResult, categoriesResult, divisionsResult, businessUnitsResult, departmentsResult] = await Promise.all([
+      supabaseAdmin.from('profiles').select('id, employee_code, full_name, department_id'),
+      supabaseAdmin.from('kra_categories').select('id, name'),
+      supabaseAdmin.from('divisions').select('id, name'),
+      supabaseAdmin.from('business_units').select('id, name, division_id'),
+      supabaseAdmin.from('departments').select('id, name, business_unit_id'),
     ]);
     
     const profiles = profilesResult.data || [];
     const categories = categoriesResult.data || [];
+    const divisions = divisionsResult.data || [];
+    const businessUnits = businessUnitsResult.data || [];
+    const departments = departmentsResult.data || [];
     
     // Build lookup maps
     const employeeByCode = new Map<string, string>();
@@ -275,10 +286,23 @@ async function processImport(
     const categoryByName = new Map<string, string>();
     categories.forEach((c: any) => categoryByName.set(c.name.toLowerCase(), c.id));
     
-    // 2. Identify missing employees and categories
-    console.log(`[${importId}] Identifying missing employees and categories...`);
-    const missingEmployees = new Map<string, { code: string; name: string }>();
+    // Org structure maps
+    const divisionByName = new Map<string, string>();
+    divisions.forEach((d: any) => divisionByName.set(d.name.toLowerCase(), d.id));
+    
+    const businessUnitByName = new Map<string, { id: string; division_id: string }>();
+    businessUnits.forEach((bu: any) => businessUnitByName.set(bu.name.toLowerCase(), { id: bu.id, division_id: bu.division_id }));
+    
+    const departmentByName = new Map<string, { id: string; business_unit_id: string }>();
+    departments.forEach((d: any) => departmentByName.set(d.name.toLowerCase(), { id: d.id, business_unit_id: d.business_unit_id }));
+    
+    // 2. Identify missing employees, categories, and org structure
+    console.log(`[${importId}] Identifying missing data...`);
+    const missingEmployees = new Map<string, { code: string; name: string; division?: string; businessUnit?: string; department?: string }>();
     const missingCategories = new Set<string>();
+    const missingDivisions = new Set<string>();
+    const missingBusinessUnits = new Map<string, string>(); // bu name -> division name
+    const missingDepartments = new Map<string, string>(); // dept name -> bu name
     
     for (const row of importData) {
       const code = String(row.newCode || '').toLowerCase();
@@ -287,16 +311,90 @@ async function processImport(
       if (!employeeByCode.has(code) && !employeeByName.has(name)) {
         const key = code || name;
         if (key && !missingEmployees.has(key)) {
-          missingEmployees.set(key, { code: row.newCode || '', name: row.fullName || '' });
+          missingEmployees.set(key, { 
+            code: row.newCode || '', 
+            name: row.fullName || '',
+            division: row.division,
+            businessUnit: row.businessUnit,
+            department: row.department,
+          });
         }
       }
       
       if (row.category && !categoryByName.has(row.category.toLowerCase())) {
         missingCategories.add(row.category);
       }
+      
+      // Track missing org structure
+      if (row.division && !divisionByName.has(row.division.toLowerCase())) {
+        missingDivisions.add(row.division);
+      }
+      if (row.businessUnit && !businessUnitByName.has(row.businessUnit.toLowerCase())) {
+        missingBusinessUnits.set(row.businessUnit, row.division || '');
+      }
+      if (row.department && !departmentByName.has(row.department.toLowerCase())) {
+        missingDepartments.set(row.department, row.businessUnit || '');
+      }
     }
     
-    // 3. Bulk create missing categories
+    // 3. Create missing divisions
+    if (missingDivisions.size > 0) {
+      console.log(`[${importId}] Creating ${missingDivisions.size} new divisions...`);
+      const divisionInserts = Array.from(missingDivisions).map(name => ({ name }));
+      const { data: newDivs, error: divError } = await supabaseAdmin
+        .from('divisions')
+        .insert(divisionInserts)
+        .select('id, name');
+      
+      if (divError) {
+        console.error(`[${importId}] Division creation error:`, divError);
+      } else {
+        newDivs?.forEach((d: any) => divisionByName.set(d.name.toLowerCase(), d.id));
+        console.log(`[${importId}] Created ${newDivs?.length || 0} divisions`);
+      }
+    }
+    
+    // 4. Create missing business units (need division IDs)
+    if (missingBusinessUnits.size > 0) {
+      console.log(`[${importId}] Creating ${missingBusinessUnits.size} new business units...`);
+      const buInserts = Array.from(missingBusinessUnits.entries()).map(([buName, divName]) => ({
+        name: buName,
+        division_id: divName ? divisionByName.get(divName.toLowerCase()) || null : null,
+      }));
+      const { data: newBUs, error: buError } = await supabaseAdmin
+        .from('business_units')
+        .insert(buInserts)
+        .select('id, name, division_id');
+      
+      if (buError) {
+        console.error(`[${importId}] Business unit creation error:`, buError);
+      } else {
+        newBUs?.forEach((bu: any) => businessUnitByName.set(bu.name.toLowerCase(), { id: bu.id, division_id: bu.division_id }));
+        console.log(`[${importId}] Created ${newBUs?.length || 0} business units`);
+      }
+    }
+    
+    // 5. Create missing departments (need business unit IDs)
+    if (missingDepartments.size > 0) {
+      console.log(`[${importId}] Creating ${missingDepartments.size} new departments...`);
+      const deptInserts = Array.from(missingDepartments.entries()).map(([deptName, buName]) => ({
+        name: deptName,
+        business_unit_id: buName ? businessUnitByName.get(buName.toLowerCase())?.id || null : null,
+      }));
+      const { data: newDepts, error: deptError } = await supabaseAdmin
+        .from('departments')
+        .insert(deptInserts)
+        .select('id, name, business_unit_id');
+      
+      if (deptError) {
+        console.error(`[${importId}] Department creation error:`, deptError);
+      } else {
+        newDepts?.forEach((d: any) => departmentByName.set(d.name.toLowerCase(), { id: d.id, business_unit_id: d.business_unit_id }));
+        console.log(`[${importId}] Created ${newDepts?.length || 0} departments`);
+      }
+    }
+    
+    // 6. Bulk create missing categories
     let categoriesCreated = 0;
     if (missingCategories.size > 0) {
       console.log(`[${importId}] Creating ${missingCategories.size} new categories...`);
@@ -322,16 +420,26 @@ async function processImport(
       await updateProgress(supabaseAdmin, importId, { categories_created: categoriesCreated });
     }
     
-    // 4. Bulk create missing employees
+    // 7. Bulk create missing employees with department linkage
     let employeesCreated = 0;
     if (missingEmployees.size > 0) {
       console.log(`[${importId}] Creating ${missingEmployees.size} new employees...`);
-      const employeeInserts = Array.from(missingEmployees.values()).map(emp => ({
-        id: crypto.randomUUID(),
-        email: `emp${emp.code || Date.now()}@temp.local`,
-        employee_code: emp.code,
-        full_name: emp.name,
-      }));
+      const employeeInserts = Array.from(missingEmployees.values()).map(emp => {
+        // Find department ID based on org structure
+        let departmentId: string | null = null;
+        if (emp.department) {
+          const dept = departmentByName.get(emp.department.toLowerCase());
+          if (dept) departmentId = dept.id;
+        }
+        
+        return {
+          id: crypto.randomUUID(),
+          email: `emp${emp.code || Date.now()}@temp.local`,
+          employee_code: emp.code,
+          full_name: emp.name,
+          department_id: departmentId,
+        };
+      });
       
       const { data: newEmps, error: empError } = await supabaseAdmin
         .from('profiles')
@@ -349,6 +457,36 @@ async function processImport(
       }
       
       await updateProgress(supabaseAdmin, importId, { employees_created: employeesCreated });
+    }
+    
+    // 8. Update existing employees with department if they don't have one
+    const employeeDeptUpdates: { id: string; department_id: string }[] = [];
+    for (const row of importData) {
+      if (!row.department) continue;
+      
+      const code = String(row.newCode || '').toLowerCase();
+      const name = (row.fullName || '').toLowerCase();
+      const employeeId = employeeByCode.get(code) || employeeByName.get(name);
+      
+      if (employeeId) {
+        const existingProfile = profiles.find((p: any) => p.id === employeeId);
+        if (existingProfile && !existingProfile.department_id) {
+          const dept = departmentByName.get(row.department.toLowerCase());
+          if (dept && !employeeDeptUpdates.find(u => u.id === employeeId)) {
+            employeeDeptUpdates.push({ id: employeeId, department_id: dept.id });
+          }
+        }
+      }
+    }
+    
+    if (employeeDeptUpdates.length > 0) {
+      console.log(`[${importId}] Updating ${employeeDeptUpdates.length} employee department assignments...`);
+      for (const update of employeeDeptUpdates) {
+        await supabaseAdmin
+          .from('profiles')
+          .update({ department_id: update.department_id })
+          .eq('id', update.id);
+      }
     }
     
     // 5. Prepare all KPI inserts

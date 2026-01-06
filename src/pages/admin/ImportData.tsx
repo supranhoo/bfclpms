@@ -101,6 +101,11 @@ interface KpiImportRow {
   auditRemarks?: string;
   sourceOfData?: string;
   kpiStatus?: string;
+  // Organization structure
+  division?: string;
+  businessUnit?: string;
+  department?: string;
+  subBranch?: string;
 }
 
 interface EmployeeImportRow {
@@ -177,6 +182,9 @@ export default function ImportData() {
           queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
           queryClient.invalidateQueries({ queryKey: ['profiles'] });
           queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+          queryClient.invalidateQueries({ queryKey: ['divisions'] });
+          queryClient.invalidateQueries({ queryKey: ['business-units'] });
+          queryClient.invalidateQueries({ queryKey: ['departments'] });
           
           if (progress.status === 'completed') {
             setImportSuccess(progress.kpis_imported);
@@ -229,6 +237,9 @@ export default function ImportData() {
             queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
             queryClient.invalidateQueries({ queryKey: ['profiles'] });
             queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+            queryClient.invalidateQueries({ queryKey: ['divisions'] });
+            queryClient.invalidateQueries({ queryKey: ['business-units'] });
+            queryClient.invalidateQueries({ queryKey: ['departments'] });
             
             if (progress.status === 'completed') {
               setImportSuccess(progress.kpis_imported);
@@ -346,6 +357,11 @@ export default function ImportData() {
       auditRemarks: getValue(['auditRemarks', 'audit_remarks', 'auditorRemarks']),
       sourceOfData: getValue(['sourceOfData', 'source_of_data', 'dataSource', 'source']),
       kpiStatus: getValue(['kpiStatus', 'kpi_status']),
+      // Organization structure
+      division: getValue(['division', 'div', 'divisionName', 'division_name']),
+      businessUnit: getValue(['businessUnit', 'business_unit', 'bu', 'businessUnitName', 'business_unit_name']),
+      department: getValue(['department', 'dept', 'departmentName', 'department_name']),
+      subBranch: getValue(['subBranch', 'sub_branch', 'subBranchName', 'sub_branch_name', 'branch']),
     };
   };
 
