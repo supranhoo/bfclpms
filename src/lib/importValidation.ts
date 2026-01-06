@@ -1,5 +1,19 @@
 import { z } from 'zod';
 
+// Valid system roles matching the app_role enum
+export const VALID_ROLES = ['admin', 'manager', 'employee', 'auditor', 'management'] as const;
+export type ValidRole = typeof VALID_ROLES[number];
+
+// Normalize and validate role - defaults to 'employee' if invalid or missing
+export function normalizeRole(role: string | undefined | null): ValidRole {
+  if (!role) return 'employee';
+  const normalized = String(role).toLowerCase().trim();
+  if (VALID_ROLES.includes(normalized as ValidRole)) {
+    return normalized as ValidRole;
+  }
+  return 'employee';
+}
+
 // Maximum limits for import
 export const IMPORT_LIMITS = {
   MAX_FILE_SIZE_MB: 10,
@@ -64,6 +78,12 @@ export const EmployeeImportRowSchema = z.object({
   pmsGrade: z.string().max(50).optional(),
   managerEmployeeId: z.string().max(50).optional(),
   managerName: z.string().max(200).optional(),
+  role: z.string()
+    .transform(val => val?.toLowerCase().trim())
+    .refine(val => !val || VALID_ROLES.includes(val as ValidRole), {
+      message: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}`
+    })
+    .optional(),
 }).passthrough();
 
 // Validate KPI import data
