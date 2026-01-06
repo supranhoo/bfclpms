@@ -62,7 +62,7 @@ const determineReviewStatus = (row: KpiImportRow): 'kra_set' | 'self_review' | '
 };
 
 interface KpiImportRow {
-  sNo?: number;
+  sNo?: number | string;
   month?: string;
   reviewStatus?: string;
   newCode: string;
@@ -70,7 +70,7 @@ interface KpiImportRow {
   category: string;
   kra: string;
   kpi: string;
-  target: string | number;
+  target?: string | number;
   uom?: string;
   frequency?: string;
   kpiWeightage?: number;
@@ -529,27 +529,34 @@ export default function ImportData() {
   const handleImport = async () => {
     if (importData.length === 0) return;
 
-    // Background import mode - send to edge function
+    // Background import mode - send to backend function
     if (useBackgroundImport) {
       setIsImporting(true);
       try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const authToken = sessionData?.session?.access_token;
-
-        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/import-kpis`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`,
-          },
-          body: JSON.stringify({ importData }),
+        const { data, error } = await supabase.functions.invoke('import-kpis', {
+          body: { importData },
         });
 
-        const result = await response.json();
+        if (error) {
+          let message = error.message || 'Import failed';
 
-        if (!response.ok) {
-          throw new Error(result.error || 'Import failed');
+          // Try to surface validation errors from the response body (400s)
+          try {
+            const body = await (error as any)?.context?.json?.();
+            if (body?.validationErrors?.length) {
+              setErrors(body.validationErrors);
+              message = body.validationErrors[0];
+            } else if (body?.error) {
+              message = body.error;
+            }
+          } catch {
+            // ignore
+          }
+
+          throw new Error(message);
         }
+
+        const result = data as any;
 
         // Set the import ID to start tracking progress
         setBackgroundImportId(result.importId);
@@ -557,10 +564,9 @@ export default function ImportData() {
           title: 'Import Started',
           description: `Processing ${importData.length} KPIs in background. Progress will show below.`,
         });
-        
+
         // Clear the import data preview
         setImportData([]);
-
       } catch (error: any) {
         toast({
           title: 'Import Failed',
@@ -579,7 +585,7 @@ export default function ImportData() {
     let categoriesCreated = 0;
     let employeesCreated = 0;
     const importErrors: string[] = [];
-    
+
     // Initialize progress tracking
     setImportProgress({
       current: 0,
