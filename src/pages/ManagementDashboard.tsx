@@ -107,64 +107,79 @@ export default function ManagementDashboard() {
     },
   });
 
-  // Fetch comprehensive dashboard stats
+  // Helper to get previous period
+  const getPreviousPeriod = (currentPeriod: string, periods: typeof reviewPeriods): string | null => {
+    if (!periods || periods.length === 0) return null;
+    const sortedPeriods = [...periods].sort((a, b) => a.period_name.localeCompare(b.period_name));
+    const currentIndex = sortedPeriods.findIndex(p => p.period_name === currentPeriod);
+    if (currentIndex > 0) {
+      return sortedPeriods[currentIndex - 1].period_name;
+    }
+    return null;
+  };
+
+  const previousPeriod = selectedPeriod !== 'all' ? getPreviousPeriod(selectedPeriod, reviewPeriods || []) : null;
+
+  // Fetch comprehensive dashboard stats with trend comparison
   const { data: dashboardData, isLoading: dataLoading } = useQuery({
-    queryKey: ['management-dashboard', selectedYear, selectedPeriod, filteredEmployeeIds],
+    queryKey: ['management-dashboard', selectedYear, selectedPeriod, filteredEmployeeIds, previousPeriod],
     queryFn: async () => {
       const year = parseInt(selectedYear);
 
-      // Batch fetch all data
-      const [kpisResult, profilesResult, queriesResult, departmentsResult] = await Promise.all([
-        // Fetch KPIs with submissions - batch to handle large datasets
-        (async () => {
-          const allKpis: any[] = [];
-          let offset = 0;
-          const batchSize = 1000;
-          let hasMore = true;
+      // Helper function to fetch period data
+      const fetchPeriodData = async (periodFilter: string | null) => {
+        const allKpis: any[] = [];
+        let offset = 0;
+        const batchSize = 1000;
+        let hasMore = true;
 
-          while (hasMore) {
-            let query = supabase
-              .from('kpis')
-              .select(`
-                id,
-                employee_id,
-                status,
-                weightage,
-                review_period,
-                review_year,
-                review_submissions (
-                  final_score,
-                  management_score,
-                  auditor_score,
-                  manager_score,
-                  self_score
-                )
-              `)
-              .eq('review_year', year)
-              .range(offset, offset + batchSize - 1);
+        while (hasMore) {
+          let query = supabase
+            .from('kpis')
+            .select(`
+              id,
+              employee_id,
+              status,
+              weightage,
+              review_period,
+              review_year,
+              review_submissions (
+                final_score,
+                management_score,
+                auditor_score,
+                manager_score,
+                self_score
+              )
+            `)
+            .eq('review_year', year)
+            .range(offset, offset + batchSize - 1);
 
-            if (selectedPeriod !== 'all') {
-              query = query.eq('review_period', selectedPeriod);
-            }
-
-            // Apply employee filter if filters are active
-            if (filteredEmployeeIds.length > 0) {
-              query = query.in('employee_id', filteredEmployeeIds);
-            }
-
-            const { data, error } = await query;
-            if (error) throw error;
-
-            if (data && data.length > 0) {
-              allKpis.push(...data);
-              offset += batchSize;
-              hasMore = data.length === batchSize;
-            } else {
-              hasMore = false;
-            }
+          if (periodFilter && periodFilter !== 'all') {
+            query = query.eq('review_period', periodFilter);
           }
-          return allKpis;
-        })(),
+
+          if (filteredEmployeeIds.length > 0) {
+            query = query.in('employee_id', filteredEmployeeIds);
+          }
+
+          const { data, error } = await query;
+          if (error) throw error;
+
+          if (data && data.length > 0) {
+            allKpis.push(...data);
+            offset += batchSize;
+            hasMore = data.length === batchSize;
+          } else {
+            hasMore = false;
+          }
+        }
+        return allKpis;
+      };
+
+      // Fetch current and previous period data in parallel
+      const [currentKpis, previousKpis, profilesResult, queriesResult, previousQueriesResult, departmentsResult] = await Promise.all([
+        fetchPeriodData(selectedPeriod),
+        previousPeriod ? fetchPeriodData(previousPeriod) : Promise.resolve([]),
         supabase.from('profiles').select(`
           id,
           full_name,
@@ -173,24 +188,75 @@ export default function ManagementDashboard() {
           departments (name)
         `),
         supabase.from('kpi_queries').select('*', { count: 'exact', head: true }).eq('status', 'open'),
+        previousPeriod 
+          ? supabase.from('kpi_queries').select('*', { count: 'exact', head: true }).eq('status', 'resolved')
+          : Promise.resolve({ count: 0 }),
         supabase.from('departments').select('id, name'),
       ]);
 
       const profiles = profilesResult.data || [];
-      const kpis = kpisResult || [];
+      const kpis = currentKpis;
       const openQueries = queriesResult.count || 0;
       const departments = departmentsResult.data || [];
 
       // Create lookups
       const profileMap = new Map(profiles.map(p => [p.id, p]));
-      const deptMap = new Map(departments.map(d => [d.id, d.name]));
 
-      // Calculate stage counts
-      const stageCounts: Record<string, number> = {};
-      kpis.forEach(kpi => {
-        const stage = kpi.status || 'kra_set';
-        stageCounts[stage] = (stageCounts[stage] || 0) + 1;
-      });
+      // Calculate metrics for current period
+      const calculateMetrics = (kpiList: any[]) => {
+        const stageCounts: Record<string, number> = {};
+        kpiList.forEach(kpi => {
+          const stage = kpi.status || 'kra_set';
+          stageCounts[stage] = (stageCounts[stage] || 0) + 1;
+        });
+
+        const managementPending = kpiList.filter(k => k.status === 'management_review').length;
+        const approvedKpis = stageCounts['approved'] || 0;
+        const completionRate = kpiList.length > 0 ? (approvedKpis / kpiList.length) * 100 : 0;
+
+        // Calculate average score
+        let totalScore = 0;
+        let totalWeightage = 0;
+        kpiList.forEach(kpi => {
+          const submission = kpi.review_submissions;
+          const score = submission?.final_score || submission?.management_score || 
+                       submission?.auditor_score || submission?.manager_score || 
+                       submission?.self_score || 0;
+          totalScore += score;
+          totalWeightage += kpi.weightage || 100;
+        });
+        const avgScore = totalWeightage > 0 ? (totalScore / totalWeightage) * 100 : 0;
+
+        return {
+          totalKpis: kpiList.length,
+          managementPending,
+          approvedKpis,
+          completionRate,
+          avgScore,
+          stageCounts,
+        };
+      };
+
+      const currentMetrics = calculateMetrics(kpis);
+      const previousMetrics = previousKpis.length > 0 ? calculateMetrics(previousKpis) : null;
+
+      // Calculate trends
+      const calculateTrend = (current: number, previous: number | null): { change: number; direction: 'up' | 'down' | 'stable' } => {
+        if (previous === null || previous === 0) {
+          return { change: 0, direction: 'stable' };
+        }
+        const change = ((current - previous) / previous) * 100;
+        if (change > 2) return { change, direction: 'up' };
+        if (change < -2) return { change, direction: 'down' };
+        return { change, direction: 'stable' };
+      };
+
+      const trends = {
+        totalKpis: calculateTrend(currentMetrics.totalKpis, previousMetrics?.totalKpis ?? null),
+        managementPending: calculateTrend(currentMetrics.managementPending, previousMetrics?.managementPending ?? null),
+        completionRate: calculateTrend(currentMetrics.completionRate, previousMetrics?.completionRate ?? null),
+        avgScore: calculateTrend(currentMetrics.avgScore, previousMetrics?.avgScore ?? null),
+      };
 
       // Calculate pending management reviews
       const managementPendingKpis = kpis.filter(k => k.status === 'management_review');
@@ -323,10 +389,10 @@ export default function ManagementDashboard() {
         totalEmployees: profiles.length,
         totalKpis: kpis.length,
         openQueries,
-        managementPending: managementPendingKpis.length,
-        approvedKpis: stageCounts['approved'] || 0,
-        stageCounts,
-        pendingReviews: pendingReviews.slice(0, 10), // Top 10
+        managementPending: currentMetrics.managementPending,
+        approvedKpis: currentMetrics.approvedKpis,
+        stageCounts: currentMetrics.stageCounts,
+        pendingReviews: pendingReviews.slice(0, 10),
         departmentPerformance: departmentPerformance.slice(0, 10),
         ratingDistribution: [
           { name: 'Excellent (85%+)', value: ratingCounts.excellent, color: CHART_COLORS[0] },
@@ -334,10 +400,57 @@ export default function ManagementDashboard() {
           { name: 'Average (50-69%)', value: ratingCounts.average, color: CHART_COLORS[2] },
           { name: 'Needs Improvement (<50%)', value: ratingCounts.poor, color: CHART_COLORS[3] },
         ],
-        completionRate: kpis.length > 0 ? ((stageCounts['approved'] || 0) / kpis.length) * 100 : 0,
+        completionRate: currentMetrics.completionRate,
+        avgScore: currentMetrics.avgScore,
+        trends,
+        hasPreviousPeriod: !!previousPeriod && previousKpis.length > 0,
+        previousPeriodName: previousPeriod,
       };
     },
   });
+
+  // Trend indicator component
+  const TrendIndicator = ({ 
+    trend, 
+    invertColors = false,
+    showLabel = true 
+  }: { 
+    trend: { change: number; direction: 'up' | 'down' | 'stable' };
+    invertColors?: boolean;
+    showLabel?: boolean;
+  }) => {
+    if (!dashboardData?.hasPreviousPeriod) return null;
+
+    const { change, direction } = trend;
+    
+    // For some metrics like "pending", down is good
+    const isPositive = invertColors ? direction === 'down' : direction === 'up';
+    const isNegative = invertColors ? direction === 'up' : direction === 'down';
+
+    if (direction === 'stable') {
+      return (
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Minus className="h-3 w-3" />
+          {showLabel && <span>Stable</span>}
+        </div>
+      );
+    }
+
+    return (
+      <div className={`flex items-center gap-1 text-xs ${
+        isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+      }`}>
+        {direction === 'up' ? (
+          <TrendingUp className="h-3 w-3" />
+        ) : (
+          <TrendingDown className="h-3 w-3" />
+        )}
+        {showLabel && (
+          <span>{Math.abs(change).toFixed(1)}%</span>
+        )}
+      </div>
+    );
+  };
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 
@@ -429,6 +542,14 @@ export default function ManagementDashboard() {
         </CardContent>
       </Card>
 
+      {/* Trend Info Banner */}
+      {dashboardData?.hasPreviousPeriod && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+          <TrendingUp className="h-3 w-3" />
+          <span>Comparing with previous period: <span className="font-medium">{dashboardData.previousPeriodName}</span></span>
+        </div>
+      )}
+
       {/* Key Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => navigate('/reports/employee-summary')}>
@@ -445,10 +566,15 @@ export default function ManagementDashboard() {
         <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => navigate('/management-review')}>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Pending My Review</CardTitle>
-            <Briefcase className="h-4 w-4 text-orange-500" />
+            <Briefcase className="h-4 w-4 text-chart-4" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{dashboardData?.managementPending || 0}</div>
+            <div className="flex items-center gap-2">
+              <span className="text-2xl font-bold text-chart-4">{dashboardData?.managementPending || 0}</span>
+              {dashboardData?.trends && (
+                <TrendIndicator trend={dashboardData.trends.managementPending} invertColors />
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">KPIs awaiting action</p>
           </CardContent>
         </Card>
@@ -456,11 +582,16 @@ export default function ManagementDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Completion Rate</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
+            <CheckCircle2 className="h-4 w-4 text-chart-2" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {(dashboardData?.completionRate || 0).toFixed(1)}%
+            <div className="flex items-center gap-2">
+              <span className="text-2xl font-bold text-chart-2">
+                {(dashboardData?.completionRate || 0).toFixed(1)}%
+              </span>
+              {dashboardData?.trends && (
+                <TrendIndicator trend={dashboardData.trends.completionRate} />
+              )}
             </div>
             <Progress 
               value={dashboardData?.completionRate || 0} 
@@ -486,7 +617,12 @@ export default function ManagementDashboard() {
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboardData?.totalKpis || 0}</div>
+            <div className="flex items-center gap-2">
+              <span className="text-2xl font-bold">{dashboardData?.totalKpis || 0}</span>
+              {dashboardData?.trends && (
+                <TrendIndicator trend={dashboardData.trends.totalKpis} />
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
               {dashboardData?.approvedKpis || 0} approved
             </p>
