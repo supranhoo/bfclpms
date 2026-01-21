@@ -36,6 +36,13 @@ const optionalString = (max: number) =>
     return String(v);
   }, z.string().max(max).optional());
 
+// Schema for qualitative options
+const QualitativeOptionSchema = z.object({
+  label: z.string().min(1).max(100),
+  rating: z.number().min(0).max(5),
+  definition: z.string().max(500).optional().default(''),
+});
+
 const KpiImportRowSchema = z.object({
   sNo: z.union([z.number(), z.string()]).optional(),
   month: optionalString(MAX_TEXT_LENGTH),
@@ -47,6 +54,11 @@ const KpiImportRowSchema = z.object({
   kpi: z.string().min(1).max(MAX_TEXT_LENGTH),
   target: z.union([z.string(), z.number()]).optional(),
   uom: optionalString(100),
+  uomType: optionalString(20), // 'numeric' | 'binary' | 'tiered'
+  qualitativeOptions: z.union([
+    z.array(QualitativeOptionSchema),
+    z.string(), // JSON string
+  ]).optional(),
   frequency: optionalString(100),
   kpiWeightage: optionalNumber({ min: 0, max: 100 }),
   criteria: optionalString(100),
@@ -639,6 +651,21 @@ async function processImport(
       
       const kpiId = crypto.randomUUID();
       
+      // Parse uomType and qualitativeOptions
+      const uomType = row.uomType || 'numeric';
+      let qualitativeOptions = null;
+      if (row.qualitativeOptions) {
+        if (typeof row.qualitativeOptions === 'string') {
+          try {
+            qualitativeOptions = JSON.parse(row.qualitativeOptions);
+          } catch {
+            qualitativeOptions = null;
+          }
+        } else if (Array.isArray(row.qualitativeOptions)) {
+          qualitativeOptions = row.qualitativeOptions;
+        }
+      }
+      
       kpiRecords.push({
         id: kpiId,
         employee_id: employeeId,
@@ -647,8 +674,10 @@ async function processImport(
         kpi_name: row.kpi,
         target_value: targetValue,
         uom: row.uom || null,
+        uom_type: uomType,
+        qualitative_options: qualitativeOptions,
         weightage: row.kpiWeightage || row.kpiWeightageScore || 0,
-        criteria: row.criteria || 'Higher is Better',
+        criteria: row.criteria || (uomType === 'numeric' ? 'Higher is Better' : null),
         status: determineReviewStatus(row),
         review_period: reviewPeriod,
         review_year: reviewYear,

@@ -62,6 +62,12 @@ const determineReviewStatus = (row: KpiImportRow): 'kra_set' | 'self_review' | '
   return 'kra_set';
 };
 
+interface QualitativeOption {
+  label: string;
+  rating: number;
+  definition: string;
+}
+
 interface KpiImportRow {
   sNo?: number | string;
   month?: string;
@@ -73,6 +79,8 @@ interface KpiImportRow {
   kpi: string;
   target?: string | number;
   uom?: string;
+  uomType?: string; // 'numeric' | 'binary' | 'tiered'
+  qualitativeOptions?: QualitativeOption[] | string; // JSON string or parsed array
   frequency?: string;
   kpiWeightage?: number;
   criteria?: string; // "Higher is Better" or "Lower is Better"
@@ -382,6 +390,30 @@ export default function ImportData() {
       return strValue;
     };
 
+    // Parse qualitative options from JSON string if provided
+    const parseQualitativeOptions = (value: any): QualitativeOption[] | undefined => {
+      if (!value) return undefined;
+      if (typeof value === 'object' && Array.isArray(value)) return value;
+      if (typeof value === 'string') {
+        try {
+          const parsed = JSON.parse(value);
+          if (Array.isArray(parsed)) return parsed;
+        } catch {
+          return undefined;
+        }
+      }
+      return undefined;
+    };
+
+    // Normalize UOM type
+    const normalizeUomType = (value: any): string => {
+      if (!value) return 'numeric';
+      const normalized = String(value).toLowerCase().trim();
+      if (normalized === 'binary' || normalized === 'yes/no' || normalized === 'yesno') return 'binary';
+      if (normalized === 'tiered' || normalized === 'qualitative' || normalized === 'options') return 'tiered';
+      return 'numeric';
+    };
+
     return {
       sNo: getValue(['sNo', 'sno', 's_no', 'sr', 'srNo', 'serialNo', 'serial']),
       month: getValue(['month', 'reviewMonth', 'review_month', 'period']),
@@ -393,6 +425,8 @@ export default function ImportData() {
       kpi: String(getValue(['kpi', 'kpiName', 'kpi_name', 'keyPerformanceIndicator']) || ''),
       target: parseNumericValue(getValue(['target', 'targetValue', 'target_value', 'targetVal'])),
       uom: getValue(['uom', 'unit', 'unitOfMeasure', 'unit_of_measure']),
+      uomType: normalizeUomType(getValue(['uomType', 'uom_type', 'uomtype', 'measureType', 'measure_type'])),
+      qualitativeOptions: parseQualitativeOptions(getValue(['qualitativeOptions', 'qualitative_options', 'tieredOptions', 'tiered_options', 'options'])),
       frequency: getValue(['frequency', 'freq', 'reviewFrequency']),
       kpiWeightage: getValue(['kpiWeightage', 'kpi_weightage', 'weightage', 'weight']),
       criteria: getValue(['criteria', 'scoringCriteria', 'scoring_criteria']),
@@ -1198,6 +1232,8 @@ export default function ImportData() {
         kra: 'Revenue Growth',
         kpi: 'Monthly Revenue Target',
         uom: '%',
+        uomType: 'numeric',
+        qualitativeOptions: '',
         frequency: 'Monthly',
         kpiWeightage: 25,
         criteria: 'Higher is Better',
@@ -1222,6 +1258,86 @@ export default function ImportData() {
         auditRating: '',
         auditRemarks: '',
         sourceOfData: 'SAP',
+        kpiStatus: 'Active',
+      },
+      {
+        sNo: 2,
+        month: 'Dec-25',
+        reviewStatus: 'Pending',
+        newCode: '100001',
+        fullName: 'John Doe',
+        category: 'Compliance',
+        kra: 'Safety Compliance',
+        kpi: 'Safety Audit Score',
+        uom: '',
+        uomType: 'tiered',
+        qualitativeOptions: JSON.stringify([
+          { label: 'Compliant', rating: 5, definition: 'All safety audits passed' },
+          { label: 'Partial', rating: 3, definition: 'Minor non-conformances found' },
+          { label: 'Non-Compliant', rating: 0, definition: 'Critical violation identified' }
+        ]),
+        frequency: 'Quarterly',
+        kpiWeightage: 15,
+        criteria: '',
+        target: '',
+        r5: '',
+        r4: '',
+        r3: '',
+        r2: '',
+        r1: '',
+        r0: '',
+        targetAchieved: '',
+        achievedWeight: '',
+        rating: '',
+        kpiWeightageScore: '',
+        employeeTargetAchieved: '',
+        employeeRating: '',
+        employeeRemarks: '',
+        managerTargetAchieved: '',
+        managerRating: '',
+        managerRemarks: '',
+        auditTargetAchieved: '',
+        auditRating: '',
+        auditRemarks: '',
+        sourceOfData: 'Internal Audit',
+        kpiStatus: 'Active',
+      },
+      {
+        sNo: 3,
+        month: 'Dec-25',
+        reviewStatus: 'Pending',
+        newCode: '100001',
+        fullName: 'John Doe',
+        category: 'Training',
+        kra: 'Training Completion',
+        kpi: 'Mandatory Training Completed',
+        uom: '',
+        uomType: 'binary',
+        qualitativeOptions: '',
+        frequency: 'Annual',
+        kpiWeightage: 10,
+        criteria: '',
+        target: '',
+        r5: '',
+        r4: '',
+        r3: '',
+        r2: '',
+        r1: '',
+        r0: '',
+        targetAchieved: '',
+        achievedWeight: '',
+        rating: '',
+        kpiWeightageScore: '',
+        employeeTargetAchieved: '',
+        employeeRating: '',
+        employeeRemarks: '',
+        managerTargetAchieved: '',
+        managerRating: '',
+        managerRemarks: '',
+        auditTargetAchieved: '',
+        auditRating: '',
+        auditRemarks: '',
+        sourceOfData: 'LMS',
         kpiStatus: 'Active',
       },
     ];
