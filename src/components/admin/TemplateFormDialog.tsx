@@ -10,7 +10,10 @@ import { Badge } from '@/components/ui/badge';
 import { X } from 'lucide-react';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { KpiTemplate, useCreateKpiTemplate, useUpdateKpiTemplate } from '@/hooks/useKpiTemplates';
-
+import { UomTypeSelector } from './UomTypeSelector';
+import { TieredOptionsBuilder } from './TieredOptionsBuilder';
+import { UomType, QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
+import { Separator } from '@/components/ui/separator';
 interface TemplateFormDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -44,6 +47,11 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
     r0: '',
     applicable_roles: [] as string[],
     is_active: true,
+    uom_type: 'numeric' as UomType,
+    qualitative_options: [
+      { label: 'Yes', rating: 5, definition: 'Requirement fully met' },
+      { label: 'No', rating: 0, definition: 'Requirement not met' },
+    ] as QualitativeOption[],
   });
 
   useEffect(() => {
@@ -68,6 +76,11 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
         r0: template.r0 || '',
         applicable_roles: template.applicable_roles || [],
         is_active: template.is_active ?? true,
+        uom_type: (template as any).uom_type || 'numeric',
+        qualitative_options: (template as any).qualitative_options || [
+          { label: 'Yes', rating: 5, definition: 'Requirement fully met' },
+          { label: 'No', rating: 0, definition: 'Requirement not met' },
+        ],
       });
     } else {
       resetForm();
@@ -95,6 +108,11 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
       r0: '',
       applicable_roles: [],
       is_active: true,
+      uom_type: 'numeric',
+      qualitative_options: [
+        { label: 'Yes', rating: 5, definition: 'Requirement fully met' },
+        { label: 'No', rating: 0, definition: 'Requirement not met' },
+      ],
     });
   };
 
@@ -123,25 +141,29 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
       category_id: formData.category_id || null,
       kra_name: formData.kra_name,
       kpi_name: formData.kpi_name,
-      uom: formData.uom || null,
-      target_value: formData.target_value ? parseFloat(formData.target_value) : null,
+      uom: formData.uom_type === 'numeric' ? (formData.uom || null) : formData.uom_type,
+      target_value: formData.uom_type === 'numeric' ? (formData.target_value ? parseFloat(formData.target_value) : null) : null,
       weightage: formData.weightage ? parseFloat(formData.weightage) : null,
-      criteria: formData.criteria || null,
+      criteria: formData.uom_type === 'numeric' ? (formData.criteria || null) : null,
       frequency: formData.frequency || null,
       source_of_data: formData.source_of_data || null,
-      r5: formData.r5 || null,
-      r4: formData.r4 || null,
-      r3: formData.r3 || null,
-      r2: formData.r2 || null,
-      r1: formData.r1 || null,
-      r0: formData.r0 || null,
+      r5: formData.uom_type === 'numeric' ? (formData.r5 || null) : null,
+      r4: formData.uom_type === 'numeric' ? (formData.r4 || null) : null,
+      r3: formData.uom_type === 'numeric' ? (formData.r3 || null) : null,
+      r2: formData.uom_type === 'numeric' ? (formData.r2 || null) : null,
+      r1: formData.uom_type === 'numeric' ? (formData.r1 || null) : null,
+      r0: formData.uom_type === 'numeric' ? (formData.r0 || null) : null,
       applicable_roles: formData.applicable_roles,
       is_active: formData.is_active,
+      uom_type: formData.uom_type,
+      qualitative_options: formData.uom_type === 'tiered' 
+        ? formData.qualitative_options 
+        : (formData.uom_type === 'binary' ? BINARY_OPTIONS : null),
     };
 
     try {
       if (template) {
-        await updateTemplate.mutateAsync({ id: template.id, ...payload });
+        await updateTemplate.mutateAsync({ id: template.id, ...payload } as any);
       } else {
         await createTemplate.mutateAsync(payload as any);
       }
@@ -241,58 +263,131 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
             </div>
 
             {/* Metrics */}
-            <div className="grid grid-cols-4 gap-4">
-              <div>
-                <Label>UOM</Label>
-                <Input
-                  value={formData.uom}
-                  onChange={(e) => setFormData({ ...formData, uom: e.target.value })}
-                  placeholder="%"
-                />
-              </div>
-              <div>
-                <Label>Target Value</Label>
-                <Input
-                  type="number"
-                  value={formData.target_value}
-                  onChange={(e) => setFormData({ ...formData, target_value: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Weightage</Label>
-                <Input
-                  type="number"
-                  value={formData.weightage}
-                  onChange={(e) => setFormData({ ...formData, weightage: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Frequency</Label>
-                <Input
-                  value={formData.frequency}
-                  onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
-                  placeholder="Monthly"
-                />
-              </div>
-            </div>
+            <Separator />
 
-            {/* Rating Thresholds */}
-            <div>
-              <Label className="text-sm font-medium">Rating Thresholds</Label>
-              <div className="grid grid-cols-6 gap-2 mt-2">
-                {(['r5', 'r4', 'r3', 'r2', 'r1', 'r0'] as const).map((key) => (
-                  <div key={key}>
-                    <Label className="text-xs uppercase text-muted-foreground">{key}</Label>
+            {/* UOM Type Selector */}
+            <UomTypeSelector 
+              value={formData.uom_type} 
+              onChange={(val) => setFormData({ ...formData, uom_type: val })} 
+            />
+
+            {/* Conditional fields based on UOM Type */}
+            {formData.uom_type === 'numeric' && (
+              <>
+                <div className="grid grid-cols-4 gap-4">
+                  <div>
+                    <Label>UOM</Label>
                     <Input
-                      value={formData[key]}
-                      onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
-                      placeholder={key === 'r5' ? '≥100' : ''}
-                      className="text-sm"
+                      value={formData.uom}
+                      onChange={(e) => setFormData({ ...formData, uom: e.target.value })}
+                      placeholder="%"
                     />
                   </div>
-                ))}
+                  <div>
+                    <Label>Target Value</Label>
+                    <Input
+                      type="number"
+                      value={formData.target_value}
+                      onChange={(e) => setFormData({ ...formData, target_value: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Weightage</Label>
+                    <Input
+                      type="number"
+                      value={formData.weightage}
+                      onChange={(e) => setFormData({ ...formData, weightage: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Frequency</Label>
+                    <Input
+                      value={formData.frequency}
+                      onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
+                      placeholder="Monthly"
+                    />
+                  </div>
+                </div>
+
+                {/* Rating Thresholds */}
+                <div>
+                  <Label className="text-sm font-medium">Rating Thresholds</Label>
+                  <div className="grid grid-cols-6 gap-2 mt-2">
+                    {(['r5', 'r4', 'r3', 'r2', 'r1', 'r0'] as const).map((key) => (
+                      <div key={key}>
+                        <Label className="text-xs uppercase text-muted-foreground">{key}</Label>
+                        <Input
+                          value={formData[key]}
+                          onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
+                          placeholder={key === 'r5' ? '≥100' : ''}
+                          className="text-sm"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {formData.uom_type === 'binary' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Weightage</Label>
+                    <Input
+                      type="number"
+                      value={formData.weightage}
+                      onChange={(e) => setFormData({ ...formData, weightage: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Frequency</Label>
+                    <Input
+                      value={formData.frequency}
+                      onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
+                      placeholder="Monthly"
+                    />
+                  </div>
+                </div>
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <Label className="text-sm font-medium mb-2 block">Binary Scoring</Label>
+                  <div className="flex gap-4">
+                    <Badge variant="default">Yes = R5 (5)</Badge>
+                    <Badge variant="destructive">No = R0 (0)</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Fixed scoring: Yes achieves maximum rating, No achieves minimum rating.
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
+
+            {formData.uom_type === 'tiered' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Weightage</Label>
+                    <Input
+                      type="number"
+                      value={formData.weightage}
+                      onChange={(e) => setFormData({ ...formData, weightage: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Frequency</Label>
+                    <Input
+                      value={formData.frequency}
+                      onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
+                      placeholder="Monthly"
+                    />
+                  </div>
+                </div>
+                <TieredOptionsBuilder
+                  options={formData.qualitative_options}
+                  onChange={(opts) => setFormData({ ...formData, qualitative_options: opts })}
+                />
+              </div>
+            )}
 
             {/* Applicable Roles */}
             <div>

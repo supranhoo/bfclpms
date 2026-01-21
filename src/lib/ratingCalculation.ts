@@ -3,7 +3,10 @@
  * 
  * Calculates ratings based on achieved value vs target using R5-R0 thresholds
  * Supports both "Higher is Better" and "Lower is Better" criteria
+ * Supports qualitative UOM types (binary, tiered)
  */
+
+import { UomType, QualitativeOption, BINARY_OPTIONS, scoreToRatingLevel } from '@/lib/qualitativeUom';
 
 export type RatingLevel = 'blue' | 'green' | 'yellow' | 'red';
 
@@ -104,20 +107,55 @@ export function levelToText(level: RatingLevel): string {
  * @param thresholds - R5-R0 threshold values (as ratios like 1.0, 0.95, 0.9, etc.)
  * @param criteria - "Higher is Better" or "Lower is Better"
  * @param weightage - KPI weightage (0-100)
+ * @param uomType - Type of UOM: 'numeric' | 'binary' | 'tiered' (optional, defaults to 'numeric')
+ * @param qualitativeOptions - Options for tiered UOM (optional)
  */
 export function calculateRating(
-  achievedValue: number | null | undefined,
+  achievedValue: number | string | null | undefined,
   target: number | null | undefined,
   thresholds: RatingThresholds,
   criteria: string = 'Higher is Better',
-  weightage: number = 0
+  weightage: number = 0,
+  uomType: UomType = 'numeric',
+  qualitativeOptions?: QualitativeOption[] | null
 ): RatingResult {
+  // Handle qualitative UOM types (binary, tiered)
+  if (uomType === 'binary' || uomType === 'tiered') {
+    const stringValue = typeof achievedValue === 'string' ? achievedValue : null;
+    
+    if (!stringValue) {
+      return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0, achievedWeight: 0 };
+    }
+
+    const options = uomType === 'binary' ? BINARY_OPTIONS : qualitativeOptions || [];
+    const selected = options.find(opt => opt.label === stringValue);
+    
+    if (!selected) {
+      return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0, achievedWeight: 0 };
+    }
+
+    const rating = selected.rating;
+    const ratingLevel = scoreToRatingLevel(rating);
+    const percentage = (rating / 5) * 100;
+    const weightedScore = weightage * rating;
+    const achievedWeight = rating / 5;
+
+    return { rating, ratingLevel, weightedScore, percentage, achievedWeight };
+  }
+
+  // Numeric UOM handling (existing logic)
   // If no achieved value, return zero rating
-  if (achievedValue === null || achievedValue === undefined) {
+  if (achievedValue === null || achievedValue === undefined || achievedValue === '') {
     return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0, achievedWeight: 0 };
   }
 
-  const achieved = parseThreshold(achievedValue, false) ?? 0;
+  // Convert string to number for numeric UOM
+  const numericValue = typeof achievedValue === 'string' ? parseFloat(achievedValue) : achievedValue;
+  if (isNaN(numericValue)) {
+    return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0, achievedWeight: 0 };
+  }
+
+  const achieved = parseThreshold(numericValue, false) ?? 0;
   const targetVal = parseThreshold(target, false) ?? 0;
   
   // When target is 0, thresholds are absolute numbers (not percentages)

@@ -1,0 +1,136 @@
+// Types and utilities for qualitative Unit of Measure support
+
+export type UomType = 'numeric' | 'binary' | 'tiered';
+
+export interface QualitativeOption {
+  label: string;      // e.g., "Partial"
+  rating: number;     // 0-5, admin's choice
+  definition: string; // KPI-specific meaning
+}
+
+// Predefined tiered templates for quick setup
+export const TIERED_TEMPLATES: Record<string, QualitativeOption[]> = {
+  'yes_no': [
+    { label: 'Yes', rating: 5, definition: 'Requirement fully met' },
+    { label: 'No', rating: 0, definition: 'Requirement not met' },
+  ],
+  'pass_fail': [
+    { label: 'Pass', rating: 5, definition: 'Successfully passed' },
+    { label: 'Fail', rating: 0, definition: 'Did not pass' },
+  ],
+  'compliance_3': [
+    { label: 'Compliant', rating: 5, definition: 'Fully compliant with all requirements' },
+    { label: 'Partial', rating: 3, definition: 'Partially compliant with documented gaps' },
+    { label: 'Non-Compliant', rating: 0, definition: 'Failed to meet compliance requirements' },
+  ],
+  'compliance_4': [
+    { label: 'Full', rating: 5, definition: 'Fully compliant' },
+    { label: 'Substantial', rating: 4, definition: 'Substantially compliant with minor gaps' },
+    { label: 'Partial', rating: 2, definition: 'Partially compliant with significant gaps' },
+    { label: 'None', rating: 0, definition: 'Non-compliant' },
+  ],
+  'achievement': [
+    { label: 'Achieved', rating: 5, definition: 'Target fully achieved' },
+    { label: 'Partial', rating: 3, definition: 'Target partially achieved' },
+    { label: 'Not Achieved', rating: 0, definition: 'Target not achieved' },
+  ],
+  'risk_rating': [
+    { label: 'Low', rating: 5, definition: 'Low risk - within acceptable limits' },
+    { label: 'Medium', rating: 3, definition: 'Medium risk - requires monitoring' },
+    { label: 'High', rating: 0, definition: 'High risk - immediate action required' },
+  ],
+  'timeliness': [
+    { label: 'On-time', rating: 5, definition: 'Delivered on or before deadline' },
+    { label: 'Late', rating: 2, definition: 'Delivered after deadline' },
+    { label: 'Not Submitted', rating: 0, definition: 'Not delivered' },
+  ],
+};
+
+export const TEMPLATE_LABELS: Record<string, string> = {
+  'yes_no': 'Yes / No',
+  'pass_fail': 'Pass / Fail',
+  'compliance_3': 'Compliance (3-tier)',
+  'compliance_4': 'Compliance (4-tier)',
+  'achievement': 'Achievement',
+  'risk_rating': 'Risk Rating',
+  'timeliness': 'Timeliness',
+};
+
+// Binary UOM fixed mapping
+export const BINARY_OPTIONS: QualitativeOption[] = [
+  { label: 'Yes', rating: 5, definition: 'Yes' },
+  { label: 'No', rating: 0, definition: 'No' },
+];
+
+// Rating score labels
+export const RATING_LABELS: Record<number, string> = {
+  5: 'Outstanding (R5)',
+  4: 'Exceeds (R4)',
+  3: 'Meets (R3)',
+  2: 'Below (R2)',
+  1: 'Needs Improvement (R1)',
+  0: 'Unacceptable (R0)',
+};
+
+// Get rating level from score for qualitative
+export function scoreToRatingLevel(score: number): 'blue' | 'green' | 'yellow' | 'red' {
+  if (score >= 5) return 'blue';
+  if (score >= 4) return 'green';
+  if (score >= 3) return 'yellow';
+  return 'red';
+}
+
+// Calculate rating for qualitative UOM
+export function calculateQualitativeRating(
+  achievedValue: string | null,
+  uomType: UomType,
+  qualitativeOptions: QualitativeOption[] | null,
+  weightage: number = 0
+): { rating: number; ratingLevel: 'blue' | 'green' | 'yellow' | 'red'; weightedScore: number } | null {
+  if (!achievedValue) return null;
+
+  let options: QualitativeOption[] = [];
+
+  if (uomType === 'binary') {
+    options = BINARY_OPTIONS;
+  } else if (uomType === 'tiered' && qualitativeOptions) {
+    options = qualitativeOptions;
+  } else {
+    return null;
+  }
+
+  const selected = options.find(opt => opt.label === achievedValue);
+  if (!selected) return null;
+
+  const rating = selected.rating;
+  const ratingLevel = scoreToRatingLevel(rating);
+  const weightedScore = (rating / 5) * weightage;
+
+  return { rating, ratingLevel, weightedScore };
+}
+
+// Validate qualitative options
+export function validateQualitativeOptions(options: QualitativeOption[]): string | null {
+  if (options.length < 2) {
+    return 'At least 2 options are required';
+  }
+
+  for (const opt of options) {
+    if (!opt.label.trim()) {
+      return 'All options must have a label';
+    }
+    if (opt.rating < 0 || opt.rating > 5) {
+      return 'Ratings must be between 0 and 5';
+    }
+    if (!opt.definition.trim()) {
+      return 'All options must have a definition';
+    }
+  }
+
+  const labels = options.map(o => o.label.toLowerCase());
+  if (new Set(labels).size !== labels.length) {
+    return 'Option labels must be unique';
+  }
+
+  return null;
+}

@@ -10,6 +10,10 @@ import { useCreateKpi, ReviewStatus } from '@/hooks/useKpis';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { UomTypeSelector } from './UomTypeSelector';
+import { TieredOptionsBuilder } from './TieredOptionsBuilder';
+import { UomType, QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
+import { Badge } from '@/components/ui/badge';
 
 interface AdminKpiCreateDialogProps {
   isOpen: boolean;
@@ -56,6 +60,13 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
   const [r1, setR1] = useState('');
   const [r0, setR0] = useState('');
 
+  // Qualitative UOM
+  const [uomType, setUomType] = useState<UomType>('numeric');
+  const [qualitativeOptions, setQualitativeOptions] = useState<QualitativeOption[]>([
+    { label: 'Yes', rating: 5, definition: 'Requirement fully met' },
+    { label: 'No', rating: 0, definition: 'Requirement not met' },
+  ]);
+
   // Period
   const [reviewPeriod, setReviewPeriod] = useState(settings.current_review_period);
   const [reviewYear, setReviewYear] = useState<number>(settings.current_review_year);
@@ -92,6 +103,11 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
     setR2('');
     setR1('');
     setR0('');
+    setUomType('numeric');
+    setQualitativeOptions([
+      { label: 'Yes', rating: 5, definition: 'Requirement fully met' },
+      { label: 'No', rating: 0, definition: 'Requirement not met' },
+    ]);
     setReviewPeriod(settings.current_review_period);
     setReviewYear(settings.current_review_year);
   };
@@ -111,22 +127,24 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
       category_id: categoryId,
       kra_name: kraName,
       kpi_name: kpiName,
-      uom: uom || null,
-      criteria: criteria || null,
-      target_value: targetValue ? parseFloat(targetValue) : null,
+      uom: uomType === 'numeric' ? (uom || null) : uomType,
+      criteria: uomType === 'numeric' ? (criteria || null) : null,
+      target_value: uomType === 'numeric' ? (targetValue ? parseFloat(targetValue) : null) : null,
       weightage: weightage ? parseFloat(weightage) : null,
       frequency: frequency || null,
       source_of_data: sourceOfData || null,
-      r5: r5 || null,
-      r4: r4 || null,
-      r3: r3 || null,
-      r2: r2 || null,
-      r1: r1 || null,
-      r0: r0 || null,
+      r5: uomType === 'numeric' ? (r5 || null) : null,
+      r4: uomType === 'numeric' ? (r4 || null) : null,
+      r3: uomType === 'numeric' ? (r3 || null) : null,
+      r2: uomType === 'numeric' ? (r2 || null) : null,
+      r1: uomType === 'numeric' ? (r1 || null) : null,
+      r0: uomType === 'numeric' ? (r0 || null) : null,
       review_period: reviewPeriod,
       review_year: reviewYear,
       status: 'kra_set' as ReviewStatus,
       is_org_level: false,
+      uom_type: uomType,
+      qualitative_options: uomType === 'tiered' ? qualitativeOptions : (uomType === 'binary' ? BINARY_OPTIONS : null),
     });
 
     handleClose();
@@ -215,138 +233,226 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
 
             <Separator />
 
-            {/* Metrics */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Unit of Measure (UOM)</Label>
-                <Input
-                  value={uom}
-                  onChange={(e) => setUom(e.target.value)}
-                  placeholder="e.g., %, INR, Count"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Target Value</Label>
-                <Input
-                  type="number"
-                  value={targetValue}
-                  onChange={(e) => setTargetValue(e.target.value)}
-                  placeholder="e.g., 100"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Weightage (%)</Label>
-                <Input
-                  type="number"
-                  value={weightage}
-                  onChange={(e) => setWeightage(e.target.value)}
-                  placeholder="e.g., 10"
-                  min="0"
-                  max="100"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Criteria</Label>
-                <Select value={criteria} onValueChange={setCriteria}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Higher is Better">Higher is Better</SelectItem>
-                    <SelectItem value="Lower is Better">Lower is Better</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Frequency</Label>
-                <Select value={frequency} onValueChange={setFrequency}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Daily">Daily</SelectItem>
-                    <SelectItem value="Weekly">Weekly</SelectItem>
-                    <SelectItem value="Monthly">Monthly</SelectItem>
-                    <SelectItem value="Quarterly">Quarterly</SelectItem>
-                    <SelectItem value="Yearly">Yearly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Source of Data</Label>
-                <Input
-                  value={sourceOfData}
-                  onChange={(e) => setSourceOfData(e.target.value)}
-                  placeholder="e.g., CRM, ERP"
-                />
-              </div>
-            </div>
+            {/* UOM Type Selector */}
+            <UomTypeSelector value={uomType} onChange={setUomType} />
 
-            <Separator />
+            {/* Conditional Fields based on UOM Type */}
+            {uomType === 'numeric' && (
+              <>
+                {/* Metrics */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Unit of Measure (UOM)</Label>
+                    <Input
+                      value={uom}
+                      onChange={(e) => setUom(e.target.value)}
+                      placeholder="e.g., %, INR, Count"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Target Value</Label>
+                    <Input
+                      type="number"
+                      value={targetValue}
+                      onChange={(e) => setTargetValue(e.target.value)}
+                      placeholder="e.g., 100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Weightage (%)</Label>
+                    <Input
+                      type="number"
+                      value={weightage}
+                      onChange={(e) => setWeightage(e.target.value)}
+                      placeholder="e.g., 10"
+                      min="0"
+                      max="100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Criteria</Label>
+                    <Select value={criteria} onValueChange={setCriteria}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Higher is Better">Higher is Better</SelectItem>
+                        <SelectItem value="Lower is Better">Lower is Better</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Frequency</Label>
+                    <Select value={frequency} onValueChange={setFrequency}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Daily">Daily</SelectItem>
+                        <SelectItem value="Weekly">Weekly</SelectItem>
+                        <SelectItem value="Monthly">Monthly</SelectItem>
+                        <SelectItem value="Quarterly">Quarterly</SelectItem>
+                        <SelectItem value="Yearly">Yearly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Source of Data</Label>
+                    <Input
+                      value={sourceOfData}
+                      onChange={(e) => setSourceOfData(e.target.value)}
+                      placeholder="e.g., CRM, ERP"
+                    />
+                  </div>
+                </div>
 
-            {/* Rating Thresholds */}
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">Rating Thresholds (R1-R5)</Label>
-              <p className="text-xs text-muted-foreground">
-                Define thresholds for automatic rating calculation. Use percentages (e.g., 95%) or absolute values.
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs text-blue-600">R5 (Exceptional)</Label>
-                  <Input
-                    value={r5}
-                    onChange={(e) => setR5(e.target.value)}
-                    placeholder="e.g., ≥110%"
-                    className="text-sm"
-                  />
+                <Separator />
+
+                {/* Rating Thresholds */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Rating Thresholds (R1-R5)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Define thresholds for automatic rating calculation. Use percentages (e.g., 95%) or absolute values.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-blue-600">R5 (Exceptional)</Label>
+                      <Input
+                        value={r5}
+                        onChange={(e) => setR5(e.target.value)}
+                        placeholder="e.g., ≥110%"
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-green-600">R4 (Exceeds)</Label>
+                      <Input
+                        value={r4}
+                        onChange={(e) => setR4(e.target.value)}
+                        placeholder="e.g., ≥100%"
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-yellow-600">R3 (Meets)</Label>
+                      <Input
+                        value={r3}
+                        onChange={(e) => setR3(e.target.value)}
+                        placeholder="e.g., ≥90%"
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-orange-600">R2 (Below)</Label>
+                      <Input
+                        value={r2}
+                        onChange={(e) => setR2(e.target.value)}
+                        placeholder="e.g., ≥75%"
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-red-600">R1 (Needs Improvement)</Label>
+                      <Input
+                        value={r1}
+                        onChange={(e) => setR1(e.target.value)}
+                        placeholder="e.g., <75%"
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">R0 (Not Applicable)</Label>
+                      <Input
+                        value={r0}
+                        onChange={(e) => setR0(e.target.value)}
+                        placeholder="Optional"
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-green-600">R4 (Exceeds)</Label>
-                  <Input
-                    value={r4}
-                    onChange={(e) => setR4(e.target.value)}
-                    placeholder="e.g., ≥100%"
-                    className="text-sm"
-                  />
+              </>
+            )}
+
+            {uomType === 'binary' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Weightage (%)</Label>
+                    <Input
+                      type="number"
+                      value={weightage}
+                      onChange={(e) => setWeightage(e.target.value)}
+                      placeholder="e.g., 10"
+                      min="0"
+                      max="100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Frequency</Label>
+                    <Select value={frequency} onValueChange={setFrequency}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Daily">Daily</SelectItem>
+                        <SelectItem value="Weekly">Weekly</SelectItem>
+                        <SelectItem value="Monthly">Monthly</SelectItem>
+                        <SelectItem value="Quarterly">Quarterly</SelectItem>
+                        <SelectItem value="Yearly">Yearly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-yellow-600">R3 (Meets)</Label>
-                  <Input
-                    value={r3}
-                    onChange={(e) => setR3(e.target.value)}
-                    placeholder="e.g., ≥90%"
-                    className="text-sm"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-orange-600">R2 (Below)</Label>
-                  <Input
-                    value={r2}
-                    onChange={(e) => setR2(e.target.value)}
-                    placeholder="e.g., ≥75%"
-                    className="text-sm"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-red-600">R1 (Needs Improvement)</Label>
-                  <Input
-                    value={r1}
-                    onChange={(e) => setR1(e.target.value)}
-                    placeholder="e.g., <75%"
-                    className="text-sm"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">R0 (Not Applicable)</Label>
-                  <Input
-                    value={r0}
-                    onChange={(e) => setR0(e.target.value)}
-                    placeholder="Optional"
-                    className="text-sm"
-                  />
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <Label className="text-sm font-medium mb-2 block">Binary Scoring</Label>
+                  <div className="flex gap-4">
+                    <Badge className="bg-blue-500 text-white">Yes = R5 (5)</Badge>
+                    <Badge className="bg-red-500 text-white">No = R0 (0)</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Fixed scoring: Yes achieves maximum rating, No achieves minimum rating.
+                  </p>
                 </div>
               </div>
-            </div>
+            )}
+
+            {uomType === 'tiered' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Weightage (%)</Label>
+                    <Input
+                      type="number"
+                      value={weightage}
+                      onChange={(e) => setWeightage(e.target.value)}
+                      placeholder="e.g., 10"
+                      min="0"
+                      max="100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Frequency</Label>
+                    <Select value={frequency} onValueChange={setFrequency}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Daily">Daily</SelectItem>
+                        <SelectItem value="Weekly">Weekly</SelectItem>
+                        <SelectItem value="Monthly">Monthly</SelectItem>
+                        <SelectItem value="Quarterly">Quarterly</SelectItem>
+                        <SelectItem value="Yearly">Yearly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <TieredOptionsBuilder
+                  options={qualitativeOptions}
+                  onChange={setQualitativeOptions}
+                />
+              </div>
+            )}
 
             <Separator />
 
