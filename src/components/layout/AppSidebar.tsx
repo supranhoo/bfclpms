@@ -35,6 +35,7 @@ import {
   Calendar,
   GitBranch,
   Library,
+  LayoutDashboard,
 } from 'lucide-react';
 
 const menuItems = {
@@ -54,6 +55,7 @@ const menuItems = {
     { title: 'Audit Panel', icon: Shield, path: '/audit', roles: ['auditor', 'admin'] },
   ],
   admin: [
+    { title: 'Admin Dashboard', icon: LayoutDashboard, path: '/admin', roles: ['admin'] },
     { title: 'User Management', icon: Users, path: '/admin/users', roles: ['admin'] },
     { title: 'KRA Library', icon: Library, path: '/admin/templates', roles: ['admin'] },
     { title: 'All KRAs', icon: Target, path: '/admin/kpis', roles: ['admin'] },

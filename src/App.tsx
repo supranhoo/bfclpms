@@ -24,6 +24,7 @@ import SystemSettings from "./pages/admin/SystemSettings";
 import WorkflowConfig from "./pages/admin/WorkflowConfig";
 import OrgKpiDataEntry from "./pages/admin/OrgKpiDataEntry";
 import KRALibrary from "./pages/admin/KRALibrary";
+import AdminDashboard from "./pages/admin/AdminDashboard";
 import PerformanceReport from "./pages/reports/PerformanceReport";
 import KRAIssuance from "./pages/reports/KRAIssuance";
 import ReportsHub from "./pages/reports/ReportsHub";
@@ -82,6 +83,11 @@ const App = () => (
               } />
               
               {/* Admin-protected routes */}
+              <Route path="/admin" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              } />
               <Route path="/admin/users" element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <UserManagement />
