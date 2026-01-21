@@ -33,6 +33,7 @@ import DepartmentReport from "./pages/reports/DepartmentReport";
 import CompletionReport from "./pages/reports/CompletionReport";
 import AuditTrailReport from "./pages/reports/AuditTrailReport";
 import MonthlyScorecardReport from "./pages/reports/MonthlyScorecardReport";
+import EmployeePerformanceSummary from "./pages/reports/EmployeePerformanceSummary";
 import KRAAcceptance from "./pages/KRAAcceptance";
 import NotFound from "./pages/NotFound";
 
@@ -178,6 +179,11 @@ const App = () => (
               <Route path="/reports/monthly-scorecard" element={
                 <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management']}>
                   <MonthlyScorecardReport />
+                </ProtectedRoute>
+              } />
+              <Route path="/reports/employee-summary" element={
+                <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management']}>
+                  <EmployeePerformanceSummary />
                 </ProtectedRoute>
               } />
             </Route>

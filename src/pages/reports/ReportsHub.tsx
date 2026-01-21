@@ -22,6 +22,13 @@ interface ReportCard {
 
 const reports: ReportCard[] = [
   {
+    title: 'Employee Performance Summary',
+    description: 'Comprehensive view of employee scores, ratings, and review status by period',
+    icon: Users,
+    path: '/reports/employee-summary',
+    color: 'text-emerald-500',
+  },
+  {
     title: 'Performance Report',
     description: 'Organization-wide performance analytics with rating distribution and category breakdown',
     icon: BarChart3,
