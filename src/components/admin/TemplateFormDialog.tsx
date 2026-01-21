@@ -7,20 +7,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { X } from 'lucide-react';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { KpiTemplate, useCreateKpiTemplate, useUpdateKpiTemplate } from '@/hooks/useKpiTemplates';
 import { UomTypeSelector } from './UomTypeSelector';
 import { TieredOptionsBuilder } from './TieredOptionsBuilder';
 import { UomType, QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
 import { Separator } from '@/components/ui/separator';
+
 interface TemplateFormDialogProps {
   isOpen: boolean;
   onClose: () => void;
   template?: KpiTemplate | null;
 }
-
-const AVAILABLE_ROLES = ['employee', 'manager', 'auditor', 'management', 'admin'];
 
 export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDialogProps) {
   const { data: categories } = useKraCategories();
@@ -45,7 +43,6 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
     r2: '',
     r1: '',
     r0: '',
-    applicable_roles: [] as string[],
     is_active: true,
     uom_type: 'numeric' as UomType,
     qualitative_options: [
@@ -74,7 +71,6 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
         r2: template.r2 || '',
         r1: template.r1 || '',
         r0: template.r0 || '',
-        applicable_roles: template.applicable_roles || [],
         is_active: template.is_active ?? true,
         uom_type: (template as any).uom_type || 'numeric',
         qualitative_options: (template as any).qualitative_options || [
@@ -106,7 +102,6 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
       r2: '',
       r1: '',
       r0: '',
-      applicable_roles: [],
       is_active: true,
       uom_type: 'numeric',
       qualitative_options: [
@@ -119,15 +114,6 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
   const handleClose = () => {
     resetForm();
     onClose();
-  };
-
-  const toggleRole = (role: string) => {
-    setFormData(prev => ({
-      ...prev,
-      applicable_roles: prev.applicable_roles.includes(role)
-        ? prev.applicable_roles.filter(r => r !== role)
-        : [...prev.applicable_roles, role],
-    }));
   };
 
   const handleSubmit = async () => {
@@ -153,7 +139,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
       r2: formData.uom_type === 'numeric' ? (formData.r2 || null) : null,
       r1: formData.uom_type === 'numeric' ? (formData.r1 || null) : null,
       r0: formData.uom_type === 'numeric' ? (formData.r0 || null) : null,
-      applicable_roles: formData.applicable_roles,
+      applicable_roles: [],
       is_active: formData.is_active,
       uom_type: formData.uom_type,
       qualitative_options: formData.uom_type === 'tiered' 
@@ -388,29 +374,6 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                 />
               </div>
             )}
-
-            {/* Applicable Roles */}
-            <div>
-              <Label>Applicable Roles</Label>
-              <p className="text-xs text-muted-foreground mb-2">
-                Select roles this template is recommended for
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {AVAILABLE_ROLES.map((role) => (
-                  <Badge
-                    key={role}
-                    variant={formData.applicable_roles.includes(role) ? 'default' : 'outline'}
-                    className="cursor-pointer capitalize"
-                    onClick={() => toggleRole(role)}
-                  >
-                    {role}
-                    {formData.applicable_roles.includes(role) && (
-                      <X className="h-3 w-3 ml-1" />
-                    )}
-                  </Badge>
-                ))}
-              </div>
-            </div>
 
             {/* Source of Data */}
             <div>
