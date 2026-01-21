@@ -1,0 +1,475 @@
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { FileText, Save, RotateCcw, Eye } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+
+interface EmailTemplate {
+  key: string;
+  label: string;
+  description: string;
+  subject: string;
+  bodyTemplate: string;
+  color: string;
+  emoji: string;
+}
+
+const DEFAULT_TEMPLATES: EmailTemplate[] = [
+  {
+    key: 'kpi_submitted',
+    label: 'KPI Submission',
+    description: 'Sent to manager when employee submits self-review',
+    subject: '[PMS] New KPI Submitted for Review - {{actor_name}}',
+    bodyTemplate: `Hi {{recipient_name}},
+
+{{actor_name}} has submitted their self-review for:
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
+
+Please review and provide your feedback.`,
+    color: '#6366f1',
+    emoji: '📝',
+  },
+  {
+    key: 'manager_approved',
+    label: 'Manager Approval',
+    description: 'Sent to employee when manager approves KPI',
+    subject: '[PMS] Your KPI Has Been Approved',
+    bodyTemplate: `Hi {{recipient_name}},
+
+Great news! Your KPI has been approved by your manager.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+
+The review will now proceed to the next stage.`,
+    color: '#10b981',
+    emoji: '✅',
+  },
+  {
+    key: 'manager_rejected',
+    label: 'Send Back',
+    description: 'Sent to employee when KPI is sent back for revision',
+    subject: '[PMS] Action Required: KPI Sent Back for Revision',
+    bodyTemplate: `Hi {{recipient_name}},
+
+Your manager has sent back your KPI for revision.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+
+Please review the feedback and update your submission.`,
+    color: '#f59e0b',
+    emoji: '🔄',
+  },
+  {
+    key: 'query_raised',
+    label: 'Query Raised',
+    description: 'Sent to recipient when a query is raised',
+    subject: '[PMS] New Query Raised on Your KPI',
+    bodyTemplate: `Hi {{recipient_name}},
+
+{{actor_name}} has raised a query on your KPI.
+
+KPI: {{kpi_name}}
+Query: {{query_reason}}
+
+Please respond to this query at your earliest convenience.`,
+    color: '#f43f5e',
+    emoji: '❓',
+  },
+  {
+    key: 'query_resolved',
+    label: 'Query Resolved',
+    description: 'Sent to raiser when their query is resolved',
+    subject: '[PMS] Your Query Has Been Resolved',
+    bodyTemplate: `Hi {{recipient_name}},
+
+Your query has been resolved by {{actor_name}}.
+
+KPI: {{kpi_name}}
+Resolution: {{resolution_notes}}`,
+    color: '#10b981',
+    emoji: '✅',
+  },
+  {
+    key: 'final_approved',
+    label: 'Final Approval',
+    description: 'Sent to employee when KPI receives final sign-off',
+    subject: '[PMS] 🎉 Your KPI Has Been Finalized',
+    bodyTemplate: `Hi {{recipient_name}},
+
+Congratulations! Your KPI has received final approval and is now complete.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+
+Thank you for your contribution!`,
+    color: '#6366f1',
+    emoji: '🎉',
+  },
+  {
+    key: 'kra_assigned',
+    label: 'KRA Assignment',
+    description: 'Sent to employee when new KRA is assigned',
+    subject: '[PMS] New KRA Assigned to You',
+    bodyTemplate: `Hi {{recipient_name}},
+
+A new KRA has been assigned to you.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
+
+Please review your new assignment.`,
+    color: '#6366f1',
+    emoji: '📋',
+  },
+  {
+    key: 'period_locked',
+    label: 'Period Locked',
+    description: 'Sent when review period is locked',
+    subject: '[PMS] Review Period Has Been Locked',
+    bodyTemplate: `Hi {{recipient_name}},
+
+The review period {{review_period}} {{review_year}} has been locked.
+
+No further changes can be made to KPIs in this period unless unlocked by an administrator.`,
+    color: '#64748b',
+    emoji: '🔒',
+  },
+];
+
+const PLACEHOLDERS = [
+  { key: '{{recipient_name}}', description: 'Name of the email recipient' },
+  { key: '{{actor_name}}', description: 'Name of the person who performed the action' },
+  { key: '{{kra_name}}', description: 'Key Result Area name' },
+  { key: '{{kpi_name}}', description: 'Key Performance Indicator name' },
+  { key: '{{review_period}}', description: 'Review period (e.g., Q1, H1)' },
+  { key: '{{review_year}}', description: 'Review year' },
+  { key: '{{query_reason}}', description: 'Reason for the query (query events only)' },
+  { key: '{{resolution_notes}}', description: 'Resolution notes (query resolved only)' },
+];
+
+export function EmailTemplateEditor() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [selectedTemplate, setSelectedTemplate] = useState(DEFAULT_TEMPLATES[0].key);
+  const [editedTemplates, setEditedTemplates] = useState<Record<string, { subject: string; body: string }>>({});
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // Fetch saved templates from system_settings
+  const { data: savedTemplates, isLoading } = useQuery({
+    queryKey: ['email-templates'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('setting_key, setting_value')
+        .like('setting_key', 'email_template_%');
+      
+      if (error) throw error;
+      
+      const templates: Record<string, { subject: string; body: string }> = {};
+      for (const setting of data || []) {
+        const key = setting.setting_key.replace('email_template_', '');
+        try {
+          const value = typeof setting.setting_value === 'string' 
+            ? JSON.parse(setting.setting_value) 
+            : setting.setting_value;
+          templates[key] = value;
+        } catch {
+          // Skip invalid entries
+        }
+      }
+      return templates;
+    },
+  });
+
+  // Initialize edited templates with saved or default values
+  useEffect(() => {
+    if (savedTemplates) {
+      const initial: Record<string, { subject: string; body: string }> = {};
+      for (const template of DEFAULT_TEMPLATES) {
+        initial[template.key] = savedTemplates[template.key] || {
+          subject: template.subject,
+          body: template.bodyTemplate,
+        };
+      }
+      setEditedTemplates(initial);
+    }
+  }, [savedTemplates]);
+
+  const updateTemplateMutation = useMutation({
+    mutationFn: async (templates: Record<string, { subject: string; body: string }>) => {
+      for (const [key, value] of Object.entries(templates)) {
+        const settingKey = `email_template_${key}`;
+        
+        // Check if setting exists
+        const { data: existing } = await supabase
+          .from('system_settings')
+          .select('id')
+          .eq('setting_key', settingKey)
+          .single();
+        
+        if (existing) {
+          const { error } = await supabase
+            .from('system_settings')
+            .update({ setting_value: value })
+            .eq('setting_key', settingKey);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('system_settings')
+            .insert({
+              setting_key: settingKey,
+              setting_value: value,
+              description: `Custom email template for ${key} notifications`,
+            });
+          if (error) throw error;
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['email-templates'] });
+      setHasChanges(false);
+      toast({
+        title: 'Templates Saved',
+        description: 'Email templates have been updated successfully.',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handleTemplateChange = (key: string, field: 'subject' | 'body', value: string) => {
+    setEditedTemplates(prev => ({
+      ...prev,
+      [key]: { ...prev[key], [field]: value },
+    }));
+    setHasChanges(true);
+  };
+
+  const handleResetTemplate = (key: string) => {
+    const defaultTemplate = DEFAULT_TEMPLATES.find(t => t.key === key);
+    if (defaultTemplate) {
+      setEditedTemplates(prev => ({
+        ...prev,
+        [key]: {
+          subject: defaultTemplate.subject,
+          body: defaultTemplate.bodyTemplate,
+        },
+      }));
+      setHasChanges(true);
+    }
+  };
+
+  const handleSave = () => {
+    updateTemplateMutation.mutate(editedTemplates);
+  };
+
+  const currentTemplate = DEFAULT_TEMPLATES.find(t => t.key === selectedTemplate);
+  const currentEdited = editedTemplates[selectedTemplate];
+
+  const renderPreview = () => {
+    if (!currentTemplate || !currentEdited) return null;
+    
+    const sampleData = {
+      '{{recipient_name}}': 'John Doe',
+      '{{actor_name}}': 'Jane Smith',
+      '{{kra_name}}': 'Sales Performance',
+      '{{kpi_name}}': 'Monthly Sales Target',
+      '{{review_period}}': 'Q1',
+      '{{review_year}}': '2024',
+      '{{query_reason}}': 'Please provide supporting documents',
+      '{{resolution_notes}}': 'Documents have been uploaded and verified',
+    };
+    
+    let previewSubject = currentEdited.subject;
+    let previewBody = currentEdited.body;
+    
+    for (const [placeholder, value] of Object.entries(sampleData)) {
+      previewSubject = previewSubject.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), value);
+      previewBody = previewBody.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), value);
+    }
+    
+    return (
+      <div className="border rounded-lg overflow-hidden">
+        <div 
+          className="p-4 text-white text-center"
+          style={{ background: `linear-gradient(135deg, ${currentTemplate.color}, ${currentTemplate.color}dd)` }}
+        >
+          <span className="text-2xl">{currentTemplate.emoji}</span>
+          <h3 className="font-semibold mt-1">{currentTemplate.label}</h3>
+        </div>
+        <div className="p-4 bg-muted/50">
+          <p className="text-sm text-muted-foreground mb-1">Subject:</p>
+          <p className="font-medium">{previewSubject}</p>
+        </div>
+        <div className="p-4 whitespace-pre-wrap text-sm">
+          {previewBody}
+        </div>
+        <div className="p-4 bg-muted/30 text-center text-xs text-muted-foreground">
+          This is an automated notification from the Performance Management System.
+        </div>
+      </div>
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-4 w-96 mt-2" />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-64 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="h-5 w-5" />
+          Email Templates
+        </CardTitle>
+        <CardDescription>
+          Customize the email content for each notification type. Use placeholders to include dynamic data.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Template Selection */}
+        <Tabs value={selectedTemplate} onValueChange={setSelectedTemplate}>
+          <TabsList className="flex flex-wrap h-auto gap-1">
+            {DEFAULT_TEMPLATES.map((template) => (
+              <TabsTrigger
+                key={template.key}
+                value={template.key}
+                className="text-xs"
+              >
+                <span className="mr-1">{template.emoji}</span>
+                {template.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          
+          {DEFAULT_TEMPLATES.map((template) => (
+            <TabsContent key={template.key} value={template.key} className="space-y-4 mt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium">{template.label}</h4>
+                  <p className="text-sm text-muted-foreground">{template.description}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Eye className="h-4 w-4 mr-1" />
+                        Preview
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-lg">
+                      <DialogHeader>
+                        <DialogTitle>Email Preview</DialogTitle>
+                      </DialogHeader>
+                      {renderPreview()}
+                    </DialogContent>
+                  </Dialog>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleResetTemplate(template.key)}
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1" />
+                    Reset
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor={`subject-${template.key}`}>Subject Line</Label>
+                  <Input
+                    id={`subject-${template.key}`}
+                    value={editedTemplates[template.key]?.subject || template.subject}
+                    onChange={(e) => handleTemplateChange(template.key, 'subject', e.target.value)}
+                    placeholder="Email subject"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor={`body-${template.key}`}>Email Body</Label>
+                  <Textarea
+                    id={`body-${template.key}`}
+                    value={editedTemplates[template.key]?.body || template.bodyTemplate}
+                    onChange={(e) => handleTemplateChange(template.key, 'body', e.target.value)}
+                    placeholder="Email content"
+                    rows={8}
+                    className="font-mono text-sm"
+                  />
+                </div>
+              </div>
+            </TabsContent>
+          ))}
+        </Tabs>
+        
+        {/* Placeholders Reference */}
+        <div className="p-4 rounded-lg border bg-muted/30">
+          <h4 className="font-medium mb-2">Available Placeholders</h4>
+          <div className="flex flex-wrap gap-2">
+            {PLACEHOLDERS.map((p) => (
+              <Badge 
+                key={p.key} 
+                variant="secondary" 
+                className="font-mono text-xs cursor-help"
+                title={p.description}
+              >
+                {p.key}
+              </Badge>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Hover over a placeholder to see its description. These will be replaced with actual values when emails are sent.
+          </p>
+        </div>
+        
+        {/* Save Button */}
+        <div className="flex justify-end border-t pt-4">
+          <Button
+            onClick={handleSave}
+            disabled={!hasChanges || updateTemplateMutation.isPending}
+            className="gap-2"
+          >
+            <Save className="h-4 w-4" />
+            {updateTemplateMutation.isPending ? 'Saving...' : 'Save Templates'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
