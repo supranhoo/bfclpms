@@ -49,6 +49,7 @@ const menuItems = {
     { title: 'Team Review', icon: Users, path: '/team-review', roles: ['manager', 'admin', 'management'] },
   ],
   management: [
+    { title: 'Management Dashboard', icon: LayoutDashboard, path: '/management-dashboard', roles: ['management', 'admin'] },
     { title: 'Management Review', icon: Briefcase, path: '/management-review', roles: ['management', 'admin'] },
   ],
   audit: [

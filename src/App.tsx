@@ -12,6 +12,7 @@ import MyKpis from "./pages/MyKpis";
 import TeamReview from "./pages/TeamReview";
 import AuditPanel from "./pages/AuditPanel";
 import ManagementReview from "./pages/ManagementReview";
+import ManagementDashboard from "./pages/ManagementDashboard";
 import AuditLogs from "./pages/AuditLogs";
 import QueryInbox from "./pages/QueryInbox";
 import UserManagement from "./pages/admin/UserManagement";
@@ -65,6 +66,11 @@ const App = () => (
               } />
               
               {/* Management-protected routes */}
+              <Route path="/management-dashboard" element={
+                <ProtectedRoute allowedRoles={['management', 'admin']}>
+                  <ManagementDashboard />
+                </ProtectedRoute>
+              } />
               <Route path="/management-review" element={
                 <ProtectedRoute allowedRoles={['management', 'admin']}>
                   <ManagementReview />
