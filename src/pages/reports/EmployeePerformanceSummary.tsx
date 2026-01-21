@@ -8,9 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Download, Search, Users } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Download, Search, Users, TrendingUp, TrendingDown, Minus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import * as XLSX from 'xlsx';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 const MONTHS = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -23,7 +25,7 @@ const STATUS_COLORS: Record<string, string> = {
   audit: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
   manager_check: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
   self_review: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
-  kra_set: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300',
+  kra_set: 'bg-muted text-muted-foreground',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -35,13 +37,33 @@ const STATUS_LABELS: Record<string, string> = {
   kra_set: 'KRA Set',
 };
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+interface EmployeePerformance {
+  employeeId: string;
+  employeeCode: string;
+  fullName: string;
+  department: string;
+  designation: string;
+  reportingManager: string;
+  reviewPeriod: string;
+  reviewYear: number;
+  status: string;
+  totalScore: number;
+  outOfScore: number;
+  kpiCount: number;
+}
+
 export default function EmployeePerformanceSummary() {
   const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth();
   
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
   const [selectedPeriod, setSelectedPeriod] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [activeTab, setActiveTab] = useState('summary');
+  const [comparisonEmployee, setComparisonEmployee] = useState<string | null>(null);
 
   // Fetch review periods for the selected year
   const { data: reviewPeriods } = useQuery({
@@ -57,38 +79,56 @@ export default function EmployeePerformanceSummary() {
     },
   });
 
-  // Fetch all KPIs with employee details and submissions
+  // Fetch all KPIs with batching for large datasets
   const { data: performanceData, isLoading } = useQuery({
     queryKey: ['employee-performance-summary', selectedYear, selectedPeriod],
     queryFn: async () => {
-      // Base query for KPIs
-      let kpisQuery = supabase
-        .from('kpis')
-        .select(`
-          id,
-          employee_id,
-          kra_name,
-          kpi_name,
-          weightage,
-          status,
-          review_period,
-          review_year,
-          review_submissions (
-            final_score,
-            self_score,
-            manager_score,
-            auditor_score,
-            management_score
-          )
-        `)
-        .eq('review_year', parseInt(selectedYear));
+      const year = parseInt(selectedYear);
+      
+      // Batch fetch KPIs to handle large datasets (1000 row limit)
+      const allKpis: any[] = [];
+      let offset = 0;
+      const batchSize = 1000;
+      let hasMore = true;
 
-      if (selectedPeriod !== 'all') {
-        kpisQuery = kpisQuery.eq('review_period', selectedPeriod);
+      while (hasMore) {
+        let query = supabase
+          .from('kpis')
+          .select(`
+            id,
+            employee_id,
+            kra_name,
+            kpi_name,
+            weightage,
+            status,
+            review_period,
+            review_year,
+            review_submissions (
+              final_score,
+              self_score,
+              manager_score,
+              auditor_score,
+              management_score
+            )
+          `)
+          .eq('review_year', year)
+          .range(offset, offset + batchSize - 1);
+
+        if (selectedPeriod !== 'all') {
+          query = query.eq('review_period', selectedPeriod);
+        }
+
+        const { data: kpis, error } = await query;
+        if (error) throw error;
+
+        if (kpis && kpis.length > 0) {
+          allKpis.push(...kpis);
+          offset += batchSize;
+          hasMore = kpis.length === batchSize;
+        } else {
+          hasMore = false;
+        }
       }
-
-      const { data: kpis, error: kpisError } = await kpisQuery;
-      if (kpisError) throw kpisError;
 
       // Fetch all profiles with department info
       const { data: profiles, error: profilesError } = await supabase
@@ -107,21 +147,9 @@ export default function EmployeePerformanceSummary() {
       const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
 
       // Group KPIs by employee and period
-      const employeePeriodMap = new Map<string, {
-        employeeId: string;
-        employeeCode: string;
-        fullName: string;
-        department: string;
-        designation: string;
-        reportingManager: string;
-        reviewPeriod: string;
-        status: string;
-        totalScore: number;
-        outOfScore: number;
-        kpiCount: number;
-      }>();
+      const employeePeriodMap = new Map<string, EmployeePerformance>();
 
-      kpis?.forEach(kpi => {
+      allKpis.forEach(kpi => {
         const profile = profileMap.get(kpi.employee_id);
         if (!profile) return;
 
@@ -144,7 +172,6 @@ export default function EmployeePerformanceSummary() {
           existing.totalScore += finalScore;
           existing.outOfScore += weightage;
           existing.kpiCount += 1;
-          // Use the most advanced status
           if (getStatusPriority(kpi.status || 'kra_set') > getStatusPriority(existing.status)) {
             existing.status = kpi.status || 'kra_set';
           }
@@ -157,6 +184,7 @@ export default function EmployeePerformanceSummary() {
             designation: profile.designation || '-',
             reportingManager: manager?.full_name || '-',
             reviewPeriod: kpi.review_period || '-',
+            reviewYear: kpi.review_year || year,
             status: kpi.status || 'kra_set',
             totalScore: finalScore,
             outOfScore: weightage,
@@ -169,7 +197,82 @@ export default function EmployeePerformanceSummary() {
     },
   });
 
-  // Helper to prioritize status
+  // Fetch comparison data (all periods for trend analysis)
+  const { data: trendData } = useQuery({
+    queryKey: ['employee-performance-trends', selectedYear],
+    queryFn: async () => {
+      const year = parseInt(selectedYear);
+      
+      // Batch fetch all KPIs for the year
+      const allKpis: any[] = [];
+      let offset = 0;
+      const batchSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data: kpis, error } = await supabase
+          .from('kpis')
+          .select(`
+            id,
+            employee_id,
+            weightage,
+            status,
+            review_period,
+            review_year,
+            review_submissions (
+              final_score,
+              self_score,
+              manager_score,
+              auditor_score,
+              management_score
+            )
+          `)
+          .eq('review_year', year)
+          .range(offset, offset + batchSize - 1);
+
+        if (error) throw error;
+
+        if (kpis && kpis.length > 0) {
+          allKpis.push(...kpis);
+          offset += batchSize;
+          hasMore = kpis.length === batchSize;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      // Group by employee and period
+      const employeeTrends = new Map<string, Map<string, { totalScore: number; outOfScore: number }>>();
+
+      allKpis.forEach(kpi => {
+        if (!employeeTrends.has(kpi.employee_id)) {
+          employeeTrends.set(kpi.employee_id, new Map());
+        }
+
+        const periodMap = employeeTrends.get(kpi.employee_id)!;
+        const existing = periodMap.get(kpi.review_period);
+
+        const submission = kpi.review_submissions;
+        const finalScore = submission?.final_score || 
+                          submission?.management_score || 
+                          submission?.auditor_score || 
+                          submission?.manager_score || 
+                          submission?.self_score || 0;
+        const weightage = kpi.weightage || 100;
+
+        if (existing) {
+          existing.totalScore += finalScore;
+          existing.outOfScore += weightage;
+        } else {
+          periodMap.set(kpi.review_period, { totalScore: finalScore, outOfScore: weightage });
+        }
+      });
+
+      return employeeTrends;
+    },
+    enabled: activeTab === 'comparison',
+  });
+
   function getStatusPriority(status: string): number {
     const priorities: Record<string, number> = {
       'approved': 6,
@@ -196,14 +299,95 @@ export default function EmployeePerformanceSummary() {
     );
   }, [performanceData, searchTerm]);
 
-  // Calculate overall rating (0-5 scale based on percentage)
+  // Pagination
+  const totalPages = Math.ceil(filteredData.length / pageSize);
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredData.slice(start, start + pageSize);
+  }, [filteredData, currentPage, pageSize]);
+
+  // Reset page when filters change
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedYear, selectedPeriod, pageSize]);
+
+  // Get unique employees for comparison
+  const uniqueEmployees = useMemo(() => {
+    if (!performanceData) return [];
+    const seen = new Set<string>();
+    return performanceData
+      .filter(row => {
+        if (seen.has(row.employeeId)) return false;
+        seen.add(row.employeeId);
+        return true;
+      })
+      .map(row => ({ id: row.employeeId, name: row.fullName, code: row.employeeCode }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [performanceData]);
+
+  // Comparison chart data
+  const comparisonChartData = useMemo(() => {
+    if (!trendData || !comparisonEmployee) return [];
+
+    const employeeTrend = trendData.get(comparisonEmployee);
+    if (!employeeTrend) return [];
+
+    // Sort periods by month order
+    const periodOrder = MONTHS.map(m => m.toLowerCase());
+    
+    return Array.from(employeeTrend.entries())
+      .sort((a, b) => {
+        const aIndex = periodOrder.findIndex(m => a[0].toLowerCase().startsWith(m));
+        const bIndex = periodOrder.findIndex(m => b[0].toLowerCase().startsWith(m));
+        return aIndex - bIndex;
+      })
+      .map(([period, data]) => ({
+        period: formatPeriod(period, parseInt(selectedYear)),
+        percentage: data.outOfScore > 0 ? ((data.totalScore / data.outOfScore) * 100) : 0,
+        score: data.totalScore,
+        outOf: data.outOfScore,
+      }));
+  }, [trendData, comparisonEmployee, selectedYear]);
+
+  // Trend indicator for each employee
+  const getTrendIndicator = (employeeId: string) => {
+    if (!trendData) return null;
+    
+    const trends = trendData.get(employeeId);
+    if (!trends || trends.size < 2) return null;
+
+    const periods = Array.from(trends.entries())
+      .sort((a, b) => {
+        const aIndex = MONTHS.findIndex(m => a[0].toLowerCase().startsWith(m.toLowerCase()));
+        const bIndex = MONTHS.findIndex(m => b[0].toLowerCase().startsWith(m.toLowerCase()));
+        return aIndex - bIndex;
+      });
+
+    if (periods.length < 2) return null;
+
+    const latest = periods[periods.length - 1][1];
+    const previous = periods[periods.length - 2][1];
+
+    const latestPct = latest.outOfScore > 0 ? (latest.totalScore / latest.outOfScore) * 100 : 0;
+    const prevPct = previous.outOfScore > 0 ? (previous.totalScore / previous.outOfScore) * 100 : 0;
+
+    const diff = latestPct - prevPct;
+
+    if (Math.abs(diff) < 2) {
+      return { icon: Minus, color: 'text-muted-foreground', label: 'Stable' };
+    } else if (diff > 0) {
+      return { icon: TrendingUp, color: 'text-green-600 dark:text-green-400', label: `+${diff.toFixed(1)}%` };
+    } else {
+      return { icon: TrendingDown, color: 'text-red-600 dark:text-red-400', label: `${diff.toFixed(1)}%` };
+    }
+  };
+
   function calculateRating(totalScore: number, outOfScore: number): number {
     if (outOfScore === 0) return 0;
     const percentage = (totalScore / outOfScore) * 100;
-    return Math.round((percentage / 20) * 100) / 100; // Scale to 0-5
+    return Math.round((percentage / 20) * 100) / 100;
   }
 
-  // Format period to Month-YY format
   function formatPeriod(period: string, year: number): string {
     const monthIndex = MONTHS.findIndex(m => 
       period.toLowerCase().startsWith(m.toLowerCase())
@@ -214,7 +398,6 @@ export default function EmployeePerformanceSummary() {
     return period;
   }
 
-  // Export to Excel
   const handleExport = () => {
     if (!filteredData.length) return;
 
@@ -225,7 +408,7 @@ export default function EmployeePerformanceSummary() {
       const rating = calculateRating(row.totalScore, row.outOfScore);
 
       return {
-        'Month': formatPeriod(row.reviewPeriod, parseInt(selectedYear)),
+        'Month': formatPeriod(row.reviewPeriod, row.reviewYear),
         'Employee ID': row.employeeCode,
         'Full Name': row.fullName,
         'Department': row.department,
@@ -243,25 +426,14 @@ export default function EmployeePerformanceSummary() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Employee Performance Summary');
     
-    // Set column widths
     ws['!cols'] = [
-      { wch: 10 }, // Month
-      { wch: 12 }, // Employee ID
-      { wch: 30 }, // Full Name
-      { wch: 35 }, // Department
-      { wch: 30 }, // Designation
-      { wch: 30 }, // Reporting Manager
-      { wch: 18 }, // Review Status
-      { wch: 12 }, // Total Score
-      { wch: 12 }, // Out of Score
-      { wch: 14 }, // Overall Rating
-      { wch: 12 }, // Percentage
+      { wch: 10 }, { wch: 12 }, { wch: 30 }, { wch: 35 }, { wch: 30 },
+      { wch: 30 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
     ];
 
     XLSX.writeFile(wb, `Employee_Performance_Summary_${selectedYear}.xlsx`);
   };
 
-  // Calculate summary stats
   const summaryStats = useMemo(() => {
     if (!filteredData.length) return { total: 0, approved: 0, avgScore: 0 };
     
@@ -293,171 +465,448 @@ export default function EmployeePerformanceSummary() {
         }
       />
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name, ID, department..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="summary">Summary View</TabsTrigger>
+          <TabsTrigger value="comparison">Period Comparison</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="summary" className="space-y-6 mt-6">
+          {/* Filters */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-wrap gap-4">
+                <div className="flex-1 min-w-[200px]">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name, ID, department..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue placeholder="Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {years.map(year => (
+                      <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Period" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Periods</SelectItem>
+                    {reviewPeriods?.map(period => (
+                      <SelectItem key={period.id} value={period.period_name}>
+                        {period.period_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            </div>
-            <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Year" />
-              </SelectTrigger>
-              <SelectContent>
-                {years.map(year => (
-                  <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Period" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Periods</SelectItem>
-                {reviewPeriods?.map(period => (
-                  <SelectItem key={period.id} value={period.period_name}>
-                    {period.period_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            </CardContent>
+          </Card>
+
+          {/* Summary Stats */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Records</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{summaryStats.total}</div>
+                <p className="text-xs text-muted-foreground">
+                  Showing {paginatedData.length} of {filteredData.length}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Approved Reviews</CardTitle>
+                <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
+                  {summaryStats.approved}
+                </Badge>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {summaryStats.total > 0 
+                    ? ((summaryStats.approved / summaryStats.total) * 100).toFixed(1) 
+                    : 0}%
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Avg Score</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{summaryStats.avgScore}%</div>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Summary Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summaryStats.total}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Approved Reviews</CardTitle>
-            <Badge variant="outline" className="bg-green-100 text-green-800">
-              {summaryStats.approved}
-            </Badge>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {summaryStats.total > 0 
-                ? ((summaryStats.approved / summaryStats.total) * 100).toFixed(1) 
-                : 0}%
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Score</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summaryStats.avgScore}%</div>
-          </CardContent>
-        </Card>
-      </div>
+          {/* Data Table with Pagination */}
+          <Card>
+            <CardContent className="p-0">
+              {isLoading ? (
+                <div className="p-6 space-y-4">
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Month</TableHead>
+                          <TableHead>Employee ID</TableHead>
+                          <TableHead>Full Name</TableHead>
+                          <TableHead>Department</TableHead>
+                          <TableHead>Designation</TableHead>
+                          <TableHead>Reporting Manager</TableHead>
+                          <TableHead>Review Status</TableHead>
+                          <TableHead className="text-right">Total Score</TableHead>
+                          <TableHead className="text-right">Out of Score</TableHead>
+                          <TableHead className="text-right">Overall Rating</TableHead>
+                          <TableHead className="text-right">Percentage</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedData.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                              No data found for the selected filters
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          paginatedData.map((row, index) => {
+                            const percentage = row.outOfScore > 0 
+                              ? ((row.totalScore / row.outOfScore) * 100)
+                              : 0;
+                            const rating = calculateRating(row.totalScore, row.outOfScore);
 
-      {/* Data Table */}
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-6 space-y-4">
-              {Array.from({ length: 10 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
+                            return (
+                              <TableRow key={`${row.employeeId}-${row.reviewPeriod}-${index}`}>
+                                <TableCell className="font-medium">
+                                  {formatPeriod(row.reviewPeriod, row.reviewYear)}
+                                </TableCell>
+                                <TableCell>{row.employeeCode}</TableCell>
+                                <TableCell>{row.fullName}</TableCell>
+                                <TableCell>{row.department}</TableCell>
+                                <TableCell>{row.designation}</TableCell>
+                                <TableCell>{row.reportingManager}</TableCell>
+                                <TableCell>
+                                  <Badge 
+                                    variant="outline" 
+                                    className={STATUS_COLORS[row.status] || 'bg-muted'}
+                                  >
+                                    {STATUS_LABELS[row.status] || row.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right font-medium">
+                                  {row.totalScore.toFixed(1)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {row.outOfScore.toFixed(1)}
+                                </TableCell>
+                                <TableCell className="text-right font-medium">
+                                  {rating.toFixed(2)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <span className={
+                                    percentage >= 80 ? 'text-green-600 dark:text-green-400' :
+                                    percentage >= 60 ? 'text-yellow-600 dark:text-yellow-400' :
+                                    'text-destructive'
+                                  }>
+                                    {percentage.toFixed(2)}%
+                                  </span>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Pagination Controls */}
+                  {filteredData.length > 0 && (
+                    <div className="flex items-center justify-between px-4 py-4 border-t">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span>Rows per page:</span>
+                        <Select value={pageSize.toString()} onValueChange={(v) => setPageSize(parseInt(v))}>
+                          <SelectTrigger className="w-[70px] h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PAGE_SIZE_OPTIONS.map(size => (
+                              <SelectItem key={size} value={size.toString()}>{size}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">
+                          Page {currentPage} of {totalPages}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="comparison" className="space-y-6 mt-6">
+          {/* Employee Selector for Comparison */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Performance Trend Comparison</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-4">
+                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue placeholder="Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {years.map(year => (
+                      <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select 
+                  value={comparisonEmployee || ''} 
+                  onValueChange={setComparisonEmployee}
+                >
+                  <SelectTrigger className="w-[300px]">
+                    <SelectValue placeholder="Select an employee to view trends" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uniqueEmployees.map(emp => (
+                      <SelectItem key={emp.id} value={emp.id}>
+                        {emp.name} ({emp.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Trend Chart */}
+          {comparisonEmployee && comparisonChartData.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  Performance Over Time - {uniqueEmployees.find(e => e.id === comparisonEmployee)?.name}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[400px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={comparisonChartData}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis 
+                        dataKey="period" 
+                        tick={{ fontSize: 12 }}
+                        className="text-muted-foreground"
+                      />
+                      <YAxis 
+                        domain={[0, 100]}
+                        tick={{ fontSize: 12 }}
+                        className="text-muted-foreground"
+                        label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }}
+                      />
+                      <Tooltip 
+                        formatter={(value: number, name: string) => {
+                          if (name === 'percentage') return [`${value.toFixed(2)}%`, 'Score %'];
+                          return [value, name];
+                        }}
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--background))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                        }}
+                      />
+                      <Legend />
+                      <Line 
+                        type="monotone" 
+                        dataKey="percentage" 
+                        stroke="hsl(var(--primary))" 
+                        strokeWidth={2}
+                        dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2 }}
+                        name="Score %"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Period Details Table */}
+                <div className="mt-6">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Period</TableHead>
+                        <TableHead className="text-right">Total Score</TableHead>
+                        <TableHead className="text-right">Out of Score</TableHead>
+                        <TableHead className="text-right">Percentage</TableHead>
+                        <TableHead className="text-right">Change</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {comparisonChartData.map((row, index) => {
+                        const prevRow = index > 0 ? comparisonChartData[index - 1] : null;
+                        const change = prevRow ? row.percentage - prevRow.percentage : 0;
+
+                        return (
+                          <TableRow key={row.period}>
+                            <TableCell className="font-medium">{row.period}</TableCell>
+                            <TableCell className="text-right">{row.score.toFixed(1)}</TableCell>
+                            <TableCell className="text-right">{row.outOf.toFixed(1)}</TableCell>
+                            <TableCell className="text-right">
+                              <span className={
+                                row.percentage >= 80 ? 'text-green-600 dark:text-green-400' :
+                                row.percentage >= 60 ? 'text-yellow-600 dark:text-yellow-400' :
+                                'text-destructive'
+                              }>
+                                {row.percentage.toFixed(2)}%
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {index > 0 ? (
+                                <span className={
+                                  change > 0 ? 'text-green-600 dark:text-green-400' :
+                                  change < 0 ? 'text-destructive' :
+                                  'text-muted-foreground'
+                                }>
+                                  {change > 0 ? '+' : ''}{change.toFixed(2)}%
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Month</TableHead>
-                    <TableHead>Employee ID</TableHead>
-                    <TableHead>Full Name</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead>Designation</TableHead>
-                    <TableHead>Reporting Manager</TableHead>
-                    <TableHead>Review Status</TableHead>
-                    <TableHead className="text-right">Total Score</TableHead>
-                    <TableHead className="text-right">Out of Score</TableHead>
-                    <TableHead className="text-right">Overall Rating</TableHead>
-                    <TableHead className="text-right">Percentage</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredData.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                {comparisonEmployee 
+                  ? 'No trend data available for this employee'
+                  : 'Select an employee to view their performance trends across periods'}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* All Employees Trend Summary */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Employee Trend Overview</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                        No data found for the selected filters
-                      </TableCell>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Department</TableHead>
+                      <TableHead className="text-right">Latest %</TableHead>
+                      <TableHead className="text-center">Trend</TableHead>
+                      <TableHead></TableHead>
                     </TableRow>
-                  ) : (
-                    filteredData.map((row, index) => {
-                      const percentage = row.outOfScore > 0 
-                        ? ((row.totalScore / row.outOfScore) * 100)
+                  </TableHeader>
+                  <TableBody>
+                    {uniqueEmployees.slice(0, 20).map(emp => {
+                      const latestData = performanceData?.find(p => p.employeeId === emp.id);
+                      const trend = getTrendIndicator(emp.id);
+                      const percentage = latestData && latestData.outOfScore > 0
+                        ? (latestData.totalScore / latestData.outOfScore) * 100
                         : 0;
-                      const rating = calculateRating(row.totalScore, row.outOfScore);
 
                       return (
-                        <TableRow key={`${row.employeeId}-${row.reviewPeriod}-${index}`}>
-                          <TableCell className="font-medium">
-                            {formatPeriod(row.reviewPeriod, parseInt(selectedYear))}
-                          </TableCell>
-                          <TableCell>{row.employeeCode}</TableCell>
-                          <TableCell>{row.fullName}</TableCell>
-                          <TableCell>{row.department}</TableCell>
-                          <TableCell>{row.designation}</TableCell>
-                          <TableCell>{row.reportingManager}</TableCell>
-                          <TableCell>
-                            <Badge 
-                              variant="outline" 
-                              className={STATUS_COLORS[row.status] || 'bg-gray-100'}
-                            >
-                              {STATUS_LABELS[row.status] || row.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {row.totalScore.toFixed(1)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {row.outOfScore.toFixed(1)}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {rating.toFixed(2)}
-                          </TableCell>
+                        <TableRow key={emp.id}>
+                          <TableCell className="font-medium">{emp.name}</TableCell>
+                          <TableCell>{latestData?.department || '-'}</TableCell>
                           <TableCell className="text-right">
                             <span className={
                               percentage >= 80 ? 'text-green-600 dark:text-green-400' :
                               percentage >= 60 ? 'text-yellow-600 dark:text-yellow-400' :
-                              'text-red-600 dark:text-red-400'
+                              'text-destructive'
                             }>
-                              {percentage.toFixed(2)}%
+                              {percentage.toFixed(1)}%
                             </span>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {trend ? (
+                              <div className={`inline-flex items-center gap-1 ${trend.color}`}>
+                                <trend.icon className="h-4 w-4" />
+                                <span className="text-xs">{trend.label}</span>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => setComparisonEmployee(emp.id)}
+                            >
+                              View Trend
+                            </Button>
                           </TableCell>
                         </TableRow>
                       );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              {uniqueEmployees.length > 20 && (
+                <p className="text-sm text-muted-foreground text-center mt-4">
+                  Showing first 20 employees. Use the selector above to view specific employees.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
