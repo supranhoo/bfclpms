@@ -17,6 +17,8 @@ export interface EmailNotificationSettings {
   senderName: string;
   senderEmail: string;
   enabledEvents: EmailEventType[];
+  companyLogoUrl: string;
+  customFooterText: string;
 }
 
 const EMAIL_SETTING_KEYS = [
@@ -24,6 +26,8 @@ const EMAIL_SETTING_KEYS = [
   'email_sender_name',
   'email_sender_address',
   'email_notification_events',
+  'email_company_logo_url',
+  'email_custom_footer',
 ];
 
 export function useEmailNotificationSettings() {
@@ -66,6 +70,8 @@ export function useEmailNotificationSettings() {
         senderName: parseStringValue(settingsMap.email_sender_name) || 'PMS Notifications',
         senderEmail: parseStringValue(settingsMap.email_sender_address) || 'onboarding@resend.dev',
         enabledEvents,
+        companyLogoUrl: parseStringValue(settingsMap.email_company_logo_url) || '',
+        customFooterText: parseStringValue(settingsMap.email_custom_footer) || '',
       };
     },
   });
@@ -82,6 +88,8 @@ export function useUpdateEmailSettings() {
         { key: 'email_sender_name', value: settings.senderName },
         { key: 'email_sender_address', value: settings.senderEmail },
         { key: 'email_notification_events', value: settings.enabledEvents },
+        { key: 'email_company_logo_url', value: settings.companyLogoUrl },
+        { key: 'email_custom_footer', value: settings.customFooterText },
       ];
       
       for (const { key, value } of updates) {

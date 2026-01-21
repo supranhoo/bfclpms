@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Mail, Send, Save, AlertCircle } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Mail, Send, Save, AlertCircle, Image } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   useEmailNotificationSettings,
@@ -37,6 +38,8 @@ export function EmailNotificationSettings() {
     senderName: 'PMS Notifications',
     senderEmail: 'onboarding@resend.dev',
     enabledEvents: [],
+    companyLogoUrl: '',
+    customFooterText: '',
   });
   const [testEmail, setTestEmail] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
@@ -149,6 +152,41 @@ export function EmailNotificationSettings() {
           </Alert>
         </div>
         
+        {/* Template Customization */}
+        <div className="space-y-4 p-4 rounded-lg border">
+          <h4 className="font-medium flex items-center gap-2">
+            <Image className="h-4 w-4" />
+            Template Customization
+          </h4>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="logo-url">Company Logo URL</Label>
+              <Input
+                id="logo-url"
+                type="url"
+                value={localSettings.companyLogoUrl}
+                onChange={(e) => handleChange('companyLogoUrl', e.target.value)}
+                placeholder="https://yourcompany.com/logo.png"
+              />
+              <p className="text-sm text-muted-foreground">
+                URL to your company logo (recommended: 200x50px, PNG or SVG)
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="footer-text">Custom Footer Text</Label>
+              <Textarea
+                id="footer-text"
+                value={localSettings.customFooterText}
+                onChange={(e) => handleChange('customFooterText', e.target.value)}
+                placeholder="© 2024 Your Company. All rights reserved."
+                rows={2}
+              />
+              <p className="text-sm text-muted-foreground">
+                Additional text to display in the email footer
+              </p>
+            </div>
+          </div>
+        </div>
         {/* Event Selection */}
         <div className="space-y-4 p-4 rounded-lg border">
           <h4 className="font-medium">Notification Events</h4>
