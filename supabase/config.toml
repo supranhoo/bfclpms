@@ -11,3 +11,6 @@ verify_jwt = true
 
 [functions.auto-rollover-kpis]
 verify_jwt = false
+
+[functions.send-email-notification]
+verify_jwt = false
