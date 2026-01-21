@@ -4,8 +4,10 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScoreSelector } from './ScoreSelector';
+import { QualitativeValueInput } from './QualitativeValueInput';
 import { useScoreCalculationMode } from '@/hooks/useSystemSettings';
 import { calculateRating, RatingLevel } from '@/lib/ratingCalculation';
+import { UomType, QualitativeOption } from '@/lib/qualitativeUom';
 import { Calculator, Check, Edit2 } from 'lucide-react';
 
 interface KpiThresholds {
@@ -22,9 +24,11 @@ interface AchievedValueScoreInputProps {
     target_value: number | null;
     criteria: string | null;
     weightage: number | null;
+    uom_type?: UomType | null;
+    qualitative_options?: QualitativeOption[] | null;
   } & KpiThresholds;
   score: number | null;
-  achievedValue: number | null;
+  achievedValue: number | string | null;
   onScoreChange: (score: number, rating: RatingLevel) => void;
   onAchievedValueChange: (value: number | null) => void;
   disabled?: boolean;
@@ -55,17 +59,34 @@ export function AchievedValueScoreInput({
   label = 'Score',
 }: AchievedValueScoreInputProps) {
   const { mode, isLoading } = useScoreCalculationMode();
+  const uomType = kpi.uom_type || 'numeric';
+  const isQualitative = uomType === 'binary' || uomType === 'tiered';
+  
   const [localAchievedValue, setLocalAchievedValue] = useState<string>(
     achievedValue?.toString() || ''
   );
   const [isOverriding, setIsOverriding] = useState(false);
 
-  // Debug log
-  console.log('AchievedValueScoreInput mode:', mode, 'isLoading:', isLoading);
-
   useEffect(() => {
     setLocalAchievedValue(achievedValue?.toString() || '');
   }, [achievedValue]);
+
+  // For qualitative UOMs, render the qualitative input component
+  if (isQualitative) {
+    return (
+      <QualitativeValueInput
+        uomType={uomType as 'binary' | 'tiered'}
+        qualitativeOptions={kpi.qualitative_options || null}
+        value={typeof achievedValue === 'string' ? achievedValue : null}
+        onChange={(value, rating, ratingLevel) => {
+          // For qualitative, we just update the score - achieved value is stored as string separately
+          onScoreChange(rating, ratingLevel);
+        }}
+        disabled={disabled}
+        label={label}
+      />
+    );
+  }
 
   // Calculate score from achieved value using thresholds
   const calculateScoreFromValue = (value: number | null) => {

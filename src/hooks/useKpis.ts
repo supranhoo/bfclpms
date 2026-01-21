@@ -35,6 +35,9 @@ export interface KPI {
   source_of_data: string | null;
   // Organization-level KPI flag
   is_org_level: boolean;
+  // Qualitative UOM fields
+  uom_type: 'numeric' | 'binary' | 'tiered' | null;
+  qualitative_options: Array<{ label: string; rating: number; definition: string }> | null;
   kra_categories?: {
     id: string;
     name: string;

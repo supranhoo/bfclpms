@@ -306,6 +306,7 @@ export type Database = {
           is_active: boolean | null
           kpi_name: string
           kra_name: string
+          qualitative_options: Json | null
           r0: string | null
           r1: string | null
           r2: string | null
@@ -316,6 +317,7 @@ export type Database = {
           target_value: number | null
           title: string
           uom: string | null
+          uom_type: string | null
           updated_at: string
           weightage: number | null
         }
@@ -331,6 +333,7 @@ export type Database = {
           is_active?: boolean | null
           kpi_name: string
           kra_name: string
+          qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
           r2?: string | null
@@ -341,6 +344,7 @@ export type Database = {
           target_value?: number | null
           title: string
           uom?: string | null
+          uom_type?: string | null
           updated_at?: string
           weightage?: number | null
         }
@@ -356,6 +360,7 @@ export type Database = {
           is_active?: boolean | null
           kpi_name?: string
           kra_name?: string
+          qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
           r2?: string | null
@@ -366,6 +371,7 @@ export type Database = {
           target_value?: number | null
           title?: string
           uom?: string | null
+          uom_type?: string | null
           updated_at?: string
           weightage?: number | null
         }
@@ -390,6 +396,7 @@ export type Database = {
           is_org_level: boolean | null
           kpi_name: string
           kra_name: string
+          qualitative_options: Json | null
           r0: string | null
           r1: string | null
           r2: string | null
@@ -402,6 +409,7 @@ export type Database = {
           status: Database["public"]["Enums"]["review_status"] | null
           target_value: number | null
           uom: string | null
+          uom_type: string | null
           updated_at: string
           weightage: number | null
         }
@@ -415,6 +423,7 @@ export type Database = {
           is_org_level?: boolean | null
           kpi_name: string
           kra_name: string
+          qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
           r2?: string | null
@@ -427,6 +436,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["review_status"] | null
           target_value?: number | null
           uom?: string | null
+          uom_type?: string | null
           updated_at?: string
           weightage?: number | null
         }
@@ -440,6 +450,7 @@ export type Database = {
           is_org_level?: boolean | null
           kpi_name?: string
           kra_name?: string
+          qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
           r2?: string | null
@@ -452,6 +463,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["review_status"] | null
           target_value?: number | null
           uom?: string | null
+          uom_type?: string | null
           updated_at?: string
           weightage?: number | null
         }
@@ -605,6 +617,7 @@ export type Database = {
           id: string
           kpi_name: string
           kra_name: string
+          qualitative_options: Json | null
           r0: string | null
           r1: string | null
           r2: string | null
@@ -615,6 +628,7 @@ export type Database = {
           review_period: string
           review_year: number
           target_value: number | null
+          uom_type: string | null
           updated_at: string
         }
         Insert: {
@@ -627,6 +641,7 @@ export type Database = {
           id?: string
           kpi_name: string
           kra_name: string
+          qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
           r2?: string | null
@@ -637,6 +652,7 @@ export type Database = {
           review_period: string
           review_year: number
           target_value?: number | null
+          uom_type?: string | null
           updated_at?: string
         }
         Update: {
@@ -649,6 +665,7 @@ export type Database = {
           id?: string
           kpi_name?: string
           kra_name?: string
+          qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
           r2?: string | null
@@ -659,6 +676,7 @@ export type Database = {
           review_period?: string
           review_year?: number
           target_value?: number | null
+          uom_type?: string | null
           updated_at?: string
         }
         Relationships: [
