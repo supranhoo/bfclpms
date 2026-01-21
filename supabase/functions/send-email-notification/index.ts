@@ -35,18 +35,38 @@ const getEmailTemplate = (
     resolutionNotes?: string;
     reviewPeriod?: string;
     reviewYear?: number;
-  }
+  },
+  customization: {
+    logoUrl?: string;
+    footerText?: string;
+  } = {}
 ): { subject: string; html: string } => {
+  const logoHtml = customization.logoUrl 
+    ? `<img src="${customization.logoUrl}" alt="Company Logo" style="max-height: 50px; margin-bottom: 15px;" />`
+    : '';
+  
+  const customFooterHtml = customization.footerText 
+    ? `<p style="margin-top: 10px;">${customization.footerText}</p>`
+    : '';
+
   const baseStyle = `
     <style>
       body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #333; }
       .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-      .header { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 30px; border-radius: 8px 8px 0 0; }
+      .header { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 30px; border-radius: 8px 8px 0 0; text-align: center; }
+      .logo { margin-bottom: 15px; }
       .content { background: #f8fafc; padding: 30px; border: 1px solid #e2e8f0; }
       .footer { background: #f1f5f9; padding: 20px; text-align: center; font-size: 12px; color: #64748b; border-radius: 0 0 8px 8px; }
       .button { display: inline-block; background: #6366f1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 20px; }
       .highlight { background: #ede9fe; padding: 15px; border-radius: 6px; margin: 15px 0; }
     </style>
+  `;
+
+  const footerHtml = `
+    <div class="footer">
+      <p>This is an automated notification from the Performance Management System.</p>
+      ${customFooterHtml}
+    </div>
   `;
 
   switch (eventType) {
@@ -57,6 +77,7 @@ const getEmailTemplate = (
           ${baseStyle}
           <div class="container">
             <div class="header">
+              ${logoHtml}
               <h1>📝 Self Review Submitted</h1>
             </div>
             <div class="content">
@@ -69,9 +90,7 @@ const getEmailTemplate = (
               </div>
               <p>Please review and provide your feedback.</p>
             </div>
-            <div class="footer">
-              <p>This is an automated notification from the Performance Management System.</p>
-            </div>
+            ${footerHtml}
           </div>
         `,
       };
@@ -83,6 +102,7 @@ const getEmailTemplate = (
           ${baseStyle}
           <div class="container">
             <div class="header" style="background: linear-gradient(135deg, #10b981, #059669);">
+              ${logoHtml}
               <h1>✅ KPI Approved</h1>
             </div>
             <div class="content">
@@ -94,9 +114,7 @@ const getEmailTemplate = (
               </div>
               <p>The review will now proceed to the next stage.</p>
             </div>
-            <div class="footer">
-              <p>This is an automated notification from the Performance Management System.</p>
-            </div>
+            ${footerHtml}
           </div>
         `,
       };
@@ -108,6 +126,7 @@ const getEmailTemplate = (
           ${baseStyle}
           <div class="container">
             <div class="header" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+              ${logoHtml}
               <h1>🔄 KPI Sent Back</h1>
             </div>
             <div class="content">
@@ -119,9 +138,7 @@ const getEmailTemplate = (
               </div>
               <p>Please review the feedback and update your submission.</p>
             </div>
-            <div class="footer">
-              <p>This is an automated notification from the Performance Management System.</p>
-            </div>
+            ${footerHtml}
           </div>
         `,
       };
@@ -133,6 +150,7 @@ const getEmailTemplate = (
           ${baseStyle}
           <div class="container">
             <div class="header" style="background: linear-gradient(135deg, #f43f5e, #e11d48);">
+              ${logoHtml}
               <h1>❓ Query Raised</h1>
             </div>
             <div class="content">
@@ -144,9 +162,7 @@ const getEmailTemplate = (
               </div>
               <p>Please respond to this query at your earliest convenience.</p>
             </div>
-            <div class="footer">
-              <p>This is an automated notification from the Performance Management System.</p>
-            </div>
+            ${footerHtml}
           </div>
         `,
       };
@@ -158,6 +174,7 @@ const getEmailTemplate = (
           ${baseStyle}
           <div class="container">
             <div class="header" style="background: linear-gradient(135deg, #10b981, #059669);">
+              ${logoHtml}
               <h1>✅ Query Resolved</h1>
             </div>
             <div class="content">
@@ -168,9 +185,7 @@ const getEmailTemplate = (
                 ${data.resolutionNotes ? `<p><strong>Resolution:</strong> ${data.resolutionNotes}</p>` : ''}
               </div>
             </div>
-            <div class="footer">
-              <p>This is an automated notification from the Performance Management System.</p>
-            </div>
+            ${footerHtml}
           </div>
         `,
       };
@@ -182,6 +197,7 @@ const getEmailTemplate = (
           ${baseStyle}
           <div class="container">
             <div class="header" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">
+              ${logoHtml}
               <h1>🎉 KPI Finalized</h1>
             </div>
             <div class="content">
@@ -193,9 +209,7 @@ const getEmailTemplate = (
               </div>
               <p>Thank you for your contribution!</p>
             </div>
-            <div class="footer">
-              <p>This is an automated notification from the Performance Management System.</p>
-            </div>
+            ${footerHtml}
           </div>
         `,
       };
@@ -207,6 +221,7 @@ const getEmailTemplate = (
           ${baseStyle}
           <div class="container">
             <div class="header">
+              ${logoHtml}
               <h1>📋 New KRA Assignment</h1>
             </div>
             <div class="content">
@@ -219,9 +234,7 @@ const getEmailTemplate = (
               </div>
               <p>Please review your new assignment.</p>
             </div>
-            <div class="footer">
-              <p>This is an automated notification from the Performance Management System.</p>
-            </div>
+            ${footerHtml}
           </div>
         `,
       };
@@ -233,6 +246,7 @@ const getEmailTemplate = (
           ${baseStyle}
           <div class="container">
             <div class="header" style="background: linear-gradient(135deg, #64748b, #475569);">
+              ${logoHtml}
               <h1>🔒 Period Locked</h1>
             </div>
             <div class="content">
@@ -240,9 +254,7 @@ const getEmailTemplate = (
               <p>The review period <strong>${data.reviewPeriod} ${data.reviewYear}</strong> has been locked.</p>
               <p>No further changes can be made to KPIs in this period unless unlocked by an administrator.</p>
             </div>
-            <div class="footer">
-              <p>This is an automated notification from the Performance Management System.</p>
-            </div>
+            ${footerHtml}
           </div>
         `,
       };
@@ -254,15 +266,14 @@ const getEmailTemplate = (
           ${baseStyle}
           <div class="container">
             <div class="header">
+              ${logoHtml}
               <h1>📬 Notification</h1>
             </div>
             <div class="content">
               <p>Hi ${data.recipientName},</p>
               <p>You have a new notification in the Performance Management System.</p>
             </div>
-            <div class="footer">
-              <p>This is an automated notification from the Performance Management System.</p>
-            </div>
+            ${footerHtml}
           </div>
         `,
       };
@@ -382,11 +393,11 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    // Get sender settings
+    // Get sender settings and customization
     const { data: settings } = await supabase
       .from("system_settings")
       .select("setting_key, setting_value")
-      .in("setting_key", ["email_sender_name", "email_sender_address"]);
+      .in("setting_key", ["email_sender_name", "email_sender_address", "email_company_logo_url", "email_custom_footer"]);
 
     const settingsMap = Object.fromEntries(
       (settings || []).map((s) => [s.setting_key, s.setting_value])
@@ -394,8 +405,10 @@ const handler = async (req: Request): Promise<Response> => {
 
     const senderName = (settingsMap.email_sender_name || "PMS Notifications").replace(/^"|"$/g, "");
     const senderEmail = (settingsMap.email_sender_address || "onboarding@resend.dev").replace(/^"|"$/g, "");
+    const logoUrl = (settingsMap.email_company_logo_url || "").replace(/^"|"$/g, "");
+    const footerText = (settingsMap.email_custom_footer || "").replace(/^"|"$/g, "");
 
-    // Get email template
+    // Get email template with customization
     const { subject, html } = getEmailTemplate(event_type, {
       recipientName: recipient_name,
       kpiName: kpi_name,
@@ -405,6 +418,9 @@ const handler = async (req: Request): Promise<Response> => {
       resolutionNotes: resolution_notes,
       reviewPeriod: review_period,
       reviewYear: review_year,
+    }, {
+      logoUrl,
+      footerText,
     });
 
     console.log(`Sending ${event_type} email to ${recipient_email}`);
