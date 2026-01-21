@@ -1,0 +1,213 @@
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Mail, Send, Save, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  useEmailNotificationSettings,
+  useUpdateEmailSettings,
+  useSendTestEmail,
+  EmailEventType,
+  EmailNotificationSettings as EmailSettings,
+} from '@/hooks/useEmailNotificationSettings';
+
+const EMAIL_EVENTS: { key: EmailEventType; label: string; description: string }[] = [
+  { key: 'kpi_submitted', label: 'KPI Submission', description: 'Notify manager when employee submits self-review' },
+  { key: 'manager_approved', label: 'Manager Approval', description: 'Notify employee when manager approves KPI' },
+  { key: 'manager_rejected', label: 'Send Back', description: 'Notify employee when KPI is sent back for revision' },
+  { key: 'query_raised', label: 'Query Raised', description: 'Notify recipient when a query is raised' },
+  { key: 'query_resolved', label: 'Query Resolved', description: 'Notify raiser when their query is resolved' },
+  { key: 'final_approved', label: 'Final Approval', description: 'Notify employee when KPI receives final sign-off' },
+  { key: 'kra_assigned', label: 'KRA Assignment', description: 'Notify employee when new KRA is assigned' },
+  { key: 'period_locked', label: 'Period Locked', description: 'Notify when review period is locked' },
+];
+
+export function EmailNotificationSettings() {
+  const { data: settings, isLoading } = useEmailNotificationSettings();
+  const updateSettings = useUpdateEmailSettings();
+  const sendTestEmail = useSendTestEmail();
+  
+  const [localSettings, setLocalSettings] = useState<EmailSettings>({
+    enabled: false,
+    senderName: 'PMS Notifications',
+    senderEmail: 'onboarding@resend.dev',
+    enabledEvents: [],
+  });
+  const [testEmail, setTestEmail] = useState('');
+  const [hasChanges, setHasChanges] = useState(false);
+  
+  useEffect(() => {
+    if (settings) {
+      setLocalSettings(settings);
+    }
+  }, [settings]);
+  
+  const handleChange = <K extends keyof EmailSettings>(key: K, value: EmailSettings[K]) => {
+    setLocalSettings(prev => ({ ...prev, [key]: value }));
+    setHasChanges(true);
+  };
+  
+  const handleEventToggle = (eventKey: EmailEventType, checked: boolean) => {
+    const newEvents = checked
+      ? [...localSettings.enabledEvents, eventKey]
+      : localSettings.enabledEvents.filter(e => e !== eventKey);
+    handleChange('enabledEvents', newEvents);
+  };
+  
+  const handleSave = () => {
+    updateSettings.mutate(localSettings, {
+      onSuccess: () => setHasChanges(false),
+    });
+  };
+  
+  const handleSendTest = () => {
+    if (testEmail) {
+      sendTestEmail.mutate(testEmail);
+    }
+  };
+  
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-4 w-96 mt-2" />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-48 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Mail className="h-5 w-5" />
+          Email Notifications
+        </CardTitle>
+        <CardDescription>
+          Send email alerts in addition to in-app notifications for important workflow events.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Master Toggle */}
+        <div className="flex items-center justify-between p-4 rounded-lg border">
+          <div className="space-y-1">
+            <Label htmlFor="email-enabled" className="text-base font-medium">
+              Enable Email Notifications
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              Send email alerts for selected workflow events
+            </p>
+          </div>
+          <Switch
+            id="email-enabled"
+            checked={localSettings.enabled}
+            onCheckedChange={(checked) => handleChange('enabled', checked)}
+          />
+        </div>
+        
+        {/* Sender Configuration */}
+        <div className="space-y-4 p-4 rounded-lg border">
+          <h4 className="font-medium">Sender Configuration</h4>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="sender-name">Sender Name</Label>
+              <Input
+                id="sender-name"
+                value={localSettings.senderName}
+                onChange={(e) => handleChange('senderName', e.target.value)}
+                placeholder="PMS Notifications"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sender-email">Sender Email</Label>
+              <Input
+                id="sender-email"
+                type="email"
+                value={localSettings.senderEmail}
+                onChange={(e) => handleChange('senderEmail', e.target.value)}
+                placeholder="pms@yourcompany.com"
+              />
+            </div>
+          </div>
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              To use a custom email domain, you must verify it in your Resend dashboard.
+              The default <code>onboarding@resend.dev</code> can only send to verified emails during testing.
+            </AlertDescription>
+          </Alert>
+        </div>
+        
+        {/* Event Selection */}
+        <div className="space-y-4 p-4 rounded-lg border">
+          <h4 className="font-medium">Notification Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Select which events should trigger email notifications
+          </p>
+          <div className="space-y-3">
+            {EMAIL_EVENTS.map((event) => (
+              <div key={event.key} className="flex items-start space-x-3">
+                <Checkbox
+                  id={event.key}
+                  checked={localSettings.enabledEvents.includes(event.key)}
+                  onCheckedChange={(checked) => handleEventToggle(event.key, checked === true)}
+                />
+                <div className="space-y-1">
+                  <Label htmlFor={event.key} className="font-medium cursor-pointer">
+                    {event.label}
+                  </Label>
+                  <p className="text-sm text-muted-foreground">{event.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        {/* Test Email */}
+        <div className="space-y-4 p-4 rounded-lg border">
+          <h4 className="font-medium">Test Configuration</h4>
+          <div className="flex gap-3">
+            <Input
+              type="email"
+              value={testEmail}
+              onChange={(e) => setTestEmail(e.target.value)}
+              placeholder="Enter email to receive test"
+              className="max-w-sm"
+            />
+            <Button
+              variant="outline"
+              onClick={handleSendTest}
+              disabled={!testEmail || sendTestEmail.isPending}
+            >
+              <Send className="h-4 w-4 mr-2" />
+              {sendTestEmail.isPending ? 'Sending...' : 'Send Test'}
+            </Button>
+          </div>
+        </div>
+        
+        {/* Save Button */}
+        <div className="flex justify-end border-t pt-4">
+          <Button
+            onClick={handleSave}
+            disabled={!hasChanges || updateSettings.isPending}
+            className="gap-2"
+          >
+            <Save className="h-4 w-4" />
+            {updateSettings.isPending ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

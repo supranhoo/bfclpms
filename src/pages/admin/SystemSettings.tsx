@@ -9,7 +9,7 @@ import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, User
 import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useTriggerRollover } from '@/hooks/useSystemSettings';
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-
+import { EmailNotificationSettings } from '@/components/admin/EmailNotificationSettings';
 const scoreCalculationOptions: { 
   value: ScoreCalculationMode; 
   label: string; 
@@ -255,6 +255,9 @@ export default function SystemSettings() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Email Notifications Card */}
+        <EmailNotificationSettings />
       </div>
     </div>
   );
