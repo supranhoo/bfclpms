@@ -1365,6 +1365,7 @@ export default function ImportData() {
                         <TableHead>Code</TableHead>
                         <TableHead>Name</TableHead>
                         <TableHead>Email</TableHead>
+                        <TableHead>Role</TableHead>
                         <TableHead>Designation</TableHead>
                         <TableHead>Division</TableHead>
                         <TableHead>Business Unit</TableHead>
@@ -1380,6 +1381,17 @@ export default function ImportData() {
                           <TableCell>{row.employeeCode}</TableCell>
                           <TableCell>{row.fullName}</TableCell>
                           <TableCell>{row.email}</TableCell>
+                          <TableCell>
+                            <Badge variant={
+                              row.role === 'admin' ? 'destructive' :
+                              row.role === 'auditor' ? 'secondary' :
+                              row.role === 'manager' ? 'default' :
+                              row.role === 'management' ? 'outline' :
+                              'secondary'
+                            }>
+                              {normalizeRole(row.role)}
+                            </Badge>
+                          </TableCell>
                           <TableCell>{row.designation || '-'}</TableCell>
                           <TableCell>{row.division || '-'}</TableCell>
                           <TableCell>{row.businessUnit || '-'}</TableCell>
