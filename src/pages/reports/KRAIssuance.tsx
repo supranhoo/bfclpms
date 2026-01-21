@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { FileText, CheckCircle2, Clock, AlertCircle, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
@@ -84,16 +85,17 @@ export default function KRAIssuance() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">KRA Issuance Report</h1>
-          <p className="text-muted-foreground">Track KPI issuance and completion status</p>
-        </div>
-        <Button variant="outline" onClick={handleExportExcel}>
-          <Download className="h-4 w-4 mr-2" />
-          Export Excel
-        </Button>
-      </div>
+      <PageHeader
+        title="KRA Issuance Report"
+        description="Track KPI issuance and completion status"
+        backTo="/reports"
+        actions={
+          <Button variant="outline" onClick={handleExportExcel}>
+            <Download className="h-4 w-4 mr-2" />
+            Export Excel
+          </Button>
+        }
+      />
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>

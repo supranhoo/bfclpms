@@ -1,9 +1,10 @@
 import { useMemo, useCallback } from 'react';
 import { useAllKpis, useReviewSubmissions } from '@/hooks/useKpis';
 import { useProfiles, useKraCategories } from '@/hooks/useOrganization';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { BarChart3, Users, Target, TrendingUp, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -85,16 +86,17 @@ export default function PerformanceReport() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Performance Report</h1>
-          <p className="text-muted-foreground">Organization-wide performance analytics</p>
-        </div>
-        <Button variant="outline" onClick={handleExportExcel}>
-          <Download className="h-4 w-4 mr-2" />
-          Export Excel
-        </Button>
-      </div>
+      <PageHeader
+        title="Performance Report"
+        description="Organization-wide performance analytics"
+        backTo="/reports"
+        actions={
+          <Button variant="outline" onClick={handleExportExcel}>
+            <Download className="h-4 w-4 mr-2" />
+            Export Excel
+          </Button>
+        }
+      />
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>

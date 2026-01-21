@@ -8,9 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Download, Search, ClipboardList, CheckCircle2, AlertTriangle, Edit, ArrowLeft } from 'lucide-react';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { Download, Search, ClipboardList, CheckCircle2, AlertTriangle, Edit } from 'lucide-react';
 import { format } from 'date-fns';
-import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 
 interface AuditLog {
@@ -62,7 +62,6 @@ const actionColors: Record<string, string> = {
 };
 
 export default function AuditTrailReport() {
-  const navigate = useNavigate();
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const [selectedAction, setSelectedAction] = useState<string>('all');
@@ -215,22 +214,17 @@ export default function AuditTrailReport() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/reports')}>
-            <ArrowLeft className="h-4 w-4" />
+      <PageHeader
+        title="Audit Trail Report"
+        description="Complete history of all KPI modifications and approvals"
+        backTo="/reports"
+        actions={
+          <Button onClick={handleExport} className="gap-2">
+            <Download className="h-4 w-4" />
+            Export Excel
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Audit Trail Report</h1>
-            <p className="text-muted-foreground">Complete history of all KPI modifications and approvals</p>
-          </div>
-        </div>
-        <Button onClick={handleExport} className="gap-2">
-          <Download className="h-4 w-4" />
-          Export Excel
-        </Button>
-      </div>
+        }
+      />
 
       {/* Statistics Cards */}
       <div className="grid gap-4 md:grid-cols-4">

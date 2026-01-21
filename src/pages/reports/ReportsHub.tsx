@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { 
   BarChart3, 
   FileText, 
@@ -91,12 +91,11 @@ export default function ReportsHub() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Reports</h1>
-        <p className="text-muted-foreground">
-          Access comprehensive analytics and insights across all performance metrics
-        </p>
-      </div>
+      <PageHeader
+        title="Reports"
+        description="Access comprehensive analytics and insights across all performance metrics"
+        backTo="/"
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {reports.map((report) => (
