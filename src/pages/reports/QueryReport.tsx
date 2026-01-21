@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { AlertTriangle, CheckCircle, Clock, Download, MessageSquare } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import * as XLSX from 'xlsx';
@@ -118,16 +119,17 @@ export default function QueryReport() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Query & Issues Report</h1>
-          <p className="text-muted-foreground">Track all queries raised during the review process</p>
-        </div>
-        <Button variant="outline" onClick={handleExportExcel}>
-          <Download className="h-4 w-4 mr-2" />
-          Export Excel
-        </Button>
-      </div>
+      <PageHeader
+        title="Query & Issues Report"
+        description="Track all queries raised during the review process"
+        backTo="/reports"
+        actions={
+          <Button variant="outline" onClick={handleExportExcel}>
+            <Download className="h-4 w-4 mr-2" />
+            Export Excel
+          </Button>
+        }
+      />
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-4">

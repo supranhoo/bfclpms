@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { Building2, Download, Users, Target, TrendingUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
@@ -118,16 +119,17 @@ export default function DepartmentReport() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Department Summary Report</h1>
-          <p className="text-muted-foreground">KPI status and completion rates by department</p>
-        </div>
-        <Button variant="outline" onClick={handleExportExcel}>
-          <Download className="h-4 w-4 mr-2" />
-          Export Excel
-        </Button>
-      </div>
+      <PageHeader
+        title="Department Summary Report"
+        description="KPI status and completion rates by department"
+        backTo="/reports"
+        actions={
+          <Button variant="outline" onClick={handleExportExcel}>
+            <Download className="h-4 w-4 mr-2" />
+            Export Excel
+          </Button>
+        }
+      />
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-4">

@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { Download, Search, FileSpreadsheet, Users, Target, TrendingUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -293,18 +294,17 @@ export default function MonthlyScorecardReport() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Monthly Scorecard Report</h1>
-          <p className="text-muted-foreground">
-            Employee performance scorecards for {selectedPeriod} {selectedYear}
-          </p>
-        </div>
-        <Button onClick={handleExportExcel} className="gap-2">
-          <Download className="h-4 w-4" />
-          Export Excel
-        </Button>
-      </div>
+      <PageHeader
+        title="Monthly Scorecard Report"
+        description={`Employee performance scorecards for ${selectedPeriod} ${selectedYear}`}
+        backTo="/reports"
+        actions={
+          <Button onClick={handleExportExcel} className="gap-2">
+            <Download className="h-4 w-4" />
+            Export Excel
+          </Button>
+        }
+      />
 
       {/* Filters */}
       <Card>
