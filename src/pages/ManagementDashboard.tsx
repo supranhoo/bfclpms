@@ -10,6 +10,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
+import { useKpiFilters } from '@/hooks/useKpiFilters';
+import { KpiFilterBar } from '@/components/ui/KpiFilterBar';
 import { 
   Users, 
   Target, 
@@ -77,6 +79,20 @@ export default function ManagementDashboard() {
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
   const [selectedPeriod, setSelectedPeriod] = useState('all');
 
+  // Use the KPI filters hook for hierarchical filtering
+  const {
+    filters,
+    updateFilter,
+    resetFilters,
+    divisions,
+    businessUnits,
+    departments,
+    managers,
+    employees,
+    filteredEmployeeIds,
+    isLoading: filtersLoading,
+  } = useKpiFilters();
+
   // Fetch review periods
   const { data: reviewPeriods } = useQuery({
     queryKey: ['review-periods', selectedYear],
@@ -92,8 +108,8 @@ export default function ManagementDashboard() {
   });
 
   // Fetch comprehensive dashboard stats
-  const { data: dashboardData, isLoading } = useQuery({
-    queryKey: ['management-dashboard', selectedYear, selectedPeriod],
+  const { data: dashboardData, isLoading: dataLoading } = useQuery({
+    queryKey: ['management-dashboard', selectedYear, selectedPeriod, filteredEmployeeIds],
     queryFn: async () => {
       const year = parseInt(selectedYear);
 
@@ -129,6 +145,11 @@ export default function ManagementDashboard() {
 
             if (selectedPeriod !== 'all') {
               query = query.eq('review_period', selectedPeriod);
+            }
+
+            // Apply employee filter if filters are active
+            if (filteredEmployeeIds.length > 0) {
+              query = query.in('employee_id', filteredEmployeeIds);
             }
 
             const { data, error } = await query;
@@ -327,6 +348,8 @@ export default function ManagementDashboard() {
     return RATING_COLORS.poor;
   };
 
+  const isLoading = filtersLoading || dataLoading;
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -386,6 +409,25 @@ export default function ManagementDashboard() {
           </div>
         }
       />
+
+      {/* Hierarchical Filters */}
+      <Card>
+        <CardContent className="pt-6">
+          <KpiFilterBar
+            filters={filters}
+            updateFilter={updateFilter}
+            resetFilters={resetFilters}
+            divisions={divisions}
+            businessUnits={businessUnits}
+            departments={departments}
+            managers={managers}
+            employees={employees}
+            showCategoryFilter={false}
+            showStatusFilter={false}
+            isLoading={filtersLoading}
+          />
+        </CardContent>
+      </Card>
 
       {/* Key Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
