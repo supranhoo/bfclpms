@@ -10,6 +10,7 @@ import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, 
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { EmailNotificationSettings } from '@/components/admin/EmailNotificationSettings';
+import { EmailTemplateEditor } from '@/components/admin/EmailTemplateEditor';
 const scoreCalculationOptions: { 
   value: ScoreCalculationMode; 
   label: string; 
@@ -258,6 +259,9 @@ export default function SystemSettings() {
 
         {/* Email Notifications Card */}
         <EmailNotificationSettings />
+
+        {/* Email Templates Card */}
+        <EmailTemplateEditor />
       </div>
     </div>
   );

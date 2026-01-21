@@ -9,275 +9,175 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface EmailRequest {
-  notification_id?: string;
-  event_type: string;
-  recipient_email: string;
-  recipient_name: string;
-  subject: string;
-  html_content: string;
-}
-
 interface TestEmailRequest {
   test: true;
   recipient_email: string;
 }
 
-// Email templates for different notification types
-const getEmailTemplate = (
-  eventType: string,
-  data: {
-    recipientName: string;
-    kpiName?: string;
-    kraName?: string;
-    actorName?: string;
-    queryReason?: string;
-    resolutionNotes?: string;
-    reviewPeriod?: string;
-    reviewYear?: number;
+// Default templates for each event type
+const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }> = {
+  kpi_submitted: {
+    subject: '[PMS] New KPI Submitted for Review - {{actor_name}}',
+    body: `Hi {{recipient_name}},
+
+{{actor_name}} has submitted their self-review for:
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
+
+Please review and provide your feedback.`,
   },
+  manager_approved: {
+    subject: '[PMS] Your KPI Has Been Approved',
+    body: `Hi {{recipient_name}},
+
+Great news! Your KPI has been approved by your manager.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+
+The review will now proceed to the next stage.`,
+  },
+  manager_rejected: {
+    subject: '[PMS] Action Required: KPI Sent Back for Revision',
+    body: `Hi {{recipient_name}},
+
+Your manager has sent back your KPI for revision.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+
+Please review the feedback and update your submission.`,
+  },
+  query_raised: {
+    subject: '[PMS] New Query Raised on Your KPI',
+    body: `Hi {{recipient_name}},
+
+{{actor_name}} has raised a query on your KPI.
+
+KPI: {{kpi_name}}
+Query: {{query_reason}}
+
+Please respond to this query at your earliest convenience.`,
+  },
+  query_resolved: {
+    subject: '[PMS] Your Query Has Been Resolved',
+    body: `Hi {{recipient_name}},
+
+Your query has been resolved by {{actor_name}}.
+
+KPI: {{kpi_name}}
+Resolution: {{resolution_notes}}`,
+  },
+  final_approved: {
+    subject: '[PMS] 🎉 Your KPI Has Been Finalized',
+    body: `Hi {{recipient_name}},
+
+Congratulations! Your KPI has received final approval and is now complete.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+
+Thank you for your contribution!`,
+  },
+  kra_assigned: {
+    subject: '[PMS] New KRA Assigned to You',
+    body: `Hi {{recipient_name}},
+
+A new KRA has been assigned to you.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
+
+Please review your new assignment.`,
+  },
+  period_locked: {
+    subject: '[PMS] Review Period Has Been Locked',
+    body: `Hi {{recipient_name}},
+
+The review period {{review_period}} {{review_year}} has been locked.
+
+No further changes can be made to KPIs in this period unless unlocked by an administrator.`,
+  },
+};
+
+const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string }> = {
+  kpi_submitted: { color: '#6366f1', emoji: '📝', title: 'Self Review Submitted' },
+  manager_approved: { color: '#10b981', emoji: '✅', title: 'KPI Approved' },
+  manager_rejected: { color: '#f59e0b', emoji: '🔄', title: 'KPI Sent Back' },
+  query_raised: { color: '#f43f5e', emoji: '❓', title: 'Query Raised' },
+  query_resolved: { color: '#10b981', emoji: '✅', title: 'Query Resolved' },
+  final_approved: { color: '#6366f1', emoji: '🎉', title: 'KPI Finalized' },
+  kra_assigned: { color: '#6366f1', emoji: '📋', title: 'New KRA Assignment' },
+  period_locked: { color: '#64748b', emoji: '🔒', title: 'Period Locked' },
+};
+
+// Replace placeholders in template
+const replacePlaceholders = (
+  template: string,
+  data: Record<string, string | number | undefined>
+): string => {
+  let result = template;
+  for (const [key, value] of Object.entries(data)) {
+    result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(value || 'N/A'));
+  }
+  return result;
+};
+
+// Build HTML email from template
+const buildEmailHtml = (
+  eventType: string,
+  body: string,
   customization: {
     logoUrl?: string;
     footerText?: string;
-  } = {}
-): { subject: string; html: string } => {
+  }
+): string => {
+  const style = EVENT_STYLES[eventType] || { color: '#6366f1', emoji: '📬', title: 'Notification' };
   const logoHtml = customization.logoUrl 
     ? `<img src="${customization.logoUrl}" alt="Company Logo" style="max-height: 50px; margin-bottom: 15px;" />`
     : '';
-  
   const customFooterHtml = customization.footerText 
     ? `<p style="margin-top: 10px;">${customization.footerText}</p>`
     : '';
 
-  const baseStyle = `
-    <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #333; }
-      .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-      .header { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 30px; border-radius: 8px 8px 0 0; text-align: center; }
-      .logo { margin-bottom: 15px; }
-      .content { background: #f8fafc; padding: 30px; border: 1px solid #e2e8f0; }
-      .footer { background: #f1f5f9; padding: 20px; text-align: center; font-size: 12px; color: #64748b; border-radius: 0 0 8px 8px; }
-      .button { display: inline-block; background: #6366f1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 20px; }
-      .highlight { background: #ede9fe; padding: 15px; border-radius: 6px; margin: 15px 0; }
-    </style>
+  // Convert newlines in body to HTML
+  const htmlBody = body.split('\n').map(line => {
+    if (line.trim() === '') return '<br/>';
+    return `<p>${line}</p>`;
+  }).join('');
+
+  return `
+    <html>
+    <head>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, ${style.color}, ${style.color}dd); color: white; padding: 30px; border-radius: 8px 8px 0 0; text-align: center; }
+        .content { background: #f8fafc; padding: 30px; border: 1px solid #e2e8f0; }
+        .content p { margin: 0 0 10px 0; }
+        .footer { background: #f1f5f9; padding: 20px; text-align: center; font-size: 12px; color: #64748b; border-radius: 0 0 8px 8px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          ${logoHtml}
+          <h1>${style.emoji} ${style.title}</h1>
+        </div>
+        <div class="content">
+          ${htmlBody}
+        </div>
+        <div class="footer">
+          <p>This is an automated notification from the Performance Management System.</p>
+          ${customFooterHtml}
+        </div>
+      </div>
+    </body>
+    </html>
   `;
-
-  const footerHtml = `
-    <div class="footer">
-      <p>This is an automated notification from the Performance Management System.</p>
-      ${customFooterHtml}
-    </div>
-  `;
-
-  switch (eventType) {
-    case 'kpi_submitted':
-      return {
-        subject: `[PMS] New KPI Submitted for Review - ${data.actorName || 'Employee'}`,
-        html: `
-          ${baseStyle}
-          <div class="container">
-            <div class="header">
-              ${logoHtml}
-              <h1>📝 Self Review Submitted</h1>
-            </div>
-            <div class="content">
-              <p>Hi ${data.recipientName},</p>
-              <p><strong>${data.actorName || 'An employee'}</strong> has submitted their self-review for:</p>
-              <div class="highlight">
-                <p><strong>KRA:</strong> ${data.kraName || 'N/A'}</p>
-                <p><strong>KPI:</strong> ${data.kpiName || 'N/A'}</p>
-                <p><strong>Period:</strong> ${data.reviewPeriod || ''} ${data.reviewYear || ''}</p>
-              </div>
-              <p>Please review and provide your feedback.</p>
-            </div>
-            ${footerHtml}
-          </div>
-        `,
-      };
-
-    case 'manager_approved':
-      return {
-        subject: `[PMS] Your KPI Has Been Approved`,
-        html: `
-          ${baseStyle}
-          <div class="container">
-            <div class="header" style="background: linear-gradient(135deg, #10b981, #059669);">
-              ${logoHtml}
-              <h1>✅ KPI Approved</h1>
-            </div>
-            <div class="content">
-              <p>Hi ${data.recipientName},</p>
-              <p>Great news! Your KPI has been approved by your manager.</p>
-              <div class="highlight">
-                <p><strong>KRA:</strong> ${data.kraName || 'N/A'}</p>
-                <p><strong>KPI:</strong> ${data.kpiName || 'N/A'}</p>
-              </div>
-              <p>The review will now proceed to the next stage.</p>
-            </div>
-            ${footerHtml}
-          </div>
-        `,
-      };
-
-    case 'manager_rejected':
-      return {
-        subject: `[PMS] Action Required: KPI Sent Back for Revision`,
-        html: `
-          ${baseStyle}
-          <div class="container">
-            <div class="header" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
-              ${logoHtml}
-              <h1>🔄 KPI Sent Back</h1>
-            </div>
-            <div class="content">
-              <p>Hi ${data.recipientName},</p>
-              <p>Your manager has sent back your KPI for revision.</p>
-              <div class="highlight">
-                <p><strong>KRA:</strong> ${data.kraName || 'N/A'}</p>
-                <p><strong>KPI:</strong> ${data.kpiName || 'N/A'}</p>
-              </div>
-              <p>Please review the feedback and update your submission.</p>
-            </div>
-            ${footerHtml}
-          </div>
-        `,
-      };
-
-    case 'query_raised':
-      return {
-        subject: `[PMS] New Query Raised on Your KPI`,
-        html: `
-          ${baseStyle}
-          <div class="container">
-            <div class="header" style="background: linear-gradient(135deg, #f43f5e, #e11d48);">
-              ${logoHtml}
-              <h1>❓ Query Raised</h1>
-            </div>
-            <div class="content">
-              <p>Hi ${data.recipientName},</p>
-              <p><strong>${data.actorName || 'Someone'}</strong> has raised a query on your KPI.</p>
-              <div class="highlight">
-                <p><strong>KPI:</strong> ${data.kpiName || 'N/A'}</p>
-                <p><strong>Query:</strong> ${data.queryReason || 'N/A'}</p>
-              </div>
-              <p>Please respond to this query at your earliest convenience.</p>
-            </div>
-            ${footerHtml}
-          </div>
-        `,
-      };
-
-    case 'query_resolved':
-      return {
-        subject: `[PMS] Your Query Has Been Resolved`,
-        html: `
-          ${baseStyle}
-          <div class="container">
-            <div class="header" style="background: linear-gradient(135deg, #10b981, #059669);">
-              ${logoHtml}
-              <h1>✅ Query Resolved</h1>
-            </div>
-            <div class="content">
-              <p>Hi ${data.recipientName},</p>
-              <p>Your query has been resolved by <strong>${data.actorName || 'the recipient'}</strong>.</p>
-              <div class="highlight">
-                <p><strong>KPI:</strong> ${data.kpiName || 'N/A'}</p>
-                ${data.resolutionNotes ? `<p><strong>Resolution:</strong> ${data.resolutionNotes}</p>` : ''}
-              </div>
-            </div>
-            ${footerHtml}
-          </div>
-        `,
-      };
-
-    case 'final_approved':
-      return {
-        subject: `[PMS] 🎉 Your KPI Has Been Finalized`,
-        html: `
-          ${baseStyle}
-          <div class="container">
-            <div class="header" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">
-              ${logoHtml}
-              <h1>🎉 KPI Finalized</h1>
-            </div>
-            <div class="content">
-              <p>Hi ${data.recipientName},</p>
-              <p>Congratulations! Your KPI has received final approval and is now complete.</p>
-              <div class="highlight">
-                <p><strong>KRA:</strong> ${data.kraName || 'N/A'}</p>
-                <p><strong>KPI:</strong> ${data.kpiName || 'N/A'}</p>
-              </div>
-              <p>Thank you for your contribution!</p>
-            </div>
-            ${footerHtml}
-          </div>
-        `,
-      };
-
-    case 'kra_assigned':
-      return {
-        subject: `[PMS] New KRA Assigned to You`,
-        html: `
-          ${baseStyle}
-          <div class="container">
-            <div class="header">
-              ${logoHtml}
-              <h1>📋 New KRA Assignment</h1>
-            </div>
-            <div class="content">
-              <p>Hi ${data.recipientName},</p>
-              <p>A new KRA has been assigned to you.</p>
-              <div class="highlight">
-                <p><strong>KRA:</strong> ${data.kraName || 'N/A'}</p>
-                <p><strong>KPI:</strong> ${data.kpiName || 'N/A'}</p>
-                <p><strong>Period:</strong> ${data.reviewPeriod || ''} ${data.reviewYear || ''}</p>
-              </div>
-              <p>Please review your new assignment.</p>
-            </div>
-            ${footerHtml}
-          </div>
-        `,
-      };
-
-    case 'period_locked':
-      return {
-        subject: `[PMS] Review Period Has Been Locked`,
-        html: `
-          ${baseStyle}
-          <div class="container">
-            <div class="header" style="background: linear-gradient(135deg, #64748b, #475569);">
-              ${logoHtml}
-              <h1>🔒 Period Locked</h1>
-            </div>
-            <div class="content">
-              <p>Hi ${data.recipientName},</p>
-              <p>The review period <strong>${data.reviewPeriod} ${data.reviewYear}</strong> has been locked.</p>
-              <p>No further changes can be made to KPIs in this period unless unlocked by an administrator.</p>
-            </div>
-            ${footerHtml}
-          </div>
-        `,
-      };
-
-    default:
-      return {
-        subject: `[PMS] Notification`,
-        html: `
-          ${baseStyle}
-          <div class="container">
-            <div class="header">
-              ${logoHtml}
-              <h1>📬 Notification</h1>
-            </div>
-            <div class="content">
-              <p>Hi ${data.recipientName},</p>
-              <p>You have a new notification in the Performance Management System.</p>
-            </div>
-            ${footerHtml}
-          </div>
-        `,
-      };
-  }
 };
 
 const handler = async (req: Request): Promise<Response> => {
@@ -302,7 +202,7 @@ const handler = async (req: Request): Promise<Response> => {
       const { data: settings } = await supabase
         .from("system_settings")
         .select("setting_key, setting_value")
-        .in("setting_key", ["email_sender_name", "email_sender_address"]);
+        .in("setting_key", ["email_sender_name", "email_sender_address", "email_company_logo_url", "email_custom_footer"]);
 
       const settingsMap = Object.fromEntries(
         (settings || []).map((s) => [s.setting_key, s.setting_value])
@@ -310,25 +210,15 @@ const handler = async (req: Request): Promise<Response> => {
 
       const senderName = (settingsMap.email_sender_name || "PMS Notifications").replace(/^"|"$/g, "");
       const senderEmail = (settingsMap.email_sender_address || "onboarding@resend.dev").replace(/^"|"$/g, "");
+      const logoUrl = (settingsMap.email_company_logo_url || "").replace(/^"|"$/g, "");
+      const footerText = (settingsMap.email_custom_footer || "").replace(/^"|"$/g, "");
 
-      const testHtml = `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 30px; border-radius: 8px 8px 0 0; text-align: center;">
-            <h1>🎉 Test Email Successful!</h1>
-          </div>
-          <div style="background: #f8fafc; padding: 30px; border: 1px solid #e2e8f0;">
-            <p>This is a test email from the Performance Management System.</p>
-            <p>If you received this email, your email notification configuration is working correctly!</p>
-            <div style="background: #ede9fe; padding: 15px; border-radius: 6px; margin: 15px 0;">
-              <p><strong>Sender Name:</strong> ${senderName}</p>
-              <p><strong>Sender Email:</strong> ${senderEmail}</p>
-            </div>
-          </div>
-          <div style="background: #f1f5f9; padding: 20px; text-align: center; font-size: 12px; color: #64748b; border-radius: 0 0 8px 8px;">
-            <p>This is an automated test notification from the Performance Management System.</p>
-          </div>
-        </div>
-      `;
+      const testHtml = buildEmailHtml('kpi_submitted', `This is a test email from the Performance Management System.
+
+If you received this email, your email notification configuration is working correctly!
+
+Sender Name: ${senderName}
+Sender Email: ${senderEmail}`, { logoUrl, footerText });
 
       console.log(`Sending test email to ${recipient_email} from ${senderName} <${senderEmail}>`);
 
@@ -348,7 +238,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Handle notification-triggered email
-    const { notification_id, event_type, recipient_email, recipient_name, kpi_name, kra_name, actor_name, query_reason, resolution_notes, review_period, review_year } = body;
+    const { event_type, recipient_email, recipient_name, kpi_name, kra_name, actor_name, query_reason, resolution_notes, review_period, review_year } = body;
 
     // Check if email notifications are enabled
     const { data: enabledSetting } = await supabase
@@ -397,7 +287,7 @@ const handler = async (req: Request): Promise<Response> => {
     const { data: settings } = await supabase
       .from("system_settings")
       .select("setting_key, setting_value")
-      .in("setting_key", ["email_sender_name", "email_sender_address", "email_company_logo_url", "email_custom_footer"]);
+      .in("setting_key", ["email_sender_name", "email_sender_address", "email_company_logo_url", "email_custom_footer", `email_template_${event_type}`]);
 
     const settingsMap = Object.fromEntries(
       (settings || []).map((s) => [s.setting_key, s.setting_value])
@@ -408,20 +298,36 @@ const handler = async (req: Request): Promise<Response> => {
     const logoUrl = (settingsMap.email_company_logo_url || "").replace(/^"|"$/g, "");
     const footerText = (settingsMap.email_custom_footer || "").replace(/^"|"$/g, "");
 
-    // Get email template with customization
-    const { subject, html } = getEmailTemplate(event_type, {
-      recipientName: recipient_name,
-      kpiName: kpi_name,
-      kraName: kra_name,
-      actorName: actor_name,
-      queryReason: query_reason,
-      resolutionNotes: resolution_notes,
-      reviewPeriod: review_period,
-      reviewYear: review_year,
-    }, {
-      logoUrl,
-      footerText,
-    });
+    // Get template (custom or default)
+    let template = DEFAULT_TEMPLATES[event_type] || DEFAULT_TEMPLATES.kpi_submitted;
+    const customTemplate = settingsMap[`email_template_${event_type}`];
+    if (customTemplate) {
+      try {
+        const parsed = typeof customTemplate === 'string' ? JSON.parse(customTemplate) : customTemplate;
+        if (parsed.subject && parsed.body) {
+          template = parsed;
+        }
+      } catch {
+        // Use default template
+      }
+    }
+
+    // Prepare placeholder data
+    const placeholderData: Record<string, string | number | undefined> = {
+      recipient_name,
+      actor_name,
+      kra_name,
+      kpi_name,
+      review_period,
+      review_year,
+      query_reason,
+      resolution_notes,
+    };
+
+    // Replace placeholders in subject and body
+    const subject = replacePlaceholders(template.subject, placeholderData);
+    const bodyContent = replacePlaceholders(template.body, placeholderData);
+    const html = buildEmailHtml(event_type, bodyContent, { logoUrl, footerText });
 
     console.log(`Sending ${event_type} email to ${recipient_email}`);
 
