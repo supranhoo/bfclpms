@@ -60,8 +60,8 @@ export function LoginSlideshow({
               style={{ backgroundImage: `url(${url})` }}
             />
           ))}
-          {/* Overlay gradient - lighter for better wallpaper visibility */}
-          <div className="absolute inset-0 bg-gradient-to-r from-background/85 via-background/40 to-transparent" />
+          {/* Overlay gradient - lighter for better wallpaper visibility, from right */}
+          <div className="absolute inset-0 bg-gradient-to-l from-background/85 via-background/40 to-transparent" />
         </>
       ) : (
         /* Default animated gradient background */
@@ -73,9 +73,12 @@ export function LoginSlideshow({
         </div>
       )}
 
-      {/* Content overlay - left-aligned strip */}
+      {/* Content overlay - right-aligned strip */}
       <div className="relative z-10 h-full flex">
-        {/* Left content strip */}
+        {/* Left side: Empty - wallpaper shows through */}
+        <div className="flex-1" />
+        
+        {/* Right content strip */}
         <div className="w-2/5 max-w-md h-full flex flex-col justify-between p-8 lg:p-12">
           {/* Top: Logo and branding */}
           <div className="flex items-center gap-3">
@@ -185,9 +188,6 @@ export function LoginSlideshow({
             <div />
           )}
         </div>
-        
-        {/* Right side: Empty - wallpaper shows through */}
-        <div className="flex-1" />
       </div>
     </div>
   );
