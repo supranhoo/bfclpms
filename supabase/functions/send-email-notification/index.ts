@@ -101,6 +101,43 @@ The review period {{review_period}} {{review_year}} has been locked.
 
 No further changes can be made to KPIs in this period unless unlocked by an administrator.`,
   },
+  pip_initiated: {
+    subject: '[PMS] Performance Improvement Plan Notification',
+    body: `Hi {{recipient_name}},
+
+You have been placed on a Performance Improvement Plan (PIP).
+
+Start Date: {{pip_start_date}}
+End Date: {{pip_end_date}}
+Reason: {{pip_reason}}
+
+Please check your email or contact HR for the formal PIP letter with detailed information about the improvement areas, milestones, and expectations.
+
+We encourage you to take this opportunity seriously and work towards meeting the improvement goals.`,
+  },
+  pip_milestone_reminder: {
+    subject: '[PMS] PIP Milestone Check-in Reminder',
+    body: `Hi {{recipient_name}},
+
+This is a reminder that you have an upcoming PIP milestone check-in.
+
+Milestone Date: {{milestone_date}}
+Description: {{milestone_description}}
+Expected Outcome: {{milestone_expected_outcome}}
+
+Please prepare for your check-in meeting with your manager.`,
+  },
+  pip_completed: {
+    subject: '[PMS] 🎉 Performance Improvement Plan Completed',
+    body: `Hi {{recipient_name}},
+
+Congratulations! Your Performance Improvement Plan has been successfully completed.
+
+Outcome: {{pip_outcome}}
+Remarks: {{pip_remarks}}
+
+Thank you for your dedication and hard work during this period. We appreciate your commitment to improvement.`,
+  },
 };
 
 const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string }> = {
@@ -112,6 +149,9 @@ const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string
   final_approved: { color: '#6366f1', emoji: '🎉', title: 'KPI Finalized' },
   kra_assigned: { color: '#6366f1', emoji: '📋', title: 'New KRA Assignment' },
   period_locked: { color: '#64748b', emoji: '🔒', title: 'Period Locked' },
+  pip_initiated: { color: '#ef4444', emoji: '⚠️', title: 'Performance Improvement Plan' },
+  pip_milestone_reminder: { color: '#f59e0b', emoji: '📅', title: 'PIP Milestone Reminder' },
+  pip_completed: { color: '#10b981', emoji: '🎉', title: 'PIP Completed' },
 };
 
 // Replace placeholders in template

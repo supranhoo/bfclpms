@@ -37,6 +37,8 @@ import {
   Library,
   LayoutDashboard,
   Package,
+  GraduationCap,
+  UserX,
 } from 'lucide-react';
 
 const menuItems = {
@@ -63,6 +65,7 @@ const menuItems = {
     { title: 'KRA Bundles', icon: Package, path: '/admin/bundles', roles: ['admin'] },
     { title: 'All KRAs', icon: Target, path: '/admin/kpis', roles: ['admin'] },
     { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', roles: ['admin'] },
+    { title: 'PIP Management', icon: UserX, path: '/admin/pip', roles: ['admin'] },
     { title: 'Workflow Config', icon: GitBranch, path: '/admin/workflow-config', roles: ['admin'] },
     { title: 'Organization', icon: Building2, path: '/admin/organization', roles: ['admin'] },
     { title: 'KRA Categories', icon: ClipboardList, path: '/admin/categories', roles: ['admin'] },
@@ -74,6 +77,7 @@ const menuItems = {
   reports: [
     { title: 'Performance Report', icon: BarChart3, path: '/reports/performance', roles: ['admin', 'manager', 'auditor'] },
     { title: 'KRA Issuance', icon: FileText, path: '/reports/kra-issuance', roles: ['admin', 'manager', 'auditor'] },
+    { title: 'TNI Report', icon: GraduationCap, path: '/reports/tni', roles: ['admin', 'manager', 'auditor'] },
   ],
 };
 
