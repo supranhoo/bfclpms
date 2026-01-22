@@ -6,12 +6,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail } from 'lucide-react';
+import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2 } from 'lucide-react';
 import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useTriggerRollover } from '@/hooks/useSystemSettings';
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { EmailNotificationSettings } from '@/components/admin/EmailNotificationSettings';
 import { EmailTemplateEditor } from '@/components/admin/EmailTemplateEditor';
+import { GlobalBrandingSettings } from '@/components/admin/GlobalBrandingSettings';
 
 const scoreCalculationOptions: { 
   value: ScoreCalculationMode; 
@@ -103,8 +104,12 @@ export default function SystemSettings() {
         <h1 className="text-3xl font-bold">System Settings</h1>
       </div>
 
-      <Tabs defaultValue="general" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+      <Tabs defaultValue="branding" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="branding" className="gap-2">
+            <Building2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Branding</span>
+          </TabsTrigger>
           <TabsTrigger value="general" className="gap-2">
             <RefreshCw className="h-4 w-4" />
             <span className="hidden sm:inline">General</span>
@@ -122,6 +127,11 @@ export default function SystemSettings() {
             <span className="hidden sm:inline">Templates</span>
           </TabsTrigger>
         </TabsList>
+
+        {/* Branding Tab */}
+        <TabsContent value="branding">
+          <GlobalBrandingSettings />
+        </TabsContent>
 
         {/* General Tab - Auto KRA Rollover */}
         <TabsContent value="general">
