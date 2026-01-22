@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -31,6 +31,20 @@ export default function Auth() {
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [forgotPasswordSuccess, setForgotPasswordSuccess] = useState(false);
   const [forgotPasswordError, setForgotPasswordError] = useState<string | null>(null);
+  const [lastResetRequest, setLastResetRequest] = useState<number>(0);
+  const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
+
+  const COOLDOWN_SECONDS = 60; // Rate limit: 1 request per 60 seconds
+
+  // Cooldown timer effect
+  useEffect(() => {
+    if (cooldownRemaining > 0) {
+      const timer = setTimeout(() => {
+        setCooldownRemaining(cooldownRemaining - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [cooldownRemaining]);
 
   if (loading) {
     return (
@@ -65,6 +79,17 @@ export default function Auth() {
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotPasswordError(null);
+
+    // Check rate limiting
+    const now = Date.now();
+    const timeSinceLastRequest = (now - lastResetRequest) / 1000;
+    if (lastResetRequest > 0 && timeSinceLastRequest < COOLDOWN_SECONDS) {
+      const remaining = Math.ceil(COOLDOWN_SECONDS - timeSinceLastRequest);
+      setCooldownRemaining(remaining);
+      setForgotPasswordError(`Please wait ${remaining} seconds before requesting another reset.`);
+      return;
+    }
+
     setForgotPasswordLoading(true);
 
     try {
@@ -78,6 +103,8 @@ export default function Auth() {
         setForgotPasswordError(error.message);
       } else {
         setForgotPasswordSuccess(true);
+        setLastResetRequest(Date.now());
+        setCooldownRemaining(COOLDOWN_SECONDS);
       }
     } catch (err) {
       setForgotPasswordError('An unexpected error occurred. Please try again.');
@@ -225,7 +252,7 @@ export default function Auth() {
           {forgotPasswordSuccess ? (
             <div className="py-6">
               <div className="flex flex-col items-center text-center gap-4">
-                <CheckCircle className="h-12 w-12 text-green-500" />
+                <CheckCircle className="h-12 w-12 text-primary" />
                 <div>
                   <p className="font-medium">Check your email</p>
                   <p className="text-sm text-muted-foreground mt-1">
@@ -264,9 +291,9 @@ export default function Auth() {
                 <Button type="button" variant="outline" onClick={resetForgotPasswordDialog}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={forgotPasswordLoading}>
+                <Button type="submit" disabled={forgotPasswordLoading || cooldownRemaining > 0}>
                   {forgotPasswordLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Send Reset Link
+                  {cooldownRemaining > 0 ? `Wait ${cooldownRemaining}s` : 'Send Reset Link'}
                 </Button>
               </DialogFooter>
             </form>
