@@ -77,6 +77,10 @@ export default function UserManagement() {
   const [resetUserName, setResetUserName] = useState('');
   const [resetLink, setResetLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+  const [resetMode, setResetMode] = useState<'link' | 'password'>('link');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [confirmUserPassword, setConfirmUserPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   // Delete Dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -265,11 +269,11 @@ export default function UserManagement() {
     },
   });
 
-  // Password reset mutation
+  // Password reset mutation (generate link)
   const resetPassword = useMutation({
     mutationFn: async (email: string) => {
       const response = await supabase.functions.invoke('reset-password', {
-        body: { email },
+        body: { email, action: 'generate_link' },
       });
       if (response.error) throw new Error(response.error.message);
       return response.data;
@@ -282,6 +286,26 @@ export default function UserManagement() {
     },
     onError: (error: Error) => {
       toast({ title: 'Failed to generate reset link', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Set new password mutation (direct update)
+  const setNewPassword = useMutation({
+    mutationFn: async ({ email, password }: { email: string; password: string }) => {
+      const response = await supabase.functions.invoke('reset-password', {
+        body: { email, newPassword: password, action: 'set_password' },
+      });
+      if (response.error) throw new Error(response.error.message);
+      if (response.data?.error) throw new Error(response.data.error);
+      return response.data;
+    },
+    onSuccess: () => {
+      toast({ title: 'Password updated successfully' });
+      setResetDialogOpen(false);
+      resetPasswordDialog();
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to update password', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -378,13 +402,37 @@ export default function UserManagement() {
   const openResetDialog = (user: NonNullable<typeof profiles>[number]) => {
     setResetUserEmail(user.email);
     setResetUserName(user.full_name || user.email);
+    resetPasswordDialog();
+    setResetDialogOpen(true);
+  };
+
+  const resetPasswordDialog = () => {
     setResetLink('');
     setLinkCopied(false);
-    setResetDialogOpen(true);
+    setResetMode('link');
+    setNewUserPassword('');
+    setConfirmUserPassword('');
+    setPasswordError('');
   };
 
   const handleResetPassword = () => {
     resetPassword.mutate(resetUserEmail);
+  };
+
+  const handleSetNewPassword = () => {
+    setPasswordError('');
+    
+    if (newUserPassword.length < 6) {
+      setPasswordError('Password must be at least 6 characters');
+      return;
+    }
+    
+    if (newUserPassword !== confirmUserPassword) {
+      setPasswordError('Passwords do not match');
+      return;
+    }
+    
+    setNewPassword.mutate({ email: resetUserEmail, password: newUserPassword });
   };
 
   const copyResetLink = async () => {
@@ -909,39 +957,105 @@ export default function UserManagement() {
       </Dialog>
 
       {/* Password Reset Dialog */}
-      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+      <Dialog open={resetDialogOpen} onOpenChange={(open) => { setResetDialogOpen(open); if (!open) resetPasswordDialog(); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reset Password</DialogTitle>
-            <DialogDescription>Generate a password reset link for {resetUserName}</DialogDescription>
+            <DialogDescription>Reset password for {resetUserName}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {!resetLink ? (
-              <p className="text-sm text-muted-foreground">
-                Click the button below to generate a one-time password reset link for this user.
-              </p>
+            {/* Mode Selection Tabs */}
+            <div className="flex border-b">
+              <button
+                type="button"
+                className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  resetMode === 'link' 
+                    ? 'border-primary text-primary' 
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+                onClick={() => setResetMode('link')}
+              >
+                Generate Reset Link
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  resetMode === 'password' 
+                    ? 'border-primary text-primary' 
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+                onClick={() => setResetMode('password')}
+              >
+                Set New Password
+              </button>
+            </div>
+
+            {resetMode === 'link' ? (
+              <>
+                {!resetLink ? (
+                  <p className="text-sm text-muted-foreground">
+                    Generate a one-time password reset link to share with the user.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Reset Link</Label>
+                    <div className="flex gap-2">
+                      <Input value={resetLink} readOnly className="text-xs" />
+                      <Button size="icon" variant="outline" onClick={copyResetLink}>
+                        {linkCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Share this link with the user. It can only be used once.
+                    </p>
+                  </div>
+                )}
+              </>
             ) : (
-              <div className="space-y-2">
-                <Label>Reset Link</Label>
-                <div className="flex gap-2">
-                  <Input value={resetLink} readOnly className="text-xs" />
-                  <Button size="icon" variant="outline" onClick={copyResetLink}>
-                    {linkCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Share this link with the user. It can only be used once.
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Directly set a new password for this user.
                 </p>
+                <div className="space-y-2">
+                  <Label>New Password</Label>
+                  <Input
+                    type="password"
+                    value={newUserPassword}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                    placeholder="Enter new password (min 6 characters)"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Confirm Password</Label>
+                  <Input
+                    type="password"
+                    value={confirmUserPassword}
+                    onChange={(e) => setConfirmUserPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                  />
+                </div>
+                {passwordError && (
+                  <p className="text-sm text-destructive">{passwordError}</p>
+                )}
               </div>
             )}
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setResetDialogOpen(false)}>Close</Button>
-            {!resetLink && (
-              <Button onClick={handleResetPassword} disabled={resetPassword.isPending}>
-                {resetPassword.isPending ? 'Generating...' : 'Generate Reset Link'}
+            {resetMode === 'link' ? (
+              !resetLink && (
+                <Button onClick={handleResetPassword} disabled={resetPassword.isPending}>
+                  {resetPassword.isPending ? 'Generating...' : 'Generate Reset Link'}
+                </Button>
+              )
+            ) : (
+              <Button 
+                onClick={handleSetNewPassword} 
+                disabled={setNewPassword.isPending || !newUserPassword || !confirmUserPassword}
+              >
+                {setNewPassword.isPending ? 'Updating...' : 'Update Password'}
               </Button>
             )}
           </DialogFooter>
