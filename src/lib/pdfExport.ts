@@ -429,7 +429,7 @@ function drawLegendBox(
   doc.setFontSize(6);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...COLORS.grayMedium);
-  doc.text('✓ Met Target    ▼ Below Target', x + width - boxWidth + 4, y + 14);
+  doc.text('[+] Met Target    [-] Below Target    * Has Notes', x + width - boxWidth + 4, y + 14);
   
   return y + boxHeight + 4;
 }
@@ -510,7 +510,7 @@ function drawReviewNotesSection(
     if (note.evidence) {
       doc.setTextColor(...COLORS.primary);
       doc.setFontSize(6);
-      doc.text('📎 Evidence attached', x + width - 30, currentY - lineHeight);
+      doc.text('[Ev] Evidence attached', x + width - 30, currentY - lineHeight);
       doc.setFontSize(7);
     }
     
@@ -632,7 +632,7 @@ export function generateDetailedScorecardPdf(
     
     // Category header row
     tableData.push([{
-      content: `▼ ${category}`,
+      content: `> ${category}`,
       colSpan: 5,
       styles: {
         fillColor: getCategoryColor(category),
@@ -679,7 +679,7 @@ export function generateDetailedScorecardPdf(
       
       // Achievement indicator
       const achievedStr = achieved !== '-' 
-        ? `${achieved} ${targetMet ? '✓' : '▼'}`
+        ? `${achieved} ${targetMet ? '[+]' : '[-]'}`
         : '-';
       
       // Collect notes for this KPI
@@ -740,7 +740,7 @@ export function generateDetailedScorecardPdf(
         // KRA / KPI with note references
         kpiNameContent,
         // Target with UOM and criteria indicator
-        `${target}${kpi.uom ? ` ${kpi.uom}` : ''}\n${isLower ? '↓ Lower' : '↑ Higher'}`,
+        `${target}${kpi.uom ? ` ${kpi.uom}` : ''}\n${isLower ? '(Lower)' : '(Higher)'}`,
         // Achieved with indicator
         achievedStr,
         // Weight
@@ -758,7 +758,7 @@ export function generateDetailedScorecardPdf(
           }
         } as CellDef,
         // Notes indicator
-        hasNotes ? '📋' : '',
+        hasNotes ? '*' : '',
       ]);
     });
   });
