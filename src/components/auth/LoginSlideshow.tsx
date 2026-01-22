@@ -86,55 +86,43 @@ export function LoginSlideshow({
           )}
           {!organizationName && <div />}
 
-          {/* Middle: Hero text + Features */}
-          <div>
-            <h2 className="text-3xl lg:text-4xl font-bold text-foreground leading-tight">
-              Manage performance{' '}
-              <span className="text-primary">with clarity.</span>
-            </h2>
-            <p className="mt-4 text-base text-muted-foreground">
-              Track KPIs, conduct reviews, and drive organizational growth with
-              a powerful performance management system.
-            </p>
-
-            {/* Feature highlights */}
-            <div className="mt-6 flex flex-col gap-3">
-              <div className="flex items-center gap-2 text-sm text-foreground">
-                <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
-                  <svg
-                    className="h-3.5 w-3.5 text-primary"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </div>
-                Multi-stage Reviews
+          {/* Middle: Feature highlights */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2 text-sm text-foreground">
+              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                <svg
+                  className="h-3.5 w-3.5 text-primary"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
               </div>
-              <div className="flex items-center gap-2 text-sm text-foreground">
-                <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
-                  <svg
-                    className="h-3.5 w-3.5 text-primary"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 10V3L4 14h7v7l9-11h-7z"
-                    />
-                  </svg>
-                </div>
-                Real-time Analytics
+              Multi-stage Reviews
+            </div>
+            <div className="flex items-center gap-2 text-sm text-foreground">
+              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                <svg
+                  className="h-3.5 w-3.5 text-primary"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
               </div>
+              Real-time Analytics
             </div>
           </div>
 
