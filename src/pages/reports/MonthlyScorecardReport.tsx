@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,9 +9,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Search, FileSpreadsheet, Users, Target, TrendingUp, FileText } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Search, FileSpreadsheet, Users, Target, TrendingUp, FileText, Eye, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { generateBulkScorecardPdf, generateDetailedScorecardPdf, EmployeeScorecard, KpiDetail } from '@/lib/pdfExport';
+import { generateBulkScorecardPdf, generateDetailedScorecardPdf, generateDetailedScorecardPdfBlob, EmployeeScorecard, KpiDetail } from '@/lib/pdfExport';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 
 const MONTHS = [
@@ -33,12 +34,34 @@ export default function MonthlyScorecardReport() {
   const [selectedPeriod, setSelectedPeriod] = useState(currentMonth);
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
   const [searchTerm, setSearchTerm] = useState('');
+  const [previewScorecard, setPreviewScorecard] = useState<EmployeeScorecard | null>(null);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   
   const { data: systemSettings } = useSystemSettings();
   const companyName = useMemo(() => {
     const setting = systemSettings?.find(s => s.setting_key === 'company_name');
     return (setting?.setting_value as string) || 'Performance Management System';
   }, [systemSettings]);
+
+  // Generate PDF blob when preview is requested
+  useEffect(() => {
+    if (previewScorecard) {
+      const blob = generateDetailedScorecardPdfBlob(previewScorecard, {
+        period: selectedPeriod,
+        year: selectedYear,
+        companyName,
+      });
+      const url = URL.createObjectURL(blob);
+      setPdfBlobUrl(url);
+      
+      // Cleanup URL when dialog closes
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    } else {
+      setPdfBlobUrl(null);
+    }
+  }, [previewScorecard, selectedPeriod, selectedYear, companyName]);
 
   // Fetch KPIs with full details
   const { data: kpis, isLoading: kpisLoading } = useQuery({
@@ -359,6 +382,14 @@ export default function MonthlyScorecardReport() {
     });
   };
 
+  const handlePreviewPdf = (scorecard: EmployeeScorecard) => {
+    setPreviewScorecard(scorecard);
+  };
+
+  const handleClosePreview = () => {
+    setPreviewScorecard(null);
+  };
+
   const isLoading = kpisLoading || submissionsLoading || profilesLoading;
 
   const getRatingBadge = (rating: string | null) => {
@@ -504,7 +535,7 @@ export default function MonthlyScorecardReport() {
                     <TableHead className="text-center">Auditor</TableHead>
                     <TableHead className="text-center">Mgmt</TableHead>
                     <TableHead className="text-center">Final</TableHead>
-                    <TableHead className="text-center w-[60px]">PDF</TableHead>
+                    <TableHead className="text-center w-[80px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -542,15 +573,26 @@ export default function MonthlyScorecardReport() {
                         </span>
                       </TableCell>
                       <TableCell className="text-center">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => handleExportSinglePdf(scorecard)}
-                          title="Download PDF Scorecard"
-                        >
-                          <FileText className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handlePreviewPdf(scorecard)}
+                            title="Preview PDF"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleExportSinglePdf(scorecard)}
+                            title="Download PDF"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -560,6 +602,43 @@ export default function MonthlyScorecardReport() {
           )}
         </CardContent>
       </Card>
+
+      {/* PDF Preview Dialog */}
+      <Dialog open={!!previewScorecard} onOpenChange={handleClosePreview}>
+        <DialogContent className="max-w-6xl max-h-[90vh] p-0">
+          <DialogHeader className="p-4 pb-2">
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5" />
+              PDF Preview - {previewScorecard?.employeeName}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden" style={{ height: 'calc(90vh - 120px)' }}>
+            {pdfBlobUrl && (
+              <iframe 
+                src={pdfBlobUrl} 
+                className="w-full h-full border-0"
+                title="PDF Preview"
+              />
+            )}
+          </div>
+          <DialogFooter className="p-4 pt-2 border-t">
+            <Button variant="outline" onClick={handleClosePreview}>
+              Close
+            </Button>
+            <Button 
+              className="gap-2"
+              onClick={() => {
+                if (previewScorecard) {
+                  handleExportSinglePdf(previewScorecard);
+                }
+              }}
+            >
+              <Download className="h-4 w-4" />
+              Download PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
