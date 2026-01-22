@@ -10,7 +10,10 @@ export type EmailEventType =
   | 'query_resolved'
   | 'final_approved'
   | 'kra_assigned'
-  | 'period_locked';
+  | 'period_locked'
+  | 'pip_initiated'
+  | 'pip_milestone_reminder'
+  | 'pip_completed';
 
 export interface EmailNotificationSettings {
   enabled: boolean;

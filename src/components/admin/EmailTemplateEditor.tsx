@@ -155,6 +155,58 @@ No further changes can be made to KPIs in this period unless unlocked by an admi
     color: '#64748b',
     emoji: '🔒',
   },
+  {
+    key: 'pip_initiated',
+    label: 'PIP Started',
+    description: 'Sent to employee when placed on Performance Improvement Plan',
+    subject: '[PMS] Performance Improvement Plan Notification',
+    bodyTemplate: `Hi {{recipient_name}},
+
+You have been placed on a Performance Improvement Plan (PIP).
+
+Start Date: {{pip_start_date}}
+End Date: {{pip_end_date}}
+Reason: {{pip_reason}}
+
+Please check your email or contact HR for the formal PIP letter with detailed information about the improvement areas, milestones, and expectations.
+
+We encourage you to take this opportunity seriously and work towards meeting the improvement goals.`,
+    color: '#ef4444',
+    emoji: '⚠️',
+  },
+  {
+    key: 'pip_milestone_reminder',
+    label: 'PIP Milestone',
+    description: 'Reminder sent before PIP milestone check-in dates',
+    subject: '[PMS] PIP Milestone Check-in Reminder',
+    bodyTemplate: `Hi {{recipient_name}},
+
+This is a reminder that you have an upcoming PIP milestone check-in.
+
+Milestone Date: {{milestone_date}}
+Description: {{milestone_description}}
+Expected Outcome: {{milestone_expected_outcome}}
+
+Please prepare for your check-in meeting with your manager.`,
+    color: '#f59e0b',
+    emoji: '📅',
+  },
+  {
+    key: 'pip_completed',
+    label: 'PIP Completed',
+    description: 'Sent when PIP is successfully completed',
+    subject: '[PMS] 🎉 Performance Improvement Plan Completed',
+    bodyTemplate: `Hi {{recipient_name}},
+
+Congratulations! Your Performance Improvement Plan has been successfully completed.
+
+Outcome: {{pip_outcome}}
+Remarks: {{pip_remarks}}
+
+Thank you for your dedication and hard work during this period. We appreciate your commitment to improvement.`,
+    color: '#10b981',
+    emoji: '🎉',
+  },
 ];
 
 const PLACEHOLDERS = [
@@ -166,6 +218,14 @@ const PLACEHOLDERS = [
   { key: '{{review_year}}', description: 'Review year' },
   { key: '{{query_reason}}', description: 'Reason for the query (query events only)' },
   { key: '{{resolution_notes}}', description: 'Resolution notes (query resolved only)' },
+  { key: '{{pip_start_date}}', description: 'PIP start date (PIP events only)' },
+  { key: '{{pip_end_date}}', description: 'PIP end date (PIP events only)' },
+  { key: '{{pip_reason}}', description: 'Reason for PIP (PIP events only)' },
+  { key: '{{pip_outcome}}', description: 'PIP outcome - improved/not improved (PIP completed only)' },
+  { key: '{{pip_remarks}}', description: 'Completion remarks (PIP completed only)' },
+  { key: '{{milestone_date}}', description: 'Milestone date (PIP milestone only)' },
+  { key: '{{milestone_description}}', description: 'Milestone description (PIP milestone only)' },
+  { key: '{{milestone_expected_outcome}}', description: 'Expected outcome (PIP milestone only)' },
 ];
 
 export function EmailTemplateEditor() {

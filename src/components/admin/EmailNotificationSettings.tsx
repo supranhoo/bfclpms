@@ -26,6 +26,9 @@ const EMAIL_EVENTS: { key: EmailEventType; label: string; description: string }[
   { key: 'final_approved', label: 'Final Approval', description: 'Notify employee when KPI receives final sign-off' },
   { key: 'kra_assigned', label: 'KRA Assignment', description: 'Notify employee when new KRA is assigned' },
   { key: 'period_locked', label: 'Period Locked', description: 'Notify when review period is locked' },
+  { key: 'pip_initiated', label: 'PIP Started', description: 'Notify employee when placed on Performance Improvement Plan' },
+  { key: 'pip_milestone_reminder', label: 'PIP Milestone', description: 'Remind employee of upcoming PIP milestone check-ins' },
+  { key: 'pip_completed', label: 'PIP Completed', description: 'Notify employee when PIP is successfully completed' },
 ];
 
 export function EmailNotificationSettings() {
