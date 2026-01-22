@@ -80,53 +80,10 @@ export function LoginSlideshow({
         
         {/* Right content strip */}
         <div className="w-2/5 max-w-md h-full flex flex-col justify-between p-8 lg:p-12">
-          {/* Top: Organization name */}
-          {organizationName && (
-            <p className="text-lg font-medium text-foreground">{organizationName}</p>
-          )}
-          {!organizationName && <div />}
+          {/* Top spacer */}
+          <div />
 
-          {/* Middle: Feature highlights */}
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2 text-sm text-foreground">
-              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
-                <svg
-                  className="h-3.5 w-3.5 text-primary"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-              Multi-stage Reviews
-            </div>
-            <div className="flex items-center gap-2 text-sm text-foreground">
-              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
-                <svg
-                  className="h-3.5 w-3.5 text-primary"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
-              </div>
-              Real-time Analytics
-            </div>
-          </div>
-
-          {/* Bottom: Slide indicators */}
+          {/* Middle: Slide indicators */}
           {wallpapers.length > 1 ? (
             <div className="flex items-center gap-2">
               {wallpapers.map((_, index) => (
@@ -146,6 +103,9 @@ export function LoginSlideshow({
           ) : (
             <div />
           )}
+
+          {/* Bottom spacer */}
+          <div />
         </div>
       </div>
     </div>
