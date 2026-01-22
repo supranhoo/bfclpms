@@ -9,7 +9,8 @@ import {
   Building2, 
   Users,
   ClipboardList,
-  Calendar
+  Calendar,
+  GraduationCap
 } from 'lucide-react';
 
 interface ReportCard {
@@ -90,6 +91,13 @@ const reports: ReportCard[] = [
     icon: Calendar,
     path: '/reports/period-comparison',
     color: 'text-indigo-500',
+  },
+  {
+    title: 'Training Needs (TNI)',
+    description: 'Identify skill gaps and training requirements across the organization',
+    icon: GraduationCap,
+    path: '/reports/tni',
+    color: 'text-rose-500',
   },
 ];
 

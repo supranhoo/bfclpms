@@ -751,6 +751,88 @@ export type Database = {
           },
         ]
       }
+      performance_improvement_plans: {
+        Row: {
+          completion_remarks: string | null
+          created_at: string
+          employee_id: string
+          end_date: string
+          extended_end_date: string | null
+          hr_approved_at: string | null
+          hr_remarks: string | null
+          hr_reviewer_id: string | null
+          id: string
+          improvement_areas: Json
+          initiated_by: string
+          outcome: Database["public"]["Enums"]["pip_outcome"] | null
+          reason: string
+          start_date: string
+          status: Database["public"]["Enums"]["pip_status"]
+          success_criteria: string
+          updated_at: string
+        }
+        Insert: {
+          completion_remarks?: string | null
+          created_at?: string
+          employee_id: string
+          end_date: string
+          extended_end_date?: string | null
+          hr_approved_at?: string | null
+          hr_remarks?: string | null
+          hr_reviewer_id?: string | null
+          id?: string
+          improvement_areas?: Json
+          initiated_by: string
+          outcome?: Database["public"]["Enums"]["pip_outcome"] | null
+          reason: string
+          start_date: string
+          status?: Database["public"]["Enums"]["pip_status"]
+          success_criteria: string
+          updated_at?: string
+        }
+        Update: {
+          completion_remarks?: string | null
+          created_at?: string
+          employee_id?: string
+          end_date?: string
+          extended_end_date?: string | null
+          hr_approved_at?: string | null
+          hr_remarks?: string | null
+          hr_reviewer_id?: string | null
+          id?: string
+          improvement_areas?: Json
+          initiated_by?: string
+          outcome?: Database["public"]["Enums"]["pip_outcome"] | null
+          reason?: string
+          start_date?: string
+          status?: Database["public"]["Enums"]["pip_status"]
+          success_criteria?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_improvement_plans_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_improvement_plans_hr_reviewer_id_fkey"
+            columns: ["hr_reviewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_improvement_plans_initiated_by_fkey"
+            columns: ["initiated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       performance_reviews: {
         Row: {
           auditor_remarks: string | null
@@ -795,6 +877,114 @@ export type Database = {
           {
             foreignKeyName: "performance_reviews_employee_id_fkey"
             columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pip_audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          new_value: Json | null
+          old_value: Json | null
+          performed_by: string | null
+          pip_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          new_value?: Json | null
+          old_value?: Json | null
+          performed_by?: string | null
+          pip_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          new_value?: Json | null
+          old_value?: Json | null
+          performed_by?: string | null
+          pip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pip_audit_logs_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pip_audit_logs_pip_id_fkey"
+            columns: ["pip_id"]
+            isOneToOne: false
+            referencedRelation: "performance_improvement_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pip_milestones: {
+        Row: {
+          actual_outcome: string | null
+          created_at: string
+          description: string
+          expected_outcome: string
+          id: string
+          milestone_date: string
+          pip_id: string
+          remarks: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["pip_milestone_status"]
+          updated_at: string
+        }
+        Insert: {
+          actual_outcome?: string | null
+          created_at?: string
+          description: string
+          expected_outcome: string
+          id?: string
+          milestone_date: string
+          pip_id: string
+          remarks?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["pip_milestone_status"]
+          updated_at?: string
+        }
+        Update: {
+          actual_outcome?: string | null
+          created_at?: string
+          description?: string
+          expected_outcome?: string
+          id?: string
+          milestone_date?: string
+          pip_id?: string
+          remarks?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["pip_milestone_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pip_milestones_pip_id_fkey"
+            columns: ["pip_id"]
+            isOneToOne: false
+            referencedRelation: "performance_improvement_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pip_milestones_reviewed_by_fkey"
+            columns: ["reviewed_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1182,6 +1372,86 @@ export type Database = {
           },
         ]
       }
+      training_needs: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          employee_id: string
+          gap_type: Database["public"]["Enums"]["tni_gap_type"]
+          id: string
+          identified_by: string | null
+          kpi_id: string | null
+          priority: Database["public"]["Enums"]["tni_priority"]
+          review_period: string
+          review_year: number
+          score: number | null
+          status: Database["public"]["Enums"]["tni_status"]
+          training_recommendation: string | null
+          updated_at: string
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          employee_id: string
+          gap_type?: Database["public"]["Enums"]["tni_gap_type"]
+          id?: string
+          identified_by?: string | null
+          kpi_id?: string | null
+          priority?: Database["public"]["Enums"]["tni_priority"]
+          review_period: string
+          review_year: number
+          score?: number | null
+          status?: Database["public"]["Enums"]["tni_status"]
+          training_recommendation?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          employee_id?: string
+          gap_type?: Database["public"]["Enums"]["tni_gap_type"]
+          id?: string
+          identified_by?: string | null
+          kpi_id?: string | null
+          priority?: Database["public"]["Enums"]["tni_priority"]
+          review_period?: string
+          review_year?: number
+          score?: number | null
+          status?: Database["public"]["Enums"]["tni_status"]
+          training_recommendation?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_needs_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_needs_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_needs_identified_by_fkey"
+            columns: ["identified_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_needs_kpi_id_fkey"
+            columns: ["kpi_id"]
+            isOneToOne: false
+            referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -1280,6 +1550,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      detect_training_needs_for_period: {
+        Args: {
+          p_review_period: string
+          p_review_year: number
+          p_threshold?: number
+        }
+        Returns: number
+      }
       get_employee_workflow: { Args: { employee_uuid: string }; Returns: Json }
       get_employee_workflow_info: {
         Args: { employee_uuid: string }
@@ -1310,6 +1588,15 @@ export type Database = {
     Enums: {
       app_role: "admin" | "manager" | "employee" | "auditor" | "management"
       kpi_status: "open" | "submitted" | "approved_by_manager" | "locked"
+      pip_milestone_status: "pending" | "met" | "partially_met" | "not_met"
+      pip_outcome: "improved" | "not_improved" | "escalated"
+      pip_status:
+        | "draft"
+        | "pending_hr_approval"
+        | "active"
+        | "completed"
+        | "extended"
+        | "terminated"
       query_entity_type: "kra" | "kpi"
       query_status: "open" | "resolved"
       rating_level: "red" | "yellow" | "green" | "blue"
@@ -1320,6 +1607,13 @@ export type Database = {
         | "audit"
         | "approved"
         | "management_review"
+      tni_gap_type: "skill" | "knowledge" | "behavior"
+      tni_priority: "high" | "medium" | "low"
+      tni_status:
+        | "identified"
+        | "training_planned"
+        | "in_progress"
+        | "completed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1449,6 +1743,16 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "manager", "employee", "auditor", "management"],
       kpi_status: ["open", "submitted", "approved_by_manager", "locked"],
+      pip_milestone_status: ["pending", "met", "partially_met", "not_met"],
+      pip_outcome: ["improved", "not_improved", "escalated"],
+      pip_status: [
+        "draft",
+        "pending_hr_approval",
+        "active",
+        "completed",
+        "extended",
+        "terminated",
+      ],
       query_entity_type: ["kra", "kpi"],
       query_status: ["open", "resolved"],
       rating_level: ["red", "yellow", "green", "blue"],
@@ -1459,6 +1763,14 @@ export const Constants = {
         "audit",
         "approved",
         "management_review",
+      ],
+      tni_gap_type: ["skill", "knowledge", "behavior"],
+      tni_priority: ["high", "medium", "low"],
+      tni_status: [
+        "identified",
+        "training_planned",
+        "in_progress",
+        "completed",
       ],
     },
   },
