@@ -37,6 +37,7 @@ import AuditTrailReport from "./pages/reports/AuditTrailReport";
 import MonthlyScorecardReport from "./pages/reports/MonthlyScorecardReport";
 import EmployeePerformanceSummary from "./pages/reports/EmployeePerformanceSummary";
 import TNIReport from "./pages/reports/TNIReport";
+import IssuesReport from "./pages/reports/IssuesReport";
 import PIPManagement from "./pages/admin/PIPManagement";
 import KRAAcceptance from "./pages/KRAAcceptance";
 import NotFound from "./pages/NotFound";
@@ -203,6 +204,11 @@ const App = () => (
               <Route path="/reports/tni" element={
                 <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>
                   <TNIReport />
+                </ProtectedRoute>
+              } />
+              <Route path="/reports/issues" element={
+                <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management']}>
+                  <IssuesReport />
                 </ProtectedRoute>
               } />
               <Route path="/admin/pip" element={

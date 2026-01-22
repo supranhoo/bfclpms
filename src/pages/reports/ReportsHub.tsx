@@ -51,11 +51,18 @@ const reports: ReportCard[] = [
     color: 'text-cyan-500',
   },
   {
-    title: 'Query & Issues Report',
+    title: 'Query Report',
     description: 'All open and resolved queries with response times and resolution status',
     icon: AlertTriangle,
     path: '/reports/queries',
     color: 'text-warning',
+  },
+  {
+    title: 'Unified Issues Report',
+    description: 'Consolidated view of queries, training needs, PIPs, stalled KPIs, and pending actions',
+    icon: AlertTriangle,
+    path: '/reports/issues',
+    color: 'text-destructive',
   },
   {
     title: 'Completion Rate Report',
