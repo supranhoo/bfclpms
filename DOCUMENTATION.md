@@ -218,11 +218,19 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
+| `app_settings` | Global branding configuration (singleton) | `id`, `organization_name`, `app_name`, `logo_url`, `login_background_url` |
 | `system_settings` | App configuration | `setting_key`, `setting_value` (JSONB) |
 | `kpi_audit_logs` | KPI change tracking | `kpi_id`, `action`, `performed_by`, `old_value`, `new_value` |
 | `kra_rollover_logs` | KRA rollover history | `source_period`, `target_period`, `kpis_copied` |
 | `org_kpi_values` | Organization-level KPI scores | `category_id`, `review_period`, `achieved_value` |
 | `import_progress` | Bulk import tracking | `id`, `status`, `total_rows`, `processed_rows` |
+
+#### Storage Buckets
+
+| Bucket | Purpose | Public |
+|--------|---------|--------|
+| `branding-assets` | App logo and login wallpaper images | Yes |
+| `review-evidence` | Evidence documents uploaded during reviews | No |
 
 ### Row-Level Security (RLS) Policies
 
@@ -299,6 +307,35 @@ has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
 - Auto-confirm enabled (no email verification in dev)
 - Password reset via `reset-password` edge function
 - Session persistence via Supabase tokens
+
+### 4.2 Global Branding
+
+**Route:** `/admin/settings` (Branding tab)
+
+**Purpose:** Allows admins to customize the application's visual identity.
+
+**Configurable Elements:**
+- **Organization Name:** Displayed in emails, reports, and sidebar subtitle
+- **App Name:** Displayed in sidebar header and browser tab title
+- **App Logo:** Custom logo shown in sidebar and login screen
+- **Login Wallpaper:** Background image for the login/signup screen
+
+**Implementation:**
+1. Settings stored in `app_settings` table (singleton pattern - single row)
+2. Images uploaded to `branding-assets` Supabase Storage bucket
+3. `useAppSettings` hook fetches settings globally
+4. Login page (`/auth`) dynamically loads logo and background
+5. Sidebar (`AppSidebar`) displays dynamic app name and logo
+6. Browser tab title (`document.title`) updates via `useEffect` in sidebar
+
+**RLS Policies:**
+- `SELECT`: Public (allows login page to load branding)
+- `UPDATE`: Admin role only
+
+**Fallback Behavior:**
+- If no custom logo: Shows default BarChart3 icon
+- If no custom background: Uses gradient background
+- If no custom names: Uses "PMS Dashboard" and "Performance Management"
 
 ### 4.2 Dashboard (Employee View)
 
@@ -590,7 +627,8 @@ src/
 │   │   ├── BundleFormDialog.tsx
 │   │   ├── SmartAssignmentDialog.tsx
 │   │   ├── ScoringSimulatorPopover.tsx
-│   │   └── EmailTemplateEditor.tsx
+│   │   ├── EmailTemplateEditor.tsx
+│   │   └── GlobalBrandingSettings.tsx
 │   │
 │   ├── pip/                   # PIP components
 │   │   ├── PIPCreateDialog.tsx
@@ -644,6 +682,7 @@ src/
 │   ├── useKpis.ts             # KPI CRUD operations
 │   ├── useOrganization.ts     # Org structure data
 │   ├── useSystemSettings.ts   # System configuration
+│   ├── useAppSettings.ts      # Global branding settings
 │   ├── usePIP.ts              # PIP management
 │   ├── useTNI.ts              # Training needs
 │   ├── useKpiTemplates.ts     # Template management

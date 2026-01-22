@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function Auth() {
   const { user, loading, signIn, signUp } = useAuth();
+  const { data: appSettings } = useAppSettings();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -120,17 +122,35 @@ export default function Auth() {
     setForgotPasswordError(null);
   };
 
+  // Dynamic background style
+  const backgroundStyle = appSettings?.login_background_url
+    ? {
+        backgroundImage: `url(${appSettings.login_background_url})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }
+    : {};
+
+  const displayAppName = appSettings?.app_name || 'PMS Dashboard';
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 p-4">
+    <div 
+      className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 p-4"
+      style={backgroundStyle}
+    >
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="p-2 rounded-lg bg-primary text-primary-foreground">
-            <BarChart3 className="h-6 w-6" />
-          </div>
-          <h1 className="text-2xl font-bold text-foreground">PMS Dashboard</h1>
+          {appSettings?.logo_url ? (
+            <img src={appSettings.logo_url} alt="Logo" className="h-10 w-10 object-contain" />
+          ) : (
+            <div className="p-2 rounded-lg bg-primary text-primary-foreground">
+              <BarChart3 className="h-6 w-6" />
+            </div>
+          )}
+          <h1 className="text-2xl font-bold text-foreground">{displayAppName}</h1>
         </div>
         
-        <Card className="border-border shadow-lg">
+        <Card className="border-border shadow-lg backdrop-blur-sm bg-card/95">
           <CardHeader className="text-center">
             <CardTitle className="text-xl">Welcome</CardTitle>
             <CardDescription>Sign in to access the Performance Management System</CardDescription>

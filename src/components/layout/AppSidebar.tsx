@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOpenQueryCount } from '@/hooks/useOpenQueryCount';
 import { useUnreadNotificationCount } from '@/hooks/useNotifications';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import {
   Sidebar,
   SidebarContent,
@@ -88,9 +90,21 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { data: openQueryCount } = useOpenQueryCount();
   const { data: unreadNotificationCount } = useUnreadNotificationCount();
+  const { data: appSettings } = useAppSettings();
+  
+  // Update document title based on app settings
+  useEffect(() => {
+    if (appSettings?.app_name) {
+      document.title = appSettings.app_name;
+    }
+  }, [appSettings?.app_name]);
   
   // Combine query count and notification count for inbox badge
   const inboxBadgeCount = (openQueryCount || 0) + (unreadNotificationCount || 0);
+  
+  const displayAppName = appSettings?.app_name || 'PMS Dashboard';
+  const displayOrgName = appSettings?.organization_name || 'Performance Management';
+  
   const filterByRole = (items: typeof menuItems.main) => {
     return items.filter(item => role && item.roles.includes(role));
   };
@@ -109,12 +123,16 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-            <BarChart3 className="h-5 w-5" />
-          </div>
+          {appSettings?.logo_url ? (
+            <img src={appSettings.logo_url} alt="Logo" className="h-9 w-9 rounded-lg object-contain" />
+          ) : (
+            <div className="p-2 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+              <BarChart3 className="h-5 w-5" />
+            </div>
+          )}
           <div>
-            <h2 className="font-semibold text-sidebar-foreground">PMS Dashboard</h2>
-            <p className="text-xs text-sidebar-foreground/60">Performance Management</p>
+            <h2 className="font-semibold text-sidebar-foreground">{displayAppName}</h2>
+            <p className="text-xs text-sidebar-foreground/60">{displayOrgName}</p>
           </div>
         </div>
       </SidebarHeader>
