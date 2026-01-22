@@ -318,24 +318,51 @@ has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
 - **Organization Name:** Displayed in emails, reports, and sidebar subtitle
 - **App Name:** Displayed in sidebar header and browser tab title
 - **App Logo:** Custom logo shown in sidebar and login screen
-- **Login Wallpaper:** Background image for the login/signup screen
+- **Login Wallpapers:** Multiple background images for auto-rotating slideshow on login screen
 
 **Implementation:**
 1. Settings stored in `app_settings` table (singleton pattern - single row)
 2. Images uploaded to `branding-assets` Supabase Storage bucket
 3. `useAppSettings` hook fetches settings globally
-4. Login page (`/auth`) dynamically loads logo and background
+4. Login page (`/auth`) features a modern split-screen design:
+   - **Left side (desktop):** Wallpaper slideshow with branding overlay
+   - **Right side:** Glassmorphism login card
 5. Sidebar (`AppSidebar`) displays dynamic app name and logo
 6. Browser tab title (`document.title`) updates via `useEffect` in sidebar
+
+**Login Screen Slideshow:**
+- Supports multiple wallpapers stored in `login_wallpapers` JSONB array
+- Auto-rotates every 5 seconds with fade transitions
+- Slide indicators (dots) for manual navigation
+- Mobile responsive: Shows subtle background overlay instead of split-screen
+
+**Admin Multi-Wallpaper Upload:**
+- Grid view of uploaded wallpapers with thumbnails
+- Add/remove individual wallpapers
+- Order badges showing rotation sequence
+- Live slideshow preview within admin panel
+- Displays cycle duration based on wallpaper count
 
 **RLS Policies:**
 - `SELECT`: Public (allows login page to load branding)
 - `UPDATE`: Admin role only
 
+**Database Schema:**
+```sql
+-- app_settings table columns for branding
+login_wallpapers jsonb DEFAULT '[]'::jsonb  -- Array of wallpaper URLs
+login_background_url text  -- Legacy single wallpaper (kept for backward compatibility)
+```
+
 **Fallback Behavior:**
 - If no custom logo: Shows default BarChart3 icon
-- If no custom background: Uses gradient background
+- If no wallpapers: Uses animated gradient background with floating blobs
 - If no custom names: Uses "PMS Dashboard" and "Performance Management"
+
+**Key Components:**
+- `GlobalBrandingSettings.tsx`: Admin form for branding configuration
+- `LoginSlideshow.tsx`: Reusable slideshow component for login screen
+- `useAppSettings.ts`: Hook for fetching/updating branding settings
 
 ### 4.2 Dashboard (Employee View)
 
