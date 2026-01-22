@@ -75,6 +75,7 @@ const menuItems = {
     { title: 'Audit Logs', icon: History, path: '/audit-logs', roles: ['admin'] },
   ],
   reports: [
+    { title: 'View Reports', icon: BarChart3, path: '/reports', roles: ['admin', 'manager', 'auditor', 'management'] },
     { title: 'Performance Report', icon: BarChart3, path: '/reports/performance', roles: ['admin', 'manager', 'auditor'] },
     { title: 'KRA Issuance', icon: FileText, path: '/reports/kra-issuance', roles: ['admin', 'manager', 'auditor'] },
     { title: 'TNI Report', icon: GraduationCap, path: '/reports/tni', roles: ['admin', 'manager', 'auditor'] },
