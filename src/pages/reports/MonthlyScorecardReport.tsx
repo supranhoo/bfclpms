@@ -9,10 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Download, Search, FileSpreadsheet, Users, Target, TrendingUp, FileText, ChevronDown } from 'lucide-react';
+import { Search, FileSpreadsheet, Users, Target, TrendingUp, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { generateBulkScorecardPdf, generateScorecardPdf } from '@/lib/pdfExport';
+import { generateBulkScorecardPdf, generateDetailedScorecardPdf, EmployeeScorecard, KpiDetail } from '@/lib/pdfExport';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 
 const MONTHS = [
@@ -41,7 +40,7 @@ export default function MonthlyScorecardReport() {
     return (setting?.setting_value as string) || 'Performance Management System';
   }, [systemSettings]);
 
-  // Fetch KPIs with submissions
+  // Fetch KPIs with full details
   const { data: kpis, isLoading: kpisLoading } = useQuery({
     queryKey: ['scorecard-kpis', selectedPeriod, selectedYear],
     queryFn: async () => {
@@ -57,7 +56,9 @@ export default function MonthlyScorecardReport() {
           category_id,
           review_period,
           review_year,
-          status
+          status,
+          uom,
+          criteria
         `)
         .eq('review_period', selectedPeriod)
         .eq('review_year', parseInt(selectedYear));
@@ -67,7 +68,7 @@ export default function MonthlyScorecardReport() {
     },
   });
 
-  // Fetch submissions for these KPIs
+  // Fetch submissions with all review stage data
   const { data: submissions, isLoading: submissionsLoading } = useQuery({
     queryKey: ['scorecard-submissions', kpis?.map(k => k.id)],
     queryFn: async () => {
@@ -81,7 +82,27 @@ export default function MonthlyScorecardReport() {
         const batch = kpiIds.slice(i, i + batchSize);
         const { data, error } = await supabase
           .from('review_submissions')
-          .select('*')
+          .select(`
+            kpi_id,
+            achieved_value,
+            self_score,
+            self_rating,
+            self_remarks,
+            self_evidence_url,
+            manager_score,
+            manager_rating,
+            manager_remarks,
+            manager_evidence_url,
+            auditor_score,
+            auditor_rating,
+            auditor_remarks,
+            auditor_evidence_url,
+            management_score,
+            management_rating,
+            management_remarks,
+            final_score,
+            final_rating
+          `)
           .in('kpi_id', batch);
         
         if (error) throw error;
@@ -126,7 +147,7 @@ export default function MonthlyScorecardReport() {
     },
   });
 
-  // Build employee scorecards
+  // Build employee scorecards with full detail
   const employeeScorecards = useMemo(() => {
     if (!kpis || !profiles || !submissions) return [];
 
@@ -145,7 +166,7 @@ export default function MonthlyScorecardReport() {
     });
 
     // Build scorecards
-    const scorecards = Array.from(employeeKpis.entries()).map(([employeeId, empKpis]) => {
+    const scorecards: EmployeeScorecard[] = Array.from(employeeKpis.entries()).map(([employeeId, empKpis]) => {
       const profile = profileMap.get(employeeId);
       if (!profile) return null;
 
@@ -158,7 +179,7 @@ export default function MonthlyScorecardReport() {
       let completedKpis = 0;
       let approvedKpis = 0;
 
-      const kpiDetails = empKpis.map(kpi => {
+      const kpiDetails: KpiDetail[] = empKpis.map(kpi => {
         const submission = submissionMap.get(kpi.id);
         const weight = kpi.weightage || 0;
         totalWeightage += weight;
@@ -192,14 +213,34 @@ export default function MonthlyScorecardReport() {
           category: categoryMap.get(kpi.category_id) || 'Unknown',
           weightage: weight,
           target: kpi.target_value,
+          uom: kpi.uom || '%',
+          criteria: kpi.criteria || 'Higher is Better',
+          
+          // Self Review
+          selfAchieved: submission?.achieved_value,
           selfScore: submission?.self_score,
           selfRating: submission?.self_rating,
+          selfRemarks: submission?.self_remarks,
+          selfEvidence: submission?.self_evidence_url,
+          
+          // Manager Review
           managerScore: submission?.manager_score,
           managerRating: submission?.manager_rating,
+          managerRemarks: submission?.manager_remarks,
+          managerEvidence: submission?.manager_evidence_url,
+          
+          // Auditor Review
           auditorScore: submission?.auditor_score,
           auditorRating: submission?.auditor_rating,
+          auditorRemarks: submission?.auditor_remarks,
+          auditorEvidence: submission?.auditor_evidence_url,
+          
+          // Management Review
           managementScore: submission?.management_score,
           managementRating: submission?.management_rating,
+          managementRemarks: submission?.management_remarks,
+          
+          // Final
           finalScore: submission?.final_score,
           finalRating: submission?.final_rating,
           status: kpi.status,
@@ -212,12 +253,33 @@ export default function MonthlyScorecardReport() {
       const avgManagement = totalWeightage > 0 ? weightedManagementScore / totalWeightage : 0;
       const avgFinal = totalWeightage > 0 ? weightedFinalScore / totalWeightage : 0;
 
+      // Calculate category metrics
+      const categoryScores = new Map<string, { totalScore: number; totalWeight: number }>();
+      kpiDetails.forEach(kpi => {
+        if (!categoryScores.has(kpi.category)) {
+          categoryScores.set(kpi.category, { totalScore: 0, totalWeight: 0 });
+        }
+        const cat = categoryScores.get(kpi.category)!;
+        cat.totalWeight += kpi.weightage;
+        cat.totalScore += (kpi.finalScore || 0) * kpi.weightage;
+      });
+
+      const categoryMetrics = Array.from(categoryScores.entries()).map(([name, data]) => ({
+        name,
+        percentage: data.totalWeight > 0 ? (data.totalScore / data.totalWeight / 5) * 100 : 0,
+        weightage: data.totalWeight,
+        score: data.totalWeight > 0 ? data.totalScore / data.totalWeight : 0,
+      }));
+
+      // Get department name
+      const deptName = deptMap.get(profile.department_id || '');
+
       return {
         employeeId,
         employeeName: profile.full_name || 'Unknown',
         employeeCode: profile.employee_code || '',
         designation: profile.designation || '',
-        department: deptMap.get(profile.department_id || '') || 'Unknown',
+        department: deptName || 'Unknown',
         totalKpis: empKpis.length,
         completedKpis,
         approvedKpis,
@@ -227,8 +289,9 @@ export default function MonthlyScorecardReport() {
         avgManagementScore: avgManagement,
         avgFinalScore: avgFinal,
         kpiDetails,
+        categoryMetrics,
       };
-    }).filter(Boolean);
+    }).filter(Boolean) as EmployeeScorecard[];
 
     return scorecards;
   }, [kpis, profiles, submissions, departments, categories]);
@@ -238,38 +301,38 @@ export default function MonthlyScorecardReport() {
     if (!searchTerm) return employeeScorecards;
     const term = searchTerm.toLowerCase();
     return employeeScorecards.filter(sc => 
-      sc?.employeeName.toLowerCase().includes(term) ||
-      sc?.employeeCode.toLowerCase().includes(term) ||
-      sc?.department.toLowerCase().includes(term)
+      sc.employeeName.toLowerCase().includes(term) ||
+      sc.employeeCode.toLowerCase().includes(term) ||
+      sc.department.toLowerCase().includes(term)
     );
   }, [employeeScorecards, searchTerm]);
 
   // Summary stats
   const stats = useMemo(() => {
-    const scorecards = filteredScorecards.filter(Boolean);
+    const scorecards = filteredScorecards;
     const totalEmployees = scorecards.length;
-    const totalKpis = scorecards.reduce((sum, sc) => sum + (sc?.totalKpis || 0), 0);
-    const totalApproved = scorecards.reduce((sum, sc) => sum + (sc?.approvedKpis || 0), 0);
+    const totalKpis = scorecards.reduce((sum, sc) => sum + sc.totalKpis, 0);
+    const totalApproved = scorecards.reduce((sum, sc) => sum + sc.approvedKpis, 0);
     const avgFinal = totalEmployees > 0 
-      ? scorecards.reduce((sum, sc) => sum + (sc?.avgFinalScore || 0), 0) / totalEmployees 
+      ? scorecards.reduce((sum, sc) => sum + sc.avgFinalScore, 0) / totalEmployees 
       : 0;
 
     return { totalEmployees, totalKpis, totalApproved, avgFinal };
   }, [filteredScorecards]);
 
   const handleExportExcel = () => {
-    const exportData = filteredScorecards.filter(Boolean).map(sc => ({
-      'Employee Code': sc?.employeeCode,
-      'Employee Name': sc?.employeeName,
-      'Designation': sc?.designation,
-      'Department': sc?.department,
-      'Total KPIs': sc?.totalKpis,
-      'Approved KPIs': sc?.approvedKpis,
-      'Avg Self Score': sc?.avgSelfScore?.toFixed(2),
-      'Avg Manager Score': sc?.avgManagerScore?.toFixed(2),
-      'Avg Auditor Score': sc?.avgAuditorScore?.toFixed(2),
-      'Avg Management Score': sc?.avgManagementScore?.toFixed(2),
-      'Avg Final Score': sc?.avgFinalScore?.toFixed(2),
+    const exportData = filteredScorecards.map(sc => ({
+      'Employee Code': sc.employeeCode,
+      'Employee Name': sc.employeeName,
+      'Designation': sc.designation,
+      'Department': sc.department,
+      'Total KPIs': sc.totalKpis,
+      'Approved KPIs': sc.approvedKpis,
+      'Avg Self Score': sc.avgSelfScore.toFixed(2),
+      'Avg Manager Score': sc.avgManagerScore.toFixed(2),
+      'Avg Auditor Score': sc.avgAuditorScore.toFixed(2),
+      'Avg Management Score': sc.avgManagementScore.toFixed(2),
+      'Avg Final Score': sc.avgFinalScore.toFixed(2),
     }));
 
     const wb = XLSX.utils.book_new();
@@ -279,18 +342,17 @@ export default function MonthlyScorecardReport() {
   };
 
   const handleExportAllPdf = () => {
-    const validScorecards = filteredScorecards.filter(Boolean) as NonNullable<typeof filteredScorecards[0]>[];
-    if (validScorecards.length === 0) return;
+    if (filteredScorecards.length === 0) return;
     
-    generateBulkScorecardPdf(validScorecards, {
+    generateBulkScorecardPdf(filteredScorecards, {
       period: selectedPeriod,
       year: selectedYear,
       companyName,
     });
   };
 
-  const handleExportSinglePdf = (scorecard: NonNullable<typeof filteredScorecards[0]>) => {
-    generateScorecardPdf(scorecard, {
+  const handleExportSinglePdf = (scorecard: EmployeeScorecard) => {
+    generateDetailedScorecardPdf(scorecard, {
       period: selectedPeriod,
       year: selectedYear,
       companyName,
@@ -446,37 +508,37 @@ export default function MonthlyScorecardReport() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredScorecards.filter(Boolean).map((scorecard) => (
-                    <TableRow key={scorecard?.employeeId}>
+                  {filteredScorecards.map((scorecard) => (
+                    <TableRow key={scorecard.employeeId}>
                       <TableCell>
                         <div>
-                          <div className="font-medium">{scorecard?.employeeName}</div>
+                          <div className="font-medium">{scorecard.employeeName}</div>
                           <div className="text-xs text-muted-foreground">
-                            {scorecard?.employeeCode} • {scorecard?.designation}
+                            {scorecard.employeeCode} • {scorecard.designation}
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>{scorecard?.department}</TableCell>
+                      <TableCell>{scorecard.department}</TableCell>
                       <TableCell className="text-center">
                         <div className="text-sm">
-                          {scorecard?.approvedKpis}/{scorecard?.totalKpis}
+                          {scorecard.approvedKpis}/{scorecard.totalKpis}
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
-                        {scorecard?.avgSelfScore ? scorecard.avgSelfScore.toFixed(2) : '-'}
+                        {scorecard.avgSelfScore ? scorecard.avgSelfScore.toFixed(2) : '-'}
                       </TableCell>
                       <TableCell className="text-center">
-                        {scorecard?.avgManagerScore ? scorecard.avgManagerScore.toFixed(2) : '-'}
+                        {scorecard.avgManagerScore ? scorecard.avgManagerScore.toFixed(2) : '-'}
                       </TableCell>
                       <TableCell className="text-center">
-                        {scorecard?.avgAuditorScore ? scorecard.avgAuditorScore.toFixed(2) : '-'}
+                        {scorecard.avgAuditorScore ? scorecard.avgAuditorScore.toFixed(2) : '-'}
                       </TableCell>
                       <TableCell className="text-center">
-                        {scorecard?.avgManagementScore ? scorecard.avgManagementScore.toFixed(2) : '-'}
+                        {scorecard.avgManagementScore ? scorecard.avgManagementScore.toFixed(2) : '-'}
                       </TableCell>
                       <TableCell className="text-center">
                         <span className="font-semibold">
-                          {scorecard?.avgFinalScore ? scorecard.avgFinalScore.toFixed(2) : '-'}
+                          {scorecard.avgFinalScore ? scorecard.avgFinalScore.toFixed(2) : '-'}
                         </span>
                       </TableCell>
                       <TableCell className="text-center">
@@ -484,7 +546,7 @@ export default function MonthlyScorecardReport() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          onClick={() => scorecard && handleExportSinglePdf(scorecard)}
+                          onClick={() => handleExportSinglePdf(scorecard)}
                           title="Download PDF Scorecard"
                         >
                           <FileText className="h-4 w-4" />
