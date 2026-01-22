@@ -1044,6 +1044,89 @@ export type Database = {
         }
         Relationships: []
       }
+      template_bundle_items: {
+        Row: {
+          bundle_id: string
+          created_at: string
+          id: string
+          sort_order: number
+          template_id: string
+        }
+        Insert: {
+          bundle_id: string
+          created_at?: string
+          id?: string
+          sort_order?: number
+          template_id: string
+        }
+        Update: {
+          bundle_id?: string
+          created_at?: string
+          id?: string
+          sort_order?: number
+          template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_bundle_items_bundle_id_fkey"
+            columns: ["bundle_id"]
+            isOneToOne: false
+            referencedRelation: "template_bundles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "template_bundle_items_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      template_bundles: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          department_id: string | null
+          description: string | null
+          designation: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          department_id?: string | null
+          description?: string | null
+          designation?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          department_id?: string | null
+          description?: string | null
+          designation?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_bundles_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
