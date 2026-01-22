@@ -181,11 +181,22 @@ export default function Auth() {
             <div className="absolute -top-24 -right-24 w-48 h-48 bg-primary/20 rounded-full blur-3xl" />
             <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-secondary/20 rounded-full blur-3xl" />
             
-            <CardHeader className="relative text-center pb-2">
-              <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
-              <CardDescription>
-                Enter your credentials to access your dashboard
-              </CardDescription>
+            <CardHeader className="relative pb-2">
+              <div className="flex items-center gap-3">
+                {appSettings?.logo_url ? (
+                  <img src={appSettings.logo_url} alt="Logo" className="h-10 w-10 object-contain rounded-lg" />
+                ) : (
+                  <div className="p-2 rounded-lg bg-primary text-primary-foreground">
+                    <BarChart3 className="h-6 w-6" />
+                  </div>
+                )}
+                <div>
+                  <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
+                  <CardDescription className="text-left">
+                    {displayAppName}
+                  </CardDescription>
+                </div>
+              </div>
             </CardHeader>
             
             <Tabs defaultValue="login" className="w-full">
