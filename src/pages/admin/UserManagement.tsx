@@ -14,10 +14,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2 } from 'lucide-react';
+import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useKpiTemplates, KpiTemplate } from '@/hooks/useKpiTemplates';
 import { TemplateAssignmentDialog } from '@/components/admin/TemplateAssignmentDialog';
+import { BundleAssignDialog } from '@/components/admin/BundleAssignDialog';
 
 type AppRole = 'admin' | 'manager' | 'employee' | 'auditor' | 'management';
 
@@ -88,6 +89,10 @@ export default function UserManagement() {
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [newCreatedUser, setNewCreatedUser] = useState<{ id: string; name: string; role: AppRole } | null>(null);
   const [matchingTemplates, setMatchingTemplates] = useState<KpiTemplate[]>([]);
+
+  // Bundle Assignment Dialog
+  const [bundleDialogOpen, setBundleDialogOpen] = useState(false);
+  const [bundleAssignUserId, setBundleAssignUserId] = useState<string | undefined>(undefined);
 
   // Filtered and paginated profiles
   const filteredProfiles = useMemo(() => {
@@ -592,6 +597,17 @@ export default function UserManagement() {
                         <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} title="Edit">
                           <Edit2 className="h-4 w-4" />
                         </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          onClick={() => {
+                            setBundleAssignUserId(profile.id);
+                            setBundleDialogOpen(true);
+                          }} 
+                          title="Assign KRA Bundle"
+                        >
+                          <Package className="h-4 w-4" />
+                        </Button>
                         <Button size="sm" variant="ghost" onClick={() => openResetDialog(profile)} title="Reset Password">
                           <KeyRound className="h-4 w-4" />
                         </Button>
@@ -969,6 +985,16 @@ export default function UserManagement() {
           employeeName={newCreatedUser.name}
         />
       )}
+
+      {/* Bundle Assignment Dialog */}
+      <BundleAssignDialog
+        isOpen={bundleDialogOpen}
+        onClose={() => {
+          setBundleDialogOpen(false);
+          setBundleAssignUserId(undefined);
+        }}
+        preselectedEmployeeId={bundleAssignUserId}
+      />
     </div>
   );
 }

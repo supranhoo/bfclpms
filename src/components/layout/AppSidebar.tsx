@@ -36,6 +36,7 @@ import {
   GitBranch,
   Library,
   LayoutDashboard,
+  Package,
 } from 'lucide-react';
 
 const menuItems = {
@@ -59,6 +60,7 @@ const menuItems = {
     { title: 'Admin Dashboard', icon: LayoutDashboard, path: '/admin', roles: ['admin'] },
     { title: 'User Management', icon: Users, path: '/admin/users', roles: ['admin'] },
     { title: 'KRA Library', icon: Library, path: '/admin/templates', roles: ['admin'] },
+    { title: 'KRA Bundles', icon: Package, path: '/admin/bundles', roles: ['admin'] },
     { title: 'All KRAs', icon: Target, path: '/admin/kpis', roles: ['admin'] },
     { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', roles: ['admin'] },
     { title: 'Workflow Config', icon: GitBranch, path: '/admin/workflow-config', roles: ['admin'] },
