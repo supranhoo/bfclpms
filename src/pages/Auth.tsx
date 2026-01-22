@@ -1,15 +1,19 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BarChart3, Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { BarChart3, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Auth() {
   const { user, loading, signIn, signUp } = useAuth();
+  const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Login form state
@@ -20,6 +24,13 @@ export default function Auth() {
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupFullName, setSignupFullName] = useState('');
+
+  // Forgot password state
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [forgotPasswordSuccess, setForgotPasswordSuccess] = useState(false);
+  const [forgotPasswordError, setForgotPasswordError] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -49,6 +60,37 @@ export default function Auth() {
       await signIn(signupEmail, signupPassword);
     }
     setIsSubmitting(false);
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotPasswordError(null);
+    setForgotPasswordLoading(true);
+
+    try {
+      const redirectUrl = `${window.location.origin}/reset-password`;
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail, {
+        redirectTo: redirectUrl,
+      });
+
+      if (error) {
+        setForgotPasswordError(error.message);
+      } else {
+        setForgotPasswordSuccess(true);
+      }
+    } catch (err) {
+      setForgotPasswordError('An unexpected error occurred. Please try again.');
+    } finally {
+      setForgotPasswordLoading(false);
+    }
+  };
+
+  const resetForgotPasswordDialog = () => {
+    setForgotPasswordOpen(false);
+    setForgotPasswordEmail('');
+    setForgotPasswordSuccess(false);
+    setForgotPasswordError(null);
   };
 
   return (
@@ -97,6 +139,15 @@ export default function Auth() {
                       onChange={(e) => setLoginPassword(e.target.value)}
                       required
                     />
+                  </div>
+                  <div className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => setForgotPasswordOpen(true)}
+                      className="text-sm text-primary hover:underline"
+                    >
+                      Forgot Password?
+                    </button>
                   </div>
                 </CardContent>
                 <CardFooter>
@@ -157,6 +208,71 @@ export default function Auth() {
           </Tabs>
         </Card>
       </div>
+
+      {/* Forgot Password Dialog */}
+      <Dialog open={forgotPasswordOpen} onOpenChange={(open) => {
+        if (!open) resetForgotPasswordDialog();
+        else setForgotPasswordOpen(true);
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Enter your email address and we'll send you a link to reset your password.
+            </DialogDescription>
+          </DialogHeader>
+
+          {forgotPasswordSuccess ? (
+            <div className="py-6">
+              <div className="flex flex-col items-center text-center gap-4">
+                <CheckCircle className="h-12 w-12 text-green-500" />
+                <div>
+                  <p className="font-medium">Check your email</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    We've sent a password reset link to <strong>{forgotPasswordEmail}</strong>
+                  </p>
+                </div>
+              </div>
+              <DialogFooter className="mt-6">
+                <Button onClick={resetForgotPasswordDialog} className="w-full">
+                  Close
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <form onSubmit={handleForgotPassword}>
+              <div className="space-y-4 py-4">
+                {forgotPasswordError && (
+                  <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    <span>{forgotPasswordError}</span>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="forgot-email">Email</Label>
+                  <Input
+                    id="forgot-email"
+                    type="email"
+                    placeholder="Enter your email"
+                    value={forgotPasswordEmail}
+                    onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={resetForgotPasswordDialog}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={forgotPasswordLoading}>
+                  {forgotPasswordLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Send Reset Link
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
