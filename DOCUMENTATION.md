@@ -472,6 +472,30 @@ useAuth() → user.id → useMyKpis() → useReviewSubmissions() → Calculate s
 | Issues Report | `/reports/issues` | System issues dashboard |
 | Employee Summary | `/reports/employee-summary` | Individual performance |
 
+#### 4.10.1 Monthly Scorecard PDF Export
+
+The Monthly Scorecard Report includes an enhanced "Performance Dashboard" PDF export with the following features:
+
+**Page 1 - Dashboard Summary:**
+- Company branding and period header
+- Employee Profile Box (name, designation, department, employee code)
+- Score Summary Box with progress bar, overall rating badge, and KPI completion status
+- Performance by Category horizontal bar chart
+
+**Page 2+ - KPI Performance Details Table:**
+- **Category Grouping:** KPIs grouped by category with colored header rows showing category averages
+- **Simplified 7-Column Layout:** KRA/KPI, Target, Achieved, Weight, Review Scores (S/M/A/Mg), Final, Notes indicator
+- **Color-Coded Rating Badges:** Final scores displayed with colored backgrounds (Blue=5, Green=4, Yellow=3, Red=1-2)
+- **Achievement Indicators:** ✓ for targets met, ▼ for below target
+- **Legend Box:** Rating scale explanation in top-right corner
+- **Note References:** Numeric references [1], [2], etc. link to detailed remarks
+
+**Review Trail Notes Section:**
+- Full remarks from all 4 review stages (Self, Manager, Auditor, Management)
+- Evidence attachment indicators (📎)
+- Paginated for large datasets
+- Each note includes stage label and full text (not truncated)
+
 ### 4.11 Performance Improvement Plans (PIP)
 
 **Workflow:**
