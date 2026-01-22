@@ -9,8 +9,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Download, Search, FileSpreadsheet, Users, Target, TrendingUp } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Download, Search, FileSpreadsheet, Users, Target, TrendingUp, FileText, ChevronDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { generateBulkScorecardPdf, generateScorecardPdf } from '@/lib/pdfExport';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -31,6 +34,12 @@ export default function MonthlyScorecardReport() {
   const [selectedPeriod, setSelectedPeriod] = useState(currentMonth);
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
   const [searchTerm, setSearchTerm] = useState('');
+  
+  const { data: systemSettings } = useSystemSettings();
+  const companyName = useMemo(() => {
+    const setting = systemSettings?.find(s => s.setting_key === 'company_name');
+    return (setting?.setting_value as string) || 'Performance Management System';
+  }, [systemSettings]);
 
   // Fetch KPIs with submissions
   const { data: kpis, isLoading: kpisLoading } = useQuery({
@@ -269,6 +278,25 @@ export default function MonthlyScorecardReport() {
     XLSX.writeFile(wb, `Monthly_Scorecard_${selectedPeriod}_${selectedYear}.xlsx`);
   };
 
+  const handleExportAllPdf = () => {
+    const validScorecards = filteredScorecards.filter(Boolean) as NonNullable<typeof filteredScorecards[0]>[];
+    if (validScorecards.length === 0) return;
+    
+    generateBulkScorecardPdf(validScorecards, {
+      period: selectedPeriod,
+      year: selectedYear,
+      companyName,
+    });
+  };
+
+  const handleExportSinglePdf = (scorecard: NonNullable<typeof filteredScorecards[0]>) => {
+    generateScorecardPdf(scorecard, {
+      period: selectedPeriod,
+      year: selectedYear,
+      companyName,
+    });
+  };
+
   const isLoading = kpisLoading || submissionsLoading || profilesLoading;
 
   const getRatingBadge = (rating: string | null) => {
@@ -299,10 +327,27 @@ export default function MonthlyScorecardReport() {
         description={`Employee performance scorecards for ${selectedPeriod} ${selectedYear}`}
         backTo="/reports"
         actions={
-          <Button onClick={handleExportExcel} className="gap-2">
-            <Download className="h-4 w-4" />
-            Export Excel
-          </Button>
+          <div className="flex gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <Download className="h-4 w-4" />
+                  Export
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleExportExcel}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Export to Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportAllPdf}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Export All to PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         }
       />
 
@@ -406,8 +451,9 @@ export default function MonthlyScorecardReport() {
                     <TableHead className="text-center">Self</TableHead>
                     <TableHead className="text-center">Manager</TableHead>
                     <TableHead className="text-center">Auditor</TableHead>
-                    <TableHead className="text-center">Management</TableHead>
+                    <TableHead className="text-center">Mgmt</TableHead>
                     <TableHead className="text-center">Final</TableHead>
+                    <TableHead className="text-center w-[60px]">PDF</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -443,6 +489,17 @@ export default function MonthlyScorecardReport() {
                         <span className="font-semibold">
                           {scorecard?.avgFinalScore ? scorecard.avgFinalScore.toFixed(2) : '-'}
                         </span>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => scorecard && handleExportSinglePdf(scorecard)}
+                          title="Download PDF Scorecard"
+                        >
+                          <FileText className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
