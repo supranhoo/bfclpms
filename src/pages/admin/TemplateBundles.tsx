@@ -4,22 +4,26 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useTemplateBundles, useDeleteTemplateBundle, TemplateBundle } from '@/hooks/useTemplateBundles';
+import { useTemplateBundles, useDeleteTemplateBundle, useDuplicateTemplateBundle, TemplateBundle } from '@/hooks/useTemplateBundles';
 import { BundleFormDialog } from '@/components/admin/BundleFormDialog';
 import { BundleAssignDialog } from '@/components/admin/BundleAssignDialog';
-import { Plus, Package, MoreHorizontal, Pencil, Trash2, Users, FileText, CheckCircle, XCircle } from 'lucide-react';
+import { BundleHistoryDialog } from '@/components/admin/BundleHistoryDialog';
+import { Plus, Package, MoreHorizontal, Pencil, Trash2, Users, FileText, CheckCircle, XCircle, Copy, History } from 'lucide-react';
 
 export default function TemplateBundles() {
   const { data: bundles, isLoading } = useTemplateBundles();
   const deleteBundle = useDeleteTemplateBundle();
+  const duplicateBundle = useDuplicateTemplateBundle();
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [editingBundle, setEditingBundle] = useState<TemplateBundle | null>(null);
   const [deletingBundle, setDeletingBundle] = useState<TemplateBundle | null>(null);
+  const [historyBundle, setHistoryBundle] = useState<TemplateBundle | null>(null);
 
   const handleEdit = (bundle: TemplateBundle) => {
     setEditingBundle(bundle);
@@ -36,6 +40,15 @@ export default function TemplateBundles() {
       deleteBundle.mutate(deletingBundle.id);
       setDeletingBundle(null);
     }
+  };
+
+  const handleDuplicate = (bundle: TemplateBundle) => {
+    duplicateBundle.mutate(bundle.id);
+  };
+
+  const handleViewHistory = (bundle: TemplateBundle | null) => {
+    setHistoryBundle(bundle);
+    setIsHistoryOpen(true);
   };
 
   // Stats
@@ -64,6 +77,10 @@ export default function TemplateBundles() {
         description="Create and manage KRA bundles for fast employee onboarding"
         actions={
           <>
+            <Button variant="outline" onClick={() => handleViewHistory(null)}>
+              <History className="mr-2 h-4 w-4" />
+              Assignment History
+            </Button>
             <Button variant="outline" onClick={() => setIsAssignOpen(true)}>
               <Users className="mr-2 h-4 w-4" />
               Assign Bundle
@@ -188,6 +205,15 @@ export default function TemplateBundles() {
                             <Pencil className="h-4 w-4 mr-2" />
                             Edit
                           </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDuplicate(bundle)}>
+                            <Copy className="h-4 w-4 mr-2" />
+                            Duplicate
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleViewHistory(bundle)}>
+                            <History className="h-4 w-4 mr-2" />
+                            View History
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => setDeletingBundle(bundle)}
                             className="text-destructive"
@@ -217,6 +243,13 @@ export default function TemplateBundles() {
       <BundleAssignDialog
         isOpen={isAssignOpen}
         onClose={() => setIsAssignOpen(false)}
+      />
+
+      {/* History Dialog */}
+      <BundleHistoryDialog
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        bundle={historyBundle}
       />
 
       {/* Delete Confirmation */}

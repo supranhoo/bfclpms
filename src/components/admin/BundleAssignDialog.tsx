@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useTemplateBundles, TemplateBundle } from '@/hooks/useTemplateBundles';
+import { useTemplateBundles, useLogBundleAssignment, TemplateBundle } from '@/hooks/useTemplateBundles';
 import { useProfiles, useDepartments } from '@/hooks/useOrganization';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { supabase } from '@/integrations/supabase/client';
@@ -31,6 +31,7 @@ export function BundleAssignDialog({ isOpen, onClose, preselectedEmployeeId }: B
   const { data: settings } = useSystemSettings();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const logAssignment = useLogBundleAssignment();
 
   const [step, setStep] = useState<'select-bundle' | 'select-employees' | 'preview'>(
     preselectedEmployeeId ? 'select-bundle' : 'select-employees'
@@ -119,7 +120,7 @@ export function BundleAssignDialog({ isOpen, onClose, preselectedEmployeeId }: B
 
   const assignBundle = useMutation({
     mutationFn: async () => {
-      if (!selectedBundle?.template_bundle_items) return;
+      if (!selectedBundle?.template_bundle_items) return { kpisCreated: 0 };
 
       const kpisToInsert = [];
       
@@ -144,8 +145,24 @@ export function BundleAssignDialog({ isOpen, onClose, preselectedEmployeeId }: B
         .insert(kpisToInsert);
 
       if (error) throw error;
+
+      // Return info for logging
+      return {
+        kpisCreated: selectedBundle.template_bundle_items.length,
+      };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Log assignment history for each employee
+      const logs = selectedEmployeeIds.map(employeeId => ({
+        bundle_id: selectedBundleId,
+        employee_id: employeeId,
+        review_period: currentPeriod,
+        review_year: currentYear,
+        kpis_created: data?.kpisCreated || 0,
+      }));
+      
+      logAssignment.mutate(logs);
+
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
       toast({
