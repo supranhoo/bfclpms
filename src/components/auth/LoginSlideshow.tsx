@@ -73,41 +73,24 @@ export function LoginSlideshow({
         </div>
       )}
 
-      {/* Content overlay - right-aligned strip */}
-      <div className="relative z-10 h-full flex">
-        {/* Left side: Empty - wallpaper shows through */}
-        <div className="flex-1" />
-        
-        {/* Right content strip */}
-        <div className="w-2/5 max-w-md h-full flex flex-col justify-between p-8 lg:p-12">
-          {/* Top spacer */}
-          <div />
-
-          {/* Middle: Slide indicators */}
-          {wallpapers.length > 1 ? (
-            <div className="flex items-center gap-2">
-              {wallpapers.map((_, index) => (
-                <button
-                  key={index}
-                  onClick={() => goToSlide(index)}
-                  className={cn(
-                    'h-2 rounded-full transition-all duration-300',
-                    index === currentIndex
-                      ? 'w-8 bg-primary'
-                      : 'w-2 bg-foreground/30 hover:bg-foreground/50'
-                  )}
-                  aria-label={`Go to slide ${index + 1}`}
-                />
-              ))}
-            </div>
-          ) : (
-            <div />
-          )}
-
-          {/* Bottom spacer */}
-          <div />
+      {/* Slide indicators - bottom left */}
+      {wallpapers.length > 1 && (
+        <div className="absolute bottom-8 left-8 z-10 flex items-center gap-2">
+          {wallpapers.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => goToSlide(index)}
+              className={cn(
+                'h-2 rounded-full transition-all duration-300',
+                index === currentIndex
+                  ? 'w-8 bg-primary'
+                  : 'w-2 bg-foreground/30 hover:bg-foreground/50'
+              )}
+              aria-label={`Go to slide ${index + 1}`}
+            />
+          ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }
