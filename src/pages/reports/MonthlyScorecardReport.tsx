@@ -327,26 +327,15 @@ export default function MonthlyScorecardReport() {
         description={`Employee performance scorecards for ${selectedPeriod} ${selectedYear}`}
         backTo="/reports"
         actions={
-          <div className="flex gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                  <Download className="h-4 w-4" />
-                  Export
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleExportExcel}>
-                  <FileSpreadsheet className="h-4 w-4 mr-2" />
-                  Export to Excel
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportAllPdf}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  Export All to PDF
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="gap-2" onClick={handleExportExcel}>
+              <FileSpreadsheet className="h-4 w-4" />
+              Excel
+            </Button>
+            <Button variant="outline" className="gap-2" onClick={handleExportAllPdf}>
+              <FileText className="h-4 w-4" />
+              PDF
+            </Button>
           </div>
         }
       />
