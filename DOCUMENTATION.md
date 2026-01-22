@@ -289,7 +289,7 @@ has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
 5. `ProtectedRoute` component enforces role-based access
 
 **Password Reset:**
-- **Self-Service:** Users can click "Forgot Password?" on the login page to receive a password reset email. The email contains a link to `/reset-password` where they can set a new password.
+- **Self-Service:** Users can click "Forgot Password?" on the login page to receive a password reset email. The email contains a link to `/reset-password` where they can set a new password. **Rate limited to 1 request per 60 seconds** to prevent abuse.
 - **Admin-Initiated:** Admins can generate password reset links for any user via the User Management page (key icon in Actions column).
 
 **Edge Cases:**
