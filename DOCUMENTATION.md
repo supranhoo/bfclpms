@@ -474,7 +474,12 @@ useAuth() → user.id → useMyKpis() → useReviewSubmissions() → Calculate s
 
 #### 4.10.1 Monthly Scorecard PDF Export
 
-The Monthly Scorecard Report includes an enhanced "Performance Dashboard" PDF export with the following features:
+The Monthly Scorecard Report includes an enhanced "Performance Dashboard" PDF export with preview functionality:
+
+**UI Features:**
+- **Eye Icon (Preview):** Click to open a full-screen PDF preview in a modal dialog before downloading
+- **Download Icon:** Direct download of the PDF scorecard
+- Both buttons appear in the Actions column for each employee row
 
 **Page 1 - Dashboard Summary:**
 - Company branding and period header
@@ -484,17 +489,26 @@ The Monthly Scorecard Report includes an enhanced "Performance Dashboard" PDF ex
 
 **Page 2+ - KPI Performance Details Table:**
 - **Category Grouping:** KPIs grouped by category with colored header rows showing category averages
-- **Simplified 7-Column Layout:** KRA/KPI, Target, Achieved, Weight, Review Scores (S/M/A/Mg), Final, Notes indicator
+- **8-Column Layout:** KRA/KPI, Weight, Target, Self Review (Ach./Remark), Manager (Score/Remark), Auditor (Score/Remark), Final, Notes indicator
+- **Review Stage Columns:** Each review stage shows achieved/score value AND truncated remarks in the same cell
 - **Color-Coded Rating Badges:** Final scores displayed with colored backgrounds (Blue=5, Green=4, Yellow=3, Red=1-2)
-- **Achievement Indicators:** ✓ for targets met, ▼ for below target
+- **Achievement Indicators:** [+] for targets met, [-] for below target (ASCII-safe for PDF compatibility)
 - **Legend Box:** Rating scale explanation in top-right corner
 - **Note References:** Numeric references [1], [2], etc. link to detailed remarks
 
 **Review Trail Notes Section:**
 - Full remarks from all 4 review stages (Self, Manager, Auditor, Management)
-- Evidence attachment indicators (📎)
+- Evidence attachment indicators ([Ev])
 - Paginated for large datasets
 - Each note includes stage label and full text (not truncated)
+
+**PDF Character Compatibility:**
+- All indicators use ASCII-safe characters for maximum PDF compatibility:
+  - `[+]` = Target Met/Exceeded
+  - `[-]` = Below Target
+  - `*` = Has Review Notes
+  - `[Ev]` = Evidence Attached
+  - `(Lower)` / `(Higher)` = Criteria direction
 
 ### 4.11 Performance Improvement Plans (PIP)
 
