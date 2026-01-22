@@ -7,15 +7,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { BarChart3, Loader2, CheckCircle, AlertCircle, Eye, EyeOff, Lock, Mail, User, ArrowRight } from 'lucide-react';
+import { BarChart3, Loader2, CheckCircle, AlertCircle, Eye, EyeOff, Lock, Mail, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { LoginSlideshow } from '@/components/auth/LoginSlideshow';
 import { cn } from '@/lib/utils';
 
 export default function Auth() {
-  const { user, loading, signIn, signUp } = useAuth();
+  const { user, loading, signIn } = useAuth();
   const { data: appSettings, isLoading: isLoadingSettings } = useAppSettings();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,11 +25,6 @@ export default function Auth() {
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   
-  // Signup form state
-  const [signupEmail, setSignupEmail] = useState('');
-  const [signupPassword, setSignupPassword] = useState('');
-  const [signupFullName, setSignupFullName] = useState('');
-  const [showSignupPassword, setShowSignupPassword] = useState(false);
 
   // Focus state for input styling
   const [focusedField, setFocusedField] = useState<string | null>(null);
@@ -74,16 +69,6 @@ export default function Auth() {
     setIsSubmitting(false);
   };
 
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    const { error } = await signUp(signupEmail, signupPassword, signupFullName);
-    if (!error) {
-      // Auto-login after signup
-      await signIn(signupEmail, signupPassword);
-    }
-    setIsSubmitting(false);
-  };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -210,210 +195,93 @@ export default function Auth() {
               </div>
             </CardHeader>
             
-            <Tabs defaultValue="login" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mx-4 bg-muted/50" style={{ width: 'calc(100% - 2rem)' }}>
-                <TabsTrigger value="login" className="data-[state=active]:bg-background">Sign In</TabsTrigger>
-                <TabsTrigger value="signup" className="data-[state=active]:bg-background">Sign Up</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="login" className="relative">
-                <form onSubmit={handleLogin}>
-                  <CardContent className="space-y-4 pt-4">
-                    {/* Email Field */}
-                    <div className="space-y-2">
-                      <Label htmlFor="login-email" className="text-sm font-medium">
-                        Email Address
-                      </Label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Mail className={cn(
-                            "h-4 w-4 transition-colors",
-                            focusedField === 'login-email' ? 'text-primary' : 'text-muted-foreground'
-                          )} />
-                        </div>
-                        <Input
-                          id="login-email"
-                          type="email"
-                          placeholder="name@company.com"
-                          value={loginEmail}
-                          onChange={(e) => setLoginEmail(e.target.value)}
-                          onFocus={() => setFocusedField('login-email')}
-                          onBlur={() => setFocusedField(null)}
-                          className="pl-10 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
-                          required
-                        />
-                      </div>
+            <form onSubmit={handleLogin}>
+              <CardContent className="space-y-4 pt-4">
+                {/* Email Field */}
+                <div className="space-y-2">
+                  <Label htmlFor="login-email" className="text-sm font-medium">
+                    Email Address
+                  </Label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Mail className={cn(
+                        "h-4 w-4 transition-colors",
+                        focusedField === 'login-email' ? 'text-primary' : 'text-muted-foreground'
+                      )} />
                     </div>
+                    <Input
+                      id="login-email"
+                      type="email"
+                      placeholder="name@company.com"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      onFocus={() => setFocusedField('login-email')}
+                      onBlur={() => setFocusedField(null)}
+                      className="pl-10 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
+                      required
+                    />
+                  </div>
+                </div>
 
-                    {/* Password Field */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="login-password" className="text-sm font-medium">
-                          Password
-                        </Label>
-                        <button
-                          type="button"
-                          onClick={() => setForgotPasswordOpen(true)}
-                          className="text-xs text-primary hover:text-primary/80 hover:underline transition-colors"
-                        >
-                          Forgot?
-                        </button>
-                      </div>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Lock className={cn(
-                            "h-4 w-4 transition-colors",
-                            focusedField === 'login-password' ? 'text-primary' : 'text-muted-foreground'
-                          )} />
-                        </div>
-                        <Input
-                          id="login-password"
-                          type={showLoginPassword ? 'text' : 'password'}
-                          placeholder="••••••••"
-                          value={loginPassword}
-                          onChange={(e) => setLoginPassword(e.target.value)}
-                          onFocus={() => setFocusedField('login-password')}
-                          onBlur={() => setFocusedField(null)}
-                          className="pl-10 pr-10 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
-                          required
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowLoginPassword(!showLoginPassword)}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    </div>
-                  </CardContent>
-                  <CardFooter className="flex flex-col gap-4">
-                    <Button
-                      type="submit"
-                      className="w-full h-11 font-semibold group"
-                      disabled={isSubmitting}
+                {/* Password Field */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="login-password" className="text-sm font-medium">
+                      Password
+                    </Label>
+                    <button
+                      type="button"
+                      onClick={() => setForgotPasswordOpen(true)}
+                      className="text-xs text-primary hover:text-primary/80 hover:underline transition-colors"
                     >
-                      {isSubmitting ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          Sign In
-                          <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                        </>
-                      )}
-                    </Button>
-                  </CardFooter>
-                </form>
-              </TabsContent>
-              
-              <TabsContent value="signup" className="relative">
-                <form onSubmit={handleSignup}>
-                  <CardContent className="space-y-4 pt-4">
-                    {/* Full Name Field */}
-                    <div className="space-y-2">
-                      <Label htmlFor="signup-name" className="text-sm font-medium">
-                        Full Name
-                      </Label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <User className={cn(
-                            "h-4 w-4 transition-colors",
-                            focusedField === 'signup-name' ? 'text-primary' : 'text-muted-foreground'
-                          )} />
-                        </div>
-                        <Input
-                          id="signup-name"
-                          type="text"
-                          placeholder="John Doe"
-                          value={signupFullName}
-                          onChange={(e) => setSignupFullName(e.target.value)}
-                          onFocus={() => setFocusedField('signup-name')}
-                          onBlur={() => setFocusedField(null)}
-                          className="pl-10 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
-                          required
-                        />
-                      </div>
+                      Forgot?
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Lock className={cn(
+                        "h-4 w-4 transition-colors",
+                        focusedField === 'login-password' ? 'text-primary' : 'text-muted-foreground'
+                      )} />
                     </div>
-
-                    {/* Email Field */}
-                    <div className="space-y-2">
-                      <Label htmlFor="signup-email" className="text-sm font-medium">
-                        Email Address
-                      </Label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Mail className={cn(
-                            "h-4 w-4 transition-colors",
-                            focusedField === 'signup-email' ? 'text-primary' : 'text-muted-foreground'
-                          )} />
-                        </div>
-                        <Input
-                          id="signup-email"
-                          type="email"
-                          placeholder="name@company.com"
-                          value={signupEmail}
-                          onChange={(e) => setSignupEmail(e.target.value)}
-                          onFocus={() => setFocusedField('signup-email')}
-                          onBlur={() => setFocusedField(null)}
-                          className="pl-10 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    {/* Password Field */}
-                    <div className="space-y-2">
-                      <Label htmlFor="signup-password" className="text-sm font-medium">
-                        Password
-                      </Label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Lock className={cn(
-                            "h-4 w-4 transition-colors",
-                            focusedField === 'signup-password' ? 'text-primary' : 'text-muted-foreground'
-                          )} />
-                        </div>
-                        <Input
-                          id="signup-password"
-                          type={showSignupPassword ? 'text' : 'password'}
-                          placeholder="Min 6 characters"
-                          value={signupPassword}
-                          onChange={(e) => setSignupPassword(e.target.value)}
-                          onFocus={() => setFocusedField('signup-password')}
-                          onBlur={() => setFocusedField(null)}
-                          className="pl-10 pr-10 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
-                          minLength={6}
-                          required
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowSignupPassword(!showSignupPassword)}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          {showSignupPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    </div>
-                  </CardContent>
-                  <CardFooter>
-                    <Button
-                      type="submit"
-                      className="w-full h-11 font-semibold group"
-                      disabled={isSubmitting}
+                    <Input
+                      id="login-password"
+                      type={showLoginPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      onFocus={() => setFocusedField('login-password')}
+                      onBlur={() => setFocusedField(null)}
+                      className="pl-10 pr-10 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
                     >
-                      {isSubmitting ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          Create Account
-                          <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                        </>
-                      )}
-                    </Button>
-                  </CardFooter>
-                </form>
-              </TabsContent>
-            </Tabs>
+                      {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+              </CardContent>
+              <CardFooter className="flex flex-col gap-4">
+                <Button
+                  type="submit"
+                  className="w-full h-11 font-semibold group"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      Sign In
+                      <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                    </>
+                  )}
+                </Button>
+              </CardFooter>
+            </form>
 
             {/* Footer */}
             <div className="relative px-6 pb-4 pt-2 text-center">
