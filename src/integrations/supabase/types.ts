@@ -14,6 +14,61 @@ export type Database = {
   }
   public: {
     Tables: {
+      bundle_assignment_logs: {
+        Row: {
+          assigned_by: string | null
+          bundle_id: string
+          created_at: string
+          employee_id: string
+          id: string
+          kpis_created: number
+          review_period: string
+          review_year: number
+        }
+        Insert: {
+          assigned_by?: string | null
+          bundle_id: string
+          created_at?: string
+          employee_id: string
+          id?: string
+          kpis_created?: number
+          review_period: string
+          review_year: number
+        }
+        Update: {
+          assigned_by?: string | null
+          bundle_id?: string
+          created_at?: string
+          employee_id?: string
+          id?: string
+          kpis_created?: number
+          review_period?: string
+          review_year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bundle_assignment_logs_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bundle_assignment_logs_bundle_id_fkey"
+            columns: ["bundle_id"]
+            isOneToOne: false
+            referencedRelation: "template_bundles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bundle_assignment_logs_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       business_units: {
         Row: {
           code: string | null
