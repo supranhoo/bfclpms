@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          app_name: string
+          created_at: string
+          id: string
+          login_background_url: string | null
+          logo_url: string | null
+          organization_name: string
+          updated_at: string
+        }
+        Insert: {
+          app_name?: string
+          created_at?: string
+          id?: string
+          login_background_url?: string | null
+          logo_url?: string | null
+          organization_name?: string
+          updated_at?: string
+        }
+        Update: {
+          app_name?: string
+          created_at?: string
+          id?: string
+          login_background_url?: string | null
+          logo_url?: string | null
+          organization_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       bundle_assignment_logs: {
         Row: {
           assigned_by: string | null
