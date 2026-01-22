@@ -6,14 +6,15 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useTemplateBundles, useLogBundleAssignment, TemplateBundle } from '@/hooks/useTemplateBundles';
 import { useKpiTemplates, KpiTemplate } from '@/hooks/useKpiTemplates';
 import { useDepartments } from '@/hooks/useOrganization';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { supabase } from '@/integrations/supabase/client';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Package, FileText, Target, Sparkles, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Loader2, Package, FileText, Target, Sparkles, CheckCircle, AlertTriangle, Copy } from 'lucide-react';
 
 type AppRole = 'employee' | 'manager' | 'auditor' | 'admin' | 'management';
 
@@ -61,6 +62,31 @@ export function SmartAssignmentDialog({
   const [activeTab, setActiveTab] = useState<'bundles' | 'templates'>('bundles');
   const [selectedBundleId, setSelectedBundleId] = useState<string>('');
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<string>>(new Set());
+  const [skipDuplicates, setSkipDuplicates] = useState(true);
+
+  // Fetch existing KPIs for this employee in the current period
+  const { data: existingKpis } = useQuery({
+    queryKey: ['employee-kpis', employeeId, currentPeriod, currentYear],
+    queryFn: async () => {
+      if (!employeeId) return [];
+      const { data, error } = await supabase
+        .from('kpis')
+        .select('id, kra_name, kpi_name')
+        .eq('employee_id', employeeId)
+        .eq('review_period', currentPeriod)
+        .eq('review_year', currentYear);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: isOpen && !!employeeId,
+  });
+
+  // Create a set of existing KPI signatures for quick lookup
+  const existingKpiSignatures = useMemo(() => {
+    return new Set(
+      existingKpis?.map(kpi => `${kpi.kra_name}::${kpi.kpi_name}`.toLowerCase()) || []
+    );
+  }, [existingKpis]);
 
   // Get active bundles, prioritize department matches
   const activeBundles = useMemo(() => {
@@ -100,6 +126,47 @@ export function SmartAssignmentDialog({
       return sum + (template?.weightage || 0);
     }, 0);
   }, [selectedTemplateIds, templates]);
+
+  // Detect duplicates in selected bundle
+  const bundleDuplicates = useMemo(() => {
+    if (!selectedBundle?.template_bundle_items) return [];
+    return selectedBundle.template_bundle_items.filter(item => {
+      const signature = `${item.kpi_templates.kra_name}::${item.kpi_templates.kpi_name}`.toLowerCase();
+      return existingKpiSignatures.has(signature);
+    }).map(item => ({
+      kra_name: item.kpi_templates.kra_name,
+      kpi_name: item.kpi_templates.kpi_name,
+    }));
+  }, [selectedBundle, existingKpiSignatures]);
+
+  // Detect duplicates in selected templates
+  const templateDuplicates = useMemo(() => {
+    return Array.from(selectedTemplateIds)
+      .map(id => templates?.find(t => t.id === id))
+      .filter(template => {
+        if (!template) return false;
+        const signature = `${template.kra_name}::${template.kpi_name}`.toLowerCase();
+        return existingKpiSignatures.has(signature);
+      })
+      .map(template => ({
+        id: template!.id,
+        kra_name: template!.kra_name,
+        kpi_name: template!.kpi_name,
+      }));
+  }, [selectedTemplateIds, templates, existingKpiSignatures]);
+
+  // Check if template is a duplicate
+  const isTemplateDuplicate = (templateId: string) => {
+    const template = templates?.find(t => t.id === templateId);
+    if (!template) return false;
+    const signature = `${template.kra_name}::${template.kpi_name}`.toLowerCase();
+    return existingKpiSignatures.has(signature);
+  };
+
+  // Current duplicates based on active tab
+  const hasDuplicates = activeTab === 'bundles' 
+    ? bundleDuplicates.length > 0 
+    : templateDuplicates.length > 0;
 
   // Auto-select based on what's available
   useEffect(() => {
@@ -143,9 +210,21 @@ export function SmartAssignmentDialog({
   // Assign bundle mutation
   const assignBundle = useMutation({
     mutationFn: async () => {
-      if (!selectedBundle?.template_bundle_items) return { kpisCreated: 0 };
+      if (!selectedBundle?.template_bundle_items) return { kpisCreated: 0, skipped: 0 };
 
-      const kpisToInsert = selectedBundle.template_bundle_items.map(item => ({
+      // Filter out duplicates if skipDuplicates is enabled
+      const itemsToInsert = skipDuplicates 
+        ? selectedBundle.template_bundle_items.filter(item => {
+            const signature = `${item.kpi_templates.kra_name}::${item.kpi_templates.kpi_name}`.toLowerCase();
+            return !existingKpiSignatures.has(signature);
+          })
+        : selectedBundle.template_bundle_items;
+
+      if (itemsToInsert.length === 0) {
+        return { kpisCreated: 0, skipped: selectedBundle.template_bundle_items.length };
+      }
+
+      const kpisToInsert = itemsToInsert.map(item => ({
         employee_id: employeeId,
         kra_name: item.kpi_templates.kra_name,
         kpi_name: item.kpi_templates.kpi_name,
@@ -171,7 +250,8 @@ export function SmartAssignmentDialog({
       const { error } = await supabase.from('kpis').insert(kpisToInsert);
       if (error) throw error;
 
-      return { kpisCreated: kpisToInsert.length };
+      const skipped = selectedBundle.template_bundle_items.length - itemsToInsert.length;
+      return { kpisCreated: kpisToInsert.length, skipped };
     },
     onSuccess: (data) => {
       // Log bundle assignment
@@ -185,9 +265,12 @@ export function SmartAssignmentDialog({
 
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-kpis'] });
+      
+      const skippedMsg = data?.skipped ? ` (${data.skipped} duplicates skipped)` : '';
       toast({
         title: 'KPIs Assigned Successfully',
-        description: `${data?.kpisCreated} KPIs from "${selectedBundle?.name}" assigned to ${employeeName}`,
+        description: `${data?.kpisCreated} KPIs from "${selectedBundle?.name}" assigned to ${employeeName}${skippedMsg}`,
       });
       handleClose();
     },
@@ -203,7 +286,21 @@ export function SmartAssignmentDialog({
   // Assign templates mutation
   const assignTemplates = useMutation({
     mutationFn: async (templateIds: string[]) => {
-      const selectedTemplates = templates?.filter(t => templateIds.includes(t.id)) || [];
+      let selectedTemplates = templates?.filter(t => templateIds.includes(t.id)) || [];
+      
+      // Filter out duplicates if skipDuplicates is enabled
+      if (skipDuplicates) {
+        selectedTemplates = selectedTemplates.filter(template => {
+          const signature = `${template.kra_name}::${template.kpi_name}`.toLowerCase();
+          return !existingKpiSignatures.has(signature);
+        });
+      }
+
+      const skipped = templateIds.length - selectedTemplates.length;
+
+      if (selectedTemplates.length === 0) {
+        return { created: 0, skipped };
+      }
 
       const kpisToInsert = selectedTemplates.map(template => ({
         employee_id: employeeId,
@@ -231,14 +328,17 @@ export function SmartAssignmentDialog({
       const { error } = await supabase.from('kpis').insert(kpisToInsert);
       if (error) throw error;
 
-      return kpisToInsert.length;
+      return { created: kpisToInsert.length, skipped };
     },
-    onSuccess: (count) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-kpis'] });
+      
+      const skippedMsg = data?.skipped ? ` (${data.skipped} duplicates skipped)` : '';
       toast({
         title: 'KPIs Assigned Successfully',
-        description: `${count} KPIs have been assigned to ${employeeName}`,
+        description: `${data?.created} KPIs have been assigned to ${employeeName}${skippedMsg}`,
       });
       handleClose();
     },
@@ -270,9 +370,15 @@ export function SmartAssignmentDialog({
   const canAssign = activeTab === 'bundles' 
     ? !!selectedBundleId 
     : selectedTemplateIds.size > 0;
+  
+  // Calculate actual count (excluding duplicates if skipDuplicates is on)
+  const bundleCount = selectedBundle?.template_bundle_items?.length || 0;
+  const bundleNewCount = bundleCount - bundleDuplicates.length;
+  const templateNewCount = selectedTemplateIds.size - templateDuplicates.length;
+  
   const assignCount = activeTab === 'bundles'
-    ? (selectedBundle?.template_bundle_items?.length || 0)
-    : selectedTemplateIds.size;
+    ? (skipDuplicates ? bundleNewCount : bundleCount)
+    : (skipDuplicates ? templateNewCount : selectedTemplateIds.size);
 
   // Get department name
   const deptName = departments?.find(d => d.id === employeeDepartmentId)?.name;
@@ -404,52 +510,98 @@ export function SmartAssignmentDialog({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {roleTemplates.map(template => (
-                    <label
-                      key={template.id}
-                      className={`flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
-                        selectedTemplateIds.has(template.id) ? 'border-primary bg-primary/5' : ''
-                      }`}
-                    >
-                      <Checkbox
-                        checked={selectedTemplateIds.has(template.id)}
-                        onCheckedChange={() => toggleTemplate(template.id)}
-                        className="mt-0.5"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Target className="h-4 w-4 text-primary shrink-0" />
-                          <span className="font-medium truncate">{template.kra_name}</span>
+                  {roleTemplates.map(template => {
+                    const isDuplicate = isTemplateDuplicate(template.id);
+                    return (
+                      <label
+                        key={template.id}
+                        className={`flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors ${
+                          selectedTemplateIds.has(template.id) ? 'border-primary bg-primary/5' : ''
+                        } ${isDuplicate ? 'opacity-60' : ''}`}
+                      >
+                        <Checkbox
+                          checked={selectedTemplateIds.has(template.id)}
+                          onCheckedChange={() => toggleTemplate(template.id)}
+                          className="mt-0.5"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Target className="h-4 w-4 text-primary shrink-0" />
+                            <span className="font-medium truncate">{template.kra_name}</span>
+                            {isDuplicate && (
+                              <Badge variant="outline" className="text-xs border-amber-500 text-amber-600 gap-1">
+                                <Copy className="h-3 w-3" />
+                                Exists
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground truncate mt-0.5">
+                            {template.kpi_name}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            {template.kra_categories && (
+                              <Badge variant="outline" className="text-xs">
+                                {template.kra_categories.name}
+                              </Badge>
+                            )}
+                            {template.weightage && (
+                              <Badge variant="secondary" className="text-xs">
+                                {template.weightage}%
+                              </Badge>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-sm text-muted-foreground truncate mt-0.5">
-                          {template.kpi_name}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1.5">
-                          {template.kra_categories && (
-                            <Badge variant="outline" className="text-xs">
-                              {template.kra_categories.name}
-                            </Badge>
-                          )}
-                          {template.weightage && (
-                            <Badge variant="secondary" className="text-xs">
-                              {template.weightage}%
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </label>
-                  ))}
+                      </label>
+                    );
+                  })}
                 </div>
               )}
             </ScrollArea>
           </TabsContent>
         </Tabs>
 
+        {/* Duplicate Warning */}
+        {hasDuplicates && (
+          <Alert variant="default" className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
+            <Copy className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800 dark:text-amber-200">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <strong>
+                    {activeTab === 'bundles' ? bundleDuplicates.length : templateDuplicates.length} duplicate(s) detected
+                  </strong>
+                  <span className="text-sm block mt-0.5">
+                    This employee already has these KPIs assigned for {currentPeriod} {currentYear}:
+                    <span className="font-medium ml-1">
+                      {(activeTab === 'bundles' ? bundleDuplicates : templateDuplicates)
+                        .slice(0, 2)
+                        .map(d => d.kpi_name)
+                        .join(', ')}
+                      {(activeTab === 'bundles' ? bundleDuplicates : templateDuplicates).length > 2 && 
+                        ` +${(activeTab === 'bundles' ? bundleDuplicates : templateDuplicates).length - 2} more`}
+                    </span>
+                  </span>
+                </div>
+                <label className="flex items-center gap-2 shrink-0 cursor-pointer">
+                  <Checkbox 
+                    checked={skipDuplicates} 
+                    onCheckedChange={(checked) => setSkipDuplicates(checked === true)}
+                  />
+                  <span className="text-sm">Skip duplicates</span>
+                </label>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={handleClose}>
             Skip
           </Button>
-          <Button onClick={handleAssign} disabled={!canAssign || isPending}>
+          <Button 
+            onClick={handleAssign} 
+            disabled={!canAssign || isPending || (hasDuplicates && skipDuplicates && assignCount === 0)}
+          >
             {isPending ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -458,7 +610,7 @@ export function SmartAssignmentDialog({
             ) : (
               <>
                 <CheckCircle className="h-4 w-4 mr-2" />
-                Assign {assignCount} KPIs
+                {assignCount === 0 ? 'No KPIs to Assign' : `Assign ${assignCount} KPIs`}
               </>
             )}
           </Button>
