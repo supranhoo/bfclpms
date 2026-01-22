@@ -859,7 +859,7 @@ export function generateDetailedScorecardPdf(
   }
 
   // Save
-  const fileName = `Performance_Dashboard_${scorecard.employeeCode}_${options.period}_${options.year}.pdf`;
+  const fileName = `Performance_Dashboard_${scorecard.employeeName}_${scorecard.employeeCode}_${options.period}_${options.year}.pdf`;
   doc.save(fileName.replace(/\s+/g, '_'));
 }
 
