@@ -14,7 +14,7 @@ import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Search, Package, Users, FileCheck } from 'lucide-react';
+import { Loader2, Search, Package, Users, FileCheck, Sparkles } from 'lucide-react';
 
 interface BundleAssignDialogProps {
   isOpen: boolean;
@@ -59,10 +59,42 @@ export function BundleAssignDialog({ isOpen, onClose, preselectedEmployeeId }: B
     [bundles, selectedBundleId]
   );
 
+  // Get preselected employee's department for auto-suggestion
+  const preselectedEmployee = useMemo(() => 
+    preselectedEmployeeId ? profiles?.find(p => p.id === preselectedEmployeeId) : null,
+    [profiles, preselectedEmployeeId]
+  );
+
   const activeBundles = useMemo(() => 
     bundles?.filter(b => b.is_active) || [],
     [bundles]
   );
+
+  // Sort bundles: matching department first, then by name
+  const sortedBundles = useMemo(() => {
+    if (!activeBundles.length) return [];
+    const employeeDeptId = preselectedEmployee?.department_id;
+    
+    return [...activeBundles].sort((a, b) => {
+      const aMatches = a.department_id === employeeDeptId;
+      const bMatches = b.department_id === employeeDeptId;
+      if (aMatches && !bMatches) return -1;
+      if (!aMatches && bMatches) return 1;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+  }, [activeBundles, preselectedEmployee?.department_id]);
+
+  // Auto-select matching bundle on dialog open
+  useMemo(() => {
+    if (isOpen && preselectedEmployee?.department_id && !selectedBundleId) {
+      const matchingBundle = activeBundles.find(
+        b => b.department_id === preselectedEmployee.department_id
+      );
+      if (matchingBundle) {
+        setSelectedBundleId(matchingBundle.id);
+      }
+    }
+  }, [isOpen, preselectedEmployee?.department_id, activeBundles, selectedBundleId]);
 
   const filteredProfiles = useMemo(() => {
     if (!profiles) return [];
@@ -167,8 +199,16 @@ export function BundleAssignDialog({ isOpen, onClose, preselectedEmployeeId }: B
           {/* Step 1: Select Bundle */}
           {step === 'select-bundle' && (
             <div className="space-y-4 py-4">
-              <Label>Select Bundle</Label>
-              {activeBundles.length === 0 ? (
+              <div className="flex items-center justify-between">
+                <Label>Select Bundle</Label>
+                {preselectedEmployee?.department_id && (
+                  <Badge variant="outline" className="text-xs gap-1">
+                    <Sparkles className="h-3 w-3" />
+                    Matching bundles shown first
+                  </Badge>
+                )}
+              </div>
+              {sortedBundles.length === 0 ? (
                 <Card>
                   <CardContent className="py-8 text-center text-muted-foreground">
                     No active bundles available. Create one first.
@@ -176,33 +216,45 @@ export function BundleAssignDialog({ isOpen, onClose, preselectedEmployeeId }: B
                 </Card>
               ) : (
                 <div className="grid gap-3">
-                  {activeBundles.map(bundle => (
-                    <Card
-                      key={bundle.id}
-                      className={`cursor-pointer transition-colors hover:border-primary ${selectedBundleId === bundle.id ? 'border-primary bg-primary/5' : ''}`}
-                      onClick={() => setSelectedBundleId(bundle.id)}
-                    >
-                      <CardHeader className="py-3">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-base">{bundle.name}</CardTitle>
-                          <Badge variant="secondary">
-                            {bundle.template_bundle_items?.length || 0} KPIs
-                          </Badge>
-                        </div>
-                        {bundle.description && (
-                          <p className="text-sm text-muted-foreground">{bundle.description}</p>
-                        )}
-                        <div className="flex gap-2 mt-2">
-                          {bundle.departments && (
-                            <Badge variant="outline">{bundle.departments.name}</Badge>
+                  {sortedBundles.map(bundle => {
+                    const isRecommended = preselectedEmployee?.department_id && 
+                      bundle.department_id === preselectedEmployee.department_id;
+                    return (
+                      <Card
+                        key={bundle.id}
+                        className={`cursor-pointer transition-colors hover:border-primary ${selectedBundleId === bundle.id ? 'border-primary bg-primary/5' : ''} ${isRecommended ? 'ring-1 ring-primary/30' : ''}`}
+                        onClick={() => setSelectedBundleId(bundle.id)}
+                      >
+                        <CardHeader className="py-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <CardTitle className="text-base">{bundle.name}</CardTitle>
+                              {isRecommended && (
+                                <Badge variant="default" className="text-xs gap-1">
+                                  <Sparkles className="h-3 w-3" />
+                                  Suggested
+                                </Badge>
+                              )}
+                            </div>
+                            <Badge variant="secondary">
+                              {bundle.template_bundle_items?.length || 0} KPIs
+                            </Badge>
+                          </div>
+                          {bundle.description && (
+                            <p className="text-sm text-muted-foreground">{bundle.description}</p>
                           )}
-                          {bundle.designation && (
-                            <Badge variant="outline">{bundle.designation}</Badge>
-                          )}
-                        </div>
-                      </CardHeader>
-                    </Card>
-                  ))}
+                          <div className="flex gap-2 mt-2">
+                            {bundle.departments && (
+                              <Badge variant="outline">{bundle.departments.name}</Badge>
+                            )}
+                            {bundle.designation && (
+                              <Badge variant="outline">{bundle.designation}</Badge>
+                            )}
+                          </div>
+                        </CardHeader>
+                      </Card>
+                    );
+                  })}
                 </div>
               )}
             </div>
