@@ -161,6 +161,9 @@ export default function ImportData() {
   
   // Clear data state
   const [isClearing, setIsClearing] = useState(false);
+  
+  // Employee search in preview
+  const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
 
   // Clear KPI data function
   const handleClearKpiData = async () => {
@@ -1694,6 +1697,17 @@ export default function ImportData() {
                   <li><code>uom</code> - Unit of Measure (%, ₹, units, etc.)</li>
                   <li><code>kpiWeightage</code> - KPI Weightage (0-100)</li>
                 </ul>
+                <p className="font-medium mt-4 mb-2">Qualitative UOM columns (for non-numeric KPIs):</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li><code>uomType</code> - Type of measure: <code>numeric</code> (default), <code>binary</code> (Yes/No), or <code>tiered</code> (custom levels)</li>
+                  <li><code>qualitativeOptions</code> - JSON array for tiered KPIs, e.g.: <code>[{`{"label":"Full","rating":5,"definition":"100% achieved"}`}]</code></li>
+                </ul>
+                <p className="font-medium mt-4 mb-2">Organization structure columns (auto-created if missing):</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li><code>division</code> - Division name</li>
+                  <li><code>businessUnit</code> - Business Unit name</li>
+                  <li><code>department</code> - Department name</li>
+                </ul>
                 <p className="font-medium mt-4 mb-2">Optional columns:</p>
                 <ul className="list-disc list-inside space-y-1">
                   <li><code>frequency</code> - Review Frequency (Monthly, Quarterly, etc.)</li>
@@ -1704,7 +1718,7 @@ export default function ImportData() {
                 <Alert className="mt-4">
                   <CheckCircle2 className="h-4 w-4" />
                   <AlertDescription>
-                    New categories will be automatically created. Ratings are auto-calculated using R5-R0 thresholds.
+                    New categories and org structure nodes will be automatically created. Ratings are auto-calculated using R5-R0 thresholds.
                   </AlertDescription>
                 </Alert>
               </div>
@@ -1817,30 +1831,46 @@ export default function ImportData() {
 
                   {/* Search for specific employee */}
                   <div>
-                    <p className="font-medium text-sm mb-2">Search for Employee (e.g., "Abhas" or "100856"):</p>
-                    <div className="max-h-48 overflow-auto rounded border p-2 bg-background text-xs font-mono">
-                      {importData
-                        .filter(r => 
-                          r.fullName?.toLowerCase().includes('abhas') || 
-                          r.newCode?.includes('100856') ||
-                          r.fullName?.toLowerCase().includes('luhar')
-                        )
-                        .map((r, i) => (
-                          <div key={i} className="py-1 border-b last:border-0">
-                            <span className="text-blue-600">{r.month}</span> | 
-                            Code: <span className="text-green-600">{r.newCode}</span> | 
-                            Name: <span className="text-purple-600">{r.fullName}</span> | 
-                            KPI: {r.kpi?.substring(0, 40)}...
-                          </div>
-                        ))}
-                      {importData.filter(r => 
-                        r.fullName?.toLowerCase().includes('abhas') || 
-                        r.newCode?.includes('100856') ||
-                        r.fullName?.toLowerCase().includes('luhar')
-                      ).length === 0 && (
-                        <div className="text-red-500">No rows found matching "Abhas", "100856", or "Luhar"</div>
-                      )}
-                    </div>
+                    <p className="font-medium text-sm mb-2">Search for Employee:</p>
+                    <Input 
+                      placeholder="Enter employee code or name..."
+                      value={employeeSearchQuery}
+                      onChange={(e) => setEmployeeSearchQuery(e.target.value)}
+                      className="mb-2 max-w-sm"
+                    />
+                    {employeeSearchQuery.trim() && (
+                      <div className="max-h-48 overflow-auto rounded border p-2 bg-background text-xs font-mono">
+                        {importData
+                          .filter(r => {
+                            const query = employeeSearchQuery.toLowerCase().trim();
+                            return r.fullName?.toLowerCase().includes(query) || 
+                                   r.newCode?.toLowerCase().includes(query);
+                          })
+                          .slice(0, 50)
+                          .map((r, i) => (
+                            <div key={i} className="py-1 border-b last:border-0">
+                              <span className="text-blue-600">{r.month}</span> | 
+                              Code: <span className="text-green-600">{r.newCode}</span> | 
+                              Name: <span className="text-purple-600">{r.fullName}</span> | 
+                              KPI: {r.kpi?.substring(0, 40)}...
+                            </div>
+                          ))}
+                        {importData.filter(r => {
+                          const query = employeeSearchQuery.toLowerCase().trim();
+                          return r.fullName?.toLowerCase().includes(query) || 
+                                 r.newCode?.toLowerCase().includes(query);
+                        }).length === 0 && (
+                          <div className="text-muted-foreground">No rows found matching "{employeeSearchQuery}"</div>
+                        )}
+                        {importData.filter(r => {
+                          const query = employeeSearchQuery.toLowerCase().trim();
+                          return r.fullName?.toLowerCase().includes(query) || 
+                                 r.newCode?.toLowerCase().includes(query);
+                        }).length > 50 && (
+                          <div className="text-muted-foreground mt-1">Showing first 50 results...</div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -1866,6 +1896,7 @@ export default function ImportData() {
                           <TableHead>KRA</TableHead>
                           <TableHead>KPI</TableHead>
                           <TableHead>UOM</TableHead>
+                          <TableHead>Type</TableHead>
                           <TableHead>Target</TableHead>
                           <TableHead>Criteria</TableHead>
                           <TableHead>R5</TableHead>
@@ -1884,6 +1915,11 @@ export default function ImportData() {
                             <TableCell>{row.kra}</TableCell>
                             <TableCell className="max-w-[150px] truncate">{row.kpi}</TableCell>
                             <TableCell>{row.uom || '-'}</TableCell>
+                            <TableCell>
+                              <Badge variant={row.uomType === 'binary' ? 'secondary' : row.uomType === 'tiered' ? 'outline' : 'default'} className="text-xs">
+                                {row.uomType || 'numeric'}
+                              </Badge>
+                            </TableCell>
                             <TableCell>{row.target}</TableCell>
                             <TableCell className="text-xs">{row.criteria || 'Higher'}</TableCell>
                             <TableCell>{row.r5 || '-'}</TableCell>
