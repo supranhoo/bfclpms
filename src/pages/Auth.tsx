@@ -175,6 +175,17 @@ export default function Auth() {
             <h1 className="text-2xl font-bold text-foreground">{displayAppName}</h1>
           </div>
           
+          {/* Hero text above card */}
+          <div className="text-center mb-6 hidden lg:block">
+            <h2 className="text-2xl lg:text-3xl font-bold text-foreground leading-tight">
+              Manage performance{' '}
+              <span className="text-primary">with clarity.</span>
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
+              Track KPIs, conduct reviews, and drive organizational growth.
+            </p>
+          </div>
+          
           {/* Glassmorphism Card */}
           <Card className="relative overflow-hidden border-border/50 shadow-2xl bg-card/80 backdrop-blur-xl">
             {/* Decorative gradient glow */}
