@@ -171,12 +171,12 @@ export default function TNIReport() {
               </SelectContent>
             </Select>
 
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <Select value={selectedPeriod || 'all'} onValueChange={(v) => setSelectedPeriod(v === 'all' ? '' : v)}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="All Periods" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Periods</SelectItem>
+                <SelectItem value="all">All Periods</SelectItem>
                 {filteredPeriods.map(p => (
                   <SelectItem key={p.id} value={p.period_name}>{p.period_name}</SelectItem>
                 ))}
