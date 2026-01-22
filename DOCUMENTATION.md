@@ -1,0 +1,858 @@
+# Performance Management System (PMS) - Documentation
+
+> **Last Updated:** 2026-01-22  
+> **Version:** 1.0.0  
+> **Maintainer:** Lovable AI
+
+---
+
+## Table of Contents
+
+1. [Executive Summary](#1-executive-summary)
+2. [Tech Stack & Architecture](#2-tech-stack--architecture)
+3. [Database Schema](#3-database-schema)
+4. [Detailed Feature Breakdown](#4-detailed-feature-breakdown)
+5. [Project Structure](#5-project-structure)
+6. [Key Components & Hooks](#6-key-components--hooks)
+7. [Third-Party Integrations](#7-third-party-integrations)
+8. [Setup & Deployment](#8-setup--deployment)
+
+---
+
+## 1. Executive Summary
+
+### Overview
+
+The **Performance Management System (PMS)** is a comprehensive enterprise-grade web application designed to streamline employee performance reviews, KPI tracking, and organizational goal alignment. It provides a multi-stage review workflow supporting self-assessments, manager evaluations, auditor checks, and management approvals.
+
+### Problem Solved
+
+- **Fragmented Review Processes:** Consolidates performance reviews into a single platform
+- **Lack of Transparency:** Provides audit trails and real-time status tracking
+- **Manual Calculations:** Automates score computation with configurable rating thresholds
+- **Poor Visibility:** Dashboards for employees, managers, and leadership
+- **Training Gap Identification:** Automatically detects training needs based on performance scores
+
+### Target Users
+
+| Role | Description |
+|------|-------------|
+| **Employee** | Views assigned KPIs, submits self-reviews, tracks personal performance |
+| **Manager** | Reviews team members' KPIs, approves/queries submissions |
+| **Auditor** | Validates manager assessments, ensures compliance |
+| **Management** | Final approval authority, organizational oversight |
+| **Admin** | System configuration, user management, data imports |
+
+### Key Features
+
+- Multi-stage workflow with configurable review stages
+- KPI templates and bundles for standardized goal-setting
+- Organization-level KPIs that apply uniformly across employees
+- Performance Improvement Plans (PIP) with milestone tracking
+- Training Needs Identification (TNI) based on scores
+- Comprehensive reporting suite with PDF/Excel exports
+- Real-time notifications and query system
+- Role-based access control with RLS policies
+
+---
+
+## 2. Tech Stack & Architecture
+
+### Frontend
+
+| Technology | Purpose |
+|------------|---------|
+| **React 18.3** | UI library with functional components and hooks |
+| **TypeScript** | Type-safe development |
+| **Vite** | Build tool and dev server |
+| **React Router 6** | Client-side routing |
+| **TanStack Query 5** | Server state management, caching, and synchronization |
+| **Tailwind CSS** | Utility-first styling |
+| **shadcn/ui** | Accessible, customizable component library |
+| **Recharts** | Data visualization and charts |
+| **Lucide React** | Icon library |
+
+### Backend (Lovable Cloud / Supabase)
+
+| Technology | Purpose |
+|------------|---------|
+| **Supabase** | Backend-as-a-Service (BaaS) |
+| **PostgreSQL** | Relational database |
+| **Row Level Security (RLS)** | Fine-grained access control |
+| **Edge Functions (Deno)** | Serverless backend logic |
+| **Realtime** | Live data subscriptions |
+| **Storage** | File uploads (evidence documents) |
+
+### State Management
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Application State                        │
+├─────────────────────────────────────────────────────────────┤
+│  TanStack Query          │  React Context                  │
+│  ├─ Server data cache    │  ├─ AuthContext (user session)  │
+│  ├─ Background refetch   │  └─ Theme/UI state              │
+│  ├─ Optimistic updates   │                                  │
+│  └─ Mutation management  │                                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Architecture Diagram
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                         Client (Browser)                          │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │  React App                                                  │  │
+│  │  ├─ Pages (Routes)                                          │  │
+│  │  ├─ Components (UI)                                         │  │
+│  │  ├─ Hooks (Business Logic)                                  │  │
+│  │  └─ Contexts (Global State)                                 │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                              │                                    │
+│                              ▼                                    │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │  Supabase Client (@supabase/supabase-js)                    │  │
+│  └────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                    Lovable Cloud (Supabase)                       │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
+│  │  PostgreSQL  │  │ Edge Funcs   │  │  Storage (Buckets)   │   │
+│  │  + RLS       │  │  (Deno)      │  │  - review-evidence   │   │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘   │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
+│  │  Auth        │  │  Realtime    │  │  Secrets (Vault)     │   │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘   │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 3. Database Schema
+
+### Entity Relationship Overview
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  divisions  │────<│business_units│────<│ departments │
+└─────────────┘     └─────────────┘     └─────────────┘
+                                              │
+                                              ▼
+                                        ┌───────────┐
+                                        │  profiles │
+                                        └───────────┘
+                                         │    │    │
+                    ┌────────────────────┘    │    └────────────────────┐
+                    ▼                         ▼                         ▼
+              ┌──────────┐            ┌─────────────┐           ┌──────────────┐
+              │   kpis   │            │ user_roles  │           │ pip (plans)  │
+              └──────────┘            └─────────────┘           └──────────────┘
+                    │                                                  │
+                    ▼                                                  ▼
+          ┌──────────────────┐                               ┌────────────────┐
+          │review_submissions│                               │ pip_milestones │
+          └──────────────────┘                               └────────────────┘
+```
+
+### Tables Reference
+
+#### Core Tables
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `profiles` | User profiles linked to auth.users | `id`, `email`, `full_name`, `employee_code`, `designation`, `department_id`, `reporting_manager_id`, `pms_grade` |
+| `user_roles` | Role assignments | `user_id`, `role` (admin/manager/employee/auditor/management) |
+| `kpis` | Key Performance Indicators | `id`, `employee_id`, `category_id`, `kra_name`, `kpi_name`, `target_value`, `weightage`, `review_period`, `review_year`, `status`, `r5-r0` (thresholds) |
+| `review_submissions` | Review data per KPI | `kpi_id`, `achieved_value`, `self_rating`, `manager_rating`, `auditor_rating`, `final_score`, `kpi_status`, `*_remarks` |
+| `kra_categories` | KRA groupings | `id`, `name`, `weightage`, `color`, `is_org_level`, `org_scoring_mode` |
+
+#### Organizational Hierarchy
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `divisions` | Top-level org units | `id`, `name`, `code` |
+| `business_units` | Division subdivisions | `id`, `division_id`, `name`, `code` |
+| `departments` | Business unit subdivisions | `id`, `business_unit_id`, `name`, `code` |
+| `sub_branches` | Department subdivisions | `id`, `department_id`, `name`, `code` |
+| `designations` | Job titles | `id`, `name`, `code` |
+| `pms_grades` | Performance grade levels | `id`, `name`, `code`, `description` |
+
+#### Review & Workflow
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `review_periods` | Review cycle definitions | `period_name`, `review_year`, `start_date`, `end_date`, `is_locked` |
+| `performance_reviews` | Aggregate review per employee/period | `employee_id`, `review_period`, `review_year`, `overall_score`, `status` |
+| `workflow_templates` | Configurable review stages | `id`, `name`, `stages` (JSONB), `is_default` |
+| `workflow_config` | Template assignments | `workflow_template_id`, `config_type`, `config_value` |
+
+#### Templates & Bundles
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `kpi_templates` | Reusable KPI definitions | `id`, `category_id`, `kra_name`, `kpi_name`, `target_value`, `weightage`, `applicable_roles`, `r5-r0` |
+| `template_bundles` | Grouped templates | `id`, `name`, `department_id`, `designation` |
+| `template_bundle_items` | Bundle-template junction | `bundle_id`, `template_id`, `sort_order` |
+| `bundle_assignment_logs` | Assignment history | `bundle_id`, `employee_id`, `assigned_by`, `review_period` |
+
+#### Performance Improvement Plans
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `performance_improvement_plans` | PIP records | `id`, `employee_id`, `initiated_by`, `status`, `start_date`, `end_date`, `improvement_areas`, `outcome` |
+| `pip_milestones` | PIP checkpoints | `pip_id`, `description`, `milestone_date`, `status`, `expected_outcome` |
+| `pip_audit_logs` | PIP change history | `pip_id`, `action`, `performed_by`, `old_value`, `new_value` |
+
+#### Training & Queries
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `training_needs` | Identified training gaps | `employee_id`, `kpi_id`, `gap_type`, `priority`, `status` |
+| `kpi_queries` | Review questions/clarifications | `kpi_id`, `raised_by`, `raised_to`, `reason`, `status` |
+| `notifications` | User notifications | `user_id`, `type`, `title`, `message`, `is_read` |
+
+#### System & Audit
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `system_settings` | App configuration | `setting_key`, `setting_value` (JSONB) |
+| `kpi_audit_logs` | KPI change tracking | `kpi_id`, `action`, `performed_by`, `old_value`, `new_value` |
+| `kra_rollover_logs` | KRA rollover history | `source_period`, `target_period`, `kpis_copied` |
+| `org_kpi_values` | Organization-level KPI scores | `category_id`, `review_period`, `achieved_value` |
+| `import_progress` | Bulk import tracking | `id`, `status`, `total_rows`, `processed_rows` |
+
+### Row-Level Security (RLS) Policies
+
+All tables have RLS enabled. Key policy patterns:
+
+```sql
+-- Pattern 1: Users can view own data
+(auth.uid() = user_id)
+
+-- Pattern 2: Managers can view team data
+has_role(auth.uid(), 'manager') AND EXISTS (
+  SELECT 1 FROM profiles 
+  WHERE profiles.id = table.employee_id 
+  AND profiles.reporting_manager_id = auth.uid()
+)
+
+-- Pattern 3: Admin full access
+has_role(auth.uid(), 'admin')
+
+-- Pattern 4: Role-based read access
+has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
+```
+
+### Database Functions
+
+| Function | Purpose |
+|----------|---------|
+| `has_role(user_id, role)` | Check if user has specific role |
+| `get_user_role(user_id)` | Get user's primary role |
+| `get_employee_workflow(employee_uuid)` | Get workflow stages for employee |
+| `get_employee_workflow_info(employee_uuid)` | Get full workflow details |
+| `is_period_locked(period, year)` | Check if review period is locked |
+| `detect_training_needs_for_period(period, year, threshold)` | Auto-detect TNI |
+| `handle_new_user()` | Trigger: Create profile on signup |
+| `sync_kpi_status_from_submission()` | Trigger: Sync KPI status |
+| `log_kpi_status_transition()` | Trigger: Audit logging |
+| `notify_on_kpi_status_change()` | Trigger: Create notifications |
+
+### Enums
+
+| Enum | Values |
+|------|--------|
+| `app_role` | admin, manager, employee, auditor, management |
+| `review_status` | kra_set, self_review, manager_check, audit, management_review, approved |
+| `kpi_status` | open, submitted, approved_by_manager, locked |
+| `rating_level` | red, yellow, green, blue |
+| `query_status` | open, resolved |
+| `pip_status` | draft, pending_hr_approval, active, extended, completed, cancelled |
+| `pip_outcome` | successful, partially_successful, unsuccessful |
+| `tni_gap_type` | skill, knowledge, behavior |
+| `tni_priority` | low, medium, high, critical |
+
+---
+
+## 4. Detailed Feature Breakdown
+
+### 4.1 Authentication & Authorization
+
+**Flow:**
+1. User visits `/auth` → Sign in or Sign up form
+2. Supabase Auth handles email/password authentication
+3. On success, `handle_new_user()` trigger creates profile + default role
+4. `AuthContext` loads user, profile, and role
+5. `ProtectedRoute` component enforces role-based access
+
+**Edge Cases:**
+- Auto-confirm enabled (no email verification in dev)
+- Password reset via `reset-password` edge function
+- Session persistence via Supabase tokens
+
+### 4.2 Dashboard (Employee View)
+
+**Route:** `/dashboard`
+
+**Features:**
+- Profile card with employee details
+- Key stat cards: Overall Rating, Total Score, Completed, Pending
+- Overall score chart (radial)
+- Category-wise score chart (bar)
+- Review status distribution
+- KPI table with status badges
+
+**Data Flow:**
+```
+useAuth() → user.id → useMyKpis() → useReviewSubmissions() → Calculate scores
+```
+
+### 4.3 KPI Self-Review
+
+**Route:** `/self-review`
+
+**Workflow:**
+1. Employee views assigned KPIs for current period
+2. Enters achieved value and self-rating
+3. Optionally adds remarks and evidence (file upload)
+4. Submits → Status changes to `submitted`
+5. Notification sent to manager
+
+**Score Calculation Modes:**
+- `manual`: Employee enters score directly
+- `auto_calculate`: System calculates from achieved value vs thresholds
+- `suggested_override`: Shows suggested score, allows override
+
+### 4.4 Manager Review
+
+**Route:** `/team-review`
+
+**Workflow:**
+1. Manager sees team members' submitted KPIs
+2. Reviews achieved values and self-ratings
+3. Can approve, raise query, or send back
+4. Enters manager rating and remarks
+5. Approved → Status moves to `manager_check`
+
+**Query System:**
+- Manager raises query → Employee notified
+- Employee responds → Query resolved
+- KPI returns to submitted state for re-review
+
+### 4.5 Audit Review
+
+**Route:** `/audit-panel`
+
+**Features:**
+- View all KPIs in `manager_check` status
+- Validate manager assessments
+- Add auditor score and remarks
+- Approve → Moves to `audit` status
+- Audit logs for compliance
+
+### 4.6 Management Review
+
+**Route:** `/management-review`
+
+**Features:**
+- Final approval authority
+- View organization-wide performance
+- Add management remarks
+- Final approval → Status `approved`
+- Lock review periods
+
+### 4.7 KRA Acceptance
+
+**Route:** `/kra-acceptance`
+
+**Purpose:** Employees acknowledge their assigned KRAs at start of period
+
+**Flow:**
+1. Employee views assigned KPIs
+2. Confirms each KPI individually
+3. Signs off on complete KRA set
+
+### 4.8 Query Inbox
+
+**Route:** `/queries`
+
+**Features:**
+- View incoming queries raised to user
+- View outgoing queries raised by user
+- Respond to queries with resolution notes
+- Attach evidence
+- Query resolution triggers KPI status reset
+
+### 4.9 Admin Features
+
+#### 4.9.1 User Management (`/admin/users`)
+- View all users with roles
+- Create new users via `create-employee` edge function
+- Assign/change roles
+- Reset passwords
+- Bulk actions
+
+#### 4.9.2 Organization Structure (`/admin/organization`)
+- Manage divisions, business units, departments
+- Manage designations and PMS grades
+- Hierarchical relationship setup
+
+#### 4.9.3 KRA Categories (`/admin/categories`)
+- Create/edit KRA categories
+- Set weightages (must sum to 100%)
+- Configure org-level categories
+- Set category colors
+
+#### 4.9.4 KPI Templates (`/admin/kra-library`)
+- Create reusable KPI definitions
+- Set rating thresholds (R5-R0)
+- Configure UOM types (numeric, binary, tiered)
+- Set applicable roles
+
+#### 4.9.5 Template Bundles (`/admin/template-bundles`)
+- Group templates into bundles
+- Assign to departments/designations
+- Bulk assign to employees
+- Assignment history
+
+#### 4.9.6 All KPIs (`/admin/all-kpis`)
+- View all KPIs across organization
+- Filter by period, department, status
+- Admin override capabilities
+- Audit logging for changes
+
+#### 4.9.7 Review Periods (`/admin/review-periods`)
+- Create review periods (monthly/quarterly)
+- Lock/unlock periods
+- Prevent modifications to locked periods
+
+#### 4.9.8 Workflow Configuration (`/admin/workflow-config`)
+- Define workflow templates
+- Assign workflows to departments/grades/employees
+- Skip stages for specific groups
+
+#### 4.9.9 Data Import (`/admin/import`)
+- Bulk import employees from Excel
+- Bulk import KPIs from Excel
+- Background processing for large files
+- Progress tracking
+- Error reporting
+
+#### 4.9.10 System Settings (`/admin/settings`)
+- Score calculation mode
+- KRA auto-rollover settings
+- Email notification templates
+- Organization name/branding
+
+#### 4.9.11 PIP Management (`/admin/pip-management`)
+- View all PIPs
+- Approve/reject PIPs
+- Track outcomes
+
+#### 4.9.12 Org KPI Data Entry (`/admin/org-kpi-data`)
+- Enter organization-level KPI values
+- Applied uniformly to all employees
+
+### 4.10 Reports
+
+| Report | Route | Purpose |
+|--------|-------|---------|
+| Reports Hub | `/reports` | Dashboard of all reports |
+| Monthly Scorecard | `/reports/monthly-scorecard` | Employee performance scorecards with PDF export |
+| Performance Report | `/reports/performance` | Performance analytics |
+| Department Report | `/reports/department` | Department-wise analysis |
+| Completion Report | `/reports/completion` | Review completion status |
+| Query Report | `/reports/queries` | Query analytics |
+| Audit Trail | `/reports/audit-trail` | Change history |
+| KRA Issuance | `/reports/kra-issuance` | KRA assignment tracking |
+| TNI Report | `/reports/tni` | Training needs analysis |
+| Issues Report | `/reports/issues` | System issues dashboard |
+| Employee Summary | `/reports/employee-summary` | Individual performance |
+
+### 4.11 Performance Improvement Plans (PIP)
+
+**Workflow:**
+1. Manager creates PIP for underperforming employee
+2. Defines improvement areas, milestones, success criteria
+3. Submits for HR approval
+4. HR approves → PIP becomes active
+5. Manager tracks milestone progress
+6. On completion → Mark outcome (successful/unsuccessful)
+
+**Statuses:** draft → pending_hr_approval → active → completed/cancelled
+
+### 4.12 Notifications
+
+**Trigger Events:**
+- KPI submitted for review
+- KPI approved/rejected
+- Query raised/resolved
+- PIP status changes
+
+**Delivery:**
+- In-app notifications (real-time)
+- Email notifications (via Resend)
+
+---
+
+## 5. Project Structure
+
+```
+src/
+├── App.tsx                    # Main app component with routing
+├── main.tsx                   # React entry point
+├── index.css                  # Global styles & design tokens
+├── vite-env.d.ts              # Vite type declarations
+│
+├── components/
+│   ├── ui/                    # shadcn/ui base components
+│   │   ├── button.tsx
+│   │   ├── card.tsx
+│   │   ├── dialog.tsx
+│   │   ├── table.tsx
+│   │   └── ...               # 40+ UI components
+│   │
+│   ├── layout/                # Layout components
+│   │   ├── DashboardLayout.tsx   # Main app shell with sidebar
+│   │   ├── AppSidebar.tsx        # Navigation sidebar
+│   │   ├── PageHeader.tsx        # Page title & actions
+│   │   └── ProtectedRoute.tsx    # Role-based route guard
+│   │
+│   ├── dashboard/             # Dashboard-specific components
+│   │   ├── ProfileCard.tsx
+│   │   ├── KeyStatCard.tsx
+│   │   ├── OverallScoreChart.tsx
+│   │   ├── CategoryScoreChart.tsx
+│   │   ├── KpiTimeline.tsx
+│   │   ├── KpiTrackerModal.tsx
+│   │   └── KpiLogicModal.tsx
+│   │
+│   ├── review/                # Review-related components
+│   │   ├── EmployeeScorecard.tsx
+│   │   ├── AuditScorecard.tsx
+│   │   ├── ManagementScorecard.tsx
+│   │   ├── ReviewFilters.tsx
+│   │   ├── ScoreSelector.tsx
+│   │   ├── RatingSelector.tsx
+│   │   ├── AchievedValueScoreInput.tsx
+│   │   └── QualitativeValueInput.tsx
+│   │
+│   ├── admin/                 # Admin feature components
+│   │   ├── TemplateFormDialog.tsx
+│   │   ├── BundleFormDialog.tsx
+│   │   ├── SmartAssignmentDialog.tsx
+│   │   ├── ScoringSimulatorPopover.tsx
+│   │   └── EmailTemplateEditor.tsx
+│   │
+│   ├── pip/                   # PIP components
+│   │   ├── PIPCreateDialog.tsx
+│   │   ├── PIPDetailSheet.tsx
+│   │   └── MilestoneTracker.tsx
+│   │
+│   └── issues/                # Issues tracking components
+│       ├── IssuesTable.tsx
+│       ├── IssueFilters.tsx
+│       └── IssuesHeatmap.tsx
+│
+├── pages/
+│   ├── Auth.tsx               # Login/signup page
+│   ├── Index.tsx              # Root redirect
+│   ├── Dashboard.tsx          # Employee dashboard
+│   ├── MyKpis.tsx             # KPI list view
+│   ├── SelfReview.tsx         # Self-review submission
+│   ├── TeamReview.tsx         # Manager team review
+│   ├── AuditPanel.tsx         # Auditor review panel
+│   ├── ManagementDashboard.tsx
+│   ├── ManagementReview.tsx
+│   ├── KRAAcceptance.tsx
+│   ├── QueryInbox.tsx
+│   ├── AuditLogs.tsx
+│   ├── NotFound.tsx
+│   │
+│   ├── admin/                 # Admin pages
+│   │   ├── AdminDashboard.tsx
+│   │   ├── UserManagement.tsx
+│   │   ├── Organization.tsx
+│   │   ├── Categories.tsx
+│   │   ├── KRALibrary.tsx
+│   │   ├── TemplateBundles.tsx
+│   │   ├── AllKpis.tsx
+│   │   ├── ReviewPeriods.tsx
+│   │   ├── WorkflowConfig.tsx
+│   │   ├── ImportData.tsx
+│   │   ├── SystemSettings.tsx
+│   │   ├── PIPManagement.tsx
+│   │   └── OrgKpiDataEntry.tsx
+│   │
+│   └── reports/               # Report pages
+│       ├── ReportsHub.tsx
+│       ├── MonthlyScorecardReport.tsx
+│       ├── PerformanceReport.tsx
+│       ├── DepartmentReport.tsx
+│       ├── CompletionReport.tsx
+│       └── ...
+│
+├── hooks/                     # Custom React hooks
+│   ├── useKpis.ts             # KPI CRUD operations
+│   ├── useOrganization.ts     # Org structure data
+│   ├── useSystemSettings.ts   # System configuration
+│   ├── usePIP.ts              # PIP management
+│   ├── useTNI.ts              # Training needs
+│   ├── useKpiTemplates.ts     # Template management
+│   ├── useTemplateBundles.ts  # Bundle management
+│   ├── useWorkflowConfig.ts   # Workflow settings
+│   ├── useKpiFilters.ts       # Filter state management
+│   ├── useNotifications.ts    # Notification handling
+│   └── use-toast.ts           # Toast notifications
+│
+├── contexts/
+│   └── AuthContext.tsx        # Authentication state
+│
+├── lib/
+│   ├── utils.ts               # Utility functions (cn, etc.)
+│   ├── pdfExport.ts           # PDF generation logic
+│   ├── ratingCalculation.ts   # Score calculation logic
+│   ├── qualitativeUom.ts      # Qualitative KPI helpers
+│   ├── reviewConstants.ts     # Status/rating constants
+│   └── importValidation.ts    # Import validation
+│
+├── integrations/
+│   └── supabase/
+│       ├── client.ts          # Supabase client (auto-generated)
+│       └── types.ts           # Database types (auto-generated)
+│
+└── test/
+    └── setup.ts               # Vitest configuration
+
+supabase/
+├── config.toml                # Supabase configuration
+└── functions/                 # Edge Functions
+    ├── send-email-notification/
+    ├── create-employee/
+    ├── reset-password/
+    ├── auto-rollover-kpis/
+    ├── import-kpis/
+    └── generate-pip-letter/
+```
+
+---
+
+## 6. Key Components & Hooks
+
+### Core Hooks
+
+#### `useAuth()` - Authentication Context
+```typescript
+const { user, session, profile, role, loading, signIn, signUp, signOut } = useAuth();
+```
+- Provides current user state
+- Handles authentication actions
+- Fetches profile and role on session change
+
+#### `useKpis.ts` - KPI Management
+```typescript
+// Fetch KPIs
+useMyKpis()                      // Current user's KPIs
+useAllKpis()                     // All KPIs (admin)
+useKpisByPeriod(period, year)    // Filtered by period
+useKpisByEmployee(employeeId)    // Specific employee
+
+// Mutations
+useCreateKpi()
+useUpdateKpi()
+useSubmitSelfReview()
+useApproveKpi()
+useRaiseQuery()
+useSendBackKpi()
+```
+
+#### `useOrganization.ts` - Org Structure
+```typescript
+useDivisions()
+useBusinessUnits()
+useDepartments()
+useProfiles()
+useTeamMembers(managerId)
+useKraCategories()
+```
+
+#### `useSystemSettings.ts` - Configuration
+```typescript
+useSystemSettings()              // All settings
+useScoreCalculationMode()        // Score calc mode
+useAutoRolloverSetting()         // Rollover config
+useUpdateSystemSetting()         // Update settings
+```
+
+#### `usePIP.ts` - Performance Improvement Plans
+```typescript
+usePIPs(filters)
+usePIPDetails(pipId)
+useCreatePIP()
+useApprovePIP()
+useCompletePIP()
+useUpdateMilestone()
+```
+
+#### `useWorkflowConfig.ts` - Workflow Management
+```typescript
+useWorkflowTemplates()
+useWorkflowConfigs()
+useEmployeeWorkflow(employeeId)
+getNextWorkflowStatus(current, stages)
+```
+
+### Core Components
+
+#### `DashboardLayout`
+Main application shell with sidebar navigation, header, and content area.
+
+#### `ProtectedRoute`
+Role-based route guard component:
+```tsx
+<ProtectedRoute allowedRoles={['admin', 'manager']}>
+  <AdminPage />
+</ProtectedRoute>
+```
+
+#### `EmployeeScorecard`
+Comprehensive employee performance view with:
+- Score summary
+- Category breakdown
+- KPI table with review actions
+- Query/send-back dialogs
+
+#### `KpiLogicModal`
+Displays KPI rating logic and thresholds:
+- Rating scale visualization
+- Threshold values (R5-R0)
+- Score calculation preview
+- Edit capability for admins
+
+#### `AchievedValueScoreInput`
+Smart input component that:
+- Handles numeric and qualitative inputs
+- Auto-calculates scores based on thresholds
+- Supports manual override mode
+
+---
+
+## 7. Third-Party Integrations
+
+### NPM Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `@supabase/supabase-js` | ^2.89.0 | Supabase client SDK |
+| `@tanstack/react-query` | ^5.83.0 | Server state management |
+| `react-router-dom` | ^6.30.1 | Client-side routing |
+| `react-hook-form` | ^7.61.1 | Form handling |
+| `zod` | ^3.25.76 | Schema validation |
+| `recharts` | ^2.15.4 | Charts and graphs |
+| `lucide-react` | ^0.462.0 | Icon library |
+| `date-fns` | ^3.6.0 | Date formatting |
+| `xlsx` | ^0.18.5 | Excel file handling |
+| `jspdf` | ^4.0.0 | PDF generation |
+| `jspdf-autotable` | ^5.0.7 | PDF tables |
+| `sonner` | ^1.7.4 | Toast notifications |
+
+### External Services
+
+| Service | Purpose | Configuration |
+|---------|---------|---------------|
+| **Lovable Cloud (Supabase)** | Backend infrastructure | Auto-configured |
+| **Resend** | Email delivery | `RESEND_API_KEY` secret |
+
+### Edge Functions
+
+| Function | Endpoint | Purpose |
+|----------|----------|---------|
+| `send-email-notification` | POST | Send transactional emails |
+| `create-employee` | POST | Create new employee accounts |
+| `reset-password` | POST | Generate password reset links |
+| `auto-rollover-kpis` | POST | Copy KPIs to new period |
+| `import-kpis` | POST | Background KPI import |
+| `generate-pip-letter` | POST | Generate PIP letter HTML |
+
+---
+
+## 8. Setup & Deployment
+
+### Prerequisites
+
+- Node.js 18+ (recommended: use nvm)
+- npm or bun package manager
+
+### Local Development
+
+```bash
+# Clone repository
+git clone <YOUR_GIT_URL>
+cd <YOUR_PROJECT_NAME>
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+### Environment Variables
+
+The following are auto-configured by Lovable Cloud:
+
+| Variable | Description |
+|----------|-------------|
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase anon key |
+| `VITE_SUPABASE_PROJECT_ID` | Supabase project ID |
+
+### Secrets (Configured in Lovable Cloud)
+
+| Secret | Purpose |
+|--------|---------|
+| `SUPABASE_SERVICE_ROLE_KEY` | Admin database access |
+| `RESEND_API_KEY` | Email delivery |
+| `LOVABLE_API_KEY` | Lovable AI integration |
+
+### Deployment
+
+1. Open Lovable project
+2. Click **Share → Publish**
+3. App deployed to: `https://bfclpms.lovable.app`
+
+### Custom Domain
+
+1. Navigate to **Project → Settings → Domains**
+2. Click **Connect Domain**
+3. Follow DNS configuration instructions
+
+---
+
+## Maintenance Protocol
+
+> ⚠️ **IMPORTANT**: This documentation must be updated whenever code changes are made.
+
+### Update Triggers
+
+- New database tables or columns
+- New or modified RLS policies
+- New pages or routes
+- New hooks or components
+- New edge functions
+- Configuration changes
+- Dependency updates
+
+### Update Process
+
+1. Identify affected sections
+2. Update relevant documentation
+3. Update "Last Updated" date at top
+4. Commit documentation with code changes
+
+---
+
+*This documentation is automatically maintained alongside the codebase.*
