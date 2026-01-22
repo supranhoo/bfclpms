@@ -16,9 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { useKpiTemplates, KpiTemplate } from '@/hooks/useKpiTemplates';
-import { TemplateAssignmentDialog } from '@/components/admin/TemplateAssignmentDialog';
-import { BundleAssignDialog } from '@/components/admin/BundleAssignDialog';
+import { SmartAssignmentDialog } from '@/components/admin/SmartAssignmentDialog';
 
 type AppRole = 'admin' | 'manager' | 'employee' | 'auditor' | 'management';
 
@@ -35,7 +33,6 @@ const ITEMS_PER_PAGE = 10;
 export default function UserManagement() {
   const { data: profiles, isLoading } = useProfiles();
   const { data: departments } = useDepartments();
-  const { data: templates } = useKpiTemplates();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -85,14 +82,14 @@ export default function UserManagement() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
-  // Template Assignment Dialog (after user creation)
-  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
-  const [newCreatedUser, setNewCreatedUser] = useState<{ id: string; name: string; role: AppRole } | null>(null);
-  const [matchingTemplates, setMatchingTemplates] = useState<KpiTemplate[]>([]);
-
-  // Bundle Assignment Dialog
-  const [bundleDialogOpen, setBundleDialogOpen] = useState(false);
-  const [bundleAssignUserId, setBundleAssignUserId] = useState<string | undefined>(undefined);
+  // Smart Assignment Dialog (unified bundle + template assignment)
+  const [smartAssignDialogOpen, setSmartAssignDialogOpen] = useState(false);
+  const [assignTargetUser, setAssignTargetUser] = useState<{ 
+    id: string; 
+    name: string; 
+    departmentId: string | null;
+    role: string;
+  } | null>(null);
 
   // Filtered and paginated profiles
   const filteredProfiles = useMemo(() => {
@@ -217,20 +214,15 @@ export default function UserManagement() {
       toast({ title: 'User created successfully' });
       setCreateDialogOpen(false);
       
-      // Check for matching templates based on role
-      const matchedTemplates = templates?.filter(t => 
-        t.is_active && 
-        (t.applicable_roles.length === 0 || t.applicable_roles.includes(newRole))
-      ) || [];
-      
-      if (matchedTemplates.length > 0 && data?.profile?.id) {
-        setNewCreatedUser({ 
+      // Open Smart Assignment Dialog for newly created user
+      if (data?.profile?.id) {
+        setAssignTargetUser({ 
           id: data.profile.id, 
           name: newFullName,
-          role: newRole 
+          departmentId: newDepartmentId || null,
+          role: newRole,
         });
-        setMatchingTemplates(matchedTemplates);
-        setTemplateDialogOpen(true);
+        setSmartAssignDialogOpen(true);
       }
       
       resetCreateForm();
@@ -601,10 +593,16 @@ export default function UserManagement() {
                           size="sm" 
                           variant="ghost" 
                           onClick={() => {
-                            setBundleAssignUserId(profile.id);
-                            setBundleDialogOpen(true);
+                            const role = (profile.user_roles as any)?.[0]?.role || 'employee';
+                            setAssignTargetUser({
+                              id: profile.id,
+                              name: profile.full_name || profile.email,
+                              departmentId: profile.department_id,
+                              role,
+                            });
+                            setSmartAssignDialogOpen(true);
                           }} 
-                          title="Assign KRA Bundle"
+                          title="Assign KRAs"
                         >
                           <Package className="h-4 w-4" />
                         </Button>
@@ -971,30 +969,20 @@ export default function UserManagement() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Template Assignment Dialog (after user creation) */}
-      {newCreatedUser && (
-        <TemplateAssignmentDialog
-          isOpen={templateDialogOpen}
+      {/* Smart Assignment Dialog (unified bundle + template assignment) */}
+      {assignTargetUser && (
+        <SmartAssignmentDialog
+          isOpen={smartAssignDialogOpen}
           onClose={() => {
-            setTemplateDialogOpen(false);
-            setNewCreatedUser(null);
-            setMatchingTemplates([]);
+            setSmartAssignDialogOpen(false);
+            setAssignTargetUser(null);
           }}
-          templates={matchingTemplates}
-          employeeId={newCreatedUser.id}
-          employeeName={newCreatedUser.name}
+          employeeId={assignTargetUser.id}
+          employeeName={assignTargetUser.name}
+          employeeDepartmentId={assignTargetUser.departmentId}
+          employeeRole={assignTargetUser.role}
         />
       )}
-
-      {/* Bundle Assignment Dialog */}
-      <BundleAssignDialog
-        isOpen={bundleDialogOpen}
-        onClose={() => {
-          setBundleDialogOpen(false);
-          setBundleAssignUserId(undefined);
-        }}
-        preselectedEmployeeId={bundleAssignUserId}
-      />
     </div>
   );
 }

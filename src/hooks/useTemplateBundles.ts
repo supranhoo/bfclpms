@@ -25,7 +25,18 @@ export interface TemplateBundle {
       title: string;
       kra_name: string;
       kpi_name: string;
+      uom: string | null;
+      target_value: number | null;
       weightage: number | null;
+      criteria: string | null;
+      frequency: string | null;
+      source_of_data: string | null;
+      r5: string | null;
+      r4: string | null;
+      r3: string | null;
+      r2: string | null;
+      r1: string | null;
+      r0: string | null;
       kra_categories: {
         id: string;
         name: string;
@@ -62,7 +73,13 @@ export function useTemplateBundles() {
               title,
               kra_name,
               kpi_name,
+              uom,
+              target_value,
               weightage,
+              criteria,
+              frequency,
+              source_of_data,
+              r5, r4, r3, r2, r1, r0,
               kra_categories (id, name, color)
             )
           )
@@ -94,7 +111,13 @@ export function useTemplateBundle(id: string | undefined) {
               title,
               kra_name,
               kpi_name,
+              uom,
+              target_value,
               weightage,
+              criteria,
+              frequency,
+              source_of_data,
+              r5, r4, r3, r2, r1, r0,
               kra_categories (id, name, color)
             )
           )
