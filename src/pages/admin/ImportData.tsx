@@ -164,6 +164,10 @@ export default function ImportData() {
   
   // Employee search in preview
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
+  
+  // Export data state
+  const [isExportingEmployees, setIsExportingEmployees] = useState(false);
+  const [isExportingKpis, setIsExportingKpis] = useState(false);
 
   // Clear KPI data function
   const handleClearKpiData = async () => {
@@ -1374,6 +1378,211 @@ export default function ImportData() {
     XLSX.writeFile(wb, 'employee_import_template.xlsx');
   };
 
+  // Export current employee data
+  const exportEmployeeData = async () => {
+    setIsExportingEmployees(true);
+    try {
+      // Fetch all profiles with department info
+      const { data: allProfiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          employee_code,
+          full_name,
+          email,
+          designation,
+          pms_grade,
+          department_id,
+          reporting_manager_id,
+          departments!profiles_department_fk(
+            id,
+            name,
+            business_unit_id,
+            business_units(
+              id,
+              name,
+              division_id,
+              divisions(id, name)
+            )
+          )
+        `);
+      
+      if (profilesError) throw profilesError;
+
+      // Fetch user roles
+      const { data: userRoles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('user_id, role');
+      
+      if (rolesError) throw rolesError;
+
+      const roleMap = new Map(userRoles?.map(r => [r.user_id, r.role]) || []);
+      const profileMap = new Map(allProfiles?.map(p => [p.id, p]) || []);
+
+      const exportData = (allProfiles || []).map(profile => {
+        const dept = profile.departments as any;
+        const bu = dept?.business_units;
+        const div = bu?.divisions;
+        const manager = profile.reporting_manager_id ? profileMap.get(profile.reporting_manager_id) : null;
+        
+        return {
+          employeeCode: profile.employee_code || '',
+          fullName: profile.full_name || '',
+          email: profile.email || '',
+          designation: profile.designation || '',
+          role: roleMap.get(profile.id) || 'employee',
+          division: div?.name || '',
+          businessUnit: bu?.name || '',
+          department: dept?.name || '',
+          pmsGrade: profile.pms_grade || '',
+          managerEmployeeId: manager?.employee_code || '',
+          managerName: manager?.full_name || '',
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Employees');
+      XLSX.writeFile(wb, `employees_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+      
+      toast({
+        title: 'Export Complete',
+        description: `Exported ${exportData.length} employees to Excel.`,
+      });
+    } catch (error: any) {
+      console.error('Error exporting employees:', error);
+      toast({
+        title: 'Export Failed',
+        description: error.message || 'Failed to export employee data',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExportingEmployees(false);
+    }
+  };
+
+  // Export current KPI data
+  const exportKpiData = async () => {
+    setIsExportingKpis(true);
+    try {
+      // Fetch all KPIs with related data - handle pagination
+      let allKpis: any[] = [];
+      let offset = 0;
+      const batchSize = 1000;
+      
+      while (true) {
+        const { data: kpiBatch, error: kpisError } = await supabase
+          .from('kpis')
+          .select(`
+            id,
+            kpi_name,
+            kra_name,
+            employee_id,
+            category_id,
+            target_value,
+            uom,
+            uom_type,
+            qualitative_options,
+            frequency,
+            weightage,
+            criteria,
+            r5, r4, r3, r2, r1, r0,
+            review_period,
+            review_year,
+            source_of_data,
+            status,
+            kra_categories(name),
+            profiles!kpis_employee_id_fkey(employee_code, full_name)
+          `)
+          .range(offset, offset + batchSize - 1);
+        
+        if (kpisError) throw kpisError;
+        if (!kpiBatch || kpiBatch.length === 0) break;
+        
+        allKpis = [...allKpis, ...kpiBatch];
+        if (kpiBatch.length < batchSize) break;
+        offset += batchSize;
+      }
+
+      // Fetch all review submissions
+      let allSubmissions: any[] = [];
+      offset = 0;
+      
+      while (true) {
+        const { data: submissionBatch, error: submissionsError } = await supabase
+          .from('review_submissions')
+          .select('kpi_id, achieved_value, self_score, self_remarks, manager_score, manager_remarks, auditor_score, auditor_remarks, final_score')
+          .range(offset, offset + batchSize - 1);
+        
+        if (submissionsError) throw submissionsError;
+        if (!submissionBatch || submissionBatch.length === 0) break;
+        
+        allSubmissions = [...allSubmissions, ...submissionBatch];
+        if (submissionBatch.length < batchSize) break;
+        offset += batchSize;
+      }
+
+      const submissionMap = new Map(allSubmissions.map(s => [s.kpi_id, s]));
+
+      const exportData = allKpis.map(kpi => {
+        const submission = submissionMap.get(kpi.id);
+        const profile = kpi.profiles as any;
+        const category = kpi.kra_categories as any;
+        
+        return {
+          newCode: profile?.employee_code || '',
+          fullName: profile?.full_name || '',
+          category: category?.name || '',
+          kra: kpi.kra_name || '',
+          kpi: kpi.kpi_name || '',
+          target: kpi.target_value || '',
+          uom: kpi.uom || '',
+          uomType: kpi.uom_type || 'numeric',
+          qualitativeOptions: kpi.qualitative_options ? JSON.stringify(kpi.qualitative_options) : '',
+          frequency: kpi.frequency || '',
+          kpiWeightage: kpi.weightage || '',
+          criteria: kpi.criteria || '',
+          r5: kpi.r5 || '',
+          r4: kpi.r4 || '',
+          r3: kpi.r3 || '',
+          r2: kpi.r2 || '',
+          r1: kpi.r1 || '',
+          r0: kpi.r0 || '',
+          month: kpi.review_period || '',
+          reviewYear: kpi.review_year || '',
+          sourceOfData: kpi.source_of_data || '',
+          targetAchieved: submission?.achieved_value || '',
+          employeeRating: submission?.self_score || '',
+          employeeRemarks: submission?.self_remarks || '',
+          managerRating: submission?.manager_score || '',
+          managerRemarks: submission?.manager_remarks || '',
+          auditRating: submission?.auditor_score || '',
+          auditRemarks: submission?.auditor_remarks || '',
+          finalScore: submission?.final_score || '',
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'KPIs');
+      XLSX.writeFile(wb, `kpis_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+      
+      toast({
+        title: 'Export Complete',
+        description: `Exported ${exportData.length} KPIs to Excel.`,
+      });
+    } catch (error: any) {
+      console.error('Error exporting KPIs:', error);
+      toast({
+        title: 'Export Failed',
+        description: error.message || 'Failed to export KPI data',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExportingKpis(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -1397,10 +1606,14 @@ export default function ImportData() {
               <CardDescription>Upload an Excel file to bulk import employees</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-4">
                 <Button variant="outline" onClick={downloadEmployeeTemplate}>
                   <Download className="h-4 w-4 mr-2" />
                   Download Template
+                </Button>
+                <Button variant="secondary" onClick={exportEmployeeData} disabled={isExportingEmployees}>
+                  {isExportingEmployees ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                  Export Current Data
                 </Button>
                 <div className="relative">
                   <Input
@@ -1547,6 +1760,10 @@ export default function ImportData() {
                 <Button variant="outline" onClick={downloadTemplate}>
                   <Download className="h-4 w-4 mr-2" />
                   Download Template
+                </Button>
+                <Button variant="secondary" onClick={exportKpiData} disabled={isExportingKpis}>
+                  {isExportingKpis ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                  Export Current Data
                 </Button>
                 <div className="relative">
                   <Input
