@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 2. Verify admin role - only admins can generate password reset links
+    // 2. Verify admin role - only admins can reset passwords
     const { data: roleData, error: roleError } = await supabaseAdmin
       .from('user_roles')
       .select('role')
@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
     }
 
     // 3. Parse and validate request body
-    const { email } = await req.json();
+    const { email, newPassword, action = 'generate_link' } = await req.json();
 
     if (!email || typeof email !== 'string') {
       return new Response(
@@ -75,9 +75,72 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Admin ${user.id} requesting password reset for: ${email}`);
+    // Handle direct password update
+    if (action === 'set_password') {
+      if (!newPassword || typeof newPassword !== 'string') {
+        return new Response(
+          JSON.stringify({ error: 'New password is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
-    // 4. Generate password reset link
+      if (newPassword.length < 6) {
+        return new Response(
+          JSON.stringify({ error: 'Password must be at least 6 characters' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log(`Admin ${user.id} setting new password for: ${email}`);
+
+      // Find user by email
+      const { data: userData, error: userFetchError } = await supabaseAdmin.auth.admin.listUsers();
+      
+      if (userFetchError) {
+        console.error('Error fetching users:', userFetchError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to find user' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const targetUser = userData.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+      
+      if (!targetUser) {
+        return new Response(
+          JSON.stringify({ error: 'User not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Update the user's password
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        targetUser.id,
+        { password: newPassword }
+      );
+
+      if (updateError) {
+        console.error('Error updating password:', updateError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to update password' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log(`Password updated successfully by admin ${user.id} for: ${email}`);
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Password updated successfully'
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Default: Generate password reset link
+    console.log(`Admin ${user.id} requesting password reset link for: ${email}`);
+
     const { data, error } = await supabaseAdmin.auth.admin.generateLink({
       type: 'recovery',
       email: email,
