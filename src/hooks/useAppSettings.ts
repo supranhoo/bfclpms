@@ -11,6 +11,7 @@ export interface AppSettings {
   app_name: string;
   logo_url: string | null;
   login_background_url: string | null;
+  login_wallpapers: string[];
   created_at: string;
   updated_at: string;
 }
@@ -30,7 +31,22 @@ export function useAppSettings() {
         throw error;
       }
 
-      return data;
+      // Ensure login_wallpapers is always an array of strings
+      if (data) {
+        const wallpapers = data.login_wallpapers;
+        let parsedWallpapers: string[] = [];
+        
+        if (Array.isArray(wallpapers)) {
+          parsedWallpapers = wallpapers.filter((item): item is string => typeof item === 'string');
+        }
+        
+        return {
+          ...data,
+          login_wallpapers: parsedWallpapers,
+        } as AppSettings;
+      }
+
+      return data as AppSettings | null;
     },
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
@@ -41,7 +57,7 @@ export function useUpdateAppSettings() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (updates: Partial<Pick<AppSettings, 'organization_name' | 'app_name' | 'logo_url' | 'login_background_url'>>) => {
+    mutationFn: async (updates: Partial<Pick<AppSettings, 'organization_name' | 'app_name' | 'logo_url' | 'login_background_url' | 'login_wallpapers'>>) => {
       const { data, error } = await supabase
         .from('app_settings')
         .update({

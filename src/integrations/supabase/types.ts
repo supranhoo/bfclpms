@@ -20,6 +20,7 @@ export type Database = {
           created_at: string
           id: string
           login_background_url: string | null
+          login_wallpapers: Json | null
           logo_url: string | null
           organization_name: string
           updated_at: string
@@ -29,6 +30,7 @@ export type Database = {
           created_at?: string
           id?: string
           login_background_url?: string | null
+          login_wallpapers?: Json | null
           logo_url?: string | null
           organization_name?: string
           updated_at?: string
@@ -38,6 +40,7 @@ export type Database = {
           created_at?: string
           id?: string
           login_background_url?: string | null
+          login_wallpapers?: Json | null
           logo_url?: string | null
           organization_name?: string
           updated_at?: string

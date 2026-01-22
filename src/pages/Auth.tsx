@@ -9,23 +9,30 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { BarChart3, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { BarChart3, Loader2, CheckCircle, AlertCircle, Eye, EyeOff, Lock, Mail, User, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { LoginSlideshow } from '@/components/auth/LoginSlideshow';
+import { cn } from '@/lib/utils';
 
 export default function Auth() {
   const { user, loading, signIn, signUp } = useAuth();
-  const { data: appSettings } = useAppSettings();
+  const { data: appSettings, isLoading: isLoadingSettings } = useAppSettings();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   
   // Signup form state
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupFullName, setSignupFullName] = useState('');
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+
+  // Focus state for input styling
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   // Forgot password state
   const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
@@ -48,7 +55,7 @@ export default function Auth() {
     }
   }, [cooldownRemaining]);
 
-  if (loading) {
+  if (loading || isLoadingSettings) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -122,138 +129,278 @@ export default function Auth() {
     setForgotPasswordError(null);
   };
 
-  // Dynamic background style
-  const backgroundStyle = appSettings?.login_background_url
-    ? {
-        backgroundImage: `url(${appSettings.login_background_url})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }
-    : {};
-
   const displayAppName = appSettings?.app_name || 'PMS Dashboard';
+  const wallpapers = appSettings?.login_wallpapers || [];
 
   return (
-    <div 
-      className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 p-4"
-      style={backgroundStyle}
-    >
-      <div className="w-full max-w-md">
-        <div className="flex items-center justify-center gap-2 mb-8">
-          {appSettings?.logo_url ? (
-            <img src={appSettings.logo_url} alt="Logo" className="h-10 w-10 object-contain" />
+    <div className="min-h-screen flex bg-background">
+      {/* Left Side: Slideshow (hidden on mobile) */}
+      <div className="hidden lg:flex lg:w-1/2 xl:w-3/5">
+        <LoginSlideshow
+          wallpapers={wallpapers}
+          interval={5000}
+          organizationName={appSettings?.organization_name}
+          appName={appSettings?.app_name}
+          logoUrl={appSettings?.logo_url}
+        />
+      </div>
+
+      {/* Right Side: Login Card */}
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-8 relative overflow-hidden">
+        {/* Mobile background - subtle gradient or single wallpaper */}
+        <div className="absolute inset-0 lg:hidden">
+          {wallpapers.length > 0 ? (
+            <>
+              <div
+                className="absolute inset-0 bg-cover bg-center opacity-20"
+                style={{ backgroundImage: `url(${wallpapers[0]})` }}
+              />
+              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
+            </>
           ) : (
-            <div className="p-2 rounded-lg bg-primary text-primary-foreground">
-              <BarChart3 className="h-6 w-6" />
-            </div>
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-secondary/5" />
           )}
-          <h1 className="text-2xl font-bold text-foreground">{displayAppName}</h1>
         </div>
-        
-        <Card className="border-border shadow-lg backdrop-blur-sm bg-card/95">
-          <CardHeader className="text-center">
-            <CardTitle className="text-xl">Welcome</CardTitle>
-            <CardDescription>Sign in to access the Performance Management System</CardDescription>
-          </CardHeader>
+
+        <div className="w-full max-w-md z-10">
+          {/* Mobile Logo */}
+          <div className="flex items-center justify-center gap-3 mb-8 lg:hidden">
+            {appSettings?.logo_url ? (
+              <img src={appSettings.logo_url} alt="Logo" className="h-10 w-10 object-contain rounded-lg" />
+            ) : (
+              <div className="p-2 rounded-lg bg-primary text-primary-foreground">
+                <BarChart3 className="h-6 w-6" />
+              </div>
+            )}
+            <h1 className="text-2xl font-bold text-foreground">{displayAppName}</h1>
+          </div>
           
-          <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mx-4" style={{ width: 'calc(100% - 2rem)' }}>
-              <TabsTrigger value="login">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
-            </TabsList>
+          {/* Glassmorphism Card */}
+          <Card className="relative overflow-hidden border-border/50 shadow-2xl bg-card/80 backdrop-blur-xl">
+            {/* Decorative gradient glow */}
+            <div className="absolute -top-24 -right-24 w-48 h-48 bg-primary/20 rounded-full blur-3xl" />
+            <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-secondary/20 rounded-full blur-3xl" />
             
-            <TabsContent value="login">
-              <form onSubmit={handleLogin}>
-                <CardContent className="space-y-4 pt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="login-email">Email</Label>
-                    <Input
-                      id="login-email"
-                      type="email"
-                      placeholder="Enter your email"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="login-password">Password</Label>
-                    <Input
-                      id="login-password"
-                      type="password"
-                      placeholder="Enter your password"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="text-right">
-                    <button
-                      type="button"
-                      onClick={() => setForgotPasswordOpen(true)}
-                      className="text-sm text-primary hover:underline"
+            <CardHeader className="relative text-center pb-2">
+              <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
+              <CardDescription>
+                Enter your credentials to access your dashboard
+              </CardDescription>
+            </CardHeader>
+            
+            <Tabs defaultValue="login" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mx-4 bg-muted/50" style={{ width: 'calc(100% - 2rem)' }}>
+                <TabsTrigger value="login" className="data-[state=active]:bg-background">Sign In</TabsTrigger>
+                <TabsTrigger value="signup" className="data-[state=active]:bg-background">Sign Up</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="login" className="relative">
+                <form onSubmit={handleLogin}>
+                  <CardContent className="space-y-4 pt-4">
+                    {/* Email Field */}
+                    <div className="space-y-2">
+                      <Label htmlFor="login-email" className="text-sm font-medium">
+                        Email Address
+                      </Label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Mail className={cn(
+                            "h-4 w-4 transition-colors",
+                            focusedField === 'login-email' ? 'text-primary' : 'text-muted-foreground'
+                          )} />
+                        </div>
+                        <Input
+                          id="login-email"
+                          type="email"
+                          placeholder="name@company.com"
+                          value={loginEmail}
+                          onChange={(e) => setLoginEmail(e.target.value)}
+                          onFocus={() => setFocusedField('login-email')}
+                          onBlur={() => setFocusedField(null)}
+                          className="pl-10 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Password Field */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="login-password" className="text-sm font-medium">
+                          Password
+                        </Label>
+                        <button
+                          type="button"
+                          onClick={() => setForgotPasswordOpen(true)}
+                          className="text-xs text-primary hover:text-primary/80 hover:underline transition-colors"
+                        >
+                          Forgot?
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Lock className={cn(
+                            "h-4 w-4 transition-colors",
+                            focusedField === 'login-password' ? 'text-primary' : 'text-muted-foreground'
+                          )} />
+                        </div>
+                        <Input
+                          id="login-password"
+                          type={showLoginPassword ? 'text' : 'password'}
+                          placeholder="••••••••"
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          onFocus={() => setFocusedField('login-password')}
+                          onBlur={() => setFocusedField(null)}
+                          className="pl-10 pr-10 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowLoginPassword(!showLoginPassword)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="flex flex-col gap-4">
+                    <Button
+                      type="submit"
+                      className="w-full h-11 font-semibold group"
+                      disabled={isSubmitting}
                     >
-                      Forgot Password?
-                    </button>
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                    Sign In
-                  </Button>
-                </CardFooter>
-              </form>
-            </TabsContent>
-            
-            <TabsContent value="signup">
-              <form onSubmit={handleSignup}>
-                <CardContent className="space-y-4 pt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-name">Full Name</Label>
-                    <Input
-                      id="signup-name"
-                      type="text"
-                      placeholder="Enter your full name"
-                      value={signupFullName}
-                      onChange={(e) => setSignupFullName(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input
-                      id="signup-email"
-                      type="email"
-                      placeholder="Enter your email"
-                      value={signupEmail}
-                      onChange={(e) => setSignupEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      placeholder="Create a password (min 6 characters)"
-                      value={signupPassword}
-                      onChange={(e) => setSignupPassword(e.target.value)}
-                      minLength={6}
-                      required
-                    />
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                    Create Account
-                  </Button>
-                </CardFooter>
-              </form>
-            </TabsContent>
-          </Tabs>
-        </Card>
+                      {isSubmitting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          Sign In
+                          <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                        </>
+                      )}
+                    </Button>
+                  </CardFooter>
+                </form>
+              </TabsContent>
+              
+              <TabsContent value="signup" className="relative">
+                <form onSubmit={handleSignup}>
+                  <CardContent className="space-y-4 pt-4">
+                    {/* Full Name Field */}
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-name" className="text-sm font-medium">
+                        Full Name
+                      </Label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <User className={cn(
+                            "h-4 w-4 transition-colors",
+                            focusedField === 'signup-name' ? 'text-primary' : 'text-muted-foreground'
+                          )} />
+                        </div>
+                        <Input
+                          id="signup-name"
+                          type="text"
+                          placeholder="John Doe"
+                          value={signupFullName}
+                          onChange={(e) => setSignupFullName(e.target.value)}
+                          onFocus={() => setFocusedField('signup-name')}
+                          onBlur={() => setFocusedField(null)}
+                          className="pl-10 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Email Field */}
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-email" className="text-sm font-medium">
+                        Email Address
+                      </Label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Mail className={cn(
+                            "h-4 w-4 transition-colors",
+                            focusedField === 'signup-email' ? 'text-primary' : 'text-muted-foreground'
+                          )} />
+                        </div>
+                        <Input
+                          id="signup-email"
+                          type="email"
+                          placeholder="name@company.com"
+                          value={signupEmail}
+                          onChange={(e) => setSignupEmail(e.target.value)}
+                          onFocus={() => setFocusedField('signup-email')}
+                          onBlur={() => setFocusedField(null)}
+                          className="pl-10 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Password Field */}
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-password" className="text-sm font-medium">
+                        Password
+                      </Label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Lock className={cn(
+                            "h-4 w-4 transition-colors",
+                            focusedField === 'signup-password' ? 'text-primary' : 'text-muted-foreground'
+                          )} />
+                        </div>
+                        <Input
+                          id="signup-password"
+                          type={showSignupPassword ? 'text' : 'password'}
+                          placeholder="Min 6 characters"
+                          value={signupPassword}
+                          onChange={(e) => setSignupPassword(e.target.value)}
+                          onFocus={() => setFocusedField('signup-password')}
+                          onBlur={() => setFocusedField(null)}
+                          className="pl-10 pr-10 bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
+                          minLength={6}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSignupPassword(!showSignupPassword)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {showSignupPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter>
+                    <Button
+                      type="submit"
+                      className="w-full h-11 font-semibold group"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          Create Account
+                          <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                        </>
+                      )}
+                    </Button>
+                  </CardFooter>
+                </form>
+              </TabsContent>
+            </Tabs>
+
+            {/* Footer */}
+            <div className="relative px-6 pb-4 pt-2 text-center">
+              <p className="text-xs text-muted-foreground">
+                {displayAppName} • Secure & Encrypted
+              </p>
+            </div>
+          </Card>
+        </div>
       </div>
 
       {/* Forgot Password Dialog */}
