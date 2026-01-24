@@ -285,7 +285,7 @@ export default function Auth() {
             {/* Footer */}
             <div className="relative px-6 pb-4 pt-2 text-center">
               <p className="text-xs text-muted-foreground">
-                {displayAppName} • Secure & Encrypted
+                Secure & Encrypted
               </p>
             </div>
           </Card>
