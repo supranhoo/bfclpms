@@ -319,6 +319,8 @@ has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
 - **App Name:** Displayed in sidebar header and browser tab title
 - **App Logo:** Custom logo shown in sidebar and login screen
 - **Login Wallpapers:** Multiple background images for auto-rotating slideshow on login screen
+- **Login Page Headline:** Main headline text displayed above the login form
+- **Login Page Description:** Supporting text below the headline
 
 **Implementation:**
 1. Settings stored in `app_settings` table (singleton pattern - single row)
@@ -326,7 +328,7 @@ has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
 3. `useAppSettings` hook fetches settings globally
 4. Login page (`/auth`) features a modern split-screen design:
    - **Left side (desktop):** Wallpaper slideshow with branding overlay
-   - **Right side:** Glassmorphism login card
+   - **Right side:** Glassmorphism login card with configurable hero text
 5. Sidebar (`AppSidebar`) displays dynamic app name and logo
 6. Browser tab title (`document.title`) updates via `useEffect` in sidebar
 
@@ -352,12 +354,15 @@ has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
 -- app_settings table columns for branding
 login_wallpapers jsonb DEFAULT '[]'::jsonb  -- Array of wallpaper URLs
 login_background_url text  -- Legacy single wallpaper (kept for backward compatibility)
+login_hero_headline text  -- Configurable headline above login form
+login_hero_description text  -- Configurable description text
 ```
 
 **Fallback Behavior:**
 - If no custom logo: Shows default BarChart3 icon
 - If no wallpapers: Uses animated gradient background with floating blobs
 - If no custom names: Uses "PMS Dashboard" and "Performance Management"
+- If no hero text: Uses default "Manage performance with clarity." and "Track KPIs, conduct reviews, and drive organizational growth."
 
 **Key Components:**
 - `GlobalBrandingSettings.tsx`: Admin form for branding configuration

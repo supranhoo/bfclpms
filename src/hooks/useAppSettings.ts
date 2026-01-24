@@ -12,6 +12,8 @@ export interface AppSettings {
   logo_url: string | null;
   login_background_url: string | null;
   login_wallpapers: string[];
+  login_hero_headline: string | null;
+  login_hero_description: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -57,7 +59,7 @@ export function useUpdateAppSettings() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (updates: Partial<Pick<AppSettings, 'organization_name' | 'app_name' | 'logo_url' | 'login_background_url' | 'login_wallpapers'>>) => {
+    mutationFn: async (updates: Partial<Pick<AppSettings, 'organization_name' | 'app_name' | 'logo_url' | 'login_background_url' | 'login_wallpapers' | 'login_hero_headline' | 'login_hero_description'>>) => {
       const { data, error } = await supabase
         .from('app_settings')
         .update({
