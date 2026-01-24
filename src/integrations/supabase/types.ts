@@ -20,6 +20,8 @@ export type Database = {
           created_at: string
           id: string
           login_background_url: string | null
+          login_hero_description: string | null
+          login_hero_headline: string | null
           login_wallpapers: Json | null
           logo_url: string | null
           organization_name: string
@@ -30,6 +32,8 @@ export type Database = {
           created_at?: string
           id?: string
           login_background_url?: string | null
+          login_hero_description?: string | null
+          login_hero_headline?: string | null
           login_wallpapers?: Json | null
           logo_url?: string | null
           organization_name?: string
@@ -40,6 +44,8 @@ export type Database = {
           created_at?: string
           id?: string
           login_background_url?: string | null
+          login_hero_description?: string | null
+          login_hero_headline?: string | null
           login_wallpapers?: Json | null
           logo_url?: string | null
           organization_name?: string

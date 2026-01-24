@@ -17,6 +17,8 @@ export function GlobalBrandingSettings() {
   const [appName, setAppName] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [loginWallpapers, setLoginWallpapers] = useState<string[]>([]);
+  const [loginHeroHeadline, setLoginHeroHeadline] = useState('');
+  const [loginHeroDescription, setLoginHeroDescription] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadingWallpaper, setUploadingWallpaper] = useState(false);
@@ -35,6 +37,8 @@ export function GlobalBrandingSettings() {
       setAppName(settings.app_name || '');
       setLogoUrl(settings.logo_url);
       setLoginWallpapers(settings.login_wallpapers || []);
+      setLoginHeroHeadline(settings.login_hero_headline || '');
+      setLoginHeroDescription(settings.login_hero_description || '');
     }
   }, [settings]);
 
@@ -50,10 +54,12 @@ export function GlobalBrandingSettings() {
         organizationName !== (settings.organization_name || '') ||
         appName !== (settings.app_name || '') ||
         logoUrl !== settings.logo_url ||
-        wallpapersChanged;
+        wallpapersChanged ||
+        loginHeroHeadline !== (settings.login_hero_headline || '') ||
+        loginHeroDescription !== (settings.login_hero_description || '');
       setHasChanges(changed);
     }
-  }, [organizationName, appName, logoUrl, loginWallpapers, settings]);
+  }, [organizationName, appName, logoUrl, loginWallpapers, loginHeroHeadline, loginHeroDescription, settings]);
 
   // Preview slideshow effect
   useEffect(() => {
@@ -121,6 +127,8 @@ export function GlobalBrandingSettings() {
       app_name: appName,
       logo_url: logoUrl,
       login_wallpapers: loginWallpapers,
+      login_hero_headline: loginHeroHeadline || null,
+      login_hero_description: loginHeroDescription || null,
       // Keep login_background_url synced with first wallpaper for backward compatibility
       login_background_url: loginWallpapers.length > 0 ? loginWallpapers[0] : null,
     });
@@ -179,6 +187,34 @@ export function GlobalBrandingSettings() {
           />
           <p className="text-xs text-muted-foreground">
             Displayed in the sidebar and browser tab.
+          </p>
+        </div>
+
+        {/* Login Page Hero Headline */}
+        <div className="space-y-2">
+          <Label htmlFor="hero-headline">Login Page Headline</Label>
+          <Input
+            id="hero-headline"
+            value={loginHeroHeadline}
+            onChange={(e) => setLoginHeroHeadline(e.target.value)}
+            placeholder="e.g., Manage performance with clarity."
+          />
+          <p className="text-xs text-muted-foreground">
+            Main headline displayed above the login form.
+          </p>
+        </div>
+
+        {/* Login Page Hero Description */}
+        <div className="space-y-2">
+          <Label htmlFor="hero-description">Login Page Description</Label>
+          <Input
+            id="hero-description"
+            value={loginHeroDescription}
+            onChange={(e) => setLoginHeroDescription(e.target.value)}
+            placeholder="e.g., Track KPIs, conduct reviews, and drive organizational growth."
+          />
+          <p className="text-xs text-muted-foreground">
+            Supporting text displayed below the headline.
           </p>
         </div>
 
