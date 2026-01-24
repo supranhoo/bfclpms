@@ -629,33 +629,16 @@ export function generateDetailedScorecardPdf(
     const catScore = kpis.reduce((sum, k) => sum + (k.finalScore || 0) * k.weightage, 0);
     const catAvg = catWeight > 0 ? catScore / catWeight : 0;
     
-    // Category header row (spanning all 8 columns)
+    // Category header row - single row spanning all 8 columns
     tableData.push([{
-      content: `> ${category}`,
-      colSpan: 6,
+      content: `${category}   |   Avg: ${catAvg.toFixed(2)}   |   Weight: ${catWeight}%`,
+      colSpan: 8,
       styles: {
         fillColor: getCategoryColor(category),
         fontStyle: 'bold',
         fontSize: 8,
         textColor: COLORS.grayMedium,
-      }
-    }, {
-      content: `Avg: ${catAvg.toFixed(2)}`,
-      styles: {
-        fillColor: getCategoryColor(category),
-        fontStyle: 'bold',
-        fontSize: 8,
-        halign: 'center',
-        textColor: getScoreColor(catAvg),
-      }
-    }, {
-      content: `${catWeight}%`,
-      styles: {
-        fillColor: getCategoryColor(category),
-        fontStyle: 'bold',
-        fontSize: 8,
-        halign: 'center',
-        textColor: COLORS.grayMedium,
+        halign: 'left',
       }
     }] as CellDef[]);
     
@@ -726,30 +709,45 @@ export function generateDetailedScorecardPdf(
         noteIndex++;
       }
       
-      // Build KPI name cell
-      const kpiNameContent = `${truncateText(kpi.kraName, 25)}\n${truncateText(kpi.kpiName, 30)}${noteRef ? ` ${noteRef}` : ''}`;
-      
-      // Format achieved with remarks
-      const selfCell = `${achieved !== '-' ? `${achieved}${targetMet ? ' [+]' : ' [-]'}` : '-'}\n${truncateText(kpi.selfRemarks || '-', 25)}`;
-      const managerCell = `${kpi.managerScore ? formatScore(kpi.managerScore) : '-'}\n${truncateText(kpi.managerRemarks || '-', 25)}`;
-      const auditorCell = `${kpi.auditorScore ? formatScore(kpi.auditorScore) : '-'}\n${truncateText(kpi.auditorRemarks || '-', 25)}`;
+      // Build simplified cell contents - avoid multi-line where possible
+      const kpiNameContent = truncateText(kpi.kpiName, 35) + (noteRef ? ` ${noteRef}` : '');
+      const targetContent = `${target}${kpi.uom ? ` ${kpi.uom}` : ''}`;
+      const achievedContent = achieved !== '-' ? `${achieved}${targetMet ? ' [+]' : ' [-]'}` : '-';
       
       tableData.push([
-        // KRA / KPI
-        kpiNameContent,
+        // KRA / KPI name
+        {
+          content: kpiNameContent,
+          styles: { halign: 'left' }
+        } as CellDef,
         // Weight
-        `${kpi.weightage}%`,
-        // Target with UOM
-        `${target}${kpi.uom ? ` ${kpi.uom}` : ''}\n${isLower ? '(Lower)' : '(Higher)'}`,
-        // Self Review: Achieved + Remark
-        selfCell,
-        // Manager Review: Score + Remark
-        managerCell,
-        // Auditor: Score + Remark
-        auditorCell,
+        {
+          content: `${kpi.weightage}%`,
+          styles: { halign: 'center' }
+        } as CellDef,
+        // Target
+        {
+          content: targetContent,
+          styles: { halign: 'center' }
+        } as CellDef,
+        // Self Achieved
+        {
+          content: achievedContent,
+          styles: { halign: 'center' }
+        } as CellDef,
+        // Manager Score
+        {
+          content: kpi.managerScore ? formatScore(kpi.managerScore) : '-',
+          styles: { halign: 'center' }
+        } as CellDef,
+        // Auditor Score
+        {
+          content: kpi.auditorScore ? formatScore(kpi.auditorScore) : '-',
+          styles: { halign: 'center' }
+        } as CellDef,
         // Final score with rating badge
         {
-          content: `${formatScore(kpi.finalScore)}\n${getRatingLabel(kpi.finalScore)}`,
+          content: `${formatScore(kpi.finalScore)} ${getRatingLabel(kpi.finalScore)}`,
           styles: {
             fontStyle: 'bold',
             fillColor: getRatingLightColor(kpi.finalScore),
@@ -758,23 +756,26 @@ export function generateDetailedScorecardPdf(
           }
         } as CellDef,
         // Notes indicator
-        hasNotes ? '*' : '',
+        {
+          content: hasNotes ? '*' : '',
+          styles: { halign: 'center' }
+        } as CellDef,
       ]);
     });
   });
 
-  // Create the table with new column structure matching wireframe
+  // Create the table with simplified column structure
   autoTable(doc, {
     startY: yPos,
     head: [[
-      { content: 'KRA / KPI', styles: { halign: 'left' } },
+      { content: 'KPI Name', styles: { halign: 'left' } },
       { content: 'W', styles: { halign: 'center' } },
       { content: 'Target', styles: { halign: 'center' } },
-      { content: 'Self Review\n(Ach./Remark)', styles: { halign: 'center' } },
-      { content: 'Manager\n(Score/Remark)', styles: { halign: 'center' } },
-      { content: 'Auditor\n(Score/Remark)', styles: { halign: 'center' } },
+      { content: 'Self Ach.', styles: { halign: 'center' } },
+      { content: 'Mgr Score', styles: { halign: 'center' } },
+      { content: 'Aud Score', styles: { halign: 'center' } },
       { content: 'Final', styles: { halign: 'center' } },
-      { content: '', styles: { halign: 'center' } },
+      { content: '*', styles: { halign: 'center' } },
     ]],
     body: tableData,
     styles: {
@@ -788,20 +789,20 @@ export function generateDetailedScorecardPdf(
     headStyles: {
       fillColor: COLORS.primary,
       textColor: COLORS.white,
-      fontSize: 6,
+      fontSize: 7,
       fontStyle: 'bold',
       halign: 'center',
       valign: 'middle',
     },
     columnStyles: {
-      0: { cellWidth: 48, halign: 'left' },   // KRA/KPI
-      1: { cellWidth: 12, halign: 'center' }, // Weight
-      2: { cellWidth: 22, halign: 'center' }, // Target
-      3: { cellWidth: 42, halign: 'left', fontSize: 6 },  // Self Review
-      4: { cellWidth: 42, halign: 'left', fontSize: 6 },  // Manager Review
-      5: { cellWidth: 42, halign: 'left', fontSize: 6 },  // Auditor
-      6: { cellWidth: 22, halign: 'center' }, // Final
-      7: { cellWidth: 8, halign: 'center' },  // Notes indicator
+      0: { cellWidth: 70, halign: 'left' },   // KPI Name
+      1: { cellWidth: 14, halign: 'center' }, // Weight
+      2: { cellWidth: 28, halign: 'center' }, // Target
+      3: { cellWidth: 28, halign: 'center' }, // Self Achieved
+      4: { cellWidth: 24, halign: 'center' }, // Manager Score
+      5: { cellWidth: 24, halign: 'center' }, // Auditor Score
+      6: { cellWidth: 28, halign: 'center' }, // Final
+      7: { cellWidth: 10, halign: 'center' }, // Notes indicator
     },
     alternateRowStyles: {
       fillColor: [252, 252, 253],
@@ -974,33 +975,16 @@ export function generateDetailedScorecardPdfBlob(
     const catScore = kpis.reduce((sum, k) => sum + (k.finalScore || 0) * k.weightage, 0);
     const catAvg = catWeight > 0 ? catScore / catWeight : 0;
     
-    // Category header row (spanning all 8 columns)
+    // Category header row - single row spanning all 8 columns
     tableData.push([{
-      content: `> ${category}`,
-      colSpan: 6,
+      content: `${category}   |   Avg: ${catAvg.toFixed(2)}   |   Weight: ${catWeight}%`,
+      colSpan: 8,
       styles: {
         fillColor: getCategoryColor(category),
         fontStyle: 'bold',
         fontSize: 8,
         textColor: COLORS.grayMedium,
-      }
-    }, {
-      content: `Avg: ${catAvg.toFixed(2)}`,
-      styles: {
-        fillColor: getCategoryColor(category),
-        fontStyle: 'bold',
-        fontSize: 8,
-        halign: 'center',
-        textColor: getScoreColor(catAvg),
-      }
-    }, {
-      content: `${catWeight}%`,
-      styles: {
-        fillColor: getCategoryColor(category),
-        fontStyle: 'bold',
-        fontSize: 8,
-        halign: 'center',
-        textColor: COLORS.grayMedium,
+        halign: 'left',
       }
     }] as CellDef[]);
     
@@ -1071,30 +1055,45 @@ export function generateDetailedScorecardPdfBlob(
         noteIndex++;
       }
       
-      // Build KPI name cell
-      const kpiNameContent = `${truncateText(kpi.kraName, 25)}\n${truncateText(kpi.kpiName, 30)}${noteRef ? ` ${noteRef}` : ''}`;
-      
-      // Format achieved with remarks
-      const selfCell = `${achieved !== '-' ? `${achieved}${targetMet ? ' [+]' : ' [-]'}` : '-'}\n${truncateText(kpi.selfRemarks || '-', 25)}`;
-      const managerCell = `${kpi.managerScore ? formatScore(kpi.managerScore) : '-'}\n${truncateText(kpi.managerRemarks || '-', 25)}`;
-      const auditorCell = `${kpi.auditorScore ? formatScore(kpi.auditorScore) : '-'}\n${truncateText(kpi.auditorRemarks || '-', 25)}`;
+      // Build simplified cell contents - avoid multi-line where possible
+      const kpiNameContent = truncateText(kpi.kpiName, 35) + (noteRef ? ` ${noteRef}` : '');
+      const targetContent = `${target}${kpi.uom ? ` ${kpi.uom}` : ''}`;
+      const achievedContent = achieved !== '-' ? `${achieved}${targetMet ? ' [+]' : ' [-]'}` : '-';
       
       tableData.push([
-        // KRA / KPI
-        kpiNameContent,
+        // KPI name
+        {
+          content: kpiNameContent,
+          styles: { halign: 'left' }
+        } as CellDef,
         // Weight
-        `${kpi.weightage}%`,
-        // Target with UOM
-        `${target}${kpi.uom ? ` ${kpi.uom}` : ''}\n${isLower ? '(Lower)' : '(Higher)'}`,
-        // Self Review: Achieved + Remark
-        selfCell,
-        // Manager Review: Score + Remark
-        managerCell,
-        // Auditor: Score + Remark
-        auditorCell,
+        {
+          content: `${kpi.weightage}%`,
+          styles: { halign: 'center' }
+        } as CellDef,
+        // Target
+        {
+          content: targetContent,
+          styles: { halign: 'center' }
+        } as CellDef,
+        // Self Achieved
+        {
+          content: achievedContent,
+          styles: { halign: 'center' }
+        } as CellDef,
+        // Manager Score
+        {
+          content: kpi.managerScore ? formatScore(kpi.managerScore) : '-',
+          styles: { halign: 'center' }
+        } as CellDef,
+        // Auditor Score
+        {
+          content: kpi.auditorScore ? formatScore(kpi.auditorScore) : '-',
+          styles: { halign: 'center' }
+        } as CellDef,
         // Final score with rating badge
         {
-          content: `${formatScore(kpi.finalScore)}\n${getRatingLabel(kpi.finalScore)}`,
+          content: `${formatScore(kpi.finalScore)} ${getRatingLabel(kpi.finalScore)}`,
           styles: {
             fontStyle: 'bold',
             fillColor: getRatingLightColor(kpi.finalScore),
@@ -1103,23 +1102,26 @@ export function generateDetailedScorecardPdfBlob(
           }
         } as CellDef,
         // Notes indicator
-        hasNotes ? '*' : '',
+        {
+          content: hasNotes ? '*' : '',
+          styles: { halign: 'center' }
+        } as CellDef,
       ]);
     });
   });
 
-  // Create the table with new column structure
+  // Create the table with simplified column structure
   autoTable(doc, {
     startY: yPos,
     head: [[
-      { content: 'KRA / KPI', styles: { halign: 'left' } },
+      { content: 'KPI Name', styles: { halign: 'left' } },
       { content: 'W', styles: { halign: 'center' } },
       { content: 'Target', styles: { halign: 'center' } },
-      { content: 'Self Review\n(Ach./Remark)', styles: { halign: 'center' } },
-      { content: 'Manager\n(Score/Remark)', styles: { halign: 'center' } },
-      { content: 'Auditor\n(Score/Remark)', styles: { halign: 'center' } },
+      { content: 'Self Ach.', styles: { halign: 'center' } },
+      { content: 'Mgr Score', styles: { halign: 'center' } },
+      { content: 'Aud Score', styles: { halign: 'center' } },
       { content: 'Final', styles: { halign: 'center' } },
-      { content: '', styles: { halign: 'center' } },
+      { content: '*', styles: { halign: 'center' } },
     ]],
     body: tableData,
     styles: {
@@ -1133,20 +1135,20 @@ export function generateDetailedScorecardPdfBlob(
     headStyles: {
       fillColor: COLORS.primary,
       textColor: COLORS.white,
-      fontSize: 6,
+      fontSize: 7,
       fontStyle: 'bold',
       halign: 'center',
       valign: 'middle',
     },
     columnStyles: {
-      0: { cellWidth: 48, halign: 'left' },   // KRA/KPI
-      1: { cellWidth: 12, halign: 'center' }, // Weight
-      2: { cellWidth: 22, halign: 'center' }, // Target
-      3: { cellWidth: 42, halign: 'left', fontSize: 6 },  // Self Review
-      4: { cellWidth: 42, halign: 'left', fontSize: 6 },  // Manager Review
-      5: { cellWidth: 42, halign: 'left', fontSize: 6 },  // Auditor
-      6: { cellWidth: 22, halign: 'center' }, // Final
-      7: { cellWidth: 8, halign: 'center' },  // Notes indicator
+      0: { cellWidth: 70, halign: 'left' },   // KPI Name
+      1: { cellWidth: 14, halign: 'center' }, // Weight
+      2: { cellWidth: 28, halign: 'center' }, // Target
+      3: { cellWidth: 28, halign: 'center' }, // Self Achieved
+      4: { cellWidth: 24, halign: 'center' }, // Manager Score
+      5: { cellWidth: 24, halign: 'center' }, // Auditor Score
+      6: { cellWidth: 28, halign: 'center' }, // Final
+      7: { cellWidth: 10, halign: 'center' }, // Notes indicator
     },
     alternateRowStyles: {
       fillColor: [252, 252, 253],
