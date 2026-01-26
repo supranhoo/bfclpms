@@ -21,7 +21,7 @@ export function CategoryScoreChart({ data }: CategoryScoreChartProps) {
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} layout="vertical" margin={{ top: 5, right: 40, left: 10, bottom: 5 }}>
+      <BarChart data={data} layout="vertical" margin={{ top: 10, right: 40, left: 10, bottom: 10 }}>
         <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
         <YAxis 
           type="category" 
