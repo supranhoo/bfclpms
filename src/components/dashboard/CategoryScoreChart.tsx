@@ -21,13 +21,13 @@ export function CategoryScoreChart({ data }: CategoryScoreChartProps) {
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} layout="vertical" margin={{ top: 5, right: 30, left: 60, bottom: 5 }}>
+      <BarChart data={data} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
         <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
         <YAxis 
           type="category" 
           dataKey="name" 
-          width={80}
-          tick={{ fontSize: 12 }}
+          width={120}
+          tick={{ fontSize: 11 }}
         />
         <Tooltip 
           formatter={(value: number) => [`${value.toFixed(1)}%`, 'Score']}
