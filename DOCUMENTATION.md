@@ -373,18 +373,46 @@ login_hero_description text  -- Configurable description text
 
 **Route:** `/dashboard`
 
+**Layout Structure:**
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│  Profile Card (Full Width)                                                 │
+│  [Avatar] Name (Employee Code) / Designation / Department                  │
+└────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│  Filters Row (Prominent, Full Width with subtle background)                │
+│  [Filter Icon] Review Period: [Month ▼] [Year ▼]   Category: [All ▼]      │
+│  Showing X of Y KPIs                                                       │
+└────────────────────────────────────────────────────────────────────────────┘
+┌─────────────┬──────────────────────────────────────────────────────────────┐
+│ [1/6] Donut │ [5/6] Performance by Category (Horizontal Bar Chart)        │
+└─────────────┴──────────────────────────────────────────────────────────────┘
+┌──────────────┬──────────────┬──────────────┬──────────────┐
+│ Monthly      │ Total        │ Completed    │ Pending      │
+│ Rating       │ Weighted     │ KPIs         │ KPIs         │
+└──────────────┴──────────────┴──────────────┴──────────────┘
+```
+
 **Features:**
-- Profile card with employee details
-- Key stat cards: Overall Rating, Total Score, Completed, Pending
-- Overall score chart (radial)
-- Category-wise score chart (bar)
-- Review status distribution
-- KPI table with status badges
+- **Global Filters:** Period and Category filters affect ALL dashboard sections (metrics, charts, status, table)
+- Profile card with compact layout: "Name (Employee Code) / Designation / Department"
+- Key stat cards: Monthly Rating, Total Weighted Score, Completed, Pending
+- Overall score chart (compact radial donut - 1/6 width)
+- Category-wise score chart (horizontal bar - 5/6 width with 180px Y-axis for long category names)
+- Review status distribution with progress bars
+- KPI details table with status badges and action buttons
 
 **Data Flow:**
 ```
-useAuth() → user.id → useMyKpis() → useReviewSubmissions() → Calculate scores
+useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculate metrics → Render
 ```
+
+**Key Components:**
+- `ProfileCard.tsx`: Compact employee info display
+- `OverallScoreChart.tsx`: Small radial chart (innerRadius: 35, outerRadius: 50)
+- `CategoryScoreChart.tsx`: Horizontal bar chart with 180px Y-axis width
+- `KeyStatCard.tsx`: Stat cards with icons
+- `ReviewPeriodSelector.tsx`: Month/Year dropdowns
 
 ### 4.3 KPI Self-Review
 

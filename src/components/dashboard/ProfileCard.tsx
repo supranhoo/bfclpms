@@ -23,6 +23,13 @@ export function ProfileCard({ profile, department, division, onViewHistory }: Pr
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
+  // Format: "Name (Employee Code)"
+  const displayName = profile.full_name 
+    ? profile.employee_code 
+      ? `${profile.full_name} (${profile.employee_code})`
+      : profile.full_name
+    : 'User';
+
   return (
     <Card>
       <CardContent className="p-6">
@@ -32,12 +39,13 @@ export function ProfileCard({ profile, department, division, onViewHistory }: Pr
               <AvatarImage src={profile.avatar_url || undefined} />
               <AvatarFallback className="text-lg">{getInitials(profile.full_name)}</AvatarFallback>
             </Avatar>
-            <div>
-              <h2 className="text-xl font-bold text-foreground">{profile.full_name || 'User'}</h2>
-              <p className="text-muted-foreground">{profile.designation || 'Employee'}</p>
-              {profile.employee_code && (
-                <span className="text-xs text-muted-foreground font-mono">{profile.employee_code}</span>
-              )}
+            <div className="space-y-1">
+              <h2 className="text-xl font-bold text-foreground">{displayName}</h2>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                {profile.designation && <span>{profile.designation}</span>}
+                {profile.designation && department && <span className="text-border">|</span>}
+                {department && <span>{department}</span>}
+              </div>
             </div>
           </div>
           {onViewHistory && (
@@ -46,25 +54,6 @@ export function ProfileCard({ profile, department, division, onViewHistory }: Pr
               View History
             </Button>
           )}
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-          <div>
-            <span className="block text-sm font-medium text-muted-foreground">Full Name</span>
-            <span className="text-foreground font-semibold">{profile.full_name || '-'}</span>
-          </div>
-          <div>
-            <span className="block text-sm font-medium text-muted-foreground">Designation</span>
-            <span className="text-foreground font-semibold">{profile.designation || '-'}</span>
-          </div>
-          <div>
-            <span className="block text-sm font-medium text-muted-foreground">Department</span>
-            <span className="text-foreground font-semibold">{department || '-'}</span>
-          </div>
-          <div>
-            <span className="block text-sm font-medium text-muted-foreground">Employee Code</span>
-            <span className="text-foreground font-semibold">{profile.employee_code || '-'}</span>
-          </div>
         </div>
       </CardContent>
     </Card>
