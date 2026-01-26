@@ -156,7 +156,10 @@ export default function QueryInbox() {
   );
 
   const openQueries = receivedQueries.filter(q => q.status === 'open');
-  const resolvedQueries = receivedQueries.filter(q => q.status === 'resolved');
+  // Count resolved queries from BOTH received and sent (for accurate stats)
+  const resolvedReceivedQueries = receivedQueries.filter(q => q.status === 'resolved');
+  const resolvedSentQueries = sentQueries.filter(q => q.status === 'resolved');
+  const totalResolvedQueries = resolvedReceivedQueries.length + resolvedSentQueries.length;
 
   const openResponseDialog = (query: QueryWithDetails) => {
     setSelectedQuery(query);
@@ -241,11 +244,15 @@ export default function QueryInbox() {
         )}
 
         {query.resolution_notes && (
-          <div className="p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
-            <Label className="text-xs text-green-700 dark:text-green-300">Resolution</Label>
-            <p className="text-sm mt-1">{query.resolution_notes}</p>
+          <div className="p-3 bg-green-50 dark:bg-green-950 rounded-lg border-2 border-green-300 dark:border-green-700">
+            <div className="flex items-center gap-2 mb-1">
+              <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <Label className="text-sm font-medium text-green-700 dark:text-green-300">Reply Received</Label>
+            </div>
+            <p className="text-sm mt-1 text-foreground">{query.resolution_notes}</p>
             {query.resolved_at && (
-              <p className="text-xs text-muted-foreground mt-2">
+              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                <Clock className="h-3 w-3" />
                 Resolved on {format(new Date(query.resolved_at), 'MMM d, yyyy h:mm a')}
               </p>
             )}
@@ -432,8 +439,10 @@ export default function QueryInbox() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Resolved</p>
-                <p className="text-3xl font-bold text-green-600">{resolvedQueries.length}</p>
-                <p className="text-xs text-muted-foreground">Queries resolved</p>
+                <p className="text-3xl font-bold text-green-600">{totalResolvedQueries}</p>
+                <p className="text-xs text-muted-foreground">
+                  {resolvedReceivedQueries.length} answered, {resolvedSentQueries.length} replies
+                </p>
               </div>
               <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
                 <CheckCircle2 className="h-6 w-6 text-green-500" />
@@ -544,14 +553,14 @@ export default function QueryInbox() {
                 </div>
               )}
               
-              {resolvedQueries.length > 0 && (
+              {resolvedReceivedQueries.length > 0 && (
                 <div>
                   <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                     <CheckCircle2 className="h-5 w-5 text-green-500" />
-                    Resolved ({resolvedQueries.length})
+                    Resolved ({resolvedReceivedQueries.length})
                   </h3>
                   <div className="grid gap-4 md:grid-cols-2">
-                    {resolvedQueries.map(query => renderQueryCard(query, false))}
+                    {resolvedReceivedQueries.map(query => renderQueryCard(query, false))}
                   </div>
                 </div>
               )}

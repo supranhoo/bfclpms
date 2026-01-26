@@ -66,18 +66,20 @@ export default function TeamReview() {
   // Calculate stats
   const stats = useMemo(() => {
     if (!periodKpis || !baseMembers) {
-      return { totalEmployees: 0, pendingReview: 0, reviewed: 0, totalKpis: 0 };
+      return { totalEmployees: 0, openKpis: 0, pendingReview: 0, reviewed: 0, totalKpis: 0 };
     }
 
     // Filter KPIs to only those belonging to team members
     const memberIds = new Set(baseMembers.map(m => m.id));
     const teamKpis = periodKpis.filter(k => memberIds.has(k.employee_id));
 
+    const openKpis = teamKpis.filter(k => k.status === 'kra_set').length;
     const pendingReview = teamKpis.filter(k => k.status === 'self_review').length;
     const reviewed = teamKpis.filter(k => ['manager_check', 'audit', 'management_review', 'approved'].includes(k.status || '')).length;
 
     return {
       totalEmployees: baseMembers.length,
+      openKpis,
       pendingReview,
       reviewed,
       totalKpis: teamKpis.length,
@@ -162,7 +164,7 @@ export default function TeamReview() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card className="border-l-4 border-l-primary">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -178,13 +180,27 @@ export default function TeamReview() {
             </div>
           </CardContent>
         </Card>
+        <Card className="border-l-4 border-l-purple-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Open KPIs</p>
+                <p className="text-3xl font-bold text-purple-600">{stats.openKpis}</p>
+                <p className="text-xs text-muted-foreground">Not yet submitted</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-purple-500/10 flex items-center justify-center">
+                <Target className="h-6 w-6 text-purple-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         <Card className="border-l-4 border-l-yellow-500">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Pending Review</p>
                 <p className="text-3xl font-bold text-yellow-600">{stats.pendingReview}</p>
-                <p className="text-xs text-muted-foreground">KPIs awaiting review</p>
+                <p className="text-xs text-muted-foreground">Awaiting manager</p>
               </div>
               <div className="h-12 w-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
                 <Clock className="h-6 w-6 text-yellow-500" />
