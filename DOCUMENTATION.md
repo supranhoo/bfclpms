@@ -563,28 +563,32 @@ The Monthly Scorecard Report includes an enhanced "Performance Dashboard" PDF ex
 - Score Summary Box with progress bar, overall rating badge, and KPI completion status
 - Performance by Category horizontal bar chart
 
-**Page 2+ - KPI Performance Details Table:**
+**Page 2 - KPI Summary Table:**
 - **Category Grouping:** KPIs grouped by category with colored header rows showing category averages
-- **8-Column Layout:** KRA/KPI, Weight, Target, Self Review (Ach./Remark), Manager (Score/Remark), Auditor (Score/Remark), Final, Notes indicator
-- **Review Stage Columns:** Each review stage shows achieved/score value AND truncated remarks in the same cell
+- **8-Column Layout:** KPI Name, Weight, Target, Self Achieved, Manager Score, Auditor Score, Final, Notes indicator
 - **Color-Coded Rating Badges:** Final scores displayed with colored backgrounds (Blue=5, Green=4, Yellow=3, Red=1-2)
 - **Achievement Indicators:** [+] for targets met, [-] for below target (ASCII-safe for PDF compatibility)
 - **Legend Box:** Rating scale explanation in top-right corner
-- **Note References:** Numeric references [1], [2], etc. link to detailed remarks
 
-**Review Trail Notes Section:**
-- Full remarks from all 4 review stages (Self, Manager, Auditor, Management)
-- Evidence attachment indicators ([Ev])
-- Paginated for large datasets
-- Each note includes stage label and full text (not truncated)
+**Pages 3+ - Detailed Review Trail Cards:**
+Each KPI gets a dedicated card-style layout similar to the web UI's ReviewTrailCard component:
+- **Header Bar:** Category badge, KPI name, weight, target, and criteria
+- **Achieved Value Bar:** Shows achieved value with final score badge
+- **2x2 Review Grid:**
+  - **Self Review Panel (Blue):** Score badge, full remarks text (up to 4 lines), evidence indicator
+  - **Manager Review Panel (Amber):** Score badge, full remarks text, evidence indicator
+  - **Auditor Review Panel (Purple):** Score badge, full remarks text, evidence indicator
+  - **Final Assessment Panel (Emerald):** Large final score, rating label, status badge
+- **Color-Coded Panels:** Each review stage has matching border, background, and text colors from the UI
+- **Page Navigation:** Shows "KPI X of Y" for easy navigation
+- **Full Remarks Display:** No truncation in detail cards - all remarks visible
 
 **PDF Character Compatibility:**
 - All indicators use ASCII-safe characters for maximum PDF compatibility:
   - `[+]` = Target Met/Exceeded
   - `[-]` = Below Target
   - `*` = Has Review Notes
-  - `[Ev]` = Evidence Attached
-  - `(Lower)` / `(Higher)` = Criteria direction
+  - `[Evidence attached]` = Evidence link present
 
 ### 4.11 Performance Improvement Plans (PIP)
 
