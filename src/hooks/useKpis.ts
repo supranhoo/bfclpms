@@ -288,7 +288,7 @@ export function useUpdateKpi() {
   });
 }
 
-// Admin update hook with audit logging
+// Admin update hook with audit logging and status change notifications
 export function useAdminUpdateKpi() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -299,11 +299,13 @@ export function useAdminUpdateKpi() {
       // Get old values for audit
       const { data: oldKpi, error: fetchError } = await supabase
         .from('kpis')
-        .select('*')
+        .select('*, profiles:employee_id(id, full_name, email, employee_code, reporting_manager_id)')
         .eq('id', id)
         .single();
 
       if (fetchError) throw fetchError;
+
+      const statusChanged = updates.status && updates.status !== oldKpi.status;
 
       // Update KPI
       const { data, error } = await supabase
@@ -318,7 +320,7 @@ export function useAdminUpdateKpi() {
       // Create audit log entry
       await supabase.from('kpi_audit_logs').insert({
         kpi_id: id,
-        action: 'ADMIN_OVERRIDE',
+        action: statusChanged ? 'ADMIN_STATUS_OVERRIDE' : 'ADMIN_OVERRIDE',
         performed_by: user?.id,
         old_value: oldKpi,
         new_value: data,
@@ -326,8 +328,58 @@ export function useAdminUpdateKpi() {
           reason: reason || null, 
           source: 'admin_edit_dialog',
           changed_fields: Object.keys(updates).filter(k => k !== 'id' && k !== 'reason'),
+          status_changed: statusChanged || false,
+          old_status: oldKpi.status,
+          new_status: updates.status || oldKpi.status,
         },
       });
+
+      // If status changed, send notifications to employee and reporting manager
+      if (statusChanged && reason) {
+        const employeeProfile = oldKpi.profiles as any;
+        const employeeId = oldKpi.employee_id;
+        const managerId = employeeProfile?.reporting_manager_id;
+        const employeeDisplay = employeeProfile?.full_name 
+          ? `${employeeProfile.full_name}${employeeProfile.employee_code ? ` (${employeeProfile.employee_code})` : ''}`
+          : 'Employee';
+
+        const notificationMessage = `Admin changed status of KPI "${oldKpi.kpi_name}" from ${oldKpi.status} to ${updates.status}. Reason: ${reason}`;
+
+        // Notify the employee
+        await supabase.from('notifications').insert({
+          user_id: employeeId,
+          type: 'admin_status_change',
+          title: 'KPI Status Changed by Admin',
+          message: notificationMessage,
+          kpi_id: id,
+          related_user_id: user?.id,
+          metadata: {
+            old_status: oldKpi.status,
+            new_status: updates.status,
+            reason,
+            kra_name: oldKpi.kra_name,
+          },
+        });
+
+        // Notify the reporting manager if exists
+        if (managerId) {
+          await supabase.from('notifications').insert({
+            user_id: managerId,
+            type: 'admin_status_change',
+            title: 'Team Member KPI Status Changed',
+            message: `Admin changed status of ${employeeDisplay}'s KPI "${oldKpi.kpi_name}". Reason: ${reason}`,
+            kpi_id: id,
+            related_user_id: user?.id,
+            metadata: {
+              old_status: oldKpi.status,
+              new_status: updates.status,
+              reason,
+              employee_id: employeeId,
+              kra_name: oldKpi.kra_name,
+            },
+          });
+        }
+      }
 
       return data;
     },
@@ -335,6 +387,7 @@ export function useAdminUpdateKpi() {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
       queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
       toast({ title: 'KPI updated by admin' });
     },
     onError: (error: Error) => {

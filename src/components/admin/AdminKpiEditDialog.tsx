@@ -61,7 +61,7 @@ const [formData, setFormData] = useState({
     is_org_level: false,
   });
   const [reason, setReason] = useState('');
-
+  const originalStatus = kpi?.status;
   useEffect(() => {
     if (kpi) {
       setFormData({
@@ -92,6 +92,12 @@ const [formData, setFormData] = useState({
 
   const handleSubmit = async () => {
     if (!kpi) return;
+    
+    // Require reason if status is changed
+    const statusChanged = formData.status !== originalStatus;
+    if (statusChanged && !reason.trim()) {
+      return; // Form validation will show the required state
+    }
 
     await updateKpi.mutateAsync({
       id: kpi.id,
@@ -342,19 +348,31 @@ const [formData, setFormData] = useState({
 
           {/* Reason for Change */}
           <div className="space-y-2">
-            <Label>Reason for Change (for audit log)</Label>
+            <Label htmlFor="reason">
+              Reason for Change {formData.status !== originalStatus && <span className="text-destructive">* (Required when changing status)</span>}
+            </Label>
             <Textarea
+              id="reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Optional: Explain why this change is being made..."
+              placeholder={formData.status !== originalStatus ? "Required: Explain why the status is being changed..." : "Optional: Explain why this change is being made..."}
               rows={2}
+              className={formData.status !== originalStatus && !reason.trim() ? 'border-destructive' : ''}
             />
+            {formData.status !== originalStatus && (
+              <p className="text-xs text-muted-foreground">
+                Notifications will be sent to the employee and their reporting manager when status is changed.
+              </p>
+            )}
           </div>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={updateKpi.isPending}>
+          <Button 
+            onClick={handleSubmit} 
+            disabled={updateKpi.isPending || (formData.status !== originalStatus && !reason.trim())}
+          >
             {updateKpi.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             Save Changes
           </Button>

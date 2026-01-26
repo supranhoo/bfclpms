@@ -15,6 +15,7 @@ import ManagementReview from "./pages/ManagementReview";
 import ManagementDashboard from "./pages/ManagementDashboard";
 import AuditLogs from "./pages/AuditLogs";
 import QueryInbox from "./pages/QueryInbox";
+import PMSPolicy from "./pages/PMSPolicy";
 import UserManagement from "./pages/admin/UserManagement";
 import AllKpis from "./pages/admin/AllKpis";
 import Organization from "./pages/admin/Organization";
@@ -63,6 +64,7 @@ const App = () => (
               <Route path="/self-review" element={<Navigate to="/my-kpis" replace />} />
               <Route path="/kra-acceptance" element={<KRAAcceptance />} />
               <Route path="/queries" element={<QueryInbox />} />
+              <Route path="/pms-policy" element={<PMSPolicy />} />
               
               {/* Manager-protected routes */}
               <Route path="/team-review" element={

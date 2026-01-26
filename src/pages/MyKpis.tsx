@@ -490,21 +490,21 @@ export default function MyKpis() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-1">
-                          {kpi.status === 'kra_set' || kpi.status === 'self_review' ? (
+                          {kpi.status === 'kra_set' ? (
                             <Button
                               size="sm"
-                              variant={kpi.status === 'kra_set' ? 'default' : 'outline'}
+                              variant="default"
                               onClick={() => openReviewDialog(kpi)}
                               className="h-8"
                             >
                               <Send className="h-3.5 w-3.5 mr-1" />
-                              {kpi.status === 'kra_set' ? 'Submit' : 'Edit'}
+                              Submit
                             </Button>
                           ) : (
-                            <Button size="sm" variant="ghost" className="h-8">
-                              <Eye className="h-3.5 w-3.5 mr-1" />
-                              View
-                            </Button>
+                            <Badge variant="secondary" className="h-8 px-3 flex items-center gap-1">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Submitted
+                            </Badge>
                           )}
                           <Button
                             size="sm"

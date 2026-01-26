@@ -19,6 +19,7 @@ export function GlobalBrandingSettings() {
   const [loginWallpapers, setLoginWallpapers] = useState<string[]>([]);
   const [loginHeroHeadline, setLoginHeroHeadline] = useState('');
   const [loginHeroDescription, setLoginHeroDescription] = useState('');
+  const [pmsPolicyUrl, setPmsPolicyUrl] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadingWallpaper, setUploadingWallpaper] = useState(false);
@@ -39,6 +40,7 @@ export function GlobalBrandingSettings() {
       setLoginWallpapers(settings.login_wallpapers || []);
       setLoginHeroHeadline(settings.login_hero_headline || '');
       setLoginHeroDescription(settings.login_hero_description || '');
+      setPmsPolicyUrl(settings.pms_policy_url || '');
     }
   }, [settings]);
 
@@ -56,10 +58,11 @@ export function GlobalBrandingSettings() {
         logoUrl !== settings.logo_url ||
         wallpapersChanged ||
         loginHeroHeadline !== (settings.login_hero_headline || '') ||
-        loginHeroDescription !== (settings.login_hero_description || '');
+        loginHeroDescription !== (settings.login_hero_description || '') ||
+        pmsPolicyUrl !== (settings.pms_policy_url || '');
       setHasChanges(changed);
     }
-  }, [organizationName, appName, logoUrl, loginWallpapers, loginHeroHeadline, loginHeroDescription, settings]);
+  }, [organizationName, appName, logoUrl, loginWallpapers, loginHeroHeadline, loginHeroDescription, pmsPolicyUrl, settings]);
 
   // Preview slideshow effect
   useEffect(() => {
@@ -129,6 +132,7 @@ export function GlobalBrandingSettings() {
       login_wallpapers: loginWallpapers,
       login_hero_headline: loginHeroHeadline || null,
       login_hero_description: loginHeroDescription || null,
+      pms_policy_url: pmsPolicyUrl || null,
       // Keep login_background_url synced with first wallpaper for backward compatibility
       login_background_url: loginWallpapers.length > 0 ? loginWallpapers[0] : null,
     });
@@ -218,7 +222,19 @@ export function GlobalBrandingSettings() {
           </p>
         </div>
 
-        {/* Logo Upload */}
+        {/* PMS Policy URL */}
+        <div className="space-y-2">
+          <Label htmlFor="pms-policy-url">PMS Policy Document URL</Label>
+          <Input
+            id="pms-policy-url"
+            value={pmsPolicyUrl}
+            onChange={(e) => setPmsPolicyUrl(e.target.value)}
+            placeholder="https://example.com/policy.pdf or Google Docs link"
+          />
+          <p className="text-xs text-muted-foreground">
+            URL to the PMS Policy document (PDF, Google Docs, or any web page). Employees can view this from the sidebar.
+          </p>
+        </div>
         <div className="space-y-2">
           <Label>App Logo</Label>
           <div className="flex items-start gap-4">

@@ -572,25 +572,54 @@ export function EmployeeScorecard({
             </div>
           )}
 
-          <SheetFooter className="gap-2">
-            <Button variant="outline" onClick={() => setReviewSheetOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmitReview}
-              disabled={managerScore === null || submitManagerReview.isPending}
-            >
-              {submitManagerReview.isPending ? 'Submitting...' : 'Submit Review'}
-            </Button>
-            <Button
-              variant="default"
-              className="bg-green-600 hover:bg-green-700"
-              onClick={handleApprove}
-              disabled={managerScore === null || approveKpi.isPending}
-            >
-              <Check className="h-4 w-4 mr-2" />
-              {approveKpi.isPending ? 'Approving...' : 'Approve'}
-            </Button>
+          <SheetFooter className="flex-wrap gap-2 sm:justify-between">
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setReviewSheetOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="outline"
+                className="border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
+                onClick={() => {
+                  if (selectedKpi) {
+                    openSendBackDialog(selectedKpi);
+                  }
+                }}
+              >
+                <Undo2 className="h-4 w-4 mr-2" />
+                Send Back
+              </Button>
+              <Button
+                variant="outline"
+                className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
+                onClick={() => {
+                  if (selectedKpi) {
+                    openQueryDialog(selectedKpi);
+                  }
+                }}
+              >
+                <MessageSquare className="h-4 w-4 mr-2" />
+                Raise Query
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                onClick={handleSubmitReview}
+                disabled={managerScore === null || submitManagerReview.isPending}
+              >
+                {submitManagerReview.isPending ? 'Saving...' : 'Save Draft'}
+              </Button>
+              <Button
+                variant="default"
+                className="bg-green-600 hover:bg-green-700"
+                onClick={handleApprove}
+                disabled={managerScore === null || approveKpi.isPending}
+              >
+                <Check className="h-4 w-4 mr-2" />
+                {approveKpi.isPending ? 'Approving...' : 'Approve'}
+              </Button>
+            </div>
           </SheetFooter>
         </SheetContent>
       </Sheet>

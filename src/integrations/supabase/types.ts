@@ -25,6 +25,7 @@ export type Database = {
           login_wallpapers: Json | null
           logo_url: string | null
           organization_name: string
+          pms_policy_url: string | null
           updated_at: string
         }
         Insert: {
@@ -37,6 +38,7 @@ export type Database = {
           login_wallpapers?: Json | null
           logo_url?: string | null
           organization_name?: string
+          pms_policy_url?: string | null
           updated_at?: string
         }
         Update: {
@@ -49,6 +51,7 @@ export type Database = {
           login_wallpapers?: Json | null
           logo_url?: string | null
           organization_name?: string
+          pms_policy_url?: string | null
           updated_at?: string
         }
         Relationships: []
