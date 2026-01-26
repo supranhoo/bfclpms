@@ -63,17 +63,32 @@ export default function Dashboard() {
     [submissions]
   );
 
-  // Calculate metrics
+  // Step 1: Filter by period first (global filter)
+  const periodFilteredKpis = useMemo(() => {
+    return kpis?.filter(k => 
+      k.review_period === selectedPeriod && k.review_year === selectedYear
+    ) || [];
+  }, [kpis, selectedPeriod, selectedYear]);
+
+  // Step 2: Apply category filter on top of period filter
+  const fullyFilteredKpis = useMemo(() => {
+    if (activeCategory === 'All') return periodFilteredKpis;
+    const cat = categories?.find(c => c.name === activeCategory);
+    return periodFilteredKpis.filter(k => k.category_id === cat?.id);
+  }, [periodFilteredKpis, activeCategory, categories]);
+
+  // Calculate metrics from FILTERED KPIs (global filtering applied)
   const metrics = useMemo(() => {
-    const totalKpis = kpis?.length || 0;
-    const completedKpis = kpis?.filter(k => k.status === 'approved').length || 0;
+    const data = fullyFilteredKpis;
+    const totalKpis = data.length;
+    const completedKpis = data.filter(k => k.status === 'approved').length;
     const pendingKpis = totalKpis - completedKpis;
 
     let totalScore = 0;
     let totalWeight = 0;
     let totalMaxScore = 0;
 
-    kpis?.forEach(kpi => {
+    data.forEach(kpi => {
       const submission = submissionMap.get(kpi.id);
       const score = submission?.final_score || submission?.self_score || 0;
       const weight = kpi.weightage || 0;
@@ -86,14 +101,15 @@ export default function Dashboard() {
     const overallPercentage = totalMaxScore > 0 ? (totalScore / totalMaxScore) * 100 : 0;
 
     return { totalKpis, completedKpis, pendingKpis, totalScore, totalMaxScore, overallRating, overallPercentage };
-  }, [kpis, submissionMap]);
+  }, [fullyFilteredKpis, submissionMap]);
 
-  // Category metrics
+  // Category metrics from FILTERED KPIs
   const categoryMetrics = useMemo(() => {
-    if (!categories || !kpis) return [];
+    if (!categories) return [];
+    const data = fullyFilteredKpis;
 
     return categories.map(cat => {
-      const catKpis = kpis.filter(k => k.category_id === cat.id);
+      const catKpis = data.filter(k => k.category_id === cat.id);
       let achieved = 0;
       let max = 0;
 
@@ -112,47 +128,41 @@ export default function Dashboard() {
         count: catKpis.length,
       };
     }).filter(c => c.count > 0).sort((a, b) => b.percentage - a.percentage);
-  }, [categories, kpis, submissionMap]);
+  }, [categories, fullyFilteredKpis, submissionMap]);
 
-  // Filtered KPIs by month/year and category
-  const filteredKpis = useMemo(() => {
-    let filtered = kpis?.filter(k => 
-      k.review_period === selectedPeriod && k.review_year === selectedYear
-    ) || [];
-    
-    if (activeCategory !== 'All') {
-      const cat = categories?.find(c => c.name === activeCategory);
-      filtered = filtered.filter(k => k.category_id === cat?.id);
-    }
-    
-    return filtered;
-  }, [kpis, activeCategory, categories, selectedPeriod, selectedYear]);
+  // Available categories for filter dropdown (based on period-filtered KPIs)
+  const availableCategories = useMemo(() => {
+    if (!categories) return [];
+    return categories.filter(cat => 
+      periodFilteredKpis.some(k => k.category_id === cat.id)
+    );
+  }, [categories, periodFilteredKpis]);
 
   if (isLoading) {
     return <DashboardSkeleton />;
   }
 
   return (
-    <div className="space-y-8">
-      {/* Profile + Filters Section */}
-      <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-        <ProfileCard
-          profile={{
-            full_name: profile?.full_name,
-            designation: profile?.designation,
-            employee_code: profile?.employee_code,
-            avatar_url: profile?.avatar_url,
-            email: profile?.email,
-          }}
-        />
-        
-        {/* Filters */}
-        <Card className="w-full lg:w-auto">
-          <CardContent className="p-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+    <div className="space-y-6">
+      {/* 1. Profile Card - Full Width */}
+      <ProfileCard
+        profile={{
+          full_name: profile?.full_name,
+          designation: profile?.designation,
+          employee_code: profile?.employee_code,
+          avatar_url: profile?.avatar_url,
+          email: profile?.email,
+        }}
+      />
+
+      {/* 2. Filters Row - Prominent, Full Width */}
+      <Card className="bg-muted/30">
+        <CardContent className="py-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                 <Filter className="h-4 w-4" />
-                <span className="font-medium">Filters</span>
+                <span>Filters</span>
               </div>
               <ReviewPeriodSelector
                 selectedPeriod={selectedPeriod}
@@ -164,17 +174,17 @@ export default function Dashboard() {
                 value={activeCategory}
                 onValueChange={setActiveCategory}
               >
-                <SelectTrigger className="w-[160px]">
+                <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="All">All Categories</SelectItem>
-                  {categoryMetrics.map(cat => (
-                    <SelectItem key={cat.name} value={cat.name}>
+                  {availableCategories.map(cat => (
+                    <SelectItem key={cat.id} value={cat.name}>
                       <div className="flex items-center gap-2">
                         <div
                           className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: cat.color || '#3B82F6' }}
+                          style={{ backgroundColor: cat.color || 'hsl(var(--primary))' }}
                         />
                         {cat.name}
                       </div>
@@ -183,14 +193,46 @@ export default function Dashboard() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="text-sm text-muted-foreground">
+              Showing <span className="font-semibold text-foreground">{fullyFilteredKpis.length}</span> of{' '}
+              <span className="font-semibold text-foreground">{kpis?.length || 0}</span> KPIs
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 3. Performance Charts Row - 1:5 ratio */}
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-6">
+        {/* Overall Score Chart - Small (1/6) */}
+        <Card className="md:col-span-1">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Overall</CardTitle>
+            <CardDescription className="text-xs">Performance</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[140px]">
+            <OverallScoreChart 
+              percentage={metrics.overallPercentage} 
+              rating={metrics.overallRating}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Category Breakdown - Wide (5/6) */}
+        <Card className="md:col-span-5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Performance by Category</CardTitle>
+            <CardDescription className="text-xs">Score breakdown across KRA categories</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[220px]">
+            <CategoryScoreChart data={categoryMetrics} />
           </CardContent>
         </Card>
       </div>
 
-      {/* Stats Cards */}
+      {/* 4. Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KeyStatCard
-          title="Overall Rating"
+          title="Monthly Rating"
           value={`${metrics.overallRating.toFixed(2)} / 5.00`}
           icon={TrendingUp}
         />
@@ -215,35 +257,7 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Performance Overview Section */}
-      <div className="grid gap-6 grid-cols-1 md:grid-cols-4">
-        {/* Overall Score Chart - Smaller */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Overall Performance</CardTitle>
-            <CardDescription className="text-xs">Achievement percentage</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[160px]">
-            <OverallScoreChart 
-              percentage={metrics.overallPercentage} 
-              rating={metrics.overallRating}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Category Breakdown - Takes more space */}
-        <Card className="md:col-span-3">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Performance by Category</CardTitle>
-            <CardDescription className="text-xs">Score breakdown across KRA categories</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[160px]">
-            <CategoryScoreChart data={categoryMetrics} />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Status Progress */}
+      {/* 5. Status Progress */}
       <Card>
         <CardHeader>
           <CardTitle>Review Status</CardTitle>
@@ -252,7 +266,7 @@ export default function Dashboard() {
         <CardContent>
           <div className="grid gap-4 md:grid-cols-5">
             {Object.entries(statusLabels).map(([key, label]) => {
-              const count = kpis?.filter(k => k.status === key).length || 0;
+              const count = fullyFilteredKpis.filter(k => k.status === key).length;
               const percentage = metrics.totalKpis > 0 ? (count / metrics.totalKpis) * 100 : 0;
               
               return (
@@ -271,12 +285,14 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* KPI Details Table */}
+      {/* 6. KPI Details Table */}
       <Card>
         <CardHeader>
           <div>
             <CardTitle>Detailed KPI Review</CardTitle>
-            <CardDescription>{filteredKpis.length} KPIs {activeCategory !== 'All' ? `in ${activeCategory}` : ''} for {selectedPeriod} {selectedYear}</CardDescription>
+            <CardDescription>
+              {fullyFilteredKpis.length} KPIs {activeCategory !== 'All' ? `in ${activeCategory}` : ''} for {selectedPeriod} {selectedYear}
+            </CardDescription>
           </div>
         </CardHeader>
         <CardContent>
@@ -294,7 +310,7 @@ export default function Dashboard() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredKpis.map(kpi => {
+              {fullyFilteredKpis.map(kpi => {
                 const submission = submissionMap.get(kpi.id);
                 const rating = submission?.final_rating || submission?.self_rating;
                 const score = submission?.final_score || submission?.self_score;
@@ -362,10 +378,10 @@ export default function Dashboard() {
                   </TableRow>
                 );
               })}
-              {filteredKpis.length === 0 && (
+              {fullyFilteredKpis.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                    No KPIs found
+                    No KPIs found for the selected filters
                   </TableCell>
                 </TableRow>
               )}

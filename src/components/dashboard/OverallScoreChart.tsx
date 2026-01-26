@@ -28,8 +28,8 @@ export function OverallScoreChart({ percentage, rating }: OverallScoreChartProps
             data={data}
             cx="50%"
             cy="50%"
-            innerRadius={60}
-            outerRadius={80}
+            innerRadius={35}
+            outerRadius={50}
             paddingAngle={0}
             dataKey="value"
             startAngle={90}
@@ -41,9 +41,9 @@ export function OverallScoreChart({ percentage, rating }: OverallScoreChartProps
         </PieChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex items-center justify-center flex-col">
-        <span className="text-3xl font-bold text-foreground">{percentage.toFixed(1)}%</span>
+        <span className="text-xl font-bold text-foreground">{percentage.toFixed(1)}%</span>
         {rating !== undefined && (
-          <span className="text-sm text-muted-foreground">{rating.toFixed(2)} / 5.00</span>
+          <span className="text-xs text-muted-foreground">{rating.toFixed(2)}/5</span>
         )}
       </div>
     </div>
