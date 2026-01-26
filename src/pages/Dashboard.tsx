@@ -223,7 +223,7 @@ export default function Dashboard() {
             <CardTitle className="text-sm">Performance by Category</CardTitle>
             <CardDescription className="text-xs">Score breakdown across KRA categories</CardDescription>
           </CardHeader>
-          <CardContent className="h-[220px]">
+          <CardContent style={{ height: Math.max(180, categoryMetrics.length * 50) }}>
             <CategoryScoreChart data={categoryMetrics} />
           </CardContent>
         </Card>
