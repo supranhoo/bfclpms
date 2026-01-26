@@ -442,6 +442,245 @@ interface ReviewNote {
   evidence?: string;
 }
 
+// Review stage colors matching the UI ReviewTrailCard
+const STAGE_COLORS = {
+  self: {
+    border: [59, 130, 246] as [number, number, number],     // Blue-500
+    bg: [239, 246, 255] as [number, number, number],        // Blue-50
+    text: [30, 64, 175] as [number, number, number],        // Blue-800
+  },
+  manager: {
+    border: [245, 158, 11] as [number, number, number],     // Amber-500
+    bg: [255, 251, 235] as [number, number, number],        // Amber-50
+    text: [146, 64, 14] as [number, number, number],        // Amber-800
+  },
+  auditor: {
+    border: [139, 92, 246] as [number, number, number],     // Purple-500
+    bg: [245, 243, 255] as [number, number, number],        // Purple-50
+    text: [91, 33, 182] as [number, number, number],        // Purple-800
+  },
+  management: {
+    border: [16, 185, 129] as [number, number, number],     // Emerald-500
+    bg: [236, 253, 245] as [number, number, number],        // Emerald-50
+    text: [6, 95, 70] as [number, number, number],          // Emerald-800
+  },
+};
+
+/**
+ * Draws a detailed KPI review card similar to ReviewTrailCard in the UI
+ * Returns the Y position after the card
+ */
+function drawKpiDetailCard(
+  doc: jsPDF,
+  kpi: KpiDetail,
+  x: number,
+  y: number,
+  width: number
+): number {
+  let currentY = y;
+  const panelPadding = 4;
+  const halfWidth = (width - 6) / 2;
+  
+  // ===== Card Header =====
+  const headerHeight = 16;
+  doc.setFillColor(...getCategoryColor(kpi.category));
+  doc.setDrawColor(200, 200, 200);
+  doc.roundedRect(x, currentY, width, headerHeight, 2, 2, 'FD');
+  
+  // Category badge
+  doc.setFillColor(...COLORS.primary);
+  doc.roundedRect(x + 4, currentY + 3, 50, 10, 2, 2, 'F');
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.white);
+  doc.text(truncateText(kpi.category, 18), x + 6, currentY + 9);
+  
+  // KPI Name
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.black);
+  doc.text(truncateText(kpi.kpiName, 60), x + 58, currentY + 9);
+  
+  // Right side: Weight, Target, UOM
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...COLORS.grayMedium);
+  const headerInfo = `Weight: ${kpi.weightage}%  |  Target: ${kpi.target ?? '-'} ${kpi.uom || ''}  |  Criteria: ${kpi.criteria || 'Higher'}`;
+  doc.text(truncateText(headerInfo, 70), x + width - 4, currentY + 9, { align: 'right' });
+  
+  currentY += headerHeight + 2;
+  
+  // ===== Achieved Value Bar =====
+  const achievedHeight = 14;
+  doc.setFillColor(240, 253, 244); // Green-50
+  doc.setDrawColor(200, 200, 200);
+  doc.roundedRect(x, currentY, width, achievedHeight, 2, 2, 'FD');
+  
+  const achieved = kpi.selfAchieved ?? '-';
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.black);
+  doc.text(`Achieved: ${achieved}`, x + 4, currentY + 9);
+  
+  // Final score badge on right
+  if (kpi.finalScore !== null) {
+    const badgeWidth = 35;
+    const badgeX = x + width - badgeWidth - 4;
+    doc.setFillColor(...getRatingColor(kpi.finalScore));
+    doc.roundedRect(badgeX, currentY + 2, badgeWidth, 10, 2, 2, 'F');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.white);
+    doc.text(`Final: ${formatScore(kpi.finalScore)}`, badgeX + 3, currentY + 8);
+  }
+  
+  currentY += achievedHeight + 2;
+  
+  // ===== Review Panels (2x2 Grid) =====
+  const panelHeight = 42;
+  
+  // Helper to draw a review panel
+  const drawPanel = (
+    panelX: number,
+    panelY: number,
+    panelW: number,
+    title: string,
+    score: number | null,
+    rating: string | null,
+    remarks: string | null,
+    evidence: string | null,
+    colors: { border: [number, number, number]; bg: [number, number, number]; text: [number, number, number] }
+  ) => {
+    // Panel background
+    doc.setFillColor(...colors.bg);
+    doc.setDrawColor(...colors.border);
+    doc.roundedRect(panelX, panelY, panelW, panelHeight, 2, 2, 'FD');
+    
+    // Title with icon indicator
+    doc.setFillColor(...colors.border);
+    doc.roundedRect(panelX + 3, panelY + 3, 8, 8, 4, 4, 'F');
+    
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...colors.text);
+    doc.text(title, panelX + 14, panelY + 9);
+    
+    // Score badge
+    if (score !== null) {
+      doc.setFillColor(...getRatingColor(score));
+      doc.roundedRect(panelX + panelW - 28, panelY + 3, 25, 8, 2, 2, 'F');
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...COLORS.white);
+      doc.text(`${formatScore(score)} ${getRatingLabel(score)}`, panelX + panelW - 26, panelY + 8);
+    } else {
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...COLORS.grayMedium);
+      doc.text('Pending', panelX + panelW - 20, panelY + 8);
+    }
+    
+    // Remarks text (wrapped)
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...COLORS.black);
+    
+    const remarksText = remarks || 'No remarks provided';
+    const maxWidth = panelW - 8;
+    const lines = doc.splitTextToSize(remarksText, maxWidth);
+    const maxLines = 4;
+    const displayLines = lines.slice(0, maxLines);
+    
+    let textY = panelY + 17;
+    displayLines.forEach((line: string, i: number) => {
+      if (i === maxLines - 1 && lines.length > maxLines) {
+        doc.text(line.substring(0, line.length - 3) + '...', panelX + 4, textY);
+      } else {
+        doc.text(line, panelX + 4, textY);
+      }
+      textY += 4;
+    });
+    
+    // Evidence indicator
+    if (evidence) {
+      doc.setFontSize(6);
+      doc.setTextColor(...COLORS.primary);
+      doc.text('[Evidence attached]', panelX + 4, panelY + panelHeight - 3);
+    }
+  };
+  
+  // Row 1: Self Review + Manager Review
+  drawPanel(x, currentY, halfWidth, 'Self Review', kpi.selfScore, kpi.selfRating, kpi.selfRemarks || null, kpi.selfEvidence || null, STAGE_COLORS.self);
+  drawPanel(x + halfWidth + 6, currentY, halfWidth, 'Manager Review', kpi.managerScore, kpi.managerRating, kpi.managerRemarks || null, kpi.managerEvidence || null, STAGE_COLORS.manager);
+  
+  currentY += panelHeight + 3;
+  
+  // Row 2: Auditor Review + Final/Management
+  drawPanel(x, currentY, halfWidth, 'Auditor Review', kpi.auditorScore, kpi.auditorRating, kpi.auditorRemarks || null, kpi.auditorEvidence || null, STAGE_COLORS.auditor);
+  
+  // Final Assessment Panel (special formatting)
+  const finalX = x + halfWidth + 6;
+  doc.setFillColor(...STAGE_COLORS.management.bg);
+  doc.setDrawColor(...STAGE_COLORS.management.border);
+  doc.roundedRect(finalX, currentY, halfWidth, panelHeight, 2, 2, 'FD');
+  
+  // Title
+  doc.setFillColor(...STAGE_COLORS.management.border);
+  doc.roundedRect(finalX + 3, currentY + 3, 8, 8, 4, 4, 'F');
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...STAGE_COLORS.management.text);
+  doc.text('Final Assessment', finalX + 14, currentY + 9);
+  
+  // Final score (larger)
+  if (kpi.finalScore !== null) {
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...getRatingColor(kpi.finalScore));
+    doc.text(formatScore(kpi.finalScore), finalX + 10, currentY + 26);
+    
+    doc.setFontSize(10);
+    doc.text('/ 5', finalX + 30, currentY + 26);
+    
+    // Rating text
+    const ratingMap: Record<string, string> = {
+      blue: 'Outstanding',
+      green: 'Exceeds Expectations',
+      yellow: 'Meets Expectations',
+      red: 'Below Expectations',
+    };
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...COLORS.black);
+    doc.text(ratingMap[kpi.finalRating?.toLowerCase() || ''] || 'N/A', finalX + 10, currentY + 34);
+  } else {
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...COLORS.grayMedium);
+    doc.text('Pending', finalX + 10, currentY + 26);
+  }
+  
+  // Status badge on right
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold');
+  doc.setFillColor(...COLORS.success);
+  doc.roundedRect(finalX + halfWidth - 35, currentY + 30, 32, 8, 2, 2, 'F');
+  doc.setTextColor(...COLORS.white);
+  doc.text(kpi.status || 'Open', finalX + halfWidth - 33, currentY + 35);
+  
+  currentY += panelHeight + 8;
+  
+  return currentY;
+}
+
+/**
+ * Calculate estimated height of a KPI detail card
+ */
+function estimateKpiCardHeight(): number {
+  // Header (16) + Achieved (14) + 2 rows of panels (42 each) + gaps
+  return 16 + 2 + 14 + 2 + 42 + 3 + 42 + 8; // ~129mm total
+}
+
 function drawReviewNotesSection(
   doc: jsPDF,
   notes: ReviewNote[],
@@ -518,6 +757,62 @@ function drawReviewNotesSection(
   }
   
   return currentY;
+}
+
+/**
+ * Draws detailed review trail pages with KPI cards
+ */
+function drawDetailedReviewTrailPages(
+  doc: jsPDF,
+  scorecard: EmployeeScorecard,
+  options: PdfExportOptions,
+  margin: number
+): void {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const contentWidth = pageWidth - 2 * margin;
+  const cardHeight = estimateKpiCardHeight();
+  
+  // Group KPIs by category
+  const groupedKpis = new Map<string, KpiDetail[]>();
+  scorecard.kpiDetails.forEach(kpi => {
+    if (!groupedKpis.has(kpi.category)) {
+      groupedKpis.set(kpi.category, []);
+    }
+    groupedKpis.get(kpi.category)!.push(kpi);
+  });
+  
+  let kpiIndex = 0;
+  const totalKpis = scorecard.kpiDetails.length;
+  
+  Array.from(groupedKpis.entries()).forEach(([category, kpis]) => {
+    kpis.forEach((kpi) => {
+      kpiIndex++;
+      
+      // Start new page for each KPI's detailed card
+      doc.addPage('landscape');
+      let yPos = 15;
+      
+      // Page header
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...COLORS.primaryDark);
+      doc.text('Detailed Review Trail', margin, yPos);
+      
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...COLORS.grayMedium);
+      doc.text(
+        `${scorecard.employeeName} (${scorecard.employeeCode}) • ${options.period} ${options.year} • KPI ${kpiIndex} of ${totalKpis}`,
+        margin, yPos + 6
+      );
+      
+      yPos += 14;
+      
+      // Draw the KPI detail card
+      yPos = drawKpiDetailCard(doc, kpi, margin, yPos, contentWidth);
+    });
+  });
 }
 
 // ============= Main Export Functions =============
@@ -822,28 +1117,8 @@ export function generateDetailedScorecardPdf(
     },
   });
 
-  // Get final Y position from table
-  const finalY = (doc as any).lastAutoTable?.finalY || yPos + 50;
-  
-  // Draw Review Trail Notes section if space available
-  const remainingSpace = pageHeight - finalY - 15;
-  if (reviewNotes.length > 0 && remainingSpace > 25) {
-    drawReviewNotesSection(doc, reviewNotes.slice(0, 10), margin, finalY + 5, pageWidth - 2 * margin, remainingSpace);
-  }
-  
-  // If there are more notes, add them on a new page
-  if (reviewNotes.length > 10) {
-    doc.addPage('landscape');
-    yPos = 15;
-    
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...COLORS.primaryDark);
-    doc.text('Review Trail Notes (Continued)', margin, yPos);
-    yPos += 10;
-    
-    drawReviewNotesSection(doc, reviewNotes.slice(10), margin, yPos, pageWidth - 2 * margin, pageHeight - yPos - 20);
-  }
+  // ===== PAGES 3+: Detailed Review Trail Cards =====
+  drawDetailedReviewTrailPages(doc, scorecard, options, margin);
 
   // Update footer on all pages
   const pageCount = doc.getNumberOfPages();
@@ -1168,28 +1443,8 @@ export function generateDetailedScorecardPdfBlob(
     },
   });
 
-  // Get final Y position from table
-  const finalY = (doc as any).lastAutoTable?.finalY || yPos + 50;
-  
-  // Draw Review Trail Notes section if space available
-  const remainingSpace = pageHeight - finalY - 15;
-  if (reviewNotes.length > 0 && remainingSpace > 25) {
-    drawReviewNotesSection(doc, reviewNotes.slice(0, 10), margin, finalY + 5, pageWidth - 2 * margin, remainingSpace);
-  }
-  
-  // If there are more notes, add them on a new page
-  if (reviewNotes.length > 10) {
-    doc.addPage('landscape');
-    yPos = 15;
-    
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...COLORS.primaryDark);
-    doc.text('Review Trail Notes (Continued)', margin, yPos);
-    yPos += 10;
-    
-    drawReviewNotesSection(doc, reviewNotes.slice(10), margin, yPos, pageWidth - 2 * margin, pageHeight - yPos - 20);
-  }
+  // ===== PAGES 3+: Detailed Review Trail Cards =====
+  drawDetailedReviewTrailPages(doc, scorecard, options, margin);
 
   // Update footer on all pages
   const pageCount = doc.getNumberOfPages();
