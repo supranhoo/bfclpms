@@ -14,8 +14,9 @@ import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
 import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Target, TrendingUp, CheckCircle2, Clock, Eye, BarChart3, Info } from 'lucide-react';
+import { Target, TrendingUp, CheckCircle2, Clock, BarChart3, Info, Filter } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -133,16 +134,58 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      {/* Profile Section */}
-      <ProfileCard
-        profile={{
-          full_name: profile?.full_name,
-          designation: profile?.designation,
-          employee_code: profile?.employee_code,
-          avatar_url: profile?.avatar_url,
-          email: profile?.email,
-        }}
-      />
+      {/* Profile + Filters Section */}
+      <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+        <ProfileCard
+          profile={{
+            full_name: profile?.full_name,
+            designation: profile?.designation,
+            employee_code: profile?.employee_code,
+            avatar_url: profile?.avatar_url,
+            email: profile?.email,
+          }}
+        />
+        
+        {/* Filters */}
+        <Card className="w-full lg:w-auto">
+          <CardContent className="p-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Filter className="h-4 w-4" />
+                <span className="font-medium">Filters</span>
+              </div>
+              <ReviewPeriodSelector
+                selectedPeriod={selectedPeriod}
+                selectedYear={selectedYear}
+                onPeriodChange={setSelectedPeriod}
+                onYearChange={setSelectedYear}
+              />
+              <Select
+                value={activeCategory}
+                onValueChange={setActiveCategory}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Categories</SelectItem>
+                  {categoryMetrics.map(cat => (
+                    <SelectItem key={cat.name} value={cat.name}>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: cat.color || '#3B82F6' }}
+                        />
+                        {cat.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -173,14 +216,14 @@ export default function Dashboard() {
       </div>
 
       {/* Performance Overview Section */}
-      <div className="grid gap-6 md:grid-cols-3">
-        {/* Overall Score Chart */}
+      <div className="grid gap-6 grid-cols-1 md:grid-cols-4">
+        {/* Overall Score Chart - Smaller */}
         <Card>
-          <CardHeader>
-            <CardTitle>Overall Performance</CardTitle>
-            <CardDescription>Your achievement percentage</CardDescription>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Overall Performance</CardTitle>
+            <CardDescription className="text-xs">Achievement percentage</CardDescription>
           </CardHeader>
-          <CardContent className="h-[200px]">
+          <CardContent className="h-[160px]">
             <OverallScoreChart 
               percentage={metrics.overallPercentage} 
               rating={metrics.overallRating}
@@ -188,13 +231,13 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Category Breakdown */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Performance by Category</CardTitle>
-            <CardDescription>Score breakdown across KRA categories</CardDescription>
+        {/* Category Breakdown - Takes more space */}
+        <Card className="md:col-span-3">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Performance by Category</CardTitle>
+            <CardDescription className="text-xs">Score breakdown across KRA categories</CardDescription>
           </CardHeader>
-          <CardContent className="h-[200px]">
+          <CardContent className="h-[160px]">
             <CategoryScoreChart data={categoryMetrics} />
           </CardContent>
         </Card>
@@ -231,46 +274,9 @@ export default function Dashboard() {
       {/* KPI Details Table */}
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
-                <CardTitle>Detailed KPI Review</CardTitle>
-                <CardDescription>{filteredKpis.length} KPIs {activeCategory !== 'All' ? `in ${activeCategory}` : ''}</CardDescription>
-              </div>
-              <ReviewPeriodSelector
-                selectedPeriod={selectedPeriod}
-                selectedYear={selectedYear}
-                onPeriodChange={setSelectedPeriod}
-                onYearChange={setSelectedYear}
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant={activeCategory === 'All' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setActiveCategory('All')}
-              >
-                All
-              </Button>
-              {categoryMetrics.map(cat => (
-                <Button
-                  key={cat.name}
-                  variant={activeCategory === cat.name ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setActiveCategory(cat.name)}
-                  style={{
-                    borderColor: activeCategory === cat.name ? cat.color || undefined : undefined,
-                    backgroundColor: activeCategory === cat.name ? cat.color || undefined : undefined,
-                  }}
-                >
-                  <div
-                    className="w-2 h-2 rounded-full mr-2"
-                    style={{ backgroundColor: activeCategory === cat.name ? 'white' : cat.color || undefined }}
-                  />
-                  {cat.name}
-                </Button>
-              ))}
-            </div>
+          <div>
+            <CardTitle>Detailed KPI Review</CardTitle>
+            <CardDescription>{filteredKpis.length} KPIs {activeCategory !== 'All' ? `in ${activeCategory}` : ''} for {selectedPeriod} {selectedYear}</CardDescription>
           </div>
         </CardHeader>
         <CardContent>
