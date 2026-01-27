@@ -143,6 +143,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
       review_year: reviewYear,
       status: 'kra_set' as ReviewStatus,
       is_org_level: false,
+      org_level_scope: 'organization' as const,
       uom_type: uomType,
       qualitative_options: uomType === 'tiered' ? qualitativeOptions : (uomType === 'binary' ? BINARY_OPTIONS : null),
     });

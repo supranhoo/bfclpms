@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useMyKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI } from '@/hooks/useKpis';
+import { useMyKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI, OrgLevelScope } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
@@ -20,7 +20,7 @@ import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/R
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
-import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock } from 'lucide-react';
+import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -71,15 +71,42 @@ export default function MyKpis() {
     selectedYear
   );
 
-  // Create a map for org KPI values lookup
+  // Create a map for org KPI values lookup based on scope
+  // For organization scope: key = categoryId||kraName||kpiName||null||null
+  // For department scope: key = categoryId||kraName||kpiName||departmentId||null  
+  // For employee scope: key = categoryId||kraName||kpiName||null||employeeId
   const orgKpiValuesMap = useMemo(() => {
     const map = new Map<string, { achieved_value: number | null; data_source: string | null }>();
     orgKpiValues?.forEach(v => {
-      const key = `${v.category_id}||${v.kra_name}||${v.kpi_name}`;
+      const deptPart = v.department_id || 'null';
+      const empPart = v.employee_id || 'null';
+      const key = `${v.category_id}||${v.kra_name}||${v.kpi_name}||${deptPart}||${empPart}`;
       map.set(key, { achieved_value: v.achieved_value, data_source: v.data_source });
     });
     return map;
   }, [orgKpiValues]);
+
+  // Helper to get org KPI value based on scope
+  const getOrgKpiValue = (kpi: KPI) => {
+    if (!kpi.is_org_level) return null;
+    
+    const scope = kpi.org_level_scope || 'organization';
+    let key: string;
+    
+    if (scope === 'organization') {
+      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+    } else if (scope === 'department') {
+      // Look up by employee's department
+      const deptId = profile?.department_id || 'null';
+      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${deptId}||null`;
+    } else {
+      // employee scope - look up by employee id
+      const empId = profile?.id || 'null';
+      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${empId}`;
+    }
+    
+    return orgKpiValuesMap.get(key) || null;
+  };
 
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
@@ -174,11 +201,8 @@ export default function MyKpis() {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
     
-    // Check if this is an org-level KPI (at KPI level now, not category level)
-    const isOrgLevel = kpi.is_org_level;
-    const orgValue = isOrgLevel 
-      ? orgKpiValuesMap.get(`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`)
-      : null;
+    // Check if this is an org-level KPI and get value based on scope
+    const orgValue = getOrgKpiValue(kpi);
     
     // Pre-fill with org value if available, otherwise use existing submission
     const prefilledValue = orgValue?.achieved_value ?? existing?.achieved_value;
@@ -409,14 +433,14 @@ export default function MyKpis() {
                   const submission = submissionMap.get(kpi.id);
                   const score = submission?.final_score || submission?.self_score;
                   const scoreInfo = score !== null && score !== undefined ? scoreDisplay[score] : null;
-                  // Check org-level at KPI level now
-                  const isOrgLevel = kpi.is_org_level;
-                  const orgValue = isOrgLevel 
-                    ? orgKpiValuesMap.get(`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`)
-                    : null;
-                  const displayAchieved = isOrgLevel && orgValue?.achieved_value != null 
+                  // Get org-level value using scoped lookup
+                  const orgValue = getOrgKpiValue(kpi);
+                  const displayAchieved = kpi.is_org_level && orgValue?.achieved_value != null 
                     ? orgValue.achieved_value 
                     : submission?.achieved_value;
+                  
+                  // Determine scope badge
+                  const scope = kpi.org_level_scope || 'organization';
                   
                   return (
                     <TableRow 
@@ -432,13 +456,19 @@ export default function MyKpis() {
                           <span className="text-xs text-muted-foreground truncate max-w-[100px]">
                             {kpi.kra_categories?.name}
                           </span>
-                          {isOrgLevel && (
+                          {kpi.is_org_level && (
                             <Tooltip>
                               <TooltipTrigger>
-                                <Building2 className="h-3 w-3 text-muted-foreground" />
+                                {scope === 'organization' ? (
+                                  <Building2 className="h-3 w-3 text-muted-foreground" />
+                                ) : scope === 'department' ? (
+                                  <Users className="h-3 w-3 text-muted-foreground" />
+                                ) : (
+                                  <User className="h-3 w-3 text-muted-foreground" />
+                                )}
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Organization-level KPI</p>
+                                <p>Organization-level KPI ({scope} scope)</p>
                                 {orgValue?.data_source && <p className="text-xs">Source: {orgValue.data_source}</p>}
                               </TooltipContent>
                             </Tooltip>
@@ -463,7 +493,7 @@ export default function MyKpis() {
                             <span className="font-mono text-sm font-medium">
                               {displayAchieved}
                             </span>
-                            {isOrgLevel && orgValue && (
+                            {kpi.is_org_level && orgValue && (
                               <Lock className="h-3 w-3 text-muted-foreground" />
                             )}
                           </div>

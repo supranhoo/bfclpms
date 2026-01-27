@@ -47,7 +47,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 
 - Multi-stage workflow with configurable review stages
 - KPI templates and bundles for standardized goal-setting
-- Organization-level KPIs that apply uniformly across employees
+- Organization-level KPIs with flexible scoping (organization-wide, department, or employee)
 - Performance Improvement Plans (PIP) with milestone tracking
 - Training Needs Identification (TNI) based on scores
 - Comprehensive reporting suite with PDF/Excel exports
@@ -557,8 +557,17 @@ useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculat
 - Track outcomes
 
 #### 4.9.12 Org KPI Data Entry (`/admin/org-kpi-data`)
-- Enter organization-level KPI values
-- Applied uniformly to all employees
+- Enter organization-level KPI values centrally
+- Values can be scoped at three levels:
+  - **Organization**: Same value applies to all employees (default)
+  - **Department**: Different values per department
+  - **Employee**: Different values per employee
+- Admin can set scope when marking a KPI as "Organization-Level" in the KPI Editor
+
+#### 4.9.13 Org KPI Overview (`/admin/org-kpi-overview`)
+- Dashboard showing all organization-level KPIs
+- Displays current achieved values and data sources
+- Filter by review period and category
 
 ### 4.10 Reports
 

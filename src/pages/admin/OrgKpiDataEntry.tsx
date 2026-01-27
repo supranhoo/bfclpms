@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useKraCategories } from '@/hooks/useOrganization';
+import { useKraCategories, useDepartments, useProfiles } from '@/hooks/useOrganization';
 import { useOrgKpiValues, useBulkUpsertOrgKpiValues, OrgKpiValue } from '@/hooks/useOrgKpiValues';
 import { useOrgLevelKpis } from '@/hooks/useOrgLevelKpis';
+import { OrgLevelScope } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/LoadingSkeletons';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
-import { Building2, Save, AlertTriangle, Filter } from 'lucide-react';
+import { Building2, Save, AlertTriangle, Filter, Users, User } from 'lucide-react';
 
 interface EditableKpi {
   category_id: string;
@@ -31,6 +32,9 @@ interface EditableKpi {
   r1: string;
   r0: string;
   criteria: string;
+  // Scoped values
+  department_id: string | null;
+  employee_id: string | null;
 }
 
 export default function OrgKpiDataEntry() {
@@ -45,6 +49,8 @@ export default function OrgKpiDataEntry() {
   // Fetch org-level KPIs (where is_org_level = true at KPI level)
   const { data: orgLevelKpis, isLoading: kpisLoading } = useOrgLevelKpis(selectedPeriod, selectedYear);
   const { data: categories } = useKraCategories();
+  const { data: departments } = useDepartments();
+  const { data: profiles } = useProfiles();
   const { data: existingOrgValues } = useOrgKpiValues(
     selectedCategoryId !== 'all' ? selectedCategoryId : undefined, 
     selectedPeriod, 
@@ -67,10 +73,13 @@ export default function OrgKpiDataEntry() {
   }, [orgLevelKpis, selectedCategoryId]);
 
   // Create a map of existing org values for quick lookup
+  // Key format: categoryId||kraName||kpiName||departmentId||employeeId
   const existingValuesMap = useMemo(() => {
     const map = new Map<string, OrgKpiValue>();
     existingOrgValues?.forEach(v => {
-      const key = `${v.category_id}||${v.kra_name}||${v.kpi_name}`;
+      const deptPart = v.department_id || 'null';
+      const empPart = v.employee_id || 'null';
+      const key = `${v.category_id}||${v.kra_name}||${v.kpi_name}||${deptPart}||${empPart}`;
       map.set(key, v);
     });
     return map;
@@ -81,8 +90,15 @@ export default function OrgKpiDataEntry() {
     return categories?.find(c => c.id === categoryId)?.org_scoring_mode || 'individual';
   };
 
-  const getDisplayValue = (categoryId: string, kraName: string, kpiName: string) => {
-    const key = `${categoryId}||${kraName}||${kpiName}`;
+  // Build the key for a given KPI row
+  const buildKey = (categoryId: string, kraName: string, kpiName: string, departmentId: string | null, employeeId: string | null) => {
+    const deptPart = departmentId || 'null';
+    const empPart = employeeId || 'null';
+    return `${categoryId}||${kraName}||${kpiName}||${deptPart}||${empPart}`;
+  };
+
+  const getDisplayValue = (categoryId: string, kraName: string, kpiName: string, departmentId: string | null = null, employeeId: string | null = null) => {
+    const key = buildKey(categoryId, kraName, kpiName, departmentId, employeeId);
     const edited = editedValues.get(key);
     const existing = existingValuesMap.get(key);
     
@@ -115,8 +131,17 @@ export default function OrgKpiDataEntry() {
     };
   };
 
-  const handleValueChange = (categoryId: string, kraName: string, kpiName: string, field: keyof EditableKpi, value: string, kpi: typeof filteredKpis[0]) => {
-    const key = `${categoryId}||${kraName}||${kpiName}`;
+  const handleValueChange = (
+    categoryId: string, 
+    kraName: string, 
+    kpiName: string, 
+    field: keyof EditableKpi, 
+    value: string, 
+    kpi: typeof filteredKpis[0],
+    departmentId: string | null = null,
+    employeeId: string | null = null
+  ) => {
+    const key = buildKey(categoryId, kraName, kpiName, departmentId, employeeId);
     const existing = existingValuesMap.get(key);
     
     const current = editedValues.get(key) || {
@@ -135,6 +160,8 @@ export default function OrgKpiDataEntry() {
       r1: existing?.r1 ?? '',
       r0: existing?.r0 ?? '',
       criteria: existing?.criteria ?? 'Higher is Better',
+      department_id: departmentId,
+      employee_id: employeeId,
     };
 
     let parsedValue: string | number | null = value;
@@ -155,15 +182,17 @@ export default function OrgKpiDataEntry() {
     if (!globalDataSource) return;
     
     const newEdited = new Map(editedValues);
-    filteredKpis.forEach(kpi => {
-      const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+    
+    // Apply to all visible rows
+    displayRows.forEach(row => {
+      const key = buildKey(row.kpi.category_id, row.kpi.kra_name, row.kpi.kpi_name, row.departmentId, row.employeeId);
       const existing = existingValuesMap.get(key);
       const current = newEdited.get(key) || {
-        category_id: kpi.category_id,
-        kra_name: kpi.kra_name,
-        kpi_name: kpi.kpi_name,
-        target_value: existing?.target_value ?? kpi.target_value,
-        uom: kpi.uom,
+        category_id: row.kpi.category_id,
+        kra_name: row.kpi.kra_name,
+        kpi_name: row.kpi.kpi_name,
+        target_value: existing?.target_value ?? row.kpi.target_value,
+        uom: row.kpi.uom,
         achieved_value: existing?.achieved_value ?? null,
         data_source: '',
         isModified: false,
@@ -174,11 +203,66 @@ export default function OrgKpiDataEntry() {
         r1: existing?.r1 ?? '',
         r0: existing?.r0 ?? '',
         criteria: existing?.criteria ?? 'Higher is Better',
+        department_id: row.departmentId,
+        employee_id: row.employeeId,
       };
       newEdited.set(key, { ...current, data_source: globalDataSource, isModified: true });
     });
     setEditedValues(newEdited);
   };
+
+  // Build display rows: for each KPI, expand based on scope
+  const displayRows = useMemo(() => {
+    const rows: Array<{
+      kpi: typeof filteredKpis[0];
+      departmentId: string | null;
+      departmentName: string | null;
+      employeeId: string | null;
+      employeeName: string | null;
+      scope: OrgLevelScope;
+    }> = [];
+
+    filteredKpis.forEach(kpi => {
+      const scope = (kpi as any).org_level_scope as OrgLevelScope || 'organization';
+      
+      if (scope === 'organization') {
+        rows.push({
+          kpi,
+          departmentId: null,
+          departmentName: null,
+          employeeId: null,
+          employeeName: null,
+          scope,
+        });
+      } else if (scope === 'department') {
+        // Create a row for each department
+        departments?.forEach(dept => {
+          rows.push({
+            kpi,
+            departmentId: dept.id,
+            departmentName: dept.name,
+            employeeId: null,
+            employeeName: null,
+            scope,
+          });
+        });
+      } else if (scope === 'employee') {
+        // Create a row for each employee
+        profiles?.forEach(emp => {
+          rows.push({
+            kpi,
+            departmentId: null,
+            departmentName: null,
+            employeeId: emp.id,
+            employeeName: emp.full_name || emp.email,
+            scope,
+          });
+        });
+      }
+    });
+
+    return rows;
+  }, [filteredKpis, departments, profiles]);
 
   const handleSaveAll = async () => {
     const valuesToSave = Array.from(editedValues.values())
@@ -196,6 +280,8 @@ export default function OrgKpiDataEntry() {
           achieved_value: v.achieved_value,
           data_source: v.data_source || undefined,
           entered_by: profile?.id,
+          department_id: v.department_id || undefined,
+          employee_id: v.employee_id || undefined,
           // Include threshold fields for uniform scoring
           ...(isUniform && {
             target_value: v.target_value,
@@ -217,6 +303,16 @@ export default function OrgKpiDataEntry() {
   };
 
   const modifiedCount = Array.from(editedValues.values()).filter(v => v.isModified).length;
+
+  // Count KPIs by scope
+  const scopeCounts = useMemo(() => {
+    const counts = { organization: 0, department: 0, employee: 0 };
+    filteredKpis.forEach(kpi => {
+      const scope = (kpi as any).org_level_scope as OrgLevelScope || 'organization';
+      counts[scope]++;
+    });
+    return counts;
+  }, [filteredKpis]);
 
   if (kpisLoading) {
     return <TableSkeleton rows={5} columns={5} />;
@@ -287,6 +383,30 @@ export default function OrgKpiDataEntry() {
               </Select>
             </div>
           </div>
+          
+          {/* Scope summary badges */}
+          {filteredKpis.length > 0 && (
+            <div className="flex gap-2 mt-4">
+              {scopeCounts.organization > 0 && (
+                <Badge variant="outline" className="gap-1">
+                  <Building2 className="h-3 w-3" />
+                  {scopeCounts.organization} Org-wide
+                </Badge>
+              )}
+              {scopeCounts.department > 0 && (
+                <Badge variant="outline" className="gap-1">
+                  <Users className="h-3 w-3" />
+                  {scopeCounts.department} Department-scoped
+                </Badge>
+              )}
+              {scopeCounts.employee > 0 && (
+                <Badge variant="outline" className="gap-1">
+                  <User className="h-3 w-3" />
+                  {scopeCounts.employee} Employee-scoped
+                </Badge>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -300,7 +420,7 @@ export default function OrgKpiDataEntry() {
                 Organization-Level KPIs - Data Entry
               </CardTitle>
               <CardDescription>
-                {filteredKpis.length} org-level KPIs found for {selectedPeriod} {selectedYear}
+                {displayRows.length} rows ({filteredKpis.length} unique KPIs) for {selectedPeriod} {selectedYear}
               </CardDescription>
             </div>
             <div className="flex items-center gap-3">
@@ -336,8 +456,8 @@ export default function OrgKpiDataEntry() {
             </div>
 
             {kpisLoading ? (
-              <TableSkeleton rows={5} columns={5} />
-            ) : filteredKpis.length === 0 ? (
+              <TableSkeleton rows={5} columns={6} />
+            ) : displayRows.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Building2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p>No org-level KPIs found for the selected filters</p>
@@ -349,15 +469,17 @@ export default function OrgKpiDataEntry() {
                     <TableHead className="font-semibold">Category</TableHead>
                     <TableHead className="font-semibold">KRA</TableHead>
                     <TableHead className="font-semibold">KPI</TableHead>
+                    <TableHead className="font-semibold">Scope</TableHead>
                     <TableHead className="font-semibold text-center w-28">Target</TableHead>
                     <TableHead className="font-semibold text-center w-36">Achieved Value</TableHead>
                     <TableHead className="font-semibold w-48">Data Source</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredKpis.map((kpi, idx) => {
-                    const display = getDisplayValue(kpi.category_id, kpi.kra_name, kpi.kpi_name);
-                    const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+                  {displayRows.map((row, idx) => {
+                    const { kpi, departmentId, departmentName, employeeId, employeeName, scope } = row;
+                    const display = getDisplayValue(kpi.category_id, kpi.kra_name, kpi.kpi_name, departmentId, employeeId);
+                    const key = buildKey(kpi.category_id, kpi.kra_name, kpi.kpi_name, departmentId, employeeId);
                     const isModified = editedValues.get(key)?.isModified;
                     const isUniformScoring = getCategoryScoringMode(kpi.category_id) === 'uniform';
                     
@@ -377,12 +499,30 @@ export default function OrgKpiDataEntry() {
                         </TableCell>
                         <TableCell className="font-medium">{kpi.kra_name}</TableCell>
                         <TableCell>{kpi.kpi_name}</TableCell>
+                        <TableCell>
+                          {scope === 'organization' ? (
+                            <Badge variant="outline" className="gap-1 text-xs">
+                              <Building2 className="h-3 w-3" />
+                              All
+                            </Badge>
+                          ) : scope === 'department' ? (
+                            <Badge variant="secondary" className="gap-1 text-xs">
+                              <Users className="h-3 w-3" />
+                              {departmentName}
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="gap-1 text-xs">
+                              <User className="h-3 w-3" />
+                              {employeeName}
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="text-center">
                           {isUniformScoring ? (
                             <Input
                               type="number"
                               value={display.target_value ?? ''}
-                              onChange={(e) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'target_value', e.target.value, kpi)}
+                              onChange={(e) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'target_value', e.target.value, kpi, departmentId, employeeId)}
                               placeholder="Target"
                               className="h-8 text-center"
                             />
@@ -397,7 +537,7 @@ export default function OrgKpiDataEntry() {
                           <Input
                             type="number"
                             value={display.achieved_value ?? ''}
-                            onChange={(e) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'achieved_value', e.target.value, kpi)}
+                            onChange={(e) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'achieved_value', e.target.value, kpi, departmentId, employeeId)}
                             placeholder="Enter value"
                             className="h-8 text-center"
                           />
@@ -405,7 +545,7 @@ export default function OrgKpiDataEntry() {
                         <TableCell>
                           <Input
                             value={display.data_source || ''}
-                            onChange={(e) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'data_source', e.target.value, kpi)}
+                            onChange={(e) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'data_source', e.target.value, kpi, departmentId, employeeId)}
                             placeholder="Source"
                             className="h-8"
                           />

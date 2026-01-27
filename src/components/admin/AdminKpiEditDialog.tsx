@@ -59,6 +59,7 @@ const [formData, setFormData] = useState({
     r1: '',
     r0: '',
     is_org_level: false,
+    org_level_scope: 'organization' as 'organization' | 'department' | 'employee',
   });
   const [reason, setReason] = useState('');
   const originalStatus = kpi?.status;
@@ -85,6 +86,7 @@ const [formData, setFormData] = useState({
         r1: kpi.r1 || '',
         r0: kpi.r0 || '',
         is_org_level: kpi.is_org_level || false,
+        org_level_scope: kpi.org_level_scope || 'organization',
       });
       setReason('');
     }
@@ -121,6 +123,7 @@ const [formData, setFormData] = useState({
       r1: formData.r1 || null,
       r0: formData.r0 || null,
       is_org_level: formData.is_org_level,
+      org_level_scope: formData.is_org_level ? formData.org_level_scope : 'organization',
       reason,
     });
 
@@ -269,20 +272,59 @@ const [formData, setFormData] = useState({
           </div>
 
           {/* Organization-Level KPI Toggle */}
-          <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">
-            <div className="flex items-center gap-3">
-              <Building2 className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <Label className="text-base font-medium">Organization-Level KPI</Label>
-                <p className="text-sm text-muted-foreground">
-                  Achieved value will be centrally managed via Org KPI Data Entry
-                </p>
+          <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Building2 className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <Label className="text-base font-medium">Organization-Level KPI</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Achieved value will be centrally managed via Org KPI Data Entry
+                  </p>
+                </div>
               </div>
+              <Switch
+                checked={formData.is_org_level}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_org_level: checked }))}
+              />
             </div>
-            <Switch
-              checked={formData.is_org_level}
-              onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_org_level: checked }))}
-            />
+            
+            {/* Scope Selector - only shown when org-level is enabled */}
+            {formData.is_org_level && (
+              <div className="ml-8 space-y-2">
+                <Label>Value Scope</Label>
+                <Select
+                  value={formData.org_level_scope}
+                  onValueChange={(value: 'organization' | 'department' | 'employee') => 
+                    setFormData(prev => ({ ...prev, org_level_scope: value }))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select scope" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="organization">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">Organization</span>
+                        <span className="text-xs text-muted-foreground">Same value for all employees</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="department">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">Department</span>
+                        <span className="text-xs text-muted-foreground">Different value per department</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="employee">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">Employee</span>
+                        <span className="text-xs text-muted-foreground">Different value per employee</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           {/* Rating Thresholds */}

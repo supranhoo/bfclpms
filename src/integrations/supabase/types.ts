@@ -493,6 +493,7 @@ export type Database = {
           is_org_level: boolean | null
           kpi_name: string
           kra_name: string
+          org_level_scope: string | null
           qualitative_options: Json | null
           r0: string | null
           r1: string | null
@@ -520,6 +521,7 @@ export type Database = {
           is_org_level?: boolean | null
           kpi_name: string
           kra_name: string
+          org_level_scope?: string | null
           qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
@@ -547,6 +549,7 @@ export type Database = {
           is_org_level?: boolean | null
           kpi_name?: string
           kra_name?: string
+          org_level_scope?: string | null
           qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
@@ -710,6 +713,8 @@ export type Database = {
           created_at: string
           criteria: string | null
           data_source: string | null
+          department_id: string | null
+          employee_id: string | null
           entered_by: string | null
           id: string
           kpi_name: string
@@ -734,6 +739,8 @@ export type Database = {
           created_at?: string
           criteria?: string | null
           data_source?: string | null
+          department_id?: string | null
+          employee_id?: string | null
           entered_by?: string | null
           id?: string
           kpi_name: string
@@ -758,6 +765,8 @@ export type Database = {
           created_at?: string
           criteria?: string | null
           data_source?: string | null
+          department_id?: string | null
+          employee_id?: string | null
           entered_by?: string | null
           id?: string
           kpi_name?: string
@@ -782,6 +791,20 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_values_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_values_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
