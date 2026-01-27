@@ -24,6 +24,9 @@ export interface OrgKpiValue {
   r1: string | null;
   r0: string | null;
   criteria: string | null;
+  // Scoped values
+  department_id: string | null;
+  employee_id: string | null;
 }
 
 export function useOrgKpiValues(categoryId?: string, reviewPeriod?: string, reviewYear?: number) {
@@ -90,6 +93,8 @@ export function useUpsertOrgKpiValue() {
       data_source?: string;
       remarks?: string;
       entered_by?: string;
+      department_id?: string;
+      employee_id?: string;
     }) => {
       const { data, error } = await supabase
         .from('org_kpi_values')
@@ -128,16 +133,80 @@ export function useBulkUpsertOrgKpiValues() {
       data_source?: string;
       remarks?: string;
       entered_by?: string;
+      department_id?: string;
+      employee_id?: string;
+      target_value?: number | null;
+      r5?: string;
+      r4?: string;
+      r3?: string;
+      r2?: string;
+      r1?: string;
+      r0?: string;
+      criteria?: string;
     }>) => {
-      const { data, error } = await supabase
-        .from('org_kpi_values')
-        .upsert(values, {
-          onConflict: 'category_id,kra_name,kpi_name,review_period,review_year',
-        })
-        .select();
+      // For scoped values, we need to handle the unique constraint properly
+      // Insert/update each value individually to handle the complex unique index
+      const results = [];
+      for (const value of values) {
+        // First try to find existing record
+        let query = supabase
+          .from('org_kpi_values')
+          .select('id')
+          .eq('category_id', value.category_id)
+          .eq('kra_name', value.kra_name)
+          .eq('kpi_name', value.kpi_name)
+          .eq('review_period', value.review_period)
+          .eq('review_year', value.review_year);
+        
+        if (value.department_id) {
+          query = query.eq('department_id', value.department_id);
+        } else {
+          query = query.is('department_id', null);
+        }
+        
+        if (value.employee_id) {
+          query = query.eq('employee_id', value.employee_id);
+        } else {
+          query = query.is('employee_id', null);
+        }
 
-      if (error) throw error;
-      return data;
+        const { data: existing } = await query.maybeSingle();
+
+        if (existing) {
+          // Update existing
+          const { data, error } = await supabase
+            .from('org_kpi_values')
+            .update({
+              achieved_value: value.achieved_value,
+              data_source: value.data_source,
+              remarks: value.remarks,
+              entered_by: value.entered_by,
+              target_value: value.target_value,
+              r5: value.r5,
+              r4: value.r4,
+              r3: value.r3,
+              r2: value.r2,
+              r1: value.r1,
+              r0: value.r0,
+              criteria: value.criteria,
+            })
+            .eq('id', existing.id)
+            .select()
+            .single();
+          if (error) throw error;
+          results.push(data);
+        } else {
+          // Insert new
+          const { data, error } = await supabase
+            .from('org_kpi_values')
+            .insert(value)
+            .select()
+            .single();
+          if (error) throw error;
+          results.push(data);
+        }
+      }
+      return results;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });

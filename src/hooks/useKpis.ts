@@ -9,6 +9,8 @@ export type RatingLevel = 'red' | 'yellow' | 'green' | 'blue';
 export type KpiStatus = 'open' | 'submitted' | 'approved_by_manager' | 'locked' | 'sent_back';
 export type QueryStatus = 'open' | 'resolved';
 
+export type OrgLevelScope = 'organization' | 'department' | 'employee';
+
 export interface KPI {
   id: string;
   category_id: string;
@@ -35,6 +37,8 @@ export interface KPI {
   source_of_data: string | null;
   // Organization-level KPI flag
   is_org_level: boolean;
+  // Org-level scope: organization (all employees), department, or employee
+  org_level_scope: OrgLevelScope;
   // Qualitative UOM fields
   uom_type: 'numeric' | 'binary' | 'tiered' | null;
   qualitative_options: Array<{ label: string; rating: number; definition: string }> | null;
