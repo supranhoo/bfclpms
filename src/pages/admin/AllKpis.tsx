@@ -13,9 +13,10 @@ import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
 import { AdminKpiCreateDialog } from '@/components/admin/AdminKpiCreateDialog';
 import { BulkTemplateAssignDialog } from '@/components/admin/BulkTemplateAssignDialog';
 import { ScoringSimulatorPopover } from '@/components/admin/ScoringSimulatorPopover';
-import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library } from 'lucide-react';
+import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 // Define the workflow stages for columns
 const WORKFLOW_STAGES = ['kra_set', 'self_review', 'manager_check', 'audit', 'management_review', 'approved'];
@@ -55,6 +56,7 @@ export default function AllKpis() {
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false);
+  const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
 
   // Get unique managers (profiles who have reports)
   const managers = useMemo(() => {
@@ -177,6 +179,27 @@ export default function AllKpis() {
 
     return Array.from(employeeMap.values()).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
   }, [filteredKpis, profiles, departments, openQueryCountByKpi]);
+
+  // Get KPIs for a specific employee
+  const getEmployeeKpis = useCallback((employeeId: string): KPI[] => {
+    return filteredKpis?.filter(k => {
+      const emp = k.profiles as { id: string } | null;
+      return emp?.id === employeeId;
+    }) || [];
+  }, [filteredKpis]);
+
+  // Toggle employee expansion
+  const toggleEmployeeExpansion = useCallback((employeeId: string) => {
+    setExpandedEmployees(prev => {
+      const next = new Set(prev);
+      if (next.has(employeeId)) {
+        next.delete(employeeId);
+      } else {
+        next.add(employeeId);
+      }
+      return next;
+    });
+  }, []);
 
   // Calculate summary stats
   const stats = useMemo(() => {
@@ -472,66 +495,143 @@ export default function AllKpis() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {employeeData.map(emp => (
-                  <TableRow key={emp.employeeId}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{emp.employeeName}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {emp.employeeCode && <span>{emp.employeeCode} · </span>}
-                          {emp.departmentName}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="secondary" className="font-mono">
-                        {emp.totalKpis}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {emp.orgLevelKpis > 0 ? (
-                        <Badge variant="outline" className="font-mono text-primary border-primary/50">
-                          {emp.orgLevelKpis}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    {WORKFLOW_STAGES.map(stage => {
-                      const count = emp.stageCounts[stage] || 0;
-                      const queryCount = emp.stageQueryCounts[stage] || 0;
-                      
-                      if (count === 0) {
-                        return (
-                          <TableCell key={stage} className="text-center text-muted-foreground">
-                            -
-                          </TableCell>
-                        );
-                      }
-
-                      return (
-                        <TableCell key={stage} className="text-center">
-                          <div className="inline-flex items-center gap-1">
-                            <span className="font-medium">{count}</span>
-                            {queryCount > 0 && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="inline-flex items-center text-warning cursor-help">
-                                    <AlertTriangle className="h-3.5 w-3.5" />
-                                    <span className="text-xs ml-0.5">({queryCount})</span>
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  {queryCount} open {queryCount === 1 ? 'query' : 'queries'}
-                                </TooltipContent>
-                              </Tooltip>
+                {employeeData.map(emp => {
+                  const isExpanded = expandedEmployees.has(emp.employeeId);
+                  const employeeKpis = isExpanded ? getEmployeeKpis(emp.employeeId) : [];
+                  
+                  return (
+                    <>
+                      <TableRow 
+                        key={emp.employeeId} 
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => toggleEmployeeExpansion(emp.employeeId)}
+                      >
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             )}
+                            <div>
+                              <div className="font-medium">{emp.employeeName}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {emp.employeeCode && <span>{emp.employeeCode} · </span>}
+                                {emp.departmentName}
+                              </div>
+                            </div>
                           </div>
                         </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                ))}
+                        <TableCell className="text-center">
+                          <Badge variant="secondary" className="font-mono">
+                            {emp.totalKpis}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {emp.orgLevelKpis > 0 ? (
+                            <Badge variant="outline" className="font-mono text-primary border-primary/50">
+                              {emp.orgLevelKpis}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        {WORKFLOW_STAGES.map(stage => {
+                          const count = emp.stageCounts[stage] || 0;
+                          const queryCount = emp.stageQueryCounts[stage] || 0;
+                          
+                          if (count === 0) {
+                            return (
+                              <TableCell key={stage} className="text-center text-muted-foreground">
+                                -
+                              </TableCell>
+                            );
+                          }
+
+                          return (
+                            <TableCell key={stage} className="text-center">
+                              <div className="inline-flex items-center gap-1">
+                                <span className="font-medium">{count}</span>
+                                {queryCount > 0 && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="inline-flex items-center text-warning cursor-help">
+                                        <AlertTriangle className="h-3.5 w-3.5" />
+                                        <span className="text-xs ml-0.5">({queryCount})</span>
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      {queryCount} open {queryCount === 1 ? 'query' : 'queries'}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+                              </div>
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                      
+                      {/* Expanded KPI details */}
+                      {isExpanded && employeeKpis.length > 0 && (
+                        <TableRow className="bg-muted/30">
+                          <TableCell colSpan={3 + WORKFLOW_STAGES.length} className="p-0">
+                            <div className="p-4 space-y-2">
+                              <div className="text-sm font-medium text-muted-foreground mb-3">
+                                Individual KPIs for {emp.employeeName}
+                              </div>
+                              <div className="grid gap-2">
+                                {employeeKpis.map(kpi => (
+                                  <div 
+                                    key={kpi.id}
+                                    className="flex items-center justify-between p-3 bg-background rounded-lg border hover:border-primary/50 cursor-pointer transition-colors"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingKpi(kpi);
+                                    }}
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-medium truncate">{kpi.kra_name}</span>
+                                        {kpi.is_org_level && (
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Badge variant="outline" className="text-xs border-primary/50 text-primary shrink-0">
+                                                <BuildingIcon className="h-3 w-3 mr-1" />
+                                                Org-Level
+                                              </Badge>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Organization-level KPI with centralized values</TooltipContent>
+                                          </Tooltip>
+                                        )}
+                                      </div>
+                                      <div className="text-sm text-muted-foreground truncate">{kpi.kpi_name}</div>
+                                      <div className="text-xs text-muted-foreground mt-1">
+                                        {kpi.review_period} {kpi.review_year} · {categories?.find(c => c.id === kpi.category_id)?.name || 'Unknown Category'}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 shrink-0 ml-4">
+                                      <Badge variant="outline">{getStageLabel(kpi.status || 'kra_set')}</Badge>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingKpi(kpi);
+                                        }}
+                                      >
+                                        <Edit className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
+                  );
+                })}
                 {employeeData.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={3 + WORKFLOW_STAGES.length} className="text-center py-8 text-muted-foreground">
