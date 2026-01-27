@@ -25,6 +25,7 @@ import ImportData from "./pages/admin/ImportData";
 import SystemSettings from "./pages/admin/SystemSettings";
 import WorkflowConfig from "./pages/admin/WorkflowConfig";
 import OrgKpiDataEntry from "./pages/admin/OrgKpiDataEntry";
+import OrgKpiOverview from "./pages/admin/OrgKpiOverview";
 import KRALibrary from "./pages/admin/KRALibrary";
 import TemplateBundles from "./pages/admin/TemplateBundles";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -146,6 +147,11 @@ const App = () => (
               <Route path="/admin/org-kpi-data" element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <OrgKpiDataEntry />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/org-kpi-overview" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <OrgKpiOverview />
                 </ProtectedRoute>
               } />
               <Route path="/admin/templates" element={

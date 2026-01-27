@@ -41,6 +41,7 @@ import {
   Package,
   GraduationCap,
   UserX,
+  Eye,
 } from 'lucide-react';
 
 const menuItems = {
@@ -68,6 +69,7 @@ const menuItems = {
     { title: 'KRA Bundles', icon: Package, path: '/admin/bundles', roles: ['admin'] },
     { title: 'All KRAs', icon: Target, path: '/admin/kpis', roles: ['admin'] },
     { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', roles: ['admin'] },
+    { title: 'Org KPI Overview', icon: Eye, path: '/admin/org-kpi-overview', roles: ['admin'] },
     { title: 'PIP Management', icon: UserX, path: '/admin/pip', roles: ['admin'] },
     { title: 'Workflow Config', icon: GitBranch, path: '/admin/workflow-config', roles: ['admin'] },
     { title: 'Organization', icon: Building2, path: '/admin/organization', roles: ['admin'] },
