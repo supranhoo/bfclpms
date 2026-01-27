@@ -52,6 +52,13 @@ export const KpiImportRowSchema = z.object({
   achievedWeight: z.string().max(50).optional(),
   rating: z.number().min(0).max(5).optional(),
   kpiWeightageScore: z.number().min(0).max(500).optional(),
+  // Organization-level KPI flag
+  isOrgLevel: z.preprocess((v) => {
+    if (v === '' || v === null || v === undefined) return undefined;
+    if (typeof v === 'boolean') return v;
+    const str = String(v).toLowerCase().trim();
+    return str === 'true' || str === 'yes' || str === '1' || str === 'y';
+  }, z.boolean().optional()),
   // Self review
   employeeTargetAchieved: z.union([z.number().min(0), z.string().max(100)]).optional(),
   employeeRating: z.number().min(0).max(5).optional(),

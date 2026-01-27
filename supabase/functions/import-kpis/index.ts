@@ -88,6 +88,13 @@ const KpiImportRowSchema = z.object({
   businessUnit: optionalString(MAX_TEXT_LENGTH),
   department: optionalString(MAX_TEXT_LENGTH),
   subBranch: optionalString(MAX_TEXT_LENGTH),
+  // Organization-level KPI flag
+  isOrgLevel: z.preprocess((v) => {
+    if (v === '' || v === null || v === undefined) return false;
+    if (typeof v === 'boolean') return v;
+    const str = String(v).toLowerCase().trim();
+    return str === 'true' || str === 'yes' || str === '1' || str === 'y';
+  }, z.boolean().optional().default(false)),
 });
 
 type KpiImportRow = z.infer<typeof KpiImportRowSchema>;
@@ -689,6 +696,7 @@ async function processImport(
         r0: formatRatingThreshold(row.r0, { mode: thresholdMode, factor: thresholdFactor }),
         frequency: row.frequency || null,
         source_of_data: row.sourceOfData || null,
+        is_org_level: row.isOrgLevel || false,
       });
       
       // Prepare submission if review data exists
