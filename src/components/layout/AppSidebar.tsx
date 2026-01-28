@@ -42,6 +42,7 @@ import {
   GraduationCap,
   UserX,
   Eye,
+  LayoutGrid,
 } from 'lucide-react';
 
 const menuItems = {
@@ -138,6 +139,16 @@ export function AppSidebar() {
             <p className="text-xs text-sidebar-foreground/60">{displayOrgName}</p>
           </div>
         </div>
+        {/* Back to Hub link */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full mt-3 justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+          onClick={() => navigate('/home')}
+        >
+          <LayoutGrid className="h-4 w-4 mr-2" />
+          Back to Hub
+        </Button>
       </SidebarHeader>
 
       <SidebarContent>

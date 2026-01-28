@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           app_name: string
           created_at: string
+          enabled_modules: Json | null
           id: string
           login_background_url: string | null
           login_hero_description: string | null
@@ -31,6 +32,7 @@ export type Database = {
         Insert: {
           app_name?: string
           created_at?: string
+          enabled_modules?: Json | null
           id?: string
           login_background_url?: string | null
           login_hero_description?: string | null
@@ -44,6 +46,7 @@ export type Database = {
         Update: {
           app_name?: string
           created_at?: string
+          enabled_modules?: Json | null
           id?: string
           login_background_url?: string | null
           login_hero_description?: string | null
@@ -656,6 +659,45 @@ export type Database = {
           target_period?: string
           target_year?: number
           triggered_by?: string
+        }
+        Relationships: []
+      }
+      modules: {
+        Row: {
+          code: string
+          color: string | null
+          created_at: string | null
+          description: string | null
+          display_order: number | null
+          icon: string
+          id: string
+          is_enabled: boolean | null
+          name: string
+          route: string
+        }
+        Insert: {
+          code: string
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          display_order?: number | null
+          icon: string
+          id?: string
+          is_enabled?: boolean | null
+          name: string
+          route: string
+        }
+        Update: {
+          code?: string
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          display_order?: number | null
+          icon?: string
+          id?: string
+          is_enabled?: boolean | null
+          name?: string
+          route?: string
         }
         Relationships: []
       }
