@@ -44,6 +44,7 @@ import PIPManagement from "./pages/admin/PIPManagement";
 import KRAAcceptance from "./pages/KRAAcceptance";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
+import ModuleHub from "./pages/ModuleHub";
 
 const queryClient = new QueryClient();
 
@@ -57,7 +58,8 @@ const App = () => (
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/home" element={<ModuleHub />} />
+            <Route path="/" element={<Navigate to="/home" replace />} />
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/my-kpis" element={<MyKpis />} />

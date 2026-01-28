@@ -45,6 +45,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 
 ### Key Features
 
+- **Multi-Module Architecture**: Hub page for navigating between enterprise modules (PMS, future HRMS, LMS)
 - Multi-stage workflow with configurable review stages
 - KPI templates and bundles for standardized goal-setting
 - Organization-level KPIs with flexible scoping (organization-wide, department, or employee)
@@ -286,6 +287,33 @@ has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
 ---
 
 ## 4. Detailed Feature Breakdown
+
+### 4.0 Multi-Module Architecture
+
+**Route:** `/home` (Module Hub)
+
+**Purpose:** Provides a centralized landing page after login where users can select which enterprise module to access.
+
+**Flow:**
+1. User logs in at `/auth`
+2. Redirected to `/home` (Module Hub)
+3. User selects a module (e.g., PMS)
+4. Navigated to the module's dashboard (e.g., `/dashboard`)
+
+**Database Tables:**
+- `modules`: Stores available modules with code, name, description, icon, route, display_order
+- `app_settings.enabled_modules`: JSONB array of enabled module codes
+
+**Components:**
+- `ModuleHub.tsx`: Main hub page with welcome message and module grid
+- `ModuleCard.tsx`: Reusable card component for each module
+- `MinimalHeader.tsx`: Simple header with logo and user menu (no sidebar)
+
+**Navigation:**
+- "Back to Hub" button in sidebar header allows returning to module selection
+- Root path `/` redirects to `/home`
+
+---
 
 ### 4.1 Authentication & Authorization
 
