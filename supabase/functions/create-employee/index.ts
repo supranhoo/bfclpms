@@ -116,30 +116,74 @@ serve(async (req) => {
       })
     }
 
-    // Check if user already exists with this email in auth
+    // Check if user already exists in auth.users by email
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
-    const existingUser = existingUsers?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
+    const existingAuthUser = existingUsers?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
 
     let userId: string
 
-    if (existingUser) {
-      userId = existingUser.id
+    if (existingAuthUser) {
+      // User exists in auth - check if they have a profile
+      userId = existingAuthUser.id
       
-      // Update the existing profile
-      const { error: updateError } = await supabaseAdmin
+      const { data: profileCheck } = await supabaseAdmin
         .from('profiles')
-        .update({
-          employee_code: body.employee_code,
-          full_name: body.full_name,
-          designation: body.designation || null,
-          department_id: body.department_id || null,
-          pms_grade: body.pms_grade || null,
-          reporting_manager_id: body.reporting_manager_id || null,
-        })
+        .select('id')
         .eq('id', userId)
+        .maybeSingle()
 
-      if (updateError) {
-        console.error('Failed to update profile:', updateError)
+      if (profileCheck) {
+        // Profile exists - update it
+        const { error: updateError } = await supabaseAdmin
+          .from('profiles')
+          .update({
+            employee_code: body.employee_code,
+            full_name: body.full_name,
+            designation: body.designation || null,
+            department_id: body.department_id || null,
+            pms_grade: body.pms_grade || null,
+            reporting_manager_id: body.reporting_manager_id || null,
+          })
+          .eq('id', userId)
+
+        if (updateError) {
+          console.error('Failed to update profile:', updateError)
+        }
+      } else {
+        // Auth user exists but no profile - create profile
+        const { error: insertError } = await supabaseAdmin
+          .from('profiles')
+          .insert({
+            id: userId,
+            email: email,
+            employee_code: body.employee_code,
+            full_name: body.full_name,
+            designation: body.designation || null,
+            department_id: body.department_id || null,
+            pms_grade: body.pms_grade || null,
+            reporting_manager_id: body.reporting_manager_id || null,
+          })
+
+        if (insertError) {
+          console.error('Failed to insert profile:', insertError)
+          // Try upsert as fallback
+          const { error: upsertError } = await supabaseAdmin
+            .from('profiles')
+            .upsert({
+              id: userId,
+              email: email,
+              employee_code: body.employee_code,
+              full_name: body.full_name,
+              designation: body.designation || null,
+              department_id: body.department_id || null,
+              pms_grade: body.pms_grade || null,
+              reporting_manager_id: body.reporting_manager_id || null,
+            })
+          
+          if (upsertError) {
+            console.error('Failed to upsert profile:', upsertError)
+          }
+        }
       }
     } else {
       // Create new auth user with a random password (they'll need to reset it)
