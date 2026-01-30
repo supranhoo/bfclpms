@@ -79,7 +79,44 @@ serve(async (req) => {
     // Generate placeholder email if not provided
     const email = body.email || `${body.employee_code.toLowerCase().replace(/[^a-z0-9]/g, '')}@placeholder.local`
 
-    // Check if user already exists with this email
+    // First, check if employee already exists by employee_code in profiles
+    const { data: existingProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('id, email')
+      .eq('employee_code', body.employee_code)
+      .maybeSingle()
+
+    if (existingProfile) {
+      // Employee already exists - just update their profile and return
+      const { error: updateError } = await supabaseAdmin
+        .from('profiles')
+        .update({
+          full_name: body.full_name,
+          designation: body.designation || null,
+          department_id: body.department_id || null,
+          pms_grade: body.pms_grade || null,
+          reporting_manager_id: body.reporting_manager_id || null,
+        })
+        .eq('id', existingProfile.id)
+
+      if (updateError) {
+        console.error('Failed to update existing profile:', updateError)
+      }
+
+      // Fetch and return the updated profile
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .eq('id', existingProfile.id)
+        .single()
+
+      return new Response(JSON.stringify({ profile, updated: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    // Check if user already exists with this email in auth
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
     const existingUser = existingUsers?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
 
