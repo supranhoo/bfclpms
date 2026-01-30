@@ -589,9 +589,9 @@ export default function AllKpis() {
                                       setEditingKpi(kpi);
                                     }}
                                   >
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-medium truncate">{kpi.kra_name}</span>
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-medium">{kpi.kra_name}</span>
                                         {kpi.is_org_level && (
                                           <Tooltip>
                                             <TooltipTrigger asChild>
@@ -604,7 +604,7 @@ export default function AllKpis() {
                                           </Tooltip>
                                         )}
                                       </div>
-                                      <div className="text-sm text-muted-foreground truncate">{kpi.kpi_name}</div>
+                                      <div className="text-sm text-muted-foreground mt-1">{kpi.kpi_name}</div>
                                       <div className="text-xs text-muted-foreground mt-1">
                                         {kpi.review_period} {kpi.review_year} · {categories?.find(c => c.id === kpi.category_id)?.name || 'Unknown Category'}
                                       </div>
