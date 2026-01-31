@@ -66,6 +66,7 @@ const [formData, setFormData] = useState({
     org_level_scope: 'organization' as 'organization' | 'department' | 'employee',
     uom_type: 'numeric' as UomType,
     qualitative_options: [] as QualitativeOption[],
+    require_resubmit_reason: true,
   });
   const [reason, setReason] = useState('');
   const originalStatus = kpi?.status;
@@ -95,6 +96,7 @@ const [formData, setFormData] = useState({
         org_level_scope: kpi.org_level_scope || 'organization',
         uom_type: (kpi.uom_type as UomType) || 'numeric',
         qualitative_options: (kpi.qualitative_options as QualitativeOption[]) || [],
+        require_resubmit_reason: kpi.require_resubmit_reason ?? true,
       });
       setReason('');
     }
@@ -144,6 +146,7 @@ const [formData, setFormData] = useState({
       org_level_scope: formData.is_org_level ? formData.org_level_scope : 'organization',
       uom_type: formData.uom_type,
       qualitative_options: formData.uom_type === 'tiered' ? formData.qualitative_options : null,
+      require_resubmit_reason: formData.require_resubmit_reason,
       reason,
     });
 
@@ -419,6 +422,23 @@ const [formData, setFormData] = useState({
                 </Select>
               </div>
             )}
+          </div>
+
+          {/* Resubmission Settings */}
+          <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
+            <h3 className="font-medium text-sm">Resubmission Settings</h3>
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-sm font-medium">Require Reason for Resubmission</Label>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, employees must provide a mandatory reason when editing previously submitted daily/weekly entries
+                </p>
+              </div>
+              <Switch
+                checked={formData.require_resubmit_reason}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, require_resubmit_reason: checked }))}
+              />
+            </div>
           </div>
 
           {/* Rating Thresholds - only shown for Numeric UOM Type */}

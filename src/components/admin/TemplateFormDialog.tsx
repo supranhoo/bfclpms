@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { KpiTemplate, useCreateKpiTemplate, useUpdateKpiTemplate } from '@/hooks/useKpiTemplates';
 import { UomTypeSelector } from './UomTypeSelector';
@@ -50,6 +51,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
       { label: 'Yes', rating: 5, definition: 'Requirement fully met' },
       { label: 'No', rating: 0, definition: 'Requirement not met' },
     ] as QualitativeOption[],
+    require_resubmit_reason: true,
   });
 
   useEffect(() => {
@@ -78,6 +80,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
           { label: 'Yes', rating: 5, definition: 'Requirement fully met' },
           { label: 'No', rating: 0, definition: 'Requirement not met' },
         ],
+        require_resubmit_reason: template.require_resubmit_reason ?? true,
       });
     } else {
       resetForm();
@@ -109,6 +112,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
         { label: 'Yes', rating: 5, definition: 'Requirement fully met' },
         { label: 'No', rating: 0, definition: 'Requirement not met' },
       ],
+      require_resubmit_reason: true,
     });
   };
 
@@ -146,6 +150,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
       qualitative_options: formData.uom_type === 'tiered' 
         ? formData.qualitative_options 
         : (formData.uom_type === 'binary' ? BINARY_OPTIONS : null),
+      require_resubmit_reason: formData.require_resubmit_reason,
     };
 
     try {
@@ -414,6 +419,25 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                 onChange={(e) => setFormData({ ...formData, source_of_data: e.target.value })}
                 placeholder="e.g., CRM System, Monthly Reports"
               />
+            </div>
+
+            <Separator />
+
+            {/* Advanced Settings */}
+            <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
+              <h3 className="font-medium text-sm">Advanced Settings</h3>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-medium">Require Reason for Resubmission</Label>
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, employees must provide a mandatory reason when editing previously submitted daily/weekly entries
+                  </p>
+                </div>
+                <Switch
+                  checked={formData.require_resubmit_reason}
+                  onCheckedChange={(checked) => setFormData({ ...formData, require_resubmit_reason: checked })}
+                />
+              </div>
             </div>
           </div>
         </ScrollArea>
