@@ -33,7 +33,7 @@ export function CategoryScoreChart({ data }: CategoryScoreChartProps) {
           tickMargin={8}
           tickFormatter={(value: string, index: number) => {
             const entry = data[index];
-            return entry?.weightage ? `${value} (${entry.weightage}%)` : value;
+            return entry?.weightage != null ? `${value} (${entry.weightage}%)` : value;
           }}
         />
         <Tooltip 
