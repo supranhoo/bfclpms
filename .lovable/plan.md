@@ -1,333 +1,266 @@
 
-
-# Plan: Admin Data Entry on Behalf of Users (No Restrictions)
+# Plan: Update Daily Binary KPI Calculation Logic
 
 ## Overview
 
-This feature enables Admin users to enter/edit KPI data on behalf of any user (Employee, Manager, Auditor, Management) **without any date or period restrictions**. All actions will be logged for full audit traceability.
+This update modifies the aggregation logic for **Daily Binary KPIs** to count both missed submissions AND "No" values when calculating the final monthly score.
 
 ---
 
-## Key Requirement: No Restrictions for Admin
+## Current vs. New Logic
 
-| Restriction | Normal User | Admin |
-|-------------|-------------|-------|
-| Daily submission window | Today + Yesterday only | **Any day of the month** |
-| Past review periods | Cannot edit closed periods | **Can edit any period** |
-| Resubmission lock | Cannot edit after resubmit | **Can override lock** |
-| Weekly submission window | Current/previous week only | **Any week** |
-| Monthly submission deadline | Must submit before period closes | **No deadline** |
+| Aspect | Current Implementation | New Implementation |
+|--------|----------------------|-------------------|
+| Missed Days | Counted as penalty | Counted as "No" |
+| "No" Submissions | Averaged with "Yes" values | Counted as "No" |
+| Total Count | Missed days only | Missed days + "No" submissions |
+| Score Formula | `5 - missedDays` | `5 - totalNoCount` (where totalNoCount = missedDays + noSubmissions) |
+
+### New Scoring Table
+
+| Total "No" Count | Final Score |
+|-----------------|-------------|
+| 0 | 5 |
+| 1 | 4 |
+| 2 | 3 |
+| 3 | 2 |
+| 4 | 1 |
+| >4 | 0 |
 
 ---
 
-## Implementation Plan
+## Technical Implementation
 
-### Phase 1: Database Schema Changes
+### Files to Modify
 
-**Add columns to `kpi_audit_logs` for on-behalf tracking:**
-
-```sql
-ALTER TABLE public.kpi_audit_logs 
-ADD COLUMN IF NOT EXISTS on_behalf_of UUID REFERENCES public.profiles(id),
-ADD COLUMN IF NOT EXISTS on_behalf_role TEXT;
-
-COMMENT ON COLUMN public.kpi_audit_logs.on_behalf_of IS 'Target user whose data was modified by admin';
-COMMENT ON COLUMN public.kpi_audit_logs.on_behalf_role IS 'Role level: self, manager, auditor, management, daily_submission';
-```
-
-### Phase 2: New Components
-
-**2.1 AdminDataEntryDialog.tsx**
-
-Dialog for entering review submission data at any role level.
-
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│  Admin Data Entry - [KPI Name]                                  │
-│  Employee: [Employee Name] ([Employee Code])                    │
-│  Period: [Month Year]                                           │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Data Entry Level:                                              │
-│  ○ Self Review  ○ Manager  ○ Auditor  ○ Management             │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────────┐ │
-│  │ Achieved Value: [_________]                               │ │
-│  │ Rating: [Dropdown: R5-R0]                                 │ │
-│  │ Score: [Auto-calculated / Editable]                       │ │
-│  │ Remarks: [Textarea]                                       │ │
-│  │ Evidence: [Upload Button]                                 │ │
-│  └───────────────────────────────────────────────────────────┘ │
-│                                                                 │
-│  Reason for Admin Entry: *                                      │
-│  [Required textarea - logged for audit purposes]                │
-│                                                                 │
-│  ⚠ This action is logged and will notify the employee          │
-│                                                                 │
-│                              [Cancel] [Save & Log]              │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**2.2 AdminDailyEntryDialog.tsx**
-
-Calendar-based dialog for entering daily/weekly submissions - **NO DATE RESTRICTIONS**.
-
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│  Admin Daily Entry - [KPI Name]                                 │
-│  Employee: [Employee Name]                                      │
-│  Period: January 2026                                           │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  Sun   Mon   Tue   Wed   Thu   Fri   Sat              │   │
-│  │  [1]   [2]   [3]   [4]   [5]   [6]   [7]              │   │
-│  │  [8]   [9]   [10]  [11]  [12]  [13]  [14]             │   │
-│  │  [15]  [16]  [17]  [18]  [19]  [20]  [21]             │   │
-│  │  [22]  [23]  [24]  [25]  [26]  [27]  [28]             │   │
-│  │  [29]  [30]  [31]                                     │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  Selected: 15 January 2026                                      │
-│  Current Value: 5 (Yes) ✓ Final                                │
-│                                                                 │
-│  New Value: [Dropdown/Input] ___________                        │
-│  Remarks: [Optional textarea]                                   │
-│                                                                 │
-│  Reason for Override: *                                         │
-│  [Required - e.g., "Correcting data entry error"]               │
-│                                                                 │
-│  ⚠ Admin override - bypasses all restrictions                  │
-│                                                                 │
-│                              [Cancel] [Save & Log]              │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Key Features:**
-- All days of the month are clickable (no greying out)
-- Can edit "Final" (locked) entries
-- Can select any past month via period selector
-- Clear indicator showing current value and lock status
-- Mandatory reason field for audit
-
-### Phase 3: Admin Data Entry Hooks
-
-**New file: `src/hooks/useAdminDataEntry.ts`**
-
-| Hook | Purpose |
+| File | Changes |
 |------|---------|
-| `useAdminSubmitReviewData` | Submit/update review_submissions for any role level |
-| `useAdminSubmitSubPeriod` | Submit daily/weekly data - **bypasses all restrictions** |
+| `src/lib/dailyAggregation.ts` | Add new aggregation method for binary KPIs that counts "No" + missed days |
+| `src/pages/MyKpis.tsx` | Pass KPI uom_type to aggregation function for binary-specific logic |
+| `src/components/review/DailySubmissionSummary.tsx` | Update stats display to show combined "Total No" count |
+| `DOCUMENTATION.md` | Document the updated binary KPI scoring logic |
 
-**Key Implementation - No Date Restrictions:**
+---
+
+### Phase 1: Update `dailyAggregation.ts`
+
+**1.1 Add new interface and function for binary-specific calculation:**
 
 ```typescript
-export function useAdminSubmitSubPeriod() {
-  const { user } = useAuth();
+export interface BinaryAggregationResult extends AggregationResult {
+  noSubmissions: number;    // Count of "No" (achieved_value = 0)
+  totalNoCount: number;     // missedDays + noSubmissions
+}
+
+/**
+ * Calculate score for binary daily KPIs
+ * Total No = Missed Days + "No" submissions
+ * Score: 0 No = 5, 1 No = 4, 2 No = 3, 3 No = 2, 4 No = 1, >4 No = 0
+ */
+export function calculateBinaryDailyScore(
+  submittedValues: number[],
+  month: string,
+  year: number
+): BinaryAggregationResult {
+  const totalDays = getExpectedDaysInMonth(month, year);
+  const submittedDays = submittedValues.length;
+  const missedDays = Math.max(0, totalDays - submittedDays);
   
-  return useMutation({
-    mutationFn: async ({
-      kpi_id,
-      employee_id,
-      sub_period_type,
-      sub_period_value, // Any date - no restriction
-      achieved_value,
-      remarks,
-      reason,
-      review_month,
-      review_year,
-    }: AdminSubPeriodParams) => {
-      
-      // 1. Get existing submission for audit trail
-      const { data: existing } = await supabase
-        .from('sub_period_submissions')
-        .select('*')
-        .eq('kpi_id', kpi_id)
-        .eq('sub_period_value', sub_period_value)
-        .maybeSingle();
+  // Count "No" submissions (achieved_value = 0)
+  const noSubmissions = submittedValues.filter(v => v === 0).length;
+  
+  // Total No = missed days + "No" submissions
+  const totalNoCount = missedDays + noSubmissions;
+  
+  // Score calculation: 0 No = 5, each No reduces by 1, minimum 0
+  const score = Math.max(0, 5 - totalNoCount);
 
-      // 2. Admin can override is_resubmitted lock
-      // Use upsert with NO date validation
-      const { data, error } = await supabase
-        .from('sub_period_submissions')
-        .upsert({
-          kpi_id,
-          sub_period_type,
-          sub_period_value,
-          achieved_value,
-          remarks,
-          review_month,
-          review_year,
-          submitted_by: employee_id, // Still track as employee's data
-          submitted_at: new Date().toISOString(),
-          // Reset resubmission flag so data can be edited again if needed
-          is_resubmitted: false,
-          update_reason: `Admin override: ${reason}`,
-        }, {
-          onConflict: 'kpi_id,sub_period_type,sub_period_value,review_month,review_year',
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // 3. Create audit log with admin context
-      await supabase.from('kpi_audit_logs').insert({
-        kpi_id,
-        action: 'ADMIN_DAILY_ENTRY_OVERRIDE',
-        performed_by: user?.id,
-        on_behalf_of: employee_id,
-        on_behalf_role: 'daily_submission',
-        old_value: existing || null,
-        new_value: data,
-        metadata: {
-          reason,
-          sub_period_value,
-          bypassed_restrictions: [
-            'date_window',
-            existing?.is_resubmitted ? 'resubmission_lock' : null,
-          ].filter(Boolean),
-        },
-      });
-
-      // 4. Notify employee
-      await supabase.from('notifications').insert({
-        user_id: employee_id,
-        type: 'admin_data_override',
-        title: 'Daily Data Updated by Admin',
-        message: `Admin updated your daily entry for ${sub_period_value}. Reason: ${reason}`,
-        kpi_id,
-        related_user_id: user?.id,
-      });
-
-      return data;
-    },
-  });
+  return {
+    score,
+    method: 'missed_days_penalty', // Still uses this method type
+    submittedDays,
+    totalDays,
+    missedDays,
+    noSubmissions,
+    totalNoCount,
+  };
 }
 ```
 
-### Phase 4: Integration into AllKpis.tsx
+**1.2 Update main aggregation function to handle binary KPIs:**
 
-**Add action buttons in the expanded KPI row:**
+```typescript
+export function calculateDailyAggregatedScore(
+  submittedValues: number[],
+  method: DailyAggregationMethod,
+  month: string,
+  year: number,
+  isBinaryKpi: boolean = false  // New parameter
+): AggregationResult | BinaryAggregationResult {
+  // For binary KPIs with missed_days_penalty, use the new binary-specific logic
+  if (isBinaryKpi && method === 'missed_days_penalty') {
+    return calculateBinaryDailyScore(submittedValues, month, year);
+  }
+  
+  // Existing logic for non-binary KPIs
+  const totalDays = getExpectedDaysInMonth(month, year);
+  const submittedDays = submittedValues.length;
+  const missedDays = Math.max(0, totalDays - submittedDays);
 
-| Button | When Shown | Opens |
-|--------|-----------|-------|
-| "Enter Data" | Always for admin | AdminDataEntryDialog |
-| "Enter Daily Data" | For daily-frequency KPIs | AdminDailyEntryDialog |
-| "Enter Weekly Data" | For weekly-frequency KPIs | AdminDailyEntryDialog (weekly mode) |
+  let score: number | null = null;
 
-**UI Changes:**
+  if (method === 'average') {
+    score = calculateAverageScore(submittedValues);
+  } else if (method === 'missed_days_penalty') {
+    score = submittedDays > 0 
+      ? calculateMissedDaysPenaltyScore(submittedDays, totalDays)
+      : null;
+  }
+
+  return {
+    score,
+    method,
+    submittedDays,
+    totalDays,
+    missedDays,
+  };
+}
+```
+
+---
+
+### Phase 2: Update `MyKpis.tsx`
+
+Update all calls to `calculateDailyAggregatedScore` to pass the `isBinaryKpi` flag:
+
+**2.1 In `aggregatedMonthlyScore` useMemo:**
+```typescript
+const aggregatedMonthlyScore = useMemo(() => {
+  // ...existing code...
+  const isBinaryKpi = selectedKpi?.uom_type === 'binary';
+  const result = calculateDailyAggregatedScore(
+    values, 
+    dailyAggregationMethod, 
+    selectedPeriod, 
+    selectedYear,
+    isBinaryKpi
+  );
+  return result.score;
+}, [selectedKpiSubPeriods, dailyAggregationMethod, selectedPeriod, selectedYear, selectedKpi]);
+```
+
+**2.2 In `handleSubmitMonthlyReview`:**
+```typescript
+const isBinaryKpi = selectedKpi?.uom_type === 'binary';
+const aggregationResult = calculateDailyAggregatedScore(
+  values, 
+  dailyAggregationMethod, 
+  selectedPeriod, 
+  selectedYear,
+  isBinaryKpi
+);
+```
+
+**2.3 In KPI table display:**
+```typescript
+const aggregatedScore = needsSubPeriod && kpiSubPeriods.length > 0 
+  ? calculateDailyAggregatedScore(
+      kpiSubPeriods.filter(s => s.achieved_value !== null).map(s => s.achieved_value as number),
+      dailyAggregationMethod,
+      selectedPeriod,
+      selectedYear,
+      kpi.uom_type === 'binary'
+    ).score
+  : null;
+```
+
+---
+
+### Phase 3: Update `DailySubmissionSummary.tsx`
+
+Update the stats calculation to show the combined "Total No" count for clarity:
+
+```typescript
+const stats = useMemo(() => {
+  const monthNumber = getMonthNumber(reviewMonth);
+  const daysInMonth = getDaysInMonth(new Date(reviewYear, monthNumber - 1));
+  
+  const submittedCount = submissions.length;
+  const missingCount = daysInMonth - submittedCount;
+  
+  const isBinary = uomType === 'binary';
+  const noCount = isBinary 
+    ? submissions.filter(s => s.achieved_value === 0).length 
+    : 0;
+  
+  // NEW: Total No = missed + explicit "No" submissions
+  const totalNoCount = missingCount + noCount;
+  
+  return { daysInMonth, submittedCount, missingCount, noCount, isBinary, totalNoCount };
+}, [submissions, reviewMonth, reviewYear, uomType]);
+```
+
+Add a new stats card showing "Total No" count:
 
 ```tsx
-// In the expanded KPI actions area
-{profile?.role === 'admin' && (
-  <div className="flex gap-2">
-    <Button 
-      size="sm" 
-      variant="outline"
-      onClick={() => openAdminDataEntry(kpi)}
-    >
-      <PenLine className="h-4 w-4 mr-1" />
-      Enter Data
-    </Button>
-    
-    {kpi.frequency === 'daily' && (
-      <Button 
-        size="sm" 
-        variant="outline"
-        onClick={() => openAdminDailyEntry(kpi)}
-      >
-        <Calendar className="h-4 w-4 mr-1" />
-        Daily Data
-      </Button>
-    )}
+{stats.isBinary && (
+  <div className="p-3 bg-orange-50 dark:bg-orange-950/30 rounded-lg text-center">
+    <div className="flex items-center justify-center gap-1 mb-1">
+      <AlertTriangle className="h-3.5 w-3.5 text-orange-600" />
+    </div>
+    <p className="text-xl font-bold text-orange-600">{stats.totalNoCount}</p>
+    <p className="text-xs text-muted-foreground">Total No</p>
   </div>
 )}
 ```
 
 ---
 
-## Files to Create
+### Phase 4: Update Documentation
 
-| File | Purpose |
-|------|---------|
-| `src/components/admin/AdminDataEntryDialog.tsx` | Dialog for review submission data entry |
-| `src/components/admin/AdminDailyEntryDialog.tsx` | Calendar dialog for daily/weekly data entry |
-| `src/hooks/useAdminDataEntry.ts` | Hooks for admin mutations with audit logging |
+Add to `DOCUMENTATION.md`:
 
-## Files to Modify
+```markdown
+### Daily Binary KPI Scoring (Missed Days Penalty)
 
-| File | Changes |
-|------|---------|
-| `src/pages/admin/AllKpis.tsx` | Add "Enter Data" and "Daily Data" buttons |
-| `DOCUMENTATION.md` | Document admin data entry feature |
+For Daily KPIs with Binary targets (Yes/No), the monthly score is calculated as:
 
-## Database Migration
+**Total No = Missed Days + "No" Submissions**
 
-```sql
--- Add on-behalf tracking columns to kpi_audit_logs
-ALTER TABLE public.kpi_audit_logs 
-ADD COLUMN IF NOT EXISTS on_behalf_of UUID REFERENCES public.profiles(id),
-ADD COLUMN IF NOT EXISTS on_behalf_role TEXT;
+| Total No Count | Final Score |
+|---------------|-------------|
+| 0 | 5 (Outstanding) |
+| 1 | 4 (Exceeds) |
+| 2 | 3 (Meets) |
+| 3 | 2 (Below) |
+| 4 | 1 (Needs Improvement) |
+| >4 | 0 (Unacceptable) |
 
--- Add index for querying on-behalf actions
-CREATE INDEX IF NOT EXISTS idx_audit_logs_on_behalf 
-ON public.kpi_audit_logs(on_behalf_of) 
-WHERE on_behalf_of IS NOT NULL;
-```
+Example: If a month has 31 days, and an employee:
+- Submitted 28 days (3 missed)
+- Of those 28, had 2 "No" responses
 
----
-
-## Audit Trail Structure
-
-Every admin data entry creates an audit log:
-
-```json
-{
-  "id": "uuid",
-  "kpi_id": "uuid",
-  "action": "ADMIN_DAILY_ENTRY_OVERRIDE",
-  "performed_by": "admin-user-uuid",
-  "on_behalf_of": "employee-uuid",
-  "on_behalf_role": "daily_submission",
-  "old_value": { 
-    "achieved_value": 5, 
-    "is_resubmitted": true 
-  },
-  "new_value": { 
-    "achieved_value": 0, 
-    "is_resubmitted": false 
-  },
-  "metadata": {
-    "reason": "Employee reported incorrect data entry",
-    "sub_period_value": "2026-01-15",
-    "bypassed_restrictions": ["date_window", "resubmission_lock"]
-  },
-  "created_at": "2026-01-31T14:30:00Z"
-}
+Total No = 3 + 2 = 5 → Score = 0
 ```
 
 ---
 
 ## Testing Checklist
 
-1. **No Date Restrictions**
-   - [ ] Admin can enter data for any day of the month
-   - [ ] Admin can enter data for past months
-   - [ ] Admin can edit "Final" (locked) entries
-   - [ ] Admin can enter weekly data for any week
+1. **Binary Daily KPI Calculation**
+   - [ ] 0 missed + 0 "No" = Score 5
+   - [ ] 2 missed + 1 "No" = Score 2 (Total 3)
+   - [ ] 5 missed + 0 "No" = Score 0 (Total 5)
+   - [ ] 0 missed + 5 "No" = Score 0 (Total 5)
 
-2. **Audit Trail**
-   - [ ] Every admin entry creates audit log
-   - [ ] on_behalf_of correctly set to employee
-   - [ ] Old/new values captured
-   - [ ] Reason is mandatory and logged
+2. **Non-Binary KPIs Unaffected**
+   - [ ] Numeric daily KPIs still use average/missed days as before
+   - [ ] Tiered KPIs with multiple options still work correctly
 
-3. **Notifications**
-   - [ ] Employee notified of admin changes
-   - [ ] Notification includes reason
+3. **UI Display**
+   - [ ] DailySubmissionSummary shows correct "Total No" count
+   - [ ] Monthly score preview reflects new calculation
 
-4. **Role Security**
-   - [ ] Only admin role sees "Enter Data" buttons
-   - [ ] Non-admins cannot access admin hooks
-
+4. **Edge Cases**
+   - [ ] No submissions at all = All days missed = Score based on total days
+   - [ ] All submissions are "Yes" and no missed = Score 5
