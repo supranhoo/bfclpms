@@ -90,7 +90,7 @@ export function EmployeeScorecard({
   const [managerScore, setManagerScore] = useState<number | null>(null);
   const [managerRemarks, setManagerRemarks] = useState('');
   const [managerEvidenceUrl, setManagerEvidenceUrl] = useState<string | null>(null);
-  const [managerAchievedValue, setManagerAchievedValue] = useState<number | null>(null);
+  const [managerAchievedValue, setManagerAchievedValue] = useState<number | string | null>(null);
   const [queryReason, setQueryReason] = useState('');
   const [sendBackReason, setSendBackReason] = useState('');
 

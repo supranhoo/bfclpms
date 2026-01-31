@@ -30,7 +30,7 @@ interface AchievedValueScoreInputProps {
   score: number | null;
   achievedValue: number | string | null;
   onScoreChange: (score: number, rating: RatingLevel) => void;
-  onAchievedValueChange: (value: number | null) => void;
+  onAchievedValueChange: (value: number | string | null) => void;
   disabled?: boolean;
   label?: string;
 }
@@ -79,7 +79,8 @@ export function AchievedValueScoreInput({
         qualitativeOptions={kpi.qualitative_options || null}
         value={typeof achievedValue === 'string' ? achievedValue : null}
         onChange={(value, rating, ratingLevel) => {
-          // For qualitative, we just update the score - achieved value is stored as string separately
+          // For qualitative, update both the string value AND the score
+          onAchievedValueChange(value);
           onScoreChange(rating, ratingLevel);
         }}
         disabled={disabled}
