@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { KpiDetailsTable } from '@/components/review/KpiDetailsTable';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI, OrgLevelScope } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
@@ -24,7 +25,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { KpiPageSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -37,7 +37,7 @@ import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { SubPeriodSelector } from '@/components/review/SubPeriodSelector';
 import { FrequencyLockedOverlay, FrequencyLockBadge } from '@/components/review/FrequencyLockedOverlay';
 import { QualitativeValueInput } from '@/components/review/QualitativeValueInput';
-import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
+import { Target, TrendingUp, CheckCircle2, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   AlertDialog,
@@ -149,6 +149,17 @@ export default function MyKpis() {
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
+  const [expandedKpis, setExpandedKpis] = useState<Set<string>>(new Set());
+  
+  // Toggle expand for daily KPI rows
+  const toggleExpand = useCallback((kpiId: string) => {
+    setExpandedKpis(prev => {
+      const next = new Set(prev);
+      if (next.has(kpiId)) next.delete(kpiId);
+      else next.add(kpiId);
+      return next;
+    });
+  }, []);
   
   // Review form state
   const [achievedValue, setAchievedValue] = useState('');
@@ -731,230 +742,20 @@ export default function MyKpis() {
         </CardHeader>
         <CardContent>
           <div className="rounded-lg border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="font-semibold">Category</TableHead>
-                  <TableHead className="font-semibold">KRA</TableHead>
-                  <TableHead className="font-semibold">KPI</TableHead>
-                  <TableHead className="font-semibold text-center">Target</TableHead>
-                  <TableHead className="font-semibold text-center">Achieved</TableHead>
-                  <TableHead className="font-semibold text-center">Rating</TableHead>
-                  <TableHead className="font-semibold text-center">Status</TableHead>
-                  <TableHead className="font-semibold text-center">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-              {sortedKpis.map((kpi, index) => {
-                  const submission = submissionMap.get(kpi.id);
-                  const score = submission?.final_score || submission?.self_score;
-                  const scoreInfo = score !== null && score !== undefined ? scoreDisplay[score] : null;
-                  // Get org-level value using scoped lookup
-                  const orgValue = getOrgKpiValue(kpi);
-                  const displayAchieved = kpi.is_org_level && orgValue?.achieved_value != null 
-                    ? orgValue.achieved_value 
-                    : submission?.achieved_value;
-                  
-                  // Determine scope badge
-                  const scope = kpi.org_level_scope || 'organization';
-                  
-                  // Check if KPI is locked for current period (multi-month cycles)
-                  const isLocked = isKpiFrequencyLocked(kpi);
-                  
-                  // Check if this is a sub-period KPI and show aggregated info
-                  const needsSubPeriod = requiresSubPeriodSelection(kpi.frequency as FrequencyType);
-                  const kpiSubPeriods = getKpiSubPeriodSubmissions(kpi.id);
-                  const aggregatedScore = needsSubPeriod && kpiSubPeriods.length > 0 
-                    ? calculateDailyAggregatedScore(
-                        kpiSubPeriods.filter(s => s.achieved_value !== null).map(s => s.achieved_value as number),
-                        dailyAggregationMethod,
-                        selectedPeriod,
-                        selectedYear,
-                        kpi.uom_type === 'binary'
-                      ).score
-                    : null;
-                  
-                  return (
-                    <TableRow 
-                      key={kpi.id}
-                      className={`${index % 2 === 0 ? 'bg-background' : 'bg-muted/20'} ${isLocked ? 'opacity-60' : ''}`}
-                    >
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-2.5 h-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: kpi.kra_categories?.color }}
-                          />
-                          <span className="text-xs text-muted-foreground truncate max-w-[100px]">
-                            {kpi.kra_categories?.name}
-                          </span>
-                          {kpi.is_org_level && (
-                            <Tooltip>
-                              <TooltipTrigger>
-                                {scope === 'organization' ? (
-                                  <Building2 className="h-3 w-3 text-muted-foreground" />
-                                ) : scope === 'department' ? (
-                                  <Users className="h-3 w-3 text-muted-foreground" />
-                                ) : (
-                                  <User className="h-3 w-3 text-muted-foreground" />
-                                )}
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Organization-level KPI ({scope} scope)</p>
-                                {orgValue?.data_source && <p className="text-xs">Source: {orgValue.data_source}</p>}
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium text-sm line-clamp-2">{kpi.kra_name}</span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <span className="text-sm line-clamp-2">{kpi.kpi_name}</span>
-                          {/* Frequency badge */}
-                          {kpi.frequency && kpi.frequency !== 'Monthly' && (
-                            <div className="flex items-center gap-1">
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                                <Calendar className="h-2.5 w-2.5 mr-0.5" />
-                                {kpi.frequency}
-                              </Badge>
-                              {needsSubPeriod && kpiSubPeriods.length > 0 && (
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                  {kpiSubPeriods.length} entries
-                                </Badge>
-                              )}
-                              {isLocked && (
-                                <FrequencyLockBadge
-                                  frequency={kpi.frequency as FrequencyType}
-                                  reviewMonth={selectedPeriod}
-                                  reviewYear={selectedYear}
-                                  frequencyCycleStart={kpi.frequency_cycle_start}
-                                />
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className="font-mono text-sm">{kpi.target_value}</span>
-                        {kpi.uom && (
-                          <span className="text-xs text-muted-foreground ml-1">{kpi.uom}</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {/* Show aggregated score for sub-period KPIs */}
-                        {needsSubPeriod && aggregatedScore !== null ? (
-                          <div className="flex flex-col items-center">
-                            <span className="font-mono text-sm font-medium">
-                              {aggregatedScore.toFixed(1)}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground">avg</span>
-                          </div>
-                        ) : displayAchieved != null ? (
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="font-mono text-sm font-medium">
-                              {displayAchieved}
-                            </span>
-                            {kpi.is_org_level && orgValue && (
-                              <Lock className="h-3 w-3 text-muted-foreground" />
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {scoreInfo ? (
-                          <Badge
-                            style={{ backgroundColor: scoreInfo.color }}
-                            className="text-white text-xs"
-                          >
-                            {score} - {scoreInfo.label}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="secondary" className={statusColors[kpi.status]}>
-                          {statusLabels[kpi.status]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-center gap-1">
-                          {isLocked ? (
-                            <Badge variant="outline" className="h-8 px-3 flex items-center gap-1 text-muted-foreground">
-                              <Lock className="h-3.5 w-3.5" />
-                              Locked
-                            </Badge>
-                          ) : kpi.status === 'kra_set' ? (
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => openReviewDialog(kpi)}
-                              className="h-8"
-                            >
-                              <FileCheck className="h-3.5 w-3.5 mr-1" />
-                              Review
-                            </Button>
-                          ) : (
-                            // For all submitted statuses: show status badge + View button
-                            <>
-                              <Badge 
-                                variant="secondary" 
-                                className={`h-7 px-2 text-xs flex items-center gap-1 ${
-                                  kpi.status === 'self_review' 
-                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                                    : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                }`}
-                              >
-                                {kpi.status === 'self_review' ? (
-                                  <Clock className="h-3 w-3" />
-                                ) : (
-                                  <CheckCircle2 className="h-3 w-3" />
-                                )}
-                                {statusLabels[kpi.status] || 'Submitted'}
-                              </Badge>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openReviewDialog(kpi)}
-                                className="h-7 px-2"
-                                title="View your submission"
-                              >
-                                <Eye className="h-3.5 w-3.5" />
-                              </Button>
-                            </>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => openTimeline(kpi)}
-                            title="View Timeline"
-                            className="h-8 w-8 p-0"
-                          >
-                            <Clock className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {sortedKpis.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12">
-                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                        <Target className="h-8 w-8" />
-                        <p className="font-medium">No KPIs found</p>
-                        <p className="text-sm">Try selecting a different period or category</p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+            <KpiDetailsTable
+              kpis={sortedKpis}
+              submissionMap={submissionMap}
+              viewType="my-kpis"
+              selectedPeriod={selectedPeriod}
+              selectedYear={selectedYear}
+              onReview={openReviewDialog}
+              onView={openReviewDialog}
+              onShowLogic={openTimeline}
+              expandedKpis={expandedKpis}
+              onToggleExpand={toggleExpand}
+              getOrgKpiValue={getOrgKpiValue}
+              isKpiLocked={isKpiFrequencyLocked}
+            />
           </div>
         </CardContent>
       </Card>
