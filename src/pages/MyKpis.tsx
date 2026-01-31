@@ -35,7 +35,18 @@ import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { SubPeriodSelector } from '@/components/review/SubPeriodSelector';
 import { FrequencyLockedOverlay, FrequencyLockBadge } from '@/components/review/FrequencyLockedOverlay';
 import { QualitativeValueInput } from '@/components/review/QualitativeValueInput';
-import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar } from 'lucide-react';
+import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar, AlertTriangle } from 'lucide-react';
+import { format } from 'date-fns';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -144,6 +155,11 @@ export default function MyKpis() {
   const [selfRemarks, setSelfRemarks] = useState('');
   const [selfEvidenceUrl, setSelfEvidenceUrl] = useState<string | null>(null);
   const [isNa, setIsNa] = useState(false);
+  
+  // Resubmission confirmation state for Daily/Weekly KPIs
+  const [showResubmitConfirm, setShowResubmitConfirm] = useState(false);
+  const [resubmitReason, setResubmitReason] = useState('');
+  const [pendingResubmitReason, setPendingResubmitReason] = useState('');
 
   // Helper to check if KPI is qualitative
   const isQualitativeKpi = (kpi: KPI | null): boolean => {
@@ -308,9 +324,18 @@ export default function MyKpis() {
     setReviewDialogOpen(true);
   };
 
+  // Helper to get current sub-period submission details
+  const getCurrentSubPeriodSubmission = (): SubPeriodSubmission | undefined => {
+    if (!selectedKpi || !selectedSubPeriod) return undefined;
+    return subPeriodSubmissions?.find(
+      s => s.kpi_id === selectedKpi.id && s.sub_period_value === selectedSubPeriod
+    );
+  };
+
   // Handle sub-period selection change
   const handleSubPeriodChange = (value: string) => {
     setSelectedSubPeriod(value);
+    setResubmitReason(''); // Reset resubmit reason when changing period
     
     // Look up existing submission for this sub-period
     if (selectedKpi) {
@@ -338,6 +363,48 @@ export default function MyKpis() {
     setTimelineOpen(true);
   };
 
+  // Confirm resubmission and proceed with the actual save
+  const handleConfirmResubmit = () => {
+    if (pendingResubmitReason.trim()) {
+      setResubmitReason(pendingResubmitReason.trim());
+      setShowResubmitConfirm(false);
+      setPendingResubmitReason('');
+      // Now actually submit with the reason
+      performSubPeriodSubmit(pendingResubmitReason.trim(), true);
+    }
+  };
+
+  const handleCancelResubmitConfirm = () => {
+    setShowResubmitConfirm(false);
+    setPendingResubmitReason('');
+  };
+
+  // Perform the actual sub-period submission
+  const performSubPeriodSubmit = async (updateReason: string | null, isResubmission: boolean) => {
+    if (!selectedKpi || !selectedSubPeriod) return;
+    
+    await submitSubPeriod.mutateAsync({
+      kpi_id: selectedKpi.id,
+      sub_period_type: selectedKpi.frequency === 'Daily' ? 'daily' : 'weekly',
+      sub_period_value: selectedSubPeriod,
+      achieved_value: isNa ? null : (parseFloat(achievedValue) || null),
+      remarks: selfRemarks || null,
+      evidence_url: selfEvidenceUrl,
+      review_month: selectedPeriod,
+      review_year: selectedYear,
+      update_reason: updateReason,
+      is_resubmission: isResubmission,
+    });
+    
+    // Reset sub-period for next entry or close dialog
+    setSelectedSubPeriod(null);
+    setAchievedValue('');
+    setCalculatedScore(null);
+    setSelfRemarks('');
+    setResubmitReason('');
+    // Don't close dialog - allow continuing to enter more sub-periods
+  };
+
   const handleSubmitReview = async () => {
     if (!selectedKpi) return;
     
@@ -345,23 +412,24 @@ export default function MyKpis() {
     
     // For sub-period KPIs, submit to sub_period_submissions
     if (needsSubPeriod && selectedSubPeriod) {
-      await submitSubPeriod.mutateAsync({
-        kpi_id: selectedKpi.id,
-        sub_period_type: selectedKpi.frequency === 'Daily' ? 'daily' : 'weekly',
-        sub_period_value: selectedSubPeriod,
-        achieved_value: isNa ? null : (parseFloat(achievedValue) || null),
-        remarks: selfRemarks || null,
-        evidence_url: selfEvidenceUrl,
-        review_month: selectedPeriod,
-        review_year: selectedYear,
-      });
+      const existingSubmission = getCurrentSubPeriodSubmission();
+      const isExistingSubmission = !!existingSubmission;
+      const isAlreadyResubmitted = existingSubmission?.is_resubmitted || false;
+      const requiresReason = selectedKpi.require_resubmit_reason !== false; // Default to true
       
-      // Reset sub-period for next entry or close dialog
-      setSelectedSubPeriod(null);
-      setAchievedValue('');
-      setCalculatedScore(null);
-      setSelfRemarks('');
-      // Don't close dialog - allow continuing to enter more sub-periods
+      // If already resubmitted (final), don't allow further edits
+      if (isAlreadyResubmitted) {
+        return; // Should already be blocked by UI
+      }
+      
+      // If this is a resubmission and KPI requires reason, show confirmation dialog
+      if (isExistingSubmission && requiresReason) {
+        setShowResubmitConfirm(true);
+        return;
+      }
+      
+      // Otherwise, submit directly (first submission or reason not required)
+      await performSubPeriodSubmit(null, isExistingSubmission);
       return;
     }
     
@@ -1094,26 +1162,45 @@ export default function MyKpis() {
                   <Button variant="outline" size="sm" onClick={() => setReviewDialogOpen(false)}>
                     {needsSubPeriodForKpi ? 'Done' : 'Cancel'}
                   </Button>
-                  <Button 
-                    size="sm" 
-                    onClick={handleSubmitReview} 
-                    disabled={
-                      // For sub-period KPIs, need sub-period selected and value
-                      (needsSubPeriodForKpi && (!selectedSubPeriod || (!isNa && !achievedValue))) ||
-                      // For regular KPIs, need achieved value unless N/A
-                      (!needsSubPeriodForKpi && !isNa && !achievedValue) || 
-                      // N/A requires 50 char reason
-                      (isNa && selfRemarks.trim().length < 50) || 
-                      submitReview.isPending ||
-                      submitSubPeriod.isPending
+                  {(() => {
+                    // Check if current sub-period is already resubmitted (final)
+                    const currentSubPeriodSubmission = needsSubPeriodForKpi && selectedSubPeriod && selectedKpi
+                      ? subPeriodSubmissions?.find(s => s.kpi_id === selectedKpi.id && s.sub_period_value === selectedSubPeriod)
+                      : null;
+                    const isSubPeriodFinal = currentSubPeriodSubmission?.is_resubmitted || false;
+                    
+                    if (isSubPeriodFinal) {
+                      return (
+                        <Badge className="gap-1 bg-green-600 hover:bg-green-600 h-9 px-4">
+                          <Lock className="h-3 w-3" />
+                          Final - No Further Edits
+                        </Badge>
+                      );
                     }
-                  >
-                    {(submitReview.isPending || submitSubPeriod.isPending) 
-                      ? 'Saving...' 
-                      : needsSubPeriodForKpi 
-                        ? 'Save Entry' 
-                        : 'Submit'}
-                  </Button>
+                    
+                    return (
+                      <Button 
+                        size="sm" 
+                        onClick={handleSubmitReview} 
+                        disabled={
+                          // For sub-period KPIs, need sub-period selected and value
+                          (needsSubPeriodForKpi && (!selectedSubPeriod || (!isNa && !achievedValue))) ||
+                          // For regular KPIs, need achieved value unless N/A
+                          (!needsSubPeriodForKpi && !isNa && !achievedValue) || 
+                          // N/A requires 50 char reason
+                          (isNa && selfRemarks.trim().length < 50) || 
+                          submitReview.isPending ||
+                          submitSubPeriod.isPending
+                        }
+                      >
+                        {(submitReview.isPending || submitSubPeriod.isPending) 
+                          ? 'Saving...' 
+                          : needsSubPeriodForKpi 
+                            ? (currentSubPeriodSubmission ? 'Update Entry' : 'Save Entry')
+                            : 'Submit'}
+                      </Button>
+                    );
+                  })()}
                 </SheetFooter>
               </>
             );
@@ -1127,6 +1214,74 @@ export default function MyKpis() {
         onClose={() => setTimelineOpen(false)}
         kpi={selectedKpi}
       />
+
+      {/* Resubmission Confirmation Dialog for Daily/Weekly KPIs */}
+      <AlertDialog open={showResubmitConfirm} onOpenChange={(open) => !open && handleCancelResubmitConfirm()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Re-submit Data?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-200">
+                  <p className="font-medium">
+                    You can update this record only once. It will be considered final and no further update will be allowed.
+                  </p>
+                </div>
+                {selectedSubPeriod && (
+                  <p>
+                    Current submission for <strong>{selectedSubPeriod}</strong>:
+                  </p>
+                )}
+                {(() => {
+                  const existingSub = getCurrentSubPeriodSubmission();
+                  if (!existingSub) return null;
+                  return (
+                    <div className="p-3 bg-muted rounded-lg text-sm">
+                      <p><strong>Current Value:</strong> {existingSub.achieved_value ?? '-'}</p>
+                      {existingSub.submitted_at && (
+                        <p><strong>Submitted On:</strong> {format(new Date(existingSub.submitted_at), 'dd MMM yyyy, hh:mm a')}</p>
+                      )}
+                      {existingSub.remarks && (
+                        <p><strong>Remarks:</strong> {existingSub.remarks}</p>
+                      )}
+                    </div>
+                  );
+                })()}
+                <div className="space-y-2 pt-2">
+                  <Label htmlFor="resubmit-reason" className="text-foreground">
+                    Reason for Update <span className="text-destructive">*</span>
+                  </Label>
+                  <Textarea
+                    id="resubmit-reason"
+                    value={pendingResubmitReason}
+                    onChange={(e) => setPendingResubmitReason(e.target.value)}
+                    placeholder="Enter reason for modifying this submission..."
+                    className="min-h-[80px]"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    This reason will be logged for audit purposes.
+                  </p>
+                </div>
+                <p className="text-sm font-medium text-foreground">
+                  Are you sure you want to re-submit?
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelResubmitConfirm}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmResubmit}
+              disabled={!pendingResubmitReason.trim()}
+            >
+              Confirm & Re-submit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
