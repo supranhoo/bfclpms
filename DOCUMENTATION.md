@@ -549,6 +549,12 @@ For Daily KPIs with **Binary targets (Yes/No)**, the monthly score uses a specia
 
 This ensures that both non-compliance (explicit "No") and non-submission (missed days) are equally penalized in the final monthly score.
 
+**Important Implementation Note:** For Daily Binary KPIs, the aggregated score (0-5) from `calculateBinaryDailyScore` **IS** the final rating. The system bypasses numeric threshold comparison (R5-R0) because binary KPIs don't have defined thresholds—the score directly maps to the rating level:
+- Score 5 → Outstanding (Blue)
+- Score 4 → Exceeds Expectations (Green)
+- Score 3 → Meets Expectations (Yellow)
+- Score 2-0 → Below Expectations / Needs Improvement (Red)
+
 ### 4.4 Manager Review
 
 **Route:** `/team-review`
