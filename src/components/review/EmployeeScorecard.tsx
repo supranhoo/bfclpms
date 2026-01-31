@@ -472,36 +472,14 @@ export function EmployeeScorecard({
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        {canReview && (
-                          <Button
-                            size="sm"
-                            onClick={() => openReviewSheet(kpi)}
-                          >
-                            Review
-                          </Button>
-                        )}
-                        {!isLocked && !isNaKpi && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => openQueryDialog(kpi)}
-                              title="Raise Query"
-                            >
-                              <MessageSquare className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => openSendBackDialog(kpi)}
-                              title="Send Back"
-                            >
-                              <Undo2 className="h-4 w-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
+                      {canReview && (
+                        <Button
+                          size="sm"
+                          onClick={() => openReviewSheet(kpi)}
+                        >
+                          Review
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
