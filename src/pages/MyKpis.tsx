@@ -160,6 +160,10 @@ export default function MyKpis() {
   const [showResubmitConfirm, setShowResubmitConfirm] = useState(false);
   const [resubmitReason, setResubmitReason] = useState('');
   const [pendingResubmitReason, setPendingResubmitReason] = useState('');
+  
+  // Monthly submission confirmation state for Daily/Weekly KPIs
+  const [showMonthlySubmitConfirm, setShowMonthlySubmitConfirm] = useState(false);
+  const [isSubmittingMonthly, setIsSubmittingMonthly] = useState(false);
 
   // Helper to check if KPI is qualitative
   const isQualitativeKpi = (kpi: KPI | null): boolean => {
@@ -173,6 +177,17 @@ export default function MyKpis() {
   const getKpiSubPeriodSubmissions = (kpiId: string) => {
     return subPeriodSubmissions?.filter(s => s.kpi_id === kpiId) || [];
   };
+
+  // Computed values for selected KPI's sub-period submissions (used in dialogs)
+  const selectedKpiSubPeriods = useMemo(() => {
+    return selectedKpi ? getKpiSubPeriodSubmissions(selectedKpi.id) : [];
+  }, [selectedKpi, subPeriodSubmissions]);
+  
+  const aggregatedSubPeriodScore = useMemo(() => {
+    return selectedKpiSubPeriods.length > 0 
+      ? calculateAggregatedScore(selectedKpiSubPeriods) 
+      : null;
+  }, [selectedKpiSubPeriods]);
 
   const filteredKpis = selectedCategory
     ? kpis?.filter(k => k.category_id === selectedCategory)
@@ -361,6 +376,47 @@ export default function MyKpis() {
   const openTimeline = (kpi: KPI) => {
     setSelectedKpi(kpi);
     setTimelineOpen(true);
+  };
+
+  // Convert numeric score to rating level for storage
+  const getRatingLevel = (score: number): RatingLevel => {
+    if (score >= 4) return 'blue';
+    if (score >= 3) return 'green';
+    if (score >= 2) return 'yellow';
+    return 'red';
+  };
+
+  // Handle monthly submission for Daily/Weekly KPIs
+  const handleSubmitMonthlyReview = async () => {
+    if (!selectedKpi) return;
+    
+    const kpiSubPeriods = getKpiSubPeriodSubmissions(selectedKpi.id);
+    const aggregatedScore = calculateAggregatedScore(kpiSubPeriods);
+    if (aggregatedScore === null) return;
+    
+    setIsSubmittingMonthly(true);
+    
+    try {
+      // Calculate rating from aggregated score
+      const result = calculateScoreFromAchieved(aggregatedScore, selectedKpi);
+      const selfRating = getRatingLevel(result.rating);
+      
+      // Submit to review_submissions and transition status
+      await submitReview.mutateAsync({
+        kpi_id: selectedKpi.id,
+        achieved_value: aggregatedScore,
+        self_rating: selfRating,
+        self_score: result.rating,
+        self_remarks: selfRemarks || `Aggregated from ${kpiSubPeriods.length} ${selectedKpi.frequency?.toLowerCase()} entries`,
+        self_evidence_url: selfEvidenceUrl,
+        is_na: false,
+      });
+      
+      setShowMonthlySubmitConfirm(false);
+      setReviewDialogOpen(false);
+    } finally {
+      setIsSubmittingMonthly(false);
+    }
   };
 
   // Confirm resubmission and proceed with the actual save
@@ -858,10 +914,7 @@ export default function MyKpis() {
             
             // Check if this KPI requires sub-period selection (Daily/Weekly)
             const needsSubPeriodForKpi = selectedKpi ? requiresSubPeriodSelection(selectedKpi.frequency as FrequencyType) : false;
-            const selectedKpiSubPeriods = selectedKpi ? getKpiSubPeriodSubmissions(selectedKpi.id) : [];
-            const aggregatedSubPeriodScore = selectedKpiSubPeriods.length > 0 
-              ? calculateAggregatedScore(selectedKpiSubPeriods) 
-              : null;
+            // Note: selectedKpiSubPeriods and aggregatedSubPeriodScore are computed at component level
             
             return (
               <>
@@ -1161,48 +1214,66 @@ export default function MyKpis() {
 
                 {/* Footer - Fixed at bottom */}
                 <SheetFooter className="pt-3 border-t flex-shrink-0">
-                  <Button variant="outline" size="sm" onClick={() => setReviewDialogOpen(false)}>
-                    {needsSubPeriodForKpi ? 'Done' : 'Cancel'}
-                  </Button>
-                  {(() => {
-                    // Check if current sub-period is already resubmitted (final)
-                    const currentSubPeriodSubmission = needsSubPeriodForKpi && selectedSubPeriod && selectedKpi
-                      ? subPeriodSubmissions?.find(s => s.kpi_id === selectedKpi.id && s.sub_period_value === selectedSubPeriod)
-                      : null;
-                    const isSubPeriodFinal = currentSubPeriodSubmission?.is_resubmitted || false;
-                    
-                    if (isSubPeriodFinal) {
-                      return (
-                        <Badge className="gap-1 bg-green-600 hover:bg-green-600 h-9 px-4">
-                          <Lock className="h-3 w-3" />
-                          Final - No Further Edits
-                        </Badge>
-                      );
-                    }
-                    
-                    return (
-                      <Button 
-                        size="sm" 
-                        onClick={handleSubmitReview} 
-                        disabled={
-                          // For sub-period KPIs, need sub-period selected and value
-                          (needsSubPeriodForKpi && (!selectedSubPeriod || (!isNa && !achievedValue))) ||
-                          // For regular KPIs, need achieved value unless N/A
-                          (!needsSubPeriodForKpi && !isNa && !achievedValue) || 
-                          // N/A requires 50 char reason
-                          (isNa && selfRemarks.trim().length < 50) || 
-                          submitReview.isPending ||
-                          submitSubPeriod.isPending
+                  <div className="flex items-center gap-2 w-full justify-between">
+                    <Button variant="outline" size="sm" onClick={() => setReviewDialogOpen(false)}>
+                      {needsSubPeriodForKpi ? 'Done' : 'Cancel'}
+                    </Button>
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        // Check if current sub-period is already resubmitted (final)
+                        const currentSubPeriodSubmission = needsSubPeriodForKpi && selectedSubPeriod && selectedKpi
+                          ? subPeriodSubmissions?.find(s => s.kpi_id === selectedKpi.id && s.sub_period_value === selectedSubPeriod)
+                          : null;
+                        const isSubPeriodFinal = currentSubPeriodSubmission?.is_resubmitted || false;
+                        
+                        if (isSubPeriodFinal) {
+                          return (
+                            <Badge className="gap-1 bg-green-600 hover:bg-green-600 h-9 px-4">
+                              <Lock className="h-3 w-3" />
+                              Final - No Further Edits
+                            </Badge>
+                          );
                         }
-                      >
-                        {(submitReview.isPending || submitSubPeriod.isPending) 
-                          ? 'Saving...' 
-                          : needsSubPeriodForKpi 
-                            ? (currentSubPeriodSubmission ? 'Update Entry' : 'Save Entry')
-                            : 'Submit'}
-                      </Button>
-                    );
-                  })()}
+                        
+                        return (
+                          <Button 
+                            size="sm"
+                            variant="secondary"
+                            onClick={handleSubmitReview} 
+                            disabled={
+                              // For sub-period KPIs, need sub-period selected and value
+                              (needsSubPeriodForKpi && (!selectedSubPeriod || (!isNa && !achievedValue))) ||
+                              // For regular KPIs, need achieved value unless N/A
+                              (!needsSubPeriodForKpi && !isNa && !achievedValue) || 
+                              // N/A requires 50 char reason
+                              (isNa && selfRemarks.trim().length < 50) || 
+                              submitReview.isPending ||
+                              submitSubPeriod.isPending
+                            }
+                          >
+                            {(submitReview.isPending || submitSubPeriod.isPending) 
+                              ? 'Saving...' 
+                              : needsSubPeriodForKpi 
+                                ? (currentSubPeriodSubmission ? 'Update Entry' : 'Save Entry')
+                                : 'Submit'}
+                          </Button>
+                        );
+                      })()}
+                      
+                      {/* Submit Month Button - Only for Daily/Weekly KPIs with entries in kra_set status */}
+                      {needsSubPeriodForKpi && selectedKpiSubPeriods.length > 0 && selectedKpi?.status === 'kra_set' && (
+                        <Button 
+                          size="sm"
+                          onClick={() => setShowMonthlySubmitConfirm(true)}
+                          className="gap-1"
+                          disabled={isSubmittingMonthly}
+                        >
+                          <Send className="h-3 w-3" />
+                          Submit Month
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </SheetFooter>
               </>
             );
@@ -1280,6 +1351,56 @@ export default function MyKpis() {
               disabled={!pendingResubmitReason.trim()}
             >
               Confirm & Re-submit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Monthly Submission Confirmation Dialog for Daily/Weekly KPIs */}
+      <AlertDialog open={showMonthlySubmitConfirm} onOpenChange={setShowMonthlySubmitConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-primary" />
+              Submit Monthly Review
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>Submit this {selectedKpi?.frequency} KPI for manager review?</p>
+                <div className="p-3 bg-muted rounded-lg space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total Entries:</span>
+                    <strong className="text-foreground">{selectedKpiSubPeriods.length}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Average Score:</span>
+                    <strong className="text-foreground">{aggregatedSubPeriodScore?.toFixed(2) ?? '—'}</strong>
+                  </div>
+                  {aggregatedSubPeriodScore !== null && selectedKpi && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Rating:</span>
+                      <Badge 
+                        style={{ backgroundColor: scoreDisplay[Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore, selectedKpi).rating)]?.color || '#991B1B' }}
+                        className="text-white"
+                      >
+                        {scoreDisplay[Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore, selectedKpi).rating)]?.label || 'Not Achieved'}
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Once submitted, the KPI will move to your manager's review queue.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmittingMonthly}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleSubmitMonthlyReview}
+              disabled={isSubmittingMonthly || selectedKpiSubPeriods.length === 0}
+            >
+              {isSubmittingMonthly ? 'Submitting...' : 'Confirm & Submit'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

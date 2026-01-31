@@ -475,6 +475,52 @@ useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculat
 - `binary`: Fixed Yes=5, No=0 scoring
 - `tiered`: Admin-defined ratings per option (0-5 range)
 
+#### Two-Level Submission for Daily/Weekly KPIs
+
+Daily and Weekly KPIs follow a **two-level submission flow**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  LEVEL 1: Sub-Period Entries                                │
+│  ─────────────────────────────                               │
+│  Day 1 ─┬─ Entry → sub_period_submissions table              │
+│  Day 2 ─┤         (No workflow status change)                │
+│  Day 3 ─┤                                                    │
+│  ...    ─┤         Employees can add/update entries          │
+│  Day N ─┘         throughout the month                       │
+│                                                              │
+│         ↓                                                    │
+│                                                              │
+│  LEVEL 2: Monthly Aggregated Submission                      │
+│  ──────────────────────────────────────                      │
+│  [Submit Month] → review_submissions (aggregated average)    │
+│                 → kpis.status = 'self_review'                │
+│                 → Manager gets notified                      │
+│                 → KPI moves to manager's queue               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Level 1: Sub-Period Entries**
+- Each day/week's value is saved to `sub_period_submissions` table
+- No workflow status change occurs at this level
+- Employees can update entries (with resubmission reason if required)
+- Running average displayed in the submission sheet
+
+**Level 2: Monthly Aggregated Submission**
+- "Submit Month" button appears when:
+  - KPI frequency is Daily or Weekly
+  - At least 1 sub-period entry exists
+  - KPI status is `kra_set` (not already submitted)
+- Confirmation dialog shows:
+  - Total number of entries
+  - Calculated average score
+  - Resulting rating
+- On confirmation:
+  - Average score written to `review_submissions.achieved_value`
+  - Status transitions from `kra_set` → `self_review`
+  - Manager notification triggered
+  - KPI appears in manager's Team Review queue
+
 ### 4.4 Manager Review
 
 **Route:** `/team-review`
