@@ -507,10 +507,13 @@ Daily and Weekly KPIs follow a **two-level submission flow**:
 - Running average displayed in the submission sheet
 
 **Level 2: Monthly Aggregated Submission**
-- "Submit Month" button appears when:
-  - KPI frequency is Daily or Weekly
-  - At least 1 sub-period entry exists
-  - KPI status is `kra_set` (not already submitted)
+- "Submit Month" button visibility for Daily/Weekly KPIs:
+  | Scenario | Button State | Tooltip |
+  |----------|--------------|---------|
+  | No sub-period entries yet | Disabled | "Enter at least one daily/weekly value first" |
+  | Has entries, status = `kra_set` | Enabled | (Clickable) |
+  | Has entries, already submitted | Disabled | "This KPI has already been submitted for the month" |
+  | Monthly/other frequency KPI | Hidden | N/A |
 - Confirmation dialog shows:
   - Total number of entries
   - Calculated average score

@@ -1260,17 +1260,49 @@ export default function MyKpis() {
                         );
                       })()}
                       
-                      {/* Submit Month Button - Only for Daily/Weekly KPIs with entries in kra_set status */}
-                      {needsSubPeriodForKpi && selectedKpiSubPeriods.length > 0 && selectedKpi?.status === 'kra_set' && (
-                        <Button 
-                          size="sm"
-                          onClick={() => setShowMonthlySubmitConfirm(true)}
-                          className="gap-1"
-                          disabled={isSubmittingMonthly}
-                        >
-                          <Send className="h-3 w-3" />
-                          Submit Month
-                        </Button>
+                      {/* Submit Month Button - Always visible for Daily/Weekly KPIs with tooltip states */}
+                      {needsSubPeriodForKpi && (
+                        <>
+                          {selectedKpiSubPeriods.length === 0 ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <Button size="sm" variant="outline" disabled className="gap-1 opacity-50">
+                                    <Send className="h-3 w-3" />
+                                    Submit Month
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                Enter at least one {selectedKpi?.frequency?.toLowerCase()} value first
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : selectedKpi?.status !== 'kra_set' ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <Button size="sm" variant="outline" disabled className="gap-1 opacity-50">
+                                    <Send className="h-3 w-3" />
+                                    Month Submitted
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                This KPI has already been submitted for the month
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <Button 
+                              size="sm"
+                              onClick={() => setShowMonthlySubmitConfirm(true)}
+                              className="gap-1"
+                              disabled={isSubmittingMonthly}
+                            >
+                              <Send className="h-3 w-3" />
+                              Submit Month
+                            </Button>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
