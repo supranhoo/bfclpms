@@ -130,7 +130,7 @@ export default function Dashboard() {
         count: catKpis.length,
         weightage: cat.weightage,
       };
-    }).sort((a, b) => b.percentage - a.percentage);
+    }).filter(c => c.count > 0).sort((a, b) => b.percentage - a.percentage);
   }, [categories, fullyFilteredKpis, submissionMap]);
 
   // Available categories for filter dropdown (based on period-filtered KPIs)
