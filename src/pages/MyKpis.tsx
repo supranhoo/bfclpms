@@ -4,7 +4,8 @@ import { useMyKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI,
 import { useKraCategories } from '@/hooks/useOrganization';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
-import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, calculateAggregatedScore } from '@/hooks/useSubPeriodSubmissions';
+import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, calculateAggregatedScore, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
+import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { QualitativeOption, calculateQualitativeRating, scoreToRatingLevel } from '@/lib/qualitativeUom';
 import { 
@@ -1070,6 +1071,19 @@ export default function MyKpis() {
                   kpiId={selectedKpi.id}
                   existingUrl={selfEvidenceUrl}
                   onUploadComplete={(url) => setSelfEvidenceUrl(url || null)}
+                />
+              )}
+              
+              {/* Daily Submission Summary - Show for Daily KPIs with submissions */}
+              {selectedKpi?.frequency === 'Daily' && selectedKpiSubPeriods.length > 0 && (
+                <DailySubmissionSummary
+                  kpiId={selectedKpi.id}
+                  reviewMonth={selectedPeriod}
+                  reviewYear={selectedYear}
+                  submissions={selectedKpiSubPeriods}
+                  uom={selectedKpi.uom}
+                  uomType={selectedKpi.uom_type}
+                  qualitativeOptions={selectedKpi.qualitative_options as QualitativeOption[] | null}
                 />
               )}
             </div>

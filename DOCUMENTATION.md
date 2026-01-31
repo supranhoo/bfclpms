@@ -723,6 +723,7 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
 | `FrequencyLockedOverlay.tsx` | Locked state overlay for multi-month cycles |
 | `DailySubmissionGrid.tsx` | Grid for daily value entry |
 | `WeeklySubmissionTable.tsx` | Table for weekly value entry |
+| `DailySubmissionSummary.tsx` | Read-only summary table showing all daily submissions with stats |
 
 #### 4.10.7 Utility Functions (`src/lib/frequencyUtils.ts`)
 
@@ -938,6 +939,11 @@ The PMS supports 7 frequency types for KPIs, each with specific submission rules
 - `FrequencyLockedOverlay.tsx`: Blur/lock overlay for KPIs in non-active periods
 - `DailySubmissionGrid.tsx`: Grid view for entering daily values
 - `WeeklySubmissionTable.tsx`: Table for entering weekly values
+- `DailySubmissionSummary.tsx`: Read-only summary table visible across all roles showing:
+  - Statistics cards: Total days, Submitted count, Not Submitted count, "No" count (for binary KPIs)
+  - Submission table: Date, Achieved Value (formatted for numeric/binary/tiered), Submission Timestamp
+  - Visual indicators: Red highlight for "No" values, Lock icon for final/resubmitted entries
+  - Visible to: Employee (MyKpis), Manager/Admin (EmployeeScorecard), Auditor (AuditScorecard), Management (ManagementScorecard)
 
 **Key Hooks:**
 - `useSubPeriodSubmissions.ts`: Fetch and submit granular submissions
