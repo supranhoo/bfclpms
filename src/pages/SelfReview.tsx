@@ -298,6 +298,23 @@ export default function SelfReview() {
       r0: kpi.r0
     };
     
+    const uomType = kpi.uom_type || 'numeric';
+    const isQualitative = uomType === 'binary' || uomType === 'tiered';
+    
+    // For daily/weekly binary/tiered KPIs, the aggregated score IS the final rating
+    // The score 0-5 from calculateBinaryDailyScore maps directly to the rating
+    if (isQualitative && (kpi.frequency === 'Daily' || kpi.frequency === 'Weekly')) {
+      const rating = Math.min(5, Math.max(0, Math.round(achieved)));
+      const ratingLevel = rating >= 4 ? 'blue' : rating >= 3 ? 'green' : rating >= 2 ? 'yellow' : 'red';
+      return {
+        rating,
+        ratingLevel: ratingLevel as 'blue' | 'green' | 'yellow' | 'red',
+        weightedScore: (kpi.weightage || 0) * rating,
+        percentage: (rating / 5) * 100,
+        achievedWeight: rating / 5,
+      };
+    }
+    
     return calculateRating(achieved, kpi.target_value, thresholds, kpi.criteria || 'Higher is Better', kpi.weightage || 0);
   };
 
