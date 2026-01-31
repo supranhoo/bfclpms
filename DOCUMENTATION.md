@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-01-31  
-> **Version:** 1.2.0  
+> **Version:** 1.3.0  
 > **Maintainer:** Lovable AI
 
 ---
@@ -833,6 +833,69 @@ Each KPI gets a dedicated card-style layout similar to the web UI's ReviewTrailC
 **Delivery:**
 - In-app notifications (real-time via Supabase Realtime)
 - Email notifications (via Resend edge function)
+
+### 4.13 Frequency & Sub-Frequency Logic
+
+The PMS supports 7 frequency types for KPIs, each with specific submission rules and scoring behavior:
+
+| Frequency | Sub-Frequency | Submission Behavior | Scoring Logic |
+|-----------|---------------|---------------------|---------------|
+| **Daily** | Daily | Rolling 2-day window (today + yesterday) | Average of all daily submissions in the month |
+| **Weekly** | Weekly | Week dropdown with specific review windows | Average of all weekly submissions in the month |
+| **Monthly** | Monthly | Standard monthly submission | Direct entry |
+| **Bi-Monthly** | Jan-Feb, Mar-Apr, etc. | Month 1 locked, Month 2 active | Score from Month 2 copies to Month 1 |
+| **Quarterly** | Q1-Q4 | Months 1-2 locked, Month 3 active | Score from Month 3 copies to Months 1-2 |
+| **Half-Yearly** | H1, H2 | Months 1-5 locked, Month 6 active | Score from Month 6 copies to Months 1-5 |
+| **Yearly** | Jan-Dec, Jul-Jun, Apr-Mar | Months 1-11 locked, Month 12 active | Score from Month 12 copies to Months 1-11 |
+
+**Daily KPI Behavior:**
+- Employees can only submit data for the current date or the immediately preceding date
+- All daily submissions are aggregated at month-end to calculate the monthly rating
+- UI shows a date dropdown with available submission dates
+
+**Weekly KPI Behavior:**
+- Each week has a defined review window:
+  - Week 1: Days 8-10 of the month
+  - Week 2: Days 15-18 of the month
+  - Week 3: Days 22-24 of the month
+  - Week 4: Days 29-31 of the month
+  - Week 5 (if applicable): Days 5-8 of the next month
+- Weekly submissions aggregate to monthly rating
+
+**Multi-Month Cycle Behavior (Bi-Monthly, Quarterly, Half-Yearly, Yearly):**
+- KPIs are locked/blurred during early months of the cycle
+- Review and scoring enabled only in the final month of the cycle
+- When a score is entered in the active month, it automatically propagates to all locked months in the same cycle
+
+**Database Tables:**
+
+| Table | Purpose |
+|-------|---------|
+| `sub_period_submissions` | Stores granular daily/weekly submissions |
+| `frequency_config` | System-wide frequency rules and review windows |
+
+**Key KPI Columns:**
+- `frequency`: The frequency type (Daily, Weekly, Monthly, etc.)
+- `sub_frequency`: System-derived based on frequency
+- `frequency_cycle_start`: For Yearly KPIs, defines the cycle start (Jan-Dec, Jul-Jun, Apr-Mar)
+- `is_frequency_locked`: Indicates if the KPI is locked for the current period
+
+**Key Components:**
+- `SubPeriodSelector.tsx`: Dropdown for selecting dates (Daily) or weeks (Weekly)
+- `FrequencyLockedOverlay.tsx`: Blur/lock overlay for KPIs in non-active periods
+- `DailySubmissionGrid.tsx`: Grid view for entering daily values
+- `WeeklySubmissionTable.tsx`: Table for entering weekly values
+
+**Key Hooks:**
+- `useSubPeriodSubmissions.ts`: Fetch and submit granular submissions
+- `useFrequencyConfig.ts`: Fetch system frequency configuration
+
+**Key Utilities (`src/lib/frequencyUtils.ts`):**
+- `isKpiLockedForPeriod()`: Checks if a KPI is locked for the current review period
+- `getActiveMonthForCycle()`: Gets the active month where scoring is allowed
+- `getCycleMonths()`: Gets all months in a frequency cycle
+- `getDailySubPeriods()`: Gets available dates for Daily KPI submission
+- `getWeeklySubPeriods()`: Gets available weeks for Weekly KPI submission
 
 ---
 
