@@ -256,6 +256,11 @@ has_role(auth.uid(), 'admin')
 has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
 ```
 
+**Profiles Table RLS:**
+- Users can view their own profile
+- Managers can view direct reports
+- Admins, Auditors, and Management can view all profiles
+
 ### Database Functions
 
 | Function | Purpose |
