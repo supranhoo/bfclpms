@@ -1,137 +1,158 @@
 
+# Plan: Add Category Weightage to "Performance by Category" Charts
+
 ## Summary
+Display the category weightage alongside the category name in all "Performance by Category" charts across the application. This will help users understand the relative importance of each category while viewing performance scores.
 
-Update the database trigger `notify_on_kpi_status_change()` to handle ALL relevant status transitions correctly. The current trigger has multiple gaps where notifications are not being created because the code performs different transitions than the trigger expects.
+## Changes Required
 
-## Analysis: Code vs Trigger Mismatches
+### 1. Update Chart Component Interface
 
-| Transition | What Code Does | What Trigger Expects | Notification Affected |
-|------------|----------------|---------------------|----------------------|
-| Self-review submission | `kra_set` → `manager_check` | `kra_set` → `self_review` | Manager notification MISSING |
-| Manager approval | Uses `sync_kpi_status_from_submission` trigger via `review_submissions` | `self_review` → `manager_check` | Auditor/Employee notification MAY WORK |
-| Auditor forward | `manager_check` → `management_review` (AuditScorecard.tsx:167) | `manager_check` → `audit` | Management notification MISSING |
-| Management approval | `management_review` → `approved` | `audit` → (none defined for management) | Correct but missing management transition |
+**File: `src/components/dashboard/CategoryScoreChart.tsx`**
 
-## Complete List of Fixes
+- Add `weightage` to the `CategoryData` interface
+- Modify the Y-axis label to include weightage display (e.g., "Category Name (25%)")
 
-### 1. Self-Review Submission (kra_set → manager_check)
+```tsx
+interface CategoryData {
+  name: string;
+  percentage: number;
+  color?: string | null;
+  weightage?: number;  // NEW: Category weightage
+}
+```
 
-**Issue:** Code skips `self_review` status entirely, going straight to `manager_check`
-
-**Fix:** Add handling for `kra_set` → `manager_check` transition to notify manager
-
-### 2. Auditor Forward to Management (manager_check → management_review)
-
-**Issue:** Code goes directly from `manager_check` to `management_review` (skipping `audit`), but trigger expects `manager_check` → `audit` first
-
-**Fix:** Add handling for `manager_check` → `management_review` transition to notify management users
-
-### 3. Management Approval (management_review → approved)
-
-**Issue:** No trigger case for `management_review` → `approved` transition
-
-**Fix:** Add specific handling for this transition to notify employee of final approval
-
-### 4. Current "audit" status handling
-
-Keep `manager_check` → `audit` and `audit` → `management_review` for backward compatibility (some workflows may use these intermediate states)
-
-## Technical Details
-
-### Updated Trigger Logic
-
-```sql
-CREATE OR REPLACE FUNCTION public.notify_on_kpi_status_change()
-RETURNS trigger
-...
-BEGIN
+Update the YAxis to format labels with weightage:
+```tsx
+<YAxis 
+  type="category" 
+  dataKey="name" 
+  width={280}
+  tickFormatter={(name, index) => {
+    const entry = data[index];
+    return entry?.weightage 
+      ? `${name} (${entry.weightage}%)` 
+      : name;
+  }}
   ...
-  
-  -- CASE 1: Self-review submission → Notify manager
-  -- Handles BOTH kra_set→self_review AND kra_set→manager_check
-  IF OLD.status = 'kra_set' AND (NEW.status = 'self_review' OR NEW.status = 'manager_check') THEN
-    IF v_manager_id IS NOT NULL THEN
-      INSERT INTO notifications (...) VALUES (v_manager_id, 'kpi_submitted', ...);
-    END IF;
-    
-  -- CASE 2: Manager approved → Notify employee + auditors
-  -- Handles self_review→manager_check (existing)
-  ELSIF OLD.status = 'self_review' AND NEW.status = 'manager_check' THEN
-    -- Notify employee + auditors (existing logic)
-    
-  -- CASE 3: Auditor forwarded → Notify management
-  -- Handles BOTH manager_check→audit AND manager_check→management_review
-  ELSIF (OLD.status = 'manager_check' AND NEW.status = 'audit') OR
-        (OLD.status = 'manager_check' AND NEW.status = 'management_review') THEN
-    INSERT INTO notifications (v_employee_id, 'kpi_approved', ...);  -- Notify employee
-    INSERT INTO notifications (management users, 'kpi_ready_for_management', ...);  -- Notify management
-    
-  -- CASE 4: Audit stage approved → Notify employee + management
-  ELSIF OLD.status = 'audit' AND NEW.status = 'management_review' THEN
-    -- Existing logic for audit→management_review
-    
-  -- CASE 5: Management approved → Notify employee (final)
-  -- Handles BOTH audit→approved AND management_review→approved
-  ELSIF NEW.status = 'approved' AND (OLD.status = 'audit' OR OLD.status = 'management_review') THEN
-    INSERT INTO notifications (v_employee_id, 'kpi_finalized', ...);
-    
-  END IF;
-  
-  RETURN NEW;
-END;
+/>
 ```
 
-## Migration File Changes
+### 2. Update Dashboard Data Source
 
-Create a new migration that updates the `notify_on_kpi_status_change` function with:
+**File: `src/pages/Dashboard.tsx`** (Lines 109-133)
 
-1. **Self-review to manager notification**: Handle `kra_set` → `manager_check` (in addition to existing `kra_set` → `self_review`)
+Add `weightage` to the returned category metrics:
 
-2. **Auditor forward notification**: Handle `manager_check` → `management_review` (in addition to existing transitions)
-
-3. **Management final approval**: Handle `management_review` → `approved` specifically
-
-## Status Workflow Diagram
-
+```tsx
+return {
+  name: cat.name,
+  percentage: max > 0 ? (achieved / max) * 100 : 0,
+  color: cat.color,
+  count: catKpis.length,
+  weightage: cat.weightage,  // NEW
+};
 ```
-                 ┌──────────────────────────────────────────────────┐
-                 │                                                  │
-                 │  CODE FLOW (what actually happens)               │
-                 │                                                  │
-                 │  kra_set ───────────────► manager_check          │
-                 │              skip                    │           │
-                 │           self_review                │           │
-                 │                                      ▼           │
-                 │                            management_review     │
-                 │                              skip audit          │
-                 │                                      │           │
-                 │                                      ▼           │
-                 │                                  approved        │
-                 │                                                  │
-                 └──────────────────────────────────────────────────┘
 
-Notifications need to fire on these transitions:
-• kra_set → manager_check → notify manager
-• manager_check → management_review → notify employee + management
-• management_review → approved → notify employee (finalized)
+### 3. Update SelfReview Data Source
+
+**File: `src/pages/SelfReview.tsx`** (Lines 218-241)
+
+Add `weightage` to the returned category metrics:
+
+```tsx
+return {
+  name: cat.name,
+  percentage: max > 0 ? (achieved / max) * 100 : 0,
+  color: cat.color,
+  count: catKpis.length,
+  weightage: cat.weightage,  // NEW
+};
 ```
+
+### 4. Update Performance Report Chart
+
+**File: `src/pages/reports/PerformanceReport.tsx`** (Lines 43-61)
+
+This page uses its own inline `BarChart`. Add `weightage` to `categoryPerformance` and update the YAxis:
+
+```tsx
+return {
+  name: cat.name,
+  avgScore: count > 0 ? Math.round(totalScore / count) : 0,
+  kpiCount: catKpis.length,
+  color: cat.color,
+  weightage: cat.weightage,  // NEW
+};
+```
+
+Update the YAxis formatter:
+```tsx
+<YAxis 
+  dataKey="name" 
+  type="category" 
+  width={160}
+  tickFormatter={(value, index) => {
+    const cat = categoryPerformance[index];
+    return cat?.weightage ? `${value} (${cat.weightage}%)` : value;
+  }}
+/>
+```
+
+### 5. Update PDF Export
+
+**File: `src/lib/pdfExport.ts`**
+
+The `CategoryMetric` interface already has `weightage?: number` (line 71). Update `drawCategoryChart` function to display weightage:
+
+```tsx
+// Line 242 - Update label to include weightage
+const label = cat.weightage 
+  ? `${truncateText(cat.name, 18)} (${cat.weightage}%)`
+  : truncateText(cat.name, 22);
+doc.text(label, x, currentY + barHeight / 2 + 1);
+```
+
+Also update where `categoryMetrics` is built (lines 878-883 and 1204-1209) to include weightage from category data.
+
+### 6. Update Documentation
+
+**File: `DOCUMENTATION.md`**
+
+Add note about weightage display in the dashboard charts section.
+
+## Visual Representation
+
+```text
+BEFORE:
+┌──────────────────────────────────────────────────┐
+│ HR Operations              ████████████  75%     │
+│ Compliance                 █████████    60%      │
+│ Training                   ███████      50%      │
+└──────────────────────────────────────────────────┘
+
+AFTER:
+┌──────────────────────────────────────────────────┐
+│ HR Operations (30%)        ████████████  75%     │
+│ Compliance (25%)           █████████    60%      │
+│ Training (20%)             ███████      50%      │
+└──────────────────────────────────────────────────┘
+```
+
+## Technical Notes
+
+- The `kra_categories` table already contains the `weightage` field
+- The `useKraCategories()` hook returns all category fields including `weightage`
+- The `CategoryMetric` interface in pdfExport.ts already has optional `weightage` field
+- Y-axis width may need slight adjustment if names are very long (280px should accommodate most cases)
 
 ## Files to Modify
 
-| File | Action |
+| File | Change |
 |------|--------|
-| New migration SQL | Update `notify_on_kpi_status_change()` function |
-| `DOCUMENTATION.md` | Document the correct notification triggers |
-
-## Notifications Matrix (After Fix)
-
-| Status Change | Recipient | Notification Type |
-|--------------|-----------|-------------------|
-| `kra_set` → `manager_check` | Reporting Manager | `kpi_submitted` - Self Review Submitted |
-| `kra_set` → `self_review` | Reporting Manager | `kpi_submitted` - Self Review Submitted (backward compat) |
-| `self_review` → `manager_check` | Employee + Auditors | `kpi_approved` + `kpi_ready_for_audit` |
-| `manager_check` → `management_review` | Employee + Management | `kpi_approved` + `kpi_ready_for_management` |
-| `manager_check` → `audit` | Employee + Auditors | `kpi_approved` + `kpi_ready_for_audit` (backward compat) |
-| `audit` → `management_review` | Employee + Management | `kpi_approved` + `kpi_ready_for_management` |
-| `management_review` → `approved` | Employee | `kpi_finalized` - KPI Finalized |
-| Any → `approved` | Employee | `kpi_finalized` - KPI Finalized |
+| `src/components/dashboard/CategoryScoreChart.tsx` | Add weightage to interface, update YAxis formatter |
+| `src/pages/Dashboard.tsx` | Pass weightage in categoryMetrics |
+| `src/pages/SelfReview.tsx` | Pass weightage in categoryMetrics |
+| `src/pages/reports/PerformanceReport.tsx` | Add weightage to data, update YAxis |
+| `src/lib/pdfExport.ts` | Update drawCategoryChart to show weightage |
+| `DOCUMENTATION.md` | Document the enhancement |
