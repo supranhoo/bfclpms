@@ -4,6 +4,7 @@ interface CategoryData {
   name: string;
   percentage: number;
   color?: string | null;
+  weightage?: number;
 }
 
 interface CategoryScoreChartProps {
@@ -30,6 +31,10 @@ export function CategoryScoreChart({ data }: CategoryScoreChartProps) {
           tick={{ fontSize: 12, textAnchor: 'end' }}
           tickLine={false}
           tickMargin={8}
+          tickFormatter={(value: string, index: number) => {
+            const entry = data[index];
+            return entry?.weightage ? `${value} (${entry.weightage}%)` : value;
+          }}
         />
         <Tooltip 
           formatter={(value: number) => [`${value.toFixed(1)}%`, 'Score']}

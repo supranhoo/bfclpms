@@ -57,6 +57,7 @@ export default function PerformanceReport() {
       avgScore: count > 0 ? Math.round(totalScore / count) : 0,
       kpiCount: catKpis.length,
       color: cat.color,
+      weightage: cat.weightage,
     };
   }) || [];
 
@@ -156,7 +157,15 @@ export default function PerformanceReport() {
                 <BarChart data={categoryPerformance} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" domain={[0, 100]} />
-                  <YAxis dataKey="name" type="category" width={120} />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    width={160}
+                    tickFormatter={(value: string, index: number) => {
+                      const cat = categoryPerformance[index];
+                      return cat?.weightage ? `${value} (${cat.weightage}%)` : value;
+                    }}
+                  />
                   <Tooltip />
                   <Bar dataKey="avgScore" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
                 </BarChart>

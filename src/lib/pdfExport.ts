@@ -235,11 +235,14 @@ function drawCategoryChart(
   const barX = x + labelWidth;
   
   categories.forEach((cat) => {
-    // Category name
+    // Category name with weightage
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...COLORS.black);
-    doc.text(truncateText(cat.name, 22), x, currentY + barHeight / 2 + 1);
+    const label = cat.weightage 
+      ? `${truncateText(cat.name, 18)} (${cat.weightage}%)`
+      : truncateText(cat.name, 22);
+    doc.text(label, x, currentY + barHeight / 2 + 1);
     
     // Progress bar
     const percentage = Math.min(cat.percentage, 100);
