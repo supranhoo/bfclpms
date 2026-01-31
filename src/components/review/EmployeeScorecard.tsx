@@ -972,6 +972,7 @@ function DailySubmissionSummaryWithOverride({
         uom={kpi.uom}
         uomType={kpi.uom_type}
         qualitativeOptions={kpi.qualitative_options as QualitativeOption[] | null}
+        kpiStatus={kpi.status}
       />
       
       {/* Manager Agreement Toggle - Only for Daily Binary in Review Mode */}

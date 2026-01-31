@@ -4,10 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Calendar, Check, X, Lock, AlertTriangle, Edit2 } from 'lucide-react';
+import { Calendar, Check, X, AlertTriangle, Edit2 } from 'lucide-react';
 import { SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
 import { getMonthNumber } from '@/lib/frequencyUtils';
+import { cn } from '@/lib/utils';
 
 interface DailySubmissionSummaryProps {
   kpiId: string;
@@ -18,9 +19,23 @@ interface DailySubmissionSummaryProps {
   uomType?: string | null;
   qualitativeOptions?: QualitativeOption[] | null;
   compact?: boolean; // Inline display mode with reduced styling
-  // Manager override display props
+  // Manager override display props (legacy - for live editing preview)
   managerOverrides?: Map<string, number>; // date -> new value
+  // KPI status to determine which reviewer columns to show
+  kpiStatus?: string | null;
 }
+
+// Reviewer column configuration
+interface ReviewerColumn {
+  key: 'achieved_value' | 'manager_achieved_value' | 'auditor_achieved_value' | 'management_achieved_value' | 'admin_achieved_value';
+  label: string;
+  shortLabel: string;
+  colorClass: string;
+  bgClass: string;
+}
+
+// Status progression order for determining visible columns
+const STATUS_ORDER = ['kra_set', 'self_review', 'manager_check', 'audit', 'management_review', 'approved'];
 
 export function DailySubmissionSummary({
   kpiId,
@@ -32,6 +47,7 @@ export function DailySubmissionSummary({
   qualitativeOptions,
   compact = false,
   managerOverrides,
+  kpiStatus,
 }: DailySubmissionSummaryProps) {
   // Calculate stats
   const stats = useMemo(() => {
@@ -53,6 +69,50 @@ export function DailySubmissionSummary({
     
     return { daysInMonth, submittedCount, missingCount, noCount, isBinary, totalNoCount };
   }, [submissions, reviewMonth, reviewYear, uomType]);
+
+  // Determine which reviewer columns to show based on KPI status
+  const visibleColumns = useMemo((): ReviewerColumn[] => {
+    const cols: ReviewerColumn[] = [
+      { key: 'achieved_value', label: 'Self (Employee)', shortLabel: 'Self', colorClass: '', bgClass: '' },
+    ];
+    
+    const statusIndex = STATUS_ORDER.indexOf(kpiStatus || 'kra_set');
+    
+    // Show Manager column if KPI has passed manager_check or later
+    if (statusIndex >= STATUS_ORDER.indexOf('manager_check')) {
+      cols.push({ 
+        key: 'manager_achieved_value', 
+        label: 'Manager Approved', 
+        shortLabel: 'Manager',
+        colorClass: 'text-amber-600 dark:text-amber-400', 
+        bgClass: 'bg-amber-50 dark:bg-amber-950/30' 
+      });
+    }
+    
+    // Show Auditor column if KPI has passed audit or later
+    if (statusIndex >= STATUS_ORDER.indexOf('audit')) {
+      cols.push({ 
+        key: 'auditor_achieved_value', 
+        label: 'Auditor Approved', 
+        shortLabel: 'Auditor',
+        colorClass: 'text-purple-600 dark:text-purple-400', 
+        bgClass: 'bg-purple-50 dark:bg-purple-950/30' 
+      });
+    }
+    
+    // Show Management column if KPI has passed management_review or approved
+    if (statusIndex >= STATUS_ORDER.indexOf('management_review')) {
+      cols.push({ 
+        key: 'management_achieved_value', 
+        label: 'Management Approved', 
+        shortLabel: 'Mgmt',
+        colorClass: 'text-emerald-600 dark:text-emerald-400', 
+        bgClass: 'bg-emerald-50 dark:bg-emerald-950/30' 
+      });
+    }
+    
+    return cols;
+  }, [kpiStatus]);
 
   // Format achieved value for display
   const formatAchievedValue = (value: number | null): string => {
@@ -143,75 +203,111 @@ export function DailySubmissionSummary({
         )}
       </div>
 
-      {/* Submissions Table */}
-      <ScrollArea className={`${compact ? 'h-[150px]' : 'h-[200px]'} rounded-md border mt-3`}>
+      {/* Submissions Table with Dynamic Reviewer Columns */}
+      <ScrollArea className={`${compact ? 'h-[200px]' : 'h-[250px]'} rounded-md border mt-3`}>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[100px]">Date</TableHead>
-              <TableHead>Achieved Value</TableHead>
+              <TableHead className="w-[80px] sticky left-0 bg-background">Date</TableHead>
+              {visibleColumns.map(col => (
+                <TableHead 
+                  key={col.key} 
+                  className={cn('text-center min-w-[80px]', col.colorClass)}
+                >
+                  {compact ? col.shortLabel : col.label}
+                </TableHead>
+              ))}
               <TableHead className="text-right">Submitted At</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-          {sortedSubmissions.map((submission) => {
+            {sortedSubmissions.map((submission) => {
               // Parse full date string directly (YYYY-MM-DD format)
               const dateObj = new Date(submission.sub_period_value);
               const formattedDate = format(dateObj, 'dd MMM');
               const formattedTimestamp = submission.submitted_at 
                 ? format(new Date(submission.submitted_at), 'dd MMM yyyy, hh:mm a')
                 : '—';
-              const isNo = isNoValue(submission.achieved_value);
-              const hasOverride = managerOverrides?.has(submission.sub_period_value);
-              const overrideValue = hasOverride ? managerOverrides?.get(submission.sub_period_value) : null;
-              const isOverrideChanged = hasOverride && overrideValue !== submission.achieved_value;
+              const selfValue = submission.achieved_value;
+              const isNo = isNoValue(selfValue);
+              
+              // Check for live manager override preview (during editing)
+              const hasLiveOverride = managerOverrides?.has(submission.sub_period_value);
+              const liveOverrideValue = hasLiveOverride ? managerOverrides?.get(submission.sub_period_value) : null;
               
               return (
                 <TableRow 
                   key={submission.id}
-                  className={
-                    isOverrideChanged 
+                  className={cn(
+                    hasLiveOverride && liveOverrideValue !== selfValue 
                       ? 'bg-amber-50/50 dark:bg-amber-950/20' 
                       : isNo 
                         ? 'bg-red-50/50 dark:bg-red-950/20' 
                         : ''
-                  }
+                  )}
                 >
-                  <TableCell className="font-medium">{formattedDate}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {isOverrideChanged ? (
-                        <>
-                          {/* Original value with strikethrough */}
-                          <span className="text-muted-foreground line-through text-sm">
-                            {formatAchievedValue(submission.achieved_value)}
-                          </span>
-                          {/* Arrow */}
-                          <span className="text-muted-foreground">→</span>
-                          {/* Manager override value */}
-                          <span className={overrideValue === 0 ? 'text-red-600 dark:text-red-400 font-medium' : 'text-green-600 dark:text-green-400 font-medium'}>
-                            {formatAchievedValue(overrideValue ?? null)}
-                          </span>
-                          <Badge variant="outline" className="text-xs h-5 px-1.5 gap-0.5 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
-                            <Edit2 className="h-3 w-3 text-amber-600 dark:text-amber-400" />
-                            <span className="text-amber-600 dark:text-amber-400">Override</span>
-                          </Badge>
-                        </>
-                      ) : (
-                        <>
-                          <span className={isNo ? 'text-red-600 dark:text-red-400 font-medium' : ''}>
-                            {formatAchievedValue(submission.achieved_value)}
-                          </span>
-                          {submission.is_resubmitted && (
-                            <Badge variant="outline" className="text-xs h-5 px-1.5 gap-0.5 bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800">
-                              <Lock className="h-3 w-3 text-green-600 dark:text-green-400" />
-                              <span className="text-green-600 dark:text-green-400">Final</span>
+                  <TableCell className="font-medium sticky left-0 bg-inherit">{formattedDate}</TableCell>
+                  
+                  {visibleColumns.map((col, colIndex) => {
+                    const value = submission[col.key] as number | null;
+                    
+                    // For Self column, handle live override preview
+                    if (col.key === 'achieved_value' && hasLiveOverride && liveOverrideValue !== selfValue) {
+                      return (
+                        <TableCell key={col.key} className="text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <span className="text-muted-foreground line-through text-sm">
+                              {formatAchievedValue(selfValue)}
+                            </span>
+                            <span className="text-muted-foreground">→</span>
+                            <span className={liveOverrideValue === 0 ? 'text-red-600 dark:text-red-400 font-medium' : 'text-green-600 dark:text-green-400 font-medium'}>
+                              {formatAchievedValue(liveOverrideValue ?? null)}
+                            </span>
+                            <Badge variant="outline" className="text-xs h-5 px-1 gap-0.5 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
+                              <Edit2 className="h-2.5 w-2.5 text-amber-600 dark:text-amber-400" />
                             </Badge>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
+                          </div>
+                        </TableCell>
+                      );
+                    }
+                    
+                    // For reviewer columns, check if value differs from previous level
+                    const prevColKey = colIndex > 0 ? visibleColumns[colIndex - 1].key : null;
+                    const prevValue = prevColKey ? (submission[prevColKey] as number | null) : null;
+                    const isChanged = prevValue !== null && value !== null && prevValue !== value;
+                    const isNoVal = isNoValue(value);
+                    
+                    return (
+                      <TableCell key={col.key} className={cn('text-center', col.colorClass)}>
+                        {value !== null ? (
+                          <div className="flex items-center justify-center gap-1">
+                            {isChanged && (
+                              <>
+                                <span className="text-muted-foreground line-through text-xs">
+                                  {formatAchievedValue(prevValue)}
+                                </span>
+                                <span className="text-muted-foreground text-xs">→</span>
+                              </>
+                            )}
+                            <span className={cn(
+                              isNoVal && 'text-red-600 dark:text-red-400',
+                              isChanged && 'font-semibold'
+                            )}>
+                              {formatAchievedValue(value)}
+                            </span>
+                            {isChanged && (
+                              <Badge variant="outline" className={cn('text-[10px] h-4 px-1', col.bgClass)}>
+                                Changed
+                              </Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                    );
+                  })}
+                  
                   <TableCell className="text-right text-sm text-muted-foreground">
                     {formattedTimestamp}
                   </TableCell>
@@ -231,6 +327,11 @@ export function DailySubmissionSummary({
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <Calendar className="h-4 w-4" />
           Daily Submission Summary
+          {visibleColumns.length > 1 && (
+            <Badge variant="outline" className="text-[10px] h-5">
+              {visibleColumns.length} levels
+            </Badge>
+          )}
         </div>
         {content}
       </div>
@@ -244,6 +345,11 @@ export function DailySubmissionSummary({
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <Calendar className="h-4 w-4 text-muted-foreground" />
           Daily Submission Summary
+          {visibleColumns.length > 1 && (
+            <Badge variant="outline" className="text-[10px] h-5">
+              {visibleColumns.length} review levels
+            </Badge>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">

@@ -44,11 +44,11 @@ export function useManagerSubPeriodOverride() {
           .maybeSingle();
 
         if (existing) {
-          // Update existing submission
+          // Update existing submission - save to manager_achieved_value column
           const { error: updateError } = await supabase
             .from('sub_period_submissions')
             .update({
-              achieved_value: override.achieved_value,
+              manager_achieved_value: override.achieved_value,
               update_reason: `Manager override: ${reason}`,
               updated_at: new Date().toISOString(),
             })
@@ -65,7 +65,8 @@ export function useManagerSubPeriodOverride() {
               sub_period_value: override.sub_period_value,
               review_month,
               review_year,
-              achieved_value: override.achieved_value,
+              achieved_value: null, // Employee didn't submit
+              manager_achieved_value: override.achieved_value, // Manager's value
               submitted_by: user.id,
               submitted_at: new Date().toISOString(),
               update_reason: `Manager override (filled missing): ${reason}`,

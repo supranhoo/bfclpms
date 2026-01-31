@@ -19,6 +19,11 @@ export interface SubPeriodSubmission {
   updated_at: string;
   update_reason: string | null;
   is_resubmitted: boolean;
+  // Per-level approved values
+  manager_achieved_value: number | null;
+  auditor_achieved_value: number | null;
+  management_achieved_value: number | null;
+  admin_achieved_value: number | null;
 }
 
 /**
