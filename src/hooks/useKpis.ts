@@ -449,10 +449,10 @@ export function useSubmitSelfReview() {
 
       if (submissionError) throw submissionError;
 
-      // Then update KPI status to manager_check (advancing to next workflow stage)
+      // Then update KPI status to self_review (employee has submitted, awaiting manager)
       const { error: kpiError } = await supabase
         .from('kpis')
-        .update({ status: 'manager_check' as const })
+        .update({ status: 'self_review' as const })
         .eq('id', kpi_id);
 
       if (kpiError) throw kpiError;
@@ -493,12 +493,12 @@ export function useSubmitSelfReview() {
         return old;
       });
       
-      // Optimistically update KPI status to manager_check across commonly used KPI caches
+      // Optimistically update KPI status to self_review across commonly used KPI caches
       const applyKpiStatus = <T extends { id: string; status?: any }>(old: T[] | undefined) => {
         if (!old) return old;
         return old.map(kpi => (
           kpi.id === variables.kpi_id
-            ? { ...kpi, status: 'manager_check' as ReviewStatus }
+            ? { ...kpi, status: 'self_review' as ReviewStatus }
             : kpi
         ));
       };
@@ -634,6 +634,14 @@ export function useApproveKpi() {
         .eq('kpi_id', kpi_id);
 
       if (submissionError) throw submissionError;
+
+      // Update KPI status to manager_check (manager has processed this KPI)
+      const { error: kpiError } = await supabase
+        .from('kpis')
+        .update({ status: 'manager_check' as const })
+        .eq('id', kpi_id);
+
+      if (kpiError) throw kpiError;
 
       // Log the approval action
       if (user?.id) {

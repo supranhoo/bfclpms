@@ -872,14 +872,21 @@ Each KPI gets a dedicated card-style layout similar to the web UI's ReviewTrailC
 
 | Status Transition | Recipients | Notification Type |
 |-------------------|-----------|-------------------|
-| `kra_set` → `manager_check` | Reporting Manager | `kpi_submitted` - Self Review Submitted |
-| `kra_set` → `self_review` | Reporting Manager | `kpi_submitted` - Self Review Submitted (legacy) |
-| `self_review` → `manager_check` | Employee + Auditors | `kpi_approved` + `kpi_ready_for_audit` |
+| `kra_set` → `self_review` | Reporting Manager | `kpi_submitted` - Self Review Submitted (employee submits data, awaiting manager) |
+| `self_review` → `manager_check` | Employee | `kpi_approved` - Manager Reviewed (manager processes and provides score) |
 | `manager_check` → `management_review` | Employee + Management | `kpi_approved` + `kpi_ready_for_management` |
-| `manager_check` → `audit` | Employee + Auditors | `kpi_approved` + `kpi_ready_for_audit` (legacy) |
+| `manager_check` → `audit` | Employee + Auditors | `kpi_approved` + `kpi_ready_for_audit` (alternative workflow) |
 | `audit` → `management_review` | Employee + Management | `kpi_approved` + `kpi_ready_for_management` |
 | `management_review` → `approved` | Employee | `kpi_finalized` - KPI Finalized |
-| `audit` → `approved` | Employee | `kpi_finalized` - KPI Finalized |
+| `audit` → `approved` | Employee | `kpi_finalized` - KPI Finalized (skip management workflow) |
+
+**Workflow Status Meanings:**
+- `kra_set`: KPI assigned but not yet submitted by employee
+- `self_review`: Employee has submitted self-review, awaiting manager processing
+- `manager_check`: Manager has reviewed and scored, ready for next stage
+- `audit`: Under auditor review (if applicable per workflow template)
+- `management_review`: Under management final review
+- `approved`: Workflow complete, KPI finalized
 
 **Other Trigger Events:**
 - Query raised → Notify recipient
