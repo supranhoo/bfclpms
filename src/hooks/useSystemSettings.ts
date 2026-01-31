@@ -2,7 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
+import type { DailyAggregationMethod } from '@/lib/dailyAggregation';
+
 export type ScoreCalculationMode = 'manual' | 'auto_calculate' | 'suggested_override';
+export type { DailyAggregationMethod };
 
 interface SystemSetting {
   id: string;
@@ -86,6 +89,23 @@ export function useAutoRolloverSetting() {
   }
   
   return { enabled, isLoading };
+}
+
+export function useDailyAggregationMethod() {
+  const { data, isLoading } = useSystemSetting('daily_aggregation_method');
+  
+  let method: DailyAggregationMethod = 'average'; // Default to average
+  if (data?.setting_value) {
+    const value = data.setting_value;
+    if (typeof value === 'string') {
+      const parsed = value.replace(/^"|"$/g, '') as DailyAggregationMethod;
+      if (parsed === 'average' || parsed === 'missed_days_penalty') {
+        method = parsed;
+      }
+    }
+  }
+  
+  return { method, isLoading };
 }
 
 export function useRolloverLogs() {

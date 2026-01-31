@@ -4,7 +4,9 @@ import { useMyKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI,
 import { useKraCategories } from '@/hooks/useOrganization';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
-import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, calculateAggregatedScore, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
+import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
+import { useDailyAggregationMethod } from '@/hooks/useSystemSettings';
+import { calculateDailyAggregatedScore, DailyAggregationMethod } from '@/lib/dailyAggregation';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { QualitativeOption, calculateQualitativeRating, scoreToRatingLevel } from '@/lib/qualitativeUom';
@@ -82,6 +84,7 @@ export default function MyKpis() {
   
   const { data: allKpis, isLoading } = useMyKpis();
   const { data: categories } = useKraCategories();
+  const { method: dailyAggregationMethod } = useDailyAggregationMethod();
   
   // Filter KPIs by selected period
   const kpis = useMemo(() => {
@@ -184,10 +187,13 @@ export default function MyKpis() {
   }, [selectedKpi, getKpiSubPeriodSubmissions]);
   
   const aggregatedSubPeriodScore = useMemo(() => {
-    return selectedKpiSubPeriods.length > 0 
-      ? calculateAggregatedScore(selectedKpiSubPeriods) 
-      : null;
-  }, [selectedKpiSubPeriods]);
+    if (selectedKpiSubPeriods.length === 0) return null;
+    const values = selectedKpiSubPeriods
+      .filter(s => s.achieved_value !== null)
+      .map(s => s.achieved_value as number);
+    const result = calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear);
+    return result.score;
+  }, [selectedKpiSubPeriods, dailyAggregationMethod, selectedPeriod, selectedYear]);
 
   const filteredKpis = selectedCategory
     ? kpis?.filter(k => k.category_id === selectedCategory)
@@ -391,7 +397,11 @@ export default function MyKpis() {
     if (!selectedKpi) return;
     
     const kpiSubPeriods = getKpiSubPeriodSubmissions(selectedKpi.id);
-    const aggregatedScore = calculateAggregatedScore(kpiSubPeriods);
+    const values = kpiSubPeriods
+      .filter(s => s.achieved_value !== null)
+      .map(s => s.achieved_value as number);
+    const aggregationResult = calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear);
+    const aggregatedScore = aggregationResult.score;
     if (aggregatedScore === null) return;
     
     setIsSubmittingMonthly(true);
@@ -401,13 +411,19 @@ export default function MyKpis() {
       const result = calculateScoreFromAchieved(aggregatedScore, selectedKpi);
       const selfRating = getRatingLevel(result.rating);
       
+      // Build remarks including aggregation method info
+      const methodLabel = dailyAggregationMethod === 'missed_days_penalty' 
+        ? `Missed Days Penalty (${aggregationResult.missedDays} missed)`
+        : 'Average';
+      const defaultRemarks = `${methodLabel}: Aggregated from ${kpiSubPeriods.length} ${selectedKpi.frequency?.toLowerCase()} entries`;
+      
       // Submit to review_submissions and transition status
       await submitReview.mutateAsync({
         kpi_id: selectedKpi.id,
         achieved_value: aggregatedScore,
         self_rating: selfRating,
         self_score: result.rating,
-        self_remarks: selfRemarks || `Aggregated from ${kpiSubPeriods.length} ${selectedKpi.frequency?.toLowerCase()} entries`,
+        self_remarks: selfRemarks || defaultRemarks,
         self_evidence_url: selfEvidenceUrl,
         is_na: false,
       });
@@ -730,7 +746,12 @@ export default function MyKpis() {
                   const needsSubPeriod = requiresSubPeriodSelection(kpi.frequency as FrequencyType);
                   const kpiSubPeriods = getKpiSubPeriodSubmissions(kpi.id);
                   const aggregatedScore = needsSubPeriod && kpiSubPeriods.length > 0 
-                    ? calculateAggregatedScore(kpiSubPeriods)
+                    ? calculateDailyAggregatedScore(
+                        kpiSubPeriods.filter(s => s.achieved_value !== null).map(s => s.achieved_value as number),
+                        dailyAggregationMethod,
+                        selectedPeriod,
+                        selectedYear
+                      ).score
                     : null;
                   
                   return (
