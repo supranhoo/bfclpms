@@ -838,6 +838,13 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - Configure tiered options with custom labels, ratings (R0-R5), and definitions
   - Toggle Organization-Level KPI flag and set value scope
   - Status changes require reason and trigger notifications to employee/manager
+- **Admin Data Entry on Behalf of Users:**
+  - **Enter Review Data:** Admins can enter or modify review submission data (achieved value, rating, score, remarks) for any role level (Self, Manager, Auditor, Management) via the "Enter Data" button (pen icon) on expanded KPI rows
+  - **Enter Daily/Weekly Data:** For KPIs with Daily or Weekly frequency, admins can enter sub-period submissions for any day or week via the "Daily Data" button (calendar icon) - **NO DATE RESTRICTIONS** apply to admins
+  - Admins can override locked entries (e.g., entries marked as "Final" with `is_resubmitted: true`)
+  - **Mandatory reason field** for all admin entries to ensure audit compliance
+  - All admin actions are logged in `kpi_audit_logs` with `on_behalf_of` and `on_behalf_role` tracking
+  - Affected employees receive notifications about admin data changes
 - Audit logging for all changes
 
 #### 4.9.7 Review Periods (`/admin/review-periods`)
@@ -1243,6 +1250,15 @@ useApproveKpi()
 useRaiseQuery()
 useSendBackKpi()
 ```
+
+#### `useAdminDataEntry.ts` - Admin Data Override
+```typescript
+useAdminSubmitReviewData()       // Admin enters review data for any role level
+useAdminSubmitSubPeriod()        // Admin enters daily/weekly data (no date restrictions)
+```
+- Bypasses all date/period restrictions for admins
+- Creates audit logs with `on_behalf_of` and `on_behalf_role` tracking
+- Sends notifications to affected employees
 
 #### `useOrganization.ts` - Org Structure
 ```typescript
