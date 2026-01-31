@@ -998,6 +998,20 @@ The PMS supports 7 frequency types for KPIs, each with specific submission rules
 - All daily submissions are aggregated at month-end to calculate the monthly rating
 - UI shows a date dropdown with available submission dates
 
+**Daily KPI Aggregation Methods (Configurable):**
+
+| Method | Description | Score Calculation |
+|--------|-------------|-------------------|
+| **Average** (default) | Simple average of all submitted daily values | `sum(values) / count(values)` |
+| **Missed Days Penalty** | Score based on number of days missed | 5 (0 missed), 4 (1 missed), 3 (2 missed), 2 (3 missed), 1 (4 missed), 0 (5+ missed) |
+
+Configuration: `System Settings > Scoring > Daily KPI Aggregation Method`
+
+The selected method affects:
+- Monthly aggregated score calculation when employee clicks "Submit Month"
+- Score displayed in the KPI table for sub-period KPIs
+- Auto-generated remarks indicating the aggregation method used
+
 **Weekly KPI Behavior:**
 - Each week has a defined review window:
   - Week 1: Days 8-10 of the month
@@ -1005,7 +1019,7 @@ The PMS supports 7 frequency types for KPIs, each with specific submission rules
   - Week 3: Days 22-24 of the month
   - Week 4: Days 29-31 of the month
   - Week 5 (if applicable): Days 5-8 of the next month
-- Weekly submissions aggregate to monthly rating
+- Weekly submissions aggregate to monthly rating using the same aggregation method as Daily KPIs
 
 **Multi-Month Cycle Behavior (Bi-Monthly, Quarterly, Half-Yearly, Yearly):**
 - KPIs are locked/blurred during early months of the cycle

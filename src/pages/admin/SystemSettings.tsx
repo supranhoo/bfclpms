@@ -6,8 +6,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2 } from 'lucide-react';
-import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useTriggerRollover } from '@/hooks/useSystemSettings';
+import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays } from 'lucide-react';
+import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useTriggerRollover, useDailyAggregationMethod, DailyAggregationMethod } from '@/hooks/useSystemSettings';
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { EmailNotificationSettings } from '@/components/admin/EmailNotificationSettings';
@@ -40,15 +40,38 @@ const scoreCalculationOptions: {
   },
 ];
 
+const dailyAggregationOptions: {
+  value: DailyAggregationMethod;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}[] = [
+  {
+    value: 'average',
+    label: 'Average Score',
+    description: 'Monthly score is the simple average of all daily submitted values.',
+    icon: <Calculator className="h-5 w-5" />,
+  },
+  {
+    value: 'missed_days_penalty',
+    label: 'Missed Days Penalty',
+    description: 'Score based on missed days: 5 (0 missed), 4 (1 missed), 3 (2 missed), 2 (3 missed), 1 (4 missed), 0 (5+ missed).',
+    icon: <CalendarDays className="h-5 w-5" />,
+  },
+];
+
 export default function SystemSettings() {
   const { mode, isLoading: modeLoading } = useScoreCalculationMode();
   const { enabled: rolloverEnabled, isLoading: rolloverLoading } = useAutoRolloverSetting();
+  const { method: dailyMethod, isLoading: dailyMethodLoading } = useDailyAggregationMethod();
   const { data: rolloverLogs, isLoading: logsLoading } = useRolloverLogs();
   const updateSetting = useUpdateSystemSetting();
   const triggerRollover = useTriggerRollover();
   
   const [selectedMode, setSelectedMode] = useState<ScoreCalculationMode>(mode);
+  const [selectedDailyMethod, setSelectedDailyMethod] = useState<DailyAggregationMethod>(dailyMethod);
   const [hasChanges, setHasChanges] = useState(false);
+  const [hasDailyChanges, setHasDailyChanges] = useState(false);
 
   useEffect(() => {
     if (mode) {
@@ -56,15 +79,33 @@ export default function SystemSettings() {
     }
   }, [mode]);
 
+  useEffect(() => {
+    if (dailyMethod) {
+      setSelectedDailyMethod(dailyMethod);
+    }
+  }, [dailyMethod]);
+
   const handleModeChange = (value: ScoreCalculationMode) => {
     setSelectedMode(value);
     setHasChanges(value !== mode);
+  };
+
+  const handleDailyMethodChange = (value: DailyAggregationMethod) => {
+    setSelectedDailyMethod(value);
+    setHasDailyChanges(value !== dailyMethod);
   };
 
   const handleSave = () => {
     updateSetting.mutate(
       { key: 'score_calculation_mode', value: selectedMode },
       { onSuccess: () => setHasChanges(false) }
+    );
+  };
+
+  const handleSaveDailyMethod = () => {
+    updateSetting.mutate(
+      { key: 'daily_aggregation_method', value: selectedDailyMethod },
+      { onSuccess: () => setHasDailyChanges(false) }
     );
   };
 
@@ -80,7 +121,7 @@ export default function SystemSettings() {
   };
 
   const lastRollover = rolloverLogs?.[0];
-  const isLoading = modeLoading || rolloverLoading;
+  const isLoading = modeLoading || rolloverLoading || dailyMethodLoading;
 
   if (isLoading) {
     return (
@@ -222,7 +263,7 @@ export default function SystemSettings() {
         </TabsContent>
 
         {/* Scoring Tab */}
-        <TabsContent value="scoring">
+        <TabsContent value="scoring" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -275,6 +316,68 @@ export default function SystemSettings() {
                 <Button 
                   onClick={handleSave} 
                   disabled={!hasChanges || updateSetting.isPending}
+                  className="gap-2"
+                >
+                  <Save className="h-4 w-4" />
+                  {updateSetting.isPending ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Daily KPI Aggregation Method */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarDays className="h-5 w-5" />
+                Daily KPI Aggregation Method
+              </CardTitle>
+              <CardDescription>
+                Configure how daily submission entries are aggregated into a monthly score.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <RadioGroup
+                value={selectedDailyMethod}
+                onValueChange={(value) => handleDailyMethodChange(value as DailyAggregationMethod)}
+                className="space-y-4"
+              >
+                {dailyAggregationOptions.map((option) => (
+                  <div
+                    key={option.value}
+                    className={`flex items-start space-x-4 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                      selectedDailyMethod === option.value
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-muted-foreground/30'
+                    }`}
+                    onClick={() => handleDailyMethodChange(option.value)}
+                  >
+                    <RadioGroupItem value={option.value} id={`daily-${option.value}`} className="mt-1" />
+                    <div className="flex-1">
+                      <Label
+                        htmlFor={`daily-${option.value}`}
+                        className="flex items-center gap-2 text-base font-medium cursor-pointer"
+                      >
+                        {option.icon}
+                        {option.label}
+                      </Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {option.description}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </RadioGroup>
+
+              <div className="mt-6 flex items-center justify-between border-t pt-4">
+                <p className="text-sm text-muted-foreground">
+                  Current method: <span className="font-medium text-foreground">{
+                    dailyAggregationOptions.find(o => o.value === dailyMethod)?.label || dailyMethod
+                  }</span>
+                </p>
+                <Button 
+                  onClick={handleSaveDailyMethod} 
+                  disabled={!hasDailyChanges || updateSetting.isPending}
                   className="gap-2"
                 >
                   <Save className="h-4 w-4" />
