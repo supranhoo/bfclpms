@@ -4,7 +4,15 @@ import { useMyKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI,
 import { useKraCategories } from '@/hooks/useOrganization';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
+import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, calculateAggregatedScore } from '@/hooks/useSubPeriodSubmissions';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
+import { 
+  FrequencyType, 
+  requiresSubPeriodSelection, 
+  hasMultiMonthCycle, 
+  isKpiLockedForPeriod,
+  getMonthNumber 
+} from '@/lib/frequencyUtils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +30,9 @@ import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
-import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck } from 'lucide-react';
+import { SubPeriodSelector } from '@/components/review/SubPeriodSelector';
+import { FrequencyLockedOverlay, FrequencyLockBadge } from '@/components/review/FrequencyLockedOverlay';
+import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -113,6 +123,10 @@ export default function MyKpis() {
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const submitReview = useSubmitSelfReview();
+  
+  // Sub-period submissions for Daily/Weekly KPIs
+  const { data: subPeriodSubmissions } = useSubPeriodSubmissionsByKpis(kpiIds, selectedPeriod, selectedYear);
+  const submitSubPeriod = useSubmitSubPeriod();
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
@@ -126,6 +140,14 @@ export default function MyKpis() {
   const [selfRemarks, setSelfRemarks] = useState('');
   const [selfEvidenceUrl, setSelfEvidenceUrl] = useState<string | null>(null);
   const [isNa, setIsNa] = useState(false);
+  
+  // Sub-period selection state for Daily/Weekly KPIs
+  const [selectedSubPeriod, setSelectedSubPeriod] = useState<string | null>(null);
+  
+  // Helper to get sub-period submissions for a KPI
+  const getKpiSubPeriodSubmissions = (kpiId: string) => {
+    return subPeriodSubmissions?.filter(s => s.kpi_id === kpiId) || [];
+  };
 
   const filteredKpis = selectedCategory
     ? kpis?.filter(k => k.category_id === selectedCategory)
@@ -209,15 +231,28 @@ export default function MyKpis() {
     // Check if this is an org-level KPI and get value based on scope
     const orgValue = getOrgKpiValue(kpi);
     
-    // Pre-fill with org value if available, otherwise use existing submission
-    const prefilledValue = orgValue?.achieved_value ?? existing?.achieved_value;
+    // Reset sub-period selection
+    setSelectedSubPeriod(null);
     
-    if (prefilledValue !== null && prefilledValue !== undefined) {
-      setAchievedValue(prefilledValue.toString());
-      const result = calculateScoreFromAchieved(prefilledValue, kpi);
-      setCalculatedScore(result.rating);
-      setCalculatedPercentage(result.percentage);
+    // For Daily/Weekly KPIs, don't pre-fill from monthly submission
+    const needsSubPeriod = requiresSubPeriodSelection(kpi.frequency as FrequencyType);
+    
+    if (!needsSubPeriod) {
+      // Pre-fill with org value if available, otherwise use existing submission
+      const prefilledValue = orgValue?.achieved_value ?? existing?.achieved_value;
+      
+      if (prefilledValue !== null && prefilledValue !== undefined) {
+        setAchievedValue(prefilledValue.toString());
+        const result = calculateScoreFromAchieved(prefilledValue, kpi);
+        setCalculatedScore(result.rating);
+        setCalculatedPercentage(result.percentage);
+      } else {
+        setAchievedValue('');
+        setCalculatedScore(null);
+        setCalculatedPercentage(null);
+      }
     } else {
+      // For sub-period KPIs, start fresh (will be filled when sub-period is selected)
       setAchievedValue('');
       setCalculatedScore(null);
       setCalculatedPercentage(null);
@@ -229,6 +264,31 @@ export default function MyKpis() {
     setReviewDialogOpen(true);
   };
 
+  // Handle sub-period selection change
+  const handleSubPeriodChange = (value: string) => {
+    setSelectedSubPeriod(value);
+    
+    // Look up existing submission for this sub-period
+    if (selectedKpi) {
+      const existingSubPeriod = subPeriodSubmissions?.find(
+        s => s.kpi_id === selectedKpi.id && s.sub_period_value === value
+      );
+      
+      if (existingSubPeriod?.achieved_value !== null && existingSubPeriod?.achieved_value !== undefined) {
+        setAchievedValue(existingSubPeriod.achieved_value.toString());
+        const result = calculateScoreFromAchieved(existingSubPeriod.achieved_value, selectedKpi);
+        setCalculatedScore(result.rating);
+        setCalculatedPercentage(result.percentage);
+        setSelfRemarks(existingSubPeriod.remarks || '');
+      } else {
+        setAchievedValue('');
+        setCalculatedScore(null);
+        setCalculatedPercentage(null);
+        setSelfRemarks('');
+      }
+    }
+  };
+
   const openTimeline = (kpi: KPI) => {
     setSelectedKpi(kpi);
     setTimelineOpen(true);
@@ -236,6 +296,30 @@ export default function MyKpis() {
 
   const handleSubmitReview = async () => {
     if (!selectedKpi) return;
+    
+    const needsSubPeriod = requiresSubPeriodSelection(selectedKpi.frequency as FrequencyType);
+    
+    // For sub-period KPIs, submit to sub_period_submissions
+    if (needsSubPeriod && selectedSubPeriod) {
+      await submitSubPeriod.mutateAsync({
+        kpi_id: selectedKpi.id,
+        sub_period_type: selectedKpi.frequency === 'Daily' ? 'daily' : 'weekly',
+        sub_period_value: selectedSubPeriod,
+        achieved_value: isNa ? null : (parseFloat(achievedValue) || null),
+        remarks: selfRemarks || null,
+        evidence_url: selfEvidenceUrl,
+        review_month: selectedPeriod,
+        review_year: selectedYear,
+      });
+      
+      // Reset sub-period for next entry or close dialog
+      setSelectedSubPeriod(null);
+      setAchievedValue('');
+      setCalculatedScore(null);
+      setSelfRemarks('');
+      // Don't close dialog - allow continuing to enter more sub-periods
+      return;
+    }
     
     // For NA submissions, score is not required
     // For regular submissions, need achieved value (score is auto-calculated)
@@ -260,6 +344,16 @@ export default function MyKpis() {
     });
 
     setReviewDialogOpen(false);
+  };
+  
+  // Check if a KPI is locked for the current period (multi-month cycles)
+  const isKpiFrequencyLocked = (kpi: KPI): boolean => {
+    return isKpiLockedForPeriod(
+      kpi.frequency as FrequencyType, 
+      selectedPeriod, 
+      selectedYear, 
+      kpi.frequency_cycle_start
+    );
   };
 
   if (isLoading) {
@@ -454,10 +548,20 @@ export default function MyKpis() {
                   // Determine scope badge
                   const scope = kpi.org_level_scope || 'organization';
                   
+                  // Check if KPI is locked for current period (multi-month cycles)
+                  const isLocked = isKpiFrequencyLocked(kpi);
+                  
+                  // Check if this is a sub-period KPI and show aggregated info
+                  const needsSubPeriod = requiresSubPeriodSelection(kpi.frequency as FrequencyType);
+                  const kpiSubPeriods = getKpiSubPeriodSubmissions(kpi.id);
+                  const aggregatedScore = needsSubPeriod && kpiSubPeriods.length > 0 
+                    ? calculateAggregatedScore(kpiSubPeriods)
+                    : null;
+                  
                   return (
                     <TableRow 
                       key={kpi.id}
-                      className={index % 2 === 0 ? 'bg-background' : 'bg-muted/20'}
+                      className={`${index % 2 === 0 ? 'bg-background' : 'bg-muted/20'} ${isLocked ? 'opacity-60' : ''}`}
                     >
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -491,7 +595,31 @@ export default function MyKpis() {
                         <span className="font-medium text-sm line-clamp-2">{kpi.kra_name}</span>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm line-clamp-2">{kpi.kpi_name}</span>
+                        <div className="space-y-1">
+                          <span className="text-sm line-clamp-2">{kpi.kpi_name}</span>
+                          {/* Frequency badge */}
+                          {kpi.frequency && kpi.frequency !== 'Monthly' && (
+                            <div className="flex items-center gap-1">
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                <Calendar className="h-2.5 w-2.5 mr-0.5" />
+                                {kpi.frequency}
+                              </Badge>
+                              {needsSubPeriod && kpiSubPeriods.length > 0 && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                  {kpiSubPeriods.length} entries
+                                </Badge>
+                              )}
+                              {isLocked && (
+                                <FrequencyLockBadge
+                                  frequency={kpi.frequency as FrequencyType}
+                                  reviewMonth={selectedPeriod}
+                                  reviewYear={selectedYear}
+                                  frequencyCycleStart={kpi.frequency_cycle_start}
+                                />
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-center">
                         <span className="font-mono text-sm">{kpi.target_value}</span>
@@ -500,7 +628,15 @@ export default function MyKpis() {
                         )}
                       </TableCell>
                       <TableCell className="text-center">
-                        {displayAchieved != null ? (
+                        {/* Show aggregated score for sub-period KPIs */}
+                        {needsSubPeriod && aggregatedScore !== null ? (
+                          <div className="flex flex-col items-center">
+                            <span className="font-mono text-sm font-medium">
+                              {aggregatedScore.toFixed(1)}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">avg</span>
+                          </div>
+                        ) : displayAchieved != null ? (
                           <div className="flex items-center justify-center gap-1">
                             <span className="font-mono text-sm font-medium">
                               {displayAchieved}
@@ -532,7 +668,12 @@ export default function MyKpis() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-1">
-                          {kpi.status === 'kra_set' ? (
+                          {isLocked ? (
+                            <Badge variant="outline" className="h-8 px-3 flex items-center gap-1 text-muted-foreground">
+                              <Lock className="h-3.5 w-3.5" />
+                              Locked
+                            </Badge>
+                          ) : kpi.status === 'kra_set' ? (
                             <Button
                               size="sm"
                               variant="default"
@@ -595,6 +736,13 @@ export default function MyKpis() {
               : null;
             const hasOrgData = isSelectedKpiOrgLevel && selectedKpiOrgValue?.achieved_value != null;
             const isKraSet = selectedKpi?.status === 'kra_set';
+            
+            // Check if this KPI requires sub-period selection (Daily/Weekly)
+            const needsSubPeriodForKpi = selectedKpi ? requiresSubPeriodSelection(selectedKpi.frequency as FrequencyType) : false;
+            const selectedKpiSubPeriods = selectedKpi ? getKpiSubPeriodSubmissions(selectedKpi.id) : [];
+            const aggregatedSubPeriodScore = selectedKpiSubPeriods.length > 0 
+              ? calculateAggregatedScore(selectedKpiSubPeriods) 
+              : null;
             
             return (
               <>
@@ -668,6 +816,38 @@ export default function MyKpis() {
                     </div>
                   </div>
                 )}
+                
+                {/* Sub-Period Selection Banner for Daily/Weekly KPIs */}
+                {needsSubPeriodForKpi && selectedKpi && (
+                  <div className="flex items-start gap-2 p-3 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-lg mt-3">
+                    <Calendar className="h-4 w-4 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm">
+                          <span className="font-medium text-purple-800 dark:text-purple-200">
+                            {selectedKpi.frequency} KPI
+                          </span>
+                          <span className="text-purple-600 dark:text-purple-400 ml-1">
+                            - Submit data for each {selectedKpi.frequency === 'Daily' ? 'day' : 'week'}
+                          </span>
+                        </div>
+                        {selectedKpiSubPeriods.length > 0 && (
+                          <Badge variant="secondary" className="text-xs">
+                            {selectedKpiSubPeriods.length} entries | Avg: {aggregatedSubPeriodScore?.toFixed(1) ?? '—'}
+                          </Badge>
+                        )}
+                      </div>
+                      <SubPeriodSelector
+                        frequency={selectedKpi.frequency as FrequencyType}
+                        reviewMonth={selectedPeriod}
+                        reviewYear={selectedYear}
+                        selectedSubPeriod={selectedSubPeriod}
+                        onSubPeriodChange={handleSubPeriodChange}
+                        submissions={selectedKpiSubPeriods}
+                      />
+                    </div>
+                  </div>
+                )}
           
           {/* Main Content - Grid Layout */}
           <div className="flex-1 grid grid-cols-3 gap-4 py-4 min-h-0">
@@ -687,6 +867,14 @@ export default function MyKpis() {
                   <span className="text-xs text-muted-foreground">Weightage</span>
                   <span className="font-medium">{selectedKpi?.weightage}%</span>
                 </div>
+                {selectedKpi?.frequency && selectedKpi.frequency !== 'Monthly' && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">Frequency</span>
+                    <Badge variant="outline" className="text-xs">
+                      {selectedKpi.frequency}
+                    </Badge>
+                  </div>
+                )}
               </div>
 
               {/* Rating Scale */}
@@ -825,10 +1013,27 @@ export default function MyKpis() {
                 {/* Footer - Fixed at bottom */}
                 <SheetFooter className="pt-3 border-t flex-shrink-0">
                   <Button variant="outline" size="sm" onClick={() => setReviewDialogOpen(false)}>
-                    Cancel
+                    {needsSubPeriodForKpi ? 'Done' : 'Cancel'}
                   </Button>
-                  <Button size="sm" onClick={handleSubmitReview} disabled={(!isNa && !achievedValue) || (isNa && selfRemarks.trim().length < 50) || submitReview.isPending}>
-                    {submitReview.isPending ? 'Submitting...' : 'Submit'}
+                  <Button 
+                    size="sm" 
+                    onClick={handleSubmitReview} 
+                    disabled={
+                      // For sub-period KPIs, need sub-period selected and value
+                      (needsSubPeriodForKpi && (!selectedSubPeriod || (!isNa && !achievedValue))) ||
+                      // For regular KPIs, need achieved value unless N/A
+                      (!needsSubPeriodForKpi && !isNa && !achievedValue) || 
+                      // N/A requires 50 char reason
+                      (isNa && selfRemarks.trim().length < 50) || 
+                      submitReview.isPending ||
+                      submitSubPeriod.isPending
+                    }
+                  >
+                    {(submitReview.isPending || submitSubPeriod.isPending) 
+                      ? 'Saving...' 
+                      : needsSubPeriodForKpi 
+                        ? 'Save Entry' 
+                        : 'Submit'}
                   </Button>
                 </SheetFooter>
               </>

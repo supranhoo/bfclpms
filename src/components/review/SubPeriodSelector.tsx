@@ -1,13 +1,14 @@
 import { useMemo } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, Clock } from 'lucide-react';
+import { Calendar, Clock, CheckCircle2 } from 'lucide-react';
 import { 
   FrequencyType, 
   getDailySubPeriods, 
   getWeeklySubPeriods,
   SubPeriodOption 
 } from '@/lib/frequencyUtils';
+import { SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 
 interface SubPeriodSelectorProps {
   frequency: FrequencyType | string | null;
@@ -17,6 +18,7 @@ interface SubPeriodSelectorProps {
   onSubPeriodChange: (value: string) => void;
   disabled?: boolean;
   className?: string;
+  submissions?: SubPeriodSubmission[];
 }
 
 export function SubPeriodSelector({
@@ -27,21 +29,36 @@ export function SubPeriodSelector({
   onSubPeriodChange,
   disabled = false,
   className = '',
+  submissions = [],
 }: SubPeriodSelectorProps) {
   const currentDate = new Date();
+  
+  // Create a set of submitted sub-period values for quick lookup
+  const submittedValues = useMemo(() => {
+    return new Set(submissions.map(s => s.sub_period_value));
+  }, [submissions]);
   
   const subPeriodOptions = useMemo((): SubPeriodOption[] => {
     if (!frequency) return [];
     
+    let options: SubPeriodOption[];
     switch (frequency) {
       case 'Daily':
-        return getDailySubPeriods(currentDate, reviewMonth, reviewYear);
+        options = getDailySubPeriods(currentDate, reviewMonth, reviewYear);
+        break;
       case 'Weekly':
-        return getWeeklySubPeriods(currentDate, reviewMonth, reviewYear);
+        options = getWeeklySubPeriods(currentDate, reviewMonth, reviewYear);
+        break;
       default:
-        return [];
+        options = [];
     }
-  }, [frequency, reviewMonth, reviewYear, currentDate.toDateString()]);
+    
+    // Mark options as submitted if they have existing submissions
+    return options.map(opt => ({
+      ...opt,
+      isSubmitted: submittedValues.has(opt.value),
+    }));
+  }, [frequency, reviewMonth, reviewYear, currentDate.toDateString(), submittedValues]);
 
   if (frequency !== 'Daily' && frequency !== 'Weekly') {
     return null;
@@ -88,14 +105,12 @@ export function SubPeriodSelector({
             >
               <div className="flex items-center gap-2">
                 <span>{option.label}</span>
+                {option.isSubmitted && (
+                  <CheckCircle2 className="h-3 w-3 text-green-600" />
+                )}
                 {!option.isEnabled && (
                   <Badge variant="outline" className="text-xs">
                     Closed
-                  </Badge>
-                )}
-                {option.isSubmitted && (
-                  <Badge variant="secondary" className="text-xs">
-                    Submitted
                   </Badge>
                 )}
               </div>
