@@ -96,6 +96,45 @@ export function useReviewerSubPeriodOverride() {
         }
       }
 
+      // After processing overrides, update remaining entries to copy previous level values
+      const previousColumnMap: Record<ReviewLevel, string> = {
+        manager: 'achieved_value',
+        auditor: 'manager_achieved_value',
+        management: 'auditor_achieved_value',
+        admin: 'management_achieved_value',
+      };
+      const previousColumn = previousColumnMap[review_level];
+
+      const { data: allSubmissions, error: fetchAllError } = await supabase
+        .from('sub_period_submissions')
+        .select('id, achieved_value, manager_achieved_value, auditor_achieved_value, management_achieved_value, sub_period_value')
+        .eq('kpi_id', kpi_id)
+        .eq('review_month', review_month)
+        .eq('review_year', review_year);
+
+      if (fetchAllError) throw fetchAllError;
+
+      // Get the dates that were overridden
+      const overriddenDates = new Set(overrides.map(o => o.sub_period_value));
+
+      // Update non-overridden entries to copy previous level value to current level column
+      for (const sub of allSubmissions || []) {
+        if (!overriddenDates.has(sub.sub_period_value)) {
+          const previousValue = sub[previousColumn as keyof typeof sub] as number | null;
+          if (previousValue !== null) {
+            const { error: copyError } = await supabase
+              .from('sub_period_submissions')
+              .update({
+                [columnName]: previousValue,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', sub.id);
+
+            if (copyError) throw copyError;
+          }
+        }
+      }
+
       // Create audit log entry for the override action
       const { error: auditError } = await supabase
         .from('kpi_audit_logs')

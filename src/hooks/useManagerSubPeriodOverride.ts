@@ -83,6 +83,34 @@ export function useManagerSubPeriodOverride() {
         }
       }
 
+      // After processing overrides, update remaining entries to copy employee values
+      const { data: allSubmissions, error: fetchAllError } = await supabase
+        .from('sub_period_submissions')
+        .select('id, achieved_value, sub_period_value')
+        .eq('kpi_id', kpi_id)
+        .eq('review_month', review_month)
+        .eq('review_year', review_year);
+
+      if (fetchAllError) throw fetchAllError;
+
+      // Get the dates that were overridden
+      const overriddenDates = new Set(overrides.map(o => o.sub_period_value));
+
+      // Update non-overridden entries to copy achieved_value to manager_achieved_value
+      for (const sub of allSubmissions || []) {
+        if (!overriddenDates.has(sub.sub_period_value) && sub.achieved_value !== null) {
+          const { error: copyError } = await supabase
+            .from('sub_period_submissions')
+            .update({
+              manager_achieved_value: sub.achieved_value,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', sub.id);
+
+          if (copyError) throw copyError;
+        }
+      }
+
       // Create audit log entry for the override action
       const { error: auditError } = await supabase
         .from('kpi_audit_logs')

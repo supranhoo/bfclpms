@@ -613,9 +613,18 @@ Score: 0 No = 5, 1 No = 4, 2 No = 3, 3 No = 2, 4 No = 1, >4 No = 0
 1. Manager makes override selections
 2. Score recalculates in real-time using `calculateOverriddenScore()`
 3. On Approve:
-   - Overrides saved to `sub_period_submissions` table with `update_reason` containing manager's justification
+   - **All** daily submissions get `manager_achieved_value` populated:
+     - Overridden entries: Get manager's override value
+     - Non-overridden entries: Get employee's `achieved_value` copied over
    - Audit log entry created with action `MANAGER_DAILY_OVERRIDE` containing full diff
    - KPI approved with the recalculated manager score
+
+**Value Propagation (All Levels):**
+When a reviewer approves (whether agreeing or overriding), ALL daily entries get the level-specific column populated:
+| Scenario | Manager Behavior | Auditor/Management Behavior |
+|----------|-----------------|----------------------------|
+| Agrees | Copies `achieved_value` → `manager_achieved_value` for all entries | Copies previous level value → current level column for all entries |
+| Disagrees | Override values → overridden dates; `achieved_value` → non-overridden dates | Override values → overridden dates; previous level → non-overridden dates |
 
 **Audit Trail:**
 ```json
