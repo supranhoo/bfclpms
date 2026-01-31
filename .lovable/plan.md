@@ -1,101 +1,165 @@
 
-# Plan: Fix Daily KPI Achieved Value and "No" Count Issues
+# Plan: Allow Employees to View Submitted KPIs in Read-Only Mode
 
 ## Problem Summary
 
-Two related issues were identified in the Daily KPI "View KPI Details" sheet:
+When an employee submits a Daily KPI for the month, the KPI status changes from `kra_set` to `self_review`. Currently:
 
-| Issue | Root Cause |
-|-------|------------|
-| Achieved Value shows "—" | Binary/Tiered values saved as `null` instead of rating number |
-| "No" Count always shows 0 | Since values are `null`, filter for `achieved_value === 0` never matches |
+| Status | What Employee Sees | Issue |
+|--------|-------------------|-------|
+| `kra_set` | "Review" button (clickable) | Works correctly |
+| `self_review` | "Pending Review" badge (not clickable) | Cannot view their submissions |
+| Other statuses | "Processed" badge (not clickable) | Cannot view their submissions |
 
-## Root Cause Analysis
+**User expectation**: After submitting, employees should still be able to open the KPI sheet and view their daily submission summary in read-only mode.
 
-### Data Flow Comparison
+## Root Cause
 
-**DailySubmissionGrid.tsx (Works Correctly):**
+In `src/pages/MyKpis.tsx` (lines 851-871), the action column logic is:
+
 ```typescript
-// Line 174-176
-const value = isQualitative 
-  ? tempRating        // Uses numeric rating (0 or 5)
-  : (tempValue ? parseFloat(tempValue) : null);
+kpi.status === 'kra_set' ? (
+  <Button onClick={() => openReviewDialog(kpi)}>Review</Button>  // Clickable
+) : kpi.status === 'self_review' ? (
+  <Badge>Pending Review</Badge>  // Not clickable!
+) : (
+  <Badge>Processed</Badge>  // Not clickable!
+)
 ```
 
-**MyKpis.tsx (Bug):**
-```typescript
-// Line 446
-achieved_value: isNa ? null : (parseFloat(achievedValue) || null),
-// achievedValue = "Yes" or "No" (string)
-// parseFloat("Yes") = NaN
-// NaN || null = null ← Always saves null!
-```
-
-### Database Evidence
-
-All recent sub-period submissions have `achieved_value: null`:
-```
-kpi_id: f1efbaf6-1cd0-452c-b81f-d33bbe981fde (binary KPI)
-achieved_value: null (should be 0 or 5)
-```
+Only `kra_set` status KPIs are clickable - all other statuses show non-interactive badges.
 
 ## Solution
 
+Add a "View" button alongside the status badge for all submitted KPIs, allowing employees to open the review sheet in read-only mode to see their Daily Submission Summary.
+
 ### Changes to `src/pages/MyKpis.tsx`
 
-**1. Modify `performSubPeriodSubmit` function (around line 446)**
+**1. Modify the Actions column (lines 851-871)**
 
-Add logic to handle qualitative KPIs by using `calculatedScore` (the numeric rating) instead of parsing the string label:
+Replace the non-clickable badges with clickable buttons that show the status and allow viewing:
 
 ```typescript
-// Before (Bug)
-achieved_value: isNa ? null : (parseFloat(achievedValue) || null),
-
-// After (Fixed)
-achieved_value: isNa 
-  ? null 
-  : isQualitativeKpi(selectedKpi) 
-    ? calculatedScore  // Use the numeric rating for binary/tiered
-    : (parseFloat(achievedValue) || null),
+{isLocked ? (
+  <Badge variant="outline" className="h-8 px-3 flex items-center gap-1 text-muted-foreground">
+    <Lock className="h-3.5 w-3.5" />
+    Locked
+  </Badge>
+) : kpi.status === 'kra_set' ? (
+  <Button
+    size="sm"
+    variant="default"
+    onClick={() => openReviewDialog(kpi)}
+    className="h-8"
+  >
+    <FileCheck className="h-3.5 w-3.5 mr-1" />
+    Review
+  </Button>
+) : (
+  // For all submitted statuses: show status badge + View button
+  <div className="flex items-center gap-1">
+    <Badge 
+      variant="secondary" 
+      className={cn("h-7 px-2 text-xs", {
+        "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200": kpi.status === 'self_review',
+        "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200": kpi.status !== 'self_review',
+      })}
+    >
+      {statusLabels[kpi.status] || 'Submitted'}
+    </Badge>
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={() => openReviewDialog(kpi)}
+      className="h-7 px-2"
+      title="View your submission"
+    >
+      <Eye className="h-3.5 w-3.5" />
+    </Button>
+  </div>
+)}
 ```
 
-This mirrors the fix already present in the regular review submission (line 513):
+**2. Update the Review Sheet to show read-only mode for submitted KPIs**
+
+When the KPI is not in `kra_set` status, the review sheet should:
+- Show all submission data (including Daily Submission Summary)
+- Hide/disable the input fields and action buttons
+- Display a "Read Only" indicator
+
+Add logic around lines 1238-1260 to conditionally disable inputs:
+
 ```typescript
-achieved_value: isNa ? null : (isQualitativeKpi(selectedKpi) ? calculatedScore : (parseFloat(achievedValue) || 0)),
+// At the top of the sheet render
+const isReadOnly = selectedKpi?.status !== 'kra_set';
+
+// Add read-only banner if applicable
+{isReadOnly && (
+  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex items-center gap-2">
+    <Eye className="h-4 w-4 text-blue-600" />
+    <span className="text-sm text-blue-800">
+      Viewing submitted data - This KPI is pending review
+    </span>
+  </div>
+)}
+
+// Disable inputs and hide action buttons when isReadOnly
+{!isReadOnly && (
+  // Show input fields and Save/Submit buttons
+)}
 ```
 
-### Visual Example
+**3. Ensure Daily Submission Summary is always visible**
 
-After fix, for a Binary KPI:
+Currently it only shows when `selectedKpiSubPeriods.length > 0`. This should remain unchanged as it will naturally show submissions if they exist.
 
-| User Selects | `achievedValue` | `calculatedScore` | Saved `achieved_value` |
-|--------------|-----------------|-------------------|------------------------|
-| "Yes" | "Yes" | 5 | 5 |
-| "No" | "No" | 0 | 0 |
+## Technical Details
 
-### Impact on "No" Count
+### Files to Modify
 
-Once values are correctly saved as `0` for "No" selections:
-- `submissions.filter(s => s.achieved_value === 0).length` will correctly count "No" entries
-- The "No" count stat card in DailySubmissionSummary will display accurate data
+| File | Changes |
+|------|---------|
+| `src/pages/MyKpis.tsx` | Add View button for submitted KPIs, implement read-only mode in sheet |
+| `DOCUMENTATION.md` | Document the view-only mode for employees |
 
-## Files to Modify
+### View-Only Sheet Behavior
 
-| File | Change |
-|------|--------|
-| `src/pages/MyKpis.tsx` | Fix `performSubPeriodSubmit` to use `calculatedScore` for qualitative KPIs |
-| `DOCUMENTATION.md` | Add note about binary/tiered value storage format |
+| Element | `kra_set` Status | Other Statuses |
+|---------|-----------------|----------------|
+| Date/Week selector | Enabled | Disabled |
+| Value input | Enabled | Disabled |
+| Remarks input | Enabled | Disabled |
+| Evidence upload | Enabled | Hidden |
+| Save Entry button | Visible | Hidden |
+| Submit Month button | Visible | Hidden |
+| Done button | Visible | Visible (to close sheet) |
+| Daily Summary table | Visible | Visible |
+| Read-only banner | Hidden | Visible |
+
+## Visual Preview
+
+**Before (Current)**:
+```
+| KPI Name            | Status      | Actions                |
+|---------------------|-------------|------------------------|
+| Share Sales Report  | Self Review | [Pending Review badge] | <-- Not clickable
+```
+
+**After (Proposed)**:
+```
+| KPI Name            | Status      | Actions                         |
+|---------------------|-------------|---------------------------------|
+| Share Sales Report  | Self Review | [Self Review badge] [View 👁] | <-- View is clickable
+```
 
 ## Testing Checklist
 
-1. Navigate to My KPIs page
-2. Open a **Daily Binary KPI** (e.g., "Aaj kam kiya kya")
-3. Select a date and choose "Yes" → Save → Verify value saved as 5 in summary
-4. Select another date and choose "No" → Save → Verify value saved as 0
-5. Check "No" count stat card shows correct count
-6. Open "View KPI Details" and verify Achieved Value column shows "Yes"/"No" labels correctly
-7. Test with a tiered KPI to ensure same behavior
-
-## Data Migration (Optional)
-
-Existing submissions with `null` values will remain unchanged. Users would need to re-enter those values. If this is a concern, a SQL update could be run to fix historical data, but this requires knowing what the user actually selected (which isn't stored elsewhere).
+1. Go to My KPIs page as an employee
+2. Verify KPIs in `kra_set` status show "Review" button (editable)
+3. Submit a Daily KPI using "Submit Month"
+4. Verify the status changes to `self_review` 
+5. Verify a "View" button appears next to the status badge
+6. Click View and verify the sheet opens in read-only mode
+7. Verify the Daily Submission Summary table is visible
+8. Verify input fields are disabled and action buttons are hidden
+9. Verify the "Done" button closes the sheet
