@@ -85,7 +85,7 @@ export function ManagementScorecard({
   const [managementScore, setManagementScore] = useState<number | null>(null);
   const [managementRemarks, setManagementRemarks] = useState('');
   const [managementEvidenceUrl, setManagementEvidenceUrl] = useState<string | null>(null);
-  const [managementAchievedValue, setManagementAchievedValue] = useState<number | null>(null);
+  const [managementAchievedValue, setManagementAchievedValue] = useState<number | string | null>(null);
   const [sendBackReason, setSendBackReason] = useState('');
   const [sendBackTarget, setSendBackTarget] = useState<'auditor' | 'manager' | 'employee'>('auditor');
 

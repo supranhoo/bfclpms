@@ -85,7 +85,7 @@ export function AuditScorecard({
   const [auditorScore, setAuditorScore] = useState<number | null>(null);
   const [auditorRemarks, setAuditorRemarks] = useState('');
   const [auditorEvidenceUrl, setAuditorEvidenceUrl] = useState<string | null>(null);
-  const [auditorAchievedValue, setAuditorAchievedValue] = useState<number | null>(null);
+  const [auditorAchievedValue, setAuditorAchievedValue] = useState<number | string | null>(null);
   const [sendBackReason, setSendBackReason] = useState('');
   const [sendBackTarget, setSendBackTarget] = useState<'manager' | 'employee'>('manager');
 
