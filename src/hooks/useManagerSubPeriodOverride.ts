@@ -20,11 +20,18 @@ export interface ManagerOverrideParams {
   new_score: number;
 }
 
+export interface AcceptEmployeeValuesParams {
+  kpi_id: string;
+  review_month: string;
+  review_year: number;
+}
+
 export function useManagerSubPeriodOverride() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
 
+  // Save overrides when manager disagrees and modifies values
   const saveOverrides = useMutation({
     mutationFn: async (params: ManagerOverrideParams) => {
       if (!user?.id) throw new Error('Not authenticated');
@@ -120,8 +127,53 @@ export function useManagerSubPeriodOverride() {
     },
   });
 
+  // Accept employee values (copy achieved_value to manager_achieved_value for all entries)
+  const acceptEmployeeValues = useMutation({
+    mutationFn: async (params: AcceptEmployeeValuesParams) => {
+      if (!user?.id) throw new Error('Not authenticated');
+
+      const { kpi_id, review_month, review_year } = params;
+
+      // Get all submissions for this KPI/month
+      const { data: submissions, error: fetchError } = await supabase
+        .from('sub_period_submissions')
+        .select('id, achieved_value')
+        .eq('kpi_id', kpi_id)
+        .eq('review_month', review_month)
+        .eq('review_year', review_year);
+
+      if (fetchError) throw fetchError;
+
+      if (!submissions || submissions.length === 0) {
+        return { success: true, updated: 0 };
+      }
+
+      // Update each submission to copy achieved_value to manager_achieved_value
+      for (const submission of submissions) {
+        const { error: updateError } = await supabase
+          .from('sub_period_submissions')
+          .update({
+            manager_achieved_value: submission.achieved_value,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', submission.id);
+
+        if (updateError) throw updateError;
+      }
+
+      return { success: true, updated: submissions.length };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sub-period-submissions'] });
+    },
+    onError: (error: Error) => {
+      console.error('Failed to accept employee values:', error);
+    },
+  });
+
   return {
     saveOverrides,
-    isLoading: saveOverrides.isPending,
+    acceptEmployeeValues,
+    isLoading: saveOverrides.isPending || acceptEmployeeValues.isPending,
   };
 }
