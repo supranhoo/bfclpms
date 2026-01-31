@@ -596,7 +596,7 @@ export default function MyKpis() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <SheetTitle className="text-lg">
-                          {isKraSet ? 'Accept KRA & Submit Review' : 'Submit Self Review'}
+                          Submit Self Review
                         </SheetTitle>
                         {isKraSet && (
                           <Badge variant="outline" className="border-amber-500 text-amber-600 dark:text-amber-400">
@@ -639,7 +639,7 @@ export default function MyKpis() {
                         New KRA Assignment
                       </span>
                       <span className="text-amber-600 dark:text-amber-400 ml-1">
-                        - Review the KPI details below and submit your self-review to accept this KRA
+                        - Review the KPI details below and submit your performance data
                       </span>
                     </div>
                   </div>
@@ -808,12 +808,7 @@ export default function MyKpis() {
                     Cancel
                   </Button>
                   <Button size="sm" onClick={handleSubmitReview} disabled={(!isNa && !achievedValue) || submitReview.isPending}>
-                    {submitReview.isPending 
-                      ? 'Submitting...' 
-                      : isKraSet 
-                        ? 'Accept & Submit' 
-                        : 'Submit Review'
-                    }
+                    {submitReview.isPending ? 'Submitting...' : 'Review & Submit'}
                   </Button>
                 </SheetFooter>
               </>
