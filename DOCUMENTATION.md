@@ -581,6 +581,27 @@ useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculat
 - Set applicable roles
 - **Frequency Configuration:** 7 frequency types with sub-frequency support
 
+#### 4.9.5 Unit of Measure (UOM) Options
+
+Standard UOM options available in dropdown selectors across all KPI forms:
+
+| Value | Label | Example Usage |
+|-------|-------|---------------|
+| `%` | Percentage (%) | Revenue growth, completion rate |
+| `Number` | Number | Tasks completed, calls made |
+| `Days` | Days | Turnaround time, SLA compliance |
+| `Hours` | Hours | Response time, training hours |
+| `Minutes` | Minutes | Call handling time |
+| `Amount` | Amount (₹) | Sales revenue, cost savings |
+| `Date` | Date | Project deadline, submission date |
+| `Index` | Index | NPS score, satisfaction index |
+| `Ratio` | Ratio | Conversion ratio, efficiency ratio |
+| `Score` | Score | Quality score, audit score |
+| `Count` | Count | Incidents, defects |
+| `Rate` | Rate | Error rate, attrition rate |
+
+**Source:** `src/lib/uomConstants.ts`
+
 ### 4.10 Frequency and Sub-Frequency System
 
 The PMS supports 7 frequency types, each with specific submission and scoring behavior.
@@ -1019,6 +1040,7 @@ src/
 │   ├── pdfExport.ts           # PDF generation logic
 │   ├── ratingCalculation.ts   # Score calculation logic
 │   ├── qualitativeUom.ts      # Qualitative KPI helpers
+│   ├── uomConstants.ts        # UOM dropdown options
 │   ├── reviewConstants.ts     # Status/rating constants
 │   └── importValidation.ts    # Import validation
 │

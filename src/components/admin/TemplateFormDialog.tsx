@@ -13,6 +13,7 @@ import { UomTypeSelector } from './UomTypeSelector';
 import { TieredOptionsBuilder } from './TieredOptionsBuilder';
 import { UomType, QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
 import { Separator } from '@/components/ui/separator';
+import { UOM_OPTIONS } from '@/lib/uomConstants';
 
 interface TemplateFormDialogProps {
   isOpen: boolean;
@@ -263,11 +264,21 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                 <div className="grid grid-cols-4 gap-4">
                   <div>
                     <Label>UOM</Label>
-                    <Input
+                    <Select
                       value={formData.uom}
-                      onChange={(e) => setFormData({ ...formData, uom: e.target.value })}
-                      placeholder="%"
-                    />
+                      onValueChange={(val) => setFormData({ ...formData, uom: val })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select UOM" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {UOM_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label>Target Value</Label>

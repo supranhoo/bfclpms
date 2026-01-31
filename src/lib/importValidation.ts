@@ -36,7 +36,9 @@ export const KpiImportRowSchema = z.object({
     z.number().min(0).max(1000000),
     z.string().max(100)
   ]).optional(),
-  uom: z.string().max(50).optional(),
+  uom: z.enum(['%', 'Number', 'Days', 'Hours', 'Minutes', 'Amount', 'Date', 'Index', 'Ratio', 'Score', 'Count', 'Rate'])
+    .optional()
+    .or(z.string().max(50).optional()), // Allow custom for backward compatibility
   frequency: z.enum(['Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly']).optional().or(z.string().max(50).optional()),
   kpiWeightage: z.number().min(0).max(100).optional(),
   criteria: z.string().max(100).optional(),

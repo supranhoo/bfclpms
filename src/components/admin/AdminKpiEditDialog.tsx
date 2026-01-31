@@ -12,6 +12,7 @@ import { Loader2, Building2 } from 'lucide-react';
 import { UomTypeSelector } from '@/components/admin/UomTypeSelector';
 import { TieredOptionsBuilder } from '@/components/admin/TieredOptionsBuilder';
 import { UomType, QualitativeOption, validateQualitativeOptions } from '@/lib/qualitativeUom';
+import { UOM_OPTIONS } from '@/lib/uomConstants';
 
 interface AdminKpiEditDialogProps {
   isOpen: boolean;
@@ -233,10 +234,21 @@ const [formData, setFormData] = useState({
             )}
             <div className="space-y-2">
               <Label>UOM</Label>
-              <Input
+              <Select
                 value={formData.uom}
-                onChange={(e) => setFormData(prev => ({ ...prev, uom: e.target.value }))}
-              />
+                onValueChange={(value) => setFormData(prev => ({ ...prev, uom: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select UOM" />
+                </SelectTrigger>
+                <SelectContent>
+                  {UOM_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>Weightage (%)</Label>
