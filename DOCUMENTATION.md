@@ -527,16 +527,18 @@ useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculat
 **Flow:**
 1. Employee views all assigned KPIs including those with `kra_set` status
 2. For new KPIs (`kra_set` status), clicks "Review & Submit" button
-3. Reviews KPI details (target, criteria, rating scale) in the side sheet
+3. Reviews KPI details (target, criteria, rating scale) in the side sheet (scrollable for Daily KPIs with extended content)
 4. Enters achieved value, justification, and evidence
-5. Clicks "Review & Submit" → KPI transitions from `kra_set` to `manager_check`
-6. Notification sent to manager
+5. For Daily KPIs, views the Daily Submission Summary table by scrolling down
+6. Clicks "Review & Submit" → KPI transitions from `kra_set` to `manager_check`
+7. Notification sent to manager
 
 **UI Indicators:**
 - "New KRA" badge shown in the review sheet header for `kra_set` KPIs
 - Info banner explaining the review and submission action
 - Consistent "Review & Submit" button text for all KPI statuses
 - Status badges showing current workflow stage
+- Scrollable content area for Daily KPIs to accommodate Daily Submission Summary table
 
 **Benefits:**
 - Single-page workflow reduces navigation
