@@ -21,8 +21,6 @@ import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
 import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { useNavigate } from 'react-router-dom';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -52,7 +50,6 @@ const scoreDisplay: Record<number, { label: string; color: string; level: Rating
 
 export default function MyKpis() {
   const { profile } = useAuth();
-  const navigate = useNavigate();
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
   const [selectedYear, setSelectedYear] = useState(defaultYear);
@@ -270,29 +267,6 @@ export default function MyKpis() {
 
   return (
     <div className="space-y-6">
-      {/* KRA Acceptance Alert */}
-      {hasKraSetKpis && (
-        <Alert className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
-          <FileCheck className="h-5 w-5 text-amber-600" />
-          <AlertTitle className="text-amber-800 dark:text-amber-200">
-            KRA Acceptance Required
-          </AlertTitle>
-          <AlertDescription className="text-amber-700 dark:text-amber-300">
-            You have {kraSetKpis.length} KPI{kraSetKpis.length > 1 ? 's' : ''} pending acceptance. 
-            Please review and accept your KRAs before you can submit your self-review.
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="ml-4 border-amber-600 text-amber-700 hover:bg-amber-100 dark:border-amber-500 dark:text-amber-300 dark:hover:bg-amber-900/30"
-              onClick={() => navigate('/kra-acceptance')}
-            >
-              <FileCheck className="h-4 w-4 mr-2" />
-              Accept KRAs
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -557,13 +531,18 @@ export default function MyKpis() {
                               onClick={() => openReviewDialog(kpi)}
                               className="h-8"
                             >
-                              <Send className="h-3.5 w-3.5 mr-1" />
-                              Submit
+                              <FileCheck className="h-3.5 w-3.5 mr-1" />
+                              Accept & Submit
                             </Button>
+                          ) : kpi.status === 'self_review' ? (
+                            <Badge variant="secondary" className="h-8 px-3 flex items-center gap-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                              <Clock className="h-3.5 w-3.5" />
+                              Pending Review
+                            </Badge>
                           ) : (
-                            <Badge variant="secondary" className="h-8 px-3 flex items-center gap-1">
+                            <Badge variant="secondary" className="h-8 px-3 flex items-center gap-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
                               <CheckCircle2 className="h-3.5 w-3.5" />
-                              Submitted
+                              {statusLabels[kpi.status] || 'Processed'}
                             </Badge>
                           )}
                           <Button
@@ -607,6 +586,7 @@ export default function MyKpis() {
               ? orgKpiValuesMap.get(`${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}`)
               : null;
             const hasOrgData = isSelectedKpiOrgLevel && selectedKpiOrgValue?.achieved_value != null;
+            const isKraSet = selectedKpi?.status === 'kra_set';
             
             return (
               <>
@@ -615,7 +595,15 @@ export default function MyKpis() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <SheetTitle className="text-lg">Submit Self Review</SheetTitle>
+                        <SheetTitle className="text-lg">
+                          {isKraSet ? 'Accept KRA & Submit Review' : 'Submit Self Review'}
+                        </SheetTitle>
+                        {isKraSet && (
+                          <Badge variant="outline" className="border-amber-500 text-amber-600 dark:text-amber-400">
+                            <FileCheck className="h-3 w-3 mr-1" />
+                            New KRA
+                          </Badge>
+                        )}
                         {hasOrgData && (
                           <Badge variant="secondary" className="flex items-center gap-1">
                             <Building2 className="h-3 w-3" />
@@ -641,6 +629,21 @@ export default function MyKpis() {
                     </div>
                   </div>
                 </SheetHeader>
+                
+                {/* KRA Acceptance Info Banner */}
+                {isKraSet && (
+                  <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg mt-3">
+                    <FileCheck className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                    <div className="text-sm">
+                      <span className="font-medium text-amber-800 dark:text-amber-200">
+                        New KRA Assignment
+                      </span>
+                      <span className="text-amber-600 dark:text-amber-400 ml-1">
+                        - Review the KPI details below and submit your self-review to accept this KRA
+                      </span>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Org-Level Info Banner */}
                 {hasOrgData && (
@@ -805,7 +808,12 @@ export default function MyKpis() {
                     Cancel
                   </Button>
                   <Button size="sm" onClick={handleSubmitReview} disabled={(!isNa && !achievedValue) || submitReview.isPending}>
-                    {submitReview.isPending ? 'Submitting...' : 'Submit Review'}
+                    {submitReview.isPending 
+                      ? 'Submitting...' 
+                      : isKraSet 
+                        ? 'Accept & Submit' 
+                        : 'Submit Review'
+                    }
                   </Button>
                 </SheetFooter>
               </>
