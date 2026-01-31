@@ -1,26 +1,22 @@
 
-# Plan: Complete Query Workflow Enhancement
+
+# Plan: Admin Data Entry on Behalf of Users (No Restrictions)
 
 ## Overview
 
-This plan implements all 4 requested features to complete the KPI query resolution workflow:
-
-1. **Two-step query resolution**: `open` → `responded` → `resolved`
-2. **Intermediate visibility**: Managers see read-only queries raised by higher levels
-3. **Query History component**: Chronological view of all queries/responses per KPI
-4. **Response notifications**: Alert query raiser when employee responds
+This feature enables Admin users to enter/edit KPI data on behalf of any user (Employee, Manager, Auditor, Management) **without any date or period restrictions**. All actions will be logged for full audit traceability.
 
 ---
 
-## Current State Analysis
+## Key Requirement: No Restrictions for Admin
 
-| Component | Current Behavior | Gap |
-|-----------|-----------------|-----|
-| `kpi_queries.status` | `open` → `resolved` (one step) | Missing `responded` status |
-| Query resolution | Employee responds and marks resolved immediately | Reviewer should approve response |
-| Manager visibility | Only sees queries raised to/by them | Should see queries raised to their subordinates (read-only) |
-| Query history | Not consolidated - scattered across tabs | Need unified per-KPI history view |
-| Response notifications | None | Raiser should be notified when response is submitted |
+| Restriction | Normal User | Admin |
+|-------------|-------------|-------|
+| Daily submission window | Today + Yesterday only | **Any day of the month** |
+| Past review periods | Cannot edit closed periods | **Can edit any period** |
+| Resubmission lock | Cannot edit after resubmit | **Can override lock** |
+| Weekly submission window | Current/previous week only | **Any week** |
+| Monthly submission deadline | Must submit before period closes | **No deadline** |
 
 ---
 
@@ -28,367 +24,286 @@ This plan implements all 4 requested features to complete the KPI query resoluti
 
 ### Phase 1: Database Schema Changes
 
-**1.1 Add `responded` status to `query_status` enum**
+**Add columns to `kpi_audit_logs` for on-behalf tracking:**
 
 ```sql
-ALTER TYPE public.query_status ADD VALUE IF NOT EXISTS 'responded';
+ALTER TABLE public.kpi_audit_logs 
+ADD COLUMN IF NOT EXISTS on_behalf_of UUID REFERENCES public.profiles(id),
+ADD COLUMN IF NOT EXISTS on_behalf_role TEXT;
+
+COMMENT ON COLUMN public.kpi_audit_logs.on_behalf_of IS 'Target user whose data was modified by admin';
+COMMENT ON COLUMN public.kpi_audit_logs.on_behalf_role IS 'Role level: self, manager, auditor, management, daily_submission';
 ```
 
-**1.2 Update `notify_on_query_resolved` trigger**
+### Phase 2: New Components
 
-Replace the current trigger logic to:
-- When status changes `open` → `responded`: Notify the **raiser** that a response was submitted
-- When status changes `responded` → `resolved`: Keep current resolved notification
+**2.1 AdminDataEntryDialog.tsx**
 
-**1.3 Create intermediate visibility view (optional)**
+Dialog for entering review submission data at any role level.
 
-Add a column or computed access for managers to see queries raised to their subordinates.
-
----
-
-### Phase 2: Two-Step Query Resolution Flow
-
-**2.1 Update `QueryInbox.tsx` - Employee Response Flow**
-
-Current flow:
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  Admin Data Entry - [KPI Name]                                  │
+│  Employee: [Employee Name] ([Employee Code])                    │
+│  Period: [Month Year]                                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Data Entry Level:                                              │
+│  ○ Self Review  ○ Manager  ○ Auditor  ○ Management             │
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────────┐ │
+│  │ Achieved Value: [_________]                               │ │
+│  │ Rating: [Dropdown: R5-R0]                                 │ │
+│  │ Score: [Auto-calculated / Editable]                       │ │
+│  │ Remarks: [Textarea]                                       │ │
+│  │ Evidence: [Upload Button]                                 │ │
+│  └───────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│  Reason for Admin Entry: *                                      │
+│  [Required textarea - logged for audit purposes]                │
+│                                                                 │
+│  ⚠ This action is logged and will notify the employee          │
+│                                                                 │
+│                              [Cancel] [Save & Log]              │
+└─────────────────────────────────────────────────────────────────┘
 ```
-Employee clicks "Respond & Resolve" → status = 'resolved' immediately
+
+**2.2 AdminDailyEntryDialog.tsx**
+
+Calendar-based dialog for entering daily/weekly submissions - **NO DATE RESTRICTIONS**.
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  Admin Daily Entry - [KPI Name]                                 │
+│  Employee: [Employee Name]                                      │
+│  Period: January 2026                                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Sun   Mon   Tue   Wed   Thu   Fri   Sat              │   │
+│  │  [1]   [2]   [3]   [4]   [5]   [6]   [7]              │   │
+│  │  [8]   [9]   [10]  [11]  [12]  [13]  [14]             │   │
+│  │  [15]  [16]  [17]  [18]  [19]  [20]  [21]             │   │
+│  │  [22]  [23]  [24]  [25]  [26]  [27]  [28]             │   │
+│  │  [29]  [30]  [31]                                     │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  Selected: 15 January 2026                                      │
+│  Current Value: 5 (Yes) ✓ Final                                │
+│                                                                 │
+│  New Value: [Dropdown/Input] ___________                        │
+│  Remarks: [Optional textarea]                                   │
+│                                                                 │
+│  Reason for Override: *                                         │
+│  [Required - e.g., "Correcting data entry error"]               │
+│                                                                 │
+│  ⚠ Admin override - bypasses all restrictions                  │
+│                                                                 │
+│                              [Cancel] [Save & Log]              │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-New flow:
-```
-Employee clicks "Respond" → status = 'responded' (awaiting approval)
-Raiser clicks "Accept" → status = 'resolved'
-```
+**Key Features:**
+- All days of the month are clickable (no greying out)
+- Can edit "Final" (locked) entries
+- Can select any past month via period selector
+- Clear indicator showing current value and lock status
+- Mandatory reason field for audit
 
-**Changes to `src/pages/QueryInbox.tsx`:**
+### Phase 3: Admin Data Entry Hooks
 
-| Element | Change |
-|---------|--------|
-| Button label | "Respond & Resolve" → "Submit Response" |
-| Status update | Set to `responded` instead of `resolved` |
-| Raiser view | Add "Accept Response" button for responded queries |
-| Badge colors | Add yellow/amber for `responded` status |
+**New file: `src/hooks/useAdminDataEntry.ts`**
 
-**2.2 New UI States in Query Card**
+| Hook | Purpose |
+|------|---------|
+| `useAdminSubmitReviewData` | Submit/update review_submissions for any role level |
+| `useAdminSubmitSubPeriod` | Submit daily/weekly data - **bypasses all restrictions** |
+
+**Key Implementation - No Date Restrictions:**
 
 ```typescript
-// Query status states
-type QueryStatusExtended = 'open' | 'responded' | 'resolved';
+export function useAdminSubmitSubPeriod() {
+  const { user } = useAuth();
+  
+  return useMutation({
+    mutationFn: async ({
+      kpi_id,
+      employee_id,
+      sub_period_type,
+      sub_period_value, // Any date - no restriction
+      achieved_value,
+      remarks,
+      reason,
+      review_month,
+      review_year,
+    }: AdminSubPeriodParams) => {
+      
+      // 1. Get existing submission for audit trail
+      const { data: existing } = await supabase
+        .from('sub_period_submissions')
+        .select('*')
+        .eq('kpi_id', kpi_id)
+        .eq('sub_period_value', sub_period_value)
+        .maybeSingle();
 
-// Badge styling
-const queryStatusColors = {
-  open: 'bg-orange-100 text-orange-800',
-  responded: 'bg-amber-100 text-amber-800',  // NEW
-  resolved: 'bg-green-100 text-green-800',
-};
+      // 2. Admin can override is_resubmitted lock
+      // Use upsert with NO date validation
+      const { data, error } = await supabase
+        .from('sub_period_submissions')
+        .upsert({
+          kpi_id,
+          sub_period_type,
+          sub_period_value,
+          achieved_value,
+          remarks,
+          review_month,
+          review_year,
+          submitted_by: employee_id, // Still track as employee's data
+          submitted_at: new Date().toISOString(),
+          // Reset resubmission flag so data can be edited again if needed
+          is_resubmitted: false,
+          update_reason: `Admin override: ${reason}`,
+        }, {
+          onConflict: 'kpi_id,sub_period_type,sub_period_value,review_month,review_year',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // 3. Create audit log with admin context
+      await supabase.from('kpi_audit_logs').insert({
+        kpi_id,
+        action: 'ADMIN_DAILY_ENTRY_OVERRIDE',
+        performed_by: user?.id,
+        on_behalf_of: employee_id,
+        on_behalf_role: 'daily_submission',
+        old_value: existing || null,
+        new_value: data,
+        metadata: {
+          reason,
+          sub_period_value,
+          bypassed_restrictions: [
+            'date_window',
+            existing?.is_resubmitted ? 'resubmission_lock' : null,
+          ].filter(Boolean),
+        },
+      });
+
+      // 4. Notify employee
+      await supabase.from('notifications').insert({
+        user_id: employee_id,
+        type: 'admin_data_override',
+        title: 'Daily Data Updated by Admin',
+        message: `Admin updated your daily entry for ${sub_period_value}. Reason: ${reason}`,
+        kpi_id,
+        related_user_id: user?.id,
+      });
+
+      return data;
+    },
+  });
+}
 ```
 
-**2.3 Accept Response Action (for query raiser)**
+### Phase 4: Integration into AllKpis.tsx
 
-Add to the "Sent" tab in QueryInbox:
-- When query status is `responded`, show "Accept" button
-- Clicking Accept → updates status to `resolved`, sets `resolved_at`
+**Add action buttons in the expanded KPI row:**
 
----
+| Button | When Shown | Opens |
+|--------|-----------|-------|
+| "Enter Data" | Always for admin | AdminDataEntryDialog |
+| "Enter Daily Data" | For daily-frequency KPIs | AdminDailyEntryDialog |
+| "Enter Weekly Data" | For weekly-frequency KPIs | AdminDailyEntryDialog (weekly mode) |
 
-### Phase 3: Intermediate Visibility for Managers
+**UI Changes:**
 
-**3.1 Visibility Logic**
-
-When Auditor or Management raises a query to Employee:
-- The Employee's reporting manager should see it in their Inbox
-- Manager view is **read-only** (no respond/resolve buttons)
-- Labeled as "For Information" or "FYI"
-
-**3.2 Query Fetch Logic Update**
-
-Current query in `QueryInbox.tsx`:
-```typescript
-.or(`raised_to.eq.${user.id},raised_by.eq.${user.id}`)
-```
-
-Enhanced query:
-```typescript
-// Get queries where:
-// 1. I am the raiser or recipient, OR
-// 2. I am the reporting manager of the recipient (subordinate)
-```
-
-This requires a database function or modified query to check `profiles.reporting_manager_id`.
-
-**3.3 UI Changes for FYI Queries**
-
-```typescript
-const isFYIQuery = query.raised_to !== user.id && 
-                   query.raised_by !== user.id &&
-                   isSubordinateQuery(query);
-
-// Render differently
-{isFYIQuery && (
-  <Badge variant="outline" className="text-blue-600">
-    <Eye className="h-3 w-3 mr-1" /> For Information
-  </Badge>
+```tsx
+// In the expanded KPI actions area
+{profile?.role === 'admin' && (
+  <div className="flex gap-2">
+    <Button 
+      size="sm" 
+      variant="outline"
+      onClick={() => openAdminDataEntry(kpi)}
+    >
+      <PenLine className="h-4 w-4 mr-1" />
+      Enter Data
+    </Button>
+    
+    {kpi.frequency === 'daily' && (
+      <Button 
+        size="sm" 
+        variant="outline"
+        onClick={() => openAdminDailyEntry(kpi)}
+      >
+        <Calendar className="h-4 w-4 mr-1" />
+        Daily Data
+      </Button>
+    )}
+  </div>
 )}
 ```
 
-**3.4 New Tab: "Subordinate Queries"**
-
-Add a fourth tab to QueryInbox:
-- "Notifications" | "Queries" | "Sent" | **"Team Queries"** (new)
-- Shows queries raised to the user's direct reports
-- Read-only view with no action buttons
-
 ---
 
-### Phase 4: Query History Component
-
-**4.1 New Component: `QueryHistoryDialog.tsx`**
-
-Location: `src/components/review/QueryHistoryDialog.tsx`
-
-```typescript
-interface QueryHistoryDialogProps {
-  kpiId: string;
-  kpiName: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
-```
-
-**4.2 Dialog Content**
-
-Shows a chronological timeline of all queries for the KPI:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Query History: [KPI Name]                                   │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │ 📩 Query Raised                       15 Jan 2026    │   │
-│  │ From: Auditor Name                                   │   │
-│  │ To: Employee Name                                    │   │
-│  │ "Please clarify the calculation methodology..."      │   │
-│  │ [View Attachment]                                    │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                      ↓                                      │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │ 💬 Response Submitted                 17 Jan 2026    │   │
-│  │ From: Employee Name                                  │   │
-│  │ "The calculation uses the formula..."               │   │
-│  │ [View Attachment]                                    │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                      ↓                                      │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │ ✅ Query Resolved                     18 Jan 2026    │   │
-│  │ Accepted by: Auditor Name                            │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**4.3 Integration Points**
-
-Add "View History" button to:
-- `EmployeeScorecard.tsx` (Team Review - Manager view)
-- `AuditScorecard.tsx` (Audit Panel)
-- `ManagementScorecard.tsx` (Management Review)
-- `MyKpis.tsx` (Employee view)
-
----
-
-### Phase 5: Response Notification Trigger
-
-**5.1 Update Database Trigger**
-
-Modify `notify_on_query_resolved()` to handle the new `responded` status:
-
-```sql
-CREATE OR REPLACE FUNCTION public.notify_on_query_status_change()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_kpi_name TEXT;
-  v_responder_name TEXT;
-  v_raiser_name TEXT;
-BEGIN
-  -- CASE 1: Employee responds (open → responded)
-  IF OLD.status = 'open' AND NEW.status = 'responded' THEN
-    -- Notify the query raiser
-    INSERT INTO notifications (user_id, type, title, message, ...)
-    VALUES (
-      NEW.raised_by,
-      'query_response_submitted',
-      'Query Response Received',
-      'Employee responded to your query on KPI: ' || v_kpi_name,
-      ...
-    );
-    
-    -- Also notify intermediate managers (FYI)
-    -- Get reporting manager of raised_to employee
-    -- Insert FYI notification if manager exists
-  END IF;
-  
-  -- CASE 2: Raiser accepts response (responded → resolved)
-  IF OLD.status = 'responded' AND NEW.status = 'resolved' THEN
-    -- Notify the responder that their response was accepted
-    INSERT INTO notifications (...)
-    VALUES (
-      NEW.raised_to,
-      'query_resolved',
-      'Query Response Accepted',
-      ...
-    );
-  END IF;
-  
-  RETURN NEW;
-END;
-$$;
-```
-
----
-
-## Files to Create/Modify
-
-### New Files
+## Files to Create
 
 | File | Purpose |
 |------|---------|
-| `src/components/review/QueryHistoryDialog.tsx` | Timeline view of query history |
-| `src/hooks/useQueryWorkflow.ts` | Hooks for respond, accept, and query visibility |
+| `src/components/admin/AdminDataEntryDialog.tsx` | Dialog for review submission data entry |
+| `src/components/admin/AdminDailyEntryDialog.tsx` | Calendar dialog for daily/weekly data entry |
+| `src/hooks/useAdminDataEntry.ts` | Hooks for admin mutations with audit logging |
 
-### Modified Files
+## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/pages/QueryInbox.tsx` | Add "Team Queries" tab, two-step resolution UI, accept button |
-| `src/hooks/useKpis.ts` | Add `useRespondToQuery` and `useAcceptQueryResponse` mutations |
-| `src/components/review/EmployeeScorecard.tsx` | Add Query History button |
-| `src/components/review/AuditScorecard.tsx` | Add Query History button |
-| `src/components/review/ManagementScorecard.tsx` | Add Query History button |
-| `src/pages/MyKpis.tsx` | Add Query History button |
-| `DOCUMENTATION.md` | Update query workflow documentation |
+| `src/pages/admin/AllKpis.tsx` | Add "Enter Data" and "Daily Data" buttons |
+| `DOCUMENTATION.md` | Document admin data entry feature |
 
-### Database Migration
+## Database Migration
 
-| Change | SQL |
-|--------|-----|
-| Add `responded` enum value | `ALTER TYPE query_status ADD VALUE 'responded'` |
-| Update notification trigger | Replace `notify_on_query_resolved` with expanded logic |
+```sql
+-- Add on-behalf tracking columns to kpi_audit_logs
+ALTER TABLE public.kpi_audit_logs 
+ADD COLUMN IF NOT EXISTS on_behalf_of UUID REFERENCES public.profiles(id),
+ADD COLUMN IF NOT EXISTS on_behalf_role TEXT;
 
----
-
-## UI Flow Summary
-
-### Employee Flow (responding to query)
-
-```
-1. Employee sees open query in Inbox → Queries tab
-2. Clicks "Respond" → Response dialog opens
-3. Enters resolution notes + optional evidence
-4. Clicks "Submit Response"
-5. Status changes: open → responded
-6. Query raiser receives notification
-7. Manager sees FYI notification (if applicable)
-```
-
-### Raiser Flow (accepting response)
-
-```
-1. Raiser receives "Response Received" notification
-2. Goes to Inbox → Sent tab
-3. Sees query with status "Responded" and employee's response
-4. Reviews the response
-5. Clicks "Accept Response" → status becomes "resolved"
-6. Employee receives confirmation notification
-```
-
-### Manager FYI Flow
-
-```
-1. Auditor raises query to Employee X (Manager Y's subordinate)
-2. Employee X receives query notification
-3. Manager Y sees query in "Team Queries" tab (read-only)
-4. When Employee X responds, Manager Y sees the response (FYI)
-5. When Auditor accepts, Manager Y sees final resolution (FYI)
+-- Add index for querying on-behalf actions
+CREATE INDEX IF NOT EXISTS idx_audit_logs_on_behalf 
+ON public.kpi_audit_logs(on_behalf_of) 
+WHERE on_behalf_of IS NOT NULL;
 ```
 
 ---
 
-## Technical Details
+## Audit Trail Structure
 
-### Query Status Extended Type
+Every admin data entry creates an audit log:
 
-```typescript
-export type QueryStatusExtended = 'open' | 'responded' | 'resolved';
-```
-
-### New Hooks
-
-```typescript
-// Submit response (employee action)
-export function useRespondToQuery() {
-  return useMutation({
-    mutationFn: async ({ query_id, resolution_notes, resolution_evidence_url }) => {
-      await supabase
-        .from('kpi_queries')
-        .update({
-          status: 'responded',
-          resolution_notes,
-          resolution_evidence_url,
-          // Note: resolved_at is NOT set yet
-        })
-        .eq('id', query_id);
-    }
-  });
-}
-
-// Accept response (raiser action)
-export function useAcceptQueryResponse() {
-  return useMutation({
-    mutationFn: async ({ query_id }) => {
-      await supabase
-        .from('kpi_queries')
-        .update({
-          status: 'resolved',
-          resolved_at: new Date().toISOString(),
-        })
-        .eq('id', query_id);
-    }
-  });
-}
-```
-
-### Subordinate Query Detection
-
-```typescript
-function useSubordinateQueries() {
-  const { user } = useAuth();
-  
-  return useQuery({
-    queryKey: ['subordinate-queries', user?.id],
-    queryFn: async () => {
-      // Get all subordinates
-      const { data: subordinates } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('reporting_manager_id', user.id);
-      
-      const subordinateIds = subordinates?.map(s => s.id) || [];
-      
-      if (subordinateIds.length === 0) return [];
-      
-      // Get queries raised TO subordinates (not BY the current user)
-      const { data: queries } = await supabase
-        .from('kpi_queries')
-        .select('*, kpi:kpi_id(kpi_name, kra_name)')
-        .in('raised_to', subordinateIds)
-        .neq('raised_by', user.id);
-      
-      return queries;
-    }
-  });
+```json
+{
+  "id": "uuid",
+  "kpi_id": "uuid",
+  "action": "ADMIN_DAILY_ENTRY_OVERRIDE",
+  "performed_by": "admin-user-uuid",
+  "on_behalf_of": "employee-uuid",
+  "on_behalf_role": "daily_submission",
+  "old_value": { 
+    "achieved_value": 5, 
+    "is_resubmitted": true 
+  },
+  "new_value": { 
+    "achieved_value": 0, 
+    "is_resubmitted": false 
+  },
+  "metadata": {
+    "reason": "Employee reported incorrect data entry",
+    "sub_period_value": "2026-01-15",
+    "bypassed_restrictions": ["date_window", "resubmission_lock"]
+  },
+  "created_at": "2026-01-31T14:30:00Z"
 }
 ```
 
@@ -396,24 +311,23 @@ function useSubordinateQueries() {
 
 ## Testing Checklist
 
-1. **Two-Step Resolution**
-   - [ ] Employee submits response → status becomes `responded`
-   - [ ] Raiser can see response in "Sent" tab
-   - [ ] Raiser clicks "Accept" → status becomes `resolved`
-   - [ ] Employee cannot re-respond after `responded` status
+1. **No Date Restrictions**
+   - [ ] Admin can enter data for any day of the month
+   - [ ] Admin can enter data for past months
+   - [ ] Admin can edit "Final" (locked) entries
+   - [ ] Admin can enter weekly data for any week
 
-2. **Notifications**
-   - [ ] Raiser gets notification when employee responds
-   - [ ] Employee gets notification when response is accepted
-   - [ ] Manager gets FYI notification for subordinate queries
+2. **Audit Trail**
+   - [ ] Every admin entry creates audit log
+   - [ ] on_behalf_of correctly set to employee
+   - [ ] Old/new values captured
+   - [ ] Reason is mandatory and logged
 
-3. **Manager Visibility**
-   - [ ] Manager sees "Team Queries" tab
-   - [ ] Subordinate queries are visible but read-only
-   - [ ] No action buttons for FYI queries
+3. **Notifications**
+   - [ ] Employee notified of admin changes
+   - [ ] Notification includes reason
 
-4. **Query History**
-   - [ ] History shows all queries for a KPI
-   - [ ] Timeline is chronological
-   - [ ] Shows query, response, and resolution events
-   - [ ] Attachments are viewable
+4. **Role Security**
+   - [ ] Only admin role sees "Enter Data" buttons
+   - [ ] Non-admins cannot access admin hooks
+
