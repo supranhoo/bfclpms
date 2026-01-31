@@ -9,8 +9,10 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useKpisByEmployee, useReviewSubmissions, useApproveKpi, useRaiseQuery, useKpiQueries, useSendBackKpi, RatingLevel, KPI } from '@/hooks/useKpis';
-import { useSubPeriodSubmissions } from '@/hooks/useSubPeriodSubmissions';
+import { useSubPeriodSubmissions, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
+import { ManagerDailyOverrideEditor, calculateOverriddenScore } from '@/components/review/ManagerDailyOverrideEditor';
+import { useManagerSubPeriodOverride } from '@/hooks/useManagerSubPeriodOverride';
 import { QualitativeOption } from '@/lib/qualitativeUom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
@@ -30,7 +32,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
-  Info, Lock, MessageSquare, Undo2, Check, Eye, Calendar, ChevronDown, ChevronUp, History
+  Info, Lock, MessageSquare, Undo2, Check, Eye, Calendar, ChevronDown, ChevronUp, History, Edit2
 } from 'lucide-react';
 import { InlineDailySubmissionRow } from '@/components/review/InlineDailySubmissionRow';
 import { DailyBadge } from '@/components/review/DailyKpiExpandButton';
@@ -95,10 +97,16 @@ export function EmployeeScorecard({
   const [managerAchievedValue, setManagerAchievedValue] = useState<number | string | null>(null);
   const [queryReason, setQueryReason] = useState('');
   const [sendBackReason, setSendBackReason] = useState('');
+  
+  // Manager daily override state
+  const [managerAgrees, setManagerAgrees] = useState<boolean | null>(null);
+  const [dailyOverrides, setDailyOverrides] = useState<Map<string, number>>(new Map());
+  const [overrideReason, setOverrideReason] = useState('');
 
   const approveKpi = useApproveKpi();
   const raiseQuery = useRaiseQuery();
   const sendBackKpi = useSendBackKpi();
+  const { saveOverrides, isLoading: isSavingOverrides } = useManagerSubPeriodOverride();
 
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
   const queryMap = new Map<string, typeof queries>();
@@ -219,6 +227,10 @@ export function EmployeeScorecard({
     setManagerRemarks(existing?.manager_remarks || '');
     setManagerEvidenceUrl(existing?.manager_evidence_url || null);
     setManagerAchievedValue((existing as any)?.manager_achieved_value || existing?.achieved_value || null);
+    // Reset manager override state
+    setManagerAgrees(null);
+    setDailyOverrides(new Map());
+    setOverrideReason('');
     setReviewSheetOpen(true);
   };
 
@@ -234,8 +246,38 @@ export function EmployeeScorecard({
     });
   };
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (!selectedKpi || managerScore === null) return;
+    
+    const isDailyBinary = selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary';
+    
+    // If manager selected "No" and has overrides, save them first
+    if (isDailyBinary && managerAgrees === false && dailyOverrides.size > 0) {
+      // Build override entries for submission
+      const overrideEntries = Array.from(dailyOverrides.entries()).map(([date, value]) => {
+        // Find original value from submissions (fetched in wrapper)
+        return {
+          sub_period_value: date,
+          achieved_value: value,
+          original_value: null, // Will be populated from submissions
+        };
+      });
+      
+      const submission = submissionMap.get(selectedKpi.id);
+      const originalScore = submission?.self_score || null;
+      
+      await saveOverrides.mutateAsync({
+        kpi_id: selectedKpi.id,
+        employee_id: employee.id,
+        overrides: overrideEntries,
+        reason: overrideReason,
+        review_month: selectedPeriod,
+        review_year: selectedYear,
+        original_score: originalScore,
+        new_score: managerScore,
+      });
+    }
+    
     const rating = scoreToRating(managerScore);
     approveKpi.mutate({
       kpi_id: selectedKpi.id,
@@ -608,15 +650,25 @@ export function EmployeeScorecard({
               {/* Review Trail */}
               <ReviewTrailCard submission={submissionMap.get(selectedKpi.id) || null} />
               
-              {/* Daily Submission Summary - Fetch and display for Daily KPIs */}
-              <DailySubmissionSummaryWrapper 
+              {/* Daily Submission Summary + Manager Override (for Daily Binary KPIs) */}
+              <DailySubmissionSummaryWithOverride 
                 kpi={selectedKpi} 
                 selectedPeriod={selectedPeriod} 
-                selectedYear={selectedYear} 
+                selectedYear={selectedYear}
+                isReviewMode={selectedKpi.status === 'self_review'}
+                managerAgrees={managerAgrees}
+                onManagerAgreesChange={setManagerAgrees}
+                dailyOverrides={dailyOverrides}
+                onDailyOverridesChange={setDailyOverrides}
+                overrideReason={overrideReason}
+                onOverrideReasonChange={setOverrideReason}
+                managerScore={managerScore}
+                onManagerScoreChange={setManagerScore}
+                submissionMap={submissionMap}
               />
 
-              {/* Score Input - Only show for reviewable KPIs */}
-              {selectedKpi.status === 'self_review' && (
+              {/* Score Input - Only show for reviewable KPIs and non-daily-binary */}
+              {selectedKpi.status === 'self_review' && !(selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary') && (
                 <>
                   <AchievedValueScoreInput
                     kpi={selectedKpi}
@@ -648,6 +700,31 @@ export function EmployeeScorecard({
                     />
                   )}
                 </>
+              )}
+              
+              {/* Remarks for Daily Binary (shown separately after agreement toggle) */}
+              {selectedKpi.status === 'self_review' && selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary' && managerAgrees !== null && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Manager Remarks</Label>
+                    <Textarea
+                      value={managerRemarks}
+                      onChange={(e) => setManagerRemarks(e.target.value)}
+                      placeholder="Enter your assessment and feedback..."
+                      rows={3}
+                    />
+                  </div>
+
+                  {/* Evidence Upload */}
+                  {user?.id && (
+                    <EvidenceUpload
+                      userId={user.id}
+                      kpiId={selectedKpi.id}
+                      onUploadComplete={setManagerEvidenceUrl}
+                      existingUrl={managerEvidenceUrl}
+                    />
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -696,10 +773,18 @@ export function EmployeeScorecard({
                     variant="default"
                     className="bg-green-600 hover:bg-green-700"
                     onClick={handleApprove}
-                    disabled={managerScore === null || approveKpi.isPending}
+                    disabled={
+                      managerScore === null || 
+                      approveKpi.isPending || 
+                      isSavingOverrides ||
+                      // For daily binary: require agreement selection
+                      (selectedKpi?.frequency === 'Daily' && selectedKpi?.uom_type === 'binary' && managerAgrees === null) ||
+                      // For daily binary with overrides: require reason
+                      (selectedKpi?.frequency === 'Daily' && selectedKpi?.uom_type === 'binary' && managerAgrees === false && !overrideReason.trim())
+                    }
                   >
                     <Check className="h-4 w-4 mr-2" />
-                    {approveKpi.isPending ? 'Approving...' : 'Approve'}
+                    {isSavingOverrides ? 'Saving...' : approveKpi.isPending ? 'Approving...' : 'Approve'}
                   </Button>
                 </div>
               </>
@@ -794,15 +879,35 @@ export function EmployeeScorecard({
   );
 }
 
-// Helper wrapper that fetches sub-period submissions for Daily KPIs
-function DailySubmissionSummaryWrapper({ 
+// Helper wrapper that fetches sub-period submissions for Daily KPIs with manager override support
+function DailySubmissionSummaryWithOverride({ 
   kpi, 
   selectedPeriod, 
-  selectedYear 
+  selectedYear,
+  isReviewMode,
+  managerAgrees,
+  onManagerAgreesChange,
+  dailyOverrides,
+  onDailyOverridesChange,
+  overrideReason,
+  onOverrideReasonChange,
+  managerScore,
+  onManagerScoreChange,
+  submissionMap,
 }: { 
   kpi: KPI; 
   selectedPeriod: string; 
-  selectedYear: number; 
+  selectedYear: number;
+  isReviewMode: boolean;
+  managerAgrees: boolean | null;
+  onManagerAgreesChange: (agrees: boolean | null) => void;
+  dailyOverrides: Map<string, number>;
+  onDailyOverridesChange: (overrides: Map<string, number>) => void;
+  overrideReason: string;
+  onOverrideReasonChange: (reason: string) => void;
+  managerScore: number | null;
+  onManagerScoreChange: (score: number | null) => void;
+  submissionMap: Map<string, any>;
 }) {
   const { data: submissions } = useSubPeriodSubmissions(
     kpi.frequency === 'Daily' ? kpi.id : undefined, 
@@ -810,19 +915,120 @@ function DailySubmissionSummaryWrapper({
     selectedYear
   );
   
+  const isDailyBinary = kpi.frequency === 'Daily' && kpi.uom_type === 'binary';
+  const existingSubmission = submissionMap.get(kpi.id);
+  const employeeSelfScore = existingSubmission?.self_score || null;
+  
+  // Calculate score when manager agrees = true (use employee's score)
+  // or when manager disagrees (recalculate from overrides)
+  React.useEffect(() => {
+    if (!isDailyBinary || !isReviewMode) return;
+    
+    if (managerAgrees === true) {
+      // Manager accepts employee's score
+      onManagerScoreChange(employeeSelfScore);
+    } else if (managerAgrees === false && submissions) {
+      // Manager disagrees - recalculate with overrides
+      const result = calculateOverriddenScore(submissions, dailyOverrides, selectedPeriod, selectedYear);
+      onManagerScoreChange(result.score);
+    }
+  }, [managerAgrees, dailyOverrides, submissions, employeeSelfScore, isDailyBinary, isReviewMode, selectedPeriod, selectedYear, onManagerScoreChange]);
+  
+  // If not a daily KPI, return nothing
   if (kpi.frequency !== 'Daily' || !submissions || submissions.length === 0) {
     return null;
   }
   
+  // Score label helper
+  const getScoreLabel = (score: number | null): string => {
+    if (score === null) return 'Not Set';
+    switch (score) {
+      case 5: return 'Outstanding';
+      case 4: return 'Exceeds Expectations';
+      case 3: return 'Meets Expectations';
+      case 2: return 'Below Expectations';
+      case 1: return 'Needs Improvement';
+      case 0: return 'Not Achieved';
+      default: return 'Unknown';
+    }
+  };
+  
+  const getScoreBadgeClass = (score: number | null): string => {
+    if (score === null) return 'bg-muted text-muted-foreground';
+    if (score >= 4) return 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200';
+    if (score >= 3) return 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200';
+    if (score >= 2) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200';
+    return 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200';
+  };
+  
   return (
-    <DailySubmissionSummary
-      kpiId={kpi.id}
-      reviewMonth={selectedPeriod}
-      reviewYear={selectedYear}
-      submissions={submissions}
-      uom={kpi.uom}
-      uomType={kpi.uom_type}
-      qualitativeOptions={kpi.qualitative_options as QualitativeOption[] | null}
-    />
+    <div className="space-y-4">
+      {/* Daily Submission Summary (read-only) */}
+      <DailySubmissionSummary
+        kpiId={kpi.id}
+        reviewMonth={selectedPeriod}
+        reviewYear={selectedYear}
+        submissions={submissions}
+        uom={kpi.uom}
+        uomType={kpi.uom_type}
+        qualitativeOptions={kpi.qualitative_options as QualitativeOption[] | null}
+      />
+      
+      {/* Manager Agreement Toggle - Only for Daily Binary in Review Mode */}
+      {isDailyBinary && isReviewMode && (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Do you agree with the employee's daily submissions?</Label>
+            <div className="flex gap-2">
+              <Button
+                variant={managerAgrees === true ? 'default' : 'outline'}
+                onClick={() => onManagerAgreesChange(true)}
+                className={managerAgrees === true ? 'bg-green-600 hover:bg-green-700 text-white' : ''}
+              >
+                <Check className="h-4 w-4 mr-2" />
+                Yes - Accept Score
+              </Button>
+              <Button
+                variant={managerAgrees === false ? 'default' : 'outline'}
+                onClick={() => onManagerAgreesChange(false)}
+                className={managerAgrees === false ? 'bg-amber-600 hover:bg-amber-700 text-white' : ''}
+              >
+                <Edit2 className="h-4 w-4 mr-2" />
+                No - Override Entries
+              </Button>
+            </div>
+          </div>
+          
+          {/* Override Editor - shown when manager disagrees */}
+          {managerAgrees === false && (
+            <ManagerDailyOverrideEditor
+              kpiId={kpi.id}
+              reviewMonth={selectedPeriod}
+              reviewYear={selectedYear}
+              submissions={submissions}
+              overrides={dailyOverrides}
+              onOverridesChange={onDailyOverridesChange}
+              overrideReason={overrideReason}
+              onReasonChange={onOverrideReasonChange}
+              originalScore={employeeSelfScore}
+            />
+          )}
+          
+          {/* Score Display - shown when manager has made a selection */}
+          {managerAgrees !== null && (
+            <div className="p-4 bg-muted rounded-lg">
+              <div className="flex justify-between items-center">
+                <span className="font-medium">
+                  {managerAgrees === false ? 'Recalculated Manager Score' : 'Manager Score (Accepted)'}
+                </span>
+                <Badge className={getScoreBadgeClass(managerScore)}>
+                  {managerScore ?? '—'} - {getScoreLabel(managerScore)}
+                </Badge>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

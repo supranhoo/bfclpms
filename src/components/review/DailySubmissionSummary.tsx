@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
-import { format, getDaysInMonth, parse } from 'date-fns';
+import { format, getDaysInMonth } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Calendar, Check, X, Ban, Lock, AlertTriangle } from 'lucide-react';
+import { Calendar, Check, X, Lock, AlertTriangle, Edit2 } from 'lucide-react';
 import { SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
 import { getMonthNumber } from '@/lib/frequencyUtils';
@@ -18,6 +18,8 @@ interface DailySubmissionSummaryProps {
   uomType?: string | null;
   qualitativeOptions?: QualitativeOption[] | null;
   compact?: boolean; // Inline display mode with reduced styling
+  // Manager override display props
+  managerOverrides?: Map<string, number>; // date -> new value
 }
 
 export function DailySubmissionSummary({
@@ -29,6 +31,7 @@ export function DailySubmissionSummary({
   uomType,
   qualitativeOptions,
   compact = false,
+  managerOverrides,
 }: DailySubmissionSummaryProps) {
   // Calculate stats
   const stats = useMemo(() => {
@@ -159,23 +162,53 @@ export function DailySubmissionSummary({
                 ? format(new Date(submission.submitted_at), 'dd MMM yyyy, hh:mm a')
                 : '—';
               const isNo = isNoValue(submission.achieved_value);
+              const hasOverride = managerOverrides?.has(submission.sub_period_value);
+              const overrideValue = hasOverride ? managerOverrides?.get(submission.sub_period_value) : null;
+              const isOverrideChanged = hasOverride && overrideValue !== submission.achieved_value;
               
               return (
                 <TableRow 
                   key={submission.id}
-                  className={isNo ? 'bg-red-50/50 dark:bg-red-950/20' : ''}
+                  className={
+                    isOverrideChanged 
+                      ? 'bg-amber-50/50 dark:bg-amber-950/20' 
+                      : isNo 
+                        ? 'bg-red-50/50 dark:bg-red-950/20' 
+                        : ''
+                  }
                 >
                   <TableCell className="font-medium">{formattedDate}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <span className={isNo ? 'text-red-600 dark:text-red-400 font-medium' : ''}>
-                        {formatAchievedValue(submission.achieved_value)}
-                      </span>
-                      {submission.is_resubmitted && (
-                        <Badge variant="outline" className="text-xs h-5 px-1.5 gap-0.5 bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800">
-                          <Lock className="h-3 w-3 text-green-600 dark:text-green-400" />
-                          <span className="text-green-600 dark:text-green-400">Final</span>
-                        </Badge>
+                      {isOverrideChanged ? (
+                        <>
+                          {/* Original value with strikethrough */}
+                          <span className="text-muted-foreground line-through text-sm">
+                            {formatAchievedValue(submission.achieved_value)}
+                          </span>
+                          {/* Arrow */}
+                          <span className="text-muted-foreground">→</span>
+                          {/* Manager override value */}
+                          <span className={overrideValue === 0 ? 'text-red-600 dark:text-red-400 font-medium' : 'text-green-600 dark:text-green-400 font-medium'}>
+                            {formatAchievedValue(overrideValue ?? null)}
+                          </span>
+                          <Badge variant="outline" className="text-xs h-5 px-1.5 gap-0.5 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
+                            <Edit2 className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                            <span className="text-amber-600 dark:text-amber-400">Override</span>
+                          </Badge>
+                        </>
+                      ) : (
+                        <>
+                          <span className={isNo ? 'text-red-600 dark:text-red-400 font-medium' : ''}>
+                            {formatAchievedValue(submission.achieved_value)}
+                          </span>
+                          {submission.is_resubmitted && (
+                            <Badge variant="outline" className="text-xs h-5 px-1.5 gap-0.5 bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800">
+                              <Lock className="h-3 w-3 text-green-600 dark:text-green-400" />
+                              <span className="text-green-600 dark:text-green-400">Final</span>
+                            </Badge>
+                          )}
+                        </>
                       )}
                     </div>
                   </TableCell>
