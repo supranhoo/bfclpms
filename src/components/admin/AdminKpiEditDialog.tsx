@@ -220,9 +220,15 @@ const [formData, setFormData] = useState({
             />
           </div>
 
-          {/* Target (only for Numeric), UOM, Weightage */}
-          <div className="grid grid-cols-3 gap-4">
-            {formData.uom_type === 'numeric' && (
+          {/* UOM Type Selector - placed above UOM dropdown */}
+          <UomTypeSelector
+            value={formData.uom_type}
+            onChange={(type) => setFormData(prev => ({ ...prev, uom_type: type }))}
+          />
+
+          {/* Numeric-specific fields */}
+          {formData.uom_type === 'numeric' && (
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Target Value</Label>
                 <Input
@@ -231,53 +237,84 @@ const [formData, setFormData] = useState({
                   onChange={(e) => setFormData(prev => ({ ...prev, target_value: e.target.value }))}
                 />
               </div>
-            )}
-            <div className="space-y-2">
-              <Label>UOM</Label>
-              <Select
-                value={formData.uom}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, uom: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select UOM" />
-                </SelectTrigger>
-                <SelectContent>
-                  {UOM_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <Label>UOM</Label>
+                <Select
+                  value={formData.uom}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, uom: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select UOM" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {UOM_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Weightage (%)</Label>
+                <Input
+                  type="number"
+                  value={formData.weightage}
+                  onChange={(e) => setFormData(prev => ({ ...prev, weightage: e.target.value }))}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Weightage (%)</Label>
-              <Input
-                type="number"
-                value={formData.weightage}
-                onChange={(e) => setFormData(prev => ({ ...prev, weightage: e.target.value }))}
-              />
-            </div>
-          </div>
+          )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Frequency</Label>
-              <Select
-                value={formData.frequency}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, frequency: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select frequency" />
-                </SelectTrigger>
-                <SelectContent>
-                  {FREQUENCY_OPTIONS.map(opt => (
-                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* Weightage for non-numeric types */}
+          {formData.uom_type !== 'numeric' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Weightage (%)</Label>
+                <Input
+                  type="number"
+                  value={formData.weightage}
+                  onChange={(e) => setFormData(prev => ({ ...prev, weightage: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Frequency</Label>
+                <Select
+                  value={formData.frequency}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, frequency: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select frequency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FREQUENCY_OPTIONS.map(opt => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            {formData.uom_type === 'numeric' && (
+          )}
+
+          {/* Frequency & Criteria for numeric */}
+          {formData.uom_type === 'numeric' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Frequency</Label>
+                <Select
+                  value={formData.frequency}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, frequency: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select frequency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FREQUENCY_OPTIONS.map(opt => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2">
                 <Label>Criteria</Label>
                 <Select
@@ -294,8 +331,8 @@ const [formData, setFormData] = useState({
                   </SelectContent>
                 </Select>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Source of Data */}
           <div className="space-y-2">
@@ -305,12 +342,6 @@ const [formData, setFormData] = useState({
               onChange={(e) => setFormData(prev => ({ ...prev, source_of_data: e.target.value }))}
             />
           </div>
-
-          {/* UOM Type Selector */}
-          <UomTypeSelector
-            value={formData.uom_type}
-            onChange={(type) => setFormData(prev => ({ ...prev, uom_type: type }))}
-          />
 
           {/* Tiered Options Builder - only shown when UOM Type is Tiered */}
           {formData.uom_type === 'tiered' && (
