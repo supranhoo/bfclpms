@@ -428,6 +428,7 @@ login_hero_description text  -- Configurable description text
 - Overall score chart (compact radial donut - 1/6 width)
 - Category-wise score chart (horizontal bar - 5/6 width with 280px Y-axis for long category names)
   - **Category labels include weightage**: Each category displays its weightage percentage (e.g., "HR Operations (30%)") to show relative importance
+  - **All categories always visible**: Shows all KRA categories regardless of whether they have KPIs assigned, displaying 0% score bar for categories without data
 - Review status distribution with progress bars
 - KPI details table with status badges and action buttons
 
