@@ -90,13 +90,18 @@ export function ManagementScorecard({
     queryMap.set(q.kpi_id, [...existing, q]);
   });
 
-  // Calculate scores
+  // Calculate scores - include ALL categories with KPIs (even without scores)
   const scoreData = useMemo(() => {
     if (!kpis || !submissions) return { overallScore: 0, rating: 0, categoryScores: [] };
     
     let totalWeightedScore = 0;
     let totalWeight = 0;
-    const categoryMap = new Map<string, { totalScore: number; totalWeight: number; color: string | null }>();
+    const categoryMap = new Map<string, { 
+      totalScore: number; 
+      totalWeight: number; 
+      color: string | null;
+      weightage: number | null;
+    }>();
     
     kpis.forEach(kpi => {
       const submission = submissionMap.get(kpi.id);
@@ -106,16 +111,26 @@ export function ManagementScorecard({
       const weight = kpi.weightage || 0;
       const categoryName = kpi.kra_categories?.name || 'Other';
       const categoryColor = kpi.kra_categories?.color || null;
+      const categoryWeightage = kpi.kra_categories?.weightage ?? null;
       
-      if (score > 0 && weight > 0) {
-        totalWeightedScore += score * weight;
-        totalWeight += weight;
-        
-        const existing = categoryMap.get(categoryName) || { totalScore: 0, totalWeight: 0, color: categoryColor };
-        existing.totalScore += score * weight;
+      // Always add to category map (even if score is 0)
+      const existing = categoryMap.get(categoryName) || { 
+        totalScore: 0, 
+        totalWeight: 0, 
+        color: categoryColor,
+        weightage: categoryWeightage
+      };
+      
+      if (weight > 0) {
+        if (score > 0) {
+          totalWeightedScore += score * weight;
+          totalWeight += weight;
+          existing.totalScore += score * weight;
+        }
         existing.totalWeight += weight;
-        categoryMap.set(categoryName, existing);
       }
+      
+      categoryMap.set(categoryName, existing);
     });
     
     const overallRating = totalWeight > 0 ? totalWeightedScore / totalWeight : 0;
@@ -125,6 +140,7 @@ export function ManagementScorecard({
       name,
       percentage: data.totalWeight > 0 ? ((data.totalScore / data.totalWeight) / 5) * 100 : 0,
       color: data.color,
+      weightage: data.weightage,
     }));
     
     return { overallScore, rating: overallRating, categoryScores };
