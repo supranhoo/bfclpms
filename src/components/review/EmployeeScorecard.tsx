@@ -438,8 +438,8 @@ export function EmployeeScorecard({
                 const kpiStatus = submission?.kpi_status || 'open';
                 const isLocked = kpiStatus === 'locked' || kpiStatus === 'approved_by_manager';
                 const isNaKpi = submission?.is_na || false;
-                // Manager can review KPIs that are in manager_check status (submitted by employee)
-                const canReview = kpi.status === 'manager_check' && !isNaKpi;
+                // Manager can review KPIs that are in self_review status (submitted by employee, awaiting manager)
+                const canReview = kpi.status === 'self_review' && !isNaKpi;
                 const isDailyKpi = kpi.frequency === 'Daily';
                 const isExpanded = expandedDailyKpis.has(kpi.id);
                 

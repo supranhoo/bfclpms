@@ -67,6 +67,11 @@ export default function CompletionReport() {
         data.managerReviewed++;
         data.selfReviewSubmitted++;
       } else if (kpi.status === 'manager_check') {
+        // Manager has processed this KPI
+        data.managerReviewed++;
+        data.selfReviewSubmitted++;
+      } else if (kpi.status === 'self_review') {
+        // Employee has submitted, awaiting manager
         data.selfReviewSubmitted++;
       }
     });
