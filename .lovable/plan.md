@@ -1,326 +1,132 @@
 
-# Plan: Add Per-Level Approved Values to Daily Submission Summary
 
-## Status: ✅ COMPLETED
+# Fix: Manager Approved Values Not Saved for All Daily Entries
 
-## Implementation Summary
+## Problem Identified
 
-Added dynamic columns to the Daily Submission Summary table showing per-level approved values (Manager, Auditor, Management) as the KPI progresses through the review workflow.
+When a Manager reviews and approves a Daily Binary KPI, the `manager_achieved_value` column in `sub_period_submissions` remains `null` for most entries. This causes the "Manager Approved" column in the Audit Review's Daily Submission Summary to show dashes (—) instead of actual values.
 
-### Changes Made
+### Root Cause
 
-1. **Database Migration** - Added 4 new columns to `sub_period_submissions`:
-   - `manager_achieved_value`
-   - `auditor_achieved_value`
-   - `management_achieved_value`
-   - `admin_achieved_value`
+The current implementation has a gap in the approval flow:
 
-2. **Updated Hooks**:
-   - `useSubPeriodSubmissions.ts` - Updated interface with new columns
-   - `useManagerSubPeriodOverride.ts` - Now saves to `manager_achieved_value` column
-   - `useReviewerSubPeriodOverride.ts` - NEW: Generalized hook for all review levels
+| Scenario | Current Behavior | Expected Behavior |
+|----------|-----------------|-------------------|
+| Manager Agrees | Calls `acceptEmployeeValues` to copy all values | Correct |
+| Manager Disagrees | Only updates entries IN the override Map | Updates ALL entries - overridden ones with new value, non-overridden ones with employee's value |
 
-3. **Updated Components**:
-   - `DailySubmissionSummary.tsx` - Dynamic columns based on `kpiStatus` prop
-   - `InlineDailySubmissionRow.tsx` - Passes `kpiStatus` to summary
-   - `EmployeeScorecard.tsx` - Passes `kpiStatus` to summary
-   - `AuditScorecard.tsx` - Passes `kpiStatus` to summary
-   - `ManagementScorecard.tsx` - Passes `kpiStatus` to summary
-   - `MyKpis.tsx` - Passes `kpiStatus` to summary
-
-4. **Documentation** - Updated DOCUMENTATION.md with new schema and behavior
+When a manager disagrees and overrides specific dates (e.g., 4 out of 31 days), only those 4 dates get `manager_achieved_value` set. The remaining 27 days are left with `null` values.
 
 ---
 
-## Original Plan
+## Solution
 
-## Overview
+Modify the `saveOverrides` mutation in `useManagerSubPeriodOverride.ts` to:
 
-Enhance the Daily Submission Summary table on the employee's "View Submission" page to display dynamic columns showing the achieved value approved at each review level (Manager, Auditor, Management, Admin) as applicable based on the KPI's current status.
+1. Save override values for modified dates (current behavior)
+2. **Also** copy `achieved_value` to `manager_achieved_value` for all non-overridden dates
 
----
+### Technical Implementation
 
-## Current vs. New Table Structure
+**File: `src/hooks/useManagerSubPeriodOverride.ts`**
 
-| Current Table Columns | New Table Columns (Dynamic) |
-|----------------------|----------------------------|
-| Date | Date |
-| Achieved Value (Employee) | Achieved Value (Self) |
-| Submitted At | Manager Approved (if applicable) |
-| | Auditor Approved (if applicable) |
-| | Management Approved (if applicable) |
-| | Admin Override (if applicable) |
-| | Submitted At |
-
----
-
-## Technical Implementation
-
-### Phase 1: Database Schema Update
-
-Add new columns to `sub_period_submissions` table to track per-level approved values:
-
-```sql
-ALTER TABLE public.sub_period_submissions
-  ADD COLUMN IF NOT EXISTS manager_achieved_value integer,
-  ADD COLUMN IF NOT EXISTS auditor_achieved_value integer,
-  ADD COLUMN IF NOT EXISTS management_achieved_value integer,
-  ADD COLUMN IF NOT EXISTS admin_achieved_value integer;
-
--- Optional: Add indexes for efficient queries
-CREATE INDEX IF NOT EXISTS idx_sub_period_manager_value 
-  ON public.sub_period_submissions(kpi_id, manager_achieved_value) 
-  WHERE manager_achieved_value IS NOT NULL;
-```
-
-### Phase 2: Update TypeScript Interface
-
-Update `SubPeriodSubmission` interface in `useSubPeriodSubmissions.ts`:
+Update the `saveOverrides` mutation to populate `manager_achieved_value` for all entries:
 
 ```typescript
-export interface SubPeriodSubmission {
-  // ...existing fields...
-  manager_achieved_value: number | null;
-  auditor_achieved_value: number | null;
-  management_achieved_value: number | null;
-  admin_achieved_value: number | null;
+// After processing overrides, update remaining entries to copy employee values
+const { data: allSubmissions, error: fetchAllError } = await supabase
+  .from('sub_period_submissions')
+  .select('id, achieved_value, sub_period_value')
+  .eq('kpi_id', kpi_id)
+  .eq('review_month', review_month)
+  .eq('review_year', review_year);
+
+if (fetchAllError) throw fetchAllError;
+
+// Get the dates that were overridden
+const overriddenDates = new Set(overrides.map(o => o.sub_period_value));
+
+// Update non-overridden entries to copy achieved_value to manager_achieved_value
+for (const sub of allSubmissions || []) {
+  if (!overriddenDates.has(sub.sub_period_value) && sub.achieved_value !== null) {
+    const { error: copyError } = await supabase
+      .from('sub_period_submissions')
+      .update({
+        manager_achieved_value: sub.achieved_value,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', sub.id);
+    
+    if (copyError) throw copyError;
+  }
 }
 ```
 
-### Phase 3: Update Override Hooks to Save Per-Level Values
+### Same Fix for Auditor/Management Levels
 
-Modify `useManagerSubPeriodOverride.ts` to save to `manager_achieved_value`:
+Apply the same pattern to `useReviewerSubPeriodOverride.ts` for the `saveOverrides` mutation:
 
-```typescript
-// When manager accepts (no override)
-.update({
-  manager_achieved_value: existing.achieved_value, // Copy employee value
-  updated_at: new Date().toISOString(),
-})
+- When auditor disagrees → copy all `manager_achieved_value` to `auditor_achieved_value` except overridden dates
+- When management disagrees → copy all `auditor_achieved_value` to `management_achieved_value` except overridden dates
 
-// When manager overrides
-.update({
-  manager_achieved_value: override.achieved_value, // Manager's new value
-  update_reason: `Manager override: ${reason}`,
-  updated_at: new Date().toISOString(),
-})
+---
+
+## Data Migration for Existing Records
+
+Since the KPI was approved today but the values weren't saved, we need to backfill using the audit trail. The audit log shows:
+
+```
+action: MANAGER_DAILY_OVERRIDE
+metadata:
+  overrides: [
+    {date: "2026-01-01", to: 5},
+    {date: "2026-01-02", to: 0},
+    {date: "2026-01-04", to: 5},
+    {date: "2026-01-06", to: 5}
+  ]
 ```
 
-Similarly update hooks for auditor, management, and admin overrides.
+**Backfill Strategy:**
+1. Query `kpi_audit_logs` for `MANAGER_DAILY_OVERRIDE` entries
+2. For each affected KPI, get all `sub_period_submissions`
+3. Apply overridden values from audit metadata
+4. Copy `achieved_value` to `manager_achieved_value` for non-overridden dates
 
-### Phase 4: Update DailySubmissionSummary Component
+---
 
-**New Props:**
-
-```typescript
-interface DailySubmissionSummaryProps {
-  // ...existing props...
-  kpiStatus?: string;           // Current KPI status to determine visible columns
-  showReviewerColumns?: boolean; // Enable/disable reviewer columns
-  reviewSubmission?: {          // Monthly review data for context
-    manager_achieved_value: number | null;
-    manager_remarks: string | null;
-    auditor_achieved_value: number | null;
-    auditor_remarks: string | null;
-    management_achieved_value: number | null;
-    management_remarks: string | null;
-  } | null;
-}
-```
-
-**Dynamic Column Logic:**
-
-```typescript
-// Determine which columns to show based on KPI status
-const visibleColumns = useMemo(() => {
-  const cols: Array<{ key: string; label: string; colorClass: string }> = [
-    { key: 'achieved_value', label: 'Self', colorClass: '' },
-  ];
-  
-  // Show Manager column if KPI has passed manager_check or later
-  const passedManager = ['manager_check', 'audit', 'management_review', 'approved'].includes(kpiStatus || '');
-  if (passedManager) {
-    cols.push({ key: 'manager_achieved_value', label: 'Manager', colorClass: 'text-amber-600' });
-  }
-  
-  // Show Auditor column if KPI has passed audit or later
-  const passedAudit = ['audit', 'management_review', 'approved'].includes(kpiStatus || '');
-  if (passedAudit) {
-    cols.push({ key: 'auditor_achieved_value', label: 'Auditor', colorClass: 'text-purple-600' });
-  }
-  
-  // Show Management column if KPI has passed management_review or approved
-  const passedManagement = ['management_review', 'approved'].includes(kpiStatus || '');
-  if (passedManagement) {
-    cols.push({ key: 'management_achieved_value', label: 'Management', colorClass: 'text-emerald-600' });
-  }
-  
-  return cols;
-}, [kpiStatus]);
-```
-
-**Updated Table Rendering:**
-
-```tsx
-<TableRow>
-  <TableHead className="w-[80px]">Date</TableHead>
-  {visibleColumns.map(col => (
-    <TableHead key={col.key} className={col.colorClass}>
-      {col.label}
-    </TableHead>
-  ))}
-  <TableHead className="text-right">Submitted At</TableHead>
-</TableRow>
-
-{sortedSubmissions.map((submission) => (
-  <TableRow key={submission.id}>
-    <TableCell className="font-medium">{formattedDate}</TableCell>
-    {visibleColumns.map(col => {
-      const value = submission[col.key as keyof SubPeriodSubmission] as number | null;
-      const prevColKey = visibleColumns[visibleColumns.indexOf(col) - 1]?.key;
-      const prevValue = prevColKey ? submission[prevColKey as keyof SubPeriodSubmission] as number | null : null;
-      const isChanged = prevValue !== null && value !== null && prevValue !== value;
-      
-      return (
-        <TableCell key={col.key}>
-          <span className={cn(col.colorClass, isChanged && 'font-semibold')}>
-            {formatAchievedValue(value)}
-          </span>
-          {isChanged && (
-            <Badge variant="outline" className="ml-1 text-xs">Changed</Badge>
-          )}
-        </TableCell>
-      );
-    })}
-    <TableCell className="text-right text-sm text-muted-foreground">
-      {formattedTimestamp}
-    </TableCell>
-  </TableRow>
-))}
-```
-
-### Phase 5: Visual Enhancements
-
-**Column Color Coding:**
-
-| Level | Header Color | Badge Color |
-|-------|-------------|-------------|
-| Self (Employee) | Default | Default |
-| Manager | Amber/Orange | `bg-amber-100` |
-| Auditor | Purple | `bg-purple-100` |
-| Management | Emerald/Green | `bg-emerald-100` |
-| Admin | Red | `bg-red-100` |
-
-**Changed Value Indicator:**
-
-When a value differs from the previous level, show:
-- Strikethrough on previous value
-- Arrow indicator
-- "Changed" badge with appropriate color
-
-```text
-| Date   | Self | Manager      | Auditor       |
-|--------|------|--------------|---------------|
-| 01 Jan | Yes  | Yes          | Yes           |
-| 02 Jan | Yes  | ~~Yes~~ → No | No            |
-| 03 Jan | No   | No           | ~~No~~ → Yes  |
-```
-
-### Phase 6: Update All Usage Points
-
-Files to update to pass new props:
+## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/pages/MyKpis.tsx` | Pass `kpiStatus` and `showReviewerColumns={true}` |
-| `src/components/review/EmployeeScorecard.tsx` | Pass `kpiStatus` and `reviewSubmission` |
-| `src/components/review/AuditScorecard.tsx` | Pass `kpiStatus` and `reviewSubmission` |
-| `src/components/review/ManagementScorecard.tsx` | Pass `kpiStatus` and `reviewSubmission` |
-| `src/components/review/InlineDailySubmissionRow.tsx` | Pass `kpiStatus` |
+| `src/hooks/useManagerSubPeriodOverride.ts` | Update `saveOverrides` to populate ALL entries |
+| `src/hooks/useReviewerSubPeriodOverride.ts` | Update `saveOverrides` to populate ALL entries for auditor/management levels |
+| `DOCUMENTATION.md` | Update to reflect the complete value propagation behavior |
 
 ---
 
-## Data Flow Summary
+## Validation
 
-```text
-1. Employee submits daily entry
-   → sub_period_submissions.achieved_value = value
+After the fix:
 
-2. Manager approves (agrees)
-   → sub_period_submissions.manager_achieved_value = achieved_value
-
-3. Manager overrides
-   → sub_period_submissions.manager_achieved_value = override_value
-   → kpi_audit_logs records diff
-
-4. Auditor approves/overrides
-   → sub_period_submissions.auditor_achieved_value = value
-
-5. Management approves/overrides
-   → sub_period_submissions.management_achieved_value = value
-
-6. View Submission page shows all applicable columns dynamically
-```
-
----
-
-## Files to Create/Modify
-
-| File | Action | Purpose |
-|------|--------|---------|
-| **Database Migration** | Create | Add new columns to `sub_period_submissions` |
-| `src/hooks/useSubPeriodSubmissions.ts` | Modify | Update TypeScript interface |
-| `src/hooks/useManagerSubPeriodOverride.ts` | Modify | Save to `manager_achieved_value` column |
-| `src/components/review/DailySubmissionSummary.tsx` | Modify | Add dynamic reviewer columns |
-| `src/components/review/EmployeeScorecard.tsx` | Modify | Pass kpiStatus and reviewSubmission props |
-| `src/components/review/AuditScorecard.tsx` | Modify | Save auditor value to column |
-| `src/components/review/ManagementScorecard.tsx` | Modify | Save management value to column |
-| `src/pages/MyKpis.tsx` | Modify | Pass kpiStatus prop |
-| `DOCUMENTATION.md` | Modify | Document new columns and UI behavior |
-
----
-
-## Expected Visual Result
-
-For a KPI at "Management Review" stage:
-
-```text
-┌────────────────────────────────────────────────────────────────────────────────┐
-│ 📅 Daily Submission Summary                                                    │
-├────────────────────────────────────────────────────────────────────────────────┤
-│ Date   │ Self (Employee) │ Manager Approved │ Auditor Approved │ Submitted At │
-│────────│─────────────────│──────────────────│──────────────────│──────────────│
-│ 01 Jan │ Yes             │ Yes              │ Yes              │ 31 Jan, 8:42 │
-│ 02 Jan │ Yes             │ No [Changed]     │ No               │ 31 Jan, 8:42 │
-│ 03 Jan │ No              │ No               │ Yes [Changed]    │ 31 Jan, 8:42 │
-│ ...    │ ...             │ ...              │ ...              │ ...          │
-└────────────────────────────────────────────────────────────────────────────────┘
-```
+1. When a Manager approves a Daily Binary KPI (whether agreeing or overriding), ALL daily submissions will have `manager_achieved_value` populated
+2. The Auditor will see complete "Manager Approved" column data
+3. Same behavior cascades to Auditor → Management flow
 
 ---
 
 ## Testing Checklist
 
-1. **Database Migration**
-   - [ ] New columns added successfully
-   - [ ] Existing data remains intact
-   - [ ] Null values handled correctly
+1. **Manager Agrees Flow**
+   - [ ] All entries get `manager_achieved_value` = `achieved_value`
 
-2. **Manager Override Flow**
-   - [ ] Manager agreement saves to `manager_achieved_value`
-   - [ ] Manager override saves override value to `manager_achieved_value`
-   - [ ] Column appears after manager review complete
+2. **Manager Disagrees Flow**
+   - [ ] Overridden entries get new value in `manager_achieved_value`
+   - [ ] Non-overridden entries get `achieved_value` copied to `manager_achieved_value`
 
-3. **Auditor/Management Flows**
-   - [ ] Each level saves to appropriate column
-   - [ ] Columns appear progressively based on KPI status
+3. **Auditor Review Display**
+   - [ ] Manager Approved column shows values for all dates
+   - [ ] Changed values show visual diff badge
 
-4. **View Submission Page**
-   - [ ] Correct columns shown based on KPI status
-   - [ ] Changed values highlighted
-   - [ ] Table is scrollable for many columns
+4. **Data Backfill**
+   - [ ] Run migration script to fix existing records using audit trail
 
-5. **Edge Cases**
-   - [ ] KPI at `kra_set` shows only Self column
-   - [ ] KPI at `approved` shows all applicable columns
-   - [ ] Null values displayed as "—"
