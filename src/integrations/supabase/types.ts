@@ -369,6 +369,7 @@ export type Database = {
           raised_by: string
           raised_to: string
           reason: string
+          resolution_evidence_url: string | null
           resolution_notes: string | null
           resolved_at: string | null
           status: Database["public"]["Enums"]["query_status"]
@@ -383,6 +384,7 @@ export type Database = {
           raised_by: string
           raised_to: string
           reason: string
+          resolution_evidence_url?: string | null
           resolution_notes?: string | null
           resolved_at?: string | null
           status?: Database["public"]["Enums"]["query_status"]
@@ -397,6 +399,7 @@ export type Database = {
           raised_by?: string
           raised_to?: string
           reason?: string
+          resolution_evidence_url?: string | null
           resolution_notes?: string | null
           resolved_at?: string | null
           status?: Database["public"]["Enums"]["query_status"]

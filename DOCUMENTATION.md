@@ -213,7 +213,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
 | `training_needs` | Identified training gaps | `employee_id`, `kpi_id`, `gap_type`, `priority`, `status` |
-| `kpi_queries` | Review questions/clarifications | `kpi_id`, `raised_by`, `raised_to`, `reason`, `status` |
+| `kpi_queries` | Review questions/clarifications | `kpi_id`, `raised_by`, `raised_to`, `reason`, `evidence_url`, `resolution_notes`, `resolution_evidence_url`, `status` |
 | `notifications` | User notifications | `user_id`, `type`, `title`, `message`, `is_read` |
 
 #### System & Audit
@@ -559,7 +559,10 @@ useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculat
 - View incoming queries raised to user
 - View outgoing queries raised by user
 - Respond to queries with resolution notes
-- Attach evidence
+- **Query Attachments:** View evidence attached when query was raised (`evidence_url`)
+- **Response Attachments:** Upload evidence when resolving a query (`resolution_evidence_url`)
+- Query cards display both original query and response attachments
+- Raiser name prominently displayed in response dialog
 - Query resolution triggers KPI status reset
 
 ### 4.9 Admin Features
