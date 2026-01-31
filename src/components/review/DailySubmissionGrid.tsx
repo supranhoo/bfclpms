@@ -8,6 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Check, Calendar, Loader2 } from 'lucide-react';
 import { SubPeriodSubmission, useSubmitSubPeriod } from '@/hooks/useSubPeriodSubmissions';
 import { getDailySubPeriods, getMonthNumber, canSubmitForSubPeriod } from '@/lib/frequencyUtils';
+import { QualitativeOption, BINARY_OPTIONS, scoreToRatingLevel } from '@/lib/qualitativeUom';
+import { QualitativeSelect } from './QualitativeSelect';
 
 interface DailySubmissionGridProps {
   kpiId: string;
@@ -16,6 +18,8 @@ interface DailySubmissionGridProps {
   submissions: SubPeriodSubmission[];
   targetValue?: number | null;
   uom?: string | null;
+  uomType?: string | null;
+  qualitativeOptions?: QualitativeOption[] | null;
   onSubmissionComplete?: () => void;
 }
 
@@ -36,12 +40,17 @@ export function DailySubmissionGrid({
   submissions,
   targetValue,
   uom,
+  uomType,
+  qualitativeOptions,
   onSubmissionComplete,
 }: DailySubmissionGridProps) {
   const submitSubPeriod = useSubmitSubPeriod();
   const [editingDay, setEditingDay] = useState<number | null>(null);
   const [tempValue, setTempValue] = useState<string>('');
+  const [tempRating, setTempRating] = useState<number | null>(null);
   const [tempRemarks, setTempRemarks] = useState<string>('');
+
+  const isQualitative = uomType === 'binary' || uomType === 'tiered';
 
   const currentDate = new Date();
   const daysInMonth = getDaysInMonth(new Date(reviewYear, getMonthNumber(reviewMonth) - 1));
@@ -75,10 +84,26 @@ export function DailySubmissionGrid({
     setEditingDay(entry.day);
     setTempValue(entry.achieved_value);
     setTempRemarks(entry.remarks);
+    // For qualitative, try to find matching rating
+    if (isQualitative && entry.achieved_value) {
+      const options = uomType === 'binary' ? BINARY_OPTIONS : (qualitativeOptions || []);
+      const match = options.find(o => o.label === entry.achieved_value);
+      setTempRating(match?.rating ?? null);
+    } else {
+      setTempRating(null);
+    }
+  };
+
+  const handleQualitativeChange = (value: string, rating: number) => {
+    setTempValue(value);
+    setTempRating(rating);
   };
 
   const handleSave = async (entry: DayEntry) => {
-    const value = tempValue ? parseFloat(tempValue) : null;
+    // For qualitative KPIs, store the rating as achieved_value
+    const value = isQualitative 
+      ? tempRating 
+      : (tempValue ? parseFloat(tempValue) : null);
     
     await submitSubPeriod.mutateAsync({
       kpi_id: kpiId,
@@ -92,6 +117,7 @@ export function DailySubmissionGrid({
     
     setEditingDay(null);
     setTempValue('');
+    setTempRating(null);
     setTempRemarks('');
     onSubmissionComplete?.();
   };
@@ -99,7 +125,28 @@ export function DailySubmissionGrid({
   const handleCancel = () => {
     setEditingDay(null);
     setTempValue('');
+    setTempRating(null);
     setTempRemarks('');
+  };
+
+  // Helper to display achieved value for qualitative KPIs
+  const getDisplayValue = (entry: DayEntry) => {
+    if (!entry.achieved_value) return '-';
+    if (isQualitative) {
+      // For qualitative, the value stored might be a label or a rating number
+      const options = uomType === 'binary' ? BINARY_OPTIONS : (qualitativeOptions || []);
+      const numVal = parseFloat(entry.achieved_value);
+      // Check if stored as rating number
+      if (!isNaN(numVal)) {
+        const match = options.find(o => o.rating === numVal);
+        if (match) return match.label;
+      }
+      // Check if stored as label
+      const labelMatch = options.find(o => o.label === entry.achieved_value);
+      if (labelMatch) return labelMatch.label;
+      return entry.achieved_value;
+    }
+    return `${entry.achieved_value} ${uom || ''}`;
   };
 
   // Calculate aggregated score
@@ -150,15 +197,25 @@ export function DailySubmissionGrid({
                 </TableCell>
                 <TableCell>
                   {editingDay === entry.day ? (
-                    <Input
-                      type="number"
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      placeholder="Enter value..."
-                      className="w-32"
-                    />
+                    isQualitative ? (
+                      <QualitativeSelect
+                        uomType={uomType as 'binary' | 'tiered'}
+                        qualitativeOptions={qualitativeOptions || null}
+                        value={tempValue || null}
+                        onChange={handleQualitativeChange}
+                        placeholder="Select..."
+                      />
+                    ) : (
+                      <Input
+                        type="number"
+                        value={tempValue}
+                        onChange={(e) => setTempValue(e.target.value)}
+                        placeholder="Enter value..."
+                        className="w-32"
+                      />
+                    )
                   ) : (
-                    <span>{entry.achieved_value || '-'} {entry.achieved_value && uom}</span>
+                    <span>{getDisplayValue(entry)}</span>
                   )}
                 </TableCell>
                 <TableCell className="hidden md:table-cell">

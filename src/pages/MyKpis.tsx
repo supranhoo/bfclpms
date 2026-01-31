@@ -6,6 +6,7 @@ import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, calculateAggregatedScore } from '@/hooks/useSubPeriodSubmissions';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
+import { QualitativeOption, calculateQualitativeRating, scoreToRatingLevel } from '@/lib/qualitativeUom';
 import { 
   FrequencyType, 
   requiresSubPeriodSelection, 
@@ -32,6 +33,7 @@ import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { SubPeriodSelector } from '@/components/review/SubPeriodSelector';
 import { FrequencyLockedOverlay, FrequencyLockBadge } from '@/components/review/FrequencyLockedOverlay';
+import { QualitativeValueInput } from '@/components/review/QualitativeValueInput';
 import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
@@ -137,9 +139,15 @@ export default function MyKpis() {
   const [achievedValue, setAchievedValue] = useState('');
   const [calculatedScore, setCalculatedScore] = useState<number | null>(null);
   const [calculatedPercentage, setCalculatedPercentage] = useState<number | null>(null);
+  const [calculatedRatingLevel, setCalculatedRatingLevel] = useState<RatingLevel | null>(null);
   const [selfRemarks, setSelfRemarks] = useState('');
   const [selfEvidenceUrl, setSelfEvidenceUrl] = useState<string | null>(null);
   const [isNa, setIsNa] = useState(false);
+
+  // Helper to check if KPI is qualitative
+  const isQualitativeKpi = (kpi: KPI | null): boolean => {
+    return kpi?.uom_type === 'binary' || kpi?.uom_type === 'tiered';
+  };
   
   // Sub-period selection state for Daily/Weekly KPIs
   const [selectedSubPeriod, setSelectedSubPeriod] = useState<string | null>(null);
@@ -218,10 +226,20 @@ export default function MyKpis() {
       const result = calculateScoreFromAchieved(parseFloat(value), selectedKpi);
       setCalculatedScore(result.rating);
       setCalculatedPercentage(result.percentage);
+      setCalculatedRatingLevel(null);
     } else {
       setCalculatedScore(null);
       setCalculatedPercentage(null);
+      setCalculatedRatingLevel(null);
     }
+  };
+
+  // Handle qualitative value change (binary/tiered)
+  const handleQualitativeChange = (value: string, rating: number, ratingLevel: RatingLevel) => {
+    setAchievedValue(value);
+    setCalculatedScore(rating);
+    setCalculatedRatingLevel(ratingLevel);
+    setCalculatedPercentage(null);
   };
 
   const openReviewDialog = (kpi: KPI) => {
@@ -242,20 +260,45 @@ export default function MyKpis() {
       const prefilledValue = orgValue?.achieved_value ?? existing?.achieved_value;
       
       if (prefilledValue !== null && prefilledValue !== undefined) {
-        setAchievedValue(prefilledValue.toString());
-        const result = calculateScoreFromAchieved(prefilledValue, kpi);
-        setCalculatedScore(result.rating);
-        setCalculatedPercentage(result.percentage);
+        // For qualitative KPIs, achieved_value might be a string label stored as text
+        if (isQualitativeKpi(kpi)) {
+          // Try to find the matching option
+          const options = kpi.uom_type === 'binary' 
+            ? [{ label: 'Yes', rating: 5 }, { label: 'No', rating: 0 }]
+            : (kpi.qualitative_options as QualitativeOption[] | null) || [];
+          const matchedOption = options.find(o => 
+            o.label === prefilledValue.toString() || o.rating === prefilledValue
+          );
+          if (matchedOption) {
+            setAchievedValue(matchedOption.label);
+            setCalculatedScore(matchedOption.rating);
+            setCalculatedRatingLevel(scoreToRatingLevel(matchedOption.rating) as RatingLevel);
+            setCalculatedPercentage(null);
+          } else {
+            setAchievedValue('');
+            setCalculatedScore(null);
+            setCalculatedRatingLevel(null);
+            setCalculatedPercentage(null);
+          }
+        } else {
+          setAchievedValue(prefilledValue.toString());
+          const result = calculateScoreFromAchieved(prefilledValue, kpi);
+          setCalculatedScore(result.rating);
+          setCalculatedPercentage(result.percentage);
+          setCalculatedRatingLevel(null);
+        }
       } else {
         setAchievedValue('');
         setCalculatedScore(null);
         setCalculatedPercentage(null);
+        setCalculatedRatingLevel(null);
       }
     } else {
       // For sub-period KPIs, start fresh (will be filled when sub-period is selected)
       setAchievedValue('');
       setCalculatedScore(null);
       setCalculatedPercentage(null);
+      setCalculatedRatingLevel(null);
     }
     
     setSelfRemarks(existing?.self_remarks || '');
@@ -333,10 +376,17 @@ export default function MyKpis() {
       return 'red';
     };
 
+    // For qualitative KPIs, use the calculated rating level directly
+    const selfRating = isNa 
+      ? null 
+      : isQualitativeKpi(selectedKpi) 
+        ? calculatedRatingLevel 
+        : (calculatedScore !== null ? getRatingLevel(calculatedScore) : null);
+
     await submitReview.mutateAsync({
       kpi_id: selectedKpi.id,
-      achieved_value: isNa ? null : (parseFloat(achievedValue) || 0),
-      self_rating: isNa ? null : (calculatedScore !== null ? getRatingLevel(calculatedScore) : null),
+      achieved_value: isNa ? null : (isQualitativeKpi(selectedKpi) ? calculatedScore : (parseFloat(achievedValue) || 0)),
+      self_rating: selfRating,
       self_score: isNa ? null : calculatedScore,
       self_remarks: selfRemarks,
       self_evidence_url: selfEvidenceUrl,
@@ -909,45 +959,60 @@ export default function MyKpis() {
               {/* Achieved Value */}
               {!isNa && (
                 <div className="space-y-2">
-                  <Label htmlFor="achieved" className="text-sm flex items-center gap-2">
-                    Achieved Value *
-                    {hasOrgData && (
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <Lock className="h-3 w-3 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          Verified organization data{selectedKpiOrgValue?.data_source && ` from ${selectedKpiOrgValue.data_source}`}
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                  </Label>
-                  <Input
-                    id="achieved"
-                    type="number"
-                    value={achievedValue}
-                    onChange={(e) => handleAchievedChange(e.target.value)}
-                    placeholder="Enter value"
-                    className={`h-9 ${hasOrgData ? 'bg-muted cursor-not-allowed' : ''}`}
-                    readOnly={hasOrgData}
-                    disabled={hasOrgData}
-                  />
-                  {hasOrgData && (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Building2 className="h-3 w-3" />
-                      Verified data - cannot be modified
-                    </p>
-                  )}
-                  {!hasOrgData && achievedValue && selectedKpi?.target_value && (
-                    <p className="text-xs text-muted-foreground">
-                      {((parseFloat(achievedValue) / selectedKpi.target_value) * 100).toFixed(1)}% of target
-                    </p>
+                  {isQualitativeKpi(selectedKpi) ? (
+                    // Qualitative input for Binary/Tiered KPIs
+                    <QualitativeValueInput
+                      uomType={selectedKpi?.uom_type as 'binary' | 'tiered'}
+                      qualitativeOptions={selectedKpi?.qualitative_options as QualitativeOption[] | null}
+                      value={achievedValue || null}
+                      onChange={handleQualitativeChange}
+                      disabled={hasOrgData}
+                      label="Achieved Value *"
+                    />
+                  ) : (
+                    // Numeric input for standard KPIs
+                    <>
+                      <Label htmlFor="achieved" className="text-sm flex items-center gap-2">
+                        Achieved Value *
+                        {hasOrgData && (
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Lock className="h-3 w-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Verified organization data{selectedKpiOrgValue?.data_source && ` from ${selectedKpiOrgValue.data_source}`}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </Label>
+                      <Input
+                        id="achieved"
+                        type="number"
+                        value={achievedValue}
+                        onChange={(e) => handleAchievedChange(e.target.value)}
+                        placeholder="Enter value"
+                        className={`h-9 ${hasOrgData ? 'bg-muted cursor-not-allowed' : ''}`}
+                        readOnly={hasOrgData}
+                        disabled={hasOrgData}
+                      />
+                      {hasOrgData && (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Building2 className="h-3 w-3" />
+                          Verified data - cannot be modified
+                        </p>
+                      )}
+                      {!hasOrgData && achievedValue && selectedKpi?.target_value && (
+                        <p className="text-xs text-muted-foreground">
+                          {((parseFloat(achievedValue) / selectedKpi.target_value) * 100).toFixed(1)}% of target
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               )}
 
-              {/* Calculated Rating Display */}
-              {!isNa && calculatedScore !== null && (
+              {/* Calculated Rating Display - Only show for numeric KPIs (qualitative already shows in input) */}
+              {!isNa && calculatedScore !== null && !isQualitativeKpi(selectedKpi) && (
                 <div className="p-3 border rounded-lg bg-muted/50">
                   <Label className="text-xs text-muted-foreground">Calculated Rating</Label>
                   <div className="flex items-center gap-2 mt-1">

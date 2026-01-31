@@ -450,7 +450,7 @@ useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculat
 
 ### 4.3 KPI Self-Review
 
-**Route:** `/self-review`
+**Route:** `/my-kpis`
 
 **Workflow:**
 1. Employee views assigned KPIs for current period
@@ -459,10 +459,15 @@ useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculat
 4. Submits → Status changes to `submitted`
 5. Notification sent to manager
 
+**Input Types by UOM Type:**
+- **Numeric KPIs**: Standard number input with auto-calculated score based on R5-R0 thresholds
+- **Binary KPIs**: Yes/No option buttons with predefined ratings (Yes=R5, No=R0)
+- **Tiered KPIs**: Custom dropdown options with admin-defined ratings (e.g., Compliant=R5, Partial=R3, Non-Compliant=R0)
+
 **Score Calculation Modes:**
-- `manual`: Employee enters score directly
-- `auto_calculate`: System calculates from achieved value vs thresholds
-- `suggested_override`: Shows suggested score, allows override
+- `numeric`: System calculates from achieved value vs R5-R0 thresholds
+- `binary`: Fixed Yes=5, No=0 scoring
+- `tiered`: Admin-defined ratings per option (0-5 range)
 
 ### 4.4 Manager Review
 
