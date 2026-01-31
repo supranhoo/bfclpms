@@ -1075,11 +1075,13 @@ src/
 │
 ├── lib/
 │   ├── utils.ts               # Utility functions (cn, etc.)
+│   ├── dateUtils.ts           # Standardized date formatting
 │   ├── pdfExport.ts           # PDF generation logic
 │   ├── ratingCalculation.ts   # Score calculation logic
 │   ├── qualitativeUom.ts      # Qualitative KPI helpers
 │   ├── uomConstants.ts        # UOM dropdown options
 │   ├── reviewConstants.ts     # Status/rating constants
+│   ├── frequencyUtils.ts      # Frequency calculation helpers
 │   └── importValidation.ts    # Import validation
 │
 ├── integrations/
@@ -1200,6 +1202,19 @@ Smart input component that:
 - Handles numeric and qualitative inputs
 - Auto-calculates scores based on thresholds
 - Supports manual override mode
+
+### Utility Libraries
+
+#### `dateUtils.ts` - Standardized Date Formatting
+All dates throughout the application use a consistent "dd MMM yyyy" format (e.g., "12 Dec 2025"):
+```typescript
+import { formatDate, formatDateTime, formatTime } from '@/lib/dateUtils';
+
+formatDate('2025-12-12')           // "12 Dec 2025"
+formatDateTime('2025-12-12T10:30') // "12 Dec 2025, 10:30 AM"
+formatTime('2025-12-12T10:30')     // "10:30 AM"
+```
+Constants available: `DATE_FORMAT`, `DATE_TIME_FORMAT`, `TIME_FORMAT`
 
 ---
 

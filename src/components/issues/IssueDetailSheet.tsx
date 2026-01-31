@@ -8,6 +8,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
+import { format } from 'date-fns';
 import { 
   SystemIssue, 
   ISSUE_TYPE_LABELS, 
@@ -17,7 +18,7 @@ import {
 } from '@/hooks/useSystemIssues';
 import { 
   Calendar, 
-  User, 
+  User,
   Building2, 
   Clock, 
   ExternalLink,
@@ -139,7 +140,7 @@ export function IssueDetailSheet({ issue, open, onOpenChange }: IssueDetailSheet
               <div>
                 <p className="text-xs text-muted-foreground">Created</p>
                 <p className="text-sm font-medium">
-                  {issue.createdAt.toLocaleDateString()}
+                  {format(issue.createdAt, 'dd MMM yyyy')}
                 </p>
               </div>
             </div>

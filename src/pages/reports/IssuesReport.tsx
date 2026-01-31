@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Download, RefreshCw } from 'lucide-react';
+import { format } from 'date-fns';
 import { useSystemIssues, SystemIssue } from '@/hooks/useSystemIssues';
 import { IssuesDashboardCards } from '@/components/issues/IssuesDashboardCards';
 import { IssueFilters, IssueFiltersState } from '@/components/issues/IssueFilters';
@@ -84,7 +85,7 @@ export default function IssuesReport() {
       'Status': issue.status,
       'Priority': issue.priority,
       'Age (Days)': issue.ageInDays,
-      'Created Date': issue.createdAt.toLocaleDateString(),
+      'Created Date': format(issue.createdAt, 'dd MMM yyyy'),
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);

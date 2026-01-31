@@ -232,7 +232,7 @@ export default function ReviewPeriods() {
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {period.locked_at ? format(new Date(period.locked_at), 'MMM d, yyyy h:mm a') : '—'}
+                        {period.locked_at ? format(new Date(period.locked_at), 'dd MMM yyyy, hh:mm a') : '—'}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button

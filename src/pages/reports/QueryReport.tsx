@@ -91,7 +91,7 @@ export default function QueryReport() {
       'Raised To': q.raisedToName,
       'Reason': q.reason,
       'Status': q.status === 'open' ? 'Open' : 'Resolved',
-      'Created Date': format(new Date(q.created_at), 'dd/MM/yyyy'),
+      'Created Date': format(new Date(q.created_at), 'dd MMM yyyy'),
       'Days Open': q.status === 'open' ? q.daysSinceCreated : q.daysToResolve,
       'Resolution Notes': q.resolution_notes || '',
     }));

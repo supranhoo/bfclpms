@@ -174,7 +174,7 @@ export default function SystemSettings() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span>{format(new Date(lastRollover.created_at), 'MMM d, yyyy HH:mm')}</span>
+                      <span>{format(new Date(lastRollover.created_at), 'dd MMM yyyy, hh:mm a')}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <FileText className="h-4 w-4 text-muted-foreground" />

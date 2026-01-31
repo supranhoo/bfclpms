@@ -270,10 +270,10 @@ export default function AuditLogs() {
                 <TableRow key={log.id}>
                   <TableCell className="whitespace-nowrap">
                     <div className="text-sm">
-                      {format(new Date(log.created_at), 'MMM d, yyyy')}
+                      {format(new Date(log.created_at), 'dd MMM yyyy')}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {format(new Date(log.created_at), 'h:mm a')}
+                      {format(new Date(log.created_at), 'hh:mm a')}
                     </div>
                   </TableCell>
                   <TableCell>
