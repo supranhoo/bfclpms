@@ -968,8 +968,9 @@ export default function MyKpis() {
                   </div>
                 )}
           
-          {/* Main Content - Grid Layout */}
-          <div className="flex-1 grid grid-cols-3 gap-4 py-4 min-h-0">
+          {/* Main Content - Grid Layout with Scroll */}
+          <div className="flex-1 overflow-y-auto min-h-0 py-4">
+            <div className="grid grid-cols-3 gap-4">
             {/* Left Column - KPI Details */}
             <div className="space-y-4">
               {/* Key Metrics */}
@@ -1156,6 +1157,7 @@ export default function MyKpis() {
               )}
             </div>
           </div>
+        </div>
 
                 {/* Footer - Fixed at bottom */}
                 <SheetFooter className="pt-3 border-t flex-shrink-0">
