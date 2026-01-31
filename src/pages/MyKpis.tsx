@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI, OrgLevelScope } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
+import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,7 @@ import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/R
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
+import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
@@ -128,6 +130,9 @@ export default function MyKpis() {
   const filteredKpis = selectedCategory
     ? kpis?.filter(k => k.category_id === selectedCategory)
     : kpis;
+
+  // Sorting with default Weightage (High to Low)
+  const { sortedKpis, sortConfig, setSort } = useKpiSorting(filteredKpis);
 
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
 
@@ -407,14 +412,17 @@ export default function MyKpis() {
                 KPI Details
               </CardTitle>
               <CardDescription>
-                {filteredKpis?.length || 0} KPIs {selectedCategory ? 'in selected category' : 'found'}
+                {sortedKpis.length} KPIs {selectedCategory ? 'in selected category' : 'found'}
               </CardDescription>
             </div>
-            {selectedCategory && (
-              <Button variant="ghost" size="sm" onClick={() => setSelectedCategory(null)}>
-                Clear filter
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />
+              {selectedCategory && (
+                <Button variant="ghost" size="sm" onClick={() => setSelectedCategory(null)}>
+                  Clear filter
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -433,7 +441,7 @@ export default function MyKpis() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-              {filteredKpis?.map((kpi, index) => {
+              {sortedKpis.map((kpi, index) => {
                   const submission = submissionMap.get(kpi.id);
                   const score = submission?.final_score || submission?.self_score;
                   const scoreInfo = score !== null && score !== undefined ? scoreDisplay[score] : null;
@@ -559,7 +567,7 @@ export default function MyKpis() {
                     </TableRow>
                   );
                 })}
-                {(!filteredKpis || filteredKpis.length === 0) && (
+                {sortedKpis.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-12">
                       <div className="flex flex-col items-center gap-2 text-muted-foreground">

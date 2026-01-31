@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useKpisByEmployee, useReviewSubmissions, useApproveKpi, useRaiseQuery, useKpiQueries, useSendBackKpi, RatingLevel, KPI } from '@/hooks/useKpis';
 import { useAuth } from '@/contexts/AuthContext';
+import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
 import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
@@ -18,6 +19,7 @@ import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
 import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
+import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { scoreToRating } from '@/components/review/ScoreSelector';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -65,6 +67,9 @@ export function EmployeeScorecard({
     const yearMatch = k.review_year === selectedYear;
     return periodMatch && yearMatch;
   }), [allKpis, selectedPeriod, selectedYear]);
+
+  // Sorting with default Weightage (High to Low)
+  const { sortedKpis, sortConfig, setSort } = useKpiSorting(kpis);
 
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
@@ -372,8 +377,13 @@ export function EmployeeScorecard({
       {/* KPI Table */}
       <Card>
         <CardHeader>
-          <CardTitle>KPI Details</CardTitle>
-          <CardDescription>Click on a KPI to review and update scores</CardDescription>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+            <div>
+              <CardTitle>KPI Details</CardTitle>
+              <CardDescription>Click on a KPI to review and update scores</CardDescription>
+            </div>
+            <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
@@ -390,7 +400,7 @@ export function EmployeeScorecard({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {kpis?.map(kpi => {
+              {sortedKpis.map(kpi => {
                 const submission = submissionMap.get(kpi.id);
                 const kpiQueries = queryMap.get(kpi.id) || [];
                 const openQueries = kpiQueries.filter((q: any) => q.status === 'open');

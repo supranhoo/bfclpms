@@ -521,6 +521,12 @@ useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculat
 - Clear, consistent terminology across all KPI states
 - Clear visual distinction between new and existing KPIs
 
+**KPI Table Sorting:**
+- All KPI tables include sorting controls for Category and Weightage
+- Default sort: Weightage (High to Low) to prioritize most impactful KPIs
+- Secondary sort applies within same values (e.g., alphabetical category within same weightage)
+- Sorting available on: Employee Dashboard, My KPIs, Team Review Scorecard
+
 ### 4.8 Query Inbox
 
 **Route:** `/queries`

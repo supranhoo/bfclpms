@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, KPI } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
+import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,7 @@ import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
 import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
 import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
+import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -137,6 +139,9 @@ export default function Dashboard() {
       periodFilteredKpis.some(k => k.category_id === cat.id)
     );
   }, [categories, periodFilteredKpis]);
+
+  // Sorting with default Weightage (High to Low)
+  const { sortedKpis, sortConfig, setSort } = useKpiSorting(fullyFilteredKpis);
 
   if (isLoading) {
     return <DashboardSkeleton />;
@@ -288,11 +293,14 @@ export default function Dashboard() {
       {/* 6. KPI Details Table */}
       <Card>
         <CardHeader>
-          <div>
-            <CardTitle>Detailed KPI Review</CardTitle>
-            <CardDescription>
-              {fullyFilteredKpis.length} KPIs {activeCategory !== 'All' ? `in ${activeCategory}` : ''} for {selectedPeriod} {selectedYear}
-            </CardDescription>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+            <div>
+              <CardTitle>Detailed KPI Review</CardTitle>
+              <CardDescription>
+                {sortedKpis.length} KPIs {activeCategory !== 'All' ? `in ${activeCategory}` : ''} for {selectedPeriod} {selectedYear}
+              </CardDescription>
+            </div>
+            <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />
           </div>
         </CardHeader>
         <CardContent>
@@ -310,7 +318,7 @@ export default function Dashboard() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {fullyFilteredKpis.map(kpi => {
+              {sortedKpis.map(kpi => {
                 const submission = submissionMap.get(kpi.id);
                 const rating = submission?.final_rating || submission?.self_rating;
                 const score = submission?.final_score || submission?.self_score;
@@ -378,7 +386,7 @@ export default function Dashboard() {
                   </TableRow>
                 );
               })}
-              {fullyFilteredKpis.length === 0 && (
+              {sortedKpis.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No KPIs found for the selected filters
