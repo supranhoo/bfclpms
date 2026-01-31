@@ -14,6 +14,7 @@ import { UomTypeSelector } from './UomTypeSelector';
 import { TieredOptionsBuilder } from './TieredOptionsBuilder';
 import { UomType, QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
 import { Badge } from '@/components/ui/badge';
+import { UOM_OPTIONS } from '@/lib/uomConstants';
 
 interface AdminKpiCreateDialogProps {
   isOpen: boolean;
@@ -248,11 +249,18 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Unit of Measure (UOM)</Label>
-                    <Input
-                      value={uom}
-                      onChange={(e) => setUom(e.target.value)}
-                      placeholder="e.g., %, INR, Count"
-                    />
+                    <Select value={uom} onValueChange={setUom}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select UOM" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {UOM_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Target Value</Label>
