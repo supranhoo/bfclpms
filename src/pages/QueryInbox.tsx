@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead, Notification } from '@/hooks/useNotifications';
+import { useRespondToQuery, useAcceptQueryResponse, useSubordinateQueries, QueryStatusExtended, QueryWithDetails as WorkflowQueryWithDetails } from '@/hooks/useQueryWorkflow';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { StatsRowSkeleton, CategoryGridSkeleton } from '@/components/ui/LoadingSkeletons';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { format } from 'date-fns';
-import { MessageSquare, CheckCircle2, Clock, Send, User, Calendar, AlertCircle, Bell, BellOff, CheckCheck, ExternalLink, Paperclip } from 'lucide-react';
+import { MessageSquare, CheckCircle2, Clock, Send, User, Calendar, AlertCircle, Bell, BellOff, CheckCheck, ExternalLink, Paperclip, Eye, Users, MessageCircle } from 'lucide-react';
 
 interface QueryWithDetails {
   id: string;
@@ -27,12 +28,12 @@ interface QueryWithDetails {
   evidence_url: string | null;
   resolution_notes: string | null;
   resolution_evidence_url: string | null;
-  status: 'open' | 'resolved';
+  status: QueryStatusExtended;
   created_at: string;
   resolved_at: string | null;
   updated_at: string;
-  raised_by_profile: { id: string; full_name: string | null; email: string } | null;
-  raised_to_profile: { id: string; full_name: string | null; email: string } | null;
+  raised_by_profile: { id: string; full_name: string | null; email: string; employee_code?: string | null } | null;
+  raised_to_profile: { id: string; full_name: string | null; email: string; employee_code?: string | null } | null;
   kpi: {
     id: string;
     kra_name: string;
@@ -54,7 +55,12 @@ export default function QueryInbox() {
   const [responseDialogOpen, setResponseDialogOpen] = useState(false);
   const [resolutionNotes, setResolutionNotes] = useState('');
   const [responseEvidenceUrl, setResponseEvidenceUrl] = useState('');
-  const [activeTab, setActiveTab] = useState<'notifications' | 'received' | 'sent'>('notifications');
+  const [activeTab, setActiveTab] = useState<'notifications' | 'received' | 'sent' | 'team'>('notifications');
+
+  // Query workflow hooks
+  const respondToQuery = useRespondToQuery();
+  const acceptQueryResponse = useAcceptQueryResponse();
+  const { data: subordinateQueries = [], isLoading: loadingSubordinateQueries } = useSubordinateQueries();
 
   // Fetch notifications
   const { data: notifications, isLoading: loadingNotifications } = useNotifications();
@@ -110,44 +116,7 @@ export default function QueryInbox() {
     enabled: !!user?.id,
   });
 
-  // Resolve query mutation
-  const resolveQuery = useMutation({
-    mutationFn: async ({ query_id, resolution_notes, resolution_evidence_url }: { query_id: string; resolution_notes: string; resolution_evidence_url?: string }) => {
-      const { error } = await supabase
-        .from('kpi_queries')
-        .update({
-          status: 'resolved' as const,
-          resolution_notes,
-          resolution_evidence_url: resolution_evidence_url || null,
-          resolved_at: new Date().toISOString(),
-        })
-        .eq('id', query_id);
-
-      if (error) throw error;
-
-      // Log the resolution
-      if (user?.id && selectedQuery) {
-        await supabase.from('kpi_audit_logs').insert({
-          kpi_id: selectedQuery.kpi_id,
-          action: 'QUERY_RESOLVED',
-          performed_by: user.id,
-          new_value: { resolution_notes, resolution_evidence_url },
-          metadata: { query_id },
-        });
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-queries'] });
-      queryClient.invalidateQueries({ queryKey: ['kpi-queries'] });
-      toast({ title: 'Query resolved successfully' });
-      setResponseDialogOpen(false);
-      setResolutionNotes('');
-      setResponseEvidenceUrl('');
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Failed to resolve query', description: error.message, variant: 'destructive' });
-    },
-  });
+  // Note: Query resolution now uses two-step workflow via useRespondToQuery and useAcceptQueryResponse
 
   // Filter queries by tab
   const receivedQueries = useMemo(() => 
@@ -161,6 +130,9 @@ export default function QueryInbox() {
   );
 
   const openQueries = receivedQueries.filter(q => q.status === 'open');
+  const respondedQueries = receivedQueries.filter(q => q.status === 'responded');
+  // Queries awaiting acceptance by the raiser (in Sent tab)
+  const pendingAcceptanceQueries = sentQueries.filter(q => q.status === 'responded');
   // Count resolved queries from BOTH received and sent (for accurate stats)
   const resolvedReceivedQueries = receivedQueries.filter(q => q.status === 'resolved');
   const resolvedSentQueries = sentQueries.filter(q => q.status === 'resolved');
@@ -173,12 +145,26 @@ export default function QueryInbox() {
     setResponseDialogOpen(true);
   };
 
-  const handleResolve = () => {
+  const handleSubmitResponse = () => {
     if (!selectedQuery || !resolutionNotes.trim()) return;
-    resolveQuery.mutate({
+    respondToQuery.mutate({
       query_id: selectedQuery.id,
+      kpi_id: selectedQuery.kpi_id,
       resolution_notes: resolutionNotes,
       resolution_evidence_url: responseEvidenceUrl || undefined,
+    }, {
+      onSuccess: () => {
+        setResponseDialogOpen(false);
+        setResolutionNotes('');
+        setResponseEvidenceUrl('');
+      }
+    });
+  };
+
+  const handleAcceptResponse = (query: QueryWithDetails) => {
+    acceptQueryResponse.mutate({
+      query_id: query.id,
+      kpi_id: query.kpi_id,
     });
   };
 
@@ -197,108 +183,169 @@ export default function QueryInbox() {
     );
   }
 
-  const renderQueryCard = (query: QueryWithDetails, showActions: boolean = true) => (
-    <Card key={query.id} className={query.status === 'resolved' ? 'opacity-75' : ''}>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <CardTitle className="text-base flex items-center gap-2">
-              <MessageSquare className="h-4 w-4" />
-              {query.kpi?.kpi_name || 'Unknown KPI'}
-            </CardTitle>
-            <CardDescription>{query.kpi?.kra_name}</CardDescription>
-          </div>
-          <Badge 
-            variant="outline" 
-            className={query.status === 'open' 
-              ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' 
-              : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-            }
-          >
-            {query.status === 'open' ? (
-              <><Clock className="h-3 w-3 mr-1" /> Open</>
-            ) : (
-              <><CheckCircle2 className="h-3 w-3 mr-1" /> Resolved</>
-            )}
+  const renderQueryCard = (query: QueryWithDetails, options: { showActions?: boolean; isFYI?: boolean; isRaiser?: boolean } = {}) => {
+    const { showActions = true, isFYI = false, isRaiser = false } = options;
+    
+    const getStatusBadge = () => {
+      if (query.status === 'open') {
+        return (
+          <Badge variant="outline" className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">
+            <Clock className="h-3 w-3 mr-1" /> Open
           </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="p-3 bg-muted rounded-lg">
-          <p className="text-sm">{query.reason}</p>
-        </div>
-        
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <User className="h-4 w-4" />
-            <span>From: {query.raised_by_profile?.full_name || query.raised_by_profile?.email || 'Unknown'}</span>
-          </div>
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Calendar className="h-4 w-4" />
-            <span>{format(new Date(query.created_at), 'dd MMM yyyy, hh:mm a')}</span>
-          </div>
-        </div>
+        );
+      } else if (query.status === 'responded') {
+        return (
+          <Badge variant="outline" className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+            <MessageCircle className="h-3 w-3 mr-1" /> Responded
+          </Badge>
+        );
+      } else {
+        return (
+          <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+            <CheckCircle2 className="h-3 w-3 mr-1" /> Resolved
+          </Badge>
+        );
+      }
+    };
 
-        {query.kpi && (
-          <div className="flex flex-wrap gap-2 text-xs">
-            <Badge variant="secondary">
-              {query.kpi.review_period} {query.kpi.review_year}
-            </Badge>
-            <Badge variant="secondary">
-              Target: {query.kpi.target_value} {query.kpi.uom}
-            </Badge>
-          </div>
-        )}
-
-        {/* Show query attachment if exists */}
-        {query.evidence_url && (
-          <a 
-            href={query.evidence_url} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
-          >
-            <Paperclip className="h-4 w-4" />
-            View Query Attachment
-          </a>
-        )}
-
-        {query.resolution_notes && (
-          <div className="p-3 bg-green-50 dark:bg-green-950 rounded-lg border-2 border-green-300 dark:border-green-700">
-            <div className="flex items-center gap-2 mb-1">
-              <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-              <Label className="text-sm font-medium text-green-700 dark:text-green-300">Reply Received</Label>
+    return (
+      <Card key={query.id} className={query.status === 'resolved' ? 'opacity-75' : ''}>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <CardTitle className="text-base flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" />
+                {query.kpi?.kpi_name || 'Unknown KPI'}
+              </CardTitle>
+              <CardDescription>{query.kpi?.kra_name}</CardDescription>
             </div>
-            <p className="text-sm mt-1 text-foreground">{query.resolution_notes}</p>
-            {query.resolution_evidence_url && (
-              <a 
-                href={query.resolution_evidence_url} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm text-green-600 dark:text-green-400 hover:underline mt-2"
-              >
-                <Paperclip className="h-4 w-4" />
-                View Response Attachment
-              </a>
-            )}
-            {query.resolved_at && (
-              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                Resolved on {format(new Date(query.resolved_at), 'dd MMM yyyy, hh:mm a')}
-              </p>
-            )}
+            <div className="flex items-center gap-2">
+              {isFYI && (
+                <Badge variant="outline" className="text-blue-600 border-blue-200 dark:border-blue-800">
+                  <Eye className="h-3 w-3 mr-1" /> For Info
+                </Badge>
+              )}
+              {getStatusBadge()}
+            </div>
           </div>
-        )}
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="p-3 bg-muted rounded-lg">
+            <p className="text-sm">{query.reason}</p>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <User className="h-4 w-4" />
+              <span>From: {query.raised_by_profile?.full_name || query.raised_by_profile?.email || 'Unknown'}</span>
+            </div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Calendar className="h-4 w-4" />
+              <span>{format(new Date(query.created_at), 'dd MMM yyyy, hh:mm a')}</span>
+            </div>
+          </div>
 
-        {showActions && query.status === 'open' && query.raised_to === user?.id && (
-          <Button onClick={() => openResponseDialog(query)} className="w-full">
-            <Send className="h-4 w-4 mr-2" />
-            Respond & Resolve
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
+          {/* Show recipient for FYI/Sent views */}
+          {(isFYI || isRaiser) && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <User className="h-4 w-4" />
+              <span>To: {query.raised_to_profile?.full_name || query.raised_to_profile?.email || 'Unknown'}</span>
+            </div>
+          )}
+
+          {query.kpi && (
+            <div className="flex flex-wrap gap-2 text-xs">
+              <Badge variant="secondary">
+                {query.kpi.review_period} {query.kpi.review_year}
+              </Badge>
+              <Badge variant="secondary">
+                Target: {query.kpi.target_value} {query.kpi.uom}
+              </Badge>
+            </div>
+          )}
+
+          {/* Show query attachment if exists */}
+          {query.evidence_url && (
+            <a 
+              href={query.evidence_url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+            >
+              <Paperclip className="h-4 w-4" />
+              View Query Attachment
+            </a>
+          )}
+
+          {/* Show resolution notes with appropriate styling based on status */}
+          {query.resolution_notes && (
+            <div className={`p-3 rounded-lg border-2 ${
+              query.status === 'resolved' 
+                ? 'bg-green-50 dark:bg-green-950 border-green-300 dark:border-green-700'
+                : 'bg-amber-50 dark:bg-amber-950 border-amber-300 dark:border-amber-700'
+            }`}>
+              <div className="flex items-center gap-2 mb-1">
+                {query.status === 'resolved' ? (
+                  <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                ) : (
+                  <MessageCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                )}
+                <Label className={`text-sm font-medium ${
+                  query.status === 'resolved' 
+                    ? 'text-green-700 dark:text-green-300'
+                    : 'text-amber-700 dark:text-amber-300'
+                }`}>
+                  {query.status === 'resolved' ? 'Response Accepted' : 'Response Pending Acceptance'}
+                </Label>
+              </div>
+              <p className="text-sm mt-1 text-foreground">{query.resolution_notes}</p>
+              {query.resolution_evidence_url && (
+                <a 
+                  href={query.resolution_evidence_url} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className={`inline-flex items-center gap-2 text-sm hover:underline mt-2 ${
+                    query.status === 'resolved' 
+                      ? 'text-green-600 dark:text-green-400'
+                      : 'text-amber-600 dark:text-amber-400'
+                  }`}
+                >
+                  <Paperclip className="h-4 w-4" />
+                  View Response Attachment
+                </a>
+              )}
+              {query.resolved_at && (
+                <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  Resolved on {format(new Date(query.resolved_at), 'dd MMM yyyy, hh:mm a')}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Actions for employees - only on open queries they received */}
+          {showActions && query.status === 'open' && query.raised_to === user?.id && !isFYI && (
+            <Button onClick={() => openResponseDialog(query)} className="w-full">
+              <Send className="h-4 w-4 mr-2" />
+              Submit Response
+            </Button>
+          )}
+
+          {/* Actions for raisers - accept response on responded queries */}
+          {showActions && query.status === 'responded' && query.raised_by === user?.id && (
+            <Button 
+              onClick={() => handleAcceptResponse(query)} 
+              className="w-full"
+              disabled={acceptQueryResponse.isPending}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-2" />
+              {acceptQueryResponse.isPending ? 'Accepting...' : 'Accept Response'}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
 
   // Notification type icons and colors
   const getNotificationIcon = (type: string) => {
@@ -498,8 +545,8 @@ export default function QueryInbox() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'notifications' | 'received' | 'sent')}>
-        <TabsList>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'notifications' | 'received' | 'sent' | 'team')}>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="notifications" className="flex items-center gap-2">
             <Bell className="h-4 w-4" />
             Notifications
@@ -521,6 +568,20 @@ export default function QueryInbox() {
           <TabsTrigger value="sent" className="flex items-center gap-2">
             <Send className="h-4 w-4" />
             Sent
+            {pendingAcceptanceQueries.length > 0 && (
+              <Badge variant="outline" className="ml-1 h-5 min-w-5 px-1 flex items-center justify-center text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                {pendingAcceptanceQueries.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="team" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Team Queries
+            {subordinateQueries.filter(q => q.status !== 'resolved').length > 0 && (
+              <Badge variant="outline" className="ml-1 h-5 min-w-5 px-1 flex items-center justify-center text-xs">
+                {subordinateQueries.filter(q => q.status !== 'resolved').length}
+              </Badge>
+            )}
           </TabsTrigger>
         </TabsList>
 
@@ -583,6 +644,18 @@ export default function QueryInbox() {
                   </div>
                 </div>
               )}
+
+              {respondedQueries.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <MessageCircle className="h-5 w-5 text-amber-500" />
+                    Awaiting Acceptance ({respondedQueries.length})
+                  </h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {respondedQueries.map(query => renderQueryCard(query, { showActions: false }))}
+                  </div>
+                </div>
+              )}
               
               {resolvedReceivedQueries.length > 0 && (
                 <div>
@@ -591,7 +664,7 @@ export default function QueryInbox() {
                     Resolved ({resolvedReceivedQueries.length})
                   </h3>
                   <div className="grid gap-4 md:grid-cols-2">
-                    {resolvedReceivedQueries.map(query => renderQueryCard(query, false))}
+                    {resolvedReceivedQueries.map(query => renderQueryCard(query, { showActions: false }))}
                   </div>
                 </div>
               )}
@@ -608,8 +681,80 @@ export default function QueryInbox() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {sentQueries.map(query => renderQueryCard(query, false))}
+            <div className="space-y-6">
+              {pendingAcceptanceQueries.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <MessageCircle className="h-5 w-5 text-amber-500" />
+                    Pending Acceptance ({pendingAcceptanceQueries.length})
+                  </h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {pendingAcceptanceQueries.map(query => renderQueryCard(query, { showActions: true, isRaiser: true }))}
+                  </div>
+                </div>
+              )}
+              
+              {sentQueries.filter(q => q.status !== 'responded').length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Send className="h-5 w-5 text-blue-500" />
+                    All Sent ({sentQueries.filter(q => q.status !== 'responded').length})
+                  </h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {sentQueries.filter(q => q.status !== 'responded').map(query => renderQueryCard(query, { showActions: false, isRaiser: true }))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="team" className="mt-6">
+          {subordinateQueries.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Users className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                <p className="text-muted-foreground">No queries for your team members</p>
+                <p className="text-xs text-muted-foreground mt-1">Queries raised to your direct reports will appear here</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-6">
+              {subordinateQueries.filter(q => q.status === 'open').length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <AlertCircle className="h-5 w-5 text-orange-500" />
+                    Open ({subordinateQueries.filter(q => q.status === 'open').length})
+                  </h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {subordinateQueries.filter(q => q.status === 'open').map(query => renderQueryCard(query, { showActions: false, isFYI: true }))}
+                  </div>
+                </div>
+              )}
+
+              {subordinateQueries.filter(q => q.status === 'responded').length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <MessageCircle className="h-5 w-5 text-amber-500" />
+                    Responded ({subordinateQueries.filter(q => q.status === 'responded').length})
+                  </h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {subordinateQueries.filter(q => q.status === 'responded').map(query => renderQueryCard(query, { showActions: false, isFYI: true }))}
+                  </div>
+                </div>
+              )}
+              
+              {subordinateQueries.filter(q => q.status === 'resolved').length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    Resolved ({subordinateQueries.filter(q => q.status === 'resolved').length})
+                  </h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {subordinateQueries.filter(q => q.status === 'resolved').map(query => renderQueryCard(query, { showActions: false, isFYI: true }))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </TabsContent>
@@ -685,11 +830,11 @@ export default function QueryInbox() {
               Cancel
             </Button>
             <Button 
-              onClick={handleResolve} 
-              disabled={!resolutionNotes.trim() || resolveQuery.isPending}
+              onClick={handleSubmitResponse} 
+              disabled={!resolutionNotes.trim() || respondToQuery.isPending}
             >
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-              {resolveQuery.isPending ? 'Resolving...' : 'Resolve Query'}
+              <Send className="h-4 w-4 mr-2" />
+              {respondToQuery.isPending ? 'Submitting...' : 'Submit Response'}
             </Button>
           </DialogFooter>
         </DialogContent>

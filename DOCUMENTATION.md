@@ -546,10 +546,13 @@ Daily and Weekly KPIs follow a **two-level submission flow**:
 
 **Note:** All actions are accessed through the Review Sheet, providing full KPI context before taking action.
 
-**Query System:**
-- Manager raises query → Employee notified
-- Employee responds → Query resolved
-- KPI returns to submitted state for re-review
+**Query System (Two-Step Resolution):**
+- Reviewer raises query → Employee notified
+- Employee submits response → Status becomes `responded` → Raiser notified
+- Raiser accepts response → Status becomes `resolved` → Employee notified
+- Intermediate managers see queries for their subordinates in "Team Queries" tab (read-only)
+- Query History dialog shows chronological timeline of all queries/responses per KPI
+- KPI returns to submitted state for re-review after resolution
 
 ### 4.5 Audit Review
 
