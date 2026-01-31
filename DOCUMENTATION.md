@@ -510,6 +510,7 @@ Daily and Weekly KPIs follow a **two-level submission flow**:
 - "Submit Month" button visibility for Daily/Weekly KPIs:
   | Scenario | Button State | Tooltip |
   |----------|--------------|---------|
+  | Data still loading | Disabled (spinner) | "Loading..." |
   | No sub-period entries yet | Disabled | "Enter at least one daily/weekly value first" |
   | Has entries, status = `kra_set` | Enabled | (Clickable) |
   | Has entries, already submitted | Disabled | "This KPI has already been submitted for the month" |
