@@ -576,6 +576,65 @@ This ensures that both non-compliance (explicit "No") and non-submission (missed
 
 **Note:** All actions are accessed through the Review Sheet, providing full KPI context before taking action.
 
+#### 4.4.1 Manager Review for Daily Binary KPIs
+
+When a manager reviews a **Daily Binary KPI** (uom_type = `binary`, frequency = `Daily`), a special workflow is triggered:
+
+**Agreement Toggle:**
+- Manager is presented with the question: "Do you agree with the employee's daily submissions?"
+- Two options:
+  1. **Yes - Accept Score**: Accept the employee's self-review score as-is. Manager score = Employee score.
+  2. **No - Override Entries**: Opens the Manager Daily Override Editor.
+
+**Manager Daily Override Editor:**
+
+When the manager selects "No", an inline editor appears allowing them to:
+- View all days of the month in a table format
+- See the current employee value (Yes/No/missing) for each day
+- Override specific days by selecting a different value (Yes/No)
+- View a **real-time score recalculation** based on overrides
+- Provide a **mandatory reason** for the overrides (required before approval)
+
+**Override Score Recalculation:**
+```
+Total No = Missed Days + "No" Submissions + Override Changes
+Score: 0 No = 5, 1 No = 4, 2 No = 3, 3 No = 2, 4 No = 1, >4 No = 0
+```
+
+**UI Components:**
+| Component | Purpose |
+|-----------|---------|
+| `ManagerDailyOverrideEditor.tsx` | Calendar-based editor for manager to override daily entries |
+| Bulk Actions | "Mark all missing as No", "Reset overrides" buttons |
+| Score Preview | Shows original score vs recalculated score with diff |
+| Reason Field | Mandatory textarea for audit trail |
+
+**Data Flow:**
+1. Manager makes override selections
+2. Score recalculates in real-time using `calculateOverriddenScore()`
+3. On Approve:
+   - Overrides saved to `sub_period_submissions` table with `update_reason` containing manager's justification
+   - Audit log entry created with action `MANAGER_DAILY_OVERRIDE` containing full diff
+   - KPI approved with the recalculated manager score
+
+**Audit Trail:**
+```json
+{
+  "action": "MANAGER_DAILY_OVERRIDE",
+  "performed_by": "manager-uuid",
+  "on_behalf_of": "employee-uuid",
+  "metadata": {
+    "reason": "Verified HRMS logs, found discrepancies",
+    "original_score": 5,
+    "new_score": 3,
+    "overrides": [
+      {"date": "2026-01-15", "from": 5, "to": 0},
+      {"date": "2026-01-18", "from": null, "to": 0}
+    ]
+  }
+}
+```
+
 **Query System (Two-Step Resolution):**
 - Reviewer raises query → Employee notified
 - Employee submits response → Status becomes `responded` → Raiser notified
