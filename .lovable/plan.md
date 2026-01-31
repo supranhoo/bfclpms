@@ -1,125 +1,195 @@
 
 
-# Plan: Fix Binary/Tiered KPI Input in Review Workflows
+# Plan: KPI Resubmission Confirmation with Mandatory Reason
 
-## Problem Summary
+## Summary
 
-When a KPI has UOM Type set to "Binary" or "Tiered", users should see option buttons (Yes/No or custom tiers) instead of a numeric input field. Currently, the self-review interfaces always show a number input regardless of the KPI type.
+This plan implements a configurable resubmission workflow for daily/weekly KPI entries:
+
+1. **Per-KPI Toggle**: Admins can enable/disable resubmission confirmation requirement for each KPI
+2. **Mandatory Reason Field**: When enabled, employees MUST provide a reason before editing previously submitted data
+3. **Audit Trail**: All update reasons are stored in the database for compliance tracking
+
+## Database Changes
+
+### 1. Add Column to `kpis` Table
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `require_resubmit_reason` | boolean | true | When enabled, shows confirmation dialog and requires mandatory reason for editing submitted entries |
+
+### 2. Add Column to `kpi_templates` Table
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `require_resubmit_reason` | boolean | true | Template default for the resubmission requirement |
+
+### 3. Add Column to `sub_period_submissions` Table
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `update_reason` | text | null | Mandatory reason provided when resubmitting/editing a previously submitted entry |
 
 ## Files to Modify
 
-| File | Purpose |
-|------|---------|
-| `src/pages/MyKpis.tsx` | Main self-review sheet - add qualitative input support |
-| `src/components/review/DailySubmissionGrid.tsx` | Daily entries - add qualitative input support |
-| `src/components/review/WeeklySubmissionTable.tsx` | Weekly entries - add qualitative input support |
-| `DOCUMENTATION.md` | Update documentation |
+| File | Change Type | Purpose |
+|------|-------------|---------|
+| Database Migration | Create | Add new columns to kpis, kpi_templates, and sub_period_submissions tables |
+| `src/components/admin/AdminKpiCreateDialog.tsx` | Modify | Add toggle for resubmission confirmation |
+| `src/components/admin/AdminKpiEditDialog.tsx` | Modify | Add toggle for resubmission confirmation |
+| `src/components/admin/TemplateFormDialog.tsx` | Modify | Add toggle for resubmission confirmation in templates |
+| `src/components/review/DailySubmissionGrid.tsx` | Modify | Add confirmation dialog with mandatory reason field |
+| `src/components/review/WeeklySubmissionTable.tsx` | Modify | Add confirmation dialog with mandatory reason field |
+| `src/hooks/useSubPeriodSubmissions.ts` | Modify | Include update_reason in submission payload |
+| `DOCUMENTATION.md` | Modify | Document new feature |
 
-## Technical Implementation
+## Technical Details
 
-### 1. Update MyKpis.tsx Self-Review Sheet
+### Database Migration SQL
 
-**Current behavior (lines 909-946):**
-Always renders a numeric input field for achieved value.
+```sql
+-- Add resubmission configuration to KPIs
+ALTER TABLE kpis 
+ADD COLUMN require_resubmit_reason boolean DEFAULT true;
 
-**New behavior:**
-- Check if `selectedKpi?.uom_type === 'binary'` or `'tiered'`
-- If qualitative: render `QualitativeValueInput` component instead of numeric input
-- Store the selected label as achieved value (string)
-- Auto-calculate score based on the selected option's rating
+-- Add resubmission configuration to templates  
+ALTER TABLE kpi_templates
+ADD COLUMN require_resubmit_reason boolean DEFAULT true;
 
-**Changes needed:**
-- Import `QualitativeValueInput` component
-- Import `calculateQualitativeRating` utility
-- Update state handling to support string values for qualitative KPIs
-- Conditional rendering in the achieved value section
-- Update `handleSubmitReview` to handle string achieved values
-
-### 2. Update DailySubmissionGrid.tsx
-
-**Current behavior:**
-Each day row has a numeric input for achieved value.
-
-**New behavior:**
-- Accept `uomType` and `qualitativeOptions` as props
-- When editing a day entry:
-  - If numeric: show number input (current behavior)
-  - If binary/tiered: show option buttons inline or in a compact dropdown
-
-### 3. Update WeeklySubmissionTable.tsx
-
-Same pattern as DailySubmissionGrid - add qualitative input support for weekly entries.
-
-## Visual Preview
-
-### Binary KPI in Self-Review Sheet
-
-```
-┌─────────────────────────────────────────────────────┐
-│ Achieved Value *                                     │
-├─────────────────────────────────────────────────────┤
-│  ┌─────────────────┐  ┌─────────────────┐          │
-│  │      Yes        │  │       No        │          │
-│  │    ⭐ R5        │  │     ⭐ R0        │          │
-│  └─────────────────┘  └─────────────────┘          │
-│                                                      │
-│  ┌───────────────────────────────────────────────┐  │
-│  │ ℹ️ Selected: Yes                               │  │
-│  │    Requirement fully met                       │  │
-│  │    Score: 5 - Outstanding                      │  │
-│  └───────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────┘
+-- Add update reason tracking to sub-period submissions
+ALTER TABLE sub_period_submissions
+ADD COLUMN update_reason text;
 ```
 
-### Daily Grid with Binary Options
+### Admin Configuration UI
+
+A new toggle will be added in the KPI creation/edit dialogs under an "Advanced Settings" section:
 
 ```
-┌──────────┬───────────────────────────────────┬────────┐
-│ Date     │ Achieved Value                    │ Status │
-├──────────┼───────────────────────────────────┼────────┤
-│ 1 Jan    │ [Yes ▾]                           │ ✓ Done │
-│ 2 Jan    │ [Select option... ▾]              │ Pending│
-│ 3 Jan    │ [No ▾]                            │ ✓ Done │
-└──────────┴───────────────────────────────────┴────────┘
++----------------------------------------------------------+
+| Advanced Settings                                         |
++----------------------------------------------------------+
+|                                                           |
+| [Toggle] Require Reason for Resubmission                  |
+|          When enabled, employees must provide a           |
+|          mandatory reason when editing previously         |
+|          submitted daily/weekly entries                   |
+|                                                           |
++----------------------------------------------------------+
 ```
 
-## State Management Updates
+### Resubmission Workflow Logic
 
-### MyKpis.tsx Changes
+When employee clicks "Edit" on a submitted entry:
+
+**If `require_resubmit_reason` is TRUE:**
+1. Show AlertDialog confirmation
+2. Display current submitted value and timestamp
+3. Show mandatory "Reason for Update" text area
+4. "Confirm & Edit" button is disabled until reason is entered
+5. On confirm, open edit mode and store reason with the updated submission
+
+**If `require_resubmit_reason` is FALSE:**
+1. Open edit mode directly (current behavior)
+2. No confirmation dialog shown
+
+### Confirmation Dialog Design
+
+```
++----------------------------------------------------------+
+|  Edit Submitted Data?                                     |
++----------------------------------------------------------+
+|                                                           |
+|  You have already submitted data for 28 January:          |
+|                                                           |
+|  Current Value: 85%                                       |
+|  Submitted On: 28 Jan 2026, 10:30 AM                      |
+|                                                           |
+|  +----------------------------------------------------+  |
+|  | Reason for Update *                                |  |
+|  +----------------------------------------------------+  |
+|  |                                                    |  |
+|  |                                                    |  |
+|  +----------------------------------------------------+  |
+|                                                           |
+|  This reason will be logged for audit purposes.           |
+|                                                           |
++----------------------------------------------------------+
+|                    [Cancel]  [Confirm & Edit] (disabled)  |
++----------------------------------------------------------+
+```
+
+The "Confirm & Edit" button remains disabled until the user enters a reason.
+
+### Hook Updates
+
+Modify `useSubmitSubPeriod` mutation to accept and store `update_reason`:
 
 ```typescript
-// Current state - only handles numbers
-const [achievedValue, setAchievedValue] = useState('');
-
-// Need to also track:
-// - For binary/tiered: store the label string
-// - Calculate score from the selected option
-
-const handleQualitativeChange = (value: string, rating: number, ratingLevel: RatingLevel) => {
-  setAchievedValue(value); // Store label like "Yes", "No", "Partial"
-  setCalculatedScore(rating);
-  // Rating level already provided
-};
+mutationFn: async ({
+  kpi_id,
+  sub_period_type,
+  sub_period_value,
+  achieved_value,
+  remarks,
+  evidence_url,
+  review_month,
+  review_year,
+  update_reason,  // NEW - mandatory for resubmissions
+}: {
+  // ... existing types
+  update_reason?: string | null;
+}) => {
+  const { data, error } = await supabase
+    .from('sub_period_submissions')
+    .upsert({
+      // ... existing fields
+      update_reason: update_reason || null,  // Store the reason
+    })
+    // ...
+}
 ```
 
-### Submission Data Handling
+### Component Props Updates
 
-For qualitative KPIs, the `achieved_value` column stores the selected label (e.g., "Yes"), while the score is derived from the option's predefined rating.
+DailySubmissionGrid and WeeklySubmissionTable receive new prop:
 
-## Affected Workflows
+```typescript
+interface DailySubmissionGridProps {
+  // ... existing props
+  requireResubmitReason?: boolean;  // From KPI configuration
+}
+```
 
-1. **Self Review (MyKpis.tsx)** - Primary user-facing review interface
-2. **Daily Submissions** - For Daily frequency KPIs with qualitative options
-3. **Weekly Submissions** - For Weekly frequency KPIs with qualitative options
-4. **Manager/Audit Scorecards** - Already use `AchievedValueScoreInput` which handles this correctly
+## User Experience
+
+### For Employees:
+
+1. **First Submission**: Submit normally without any confirmation
+2. **Resubmission (when enabled)**:
+   - Click "Edit" on previously submitted row
+   - Confirmation dialog appears showing current value
+   - Enter mandatory reason for the update
+   - Click "Confirm & Edit" (only enabled after entering reason)
+   - Edit mode opens with previous values pre-filled
+   - Save updates the record with reason logged in database
+
+### For Administrators:
+
+1. When creating/editing a KPI, toggle "Require Reason for Resubmission"
+2. Default is ON (enabled) for audit compliance
+3. Can disable for KPIs where frequent corrections are expected and formal tracking is not required
 
 ## Testing Checklist
 
 After implementation:
-- Create a Binary UOM type KPI and verify Yes/No buttons appear in self-review
-- Create a Tiered UOM type KPI with custom options and verify dropdown/buttons work
-- Test Daily frequency + Binary combination
-- Test Weekly frequency + Tiered combination
-- Verify scores are correctly calculated from selected options
-- Verify submitted data saves the label string correctly
+- Create KPI with resubmission requirement ON - verify dialog appears on edit
+- Create KPI with resubmission requirement OFF - verify no dialog appears
+- Verify "Confirm & Edit" button is disabled when reason field is empty
+- Submit daily entry, then edit - verify mandatory reason is required
+- Submit weekly entry, then edit - verify mandatory reason is required
+- Check database `sub_period_submissions.update_reason` column for stored values
+- Verify first-time submissions do NOT show confirmation dialog
+- Test cancel button in confirmation dialog returns to grid without changes
+- Verify the toggle appears correctly in KPI templates
 
