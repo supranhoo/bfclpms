@@ -38,7 +38,13 @@ export default function CompletionReport() {
       : allKpis.filter(k => k.review_year?.toString() === selectedYear);
 
     // Group by period
-    const periodMap = new Map<string, { total: number; approved: number; year: number }>();
+    const periodMap = new Map<string, { 
+      total: number; 
+      approved: number; 
+      selfReviewSubmitted: number;
+      managerReviewed: number;
+      year: number 
+    }>();
 
     filteredKpis.forEach(kpi => {
       const period = kpi.review_period || 'Unknown';
@@ -46,13 +52,22 @@ export default function CompletionReport() {
       const key = `${period}-${year}`;
       
       if (!periodMap.has(key)) {
-        periodMap.set(key, { total: 0, approved: 0, year });
+        periodMap.set(key, { total: 0, approved: 0, selfReviewSubmitted: 0, managerReviewed: 0, year });
       }
       
       const data = periodMap.get(key)!;
       data.total++;
+      
+      // Track different stages of completion
       if (kpi.status === 'approved') {
         data.approved++;
+        data.managerReviewed++;
+        data.selfReviewSubmitted++;
+      } else if (['management_review', 'audit'].includes(kpi.status || '')) {
+        data.managerReviewed++;
+        data.selfReviewSubmitted++;
+      } else if (kpi.status === 'manager_check') {
+        data.selfReviewSubmitted++;
       }
     });
 
@@ -61,13 +76,18 @@ export default function CompletionReport() {
       .map(([key, data]) => {
         const [period] = key.split('-');
         const completionRate = data.total > 0 ? Math.round((data.approved / data.total) * 100) : 0;
+        const selfReviewRate = data.total > 0 ? Math.round((data.selfReviewSubmitted / data.total) * 100) : 0;
         return {
           period,
           year: data.year,
           total: data.total,
           approved: data.approved,
+          selfReviewSubmitted: data.selfReviewSubmitted,
+          managerReviewed: data.managerReviewed,
           pending: data.total - data.approved,
+          notSubmitted: data.total - data.selfReviewSubmitted,
           completionRate,
+          selfReviewRate,
         };
       })
       .sort((a, b) => {
@@ -80,9 +100,10 @@ export default function CompletionReport() {
   const chartData = useMemo(() => {
     return periodData.slice(0, 6).reverse().map(p => ({
       name: `${p.period.substring(0, 3)} ${p.year}`,
+      'Self Review': p.selfReviewSubmitted,
+      'Manager Review': p.managerReviewed,
       Approved: p.approved,
-      Pending: p.pending,
-      'Completion %': p.completionRate,
+      'Not Submitted': p.notSubmitted,
     }));
   }, [periodData]);
 
@@ -91,11 +112,15 @@ export default function CompletionReport() {
     const totalPeriods = periodData.length;
     const totalKpis = periodData.reduce((sum, p) => sum + p.total, 0);
     const totalApproved = periodData.reduce((sum, p) => sum + p.approved, 0);
+    const totalSelfReviewSubmitted = periodData.reduce((sum, p) => sum + p.selfReviewSubmitted, 0);
     const avgCompletion = totalPeriods > 0 
       ? Math.round(periodData.reduce((sum, p) => sum + p.completionRate, 0) / totalPeriods) 
       : 0;
+    const avgSelfReviewRate = totalPeriods > 0
+      ? Math.round(periodData.reduce((sum, p) => sum + p.selfReviewRate, 0) / totalPeriods)
+      : 0;
 
-    return { totalPeriods, totalKpis, totalApproved, avgCompletion };
+    return { totalPeriods, totalKpis, totalApproved, totalSelfReviewSubmitted, avgCompletion, avgSelfReviewRate };
   }, [periodData]);
 
   const handleExportExcel = useCallback(() => {
@@ -108,8 +133,11 @@ export default function CompletionReport() {
       'Period': p.period,
       'Year': p.year,
       'Total KPIs': p.total,
+      'Self Review Submitted': p.selfReviewSubmitted,
+      'Manager Reviewed': p.managerReviewed,
       'Approved': p.approved,
-      'Pending': p.pending,
+      'Not Submitted': p.notSubmitted,
+      'Self Review Rate': `${p.selfReviewRate}%`,
       'Completion Rate': `${p.completionRate}%`,
     }));
 
@@ -147,7 +175,7 @@ export default function CompletionReport() {
       />
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Periods</CardTitle>
@@ -168,11 +196,21 @@ export default function CompletionReport() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Approved</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-500" />
+            <CardTitle className="text-sm font-medium text-muted-foreground">Self Review Done</CardTitle>
+            <TrendingUp className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-600">{stats.totalApproved}</div>
+            <div className="text-3xl font-bold text-blue-600">{stats.totalSelfReviewSubmitted}</div>
+            <p className="text-xs text-muted-foreground">{stats.avgSelfReviewRate}% avg rate</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Approved</CardTitle>
+            <CheckCircle className="h-4 w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-emerald-600">{stats.totalApproved}</div>
           </CardContent>
         </Card>
         <Card>
@@ -211,7 +249,7 @@ export default function CompletionReport() {
         <Card>
           <CardHeader>
             <CardTitle>Completion Trend</CardTitle>
-            <CardDescription>Approved vs Pending KPIs by period</CardDescription>
+            <CardDescription>KPI workflow progression by period</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
@@ -222,8 +260,9 @@ export default function CompletionReport() {
                   <YAxis />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="Approved" fill="hsl(var(--primary))" />
-                  <Bar dataKey="Pending" fill="hsl(var(--muted-foreground))" />
+                  <Bar dataKey="Self Review" fill="hsl(210, 80%, 60%)" />
+                  <Bar dataKey="Manager Review" fill="hsl(38, 80%, 55%)" />
+                  <Bar dataKey="Approved" fill="hsl(145, 65%, 45%)" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -245,9 +284,11 @@ export default function CompletionReport() {
                   <TableHead>Period</TableHead>
                   <TableHead>Year</TableHead>
                   <TableHead className="text-center">Total KPIs</TableHead>
+                  <TableHead className="text-center">Self Review</TableHead>
+                  <TableHead className="text-center">Manager Review</TableHead>
                   <TableHead className="text-center">Approved</TableHead>
-                  <TableHead className="text-center">Pending</TableHead>
-                  <TableHead>Completion Rate</TableHead>
+                  <TableHead className="text-center">Not Submitted</TableHead>
+                  <TableHead>Completion</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -256,8 +297,10 @@ export default function CompletionReport() {
                     <TableCell className="font-medium">{p.period}</TableCell>
                     <TableCell>{p.year}</TableCell>
                     <TableCell className="text-center">{p.total}</TableCell>
-                    <TableCell className="text-center text-green-600">{p.approved}</TableCell>
-                    <TableCell className="text-center text-muted-foreground">{p.pending}</TableCell>
+                    <TableCell className="text-center text-blue-600">{p.selfReviewSubmitted}</TableCell>
+                    <TableCell className="text-center text-amber-600">{p.managerReviewed}</TableCell>
+                    <TableCell className="text-center text-emerald-600">{p.approved}</TableCell>
+                    <TableCell className="text-center text-muted-foreground">{p.notSubmitted}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Progress value={p.completionRate} className="w-24 h-2" />
@@ -268,7 +311,7 @@ export default function CompletionReport() {
                 ))}
                 {periodData.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       No period data found
                     </TableCell>
                   </TableRow>
