@@ -60,6 +60,7 @@ const KpiImportRowSchema = z.object({
     z.string(), // JSON string
   ]).optional(),
   frequency: optionalString(100),
+  frequencyCycleStart: optionalString(50), // For yearly: 'Jan-Dec', 'Jul-Jun', 'Apr-Mar', 'Custom'
   kpiWeightage: optionalNumber({ min: 0, max: 100 }),
   criteria: optionalString(100),
   r5: z.union([z.string(), z.number()]).optional(),
@@ -695,6 +696,7 @@ async function processImport(
         r1: formatRatingThreshold(row.r1, { mode: thresholdMode, factor: thresholdFactor }),
         r0: formatRatingThreshold(row.r0, { mode: thresholdMode, factor: thresholdFactor }),
         frequency: row.frequency || null,
+        frequency_cycle_start: row.frequencyCycleStart || null,
         source_of_data: row.sourceOfData || null,
         is_org_level: row.isOrgLevel || false,
       });
