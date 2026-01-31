@@ -1,59 +1,90 @@
 
 
-# Plan: Fix "Submit Month" Button Visibility
+# Plan: Fix "Submit Month" Button Not Visible for Employees
 
-## Problem Analysis
+## Root Cause Analysis
 
-The "Submit Month" button is not visible to users. After investigation, I identified the following potential causes:
+After thorough investigation, I found the issue is a **race condition / loading state problem**:
 
-### Current Button Visibility Conditions (Line 1264)
-```tsx
-{needsSubPeriodForKpi && selectedKpiSubPeriods.length > 0 && selectedKpi?.status === 'kra_set' && (
-  <Button ...>Submit Month</Button>
-)}
+### Data Flow
+1. `kpis` loads from `useMyKpis()`
+2. `kpiIds` is derived from `kpis`
+3. `subPeriodSubmissions` loads from `useSubPeriodSubmissionsByKpis(kpiIds, ...)` - **depends on kpiIds**
+4. When user opens review sheet, `selectedKpiSubPeriods` is computed from `subPeriodSubmissions`
+
+### The Problem
+If the user opens the review sheet **before** `subPeriodSubmissions` finishes loading:
+- `subPeriodSubmissions` is `undefined` or empty array initially
+- `selectedKpiSubPeriods.length === 0` evaluates to `true`
+- The **disabled** button with tooltip is shown instead of the enabled button
+
+Even after data loads, the button might not update properly because:
+1. The `selectedKpiSubPeriods` useMemo depends on `[selectedKpi, subPeriodSubmissions]`
+2. If `subPeriodSubmissions` was undefined when the sheet opened, it returns `[]`
+
+### Database Confirmation
+Database shows entries exist:
+```
+kpi_id: 45e6a59c-7b22-40b5-9074-b5e784939379
+review_month: January, review_year: 2026
+sub_period_value: 2026-01-31, 2026-01-30
+achieved_value: null (entries saved without values)
 ```
 
-All THREE conditions must be met:
-| Condition | What It Checks |
-|-----------|----------------|
-| `needsSubPeriodForKpi` | KPI frequency is "Daily" or "Weekly" |
-| `selectedKpiSubPeriods.length > 0` | At least one sub-period entry exists for this KPI in the current review period |
-| `selectedKpi?.status === 'kra_set'` | KPI hasn't been submitted yet |
+## Proposed Solution
 
-### Potential Issues Found
+### Fix 1: Handle Loading State
+Add a loading indicator for when sub-period data is still being fetched.
 
-1. **Page Location**: The button only exists on `/my-kpis`, not on admin pages like `/admin/kpis`
+### Fix 2: Fix Dependency Issue
+Ensure `getKpiSubPeriodSubmissions` is properly memoized and included in dependencies.
 
-2. **Missing Sub-Period Submissions**: The `selectedKpiSubPeriods` array might be empty because:
-   - The user hasn't entered any daily/weekly values yet
-   - The query filters by `review_month` and `review_year` - if these don't match the KPI's period, no submissions are returned
+### Fix 3: Consider Entries with NULL Values
+Currently `selectedKpiSubPeriods` includes ALL entries (even with null values). This is correct for showing the button - but we should also validate against entries with actual values for enabling submission.
 
-3. **Status Check**: If the KPI status is anything other than `kra_set` (e.g., already submitted), the button won't appear
-
-## Proposed Solutions
-
-### Fix 1: Improve Button Discoverability
-Show a helper message when conditions aren't fully met, guiding users to understand what's needed.
-
-### Fix 2: Add Console Debugging (Temporary)
-Add conditional logging to help diagnose the exact condition that's failing.
-
-### Fix 3: Visual Indicator in Footer
-Show the button in a disabled state with tooltip explaining why it can't be used yet, rather than hiding it completely.
-
-## Implementation Details
+## Implementation
 
 ### Changes to `src/pages/MyKpis.tsx`
 
-**1. Add debug info to understand why button is hidden** (around line 1262)
+**1. Add loading state check for sub-period data** (around line 142)
 
-Replace the current button rendering with a more informative approach:
+```typescript
+// Add isLoading state from the hook
+const { data: subPeriodSubmissions, isLoading: subPeriodLoading } = useSubPeriodSubmissionsByKpis(kpiIds, selectedPeriod, selectedYear);
+```
 
-```tsx
-{/* Submit Month Button Section */}
+**2. Fix the memoized helper function** (around line 176-179)
+
+The current implementation has a stale closure issue. The `getKpiSubPeriodSubmissions` function is defined inside the component but not memoized, so it captures `subPeriodSubmissions` at a specific point.
+
+```typescript
+// Wrap in useCallback to ensure fresh data
+const getKpiSubPeriodSubmissions = useCallback((kpiId: string) => {
+  return subPeriodSubmissions?.filter(s => s.kpi_id === kpiId) || [];
+}, [subPeriodSubmissions]);
+```
+
+**3. Update useMemo dependency** (lines 182-184)
+
+```typescript
+const selectedKpiSubPeriods = useMemo(() => {
+  return selectedKpi ? getKpiSubPeriodSubmissions(selectedKpi.id) : [];
+}, [selectedKpi, getKpiSubPeriodSubmissions]);
+```
+
+**4. Add loading state to button rendering** (around line 1264-1306)
+
+Show a loading state while data is being fetched:
+
+```typescript
 {needsSubPeriodForKpi && (
   <>
-    {selectedKpiSubPeriods.length === 0 ? (
+    {subPeriodLoading ? (
+      <Button size="sm" variant="outline" disabled className="gap-1 opacity-50">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Loading...
+      </Button>
+    ) : selectedKpiSubPeriods.length === 0 ? (
       <Tooltip>
         <TooltipTrigger asChild>
           <span>
@@ -96,34 +127,34 @@ Replace the current button rendering with a more informative approach:
 )}
 ```
 
-This change:
-- Shows a **disabled** "Submit Month" button for Daily/Weekly KPIs even when conditions aren't met
-- Provides **tooltip explanations** for why the button is disabled
-- Makes the workflow **discoverable** instead of hiding the action entirely
+**5. Add Loader2 import** (line 38)
 
-### Visual Summary
-
-| Scenario | Current Behavior | New Behavior |
-|----------|------------------|--------------|
-| Daily KPI, no entries | Button hidden | Disabled button with tooltip "Enter at least one daily value first" |
-| Daily KPI, has entries, status=kra_set | Button shown | Button enabled (no change) |
-| Daily KPI, already submitted | Button hidden | Disabled button with "Month Submitted" |
-| Monthly KPI | Button hidden | No button (correct - not applicable) |
+```typescript
+import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
+```
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/pages/MyKpis.tsx` | Replace hidden button with always-visible button that shows disabled state with tooltips |
-| `DOCUMENTATION.md` | Document the Submit Month button behavior |
+| `src/pages/MyKpis.tsx` | Fix loading state, memoization, and button rendering |
+| `DOCUMENTATION.md` | Update button visibility documentation |
+
+## Visual Summary
+
+| Scenario | Current | Fixed |
+|----------|---------|-------|
+| Data loading | Shows disabled "Submit Month" | Shows "Loading..." |
+| No entries | Disabled with tooltip | (same) |
+| Has entries, status=kra_set | Button enabled | (same, but now works) |
+| Already submitted | "Month Submitted" disabled | (same) |
 
 ## Testing Checklist
 
-- Navigate to My KPIs page (not admin page)
-- Select a Daily or Weekly KPI with `kra_set` status
-- Verify "Submit Month" button appears (disabled if no entries)
-- Enter a daily value and save
-- Verify button becomes enabled
-- Click Submit Month and verify confirmation dialog
-- After submission, verify button shows "Month Submitted" (disabled)
+1. Go to My KPIs page (`/my-kpis`)
+2. Open a Daily KPI in `kra_set` status
+3. Verify loading state appears briefly
+4. Verify "Submit Month" button is visible and enabled after data loads
+5. Click Submit Month and verify confirmation dialog
+6. Complete submission and verify status changes to `self_review`
 
