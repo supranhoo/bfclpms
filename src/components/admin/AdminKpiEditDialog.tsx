@@ -9,6 +9,9 @@ import { Switch } from '@/components/ui/switch';
 import { useKraCategories, useProfiles } from '@/hooks/useOrganization';
 import { useAdminUpdateKpi, ReviewStatus, KPI } from '@/hooks/useKpis';
 import { Loader2, Building2 } from 'lucide-react';
+import { UomTypeSelector } from '@/components/admin/UomTypeSelector';
+import { TieredOptionsBuilder } from '@/components/admin/TieredOptionsBuilder';
+import { UomType, QualitativeOption, validateQualitativeOptions } from '@/lib/qualitativeUom';
 
 interface AdminKpiEditDialogProps {
   isOpen: boolean;
@@ -60,6 +63,8 @@ const [formData, setFormData] = useState({
     r0: '',
     is_org_level: false,
     org_level_scope: 'organization' as 'organization' | 'department' | 'employee',
+    uom_type: 'numeric' as UomType,
+    qualitative_options: [] as QualitativeOption[],
   });
   const [reason, setReason] = useState('');
   const originalStatus = kpi?.status;
@@ -87,10 +92,17 @@ const [formData, setFormData] = useState({
         r0: kpi.r0 || '',
         is_org_level: kpi.is_org_level || false,
         org_level_scope: kpi.org_level_scope || 'organization',
+        uom_type: (kpi.uom_type as UomType) || 'numeric',
+        qualitative_options: (kpi.qualitative_options as QualitativeOption[]) || [],
       });
       setReason('');
     }
   }, [kpi]);
+
+  // Validation for tiered options
+  const tieredValidationError = formData.uom_type === 'tiered' 
+    ? validateQualitativeOptions(formData.qualitative_options) 
+    : null;
 
   const handleSubmit = async () => {
     if (!kpi) return;
@@ -101,29 +113,36 @@ const [formData, setFormData] = useState({
       return; // Form validation will show the required state
     }
 
+    // Validate tiered options if uom_type is tiered
+    if (formData.uom_type === 'tiered' && tieredValidationError) {
+      return;
+    }
+
     await updateKpi.mutateAsync({
       id: kpi.id,
       employee_id: formData.employee_id,
       category_id: formData.category_id,
       kra_name: formData.kra_name,
       kpi_name: formData.kpi_name,
-      target_value: formData.target_value ? parseFloat(formData.target_value) : null,
+      target_value: formData.uom_type === 'numeric' ? (formData.target_value ? parseFloat(formData.target_value) : null) : null,
       uom: formData.uom || null,
       weightage: formData.weightage ? parseFloat(formData.weightage) : null,
       frequency: formData.frequency || null,
-      criteria: formData.criteria || null,
+      criteria: formData.uom_type === 'numeric' ? (formData.criteria || null) : null,
       source_of_data: formData.source_of_data || null,
       review_period: formData.review_period || null,
       review_year: formData.review_year ? parseInt(formData.review_year) : null,
       status: formData.status,
-      r5: formData.r5 || null,
-      r4: formData.r4 || null,
-      r3: formData.r3 || null,
-      r2: formData.r2 || null,
-      r1: formData.r1 || null,
-      r0: formData.r0 || null,
+      r5: formData.uom_type === 'numeric' ? (formData.r5 || null) : null,
+      r4: formData.uom_type === 'numeric' ? (formData.r4 || null) : null,
+      r3: formData.uom_type === 'numeric' ? (formData.r3 || null) : null,
+      r2: formData.uom_type === 'numeric' ? (formData.r2 || null) : null,
+      r1: formData.uom_type === 'numeric' ? (formData.r1 || null) : null,
+      r0: formData.uom_type === 'numeric' ? (formData.r0 || null) : null,
       is_org_level: formData.is_org_level,
       org_level_scope: formData.is_org_level ? formData.org_level_scope : 'organization',
+      uom_type: formData.uom_type,
+      qualitative_options: formData.uom_type === 'tiered' ? formData.qualitative_options : null,
       reason,
     });
 
@@ -200,16 +219,18 @@ const [formData, setFormData] = useState({
             />
           </div>
 
-          {/* Target, UOM, Weightage, Frequency, Criteria */}
+          {/* Target (only for Numeric), UOM, Weightage */}
           <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>Target Value</Label>
-              <Input
-                type="number"
-                value={formData.target_value}
-                onChange={(e) => setFormData(prev => ({ ...prev, target_value: e.target.value }))}
-              />
-            </div>
+            {formData.uom_type === 'numeric' && (
+              <div className="space-y-2">
+                <Label>Target Value</Label>
+                <Input
+                  type="number"
+                  value={formData.target_value}
+                  onChange={(e) => setFormData(prev => ({ ...prev, target_value: e.target.value }))}
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>UOM</Label>
               <Input
@@ -244,22 +265,24 @@ const [formData, setFormData] = useState({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Criteria</Label>
-              <Select
-                value={formData.criteria}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, criteria: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select criteria" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CRITERIA_OPTIONS.map(opt => (
-                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {formData.uom_type === 'numeric' && (
+              <div className="space-y-2">
+                <Label>Criteria</Label>
+                <Select
+                  value={formData.criteria}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, criteria: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select criteria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CRITERIA_OPTIONS.map(opt => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           {/* Source of Data */}
@@ -270,6 +293,34 @@ const [formData, setFormData] = useState({
               onChange={(e) => setFormData(prev => ({ ...prev, source_of_data: e.target.value }))}
             />
           </div>
+
+          {/* UOM Type Selector */}
+          <UomTypeSelector
+            value={formData.uom_type}
+            onChange={(type) => setFormData(prev => ({ ...prev, uom_type: type }))}
+          />
+
+          {/* Tiered Options Builder - only shown when UOM Type is Tiered */}
+          {formData.uom_type === 'tiered' && (
+            <div className="space-y-2">
+              <TieredOptionsBuilder
+                options={formData.qualitative_options}
+                onChange={(options) => setFormData(prev => ({ ...prev, qualitative_options: options }))}
+              />
+              {tieredValidationError && (
+                <p className="text-sm text-destructive">{tieredValidationError}</p>
+              )}
+            </div>
+          )}
+
+          {/* Binary UOM Info */}
+          {formData.uom_type === 'binary' && (
+            <div className="p-3 border rounded-lg bg-muted/30">
+              <p className="text-sm text-muted-foreground">
+                Binary KPIs use fixed scoring: <strong>Yes = R5 (Outstanding)</strong>, <strong>No = R0 (Unacceptable)</strong>
+              </p>
+            </div>
+          )}
 
           {/* Organization-Level KPI Toggle */}
           <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
@@ -327,22 +378,24 @@ const [formData, setFormData] = useState({
             )}
           </div>
 
-          {/* Rating Thresholds */}
-          <div className="space-y-2">
-            <Label>Rating Thresholds</Label>
-            <div className="grid grid-cols-6 gap-2">
-              {(['r5', 'r4', 'r3', 'r2', 'r1', 'r0'] as const).map((field) => (
-                <div key={field} className="space-y-1">
-                  <Label className="text-xs uppercase">{field}</Label>
-                  <Input
-                    value={formData[field]}
-                    onChange={(e) => setFormData(prev => ({ ...prev, [field]: e.target.value }))}
-                    placeholder={field.toUpperCase()}
-                  />
-                </div>
-              ))}
+          {/* Rating Thresholds - only shown for Numeric UOM Type */}
+          {formData.uom_type === 'numeric' && (
+            <div className="space-y-2">
+              <Label>Rating Thresholds</Label>
+              <div className="grid grid-cols-6 gap-2">
+                {(['r5', 'r4', 'r3', 'r2', 'r1', 'r0'] as const).map((field) => (
+                  <div key={field} className="space-y-1">
+                    <Label className="text-xs uppercase">{field}</Label>
+                    <Input
+                      value={formData[field]}
+                      onChange={(e) => setFormData(prev => ({ ...prev, [field]: e.target.value }))}
+                      placeholder={field.toUpperCase()}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Review Period & Status */}
           <div className="grid grid-cols-3 gap-4">
@@ -413,7 +466,7 @@ const [formData, setFormData] = useState({
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button 
             onClick={handleSubmit} 
-            disabled={updateKpi.isPending || (formData.status !== originalStatus && !reason.trim())}
+            disabled={updateKpi.isPending || (formData.status !== originalStatus && !reason.trim()) || (formData.uom_type === 'tiered' && !!tieredValidationError)}
           >
             {updateKpi.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             Save Changes

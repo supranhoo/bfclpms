@@ -553,8 +553,13 @@ useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculat
 #### 4.9.6 All KPIs (`/admin/all-kpis`)
 - View all KPIs across organization
 - Filter by period, department, status
-- Admin override capabilities
-- Audit logging for changes
+- Admin override capabilities via Admin KPI Editor dialog:
+  - Edit all KPI fields including employee, category, targets, thresholds
+  - **Change UOM Type:** Switch between Numeric, Binary, and Tiered measurement types
+  - Configure tiered options with custom labels, ratings (R0-R5), and definitions
+  - Toggle Organization-Level KPI flag and set value scope
+  - Status changes require reason and trigger notifications to employee/manager
+- Audit logging for all changes
 
 #### 4.9.7 Review Periods (`/admin/review-periods`)
 - Create review periods (monthly/quarterly)
