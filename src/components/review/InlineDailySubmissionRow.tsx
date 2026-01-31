@@ -49,6 +49,7 @@ export function InlineDailySubmissionRow({
           uom={kpi.uom}
           uomType={kpi.uom_type}
           qualitativeOptions={kpi.qualitative_options as QualitativeOption[] | null}
+          kpiStatus={kpi.status}
           compact
         />
       </TableCell>

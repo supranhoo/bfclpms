@@ -849,8 +849,33 @@ CREATE TABLE public.sub_period_submissions (
   review_month TEXT,
   review_year INTEGER,
   update_reason TEXT, -- Reason provided when resubmitting
-  is_resubmitted BOOLEAN DEFAULT false -- True if entry has been updated once (no further edits allowed)
+  is_resubmitted BOOLEAN DEFAULT false, -- True if entry has been updated once (no further edits allowed)
+  -- Per-level approved values (added 2026-01-31)
+  manager_achieved_value INTEGER, -- Value approved/overridden by reporting manager
+  auditor_achieved_value INTEGER, -- Value approved/overridden by auditor
+  management_achieved_value INTEGER, -- Value approved/overridden by management
+  admin_achieved_value INTEGER -- Value overridden by admin
 );
+```
+
+#### 4.10.6 Per-Level Approved Values
+
+The `sub_period_submissions` table now tracks per-level approved values, enabling a complete audit trail of how each daily entry was evaluated at each review stage:
+
+| Column | Description |
+|--------|-------------|
+| `achieved_value` | Original value submitted by employee (Self) |
+| `manager_achieved_value` | Value approved or overridden by reporting manager |
+| `auditor_achieved_value` | Value approved or overridden by auditor |
+| `management_achieved_value` | Value approved or overridden by management |
+| `admin_achieved_value` | Value overridden by admin |
+
+**UI Behavior:**
+- The Daily Submission Summary table dynamically shows columns based on KPI status
+- When a KPI reaches `manager_check` status, the "Manager Approved" column becomes visible
+- When a KPI reaches `audit` status, the "Auditor Approved" column becomes visible
+- When a KPI reaches `management_review` or `approved` status, the "Management Approved" column becomes visible
+- Changed values between levels are highlighted with a "Changed" badge and strikethrough on the previous value
 
 -- Frequency configuration
 CREATE TABLE public.frequency_config (

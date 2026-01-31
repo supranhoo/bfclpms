@@ -1319,6 +1319,7 @@ export default function MyKpis() {
                   uom={selectedKpi.uom}
                   uomType={selectedKpi.uom_type}
                   qualitativeOptions={selectedKpi.qualitative_options as QualitativeOption[] | null}
+                  kpiStatus={selectedKpi.status}
                 />
               )}
             </div>

@@ -1,6 +1,39 @@
 
 # Plan: Add Per-Level Approved Values to Daily Submission Summary
 
+## Status: ✅ COMPLETED
+
+## Implementation Summary
+
+Added dynamic columns to the Daily Submission Summary table showing per-level approved values (Manager, Auditor, Management) as the KPI progresses through the review workflow.
+
+### Changes Made
+
+1. **Database Migration** - Added 4 new columns to `sub_period_submissions`:
+   - `manager_achieved_value`
+   - `auditor_achieved_value`
+   - `management_achieved_value`
+   - `admin_achieved_value`
+
+2. **Updated Hooks**:
+   - `useSubPeriodSubmissions.ts` - Updated interface with new columns
+   - `useManagerSubPeriodOverride.ts` - Now saves to `manager_achieved_value` column
+   - `useReviewerSubPeriodOverride.ts` - NEW: Generalized hook for all review levels
+
+3. **Updated Components**:
+   - `DailySubmissionSummary.tsx` - Dynamic columns based on `kpiStatus` prop
+   - `InlineDailySubmissionRow.tsx` - Passes `kpiStatus` to summary
+   - `EmployeeScorecard.tsx` - Passes `kpiStatus` to summary
+   - `AuditScorecard.tsx` - Passes `kpiStatus` to summary
+   - `ManagementScorecard.tsx` - Passes `kpiStatus` to summary
+   - `MyKpis.tsx` - Passes `kpiStatus` to summary
+
+4. **Documentation** - Updated DOCUMENTATION.md with new schema and behavior
+
+---
+
+## Original Plan
+
 ## Overview
 
 Enhance the Daily Submission Summary table on the employee's "View Submission" page to display dynamic columns showing the achieved value approved at each review level (Manager, Auditor, Management, Admin) as applicable based on the KPI's current status.

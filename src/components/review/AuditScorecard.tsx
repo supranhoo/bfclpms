@@ -950,6 +950,7 @@ function DailySubmissionWithOverrideWrapper({
         uom={kpi.uom}
         uomType={kpi.uom_type}
         qualitativeOptions={kpi.qualitative_options as QualitativeOption[] | null}
+        kpiStatus={kpi.status}
         managerOverrides={dailyOverrides.size > 0 ? dailyOverrides : undefined}
       />
       

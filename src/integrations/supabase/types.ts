@@ -1436,11 +1436,15 @@ export type Database = {
       sub_period_submissions: {
         Row: {
           achieved_value: number | null
+          admin_achieved_value: number | null
+          auditor_achieved_value: number | null
           created_at: string | null
           evidence_url: string | null
           id: string
           is_resubmitted: boolean | null
           kpi_id: string
+          management_achieved_value: number | null
+          manager_achieved_value: number | null
           remarks: string | null
           review_month: string
           review_year: number
@@ -1453,11 +1457,15 @@ export type Database = {
         }
         Insert: {
           achieved_value?: number | null
+          admin_achieved_value?: number | null
+          auditor_achieved_value?: number | null
           created_at?: string | null
           evidence_url?: string | null
           id?: string
           is_resubmitted?: boolean | null
           kpi_id: string
+          management_achieved_value?: number | null
+          manager_achieved_value?: number | null
           remarks?: string | null
           review_month: string
           review_year: number
@@ -1470,11 +1478,15 @@ export type Database = {
         }
         Update: {
           achieved_value?: number | null
+          admin_achieved_value?: number | null
+          auditor_achieved_value?: number | null
           created_at?: string | null
           evidence_url?: string | null
           id?: string
           is_resubmitted?: boolean | null
           kpi_id?: string
+          management_achieved_value?: number | null
+          manager_achieved_value?: number | null
           remarks?: string | null
           review_month?: string
           review_year?: number
