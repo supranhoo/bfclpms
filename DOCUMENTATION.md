@@ -500,12 +500,19 @@ useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculat
 
 **Route:** `/kra-acceptance`
 
-**Purpose:** Employees acknowledge their assigned KRAs at start of period
+**Purpose:** Employees acknowledge their assigned KRAs at start of period before submitting self-reviews
 
 **Flow:**
-1. Employee views assigned KPIs
-2. Confirms each KPI individually
-3. Signs off on complete KRA set
+1. Employee views assigned KPIs with `kra_set` status
+2. Confirms each KPI individually via checkbox
+3. Clicks "Accept Agreement" to transition all KPIs to `self_review` status
+4. Can now submit self-review on My KPIs page
+
+**Integration with My KPIs:**
+- The My KPIs page (`/my-kpis`) displays an alert banner when KPIs with `kra_set` status exist
+- The alert prompts users to accept their KRAs before submitting self-reviews
+- A button in the alert navigates directly to the KRA Acceptance page
+- KPIs in `kra_set` status are visible but cannot be reviewed until accepted
 
 ### 4.8 Query Inbox
 

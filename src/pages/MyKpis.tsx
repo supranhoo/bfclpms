@@ -20,7 +20,9 @@ import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/R
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
-import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User } from 'lucide-react';
+import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useNavigate } from 'react-router-dom';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -50,6 +52,7 @@ const scoreDisplay: Record<number, { label: string; color: string; level: Rating
 
 export default function MyKpis() {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
   const [selectedYear, setSelectedYear] = useState(defaultYear);
@@ -261,8 +264,35 @@ export default function MyKpis() {
     return <KpiPageSkeleton />;
   }
 
+  // Check for KPIs pending acceptance
+  const kraSetKpis = kpis?.filter(k => k.status === 'kra_set') || [];
+  const hasKraSetKpis = kraSetKpis.length > 0;
+
   return (
     <div className="space-y-6">
+      {/* KRA Acceptance Alert */}
+      {hasKraSetKpis && (
+        <Alert className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
+          <FileCheck className="h-5 w-5 text-amber-600" />
+          <AlertTitle className="text-amber-800 dark:text-amber-200">
+            KRA Acceptance Required
+          </AlertTitle>
+          <AlertDescription className="text-amber-700 dark:text-amber-300">
+            You have {kraSetKpis.length} KPI{kraSetKpis.length > 1 ? 's' : ''} pending acceptance. 
+            Please review and accept your KRAs before you can submit your self-review.
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="ml-4 border-amber-600 text-amber-700 hover:bg-amber-100 dark:border-amber-500 dark:text-amber-300 dark:hover:bg-amber-900/30"
+              onClick={() => navigate('/kra-acceptance')}
+            >
+              <FileCheck className="h-4 w-4 mr-2" />
+              Accept KRAs
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
