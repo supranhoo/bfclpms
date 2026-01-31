@@ -11,6 +11,8 @@ export type QueryStatus = 'open' | 'resolved';
 
 export type OrgLevelScope = 'organization' | 'department' | 'employee';
 
+export type FrequencyType = 'Daily' | 'Weekly' | 'Monthly' | 'Bi-Monthly' | 'Quarterly' | 'Half-Yearly' | 'Yearly';
+
 export interface KPI {
   id: string;
   category_id: string;
@@ -42,6 +44,10 @@ export interface KPI {
   // Qualitative UOM fields
   uom_type: 'numeric' | 'binary' | 'tiered' | null;
   qualitative_options: Array<{ label: string; rating: number; definition: string }> | null;
+  // Frequency and Sub-Frequency fields
+  sub_frequency: string | null;
+  frequency_cycle_start: string | null;
+  is_frequency_locked: boolean;
   kra_categories?: {
     id: string;
     name: string;
@@ -108,7 +114,7 @@ export function useMyKpis() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data as KPI[];
+      return data as unknown as KPI[];
     },
     enabled: !!user?.id,
   });
@@ -204,7 +210,7 @@ export function useKpisByEmployee(employeeId: string | undefined) {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data as KPI[];
+      return data as unknown as KPI[];
     },
     enabled: !!employeeId,
   });

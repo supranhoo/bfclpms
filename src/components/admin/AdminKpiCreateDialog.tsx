@@ -146,6 +146,10 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
       org_level_scope: 'organization' as const,
       uom_type: uomType,
       qualitative_options: uomType === 'tiered' ? qualitativeOptions : (uomType === 'binary' ? BINARY_OPTIONS : null),
+      // Frequency fields - auto-derived by database trigger
+      sub_frequency: null,
+      frequency_cycle_start: null,
+      is_frequency_locked: false,
     });
 
     handleClose();
