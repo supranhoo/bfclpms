@@ -581,24 +581,48 @@ Daily and Weekly KPIs follow a **two-level submission flow**:
 
 **Flow:**
 1. Employee views all assigned KPIs including those with `kra_set` status
-2. For new KPIs (`kra_set` status), clicks "Review & Submit" button
+2. For new KPIs (`kra_set` status), clicks "Review" button
 3. Reviews KPI details (target, criteria, rating scale) in the side sheet (scrollable for Daily KPIs with extended content)
 4. Enters achieved value, justification, and evidence
 5. For Daily KPIs, views the Daily Submission Summary table by scrolling down
-6. Clicks "Review & Submit" → KPI transitions from `kra_set` to `manager_check`
+6. Clicks "Submit" → KPI transitions from `kra_set` to `self_review`
 7. Notification sent to manager
+
+**View-Only Mode for Submitted KPIs:**
+After an employee submits a KPI (status changes from `kra_set` to `self_review` or beyond), they can still view their submission in read-only mode:
+- **Action Column:** Shows status badge + View button (Eye icon) instead of non-interactive badge
+- **Sheet Header:** Displays "View Submission" title with "Read Only" badge
+- **Read-Only Banner:** Informs employee "Viewing submitted data - This KPI is currently at [status] stage"
+- **Input Fields:** Hidden (N/A checkbox, achieved value input, remarks textarea)
+- **Evidence Upload:** Hidden; existing evidence shown as clickable link
+- **Daily Submission Summary:** Remains visible for reviewing historical entries
+- **Footer:** Only shows "Close" button; Save/Submit buttons are hidden
+
+| Element | Edit Mode (`kra_set`) | View Mode (Other statuses) |
+|---------|----------------------|---------------------------|
+| Sheet Title | "Submit Self Review" | "View Submission" |
+| Date/Week selector | Enabled | Hidden |
+| Value input | Enabled | Hidden |
+| Remarks input | Enabled | Shows read-only text |
+| Evidence upload | Enabled | Shows link if exists |
+| Save Entry button | Visible | Hidden |
+| Submit Month button | Visible | Hidden |
+| Close button | "Cancel" / "Done" | "Close" |
+| Daily Summary table | Visible | Visible |
+| Read-only banner | Hidden | Visible |
 
 **UI Indicators:**
 - "New KRA" badge shown in the review sheet header for `kra_set` KPIs
-- Info banner explaining the review and submission action
-- Consistent "Review & Submit" button text for all KPI statuses
+- "Read Only" badge shown in the review sheet header for submitted KPIs
+- Info banner explaining the current review stage
 - Status badges showing current workflow stage
 - Scrollable content area for Daily KPIs to accommodate Daily Submission Summary table
 
 **Benefits:**
 - Single-page workflow reduces navigation
-- Clear, consistent terminology across all KPI states
-- Clear visual distinction between new and existing KPIs
+- Employees can always view their submissions even after submitting
+- Clear visual distinction between edit and view modes
+- Transparent tracking of submitted values
 
 **KPI Table Sorting:**
 - All KPI tables include sorting controls for Category and Weightage

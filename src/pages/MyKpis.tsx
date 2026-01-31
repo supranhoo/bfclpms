@@ -858,16 +858,34 @@ export default function MyKpis() {
                               <FileCheck className="h-3.5 w-3.5 mr-1" />
                               Review
                             </Button>
-                          ) : kpi.status === 'self_review' ? (
-                            <Badge variant="secondary" className="h-8 px-3 flex items-center gap-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                              <Clock className="h-3.5 w-3.5" />
-                              Pending Review
-                            </Badge>
                           ) : (
-                            <Badge variant="secondary" className="h-8 px-3 flex items-center gap-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                              {statusLabels[kpi.status] || 'Processed'}
-                            </Badge>
+                            // For all submitted statuses: show status badge + View button
+                            <>
+                              <Badge 
+                                variant="secondary" 
+                                className={`h-7 px-2 text-xs flex items-center gap-1 ${
+                                  kpi.status === 'self_review' 
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                                    : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                }`}
+                              >
+                                {kpi.status === 'self_review' ? (
+                                  <Clock className="h-3 w-3" />
+                                ) : (
+                                  <CheckCircle2 className="h-3 w-3" />
+                                )}
+                                {statusLabels[kpi.status] || 'Submitted'}
+                              </Badge>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openReviewDialog(kpi)}
+                                className="h-7 px-2"
+                                title="View your submission"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                              </Button>
+                            </>
                           )}
                           <Button
                             size="sm"
@@ -916,6 +934,9 @@ export default function MyKpis() {
             const needsSubPeriodForKpi = selectedKpi ? requiresSubPeriodSelection(selectedKpi.frequency as FrequencyType) : false;
             // Note: selectedKpiSubPeriods and aggregatedSubPeriodScore are computed at component level
             
+            // Check if read-only mode (submitted KPIs should be view-only)
+            const isReadOnly = !isKraSet;
+            
             return (
               <>
                 {/* Header with Category, KRA, KPI */}
@@ -924,9 +945,15 @@ export default function MyKpis() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <SheetTitle className="text-lg">
-                          Submit Self Review
+                          {isReadOnly ? 'View Submission' : 'Submit Self Review'}
                         </SheetTitle>
-                        {isKraSet && (
+                        {isReadOnly && (
+                          <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 flex items-center gap-1">
+                            <Eye className="h-3 w-3" />
+                            Read Only
+                          </Badge>
+                        )}
+                        {!isReadOnly && (
                           <Badge variant="outline" className="border-amber-500 text-amber-600 dark:text-amber-400">
                             <FileCheck className="h-3 w-3 mr-1" />
                             New KRA
@@ -989,8 +1016,23 @@ export default function MyKpis() {
                   </div>
                 )}
                 
-                {/* Sub-Period Selection Banner for Daily/Weekly KPIs */}
-                {needsSubPeriodForKpi && selectedKpi && (
+                {/* Read-Only Banner for submitted KPIs */}
+                {isReadOnly && (
+                  <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg mt-3">
+                    <Eye className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                    <div className="text-sm">
+                      <span className="font-medium text-blue-800 dark:text-blue-200">
+                        Viewing submitted data
+                      </span>
+                      <span className="text-blue-600 dark:text-blue-400 ml-1">
+                        - This KPI is currently at "{statusLabels[selectedKpi?.status || 'self_review']}" stage
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Sub-Period Selection Banner for Daily/Weekly KPIs - Show in read-only mode too for viewing */}
+                {needsSubPeriodForKpi && selectedKpi && !isReadOnly && (
                   <div className="flex items-start gap-2 p-3 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-lg mt-3">
                     <Calendar className="h-4 w-4 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
@@ -1056,28 +1098,30 @@ export default function MyKpis() {
 
             {/* Middle Column - Score Input */}
             <div className="space-y-4">
-              {/* N/A Toggle */}
-              <div className="flex items-center space-x-2 p-2 border rounded-lg bg-muted/30">
-                <Checkbox
-                  id="is_na"
-                  checked={isNa}
-                  onCheckedChange={(checked) => {
-                    setIsNa(checked as boolean);
-                    if (checked) {
-                      setAchievedValue('');
-                      setCalculatedScore(null);
-                      setCalculatedPercentage(null);
-                    }
-                  }}
-                  disabled={hasOrgData}
-                />
-                <Label htmlFor="is_na" className="cursor-pointer text-xs">
-                  Mark as N/A (Not Applicable)
-                  {hasOrgData && (
-                    <span className="text-muted-foreground ml-1">(disabled for org data)</span>
-                  )}
-                </Label>
-              </div>
+              {/* N/A Toggle - Hidden in read-only mode */}
+              {!isReadOnly && (
+                <div className="flex items-center space-x-2 p-2 border rounded-lg bg-muted/30">
+                  <Checkbox
+                    id="is_na"
+                    checked={isNa}
+                    onCheckedChange={(checked) => {
+                      setIsNa(checked as boolean);
+                      if (checked) {
+                        setAchievedValue('');
+                        setCalculatedScore(null);
+                        setCalculatedPercentage(null);
+                      }
+                    }}
+                    disabled={hasOrgData}
+                  />
+                  <Label htmlFor="is_na" className="cursor-pointer text-xs">
+                    Mark as N/A (Not Applicable)
+                    {hasOrgData && (
+                      <span className="text-muted-foreground ml-1">(disabled for org data)</span>
+                    )}
+                  </Label>
+                </div>
+              )}
 
               {/* Achieved Value */}
               {!isNa && (
@@ -1161,33 +1205,46 @@ export default function MyKpis() {
 
             {/* Right Column - Remarks & Evidence */}
             <div className="flex flex-col space-y-4">
-              <div className="flex-1">
-                <div className="flex justify-between items-center mb-2">
-                  <Label htmlFor="remarks" className="text-sm">
-                    {isNa ? 'Reason for N/A *' : 'Justification'}
-                  </Label>
-                  {isNa && (
-                    <span className={`text-xs ${selfRemarks.trim().length < 50 ? 'text-destructive' : 'text-muted-foreground'}`}>
-                      {selfRemarks.trim().length}/50 characters minimum
-                    </span>
+              {/* Remarks - disabled in read-only mode */}
+              {!isReadOnly && (
+                <div className="flex-1">
+                  <div className="flex justify-between items-center mb-2">
+                    <Label htmlFor="remarks" className="text-sm">
+                      {isNa ? 'Reason for N/A *' : 'Justification'}
+                    </Label>
+                    {isNa && (
+                      <span className={`text-xs ${selfRemarks.trim().length < 50 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                        {selfRemarks.trim().length}/50 characters minimum
+                      </span>
+                    )}
+                  </div>
+                  <Textarea
+                    id="remarks"
+                    value={selfRemarks}
+                    onChange={(e) => setSelfRemarks(e.target.value)}
+                    placeholder={isNa ? 'Explain why this KPI is not applicable (minimum 50 characters)...' : 'Describe your achievements...'}
+                    className={`resize-none min-h-[100px] ${isNa && selfRemarks.trim().length < 50 && selfRemarks.length > 0 ? 'border-destructive' : ''}`}
+                  />
+                  {isNa && selfRemarks.trim().length < 50 && selfRemarks.length > 0 && (
+                    <p className="text-xs text-destructive mt-1">
+                      Please provide at least 50 characters ({50 - selfRemarks.trim().length} more needed)
+                    </p>
                   )}
                 </div>
-                <Textarea
-                  id="remarks"
-                  value={selfRemarks}
-                  onChange={(e) => setSelfRemarks(e.target.value)}
-                  placeholder={isNa ? 'Explain why this KPI is not applicable (minimum 50 characters)...' : 'Describe your achievements...'}
-                  className={`resize-none min-h-[100px] ${isNa && selfRemarks.trim().length < 50 && selfRemarks.length > 0 ? 'border-destructive' : ''}`}
-                />
-                {isNa && selfRemarks.trim().length < 50 && selfRemarks.length > 0 && (
-                  <p className="text-xs text-destructive mt-1">
-                    Please provide at least 50 characters ({50 - selfRemarks.trim().length} more needed)
-                  </p>
-                )}
-              </div>
+              )}
               
-              {/* Evidence Upload */}
-              {profile?.id && selectedKpi && (
+              {/* Show submitted remarks in read-only mode */}
+              {isReadOnly && selfRemarks && (
+                <div className="flex-1">
+                  <Label className="text-sm mb-2 block">Submitted Justification</Label>
+                  <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                    {selfRemarks || <span className="text-muted-foreground italic">No remarks provided</span>}
+                  </div>
+                </div>
+              )}
+              
+              {/* Evidence Upload - Only show in edit mode */}
+              {!isReadOnly && profile?.id && selectedKpi && (
                 <EvidenceUpload
                   userId={profile.id}
                   kpiId={selectedKpi.id}
@@ -1196,7 +1253,22 @@ export default function MyKpis() {
                 />
               )}
               
-              {/* Daily Submission Summary - Show for Daily KPIs with submissions */}
+              {/* Show evidence link in read-only mode */}
+              {isReadOnly && selfEvidenceUrl && (
+                <div>
+                  <Label className="text-sm mb-2 block">Submitted Evidence</Label>
+                  <a 
+                    href={selfEvidenceUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary underline hover:no-underline"
+                  >
+                    View Evidence
+                  </a>
+                </div>
+              )}
+              
+              {/* Daily Submission Summary - Show for Daily KPIs with submissions (always visible in both modes) */}
               {selectedKpi?.frequency === 'Daily' && selectedKpiSubPeriods.length > 0 && (
                 <DailySubmissionSummary
                   kpiId={selectedKpi.id}
@@ -1216,100 +1288,104 @@ export default function MyKpis() {
                 <SheetFooter className="pt-3 border-t flex-shrink-0">
                   <div className="flex items-center gap-2 w-full justify-between">
                     <Button variant="outline" size="sm" onClick={() => setReviewDialogOpen(false)}>
-                      {needsSubPeriodForKpi ? 'Done' : 'Cancel'}
+                      {isReadOnly ? 'Close' : (needsSubPeriodForKpi ? 'Done' : 'Cancel')}
                     </Button>
-                    <div className="flex items-center gap-2">
-                      {(() => {
-                        // Check if current sub-period is already resubmitted (final)
-                        const currentSubPeriodSubmission = needsSubPeriodForKpi && selectedSubPeriod && selectedKpi
-                          ? subPeriodSubmissions?.find(s => s.kpi_id === selectedKpi.id && s.sub_period_value === selectedSubPeriod)
-                          : null;
-                        const isSubPeriodFinal = currentSubPeriodSubmission?.is_resubmitted || false;
-                        
-                        if (isSubPeriodFinal) {
+                    
+                    {/* Only show action buttons in edit mode (not read-only) */}
+                    {!isReadOnly && (
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          // Check if current sub-period is already resubmitted (final)
+                          const currentSubPeriodSubmission = needsSubPeriodForKpi && selectedSubPeriod && selectedKpi
+                            ? subPeriodSubmissions?.find(s => s.kpi_id === selectedKpi.id && s.sub_period_value === selectedSubPeriod)
+                            : null;
+                          const isSubPeriodFinal = currentSubPeriodSubmission?.is_resubmitted || false;
+                          
+                          if (isSubPeriodFinal) {
+                            return (
+                              <Badge className="gap-1 bg-green-600 hover:bg-green-600 h-9 px-4">
+                                <Lock className="h-3 w-3" />
+                                Final - No Further Edits
+                              </Badge>
+                            );
+                          }
+                          
                           return (
-                            <Badge className="gap-1 bg-green-600 hover:bg-green-600 h-9 px-4">
-                              <Lock className="h-3 w-3" />
-                              Final - No Further Edits
-                            </Badge>
-                          );
-                        }
-                        
-                        return (
-                          <Button 
-                            size="sm"
-                            variant="secondary"
-                            onClick={handleSubmitReview} 
-                            disabled={
-                              // For sub-period KPIs, need sub-period selected and value
-                              (needsSubPeriodForKpi && (!selectedSubPeriod || (!isNa && !achievedValue))) ||
-                              // For regular KPIs, need achieved value unless N/A
-                              (!needsSubPeriodForKpi && !isNa && !achievedValue) || 
-                              // N/A requires 50 char reason
-                              (isNa && selfRemarks.trim().length < 50) || 
-                              submitReview.isPending ||
-                              submitSubPeriod.isPending
-                            }
-                          >
-                            {(submitReview.isPending || submitSubPeriod.isPending) 
-                              ? 'Saving...' 
-                              : needsSubPeriodForKpi 
-                                ? (currentSubPeriodSubmission ? 'Update Entry' : 'Save Entry')
-                                : 'Submit'}
-                          </Button>
-                        );
-                      })()}
-                      
-                      {/* Submit Month Button - Always visible for Daily/Weekly KPIs with tooltip states */}
-                      {needsSubPeriodForKpi && (
-                        <>
-                          {subPeriodLoading ? (
-                            <Button size="sm" variant="outline" disabled className="gap-1 opacity-50">
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                              Loading...
-                            </Button>
-                          ) : selectedKpiSubPeriods.length === 0 ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span>
-                                  <Button size="sm" variant="outline" disabled className="gap-1 opacity-50">
-                                    <Send className="h-3 w-3" />
-                                    Submit Month
-                                  </Button>
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                Enter at least one {selectedKpi?.frequency?.toLowerCase()} value first
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : selectedKpi?.status !== 'kra_set' ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span>
-                                  <Button size="sm" variant="outline" disabled className="gap-1 opacity-50">
-                                    <Send className="h-3 w-3" />
-                                    Month Submitted
-                                  </Button>
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                This KPI has already been submitted for the month
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : (
                             <Button 
                               size="sm"
-                              onClick={() => setShowMonthlySubmitConfirm(true)}
-                              className="gap-1"
-                              disabled={isSubmittingMonthly}
+                              variant="secondary"
+                              onClick={handleSubmitReview} 
+                              disabled={
+                                // For sub-period KPIs, need sub-period selected and value
+                                (needsSubPeriodForKpi && (!selectedSubPeriod || (!isNa && !achievedValue))) ||
+                                // For regular KPIs, need achieved value unless N/A
+                                (!needsSubPeriodForKpi && !isNa && !achievedValue) || 
+                                // N/A requires 50 char reason
+                                (isNa && selfRemarks.trim().length < 50) || 
+                                submitReview.isPending ||
+                                submitSubPeriod.isPending
+                              }
                             >
-                              <Send className="h-3 w-3" />
-                              Submit Month
+                              {(submitReview.isPending || submitSubPeriod.isPending) 
+                                ? 'Saving...' 
+                                : needsSubPeriodForKpi 
+                                  ? (currentSubPeriodSubmission ? 'Update Entry' : 'Save Entry')
+                                  : 'Submit'}
                             </Button>
-                          )}
-                        </>
-                      )}
-                    </div>
+                          );
+                        })()}
+                        
+                        {/* Submit Month Button - Always visible for Daily/Weekly KPIs with tooltip states */}
+                        {needsSubPeriodForKpi && (
+                          <>
+                            {subPeriodLoading ? (
+                              <Button size="sm" variant="outline" disabled className="gap-1 opacity-50">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Loading...
+                              </Button>
+                            ) : selectedKpiSubPeriods.length === 0 ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span>
+                                    <Button size="sm" variant="outline" disabled className="gap-1 opacity-50">
+                                      <Send className="h-3 w-3" />
+                                      Submit Month
+                                    </Button>
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Enter at least one {selectedKpi?.frequency?.toLowerCase()} value first
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : selectedKpi?.status !== 'kra_set' ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span>
+                                    <Button size="sm" variant="outline" disabled className="gap-1 opacity-50">
+                                      <Send className="h-3 w-3" />
+                                      Month Submitted
+                                    </Button>
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  This KPI has already been submitted for the month
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <Button 
+                                size="sm"
+                                onClick={() => setShowMonthlySubmitConfirm(true)}
+                                className="gap-1"
+                                disabled={isSubmittingMonthly}
+                              >
+                                <Send className="h-3 w-3" />
+                                Submit Month
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </SheetFooter>
               </>
