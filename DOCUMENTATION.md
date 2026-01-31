@@ -944,6 +944,7 @@ The PMS supports 7 frequency types for KPIs, each with specific submission rules
   - Submission table: Date, Achieved Value (formatted for numeric/binary/tiered, "—" for pending), Submission Timestamp
   - Visual indicators: Red highlight for "No" values, Lock icon for final/resubmitted entries
   - Visible to: Employee (MyKpis), Manager/Admin (EmployeeScorecard), Auditor (AuditScorecard), Management (ManagementScorecard)
+  - **Accessibility**: A "View" button appears for Daily KPIs in ALL statuses (not just `self_review`), allowing managers to view daily submissions even for KPIs in `kra_set` or other non-reviewable statuses. The sheet opens in read-only mode with no action buttons.
   - **Note**: Table displays all submissions including those with null achieved_value; dates are parsed from full YYYY-MM-DD format
 
 **Key Hooks:**
