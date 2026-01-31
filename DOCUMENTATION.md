@@ -428,6 +428,7 @@ login_hero_description text  -- Configurable description text
 - Overall score chart (compact radial donut - 1/6 width)
 - Category-wise score chart (horizontal bar - 5/6 width with 280px Y-axis for long category names)
   - **Category labels include weightage**: Each category displays its weightage percentage (e.g., "HR Operations (30%)") to show relative importance
+  - **All categories with mapped KPIs are shown**: Categories appear if the employee has at least one KPI assigned to that category, even if no scores have been submitted yet (displays 0% score bar)
 - Review status distribution with progress bars
 - KPI details table with status badges and action buttons
 
