@@ -13,7 +13,7 @@ import { useSubPeriodSubmissions, SubPeriodSubmission } from '@/hooks/useSubPeri
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { ReviewLevelOverrideEditor, calculateOverriddenScore } from '@/components/review/ReviewLevelOverrideEditor';
 import { PreviousLevelRemarks } from '@/components/review/PreviousLevelRemarks';
-import { useManagerSubPeriodOverride } from '@/hooks/useManagerSubPeriodOverride';
+import { useReviewerSubPeriodOverride } from '@/hooks/useReviewerSubPeriodOverride';
 import { QualitativeOption } from '@/lib/qualitativeUom';
 import { useAuth } from '@/contexts/AuthContext';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
@@ -97,7 +97,7 @@ export function AuditScorecard({
   const [dailyOverrides, setDailyOverrides] = useState<Map<string, number>>(new Map());
   const [overrideReason, setOverrideReason] = useState('');
   
-  const { saveOverrides, isLoading: isSavingOverrides } = useManagerSubPeriodOverride();
+  const { saveOverrides, acceptPreviousLevel, isLoading: isSavingOverrides } = useReviewerSubPeriodOverride();
 
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
   const queryMap = new Map<string, typeof queries>();
@@ -279,8 +279,46 @@ export function AuditScorecard({
     setReviewSheetOpen(true);
   };
 
-  const handleSubmitReview = (approve: boolean) => {
+  const handleSubmitReview = async (approve: boolean) => {
     if (!selectedKpi || auditorScore === null) return;
+    
+    const isDailyBinary = selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary';
+    
+    // For daily binary KPIs, persist auditor values
+    if (isDailyBinary) {
+      if (auditorAgrees === false && dailyOverrides.size > 0) {
+        // Auditor disagrees - save overrides
+        const overrideEntries = Array.from(dailyOverrides.entries()).map(([date, value]) => ({
+          sub_period_value: date,
+          achieved_value: value,
+          original_value: null,
+        }));
+        
+        const submission = submissionMap.get(selectedKpi.id);
+        const originalScore = submission?.manager_score || null;
+        
+        await saveOverrides.mutateAsync({
+          kpi_id: selectedKpi.id,
+          employee_id: employee.id,
+          review_level: 'auditor',
+          overrides: overrideEntries,
+          reason: overrideReason,
+          review_month: selectedPeriod,
+          review_year: selectedYear,
+          original_score: originalScore,
+          new_score: auditorScore,
+        });
+      } else {
+        // Auditor agrees - copy manager values to auditor column
+        await acceptPreviousLevel.mutateAsync({
+          kpi_id: selectedKpi.id,
+          review_level: 'auditor',
+          review_month: selectedPeriod,
+          review_year: selectedYear,
+        });
+      }
+    }
+    
     const rating = scoreToRating(auditorScore);
     submitAuditReview.mutate({
       kpi_id: selectedKpi.id,

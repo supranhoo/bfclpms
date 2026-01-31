@@ -106,7 +106,7 @@ export function EmployeeScorecard({
   const approveKpi = useApproveKpi();
   const raiseQuery = useRaiseQuery();
   const sendBackKpi = useSendBackKpi();
-  const { saveOverrides, isLoading: isSavingOverrides } = useManagerSubPeriodOverride();
+  const { saveOverrides, acceptEmployeeValues, isLoading: isSavingOverrides } = useManagerSubPeriodOverride();
 
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
   const queryMap = new Map<string, typeof queries>();
@@ -251,31 +251,37 @@ export function EmployeeScorecard({
     
     const isDailyBinary = selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary';
     
-    // If manager selected "No" and has overrides, save them first
-    if (isDailyBinary && managerAgrees === false && dailyOverrides.size > 0) {
-      // Build override entries for submission
-      const overrideEntries = Array.from(dailyOverrides.entries()).map(([date, value]) => {
-        // Find original value from submissions (fetched in wrapper)
-        return {
+    // For daily binary KPIs, handle manager value persistence
+    if (isDailyBinary) {
+      if (managerAgrees === false && dailyOverrides.size > 0) {
+        // Manager disagrees and has overrides - save them
+        const overrideEntries = Array.from(dailyOverrides.entries()).map(([date, value]) => ({
           sub_period_value: date,
           achieved_value: value,
-          original_value: null, // Will be populated from submissions
-        };
-      });
-      
-      const submission = submissionMap.get(selectedKpi.id);
-      const originalScore = submission?.self_score || null;
-      
-      await saveOverrides.mutateAsync({
-        kpi_id: selectedKpi.id,
-        employee_id: employee.id,
-        overrides: overrideEntries,
-        reason: overrideReason,
-        review_month: selectedPeriod,
-        review_year: selectedYear,
-        original_score: originalScore,
-        new_score: managerScore,
-      });
+          original_value: null,
+        }));
+        
+        const submission = submissionMap.get(selectedKpi.id);
+        const originalScore = submission?.self_score || null;
+        
+        await saveOverrides.mutateAsync({
+          kpi_id: selectedKpi.id,
+          employee_id: employee.id,
+          overrides: overrideEntries,
+          reason: overrideReason,
+          review_month: selectedPeriod,
+          review_year: selectedYear,
+          original_score: originalScore,
+          new_score: managerScore,
+        });
+      } else {
+        // Manager agrees - copy all employee values to manager_achieved_value column
+        await acceptEmployeeValues.mutateAsync({
+          kpi_id: selectedKpi.id,
+          review_month: selectedPeriod,
+          review_year: selectedYear,
+        });
+      }
     }
     
     const rating = scoreToRating(managerScore);
