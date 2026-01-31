@@ -18,6 +18,7 @@ export interface SubPeriodSubmission {
   created_at: string;
   updated_at: string;
   update_reason: string | null;
+  is_resubmitted: boolean;
 }
 
 /**
@@ -95,6 +96,7 @@ export function useSubmitSubPeriod() {
       review_month,
       review_year,
       update_reason,
+      is_resubmission,
     }: {
       kpi_id: string;
       sub_period_type: 'daily' | 'weekly';
@@ -105,6 +107,7 @@ export function useSubmitSubPeriod() {
       review_month: string;
       review_year: number;
       update_reason?: string | null;
+      is_resubmission?: boolean;
     }) => {
       const { data, error } = await supabase
         .from('sub_period_submissions')
@@ -121,6 +124,7 @@ export function useSubmitSubPeriod() {
             submitted_by: user?.id,
             submitted_at: new Date().toISOString(),
             update_reason: update_reason || null,
+            is_resubmitted: is_resubmission || false,
           },
           {
             onConflict: 'kpi_id,sub_period_type,sub_period_value,review_month,review_year',

@@ -1423,6 +1423,7 @@ export type Database = {
           created_at: string | null
           evidence_url: string | null
           id: string
+          is_resubmitted: boolean | null
           kpi_id: string
           remarks: string | null
           review_month: string
@@ -1439,6 +1440,7 @@ export type Database = {
           created_at?: string | null
           evidence_url?: string | null
           id?: string
+          is_resubmitted?: boolean | null
           kpi_id: string
           remarks?: string | null
           review_month: string
@@ -1455,6 +1457,7 @@ export type Database = {
           created_at?: string | null
           evidence_url?: string | null
           id?: string
+          is_resubmitted?: boolean | null
           kpi_id?: string
           remarks?: string | null
           review_month?: string

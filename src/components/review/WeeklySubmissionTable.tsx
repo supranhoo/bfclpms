@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Check, Clock, Loader2 } from 'lucide-react';
+import { Check, Clock, Loader2, Lock, AlertTriangle } from 'lucide-react';
 import { SubPeriodSubmission, useSubmitSubPeriod } from '@/hooks/useSubPeriodSubmissions';
 import { getWeeklySubPeriods, WEEKLY_REVIEW_WINDOWS } from '@/lib/frequencyUtils';
 import { QualitativeOption, BINARY_OPTIONS, scoreToRatingLevel } from '@/lib/qualitativeUom';
@@ -41,6 +41,7 @@ interface WeekEntry {
   achieved_value: string;
   remarks: string;
   isSubmitted: boolean;
+  isResubmitted: boolean;
   submissionId?: string;
   canSubmit: boolean;
   reviewWindow: string;
@@ -90,6 +91,7 @@ export function WeeklySubmissionTable({
         achieved_value: submission?.achieved_value?.toString() || '',
         remarks: submission?.remarks || '',
         isSubmitted: !!submission,
+        isResubmitted: submission?.is_resubmitted || false,
         submissionId: submission?.id,
         canSubmit: week.isEnabled,
         reviewWindow: window 
@@ -119,6 +121,9 @@ export function WeeklySubmissionTable({
 
   const handleStartEdit = (entry: WeekEntry) => {
     if (!entry.canSubmit) return;
+    
+    // If already resubmitted, no further edits allowed
+    if (entry.isResubmitted) return;
     
     // If already submitted and require reason is enabled, show confirmation dialog
     if (entry.isSubmitted && requireResubmitReason) {
@@ -180,6 +185,7 @@ export function WeeklySubmissionTable({
       review_month: reviewMonth,
       review_year: reviewYear,
       update_reason: updateReason || null,
+      is_resubmission: entry.isSubmitted,
     });
     
     setEditingWeek(null);
@@ -288,7 +294,12 @@ export function WeeklySubmissionTable({
                   )}
                 </TableCell>
                 <TableCell>
-                  {entry.isSubmitted ? (
+                  {entry.isResubmitted ? (
+                    <Badge className="gap-1 bg-green-600 hover:bg-green-600">
+                      <Lock className="h-3 w-3" />
+                      Final
+                    </Badge>
+                  ) : entry.isSubmitted ? (
                     <Badge variant="secondary" className="gap-1">
                       <Check className="h-3 w-3" />
                       Done
@@ -325,7 +336,7 @@ export function WeeklySubmissionTable({
                         Cancel
                       </Button>
                     </div>
-                  ) : entry.canSubmit ? (
+                  ) : entry.canSubmit && !entry.isResubmitted ? (
                     <Button 
                       size="sm" 
                       variant="outline"
@@ -354,11 +365,19 @@ export function WeeklySubmissionTable({
       <AlertDialog open={!!confirmEditEntry} onOpenChange={(open) => !open && handleCancelConfirmEdit()}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Edit Submitted Data?</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Re-submit Data?
+            </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-200">
+                  <p className="font-medium">
+                    You can update this record only once. It will be considered final and no further update will be allowed.
+                  </p>
+                </div>
                 <p>
-                  You have already submitted data for <strong>Week {confirmEditEntry?.weekNum}</strong>:
+                  Current submission for <strong>Week {confirmEditEntry?.weekNum}</strong>:
                 </p>
                 <div className="p-3 bg-muted rounded-lg text-sm">
                   <p><strong>Current Value:</strong> {confirmEditEntry ? getDisplayValue(confirmEditEntry) : '-'}</p>
@@ -384,6 +403,9 @@ export function WeeklySubmissionTable({
                     This reason will be logged for audit purposes.
                   </p>
                 </div>
+                <p className="text-sm font-medium text-foreground">
+                  Are you sure you want to re-submit?
+                </p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -393,7 +415,7 @@ export function WeeklySubmissionTable({
               onClick={handleConfirmEdit}
               disabled={!pendingUpdateReason.trim()}
             >
-              Confirm & Edit
+              Confirm & Re-submit
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
