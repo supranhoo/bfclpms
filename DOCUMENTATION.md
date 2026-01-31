@@ -671,7 +671,9 @@ CREATE TABLE public.sub_period_submissions (
   achieved_value NUMERIC,
   remarks TEXT,
   review_month TEXT,
-  review_year INTEGER
+  review_year INTEGER,
+  update_reason TEXT, -- Reason provided when resubmitting
+  is_resubmitted BOOLEAN DEFAULT false -- True if entry has been updated once (no further edits allowed)
 );
 
 -- Frequency configuration
@@ -687,7 +689,31 @@ CREATE TABLE public.frequency_config (
 ALTER TABLE kpis ADD COLUMN sub_frequency TEXT;
 ALTER TABLE kpis ADD COLUMN frequency_cycle_start TEXT;
 ALTER TABLE kpis ADD COLUMN is_frequency_locked BOOLEAN;
+ALTER TABLE kpis ADD COLUMN require_resubmit_reason BOOLEAN DEFAULT true;
 ```
+
+#### 4.10.6 One-Time Update Policy
+
+Sub-period submissions (daily/weekly) enforce a **one-time update** policy for audit compliance:
+
+| Submission State | Status Badge | Action Available | Notes |
+|------------------|--------------|------------------|-------|
+| Not submitted | Pending | Enter | First submission allowed |
+| Submitted (first time) | Done | Edit | One update allowed with mandatory reason |
+| Resubmitted (final) | Final (🔒) | None | Locked, no further edits |
+
+**Workflow:**
+1. Employee submits data for the first time → Status shows "Done"
+2. If employee clicks "Edit", a warning dialog appears:
+   - *"You can update this record only once. It will be considered final and no further update will be allowed."*
+   - Employee must provide a mandatory reason for the update
+3. After resubmission, `is_resubmitted` is set to `true` → Status shows "Final" with lock icon
+4. No further edits are allowed for that entry
+
+**Configuration:**
+- The `require_resubmit_reason` flag on KPIs controls whether this confirmation is required
+- When enabled (default), the dialog and mandatory reason are enforced
+- When disabled, employees can edit freely without confirmation (but still limited to one update)
 
 #### 4.10.6 Key Components
 
