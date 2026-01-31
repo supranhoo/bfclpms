@@ -728,7 +728,7 @@ CREATE TABLE public.sub_period_submissions (
   kpi_id UUID REFERENCES kpis(id),
   sub_period_type TEXT, -- 'daily' | 'weekly'
   sub_period_value TEXT, -- Date or week number
-  achieved_value NUMERIC,
+  achieved_value NUMERIC, -- For binary: 0 (No) or 5 (Yes); For tiered: rating value; For numeric: actual value
   remarks TEXT,
   review_month TEXT,
   review_year INTEGER,

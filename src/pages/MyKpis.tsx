@@ -443,7 +443,7 @@ export default function MyKpis() {
       kpi_id: selectedKpi.id,
       sub_period_type: selectedKpi.frequency === 'Daily' ? 'daily' : 'weekly',
       sub_period_value: selectedSubPeriod,
-      achieved_value: isNa ? null : (parseFloat(achievedValue) || null),
+      achieved_value: isNa ? null : (isQualitativeKpi(selectedKpi) ? calculatedScore : (parseFloat(achievedValue) || null)),
       remarks: selfRemarks || null,
       evidence_url: selfEvidenceUrl,
       review_month: selectedPeriod,
