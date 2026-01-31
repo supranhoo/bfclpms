@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI, OrgLevelScope } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
@@ -35,7 +35,7 @@ import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { SubPeriodSelector } from '@/components/review/SubPeriodSelector';
 import { FrequencyLockedOverlay, FrequencyLockBadge } from '@/components/review/FrequencyLockedOverlay';
 import { QualitativeValueInput } from '@/components/review/QualitativeValueInput';
-import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar, AlertTriangle } from 'lucide-react';
+import { Target, TrendingUp, CheckCircle2, Clock, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   AlertDialog,
@@ -139,7 +139,7 @@ export default function MyKpis() {
   const submitReview = useSubmitSelfReview();
   
   // Sub-period submissions for Daily/Weekly KPIs
-  const { data: subPeriodSubmissions } = useSubPeriodSubmissionsByKpis(kpiIds, selectedPeriod, selectedYear);
+  const { data: subPeriodSubmissions, isLoading: subPeriodLoading } = useSubPeriodSubmissionsByKpis(kpiIds, selectedPeriod, selectedYear);
   const submitSubPeriod = useSubmitSubPeriod();
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -173,15 +173,15 @@ export default function MyKpis() {
   // Sub-period selection state for Daily/Weekly KPIs
   const [selectedSubPeriod, setSelectedSubPeriod] = useState<string | null>(null);
   
-  // Helper to get sub-period submissions for a KPI
-  const getKpiSubPeriodSubmissions = (kpiId: string) => {
+  // Helper to get sub-period submissions for a KPI - memoized to prevent stale closures
+  const getKpiSubPeriodSubmissions = useCallback((kpiId: string) => {
     return subPeriodSubmissions?.filter(s => s.kpi_id === kpiId) || [];
-  };
+  }, [subPeriodSubmissions]);
 
   // Computed values for selected KPI's sub-period submissions (used in dialogs)
   const selectedKpiSubPeriods = useMemo(() => {
     return selectedKpi ? getKpiSubPeriodSubmissions(selectedKpi.id) : [];
-  }, [selectedKpi, subPeriodSubmissions]);
+  }, [selectedKpi, getKpiSubPeriodSubmissions]);
   
   const aggregatedSubPeriodScore = useMemo(() => {
     return selectedKpiSubPeriods.length > 0 
@@ -1263,7 +1263,12 @@ export default function MyKpis() {
                       {/* Submit Month Button - Always visible for Daily/Weekly KPIs with tooltip states */}
                       {needsSubPeriodForKpi && (
                         <>
-                          {selectedKpiSubPeriods.length === 0 ? (
+                          {subPeriodLoading ? (
+                            <Button size="sm" variant="outline" disabled className="gap-1 opacity-50">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Loading...
+                            </Button>
+                          ) : selectedKpiSubPeriods.length === 0 ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span>
