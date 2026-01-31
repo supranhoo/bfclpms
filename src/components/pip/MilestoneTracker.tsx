@@ -56,7 +56,7 @@ export function MilestoneTracker({ milestones, className }: MilestoneTrackerProp
                 </div>
 
                 <p className="text-xs text-muted-foreground mb-2">
-                  Due: {format(new Date(milestone.milestone_date), 'MMM d, yyyy')}
+                  Due: {format(new Date(milestone.milestone_date), 'dd MMM yyyy')}
                 </p>
 
                 <div className="text-sm space-y-1">
@@ -79,7 +79,7 @@ export function MilestoneTracker({ milestones, className }: MilestoneTrackerProp
 
                 {milestone.reviewed_by && milestone.reviewed_at && (
                   <p className="text-xs text-muted-foreground mt-2">
-                    Reviewed on {format(new Date(milestone.reviewed_at), 'MMM d, yyyy')}
+                    Reviewed on {format(new Date(milestone.reviewed_at), 'dd MMM yyyy')}
                   </p>
                 )}
               </div>

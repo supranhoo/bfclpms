@@ -191,13 +191,13 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
                 <div className="flex justify-between">
                   <div>
                     <p className="text-muted-foreground text-xs">Start Date</p>
-                    <p className="font-medium">{format(new Date(pip.start_date), 'PPP')}</p>
+                    <p className="font-medium">{format(new Date(pip.start_date), 'dd MMM yyyy')}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-muted-foreground text-xs">End Date</p>
-                    <p className="font-medium">{format(new Date(effectiveEndDate), 'PPP')}</p>
+                    <p className="font-medium">{format(new Date(effectiveEndDate), 'dd MMM yyyy')}</p>
                     {pip.extended_end_date && (
-                      <p className="text-xs text-warning">Extended from {format(new Date(pip.end_date), 'MMM d')}</p>
+                      <p className="text-xs text-warning">Extended from {format(new Date(pip.end_date), 'dd MMM yyyy')}</p>
                     )}
                   </div>
                 </div>
@@ -253,7 +253,7 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-medium text-muted-foreground">
-                            {format(new Date(milestone.milestone_date), 'MMM d, yyyy')}
+                            {format(new Date(milestone.milestone_date), 'dd MMM yyyy')}
                           </span>
                           <Badge variant={msConfig.variant} className="text-xs">
                             {msConfig.label}
@@ -300,7 +300,7 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
                   <p>{pip.hr_remarks}</p>
                   {pip.hr_reviewer && (
                     <p className="text-xs text-muted-foreground mt-2">
-                      By {pip.hr_reviewer.full_name} on {format(new Date(pip.hr_approved_at!), 'PPP')}
+                      By {pip.hr_reviewer.full_name} on {format(new Date(pip.hr_approved_at!), 'dd MMM yyyy')}
                     </p>
                   )}
                 </CardContent>
@@ -336,7 +336,7 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
                       <div key={log.id} className="text-xs border-l-2 border-muted pl-3 py-1">
                         <p className="font-medium">{log.action.replace('_', ' ')}</p>
                         <p className="text-muted-foreground">
-                          {log.performer?.full_name || 'System'} · {format(new Date(log.created_at), 'MMM d, h:mm a')}
+                          {log.performer?.full_name || 'System'} · {format(new Date(log.created_at), 'dd MMM yyyy, hh:mm a')}
                         </p>
                       </div>
                     ))}

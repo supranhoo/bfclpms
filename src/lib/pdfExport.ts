@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable, { RowInput, CellDef, CellHookData } from 'jspdf-autotable';
 import { RatingLevel, ratingToLevel } from './ratingCalculation';
+import { format } from 'date-fns';
 
 // ============= Types =============
 
@@ -1112,7 +1113,7 @@ export function generateDetailedScorecardPdf(
       doc.setFontSize(7);
       doc.setTextColor(...COLORS.grayMedium);
       doc.text(
-        `Page ${data.pageNumber} of ${pageCount}  •  Generated: ${new Date().toLocaleDateString()}  •  ${options.companyName || ''}`,
+        `Page ${data.pageNumber} of ${pageCount}  •  Generated: ${format(new Date(), 'dd MMM yyyy')}  •  ${options.companyName || ''}`,
         pageWidth / 2,
         pageHeight - 8,
         { align: 'center' }
@@ -1130,7 +1131,7 @@ export function generateDetailedScorecardPdf(
     doc.setFontSize(7);
     doc.setTextColor(...COLORS.grayMedium);
     doc.text(
-      `Page ${i} of ${pageCount}  •  Generated: ${new Date().toLocaleDateString()}  •  ${options.companyName || ''}`,
+      `Page ${i} of ${pageCount}  •  Generated: ${format(new Date(), 'dd MMM yyyy')}  •  ${options.companyName || ''}`,
       pageWidth / 2,
       pageHeight - 8,
       { align: 'center' }
@@ -1438,7 +1439,7 @@ export function generateDetailedScorecardPdfBlob(
       doc.setFontSize(7);
       doc.setTextColor(...COLORS.grayMedium);
       doc.text(
-        `Page ${data.pageNumber} of ${pageCount}  •  Generated: ${new Date().toLocaleDateString()}  •  ${options.companyName || ''}`,
+        `Page ${data.pageNumber} of ${pageCount}  •  Generated: ${format(new Date(), 'dd MMM yyyy')}  •  ${options.companyName || ''}`,
         pageWidth / 2,
         pageHeight - 8,
         { align: 'center' }
@@ -1456,7 +1457,7 @@ export function generateDetailedScorecardPdfBlob(
     doc.setFontSize(7);
     doc.setTextColor(...COLORS.grayMedium);
     doc.text(
-      `Page ${i} of ${pageCount}  •  Generated: ${new Date().toLocaleDateString()}  •  ${options.companyName || ''}`,
+      `Page ${i} of ${pageCount}  •  Generated: ${format(new Date(), 'dd MMM yyyy')}  •  ${options.companyName || ''}`,
       pageWidth / 2,
       pageHeight - 8,
       { align: 'center' }
@@ -1586,7 +1587,7 @@ export function generateBulkScorecardPdf(
       doc.setFontSize(7);
       doc.setTextColor(...COLORS.grayMedium);
       doc.text(
-        `Page ${data.pageNumber} of ${pageCount}  •  Generated: ${new Date().toLocaleDateString()}`,
+        `Page ${data.pageNumber} of ${pageCount}  •  Generated: ${format(new Date(), 'dd MMM yyyy')}`,
         pageWidth / 2,
         pageHeight - 8,
         { align: 'center' }

@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { User, Shield, Briefcase, FileText, ExternalLink, MessageSquare, AlertCircle } from 'lucide-react';
 import { RatingLevel, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
+import { format } from 'date-fns';
 
 const ratingOptions: { value: RatingLevel; label: string; color: string; score: number }[] = [
   { value: 'blue', label: 'Outstanding', color: '#3B82F6', score: 5 },
@@ -62,7 +63,7 @@ export function ReviewTrailCard({
                     <div key={q.id} className="p-2 bg-white/50 dark:bg-black/20 rounded text-sm">
                       <p className="text-orange-900 dark:text-orange-100">{q.reason}</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Raised on {new Date(q.created_at).toLocaleDateString()}
+                        Raised on {format(new Date(q.created_at), 'dd MMM yyyy')}
                       </p>
                     </div>
                   ))}
@@ -330,8 +331,8 @@ export function ReviewTrailCard({
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Raised: {new Date(q.created_at).toLocaleDateString()}
-                    {q.resolved_at && ` • Resolved: ${new Date(q.resolved_at).toLocaleDateString()}`}
+                    Raised: {format(new Date(q.created_at), 'dd MMM yyyy')}
+                    {q.resolved_at && ` • Resolved: ${format(new Date(q.resolved_at), 'dd MMM yyyy')}`}
                   </p>
                 </div>
               ))}

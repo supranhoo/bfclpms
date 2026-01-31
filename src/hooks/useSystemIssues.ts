@@ -4,6 +4,7 @@ import { useAllKpis, useKpiQueries } from './useKpis';
 import { useProfiles } from './useOrganization';
 import { useTrainingNeeds } from './useTNI';
 import { usePIPs } from './usePIP';
+import { format } from 'date-fns';
 
 export type IssueType = 'query' | 'training_need' | 'pip' | 'pip_milestone' | 'stalled_kpi' | 'pending_kra';
 export type IssuePriority = 'critical' | 'high' | 'medium' | 'low';
@@ -211,7 +212,7 @@ export function useSystemIssues() {
       id: `milestone-${ms.id}`,
       issueType: 'pip_milestone',
       sourceId: ms.id,
-      subject: `Overdue Milestone: ${new Date(ms.milestone_date).toLocaleDateString()}`,
+      subject: `Overdue Milestone: ${format(new Date(ms.milestone_date), 'dd MMM yyyy')}`,
       description: ms.notes || 'Scheduled check-in not completed',
       employeeId: pip.employee_id,
       employeeName: employee?.full_name || 'Unknown',

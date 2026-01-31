@@ -72,7 +72,7 @@ export function BundleHistoryDialog({ isOpen, onClose, bundle }: BundleHistoryDi
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
-                          <span>{format(new Date(log.created_at), 'MMM d, yyyy h:mm a')}</span>
+                          <span>{format(new Date(log.created_at), 'dd MMM yyyy, hh:mm a')}</span>
                         </div>
                         <span>•</span>
                         <span>{log.review_period} {log.review_year}</span>

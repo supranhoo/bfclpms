@@ -228,7 +228,7 @@ export default function QueryInbox() {
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <Calendar className="h-4 w-4" />
-            <span>{format(new Date(query.created_at), 'MMM d, yyyy h:mm a')}</span>
+            <span>{format(new Date(query.created_at), 'dd MMM yyyy, hh:mm a')}</span>
           </div>
         </div>
 
@@ -253,7 +253,7 @@ export default function QueryInbox() {
             {query.resolved_at && (
               <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                 <Clock className="h-3 w-3" />
-                Resolved on {format(new Date(query.resolved_at), 'MMM d, yyyy h:mm a')}
+                Resolved on {format(new Date(query.resolved_at), 'dd MMM yyyy, hh:mm a')}
               </p>
             )}
           </div>
@@ -365,7 +365,7 @@ export default function QueryInbox() {
               <p className="text-sm text-muted-foreground mt-1">{notification.message}</p>
               <div className="flex items-center justify-between mt-3">
                 <p className="text-xs text-muted-foreground">
-                  {format(new Date(notification.created_at), 'MMM d, yyyy h:mm a')}
+                  {format(new Date(notification.created_at), 'dd MMM yyyy, hh:mm a')}
                 </p>
                 <Button 
                   variant="outline" 

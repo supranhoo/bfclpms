@@ -262,9 +262,9 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
                             </div>
                             
                             <time className="text-xs text-muted-foreground whitespace-nowrap">
-                              {format(new Date(log.created_at), 'MMM d, yyyy')}
+                              {format(new Date(log.created_at), 'dd MMM yyyy')}
                               <br />
-                              {format(new Date(log.created_at), 'h:mm a')}
+                              {format(new Date(log.created_at), 'hh:mm a')}
                             </time>
                           </div>
                         </div>
