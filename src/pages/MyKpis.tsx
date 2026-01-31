@@ -540,7 +540,7 @@ export default function MyKpis() {
                               className="h-8"
                             >
                               <FileCheck className="h-3.5 w-3.5 mr-1" />
-                              Accept & Submit
+                              Review
                             </Button>
                           ) : kpi.status === 'self_review' ? (
                             <Badge variant="secondary" className="h-8 px-3 flex items-center gap-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
@@ -816,7 +816,7 @@ export default function MyKpis() {
                     Cancel
                   </Button>
                   <Button size="sm" onClick={handleSubmitReview} disabled={(!isNa && !achievedValue) || submitReview.isPending}>
-                    {submitReview.isPending ? 'Submitting...' : 'Review & Submit'}
+                    {submitReview.isPending ? 'Submitting...' : 'Submit'}
                   </Button>
                 </SheetFooter>
               </>
