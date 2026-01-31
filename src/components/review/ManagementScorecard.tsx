@@ -9,8 +9,11 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useKpisByEmployee, useReviewSubmissions, useKpiQueries, RatingLevel, KPI } from '@/hooks/useKpis';
-import { useSubPeriodSubmissions } from '@/hooks/useSubPeriodSubmissions';
+import { useSubPeriodSubmissions, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
+import { ReviewLevelOverrideEditor, calculateOverriddenScore } from '@/components/review/ReviewLevelOverrideEditor';
+import { PreviousLevelRemarks } from '@/components/review/PreviousLevelRemarks';
+import { useManagerSubPeriodOverride } from '@/hooks/useManagerSubPeriodOverride';
 import { QualitativeOption } from '@/lib/qualitativeUom';
 import { useAuth } from '@/contexts/AuthContext';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
@@ -27,7 +30,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
-  Info, Lock, MessageSquare, Undo2, Check, Briefcase, User, Shield, Calendar, ChevronDown, ChevronUp
+  Info, Lock, MessageSquare, Undo2, Check, Briefcase, User, Shield, Calendar, ChevronDown, ChevronUp, Edit2
 } from 'lucide-react';
 import { InlineDailySubmissionRow } from '@/components/review/InlineDailySubmissionRow';
 import { DailyBadge } from '@/components/review/DailyKpiExpandButton';
@@ -88,6 +91,13 @@ export function ManagementScorecard({
   const [managementAchievedValue, setManagementAchievedValue] = useState<number | string | null>(null);
   const [sendBackReason, setSendBackReason] = useState('');
   const [sendBackTarget, setSendBackTarget] = useState<'auditor' | 'manager' | 'employee'>('auditor');
+  
+  // Management daily override state
+  const [managementAgrees, setManagementAgrees] = useState<boolean | null>(null);
+  const [dailyOverrides, setDailyOverrides] = useState<Map<string, number>>(new Map());
+  const [overrideReason, setOverrideReason] = useState('');
+  
+  const { saveOverrides, isLoading: isSavingOverrides } = useManagerSubPeriodOverride();
 
   const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
   const queryMap = new Map<string, typeof queries>();
@@ -279,6 +289,10 @@ export function ManagementScorecard({
     setManagementRemarks(existing?.management_remarks || '');
     setManagementEvidenceUrl(existing?.management_evidence_url || null);
     setManagementAchievedValue((existing as any)?.management_achieved_value || (existing as any)?.auditor_achieved_value || existing?.achieved_value || null);
+    // Reset override state
+    setManagementAgrees(null);
+    setDailyOverrides(new Map());
+    setOverrideReason('');
     setReviewSheetOpen(true);
   };
 
@@ -666,33 +680,46 @@ export function ManagementScorecard({
             {/* Rating Scale */}
             <RatingScaleDisplay kpi={selectedKpi} compact />
 
-            {/* Review Trail */}
+            {/* Previous Level Remarks - Self, Manager & Auditor */}
             {selectedKpi && submissionMap.get(selectedKpi.id) && (
-              <ReviewTrailCard
+              <PreviousLevelRemarks
                 submission={submissionMap.get(selectedKpi.id)!}
-                queries={queryMap.get(selectedKpi.id) || []}
+                showSelf={true}
+                showManager={true}
+                showAuditor={true}
               />
             )}
             
-            {/* Daily Submission Summary - Fetch and display for Daily KPIs */}
+            {/* Daily Submission Summary with Override - for Daily Binary KPIs */}
             {selectedKpi && (
-              <DailySubmissionSummaryWrapper 
+              <DailySubmissionWithOverrideWrapper 
                 kpi={selectedKpi} 
                 selectedPeriod={selectedPeriod} 
-                selectedYear={selectedYear} 
+                selectedYear={selectedYear}
+                employee={employee}
+                reviewerAgrees={managementAgrees}
+                onReviewerAgreesChange={setManagementAgrees}
+                dailyOverrides={dailyOverrides}
+                onDailyOverridesChange={setDailyOverrides}
+                overrideReason={overrideReason}
+                onOverrideReasonChange={setOverrideReason}
+                reviewerScore={managementScore}
+                onReviewerScoreChange={setManagementScore}
+                submissionMap={submissionMap}
+                reviewLevel="management"
               />
             )}
 
-            {/* Management Assessment */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Briefcase className="h-4 w-4 text-emerald-500" />
-                  Management Assessment
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {selectedKpi && (
+            {/* Management Assessment - Only show for non-daily-binary or when agrees */}
+            {selectedKpi && !(selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary') && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Briefcase className="h-4 w-4 text-emerald-500" />
+                    Management Assessment
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
                   <AchievedValueScoreInput
                     kpi={selectedKpi}
                     achievedValue={managementAchievedValue}
@@ -701,27 +728,59 @@ export function ManagementScorecard({
                     onScoreChange={(score, rating) => setManagementScore(score)}
                     label="Management Assessment"
                   />
-                )}
-                <div className="space-y-2">
-                  <Label>Remarks</Label>
-                  <Textarea
-                    placeholder="Add your review comments..."
-                    value={managementRemarks}
-                    onChange={(e) => setManagementRemarks(e.target.value)}
-                    rows={3}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Evidence</Label>
-                  <EvidenceUpload
-                    userId={user?.id || ''}
-                    kpiId={selectedKpi?.id || ''}
-                    onUploadComplete={(url) => setManagementEvidenceUrl(url)}
-                    existingUrl={managementEvidenceUrl}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+                  <div className="space-y-2">
+                    <Label>Remarks</Label>
+                    <Textarea
+                      placeholder="Add your review comments..."
+                      value={managementRemarks}
+                      onChange={(e) => setManagementRemarks(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Evidence</Label>
+                    <EvidenceUpload
+                      userId={user?.id || ''}
+                      kpiId={selectedKpi?.id || ''}
+                      onUploadComplete={(url) => setManagementEvidenceUrl(url)}
+                      existingUrl={managementEvidenceUrl}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
+            {/* Remarks for Daily Binary - shown separately */}
+            {selectedKpi && selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary' && managementAgrees !== null && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Briefcase className="h-4 w-4 text-emerald-500" />
+                    Management Remarks
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Remarks</Label>
+                    <Textarea
+                      placeholder="Add your review comments..."
+                      value={managementRemarks}
+                      onChange={(e) => setManagementRemarks(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Evidence</Label>
+                    <EvidenceUpload
+                      userId={user?.id || ''}
+                      kpiId={selectedKpi?.id || ''}
+                      onUploadComplete={(url) => setManagementEvidenceUrl(url)}
+                      existingUrl={managementEvidenceUrl}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           <SheetFooter className="pt-4 border-t gap-2">
@@ -812,15 +871,37 @@ export function ManagementScorecard({
   );
 }
 
-// Helper wrapper that fetches sub-period submissions for Daily KPIs
-function DailySubmissionSummaryWrapper({ 
+// Helper wrapper that fetches sub-period submissions for Daily KPIs with override support
+function DailySubmissionWithOverrideWrapper({ 
   kpi, 
   selectedPeriod, 
-  selectedYear 
+  selectedYear,
+  employee,
+  reviewerAgrees,
+  onReviewerAgreesChange,
+  dailyOverrides,
+  onDailyOverridesChange,
+  overrideReason,
+  onOverrideReasonChange,
+  reviewerScore,
+  onReviewerScoreChange,
+  submissionMap,
+  reviewLevel,
 }: { 
   kpi: KPI; 
   selectedPeriod: string; 
-  selectedYear: number; 
+  selectedYear: number;
+  employee: { id: string };
+  reviewerAgrees: boolean | null;
+  onReviewerAgreesChange: (agrees: boolean | null) => void;
+  dailyOverrides: Map<string, number>;
+  onDailyOverridesChange: (overrides: Map<string, number>) => void;
+  overrideReason: string;
+  onOverrideReasonChange: (reason: string) => void;
+  reviewerScore: number | null;
+  onReviewerScoreChange: (score: number | null) => void;
+  submissionMap: Map<string, any>;
+  reviewLevel: 'manager' | 'auditor' | 'management';
 }) {
   const { data: submissions } = useSubPeriodSubmissions(
     kpi.frequency === 'Daily' ? kpi.id : undefined, 
@@ -828,19 +909,122 @@ function DailySubmissionSummaryWrapper({
     selectedYear
   );
   
+  const isDailyBinary = kpi.frequency === 'Daily' && kpi.uom_type === 'binary';
+  const existingSubmission = submissionMap.get(kpi.id);
+  
+  const previousLevelScore = React.useMemo(() => {
+    if (reviewLevel === 'management') return existingSubmission?.auditor_score || existingSubmission?.manager_score || null;
+    return existingSubmission?.manager_score || null;
+  }, [reviewLevel, existingSubmission]);
+  
+  const previousLevelRemarks = React.useMemo(() => {
+    if (reviewLevel === 'management') return existingSubmission?.auditor_remarks || existingSubmission?.manager_remarks || null;
+    return existingSubmission?.manager_remarks || null;
+  }, [reviewLevel, existingSubmission]);
+  
+  React.useEffect(() => {
+    if (!isDailyBinary) return;
+    
+    if (reviewerAgrees === true) {
+      onReviewerScoreChange(previousLevelScore);
+    } else if (reviewerAgrees === false && submissions) {
+      const result = calculateOverriddenScore(submissions, dailyOverrides, selectedPeriod, selectedYear);
+      onReviewerScoreChange(result.score);
+    }
+  }, [reviewerAgrees, dailyOverrides, submissions, previousLevelScore, isDailyBinary, selectedPeriod, selectedYear, onReviewerScoreChange]);
+  
   if (kpi.frequency !== 'Daily' || !submissions || submissions.length === 0) {
     return null;
   }
   
+  const getScoreLabel = (score: number | null): string => {
+    if (score === null) return 'Not Set';
+    switch (score) {
+      case 5: return 'Outstanding';
+      case 4: return 'Exceeds Expectations';
+      case 3: return 'Meets Expectations';
+      case 2: return 'Below Expectations';
+      case 1: return 'Needs Improvement';
+      case 0: return 'Not Achieved';
+      default: return 'Unknown';
+    }
+  };
+  
+  const getScoreBadgeClass = (score: number | null): string => {
+    if (score === null) return 'bg-muted text-muted-foreground';
+    if (score >= 4) return 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200';
+    if (score >= 3) return 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200';
+    if (score >= 2) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200';
+    return 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200';
+  };
+  
   return (
-    <DailySubmissionSummary
-      kpiId={kpi.id}
-      reviewMonth={selectedPeriod}
-      reviewYear={selectedYear}
-      submissions={submissions}
-      uom={kpi.uom}
-      uomType={kpi.uom_type}
-      qualitativeOptions={kpi.qualitative_options as QualitativeOption[] | null}
-    />
+    <div className="space-y-4">
+      <DailySubmissionSummary
+        kpiId={kpi.id}
+        reviewMonth={selectedPeriod}
+        reviewYear={selectedYear}
+        submissions={submissions}
+        uom={kpi.uom}
+        uomType={kpi.uom_type}
+        qualitativeOptions={kpi.qualitative_options as QualitativeOption[] | null}
+        managerOverrides={dailyOverrides.size > 0 ? dailyOverrides : undefined}
+      />
+      
+      {isDailyBinary && (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Do you agree with the previous level's submissions?</Label>
+            <div className="flex gap-2">
+              <Button
+                variant={reviewerAgrees === true ? 'default' : 'outline'}
+                onClick={() => onReviewerAgreesChange(true)}
+                className={reviewerAgrees === true ? 'bg-green-600 hover:bg-green-700 text-white' : ''}
+              >
+                <Check className="h-4 w-4 mr-2" />
+                Yes - Accept Score
+              </Button>
+              <Button
+                variant={reviewerAgrees === false ? 'default' : 'outline'}
+                onClick={() => onReviewerAgreesChange(false)}
+                className={reviewerAgrees === false ? 'bg-amber-600 hover:bg-amber-700 text-white' : ''}
+              >
+                <Edit2 className="h-4 w-4 mr-2" />
+                No - Override Entries
+              </Button>
+            </div>
+          </div>
+          
+          {reviewerAgrees === false && (
+            <ReviewLevelOverrideEditor
+              kpiId={kpi.id}
+              reviewMonth={selectedPeriod}
+              reviewYear={selectedYear}
+              submissions={submissions}
+              overrides={dailyOverrides}
+              onOverridesChange={onDailyOverridesChange}
+              overrideReason={overrideReason}
+              onReasonChange={onOverrideReasonChange}
+              originalScore={previousLevelScore}
+              reviewLevel={reviewLevel}
+              previousLevelRemarks={previousLevelRemarks}
+            />
+          )}
+          
+          {reviewerAgrees !== null && (
+            <div className="p-4 bg-muted rounded-lg">
+              <div className="flex justify-between items-center">
+                <span className="font-medium">
+                  {reviewerAgrees === false ? 'Recalculated Management Score' : 'Management Score (Accepted)'}
+                </span>
+                <Badge className={getScoreBadgeClass(reviewerScore)}>
+                  {reviewerScore ?? '—'} - {getScoreLabel(reviewerScore)}
+                </Badge>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
