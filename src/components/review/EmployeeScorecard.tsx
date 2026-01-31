@@ -621,7 +621,7 @@ export function EmployeeScorecard({
                     achievedValue={managerAchievedValue}
                     score={managerScore}
                     onAchievedValueChange={setManagerAchievedValue}
-                    onScoreChange={setManagerScore}
+                    onScoreChange={(score, _rating) => setManagerScore(score)}
                     label="Manager Score"
                   />
 
