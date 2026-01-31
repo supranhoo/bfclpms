@@ -1231,6 +1231,7 @@ src/
 │   │   └── KpiLogicModal.tsx
 │   │
 │   ├── review/                # Review-related components
+│   │   ├── KpiDetailsTable.tsx   # **Unified KPI table component** - shared across all views
 │   │   ├── EmployeeScorecard.tsx
 │   │   ├── AuditScorecard.tsx
 │   │   ├── ManagementScorecard.tsx
@@ -1432,11 +1433,43 @@ Role-based route guard component:
 </ProtectedRoute>
 ```
 
+#### `KpiDetailsTable`
+Unified, reusable KPI details table component used across all review views (My KPIs, Team Review, Audit, Management):
+
+**Key Features:**
+- **Dynamic Score Columns**: Score columns (Self, Manager, Auditor, Mgmt) appear progressively based on KPI status
+  - `kra_set`: Self only
+  - `self_review`: Self, Manager
+  - `manager_check` / `audit`: Self, Manager, Auditor
+  - `management_review` / `approved`: All four columns
+- **Simplified Score Display**: Scores shown as single digit (1-5) without denominator or rating labels
+- **Self Column**: Displays the employee's calculated **score** (1-5) from `review_submissions.self_score`, NOT the raw `achieved_value`
+- **Consistent Columns**: Same structure across all views for cross-stage visibility
+- **View-Type Actions**: Action buttons adapt based on `viewType` prop ('my-kpis', 'team-review', 'audit', 'management')
+
+**Props:**
+```typescript
+interface KpiDetailsTableProps {
+  kpis: KPI[];
+  submissionMap: Map<string, ReviewSubmission>;
+  queryMap?: Map<string, KpiQuery[]>;
+  viewType: 'my-kpis' | 'team-review' | 'audit' | 'management';
+  selectedPeriod: string;
+  selectedYear: number;
+  onReview?: (kpi: KPI) => void;
+  onView?: (kpi: KPI) => void;
+  onSendBack?: (kpi: KPI) => void;
+  onShowLogic?: (kpi: KPI) => void;
+  expandedKpis?: Set<string>;
+  onToggleExpand?: (kpiId: string) => void;
+}
+```
+
 #### `EmployeeScorecard`
 Comprehensive employee performance view with:
 - Score summary
 - Category breakdown
-- KPI table with review actions
+- KPI table using KpiDetailsTable component
 - Query/send-back dialogs
 
 #### `KpiLogicModal`

@@ -3,12 +3,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { useKpisByEmployee, useReviewSubmissions, useKpiQueries, RatingLevel, KPI } from '@/hooks/useKpis';
+import { useKpisByEmployee, useReviewSubmissions, useKpiQueries, RatingLevel, KPI, KpiQuery } from '@/hooks/useKpis';
 import { useSubPeriodSubmissions, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { ReviewLevelOverrideEditor, calculateOverriddenScore } from '@/components/review/ReviewLevelOverrideEditor';
@@ -24,6 +23,7 @@ import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
 import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
+import { KpiDetailsTable } from '@/components/review/KpiDetailsTable';
 import { scoreToRating } from '@/components/review/ScoreSelector';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -32,8 +32,6 @@ import {
   ArrowLeft, Target, CheckCircle2, Clock, 
   Info, Undo2, Check, Shield, User, FileCheck, Calendar, ChevronDown, ChevronUp, Edit2
 } from 'lucide-react';
-import { InlineDailySubmissionRow } from '@/components/review/InlineDailySubmissionRow';
-import { DailyBadge } from '@/components/review/DailyKpiExpandButton';
 import { 
   statusColors,
   statusLabels,
@@ -473,180 +471,19 @@ export function AuditScorecard({
           <CardDescription>Verify and validate KPI evaluations</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Category</TableHead>
-                <TableHead>KRA / KPI</TableHead>
-                <TableHead>Target</TableHead>
-                <TableHead>Achieved</TableHead>
-                <TableHead>Manager Score</TableHead>
-                <TableHead>Auditor Score</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {kpis?.map(kpi => {
-                const submission = submissionMap.get(kpi.id);
-                const isNaKpi = submission?.is_na || false;
-                const canAudit = (kpi.status === 'manager_check' || kpi.status === 'audit') && !isNaKpi;
-                const isForwarded = kpi.status === 'management_review' || kpi.status === 'approved';
-                const isDailyKpi = kpi.frequency === 'Daily';
-                const isExpanded = expandedDailyKpis.has(kpi.id);
-                
-                return (
-                  <React.Fragment key={kpi.id}>
-                    <TableRow 
-                      className={`${isForwarded ? 'opacity-75 bg-muted/30' : ''} ${isNaKpi ? 'opacity-60 bg-muted/20' : ''}`}
-                    >
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: kpi.kra_categories?.color || '#6B7280' }}
-                          />
-                          <span className="text-sm">{kpi.kra_categories?.name || 'Uncategorized'}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <button
-                          onClick={() => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
-                          className="text-left hover:bg-muted/50 p-1 -m-1 rounded transition-colors cursor-pointer group w-full"
-                          title="Click to view KPI details"
-                        >
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-primary group-hover:underline">{kpi.kra_name}</p>
-                            {isDailyKpi && <DailyBadge />}
-                          </div>
-                          <p className="text-sm text-muted-foreground flex items-center gap-1">
-                            {kpi.kpi_name}
-                            <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </p>
-                        </button>
-                      </TableCell>
-                      <TableCell>{kpi.target_value ?? '-'}</TableCell>
-                      <TableCell>
-                        {isNaKpi ? (
-                          <Badge variant="outline" className="bg-muted text-muted-foreground">N/A</Badge>
-                        ) : (
-                          submission?.achieved_value ?? '-'
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {isNaKpi ? (
-                          <Badge variant="outline" className="bg-muted text-muted-foreground">N/A</Badge>
-                        ) : submission?.manager_score ? (
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{submission.manager_score}/5</span>
-                            {submission.manager_rating && (
-                              <Badge
-                                style={{
-                                  backgroundColor: ratingOptions.find(r => r.value === submission.manager_rating)?.color,
-                                }}
-                                className="text-white text-xs"
-                              >
-                                {ratingOptions.find(r => r.value === submission.manager_rating)?.label}
-                              </Badge>
-                            )}
-                          </div>
-                        ) : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {isNaKpi ? (
-                          <Badge variant="outline" className="bg-muted text-muted-foreground">N/A</Badge>
-                        ) : submission?.auditor_score ? (
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{submission.auditor_score}/5</span>
-                            {submission.auditor_rating && (
-                              <Badge
-                                style={{
-                                  backgroundColor: ratingOptions.find(r => r.value === submission.auditor_rating)?.color,
-                                }}
-                                className="text-white text-xs"
-                              >
-                                {ratingOptions.find(r => r.value === submission.auditor_rating)?.label}
-                              </Badge>
-                            )}
-                          </div>
-                        ) : '-'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={statusColors[kpi.status || 'kra_set']}>
-                          {statusLabels[kpi.status || 'kra_set']}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          {canAudit && (
-                            <>
-                              <Button 
-                                size="sm" 
-                                onClick={() => openReviewSheet(kpi)}
-                              >
-                                {kpi.status === 'audit' ? 'Continue' : 'Audit'}
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => openSendBackDialog(kpi)}
-                              >
-                                <Undo2 className="h-3 w-3" />
-                              </Button>
-                            </>
-                          )}
-                          {isForwarded && (
-                            <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400">
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Forwarded
-                            </Badge>
-                          )}
-                          {isNaKpi && (
-                            <Badge variant="outline" className="bg-muted text-muted-foreground">
-                              Not Applicable
-                            </Badge>
-                          )}
-                          {isDailyKpi && !isNaKpi && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => toggleDailyExpand(kpi.id)}
-                              className="h-8 px-2"
-                              title={isExpanded ? "Hide daily submissions" : "Show daily submissions"}
-                            >
-                              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                              {isExpanded ? (
-                                <ChevronUp className="h-3 w-3 ml-0.5" />
-                              ) : (
-                                <ChevronDown className="h-3 w-3 ml-0.5" />
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                    
-                    {/* Expandable Daily Summary Row */}
-                    {isDailyKpi && isExpanded && !isNaKpi && (
-                      <InlineDailySubmissionRow
-                        kpi={kpi}
-                        selectedPeriod={selectedPeriod}
-                        selectedYear={selectedYear}
-                        colSpan={8}
-                      />
-                    )}
-                  </React.Fragment>
-                );
-              })}
-              {kpis?.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                    No KPIs found for this period.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <KpiDetailsTable
+            kpis={kpis || []}
+            submissionMap={submissionMap}
+            queryMap={queryMap as Map<string, KpiQuery[]>}
+            viewType="audit"
+            selectedPeriod={selectedPeriod}
+            selectedYear={selectedYear}
+            onReview={openReviewSheet}
+            onSendBack={openSendBackDialog}
+            onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
+            expandedKpis={expandedDailyKpis}
+            onToggleExpand={toggleDailyExpand}
+          />
         </CardContent>
       </Card>
 
