@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,8 +29,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
-  Info, Lock, MessageSquare, Undo2, Check, Eye 
+  Info, Lock, MessageSquare, Undo2, Check, Eye, Calendar, ChevronDown, ChevronUp 
 } from 'lucide-react';
+import { InlineDailySubmissionRow } from '@/components/review/InlineDailySubmissionRow';
+import { DailyBadge } from '@/components/review/DailyKpiExpandButton';
 import { 
   kpiStatusColors, 
   kpiStatusLabels
@@ -83,6 +85,7 @@ export function EmployeeScorecard({
   const [sendBackDialogOpen, setSendBackDialogOpen] = useState(false);
   const [logicModalOpen, setLogicModalOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
+  const [expandedDailyKpis, setExpandedDailyKpis] = useState<Set<string>>(new Set());
   
   const [managerScore, setManagerScore] = useState<number | null>(null);
   const [managerRemarks, setManagerRemarks] = useState('');
@@ -283,6 +286,15 @@ export function EmployeeScorecard({
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
+  const toggleDailyExpand = (kpiId: string) => {
+    setExpandedDailyKpis(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(kpiId)) newSet.delete(kpiId);
+      else newSet.add(kpiId);
+      return newSet;
+    });
+  };
+
   if (isLoading) {
     return <ReviewPanelSkeleton />;
   }
@@ -427,12 +439,14 @@ export function EmployeeScorecard({
                 const isLocked = kpiStatus === 'locked' || kpiStatus === 'approved_by_manager';
                 const isNaKpi = submission?.is_na || false;
                 const canReview = kpi.status === 'self_review' && !isNaKpi;
+                const isDailyKpi = kpi.frequency === 'Daily';
+                const isExpanded = expandedDailyKpis.has(kpi.id);
                 
                 return (
-                  <TableRow 
-                    key={kpi.id} 
-                    className={`${isLocked ? 'opacity-75 bg-muted/30' : ''} ${isNaKpi ? 'opacity-60 bg-muted/20' : ''}`}
-                  >
+                  <React.Fragment key={kpi.id}>
+                    <TableRow 
+                      className={`${isLocked ? 'opacity-75 bg-muted/30' : ''} ${isNaKpi ? 'opacity-60 bg-muted/20' : ''}`}
+                    >
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <div
@@ -448,7 +462,10 @@ export function EmployeeScorecard({
                         className="text-left hover:bg-muted/50 p-1 -m-1 rounded transition-colors cursor-pointer group w-full"
                         title="Click to view KPI details"
                       >
-                        <p className="font-medium text-primary group-hover:underline">{kpi.kra_name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-primary group-hover:underline">{kpi.kra_name}</p>
+                          {isDailyKpi && <DailyBadge />}
+                        </div>
                         <p className="text-sm text-muted-foreground flex items-center gap-1">
                           {kpi.kpi_name}
                           <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -491,25 +508,54 @@ export function EmployeeScorecard({
                       </div>
                     </TableCell>
                     <TableCell>
-                      {canReview ? (
-                        <Button
-                          size="sm"
-                          onClick={() => openReviewSheet(kpi)}
-                        >
-                          Review
-                        </Button>
-                      ) : kpi.frequency === 'Daily' && !isNaKpi ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openReviewSheet(kpi)}
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          View
-                        </Button>
-                      ) : null}
+                      <div className="flex items-center gap-1">
+                        {canReview ? (
+                          <Button
+                            size="sm"
+                            onClick={() => openReviewSheet(kpi)}
+                          >
+                            Review
+                          </Button>
+                        ) : kpi.frequency === 'Daily' && !isNaKpi ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openReviewSheet(kpi)}
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            View
+                          </Button>
+                        ) : null}
+                        {isDailyKpi && !isNaKpi && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleDailyExpand(kpi.id)}
+                            className="h-8 px-2"
+                            title={isExpanded ? "Hide daily submissions" : "Show daily submissions"}
+                          >
+                            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                            {isExpanded ? (
+                              <ChevronUp className="h-3 w-3 ml-0.5" />
+                            ) : (
+                              <ChevronDown className="h-3 w-3 ml-0.5" />
+                            )}
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
+                  
+                  {/* Expandable Daily Summary Row */}
+                  {isDailyKpi && isExpanded && !isNaKpi && (
+                    <InlineDailySubmissionRow
+                      kpi={kpi}
+                      selectedPeriod={selectedPeriod}
+                      selectedYear={selectedYear}
+                      colSpan={8}
+                    />
+                  )}
+                  </React.Fragment>
                 );
               })}
               {(!kpis || kpis.length === 0) && (

@@ -17,6 +17,7 @@ interface DailySubmissionSummaryProps {
   uom?: string | null;
   uomType?: string | null;
   qualitativeOptions?: QualitativeOption[] | null;
+  compact?: boolean; // Inline display mode with reduced styling
 }
 
 export function DailySubmissionSummary({
@@ -27,6 +28,7 @@ export function DailySubmissionSummary({
   uom,
   uomType,
   qualitativeOptions,
+  compact = false,
 }: DailySubmissionSummaryProps) {
   // Calculate stats
   const stats = useMemo(() => {
@@ -85,6 +87,121 @@ export function DailySubmissionSummary({
     return null;
   }
 
+  // Compact mode: no Card wrapper, smaller spacing
+  const content = (
+    <>
+      {/* Stats Row */}
+      <div className={`grid grid-cols-4 ${compact ? 'gap-2' : 'gap-3'}`}>
+        <div className={`${compact ? 'p-2' : 'p-3'} bg-muted/50 rounded-lg text-center`}>
+          <div className="flex items-center justify-center gap-1 mb-1">
+            <Calendar className={`${compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} text-muted-foreground`} />
+          </div>
+          <p className={`${compact ? 'text-lg' : 'text-xl'} font-bold`}>{stats.daysInMonth}</p>
+          <p className="text-xs text-muted-foreground">Total Days</p>
+        </div>
+        <div className={`${compact ? 'p-2' : 'p-3'} bg-green-50 dark:bg-green-950/30 rounded-lg text-center`}>
+          <div className="flex items-center justify-center gap-1 mb-1">
+            <Check className={`${compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} text-green-600 dark:text-green-400`} />
+          </div>
+          <p className={`${compact ? 'text-lg' : 'text-xl'} font-bold text-green-600 dark:text-green-400`}>{stats.submittedCount}</p>
+          <p className="text-xs text-muted-foreground">Submitted</p>
+        </div>
+        <div className={`${compact ? 'p-2' : 'p-3'} bg-amber-50 dark:bg-amber-950/30 rounded-lg text-center`}>
+          <div className="flex items-center justify-center gap-1 mb-1">
+            <X className={`${compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} text-amber-600 dark:text-amber-400`} />
+          </div>
+          <p className={`${compact ? 'text-lg' : 'text-xl'} font-bold text-amber-600 dark:text-amber-400`}>{stats.missingCount}</p>
+          <p className="text-xs text-muted-foreground">Not Submitted</p>
+        </div>
+        {stats.isBinary && (
+          <div className={`${compact ? 'p-2' : 'p-3'} bg-red-50 dark:bg-red-950/30 rounded-lg text-center`}>
+            <div className="flex items-center justify-center gap-1 mb-1">
+              <Ban className={`${compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} text-red-600 dark:text-red-400`} />
+            </div>
+            <p className={`${compact ? 'text-lg' : 'text-xl'} font-bold text-red-600 dark:text-red-400`}>{stats.noCount}</p>
+            <p className="text-xs text-muted-foreground">"No" Count</p>
+          </div>
+        )}
+        {!stats.isBinary && (
+          <div className={`${compact ? 'p-2' : 'p-3'} bg-muted/50 rounded-lg text-center`}>
+            <div className="flex items-center justify-center gap-1 mb-1">
+              <Check className={`${compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} text-muted-foreground`} />
+            </div>
+            <p className={`${compact ? 'text-lg' : 'text-xl'} font-bold`}>
+              {stats.daysInMonth > 0 
+                ? Math.round((stats.submittedCount / stats.daysInMonth) * 100) 
+                : 0}%
+            </p>
+            <p className="text-xs text-muted-foreground">Completion</p>
+          </div>
+        )}
+      </div>
+
+      {/* Submissions Table */}
+      <ScrollArea className={`${compact ? 'h-[150px]' : 'h-[200px]'} rounded-md border mt-3`}>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[100px]">Date</TableHead>
+              <TableHead>Achieved Value</TableHead>
+              <TableHead className="text-right">Submitted At</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+          {sortedSubmissions.map((submission) => {
+              // Parse full date string directly (YYYY-MM-DD format)
+              const dateObj = new Date(submission.sub_period_value);
+              const formattedDate = format(dateObj, 'dd MMM');
+              const formattedTimestamp = submission.submitted_at 
+                ? format(new Date(submission.submitted_at), 'dd MMM yyyy, hh:mm a')
+                : '—';
+              const isNo = isNoValue(submission.achieved_value);
+              
+              return (
+                <TableRow 
+                  key={submission.id}
+                  className={isNo ? 'bg-red-50/50 dark:bg-red-950/20' : ''}
+                >
+                  <TableCell className="font-medium">{formattedDate}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span className={isNo ? 'text-red-600 dark:text-red-400 font-medium' : ''}>
+                        {formatAchievedValue(submission.achieved_value)}
+                      </span>
+                      {submission.is_resubmitted && (
+                        <Badge variant="outline" className="text-xs h-5 px-1.5 gap-0.5 bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800">
+                          <Lock className="h-3 w-3 text-green-600 dark:text-green-400" />
+                          <span className="text-green-600 dark:text-green-400">Final</span>
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right text-sm text-muted-foreground">
+                    {formattedTimestamp}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </ScrollArea>
+    </>
+  );
+
+  // Compact mode: return content directly without Card wrapper
+  if (compact) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Calendar className="h-4 w-4" />
+          Daily Submission Summary
+        </div>
+        {content}
+      </div>
+    );
+  }
+
+  // Full mode: wrap in Card
   return (
     <Card className="mt-4">
       <CardHeader className="pb-3">
@@ -94,101 +211,7 @@ export function DailySubmissionSummary({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Stats Row */}
-        <div className="grid grid-cols-4 gap-3">
-          <div className="p-3 bg-muted/50 rounded-lg text-center">
-            <div className="flex items-center justify-center gap-1 mb-1">
-              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-            </div>
-            <p className="text-xl font-bold">{stats.daysInMonth}</p>
-            <p className="text-xs text-muted-foreground">Total Days</p>
-          </div>
-          <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg text-center">
-            <div className="flex items-center justify-center gap-1 mb-1">
-              <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-            </div>
-            <p className="text-xl font-bold text-green-600 dark:text-green-400">{stats.submittedCount}</p>
-            <p className="text-xs text-muted-foreground">Submitted</p>
-          </div>
-          <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg text-center">
-            <div className="flex items-center justify-center gap-1 mb-1">
-              <X className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-            </div>
-            <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{stats.missingCount}</p>
-            <p className="text-xs text-muted-foreground">Not Submitted</p>
-          </div>
-          {stats.isBinary && (
-            <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-lg text-center">
-              <div className="flex items-center justify-center gap-1 mb-1">
-                <Ban className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
-              </div>
-              <p className="text-xl font-bold text-red-600 dark:text-red-400">{stats.noCount}</p>
-              <p className="text-xs text-muted-foreground">"No" Count</p>
-            </div>
-          )}
-          {!stats.isBinary && (
-            <div className="p-3 bg-muted/50 rounded-lg text-center">
-              <div className="flex items-center justify-center gap-1 mb-1">
-                <Check className="h-3.5 w-3.5 text-muted-foreground" />
-              </div>
-              <p className="text-xl font-bold">
-                {stats.daysInMonth > 0 
-                  ? Math.round((stats.submittedCount / stats.daysInMonth) * 100) 
-                  : 0}%
-              </p>
-              <p className="text-xs text-muted-foreground">Completion</p>
-            </div>
-          )}
-        </div>
-
-        {/* Submissions Table */}
-        <ScrollArea className="h-[200px] rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[100px]">Date</TableHead>
-                <TableHead>Achieved Value</TableHead>
-                <TableHead className="text-right">Submitted At</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-            {sortedSubmissions.map((submission) => {
-                // Parse full date string directly (YYYY-MM-DD format)
-                const dateObj = new Date(submission.sub_period_value);
-                const formattedDate = format(dateObj, 'dd MMM');
-                const formattedTimestamp = submission.submitted_at 
-                  ? format(new Date(submission.submitted_at), 'dd MMM yyyy, hh:mm a')
-                  : '—';
-                const isNo = isNoValue(submission.achieved_value);
-                
-                return (
-                  <TableRow 
-                    key={submission.id}
-                    className={isNo ? 'bg-red-50/50 dark:bg-red-950/20' : ''}
-                  >
-                    <TableCell className="font-medium">{formattedDate}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span className={isNo ? 'text-red-600 dark:text-red-400 font-medium' : ''}>
-                          {formatAchievedValue(submission.achieved_value)}
-                        </span>
-                        {submission.is_resubmitted && (
-                          <Badge variant="outline" className="text-xs h-5 px-1.5 gap-0.5 bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800">
-                            <Lock className="h-3 w-3 text-green-600 dark:text-green-400" />
-                            <span className="text-green-600 dark:text-green-400">Final</span>
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right text-sm text-muted-foreground">
-                      {formattedTimestamp}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </ScrollArea>
+        {content}
       </CardContent>
     </Card>
   );
