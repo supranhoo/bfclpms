@@ -1,59 +1,153 @@
-# Plan: Standardize KPI Details Table - COMPLETED ✓
 
-## Summary
+# Plan: Integrate KpiDetailsTable into My KPIs Page
 
-Created a unified `KpiDetailsTable.tsx` component that standardizes the KPI table display across all review views (My KPIs, Team Review, Audit, Management).
+## Overview
+
+Replace the inline KPI table in `MyKpis.tsx` (lines 734-958) with the unified `KpiDetailsTable` component to ensure consistency with Team Review, Audit, and Management views.
 
 ---
 
-## Changes Made
+## Current State
 
-### New Component: `src/components/review/KpiDetailsTable.tsx`
+The `MyKpis.tsx` page has a custom inline table with the following columns:
 
-Reusable table component with:
-- **Dynamic score columns** based on KPI status progression
-- **Single-digit scores** (1-5) without denominator
-- **Self column** shows `self_score` (1-5 rating), NOT raw `achieved_value`
-- **Progressive visibility**: Columns appear as KPI moves through workflow
-- **View-type actions**: Buttons adapt to each view context
+| Current Column | Issue |
+|----------------|-------|
+| Category | Separate column |
+| KRA | Separate column |
+| KPI | Separate column |
+| Target | OK |
+| Achieved | Shows raw achieved_value, not score |
+| Rating | Shows score with description badge (e.g., "4 - Exceeds Expectations") |
+| Status | OK |
+| Actions | Different button structure |
 
-### Updated Files
+**Lines to replace:** ~734-958 (inline Table component)
+
+---
+
+## Target State
+
+Use `<KpiDetailsTable viewType="my-kpis" />` with unified columns:
+
+| New Column | Description |
+|------------|-------------|
+| Category | Category with org-level indicator |
+| KRA / KPI | Combined with Daily badge |
+| Target | Target value with UOM |
+| Self | Employee's score (1-5), single digit |
+| Manager | Manager score (if visible) |
+| Auditor | Auditor score (if visible) |
+| Mgmt | Management score (if visible) |
+| Status | Status badge with query count |
+| Actions | Review/View buttons |
+
+---
+
+## Implementation Details
+
+### Step 1: Add Import
+
+```typescript
+import { KpiDetailsTable } from '@/components/review/KpiDetailsTable';
+```
+
+### Step 2: Add Required State and Handlers
+
+The `MyKpis.tsx` page needs to provide:
+
+1. **`expandedKpis` state** - For daily KPI expand/collapse:
+```typescript
+const [expandedKpis, setExpandedKpis] = useState<Set<string>>(new Set());
+const toggleExpand = (kpiId: string) => {
+  setExpandedKpis(prev => {
+    const next = new Set(prev);
+    if (next.has(kpiId)) next.delete(kpiId);
+    else next.add(kpiId);
+    return next;
+  });
+};
+```
+
+2. **`isKpiFrequencyLocked` function** - Already exists in the file
+
+3. **`openTimeline` as `onShowLogic`** - Reuse existing timeline handler
+
+### Step 3: Replace Inline Table
+
+Replace lines 734-958 with:
+
+```tsx
+<div className="rounded-lg border overflow-hidden">
+  <KpiDetailsTable
+    kpis={sortedKpis}
+    submissionMap={submissionMap}
+    viewType="my-kpis"
+    selectedPeriod={selectedPeriod}
+    selectedYear={selectedYear}
+    onReview={openReviewDialog}
+    onView={openReviewDialog}
+    onShowLogic={openTimeline}
+    expandedKpis={expandedKpis}
+    onToggleExpand={toggleExpand}
+    getOrgKpiValue={getOrgKpiValue}
+    isKpiLocked={isKpiFrequencyLocked}
+  />
+</div>
+```
+
+---
+
+## What Changes for Users
+
+| Before | After |
+|--------|-------|
+| Separate KRA and KPI columns | Combined "KRA / KPI" column |
+| "Achieved" shows raw value (95) | "Self" shows score (4) |
+| "Rating" shows "4 - Exceeds Expectations" | Score shown as single digit (4) |
+| Fixed columns | Dynamic columns based on status |
+
+---
+
+## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `EmployeeScorecard.tsx` | Replaced inline table with `<KpiDetailsTable viewType="team-review" />` |
-| `AuditScorecard.tsx` | Replaced inline table with `<KpiDetailsTable viewType="audit" />` |
-| `ManagementScorecard.tsx` | Replaced inline table with `<KpiDetailsTable viewType="management" />` |
-| `DOCUMENTATION.md` | Added KpiDetailsTable documentation |
+| `src/pages/MyKpis.tsx` | Import component, add state, replace table |
+| `DOCUMENTATION.md` | Update to reflect My KPIs uses unified table |
 
 ---
 
-## Column Visibility Rules
+## Cleanup
 
-| KPI Status | Visible Columns |
-|------------|-----------------|
-| `kra_set` | Self |
-| `self_review` | Self, Manager |
-| `manager_check` | Self, Manager, Auditor |
-| `audit` | Self, Manager, Auditor |
-| `management_review` | Self, Manager, Auditor, Mgmt |
-| `approved` | Self, Manager, Auditor, Mgmt |
+Remove unused imports from MyKpis.tsx after refactoring:
+- `Table, TableBody, TableCell, TableHead, TableHeader, TableRow` (if no longer needed elsewhere in file)
+- `Clock` icon (used in old actions column)
 
 ---
 
-## Score Data Sources
+## Testing Checklist
 
-| Column | Data Field |
-|--------|-----------|
-| Self | `review_submissions.self_score` (1-5) |
-| Manager | `review_submissions.manager_score` (1-5) |
-| Auditor | `review_submissions.auditor_score` (1-5) |
-| Mgmt | `review_submissions.management_score` (1-5) |
+1. **My KPIs Table Display**
+   - [ ] Self column shows score (1-5), not achieved value
+   - [ ] Score displayed as single digit without /5
+   - [ ] No rating description badges shown
+   - [ ] Dynamic columns appear based on KPI status
 
----
+2. **Actions Work Correctly**
+   - [ ] "Review" button opens review dialog for kra_set status
+   - [ ] "View" button opens dialog for submitted KPIs
+   - [ ] Timeline button (KPI click) opens timeline modal
 
-## Next Steps (Optional)
+3. **Daily KPIs**
+   - [ ] Daily badge shown
+   - [ ] Expand/collapse button works
+   - [ ] Inline daily summary row displays
 
-- [ ] Update `MyKpis.tsx` to use `KpiDetailsTable` (currently uses custom inline table)
-- [ ] Add sorting controls to unified table component
+4. **Org-Level KPIs**
+   - [ ] Scope icons display correctly
+   - [ ] Tooltip shows scope info
 
+5. **Locked KPIs**
+   - [ ] Locked badge displays for frequency-locked KPIs
+   - [ ] Row has reduced opacity
