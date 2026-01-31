@@ -427,7 +427,7 @@ login_hero_description text  -- Configurable description text
 - Key stat cards: Monthly Rating, Total Weighted Score, Completed, Pending
 - Overall score chart (compact radial donut - 1/6 width)
 - Category-wise score chart (horizontal bar - 5/6 width with 280px Y-axis for long category names)
-  - **Category labels include weightage**: Each category displays its weightage percentage (e.g., "HR Operations (30%)") to show relative importance
+  - **Category labels include dynamic weightage**: Each category displays its weightage percentage (e.g., "HR Operations (30%)") calculated by summing the individual KPI weightages assigned to that category for the specific employee. This ensures the displayed weightage accurately reflects the employee's unique scorecard composition rather than a static table value.
   - **All categories with mapped KPIs are shown**: Categories appear if the employee has at least one KPI assigned to that category, even if no scores have been submitted yet (displays 0% score bar)
 - Review status distribution with progress bars
 - KPI details table with status badges and action buttons

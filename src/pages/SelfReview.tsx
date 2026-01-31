@@ -231,12 +231,15 @@ export default function SelfReview() {
         max += weight * 5;
       });
 
+      // Calculate category weightage from sum of KPI weightages
+      const categoryWeightage = catKpis.reduce((sum, kpi) => sum + (kpi.weightage || 0), 0);
+
       return {
         name: cat.name,
         percentage: max > 0 ? (achieved / max) * 100 : 0,
         color: cat.color,
         count: catKpis.length,
-        weightage: cat.weightage,
+        weightage: categoryWeightage,
       };
     }).filter(c => c.count > 0).sort((a, b) => b.percentage - a.percentage);
   }, [categories, filteredKpis, submissionMap]);
