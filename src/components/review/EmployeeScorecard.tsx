@@ -23,13 +23,14 @@ import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreI
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
+import { QueryHistoryDialog } from '@/components/review/QueryHistoryDialog';
 import { scoreToRating } from '@/components/review/ScoreSelector';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
-  Info, Lock, MessageSquare, Undo2, Check, Eye, Calendar, ChevronDown, ChevronUp 
+  Info, Lock, MessageSquare, Undo2, Check, Eye, Calendar, ChevronDown, ChevronUp, History
 } from 'lucide-react';
 import { InlineDailySubmissionRow } from '@/components/review/InlineDailySubmissionRow';
 import { DailyBadge } from '@/components/review/DailyKpiExpandButton';
@@ -84,6 +85,7 @@ export function EmployeeScorecard({
   const [queryDialogOpen, setQueryDialogOpen] = useState(false);
   const [sendBackDialogOpen, setSendBackDialogOpen] = useState(false);
   const [logicModalOpen, setLogicModalOpen] = useState(false);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   const [expandedDailyKpis, setExpandedDailyKpis] = useState<Set<string>>(new Set());
   
@@ -779,6 +781,14 @@ export function EmployeeScorecard({
         isOpen={logicModalOpen}
         onClose={() => setLogicModalOpen(false)}
         kpi={selectedKpi}
+      />
+
+      {/* Query History Dialog */}
+      <QueryHistoryDialog
+        kpiId={selectedKpi?.id || ''}
+        kpiName={selectedKpi?.kpi_name || ''}
+        open={historyDialogOpen}
+        onOpenChange={setHistoryDialogOpen}
       />
     </div>
   );

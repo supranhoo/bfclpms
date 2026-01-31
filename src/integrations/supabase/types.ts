@@ -1837,7 +1837,7 @@ export type Database = {
         | "extended"
         | "terminated"
       query_entity_type: "kra" | "kpi"
-      query_status: "open" | "resolved"
+      query_status: "open" | "resolved" | "responded"
       rating_level: "red" | "yellow" | "green" | "blue"
       review_status:
         | "kra_set"
@@ -1993,7 +1993,7 @@ export const Constants = {
         "terminated",
       ],
       query_entity_type: ["kra", "kpi"],
-      query_status: ["open", "resolved"],
+      query_status: ["open", "resolved", "responded"],
       rating_level: ["red", "yellow", "green", "blue"],
       review_status: [
         "kra_set",
