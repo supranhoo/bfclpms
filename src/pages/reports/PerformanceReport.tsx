@@ -52,12 +52,14 @@ export default function PerformanceReport() {
         count++;
       }
     });
+    // Calculate dynamic weightage from KPIs
+    const dynamicWeightage = catKpis.reduce((sum, kpi) => sum + (kpi.weightage || 0), 0);
     return {
       name: cat.name,
       avgScore: count > 0 ? Math.round(totalScore / count) : 0,
       kpiCount: catKpis.length,
       color: cat.color,
-      weightage: cat.weightage,
+      weightage: dynamicWeightage,  // Dynamic from KPIs
     };
   }) || [];
 

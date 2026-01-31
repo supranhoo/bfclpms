@@ -100,7 +100,7 @@ export function ManagementScorecard({
       totalScore: number; 
       totalWeight: number; 
       color: string | null;
-      weightage: number | null;
+      dynamicWeightage: number;  // Sum of KPI weightages
     }>();
     
     kpis.forEach(kpi => {
@@ -111,17 +111,17 @@ export function ManagementScorecard({
       const weight = kpi.weightage || 0;
       const categoryName = kpi.kra_categories?.name || 'Other';
       const categoryColor = kpi.kra_categories?.color || null;
-      const categoryWeightage = kpi.kra_categories?.weightage ?? null;
       
       // Always add to category map (even if score is 0)
       const existing = categoryMap.get(categoryName) || { 
         totalScore: 0, 
         totalWeight: 0, 
         color: categoryColor,
-        weightage: categoryWeightage
+        dynamicWeightage: 0
       };
       
       if (weight > 0) {
+        existing.dynamicWeightage += weight;  // Accumulate KPI weightage
         if (score > 0) {
           totalWeightedScore += score * weight;
           totalWeight += weight;
@@ -140,7 +140,7 @@ export function ManagementScorecard({
       name,
       percentage: data.totalWeight > 0 ? ((data.totalScore / data.totalWeight) / 5) * 100 : 0,
       color: data.color,
-      weightage: data.weightage,
+      weightage: data.dynamicWeightage,  // Use accumulated KPI weightage
     }));
     
     return { overallScore, rating: overallRating, categoryScores };
