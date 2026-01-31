@@ -13,7 +13,9 @@ import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
 import { AdminKpiCreateDialog } from '@/components/admin/AdminKpiCreateDialog';
 import { BulkTemplateAssignDialog } from '@/components/admin/BulkTemplateAssignDialog';
 import { ScoringSimulatorPopover } from '@/components/admin/ScoringSimulatorPopover';
-import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon } from 'lucide-react';
+import { AdminDataEntryDialog } from '@/components/admin/AdminDataEntryDialog';
+import { AdminDailyEntryDialog } from '@/components/admin/AdminDailyEntryDialog';
+import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -57,6 +59,12 @@ export default function AllKpis() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false);
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
+  
+  // Admin data entry dialog states
+  const [dataEntryKpi, setDataEntryKpi] = useState<KPI | null>(null);
+  const [dataEntryEmployee, setDataEntryEmployee] = useState<{ id: string; name: string; code?: string } | null>(null);
+  const [dailyEntryKpi, setDailyEntryKpi] = useState<KPI | null>(null);
+  const [dailyEntryEmployee, setDailyEntryEmployee] = useState<{ id: string; name: string; code?: string } | null>(null);
 
   // Get unique managers (profiles who have reports)
   const managers = useMemo(() => {
@@ -580,50 +588,104 @@ export default function AllKpis() {
                                 Individual KPIs for {emp.employeeName}
                               </div>
                               <div className="grid gap-2">
-                                {employeeKpis.map(kpi => (
-                                  <div 
-                                    key={kpi.id}
-                                    className="flex items-center justify-between p-3 bg-background rounded-lg border hover:border-primary/50 cursor-pointer transition-colors"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditingKpi(kpi);
-                                    }}
-                                  >
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-medium">{kpi.kra_name}</span>
-                                        {kpi.is_org_level && (
+                                {employeeKpis.map(kpi => {
+                                  const employee = (kpi as any).profiles as { id: string; full_name?: string; employee_code?: string } | null;
+                                  const isDaily = kpi.frequency?.toLowerCase() === 'daily';
+                                  const isWeekly = kpi.frequency?.toLowerCase() === 'weekly';
+                                  
+                                  return (
+                                    <div 
+                                      key={kpi.id}
+                                      className="flex items-center justify-between p-3 bg-background rounded-lg border hover:border-primary/50 transition-colors"
+                                    >
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="font-medium">{kpi.kra_name}</span>
+                                          {kpi.is_org_level && (
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Badge variant="outline" className="text-xs border-primary/50 text-primary shrink-0">
+                                                  <BuildingIcon className="h-3 w-3 mr-1" />
+                                                  Org-Level
+                                                </Badge>
+                                              </TooltipTrigger>
+                                              <TooltipContent>Organization-level KPI with centralized values</TooltipContent>
+                                            </Tooltip>
+                                          )}
+                                          {(isDaily || isWeekly) && (
+                                            <Badge variant="secondary" className="text-xs shrink-0">
+                                              {kpi.frequency}
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <div className="text-sm text-muted-foreground mt-1">{kpi.kpi_name}</div>
+                                        <div className="text-xs text-muted-foreground mt-1">
+                                          {kpi.review_period} {kpi.review_year} · {categories?.find(c => c.id === kpi.category_id)?.name || 'Unknown Category'}
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2 shrink-0 ml-4">
+                                        <Badge variant="outline">{getStageLabel(kpi.status || 'kra_set')}</Badge>
+                                        
+                                        {/* Admin Data Entry Buttons */}
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button 
+                                              variant="outline" 
+                                              size="sm"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setDataEntryKpi(kpi);
+                                                setDataEntryEmployee({
+                                                  id: employee?.id || '',
+                                                  name: employee?.full_name || 'Unknown',
+                                                  code: employee?.employee_code,
+                                                });
+                                              }}
+                                            >
+                                              <PenLine className="h-4 w-4" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>Enter Review Data</TooltipContent>
+                                        </Tooltip>
+                                        
+                                        {/* Daily/Weekly Entry Button */}
+                                        {(isDaily || isWeekly) && (
                                           <Tooltip>
                                             <TooltipTrigger asChild>
-                                              <Badge variant="outline" className="text-xs border-primary/50 text-primary shrink-0">
-                                                <BuildingIcon className="h-3 w-3 mr-1" />
-                                                Org-Level
-                                              </Badge>
+                                              <Button 
+                                                variant="outline" 
+                                                size="sm"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setDailyEntryKpi(kpi);
+                                                  setDailyEntryEmployee({
+                                                    id: employee?.id || '',
+                                                    name: employee?.full_name || 'Unknown',
+                                                    code: employee?.employee_code,
+                                                  });
+                                                }}
+                                              >
+                                                <CalendarDays className="h-4 w-4" />
+                                              </Button>
                                             </TooltipTrigger>
-                                            <TooltipContent>Organization-level KPI with centralized values</TooltipContent>
+                                            <TooltipContent>{isDaily ? 'Enter Daily Data' : 'Enter Weekly Data'}</TooltipContent>
                                           </Tooltip>
                                         )}
-                                      </div>
-                                      <div className="text-sm text-muted-foreground mt-1">{kpi.kpi_name}</div>
-                                      <div className="text-xs text-muted-foreground mt-1">
-                                        {kpi.review_period} {kpi.review_year} · {categories?.find(c => c.id === kpi.category_id)?.name || 'Unknown Category'}
+                                        
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingKpi(kpi);
+                                          }}
+                                        >
+                                          <Edit className="h-4 w-4" />
+                                        </Button>
                                       </div>
                                     </div>
-                                    <div className="flex items-center gap-3 shrink-0 ml-4">
-                                      <Badge variant="outline">{getStageLabel(kpi.status || 'kra_set')}</Badge>
-                                      <Button 
-                                        variant="ghost" 
-                                        size="sm"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setEditingKpi(kpi);
-                                        }}
-                                      >
-                                        <Edit className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             </div>
                           </TableCell>
@@ -660,6 +722,31 @@ export default function AllKpis() {
       <BulkTemplateAssignDialog
         isOpen={isBulkAssignOpen}
         onClose={() => setIsBulkAssignOpen(false)}
+      />
+
+      {/* Admin Data Entry Dialogs */}
+      <AdminDataEntryDialog
+        isOpen={!!dataEntryKpi && !!dataEntryEmployee}
+        onClose={() => {
+          setDataEntryKpi(null);
+          setDataEntryEmployee(null);
+        }}
+        kpi={dataEntryKpi}
+        employeeId={dataEntryEmployee?.id || ''}
+        employeeName={dataEntryEmployee?.name || ''}
+        employeeCode={dataEntryEmployee?.code}
+      />
+
+      <AdminDailyEntryDialog
+        isOpen={!!dailyEntryKpi && !!dailyEntryEmployee}
+        onClose={() => {
+          setDailyEntryKpi(null);
+          setDailyEntryEmployee(null);
+        }}
+        kpi={dailyEntryKpi}
+        employeeId={dailyEntryEmployee?.id || ''}
+        employeeName={dailyEntryEmployee?.name || ''}
+        employeeCode={dailyEntryEmployee?.code}
       />
     </div>
   );

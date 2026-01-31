@@ -310,6 +310,8 @@ export type Database = {
           metadata: Json | null
           new_value: Json | null
           old_value: Json | null
+          on_behalf_of: string | null
+          on_behalf_role: string | null
           performed_by: string
           submission_id: string | null
         }
@@ -321,6 +323,8 @@ export type Database = {
           metadata?: Json | null
           new_value?: Json | null
           old_value?: Json | null
+          on_behalf_of?: string | null
+          on_behalf_role?: string | null
           performed_by: string
           submission_id?: string | null
         }
@@ -332,6 +336,8 @@ export type Database = {
           metadata?: Json | null
           new_value?: Json | null
           old_value?: Json | null
+          on_behalf_of?: string | null
+          on_behalf_role?: string | null
           performed_by?: string
           submission_id?: string | null
         }
@@ -341,6 +347,13 @@ export type Database = {
             columns: ["kpi_id"]
             isOneToOne: false
             referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_audit_logs_on_behalf_of_fkey"
+            columns: ["on_behalf_of"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
