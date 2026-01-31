@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Calendar, Check, X, Ban, Lock } from 'lucide-react';
+import { Calendar, Check, X, Ban, Lock, AlertTriangle } from 'lucide-react';
 import { SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
 import { getMonthNumber } from '@/lib/frequencyUtils';
@@ -45,7 +45,10 @@ export function DailySubmissionSummary({
       ? submissions.filter(s => s.achieved_value === 0).length 
       : 0;
     
-    return { daysInMonth, submittedCount, missingCount, noCount, isBinary };
+    // Total No = missed days + explicit "No" submissions (for binary KPIs)
+    const totalNoCount = missingCount + noCount;
+    
+    return { daysInMonth, submittedCount, missingCount, noCount, isBinary, totalNoCount };
   }, [submissions, reviewMonth, reviewYear, uomType]);
 
   // Format achieved value for display
@@ -114,12 +117,12 @@ export function DailySubmissionSummary({
           <p className="text-xs text-muted-foreground">Not Submitted</p>
         </div>
         {stats.isBinary && (
-          <div className={`${compact ? 'p-2' : 'p-3'} bg-red-50 dark:bg-red-950/30 rounded-lg text-center`}>
+          <div className={`${compact ? 'p-2' : 'p-3'} bg-orange-50 dark:bg-orange-950/30 rounded-lg text-center`}>
             <div className="flex items-center justify-center gap-1 mb-1">
-              <Ban className={`${compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} text-red-600 dark:text-red-400`} />
+              <AlertTriangle className={`${compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} text-orange-600 dark:text-orange-400`} />
             </div>
-            <p className={`${compact ? 'text-lg' : 'text-xl'} font-bold text-red-600 dark:text-red-400`}>{stats.noCount}</p>
-            <p className="text-xs text-muted-foreground">"No" Count</p>
+            <p className={`${compact ? 'text-lg' : 'text-xl'} font-bold text-orange-600 dark:text-orange-400`}>{stats.totalNoCount}</p>
+            <p className="text-xs text-muted-foreground">Total No</p>
           </div>
         )}
         {!stats.isBinary && (

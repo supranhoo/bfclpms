@@ -525,6 +525,30 @@ Daily and Weekly KPIs follow a **two-level submission flow**:
   - Manager notification triggered
   - KPI appears in manager's Team Review queue
 
+#### Daily Binary KPI Scoring (Missed Days Penalty)
+
+For Daily KPIs with **Binary targets (Yes/No)**, the monthly score uses a special calculation that treats both missed days AND "No" submissions as penalties:
+
+**Formula:** `Total No = Missed Days + "No" Submissions`
+
+| Total No Count | Final Score | Rating Level |
+|---------------|-------------|--------------|
+| 0 | 5 | Outstanding |
+| 1 | 4 | Exceeds Expectations |
+| 2 | 3 | Meets Expectations |
+| 3 | 2 | Below Expectations |
+| 4 | 1 | Needs Improvement |
+| >4 | 0 | Not Achieved |
+
+**Example Calculation:**
+- Month has 31 days
+- Employee submitted 28 days (3 missed)
+- Of those 28 submissions, 2 were "No" responses
+
+**Total No = 3 (missed) + 2 ("No" responses) = 5 → Final Score = 0**
+
+This ensures that both non-compliance (explicit "No") and non-submission (missed days) are equally penalized in the final monthly score.
+
 ### 4.4 Manager Review
 
 **Route:** `/team-review`
