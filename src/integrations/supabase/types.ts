@@ -220,6 +220,39 @@ export type Database = {
         }
         Relationships: []
       }
+      frequency_config: {
+        Row: {
+          active_month: number | null
+          created_at: string | null
+          description: string | null
+          frequency: string
+          id: string
+          locked_months: Json | null
+          review_window_rules: Json | null
+          sub_frequency: string
+        }
+        Insert: {
+          active_month?: number | null
+          created_at?: string | null
+          description?: string | null
+          frequency: string
+          id?: string
+          locked_months?: Json | null
+          review_window_rules?: Json | null
+          sub_frequency: string
+        }
+        Update: {
+          active_month?: number | null
+          created_at?: string | null
+          description?: string | null
+          frequency?: string
+          id?: string
+          locked_months?: Json | null
+          review_window_rules?: Json | null
+          sub_frequency?: string
+        }
+        Relationships: []
+      }
       import_progress: {
         Row: {
           categories_created: number
@@ -492,7 +525,9 @@ export type Database = {
           criteria: string | null
           employee_id: string
           frequency: string | null
+          frequency_cycle_start: string | null
           id: string
+          is_frequency_locked: boolean | null
           is_org_level: boolean | null
           kpi_name: string
           kra_name: string
@@ -508,6 +543,7 @@ export type Database = {
           review_year: number | null
           source_of_data: string | null
           status: Database["public"]["Enums"]["review_status"] | null
+          sub_frequency: string | null
           target_value: number | null
           uom: string | null
           uom_type: string | null
@@ -520,7 +556,9 @@ export type Database = {
           criteria?: string | null
           employee_id: string
           frequency?: string | null
+          frequency_cycle_start?: string | null
           id?: string
+          is_frequency_locked?: boolean | null
           is_org_level?: boolean | null
           kpi_name: string
           kra_name: string
@@ -536,6 +574,7 @@ export type Database = {
           review_year?: number | null
           source_of_data?: string | null
           status?: Database["public"]["Enums"]["review_status"] | null
+          sub_frequency?: string | null
           target_value?: number | null
           uom?: string | null
           uom_type?: string | null
@@ -548,7 +587,9 @@ export type Database = {
           criteria?: string | null
           employee_id?: string
           frequency?: string | null
+          frequency_cycle_start?: string | null
           id?: string
+          is_frequency_locked?: boolean | null
           is_org_level?: boolean | null
           kpi_name?: string
           kra_name?: string
@@ -564,6 +605,7 @@ export type Database = {
           review_year?: number | null
           source_of_data?: string | null
           status?: Database["public"]["Enums"]["review_status"] | null
+          sub_frequency?: string | null
           target_value?: number | null
           uom?: string | null
           uom_type?: string | null
@@ -1369,6 +1411,69 @@ export type Database = {
           },
         ]
       }
+      sub_period_submissions: {
+        Row: {
+          achieved_value: number | null
+          created_at: string | null
+          evidence_url: string | null
+          id: string
+          kpi_id: string
+          remarks: string | null
+          review_month: string
+          review_year: number
+          sub_period_type: string
+          sub_period_value: string
+          submitted_at: string | null
+          submitted_by: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          achieved_value?: number | null
+          created_at?: string | null
+          evidence_url?: string | null
+          id?: string
+          kpi_id: string
+          remarks?: string | null
+          review_month: string
+          review_year: number
+          sub_period_type: string
+          sub_period_value: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          achieved_value?: number | null
+          created_at?: string | null
+          evidence_url?: string | null
+          id?: string
+          kpi_id?: string
+          remarks?: string | null
+          review_month?: string
+          review_year?: number
+          sub_period_type?: string
+          sub_period_value?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sub_period_submissions_kpi_id_fkey"
+            columns: ["kpi_id"]
+            isOneToOne: false
+            referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sub_period_submissions_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_settings: {
         Row: {
           created_at: string | null
@@ -1657,6 +1762,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      aggregate_sub_period_scores: {
+        Args: { p_kpi_id: string; p_month: string; p_year: number }
+        Returns: number
+      }
       detect_training_needs_for_period: {
         Args: {
           p_review_period: string
@@ -1664,6 +1773,10 @@ export type Database = {
           p_threshold?: number
         }
         Returns: number
+      }
+      get_cycle_months: {
+        Args: { p_frequency: string; p_month: string; p_year: number }
+        Returns: string[]
       }
       get_employee_workflow: { Args: { employee_uuid: string }; Returns: Json }
       get_employee_workflow_info: {
@@ -1685,6 +1798,10 @@ export type Database = {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      is_month_locked_for_frequency: {
+        Args: { p_frequency: string; p_month: string; p_year: number }
         Returns: boolean
       }
       is_period_locked: {

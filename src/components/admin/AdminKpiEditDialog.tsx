@@ -28,7 +28,7 @@ const STATUS_OPTIONS: { value: ReviewStatus; label: string }[] = [
   { value: 'approved', label: 'Approved' },
 ];
 
-const FREQUENCY_OPTIONS = ['Monthly', 'Quarterly', 'Half-Yearly', 'Annually'];
+const FREQUENCY_OPTIONS = ['Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
 const CRITERIA_OPTIONS = ['Higher is Better', 'Lower is Better', 'Equal to Target'];
 
 const MONTHS = [

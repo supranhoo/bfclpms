@@ -37,7 +37,7 @@ export function useOrgLevelKpis(reviewPeriod?: string, reviewYear?: number) {
         }
       });
       
-      return Array.from(uniqueMap.values()) as (KPI & { kra_categories: { id: string; name: string; color: string; weightage: number } })[];
+      return Array.from(uniqueMap.values()) as unknown as (KPI & { kra_categories: { id: string; name: string; color: string; weightage: number } })[];
     },
     enabled: !!reviewPeriod && !!reviewYear,
   });

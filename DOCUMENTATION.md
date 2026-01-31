@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-01-26  
-> **Version:** 1.1.0  
+> **Last Updated:** 2026-01-31  
+> **Version:** 1.2.0  
 > **Maintainer:** Lovable AI
 
 ---
@@ -269,6 +269,10 @@ has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
 | `sync_kpi_status_from_submission()` | Trigger: Sync KPI status |
 | `log_kpi_status_transition()` | Trigger: Audit logging |
 | `notify_on_kpi_status_change()` | Trigger: Create notifications |
+| `aggregate_sub_period_scores(kpi_id, month, year)` | Calculate monthly avg from daily/weekly submissions |
+| `get_cycle_months(frequency, month, year)` | Get all months in a frequency cycle |
+| `is_month_locked_for_frequency(frequency, month, year)` | Check if month is locked for multi-month frequency |
+| `sync_sub_frequency()` | Trigger: Auto-derive sub_frequency from frequency |
 
 ### Enums
 
@@ -575,6 +579,108 @@ useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculat
 - Set rating thresholds (R5-R0)
 - Configure UOM types (numeric, binary, tiered)
 - Set applicable roles
+- **Frequency Configuration:** 7 frequency types with sub-frequency support
+
+### 4.10 Frequency and Sub-Frequency System
+
+The PMS supports 7 frequency types, each with specific submission and scoring behavior.
+
+#### 4.10.1 Frequency Types Overview
+
+| Frequency | Sub-Frequency | Submission Behavior | Score Calculation |
+|-----------|---------------|---------------------|-------------------|
+| **Daily** | Daily | Date dropdown (today + yesterday only) | Average of all daily submissions in month |
+| **Weekly** | Weekly | Week dropdown (1-5), restricted review windows | Average of weekly submissions in month |
+| **Monthly** | Monthly | Standard monthly submission | Direct entry |
+| **Bi-Monthly** | Jan-Feb, Mar-Apr, etc. | Month 1 locked, Month 2 active | Score from Month 2 → Month 1 |
+| **Quarterly** | Q1-Q4 | Months 1-2 locked, Month 3 active | Score from Month 3 → Months 1-2 |
+| **Half-Yearly** | H1, H2 | Months 1-5 locked, Month 6 active | Score from Month 6 → Months 1-5 |
+| **Yearly** | Jan-Dec (configurable) | Months 1-11 locked, Month 12 active | Score from Month 12 → Months 1-11 |
+
+#### 4.10.2 Daily Frequency
+
+**Behavior:**
+- Rolling 2-day submission window (current date + yesterday)
+- Only dates within the current review month are available
+- Monthly score = Average of all daily submissions
+
+**Example (January 15th):**
+- Available dates: Jan 14, Jan 15
+- Dates Jan 1-13 are closed
+
+#### 4.10.3 Weekly Frequency
+
+**Review Windows:**
+| Week | Review Dates | Description |
+|------|--------------|-------------|
+| Week 1 | 8-10 of month | Review 1st-7th |
+| Week 2 | 15-18 of month | Review 8th-14th |
+| Week 3 | 22-24 of month | Review 15th-21st |
+| Week 4 | 29-31 of month | Review 22nd-28th |
+| Week 5 | 5-8 of next month | Review 29th-end (if applicable) |
+
+**Scoring:** Monthly average of all weekly submissions
+
+#### 4.10.4 Multi-Month Cycles (Bi-Monthly, Quarterly, Half-Yearly, Yearly)
+
+**Locked Period Behavior:**
+- KPIs show as locked/blurred in non-active months
+- Overlay displays: "Review in {active_month}"
+- Users cannot submit during locked periods
+
+**Score Propagation:**
+- Score entered in the active month automatically applies to all locked months in the cycle
+- Ensures consistent reporting across the entire cycle
+
+#### 4.10.5 Database Schema
+
+```sql
+-- Sub-period submissions table (Daily/Weekly)
+CREATE TABLE public.sub_period_submissions (
+  id UUID PRIMARY KEY,
+  kpi_id UUID REFERENCES kpis(id),
+  sub_period_type TEXT, -- 'daily' | 'weekly'
+  sub_period_value TEXT, -- Date or week number
+  achieved_value NUMERIC,
+  remarks TEXT,
+  review_month TEXT,
+  review_year INTEGER
+);
+
+-- Frequency configuration
+CREATE TABLE public.frequency_config (
+  frequency TEXT UNIQUE,
+  sub_frequency TEXT,
+  review_window_rules JSONB,
+  locked_months JSONB,
+  active_month INTEGER
+);
+
+-- KPIs table additions
+ALTER TABLE kpis ADD COLUMN sub_frequency TEXT;
+ALTER TABLE kpis ADD COLUMN frequency_cycle_start TEXT;
+ALTER TABLE kpis ADD COLUMN is_frequency_locked BOOLEAN;
+```
+
+#### 4.10.6 Key Components
+
+| Component | Purpose |
+|-----------|---------|
+| `SubPeriodSelector.tsx` | Dropdown for date/week selection |
+| `FrequencyLockedOverlay.tsx` | Locked state overlay for multi-month cycles |
+| `DailySubmissionGrid.tsx` | Grid for daily value entry |
+| `WeeklySubmissionTable.tsx` | Table for weekly value entry |
+
+#### 4.10.7 Utility Functions (`src/lib/frequencyUtils.ts`)
+
+| Function | Purpose |
+|----------|---------|
+| `isKpiLockedForPeriod()` | Check if KPI is locked for a review period |
+| `getActiveMonthForCycle()` | Get the active month for multi-month cycles |
+| `getCycleMonths()` | Get all months in a frequency cycle |
+| `getDailySubPeriods()` | Get available dates for daily frequency |
+| `getWeeklySubPeriods()` | Get available weeks with review window status |
+| `canSubmitForSubPeriod()` | Check if submission is allowed |
 
 #### 4.9.5 Template Bundles (`/admin/template-bundles`)
 - Group templates into bundles

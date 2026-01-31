@@ -287,11 +287,21 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                   </div>
                   <div>
                     <Label>Frequency</Label>
-                    <Input
+                    <Select
                       value={formData.frequency}
-                      onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
-                      placeholder="Monthly"
-                    />
+                      onValueChange={(val) => setFormData({ ...formData, frequency: val })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select frequency" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {['Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'].map((freq) => (
+                          <SelectItem key={freq} value={freq}>
+                            {freq}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -328,11 +338,21 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                   </div>
                   <div>
                     <Label>Frequency</Label>
-                    <Input
+                    <Select
                       value={formData.frequency}
-                      onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
-                      placeholder="Monthly"
-                    />
+                      onValueChange={(val) => setFormData({ ...formData, frequency: val })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select frequency" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {['Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'].map((freq) => (
+                          <SelectItem key={freq} value={freq}>
+                            {freq}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div className="p-4 bg-muted/50 rounded-lg">
