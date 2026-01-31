@@ -128,6 +128,7 @@ export default function Dashboard() {
         percentage: max > 0 ? (achieved / max) * 100 : 0,
         color: cat.color,
         count: catKpis.length,
+        weightage: cat.weightage,
       };
     }).filter(c => c.count > 0).sort((a, b) => b.percentage - a.percentage);
   }, [categories, fullyFilteredKpis, submissionMap]);

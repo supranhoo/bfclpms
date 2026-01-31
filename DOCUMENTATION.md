@@ -426,7 +426,8 @@ login_hero_description text  -- Configurable description text
 - Profile card with compact layout: "Name (Employee Code) / Designation / Department"
 - Key stat cards: Monthly Rating, Total Weighted Score, Completed, Pending
 - Overall score chart (compact radial donut - 1/6 width)
-- Category-wise score chart (horizontal bar - 5/6 width with 180px Y-axis for long category names)
+- Category-wise score chart (horizontal bar - 5/6 width with 280px Y-axis for long category names)
+  - **Category labels include weightage**: Each category displays its weightage percentage (e.g., "HR Operations (30%)") to show relative importance
 - Review status distribution with progress bars
 - KPI details table with status badges and action buttons
 
