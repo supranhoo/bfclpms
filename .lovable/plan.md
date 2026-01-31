@@ -1,106 +1,104 @@
 
 
-# Plan: KPI Resubmission Confirmation with Mandatory Reason
+# Plan: One-Time Update Limit for Sub-Period Submissions
 
 ## Summary
 
-This plan implements a configurable resubmission workflow for daily/weekly KPI entries:
+This plan implements a "one update only" policy for daily/weekly KPI entries:
 
-1. **Per-KPI Toggle**: Admins can enable/disable resubmission confirmation requirement for each KPI
-2. **Mandatory Reason Field**: When enabled, employees MUST provide a reason before editing previously submitted data
-3. **Audit Trail**: All update reasons are stored in the database for compliance tracking
+1. After the initial submission, employee can update exactly **once**
+2. After the single update is made, no further edits are allowed
+3. The confirmation dialog will show a clear warning message about this limitation
 
 ## Database Changes
 
-### 1. Add Column to `kpis` Table
+### Add Column to `sub_period_submissions` Table
 
 | Column | Type | Default | Description |
 |--------|------|---------|-------------|
-| `require_resubmit_reason` | boolean | true | When enabled, shows confirmation dialog and requires mandatory reason for editing submitted entries |
-
-### 2. Add Column to `kpi_templates` Table
-
-| Column | Type | Default | Description |
-|--------|------|---------|-------------|
-| `require_resubmit_reason` | boolean | true | Template default for the resubmission requirement |
-
-### 3. Add Column to `sub_period_submissions` Table
-
-| Column | Type | Default | Description |
-|--------|------|---------|-------------|
-| `update_reason` | text | null | Mandatory reason provided when resubmitting/editing a previously submitted entry |
+| `is_resubmitted` | boolean | false | Set to true after the first update is made. When true, no further edits are allowed. |
 
 ## Files to Modify
 
 | File | Change Type | Purpose |
 |------|-------------|---------|
-| Database Migration | Create | Add new columns to kpis, kpi_templates, and sub_period_submissions tables |
-| `src/components/admin/AdminKpiCreateDialog.tsx` | Modify | Add toggle for resubmission confirmation |
-| `src/components/admin/AdminKpiEditDialog.tsx` | Modify | Add toggle for resubmission confirmation |
-| `src/components/admin/TemplateFormDialog.tsx` | Modify | Add toggle for resubmission confirmation in templates |
-| `src/components/review/DailySubmissionGrid.tsx` | Modify | Add confirmation dialog with mandatory reason field |
-| `src/components/review/WeeklySubmissionTable.tsx` | Modify | Add confirmation dialog with mandatory reason field |
-| `src/hooks/useSubPeriodSubmissions.ts` | Modify | Include update_reason in submission payload |
-| `DOCUMENTATION.md` | Modify | Document new feature |
+| Database Migration | Create | Add `is_resubmitted` column |
+| `src/hooks/useSubPeriodSubmissions.ts` | Modify | Include `is_resubmitted` in interface and mutation |
+| `src/components/review/DailySubmissionGrid.tsx` | Modify | Check `is_resubmitted` flag, update dialog message |
+| `src/components/review/WeeklySubmissionTable.tsx` | Modify | Check `is_resubmitted` flag, update dialog message |
+| `DOCUMENTATION.md` | Modify | Document one-update policy |
 
 ## Technical Details
 
 ### Database Migration SQL
 
 ```sql
--- Add resubmission configuration to KPIs
-ALTER TABLE kpis 
-ADD COLUMN require_resubmit_reason boolean DEFAULT true;
-
--- Add resubmission configuration to templates  
-ALTER TABLE kpi_templates
-ADD COLUMN require_resubmit_reason boolean DEFAULT true;
-
--- Add update reason tracking to sub-period submissions
+-- Add resubmission tracking to sub-period submissions
 ALTER TABLE sub_period_submissions
-ADD COLUMN update_reason text;
+ADD COLUMN is_resubmitted boolean DEFAULT false;
 ```
 
-### Admin Configuration UI
+### Interface Update
 
-A new toggle will be added in the KPI creation/edit dialogs under an "Advanced Settings" section:
+Add to `SubPeriodSubmission` interface:
 
-```
-+----------------------------------------------------------+
-| Advanced Settings                                         |
-+----------------------------------------------------------+
-|                                                           |
-| [Toggle] Require Reason for Resubmission                  |
-|          When enabled, employees must provide a           |
-|          mandatory reason when editing previously         |
-|          submitted daily/weekly entries                   |
-|                                                           |
-+----------------------------------------------------------+
+```typescript
+export interface SubPeriodSubmission {
+  // ... existing fields
+  is_resubmitted: boolean;  // NEW - true if entry has been updated once
+}
 ```
 
-### Resubmission Workflow Logic
+### Submission Logic Update
 
-When employee clicks "Edit" on a submitted entry:
+Modify `useSubmitSubPeriod` mutation to:
+- When upserting a record that already exists (update scenario), set `is_resubmitted = true`
+- Check if the existing record has `is_resubmitted = true` before allowing the update
 
-**If `require_resubmit_reason` is TRUE:**
-1. Show AlertDialog confirmation
-2. Display current submitted value and timestamp
-3. Show mandatory "Reason for Update" text area
-4. "Confirm & Edit" button is disabled until reason is entered
-5. On confirm, open edit mode and store reason with the updated submission
+### DayEntry/WeekEntry Interface Updates
 
-**If `require_resubmit_reason` is FALSE:**
-1. Open edit mode directly (current behavior)
-2. No confirmation dialog shown
+Add tracking for resubmission status:
+
+```typescript
+interface DayEntry {
+  // ... existing fields
+  isResubmitted: boolean;  // NEW - from submission.is_resubmitted
+}
+```
+
+### UI Logic Changes
+
+**DailySubmissionGrid.tsx & WeeklySubmissionTable.tsx:**
+
+1. **Check if already resubmitted** - If `entry.isResubmitted === true`, hide the Edit button (entry is now locked)
+
+2. **Status Badge Update** - Show "Final" badge instead of "Done" when `isResubmitted` is true
+
+3. **Updated Dialog Warning Message:**
+   ```
+   "You can update this record only once. It will be considered final 
+   and no further update will be allowed. Are you sure to re-submit?"
+   ```
+
+4. **Button Text Change** - Change "Confirm & Edit" to "Confirm & Re-submit"
+
+### UI State Flow
+
+| State | Badge | Action Button | Editable |
+|-------|-------|---------------|----------|
+| Not submitted | Pending | Enter | Yes |
+| Submitted (first time) | Done | Edit | Yes (with confirmation) |
+| Resubmitted (final) | Final | None | No |
 
 ### Confirmation Dialog Design
 
 ```
 +----------------------------------------------------------+
-|  Edit Submitted Data?                                     |
+|  Re-submit Data?                                          |
 +----------------------------------------------------------+
 |                                                           |
-|  You have already submitted data for 28 January:          |
+|  ⚠️ You can update this record only once. It will be     |
+|  considered final and no further update will be allowed.  |
 |                                                           |
 |  Current Value: 85%                                       |
 |  Submitted On: 28 Jan 2026, 10:30 AM                      |
@@ -109,87 +107,99 @@ When employee clicks "Edit" on a submitted entry:
 |  | Reason for Update *                                |  |
 |  +----------------------------------------------------+  |
 |  |                                                    |  |
-|  |                                                    |  |
 |  +----------------------------------------------------+  |
 |                                                           |
-|  This reason will be logged for audit purposes.           |
+|  Are you sure you want to re-submit?                      |
 |                                                           |
 +----------------------------------------------------------+
-|                    [Cancel]  [Confirm & Edit] (disabled)  |
+|                    [Cancel]  [Confirm & Re-submit]        |
 +----------------------------------------------------------+
 ```
 
-The "Confirm & Edit" button remains disabled until the user enters a reason.
+### Save Logic Update
 
-### Hook Updates
-
-Modify `useSubmitSubPeriod` mutation to accept and store `update_reason`:
+When saving an update:
 
 ```typescript
-mutationFn: async ({
-  kpi_id,
-  sub_period_type,
-  sub_period_value,
-  achieved_value,
-  remarks,
-  evidence_url,
-  review_month,
-  review_year,
-  update_reason,  // NEW - mandatory for resubmissions
-}: {
-  // ... existing types
-  update_reason?: string | null;
-}) => {
-  const { data, error } = await supabase
-    .from('sub_period_submissions')
-    .upsert({
-      // ... existing fields
-      update_reason: update_reason || null,  // Store the reason
-    })
-    // ...
-}
+const handleSave = async (entry: DayEntry) => {
+  await submitSubPeriod.mutateAsync({
+    kpi_id: kpiId,
+    sub_period_type: 'daily',
+    sub_period_value: entry.date,
+    achieved_value: value,
+    remarks: tempRemarks || null,
+    review_month: reviewMonth,
+    review_year: reviewYear,
+    update_reason: updateReason || null,
+    is_resubmission: entry.isSubmitted,  // NEW - mark as resubmission if updating
+  });
+};
 ```
 
-### Component Props Updates
+## Technical Implementation Details
 
-DailySubmissionGrid and WeeklySubmissionTable receive new prop:
+### 1. Hook Update (useSubPeriodSubmissions.ts)
+
+- Add `is_resubmitted` to `SubPeriodSubmission` interface
+- Add `is_resubmission` flag to mutation parameters
+- When `is_resubmission` is true, set `is_resubmitted = true` in the upsert
+
+### 2. Grid Components Update
+
+**Build entries with resubmission status:**
 
 ```typescript
-interface DailySubmissionGridProps {
-  // ... existing props
-  requireResubmitReason?: boolean;  // From KPI configuration
-}
+entries.push({
+  date: dateStr,
+  day,
+  achieved_value: submission?.achieved_value?.toString() || '',
+  remarks: submission?.remarks || '',
+  isSubmitted: !!submission,
+  isResubmitted: submission?.is_resubmitted || false,  // NEW
+  submissionId: submission?.id,
+  canSubmit: availableDateValues.includes(dateStr),
+  submittedAt: submission?.submitted_at || undefined,
+});
 ```
 
-## User Experience
+**Disable edit for resubmitted entries:**
 
-### For Employees:
+```typescript
+// In Action column
+{editingDay === entry.day ? (
+  // ... edit mode buttons
+) : entry.canSubmit && !entry.isResubmitted ? (  // NEW CHECK
+  <Button onClick={() => handleStartEdit(entry)}>
+    {entry.isSubmitted ? 'Edit' : 'Enter'}
+  </Button>
+) : null}
+```
 
-1. **First Submission**: Submit normally without any confirmation
-2. **Resubmission (when enabled)**:
-   - Click "Edit" on previously submitted row
-   - Confirmation dialog appears showing current value
-   - Enter mandatory reason for the update
-   - Click "Confirm & Edit" (only enabled after entering reason)
-   - Edit mode opens with previous values pre-filled
-   - Save updates the record with reason logged in database
+**Updated status badge:**
 
-### For Administrators:
-
-1. When creating/editing a KPI, toggle "Require Reason for Resubmission"
-2. Default is ON (enabled) for audit compliance
-3. Can disable for KPIs where frequent corrections are expected and formal tracking is not required
+```typescript
+{entry.isResubmitted ? (
+  <Badge variant="default" className="bg-green-600">
+    <Lock className="h-3 w-3 mr-1" />
+    Final
+  </Badge>
+) : entry.isSubmitted ? (
+  <Badge variant="secondary" className="gap-1">
+    <Check className="h-3 w-3" />
+    Done
+  </Badge>
+) : // ...
+}
+```
 
 ## Testing Checklist
 
 After implementation:
-- Create KPI with resubmission requirement ON - verify dialog appears on edit
-- Create KPI with resubmission requirement OFF - verify no dialog appears
-- Verify "Confirm & Edit" button is disabled when reason field is empty
-- Submit daily entry, then edit - verify mandatory reason is required
-- Submit weekly entry, then edit - verify mandatory reason is required
-- Check database `sub_period_submissions.update_reason` column for stored values
-- Verify first-time submissions do NOT show confirmation dialog
-- Test cancel button in confirmation dialog returns to grid without changes
-- Verify the toggle appears correctly in KPI templates
+- Submit a daily entry for the first time - should show "Done" status
+- Click "Edit" on submitted entry - should see warning about one-time update
+- Confirm update with reason - should save and show "Final" status
+- Verify "Edit" button is hidden for entries with "Final" status
+- Test same flow for weekly submissions
+- Verify database `is_resubmitted` column is set correctly
+- Verify update_reason is stored when resubmitting
 
