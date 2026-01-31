@@ -9,6 +9,9 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useKpisByEmployee, useReviewSubmissions, useApproveKpi, useRaiseQuery, useKpiQueries, useSendBackKpi, RatingLevel, KPI } from '@/hooks/useKpis';
+import { useSubPeriodSubmissions } from '@/hooks/useSubPeriodSubmissions';
+import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
+import { QualitativeOption } from '@/lib/qualitativeUom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
@@ -542,6 +545,13 @@ export function EmployeeScorecard({
 
               {/* Review Trail */}
               <ReviewTrailCard submission={submissionMap.get(selectedKpi.id) || null} />
+              
+              {/* Daily Submission Summary - Fetch and display for Daily KPIs */}
+              <DailySubmissionSummaryWrapper 
+                kpi={selectedKpi} 
+                selectedPeriod={selectedPeriod} 
+                selectedYear={selectedYear} 
+              />
 
               {/* Score Input */}
               <AchievedValueScoreInput
@@ -699,5 +709,38 @@ export function EmployeeScorecard({
         kpi={selectedKpi}
       />
     </div>
+  );
+}
+
+// Helper wrapper that fetches sub-period submissions for Daily KPIs
+function DailySubmissionSummaryWrapper({ 
+  kpi, 
+  selectedPeriod, 
+  selectedYear 
+}: { 
+  kpi: KPI; 
+  selectedPeriod: string; 
+  selectedYear: number; 
+}) {
+  const { data: submissions } = useSubPeriodSubmissions(
+    kpi.frequency === 'Daily' ? kpi.id : undefined, 
+    selectedPeriod, 
+    selectedYear
+  );
+  
+  if (kpi.frequency !== 'Daily' || !submissions || submissions.length === 0) {
+    return null;
+  }
+  
+  return (
+    <DailySubmissionSummary
+      kpiId={kpi.id}
+      reviewMonth={selectedPeriod}
+      reviewYear={selectedYear}
+      submissions={submissions}
+      uom={kpi.uom}
+      uomType={kpi.uom_type}
+      qualitativeOptions={kpi.qualitative_options as QualitativeOption[] | null}
+    />
   );
 }
