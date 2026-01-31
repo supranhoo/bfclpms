@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useKraCategories, useProfiles } from '@/hooks/useOrganization';
 import { useCreateKpi, ReviewStatus } from '@/hooks/useKpis';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
@@ -67,6 +68,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
     { label: 'Yes', rating: 5, definition: 'Requirement fully met' },
     { label: 'No', rating: 0, definition: 'Requirement not met' },
   ]);
+  const [requireResubmitReason, setRequireResubmitReason] = useState(true);
 
   // Period
   const [reviewPeriod, setReviewPeriod] = useState(settings.current_review_period);
@@ -111,6 +113,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
     ]);
     setReviewPeriod(settings.current_review_period);
     setReviewYear(settings.current_review_year);
+    setRequireResubmitReason(true);
   };
 
   const handleClose = () => {
@@ -151,6 +154,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
       sub_frequency: null,
       frequency_cycle_start: null,
       is_frequency_locked: false,
+      require_resubmit_reason: requireResubmitReason,
     });
 
     handleClose();
@@ -466,6 +470,25 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
                 />
               </div>
             )}
+
+            <Separator />
+
+            {/* Advanced Settings */}
+            <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
+              <h3 className="font-medium text-sm">Advanced Settings</h3>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-medium">Require Reason for Resubmission</Label>
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, employees must provide a mandatory reason when editing previously submitted daily/weekly entries
+                  </p>
+                </div>
+                <Switch
+                  checked={requireResubmitReason}
+                  onCheckedChange={setRequireResubmitReason}
+                />
+              </div>
+            </div>
 
             <Separator />
 

@@ -48,6 +48,8 @@ export interface KPI {
   sub_frequency: string | null;
   frequency_cycle_start: string | null;
   is_frequency_locked: boolean;
+  // Resubmission configuration
+  require_resubmit_reason: boolean;
   kra_categories?: {
     id: string;
     name: string;

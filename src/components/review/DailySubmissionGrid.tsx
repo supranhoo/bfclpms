@@ -10,6 +10,17 @@ import { SubPeriodSubmission, useSubmitSubPeriod } from '@/hooks/useSubPeriodSub
 import { getDailySubPeriods, getMonthNumber, canSubmitForSubPeriod } from '@/lib/frequencyUtils';
 import { QualitativeOption, BINARY_OPTIONS, scoreToRatingLevel } from '@/lib/qualitativeUom';
 import { QualitativeSelect } from './QualitativeSelect';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Label } from '@/components/ui/label';
 
 interface DailySubmissionGridProps {
   kpiId: string;
@@ -21,6 +32,7 @@ interface DailySubmissionGridProps {
   uomType?: string | null;
   qualitativeOptions?: QualitativeOption[] | null;
   onSubmissionComplete?: () => void;
+  requireResubmitReason?: boolean;
 }
 
 interface DayEntry {
@@ -31,6 +43,7 @@ interface DayEntry {
   isSubmitted: boolean;
   submissionId?: string;
   canSubmit: boolean;
+  submittedAt?: string;
 }
 
 export function DailySubmissionGrid({
@@ -43,12 +56,18 @@ export function DailySubmissionGrid({
   uomType,
   qualitativeOptions,
   onSubmissionComplete,
+  requireResubmitReason = true,
 }: DailySubmissionGridProps) {
   const submitSubPeriod = useSubmitSubPeriod();
   const [editingDay, setEditingDay] = useState<number | null>(null);
   const [tempValue, setTempValue] = useState<string>('');
   const [tempRating, setTempRating] = useState<number | null>(null);
   const [tempRemarks, setTempRemarks] = useState<string>('');
+  
+  // Resubmission confirmation state
+  const [confirmEditEntry, setConfirmEditEntry] = useState<DayEntry | null>(null);
+  const [updateReason, setUpdateReason] = useState<string>('');
+  const [pendingUpdateReason, setPendingUpdateReason] = useState<string>('');
 
   const isQualitative = uomType === 'binary' || uomType === 'tiered';
 
@@ -73,17 +92,50 @@ export function DailySubmissionGrid({
         isSubmitted: !!submission,
         submissionId: submission?.id,
         canSubmit: availableDateValues.includes(dateStr),
+        submittedAt: submission?.submitted_at || undefined,
       });
     }
     
     return entries;
   }, [submissions, daysInMonth, reviewMonth, reviewYear, currentDate.toDateString()]);
 
+  // Helper to display achieved value for qualitative KPIs
+  const getDisplayValue = (entry: DayEntry) => {
+    if (!entry.achieved_value) return '-';
+    if (isQualitative) {
+      const options = uomType === 'binary' ? BINARY_OPTIONS : (qualitativeOptions || []);
+      const numVal = parseFloat(entry.achieved_value);
+      if (!isNaN(numVal)) {
+        const match = options.find(o => o.rating === numVal);
+        if (match) return match.label;
+      }
+      const labelMatch = options.find(o => o.label === entry.achieved_value);
+      if (labelMatch) return labelMatch.label;
+      return entry.achieved_value;
+    }
+    return `${entry.achieved_value} ${uom || ''}`;
+  };
+
   const handleStartEdit = (entry: DayEntry) => {
     if (!entry.canSubmit) return;
+    
+    // If already submitted and require reason is enabled, show confirmation dialog
+    if (entry.isSubmitted && requireResubmitReason) {
+      setConfirmEditEntry(entry);
+      setPendingUpdateReason('');
+      return;
+    }
+    
+    // Otherwise, proceed directly
+    startEditing(entry, '');
+  };
+
+  const startEditing = (entry: DayEntry, reason: string) => {
     setEditingDay(entry.day);
     setTempValue(entry.achieved_value);
     setTempRemarks(entry.remarks);
+    setUpdateReason(reason);
+    
     // For qualitative, try to find matching rating
     if (isQualitative && entry.achieved_value) {
       const options = uomType === 'binary' ? BINARY_OPTIONS : (qualitativeOptions || []);
@@ -92,6 +144,19 @@ export function DailySubmissionGrid({
     } else {
       setTempRating(null);
     }
+  };
+
+  const handleConfirmEdit = () => {
+    if (confirmEditEntry && pendingUpdateReason.trim()) {
+      startEditing(confirmEditEntry, pendingUpdateReason.trim());
+      setConfirmEditEntry(null);
+      setPendingUpdateReason('');
+    }
+  };
+
+  const handleCancelConfirmEdit = () => {
+    setConfirmEditEntry(null);
+    setPendingUpdateReason('');
   };
 
   const handleQualitativeChange = (value: string, rating: number) => {
@@ -113,12 +178,14 @@ export function DailySubmissionGrid({
       remarks: tempRemarks || null,
       review_month: reviewMonth,
       review_year: reviewYear,
+      update_reason: updateReason || null,
     });
     
     setEditingDay(null);
     setTempValue('');
     setTempRating(null);
     setTempRemarks('');
+    setUpdateReason('');
     onSubmissionComplete?.();
   };
 
@@ -127,26 +194,7 @@ export function DailySubmissionGrid({
     setTempValue('');
     setTempRating(null);
     setTempRemarks('');
-  };
-
-  // Helper to display achieved value for qualitative KPIs
-  const getDisplayValue = (entry: DayEntry) => {
-    if (!entry.achieved_value) return '-';
-    if (isQualitative) {
-      // For qualitative, the value stored might be a label or a rating number
-      const options = uomType === 'binary' ? BINARY_OPTIONS : (qualitativeOptions || []);
-      const numVal = parseFloat(entry.achieved_value);
-      // Check if stored as rating number
-      if (!isNaN(numVal)) {
-        const match = options.find(o => o.rating === numVal);
-        if (match) return match.label;
-      }
-      // Check if stored as label
-      const labelMatch = options.find(o => o.label === entry.achieved_value);
-      if (labelMatch) return labelMatch.label;
-      return entry.achieved_value;
-    }
-    return `${entry.achieved_value} ${uom || ''}`;
+    setUpdateReason('');
   };
 
   // Calculate aggregated score
@@ -287,6 +335,55 @@ export function DailySubmissionGrid({
       <p className="text-xs text-muted-foreground">
         You can only submit data for today and yesterday. The monthly score is calculated as the average of all daily submissions.
       </p>
+
+      {/* Resubmission Confirmation Dialog */}
+      <AlertDialog open={!!confirmEditEntry} onOpenChange={(open) => !open && handleCancelConfirmEdit()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edit Submitted Data?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  You have already submitted data for <strong>{confirmEditEntry?.day} {reviewMonth}</strong>:
+                </p>
+                <div className="p-3 bg-muted rounded-lg text-sm">
+                  <p><strong>Current Value:</strong> {confirmEditEntry ? getDisplayValue(confirmEditEntry) : '-'}</p>
+                  {confirmEditEntry?.submittedAt && (
+                    <p><strong>Submitted On:</strong> {format(new Date(confirmEditEntry.submittedAt), 'dd MMM yyyy, hh:mm a')}</p>
+                  )}
+                  {confirmEditEntry?.remarks && (
+                    <p><strong>Remarks:</strong> {confirmEditEntry.remarks}</p>
+                  )}
+                </div>
+                <div className="space-y-2 pt-2">
+                  <Label htmlFor="update-reason" className="text-foreground">
+                    Reason for Update <span className="text-destructive">*</span>
+                  </Label>
+                  <Textarea
+                    id="update-reason"
+                    value={pendingUpdateReason}
+                    onChange={(e) => setPendingUpdateReason(e.target.value)}
+                    placeholder="Enter reason for modifying this submission..."
+                    className="min-h-[80px]"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    This reason will be logged for audit purposes.
+                  </p>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelConfirmEdit}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmEdit}
+              disabled={!pendingUpdateReason.trim()}
+            >
+              Confirm & Edit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

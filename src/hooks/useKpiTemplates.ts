@@ -26,6 +26,9 @@ export interface KpiTemplate {
   created_at: string;
   updated_at: string;
   created_by: string | null;
+  uom_type?: string | null;
+  qualitative_options?: Array<{ label: string; rating: number; definition: string }> | null;
+  require_resubmit_reason?: boolean;
   kra_categories?: {
     id: string;
     name: string;

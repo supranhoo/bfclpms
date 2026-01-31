@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { format } from 'date-fns';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -9,6 +10,17 @@ import { SubPeriodSubmission, useSubmitSubPeriod } from '@/hooks/useSubPeriodSub
 import { getWeeklySubPeriods, WEEKLY_REVIEW_WINDOWS } from '@/lib/frequencyUtils';
 import { QualitativeOption, BINARY_OPTIONS, scoreToRatingLevel } from '@/lib/qualitativeUom';
 import { QualitativeSelect } from './QualitativeSelect';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Label } from '@/components/ui/label';
 
 interface WeeklySubmissionTableProps {
   kpiId: string;
@@ -20,6 +32,7 @@ interface WeeklySubmissionTableProps {
   uomType?: string | null;
   qualitativeOptions?: QualitativeOption[] | null;
   onSubmissionComplete?: () => void;
+  requireResubmitReason?: boolean;
 }
 
 interface WeekEntry {
@@ -31,6 +44,7 @@ interface WeekEntry {
   submissionId?: string;
   canSubmit: boolean;
   reviewWindow: string;
+  submittedAt?: string;
 }
 
 export function WeeklySubmissionTable({
@@ -43,12 +57,18 @@ export function WeeklySubmissionTable({
   uomType,
   qualitativeOptions,
   onSubmissionComplete,
+  requireResubmitReason = true,
 }: WeeklySubmissionTableProps) {
   const submitSubPeriod = useSubmitSubPeriod();
   const [editingWeek, setEditingWeek] = useState<number | null>(null);
   const [tempValue, setTempValue] = useState<string>('');
   const [tempRating, setTempRating] = useState<number | null>(null);
   const [tempRemarks, setTempRemarks] = useState<string>('');
+
+  // Resubmission confirmation state
+  const [confirmEditEntry, setConfirmEditEntry] = useState<WeekEntry | null>(null);
+  const [updateReason, setUpdateReason] = useState<string>('');
+  const [pendingUpdateReason, setPendingUpdateReason] = useState<string>('');
 
   const isQualitative = uomType === 'binary' || uomType === 'tiered';
 
@@ -75,15 +95,48 @@ export function WeeklySubmissionTable({
         reviewWindow: window 
           ? `${window.start}-${window.end}${window.nextMonth ? ' (next month)' : ''}`
           : '',
+        submittedAt: submission?.submitted_at || undefined,
       };
     });
   }, [submissions, reviewMonth, reviewYear, currentDate.toDateString()]);
 
+  // Helper to display achieved value for qualitative KPIs
+  const getDisplayValue = (entry: WeekEntry) => {
+    if (!entry.achieved_value) return '-';
+    if (isQualitative) {
+      const options = uomType === 'binary' ? BINARY_OPTIONS : (qualitativeOptions || []);
+      const numVal = parseFloat(entry.achieved_value);
+      if (!isNaN(numVal)) {
+        const match = options.find(o => o.rating === numVal);
+        if (match) return match.label;
+      }
+      const labelMatch = options.find(o => o.label === entry.achieved_value);
+      if (labelMatch) return labelMatch.label;
+      return entry.achieved_value;
+    }
+    return `${entry.achieved_value} ${uom || ''}`;
+  };
+
   const handleStartEdit = (entry: WeekEntry) => {
     if (!entry.canSubmit) return;
+    
+    // If already submitted and require reason is enabled, show confirmation dialog
+    if (entry.isSubmitted && requireResubmitReason) {
+      setConfirmEditEntry(entry);
+      setPendingUpdateReason('');
+      return;
+    }
+    
+    // Otherwise, proceed directly
+    startEditing(entry, '');
+  };
+
+  const startEditing = (entry: WeekEntry, reason: string) => {
     setEditingWeek(entry.weekNum);
     setTempValue(entry.achieved_value);
     setTempRemarks(entry.remarks);
+    setUpdateReason(reason);
+    
     // For qualitative, try to find matching rating
     if (isQualitative && entry.achieved_value) {
       const options = uomType === 'binary' ? BINARY_OPTIONS : (qualitativeOptions || []);
@@ -92,6 +145,19 @@ export function WeeklySubmissionTable({
     } else {
       setTempRating(null);
     }
+  };
+
+  const handleConfirmEdit = () => {
+    if (confirmEditEntry && pendingUpdateReason.trim()) {
+      startEditing(confirmEditEntry, pendingUpdateReason.trim());
+      setConfirmEditEntry(null);
+      setPendingUpdateReason('');
+    }
+  };
+
+  const handleCancelConfirmEdit = () => {
+    setConfirmEditEntry(null);
+    setPendingUpdateReason('');
   };
 
   const handleQualitativeChange = (value: string, rating: number) => {
@@ -113,12 +179,14 @@ export function WeeklySubmissionTable({
       remarks: tempRemarks || null,
       review_month: reviewMonth,
       review_year: reviewYear,
+      update_reason: updateReason || null,
     });
     
     setEditingWeek(null);
     setTempValue('');
     setTempRating(null);
     setTempRemarks('');
+    setUpdateReason('');
     onSubmissionComplete?.();
   };
 
@@ -127,25 +195,7 @@ export function WeeklySubmissionTable({
     setTempValue('');
     setTempRating(null);
     setTempRemarks('');
-  };
-
-  // Helper to display achieved value for qualitative KPIs
-  const getDisplayValue = (entry: WeekEntry) => {
-    if (!entry.achieved_value) return '-';
-    if (isQualitative) {
-      const options = uomType === 'binary' ? BINARY_OPTIONS : (qualitativeOptions || []);
-      const numVal = parseFloat(entry.achieved_value);
-      // Check if stored as rating number
-      if (!isNaN(numVal)) {
-        const match = options.find(o => o.rating === numVal);
-        if (match) return match.label;
-      }
-      // Check if stored as label
-      const labelMatch = options.find(o => o.label === entry.achieved_value);
-      if (labelMatch) return labelMatch.label;
-      return entry.achieved_value;
-    }
-    return `${entry.achieved_value} ${uom || ''}`;
+    setUpdateReason('');
   };
 
   // Calculate aggregated score
@@ -299,6 +349,55 @@ export function WeeklySubmissionTable({
           The monthly score is calculated as the average of all weekly submissions.
         </p>
       </div>
+
+      {/* Resubmission Confirmation Dialog */}
+      <AlertDialog open={!!confirmEditEntry} onOpenChange={(open) => !open && handleCancelConfirmEdit()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edit Submitted Data?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  You have already submitted data for <strong>Week {confirmEditEntry?.weekNum}</strong>:
+                </p>
+                <div className="p-3 bg-muted rounded-lg text-sm">
+                  <p><strong>Current Value:</strong> {confirmEditEntry ? getDisplayValue(confirmEditEntry) : '-'}</p>
+                  {confirmEditEntry?.submittedAt && (
+                    <p><strong>Submitted On:</strong> {format(new Date(confirmEditEntry.submittedAt), 'dd MMM yyyy, hh:mm a')}</p>
+                  )}
+                  {confirmEditEntry?.remarks && (
+                    <p><strong>Remarks:</strong> {confirmEditEntry.remarks}</p>
+                  )}
+                </div>
+                <div className="space-y-2 pt-2">
+                  <Label htmlFor="update-reason-weekly" className="text-foreground">
+                    Reason for Update <span className="text-destructive">*</span>
+                  </Label>
+                  <Textarea
+                    id="update-reason-weekly"
+                    value={pendingUpdateReason}
+                    onChange={(e) => setPendingUpdateReason(e.target.value)}
+                    placeholder="Enter reason for modifying this submission..."
+                    className="min-h-[80px]"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    This reason will be logged for audit purposes.
+                  </p>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelConfirmEdit}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmEdit}
+              disabled={!pendingUpdateReason.trim()}
+            >
+              Confirm & Edit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -446,6 +446,7 @@ export type Database = {
           r3: string | null
           r4: string | null
           r5: string | null
+          require_resubmit_reason: boolean | null
           source_of_data: string | null
           target_value: number | null
           title: string
@@ -473,6 +474,7 @@ export type Database = {
           r3?: string | null
           r4?: string | null
           r5?: string | null
+          require_resubmit_reason?: boolean | null
           source_of_data?: string | null
           target_value?: number | null
           title: string
@@ -500,6 +502,7 @@ export type Database = {
           r3?: string | null
           r4?: string | null
           r5?: string | null
+          require_resubmit_reason?: boolean | null
           source_of_data?: string | null
           target_value?: number | null
           title?: string
@@ -539,6 +542,7 @@ export type Database = {
           r3: string | null
           r4: string | null
           r5: string | null
+          require_resubmit_reason: boolean | null
           review_period: string | null
           review_year: number | null
           source_of_data: string | null
@@ -570,6 +574,7 @@ export type Database = {
           r3?: string | null
           r4?: string | null
           r5?: string | null
+          require_resubmit_reason?: boolean | null
           review_period?: string | null
           review_year?: number | null
           source_of_data?: string | null
@@ -601,6 +606,7 @@ export type Database = {
           r3?: string | null
           r4?: string | null
           r5?: string | null
+          require_resubmit_reason?: boolean | null
           review_period?: string | null
           review_year?: number | null
           source_of_data?: string | null
@@ -1425,6 +1431,7 @@ export type Database = {
           sub_period_value: string
           submitted_at: string | null
           submitted_by: string | null
+          update_reason: string | null
           updated_at: string | null
         }
         Insert: {
@@ -1440,6 +1447,7 @@ export type Database = {
           sub_period_value: string
           submitted_at?: string | null
           submitted_by?: string | null
+          update_reason?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -1455,6 +1463,7 @@ export type Database = {
           sub_period_value?: string
           submitted_at?: string | null
           submitted_by?: string | null
+          update_reason?: string | null
           updated_at?: string | null
         }
         Relationships: [
