@@ -29,7 +29,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
-  Info, Lock, MessageSquare, Undo2, Check 
+  Info, Lock, MessageSquare, Undo2, Check, Eye 
 } from 'lucide-react';
 import { 
   kpiStatusColors, 
@@ -491,14 +491,23 @@ export function EmployeeScorecard({
                       </div>
                     </TableCell>
                     <TableCell>
-                      {canReview && (
+                      {canReview ? (
                         <Button
                           size="sm"
                           onClick={() => openReviewSheet(kpi)}
                         >
                           Review
                         </Button>
-                      )}
+                      ) : kpi.frequency === 'Daily' && !isNaKpi ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openReviewSheet(kpi)}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          View
+                        </Button>
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 );
@@ -519,9 +528,13 @@ export function EmployeeScorecard({
       <Sheet open={reviewSheetOpen} onOpenChange={setReviewSheetOpen}>
         <SheetContent className="sm:max-w-xl overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Manager Review</SheetTitle>
+            <SheetTitle>
+              {selectedKpi?.status === 'self_review' ? 'Manager Review' : 'View KPI Details'}
+            </SheetTitle>
             <SheetDescription>
-              Review and provide your assessment for this KPI
+              {selectedKpi?.status === 'self_review' 
+                ? 'Review and provide your assessment for this KPI'
+                : 'View daily submission details for this KPI'}
             </SheetDescription>
           </SheetHeader>
 
@@ -553,87 +566,99 @@ export function EmployeeScorecard({
                 selectedYear={selectedYear} 
               />
 
-              {/* Score Input */}
-              <AchievedValueScoreInput
-                kpi={selectedKpi}
-                achievedValue={managerAchievedValue}
-                score={managerScore}
-                onAchievedValueChange={setManagerAchievedValue}
-                onScoreChange={setManagerScore}
-                label="Manager Score"
-              />
+              {/* Score Input - Only show for reviewable KPIs */}
+              {selectedKpi.status === 'self_review' && (
+                <>
+                  <AchievedValueScoreInput
+                    kpi={selectedKpi}
+                    achievedValue={managerAchievedValue}
+                    score={managerScore}
+                    onAchievedValueChange={setManagerAchievedValue}
+                    onScoreChange={setManagerScore}
+                    label="Manager Score"
+                  />
 
-              {/* Remarks */}
-              <div className="space-y-2">
-                <Label>Manager Remarks</Label>
-                <Textarea
-                  value={managerRemarks}
-                  onChange={(e) => setManagerRemarks(e.target.value)}
-                  placeholder="Enter your assessment and feedback..."
-                  rows={3}
-                />
-              </div>
+                  {/* Remarks */}
+                  <div className="space-y-2">
+                    <Label>Manager Remarks</Label>
+                    <Textarea
+                      value={managerRemarks}
+                      onChange={(e) => setManagerRemarks(e.target.value)}
+                      placeholder="Enter your assessment and feedback..."
+                      rows={3}
+                    />
+                  </div>
 
-              {/* Evidence Upload */}
-              {user?.id && selectedKpi && (
-                <EvidenceUpload
-                  userId={user.id}
-                  kpiId={selectedKpi.id}
-                  onUploadComplete={setManagerEvidenceUrl}
-                  existingUrl={managerEvidenceUrl}
-                />
+                  {/* Evidence Upload */}
+                  {user?.id && (
+                    <EvidenceUpload
+                      userId={user.id}
+                      kpiId={selectedKpi.id}
+                      onUploadComplete={setManagerEvidenceUrl}
+                      existingUrl={managerEvidenceUrl}
+                    />
+                  )}
+                </>
               )}
             </div>
           )}
 
           <SheetFooter className="flex-wrap gap-2 sm:justify-between">
-            <div className="flex gap-2">
+            {selectedKpi?.status === 'self_review' ? (
+              <>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setReviewSheetOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
+                    onClick={() => {
+                      if (selectedKpi) {
+                        openSendBackDialog(selectedKpi);
+                      }
+                    }}
+                  >
+                    <Undo2 className="h-4 w-4 mr-2" />
+                    Send Back
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
+                    onClick={() => {
+                      if (selectedKpi) {
+                        openQueryDialog(selectedKpi);
+                      }
+                    }}
+                  >
+                    <MessageSquare className="h-4 w-4 mr-2" />
+                    Raise Query
+                  </Button>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={handleSubmitReview}
+                    disabled={managerScore === null || submitManagerReview.isPending}
+                  >
+                    {submitManagerReview.isPending ? 'Saving...' : 'Save Draft'}
+                  </Button>
+                  <Button
+                    variant="default"
+                    className="bg-green-600 hover:bg-green-700"
+                    onClick={handleApprove}
+                    disabled={managerScore === null || approveKpi.isPending}
+                  >
+                    <Check className="h-4 w-4 mr-2" />
+                    {approveKpi.isPending ? 'Approving...' : 'Approve'}
+                  </Button>
+                </div>
+              </>
+            ) : (
               <Button variant="outline" onClick={() => setReviewSheetOpen(false)}>
-                Cancel
+                Close
               </Button>
-              <Button
-                variant="outline"
-                className="border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
-                onClick={() => {
-                  if (selectedKpi) {
-                    openSendBackDialog(selectedKpi);
-                  }
-                }}
-              >
-                <Undo2 className="h-4 w-4 mr-2" />
-                Send Back
-              </Button>
-              <Button
-                variant="outline"
-                className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
-                onClick={() => {
-                  if (selectedKpi) {
-                    openQueryDialog(selectedKpi);
-                  }
-                }}
-              >
-                <MessageSquare className="h-4 w-4 mr-2" />
-                Raise Query
-              </Button>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                onClick={handleSubmitReview}
-                disabled={managerScore === null || submitManagerReview.isPending}
-              >
-                {submitManagerReview.isPending ? 'Saving...' : 'Save Draft'}
-              </Button>
-              <Button
-                variant="default"
-                className="bg-green-600 hover:bg-green-700"
-                onClick={handleApprove}
-                disabled={managerScore === null || approveKpi.isPending}
-              >
-                <Check className="h-4 w-4 mr-2" />
-                {approveKpi.isPending ? 'Approving...' : 'Approve'}
-              </Button>
-            </div>
+            )}
           </SheetFooter>
         </SheetContent>
       </Sheet>
