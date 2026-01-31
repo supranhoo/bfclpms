@@ -704,15 +704,27 @@ Each KPI gets a dedicated card-style layout similar to the web UI's ReviewTrailC
 
 ### 4.12 Notifications
 
-**Trigger Events:**
-- KPI submitted for review
-- KPI approved/rejected
-- Query raised/resolved
-- PIP status changes
+**KPI Status Transition Notifications:**
+
+| Status Transition | Recipients | Notification Type |
+|-------------------|-----------|-------------------|
+| `kra_set` → `manager_check` | Reporting Manager | `kpi_submitted` - Self Review Submitted |
+| `kra_set` → `self_review` | Reporting Manager | `kpi_submitted` - Self Review Submitted (legacy) |
+| `self_review` → `manager_check` | Employee + Auditors | `kpi_approved` + `kpi_ready_for_audit` |
+| `manager_check` → `management_review` | Employee + Management | `kpi_approved` + `kpi_ready_for_management` |
+| `manager_check` → `audit` | Employee + Auditors | `kpi_approved` + `kpi_ready_for_audit` (legacy) |
+| `audit` → `management_review` | Employee + Management | `kpi_approved` + `kpi_ready_for_management` |
+| `management_review` → `approved` | Employee | `kpi_finalized` - KPI Finalized |
+| `audit` → `approved` | Employee | `kpi_finalized` - KPI Finalized |
+
+**Other Trigger Events:**
+- Query raised → Notify recipient
+- Query resolved → Notify raiser
+- PIP status changes → Notify employee/HR
 
 **Delivery:**
-- In-app notifications (real-time)
-- Email notifications (via Resend)
+- In-app notifications (real-time via Supabase Realtime)
+- Email notifications (via Resend edge function)
 
 ---
 
