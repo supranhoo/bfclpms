@@ -144,8 +144,28 @@ export function DailySubmissionGrid({
     // For qualitative, try to find matching rating
     if (isQualitative && entry.achieved_value) {
       const options = uomType === 'binary' ? BINARY_OPTIONS : (qualitativeOptions || []);
-      const match = options.find(o => o.label === entry.achieved_value);
-      setTempRating(match?.rating ?? null);
+      const numVal = parseFloat(entry.achieved_value);
+      
+      // First try to match by rating (achieved_value is stored as a number)
+      if (!isNaN(numVal)) {
+        const matchByRating = options.find(o => o.rating === numVal);
+        if (matchByRating) {
+          setTempValue(matchByRating.label);
+          setTempRating(matchByRating.rating);
+          return;
+        }
+      }
+      
+      // Fallback: try to match by label
+      const matchByLabel = options.find(o => o.label === entry.achieved_value);
+      if (matchByLabel) {
+        setTempValue(matchByLabel.label);
+        setTempRating(matchByLabel.rating);
+        return;
+      }
+      
+      // No match found
+      setTempRating(null);
     } else {
       setTempRating(null);
     }
