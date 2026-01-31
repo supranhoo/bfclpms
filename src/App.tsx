@@ -41,7 +41,7 @@ import EmployeePerformanceSummary from "./pages/reports/EmployeePerformanceSumma
 import TNIReport from "./pages/reports/TNIReport";
 import IssuesReport from "./pages/reports/IssuesReport";
 import PIPManagement from "./pages/admin/PIPManagement";
-import KRAAcceptance from "./pages/KRAAcceptance";
+
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 import ModuleHub from "./pages/ModuleHub";
@@ -65,7 +65,8 @@ const App = () => (
               <Route path="/my-kpis" element={<MyKpis />} />
               {/* Redirect old self-review route to my-kpis for backward compatibility */}
               <Route path="/self-review" element={<Navigate to="/my-kpis" replace />} />
-              <Route path="/kra-acceptance" element={<KRAAcceptance />} />
+              {/* Redirect old kra-acceptance route to my-kpis for backward compatibility */}
+              <Route path="/kra-acceptance" element={<Navigate to="/my-kpis" replace />} />
               <Route path="/queries" element={<QueryInbox />} />
               <Route path="/pms-policy" element={<PMSPolicy />} />
               

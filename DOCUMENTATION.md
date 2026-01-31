@@ -496,23 +496,32 @@ useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculat
 - Final approval → Status `approved`
 - Lock review periods
 
-### 4.7 KRA Acceptance
+### 4.7 Combined KRA Acceptance & Self Review
 
-**Route:** `/kra-acceptance`
+**Route:** `/my-kpis`
 
-**Purpose:** Employees acknowledge their assigned KRAs at start of period before submitting self-reviews
+**Purpose:** Unified workflow where employees accept KRAs and submit self-reviews in a single step
 
 **Flow:**
-1. Employee views assigned KPIs with `kra_set` status
-2. Confirms each KPI individually via checkbox
-3. Clicks "Accept Agreement" to transition all KPIs to `self_review` status
-4. Can now submit self-review on My KPIs page
+1. Employee views all assigned KPIs including those with `kra_set` status
+2. For new KPIs (`kra_set` status), clicks "Accept & Submit" button
+3. Reviews KPI details (target, criteria, rating scale) in the side sheet
+4. Enters achieved value, justification, and evidence
+5. Clicks "Accept & Submit" → KPI transitions from `kra_set` to `self_review`
+6. Notification sent to manager
 
-**Integration with My KPIs:**
-- The My KPIs page (`/my-kpis`) displays an alert banner when KPIs with `kra_set` status exist
-- The alert prompts users to accept their KRAs before submitting self-reviews
-- A button in the alert navigates directly to the KRA Acceptance page
-- KPIs in `kra_set` status are visible but cannot be reviewed until accepted
+**UI Indicators:**
+- "New KRA" badge shown in the review sheet header for `kra_set` KPIs
+- Info banner explaining the combined acceptance + review action
+- Action button text changes based on KPI status:
+  - `kra_set`: "Accept & Submit"
+  - `self_review`: Badge showing "Pending Review"
+  - Other statuses: Badge showing current status
+
+**Benefits:**
+- Single-page workflow reduces navigation
+- Employees can accept and provide self-assessment simultaneously
+- Clear visual distinction between new and existing KPIs
 
 ### 4.8 Query Inbox
 
