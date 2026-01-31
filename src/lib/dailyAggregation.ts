@@ -5,6 +5,10 @@
  * 1. Average: Simple average of all submitted daily values
  * 2. Missed Days Penalty: Score based on number of missed days
  *    - 0 missed = 5, 1 missed = 4, 2 missed = 3, 3 missed = 2, 4 missed = 1, 5+ missed = 0
+ * 
+ * For Binary KPIs with Missed Days Penalty:
+ * - Total No = Missed Days + "No" Submissions (achieved_value = 0)
+ * - Score: 0 No = 5, 1 No = 4, 2 No = 3, 3 No = 2, 4 No = 1, >4 No = 0
  */
 
 import { getDaysInMonth } from 'date-fns';
@@ -18,6 +22,11 @@ export interface AggregationResult {
   submittedDays: number;
   totalDays: number;
   missedDays: number;
+}
+
+export interface BinaryAggregationResult extends AggregationResult {
+  noSubmissions: number;    // Count of "No" (achieved_value = 0)
+  totalNoCount: number;     // missedDays + noSubmissions
 }
 
 /**
@@ -61,14 +70,55 @@ export function calculateMissedDaysPenaltyScore(
 }
 
 /**
+ * Calculate score for binary daily KPIs
+ * Total No = Missed Days + "No" submissions (achieved_value = 0)
+ * Score: 0 No = 5, 1 No = 4, 2 No = 3, 3 No = 2, 4 No = 1, >4 No = 0
+ */
+export function calculateBinaryDailyScore(
+  submittedValues: number[],
+  month: string,
+  year: number
+): BinaryAggregationResult {
+  const totalDays = getExpectedDaysInMonth(month, year);
+  const submittedDays = submittedValues.length;
+  const missedDays = Math.max(0, totalDays - submittedDays);
+  
+  // Count "No" submissions (achieved_value = 0)
+  const noSubmissions = submittedValues.filter(v => v === 0).length;
+  
+  // Total No = missed days + "No" submissions
+  const totalNoCount = missedDays + noSubmissions;
+  
+  // Score calculation: 0 No = 5, each No reduces by 1, minimum 0
+  const score = Math.max(0, 5 - totalNoCount);
+
+  return {
+    score,
+    method: 'missed_days_penalty',
+    submittedDays,
+    totalDays,
+    missedDays,
+    noSubmissions,
+    totalNoCount,
+  };
+}
+
+/**
  * Main aggregation function that calculates the monthly score based on the selected method
+ * @param isBinaryKpi - If true and method is 'missed_days_penalty', uses binary-specific logic
  */
 export function calculateDailyAggregatedScore(
   submittedValues: number[],
   method: DailyAggregationMethod,
   month: string,
-  year: number
-): AggregationResult {
+  year: number,
+  isBinaryKpi: boolean = false
+): AggregationResult | BinaryAggregationResult {
+  // For binary KPIs with missed_days_penalty, use the new binary-specific logic
+  if (isBinaryKpi && method === 'missed_days_penalty') {
+    return calculateBinaryDailyScore(submittedValues, month, year);
+  }
+
   const totalDays = getExpectedDaysInMonth(month, year);
   const submittedDays = submittedValues.length;
   const missedDays = Math.max(0, totalDays - submittedDays);

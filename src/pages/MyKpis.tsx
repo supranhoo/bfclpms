@@ -191,9 +191,10 @@ export default function MyKpis() {
     const values = selectedKpiSubPeriods
       .filter(s => s.achieved_value !== null)
       .map(s => s.achieved_value as number);
-    const result = calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear);
+    const isBinaryKpi = selectedKpi?.uom_type === 'binary';
+    const result = calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear, isBinaryKpi);
     return result.score;
-  }, [selectedKpiSubPeriods, dailyAggregationMethod, selectedPeriod, selectedYear]);
+  }, [selectedKpiSubPeriods, dailyAggregationMethod, selectedPeriod, selectedYear, selectedKpi]);
 
   const filteredKpis = selectedCategory
     ? kpis?.filter(k => k.category_id === selectedCategory)
@@ -400,7 +401,8 @@ export default function MyKpis() {
     const values = kpiSubPeriods
       .filter(s => s.achieved_value !== null)
       .map(s => s.achieved_value as number);
-    const aggregationResult = calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear);
+    const isBinaryKpi = selectedKpi?.uom_type === 'binary';
+    const aggregationResult = calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear, isBinaryKpi);
     const aggregatedScore = aggregationResult.score;
     if (aggregatedScore === null) return;
     
@@ -750,7 +752,8 @@ export default function MyKpis() {
                         kpiSubPeriods.filter(s => s.achieved_value !== null).map(s => s.achieved_value as number),
                         dailyAggregationMethod,
                         selectedPeriod,
-                        selectedYear
+                        selectedYear,
+                        kpi.uom_type === 'binary'
                       ).score
                     : null;
                   
