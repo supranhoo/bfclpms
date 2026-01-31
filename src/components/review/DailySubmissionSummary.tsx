@@ -33,7 +33,8 @@ export function DailySubmissionSummary({
     const monthNumber = getMonthNumber(reviewMonth);
     const daysInMonth = getDaysInMonth(new Date(reviewYear, monthNumber - 1));
     
-    const submittedCount = submissions.filter(s => s.achieved_value !== null).length;
+    // Count all submissions (regardless of achieved_value)
+    const submittedCount = submissions.length;
     const missingCount = daysInMonth - submittedCount;
     
     // For binary KPIs, count "No" values (rating = 0)
@@ -68,13 +69,13 @@ export function DailySubmissionSummary({
     return uomType === 'binary' && value === 0;
   };
 
-  // Sort submissions by date
+  // Sort submissions by date (show ALL submissions, not just ones with values)
   const sortedSubmissions = useMemo(() => {
     return [...submissions]
-      .filter(s => s.achieved_value !== null)
       .sort((a, b) => {
-        const dateA = parseInt(a.sub_period_value);
-        const dateB = parseInt(b.sub_period_value);
+        // Parse full date strings properly (YYYY-MM-DD format)
+        const dateA = new Date(a.sub_period_value).getTime();
+        const dateB = new Date(b.sub_period_value).getTime();
         return dateA - dateB;
       });
   }, [submissions]);
@@ -151,10 +152,9 @@ export function DailySubmissionSummary({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedSubmissions.map((submission) => {
-                const dayNumber = parseInt(submission.sub_period_value);
-                const monthNumber = getMonthNumber(reviewMonth);
-                const dateObj = new Date(reviewYear, monthNumber - 1, dayNumber);
+            {sortedSubmissions.map((submission) => {
+                // Parse full date string directly (YYYY-MM-DD format)
+                const dateObj = new Date(submission.sub_period_value);
                 const formattedDate = format(dateObj, 'dd MMM');
                 const formattedTimestamp = submission.submitted_at 
                   ? format(new Date(submission.submitted_at), 'dd MMM yyyy, hh:mm a')

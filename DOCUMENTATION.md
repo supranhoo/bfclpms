@@ -940,10 +940,11 @@ The PMS supports 7 frequency types for KPIs, each with specific submission rules
 - `DailySubmissionGrid.tsx`: Grid view for entering daily values
 - `WeeklySubmissionTable.tsx`: Table for entering weekly values
 - `DailySubmissionSummary.tsx`: Read-only summary table visible across all roles showing:
-  - Statistics cards: Total days, Submitted count, Not Submitted count, "No" count (for binary KPIs)
-  - Submission table: Date, Achieved Value (formatted for numeric/binary/tiered), Submission Timestamp
+  - Statistics cards: Total days, Submitted count (all entries regardless of value), Not Submitted count, "No" count (for binary KPIs)
+  - Submission table: Date, Achieved Value (formatted for numeric/binary/tiered, "—" for pending), Submission Timestamp
   - Visual indicators: Red highlight for "No" values, Lock icon for final/resubmitted entries
   - Visible to: Employee (MyKpis), Manager/Admin (EmployeeScorecard), Auditor (AuditScorecard), Management (ManagementScorecard)
+  - **Note**: Table displays all submissions including those with null achieved_value; dates are parsed from full YYYY-MM-DD format
 
 **Key Hooks:**
 - `useSubPeriodSubmissions.ts`: Fetch and submit granular submissions
