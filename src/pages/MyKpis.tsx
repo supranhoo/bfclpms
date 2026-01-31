@@ -786,16 +786,28 @@ export default function MyKpis() {
             {/* Right Column - Remarks & Evidence */}
             <div className="flex flex-col space-y-4">
               <div className="flex-1">
-                <Label htmlFor="remarks" className="text-sm mb-2 block">
-                  {isNa ? 'Reason for N/A' : 'Justification'}
-                </Label>
+                <div className="flex justify-between items-center mb-2">
+                  <Label htmlFor="remarks" className="text-sm">
+                    {isNa ? 'Reason for N/A *' : 'Justification'}
+                  </Label>
+                  {isNa && (
+                    <span className={`text-xs ${selfRemarks.trim().length < 50 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                      {selfRemarks.trim().length}/50 characters minimum
+                    </span>
+                  )}
+                </div>
                 <Textarea
                   id="remarks"
                   value={selfRemarks}
                   onChange={(e) => setSelfRemarks(e.target.value)}
-                  placeholder={isNa ? 'Explain why this KPI is not applicable...' : 'Describe your achievements...'}
-                  className="resize-none min-h-[100px]"
+                  placeholder={isNa ? 'Explain why this KPI is not applicable (minimum 50 characters)...' : 'Describe your achievements...'}
+                  className={`resize-none min-h-[100px] ${isNa && selfRemarks.trim().length < 50 && selfRemarks.length > 0 ? 'border-destructive' : ''}`}
                 />
+                {isNa && selfRemarks.trim().length < 50 && selfRemarks.length > 0 && (
+                  <p className="text-xs text-destructive mt-1">
+                    Please provide at least 50 characters ({50 - selfRemarks.trim().length} more needed)
+                  </p>
+                )}
               </div>
               
               {/* Evidence Upload */}
@@ -815,7 +827,7 @@ export default function MyKpis() {
                   <Button variant="outline" size="sm" onClick={() => setReviewDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button size="sm" onClick={handleSubmitReview} disabled={(!isNa && !achievedValue) || submitReview.isPending}>
+                  <Button size="sm" onClick={handleSubmitReview} disabled={(!isNa && !achievedValue) || (isNa && selfRemarks.trim().length < 50) || submitReview.isPending}>
                     {submitReview.isPending ? 'Submitting...' : 'Submit'}
                   </Button>
                 </SheetFooter>
