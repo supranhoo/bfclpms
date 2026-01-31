@@ -13,8 +13,9 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { StatsRowSkeleton, CategoryGridSkeleton } from '@/components/ui/LoadingSkeletons';
+import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { format } from 'date-fns';
-import { MessageSquare, CheckCircle2, Clock, Send, User, Calendar, AlertCircle, Bell, BellOff, CheckCheck, ExternalLink } from 'lucide-react';
+import { MessageSquare, CheckCircle2, Clock, Send, User, Calendar, AlertCircle, Bell, BellOff, CheckCheck, ExternalLink, Paperclip } from 'lucide-react';
 
 interface QueryWithDetails {
   id: string;
@@ -25,6 +26,7 @@ interface QueryWithDetails {
   reason: string;
   evidence_url: string | null;
   resolution_notes: string | null;
+  resolution_evidence_url: string | null;
   status: 'open' | 'resolved';
   created_at: string;
   resolved_at: string | null;
@@ -51,6 +53,7 @@ export default function QueryInbox() {
   const [selectedQuery, setSelectedQuery] = useState<QueryWithDetails | null>(null);
   const [responseDialogOpen, setResponseDialogOpen] = useState(false);
   const [resolutionNotes, setResolutionNotes] = useState('');
+  const [responseEvidenceUrl, setResponseEvidenceUrl] = useState('');
   const [activeTab, setActiveTab] = useState<'notifications' | 'received' | 'sent'>('notifications');
 
   // Fetch notifications
@@ -109,12 +112,13 @@ export default function QueryInbox() {
 
   // Resolve query mutation
   const resolveQuery = useMutation({
-    mutationFn: async ({ query_id, resolution_notes }: { query_id: string; resolution_notes: string }) => {
+    mutationFn: async ({ query_id, resolution_notes, resolution_evidence_url }: { query_id: string; resolution_notes: string; resolution_evidence_url?: string }) => {
       const { error } = await supabase
         .from('kpi_queries')
         .update({
           status: 'resolved' as const,
           resolution_notes,
+          resolution_evidence_url: resolution_evidence_url || null,
           resolved_at: new Date().toISOString(),
         })
         .eq('id', query_id);
@@ -127,7 +131,7 @@ export default function QueryInbox() {
           kpi_id: selectedQuery.kpi_id,
           action: 'QUERY_RESOLVED',
           performed_by: user.id,
-          new_value: { resolution_notes },
+          new_value: { resolution_notes, resolution_evidence_url },
           metadata: { query_id },
         });
       }
@@ -138,6 +142,7 @@ export default function QueryInbox() {
       toast({ title: 'Query resolved successfully' });
       setResponseDialogOpen(false);
       setResolutionNotes('');
+      setResponseEvidenceUrl('');
     },
     onError: (error: Error) => {
       toast({ title: 'Failed to resolve query', description: error.message, variant: 'destructive' });
@@ -164,6 +169,7 @@ export default function QueryInbox() {
   const openResponseDialog = (query: QueryWithDetails) => {
     setSelectedQuery(query);
     setResolutionNotes('');
+    setResponseEvidenceUrl('');
     setResponseDialogOpen(true);
   };
 
@@ -172,6 +178,7 @@ export default function QueryInbox() {
     resolveQuery.mutate({
       query_id: selectedQuery.id,
       resolution_notes: resolutionNotes,
+      resolution_evidence_url: responseEvidenceUrl || undefined,
     });
   };
 
@@ -243,6 +250,19 @@ export default function QueryInbox() {
           </div>
         )}
 
+        {/* Show query attachment if exists */}
+        {query.evidence_url && (
+          <a 
+            href={query.evidence_url} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+          >
+            <Paperclip className="h-4 w-4" />
+            View Query Attachment
+          </a>
+        )}
+
         {query.resolution_notes && (
           <div className="p-3 bg-green-50 dark:bg-green-950 rounded-lg border-2 border-green-300 dark:border-green-700">
             <div className="flex items-center gap-2 mb-1">
@@ -250,6 +270,17 @@ export default function QueryInbox() {
               <Label className="text-sm font-medium text-green-700 dark:text-green-300">Reply Received</Label>
             </div>
             <p className="text-sm mt-1 text-foreground">{query.resolution_notes}</p>
+            {query.resolution_evidence_url && (
+              <a 
+                href={query.resolution_evidence_url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-green-600 dark:text-green-400 hover:underline mt-2"
+              >
+                <Paperclip className="h-4 w-4" />
+                View Response Attachment
+              </a>
+            )}
             {query.resolved_at && (
               <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                 <Clock className="h-3 w-3" />
@@ -596,7 +627,7 @@ export default function QueryInbox() {
 
           <div className="space-y-4 py-4">
             {/* Query Details */}
-            <div className="p-4 bg-muted rounded-lg space-y-2">
+            <div className="p-4 bg-muted rounded-lg space-y-3">
               <div>
                 <Label className="text-xs text-muted-foreground">KPI</Label>
                 <p className="font-medium">{selectedQuery?.kpi?.kpi_name}</p>
@@ -607,8 +638,24 @@ export default function QueryInbox() {
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">Raised By</Label>
-                <p className="text-sm">{selectedQuery?.raised_by_profile?.full_name || selectedQuery?.raised_by_profile?.email}</p>
+                <p className="text-sm font-medium text-primary">
+                  {selectedQuery?.raised_by_profile?.full_name || selectedQuery?.raised_by_profile?.email || 'Unknown'}
+                </p>
               </div>
+              {selectedQuery?.evidence_url && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Query Attachment</Label>
+                  <a 
+                    href={selectedQuery.evidence_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-primary hover:underline mt-1"
+                  >
+                    <Paperclip className="h-4 w-4" />
+                    View Attachment
+                  </a>
+                </div>
+              )}
             </div>
 
             {/* Resolution Notes */}
@@ -621,6 +668,16 @@ export default function QueryInbox() {
                 rows={4}
               />
             </div>
+
+            {/* Response Attachment */}
+            {user && selectedQuery && (
+              <EvidenceUpload
+                userId={user.id}
+                kpiId={selectedQuery.id}
+                existingUrl={responseEvidenceUrl || null}
+                onUploadComplete={(url) => setResponseEvidenceUrl(url)}
+              />
+            )}
           </div>
 
           <DialogFooter>
