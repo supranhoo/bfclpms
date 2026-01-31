@@ -463,11 +463,21 @@ useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculat
 **Route:** `/team-review`
 
 **Workflow:**
-1. Manager sees team members' submitted KPIs
-2. Reviews achieved values and self-ratings
-3. Can approve, raise query, or send back
-4. Enters manager rating and remarks
-5. Approved → Status moves to `manager_check`
+1. Manager sees team members with KPI status counts
+2. Selects employee to view their scorecard
+3. Clicks "Review" on a KPI to open the Review Sheet
+4. Reviews achieved values and self-ratings in context
+5. Can approve, raise query, or send back via Review Sheet actions
+6. Enters manager rating and remarks
+7. Approved → Status moves to `manager_check`
+
+**Review Sheet Actions:**
+- **Save Draft**: Save progress without status change
+- **Approve**: Move KPI to next workflow stage
+- **Raise Query**: Open query dialog (requires reason)
+- **Send Back**: Return KPI to employee for revision (requires reason)
+
+**Note:** All actions are accessed through the Review Sheet, providing full KPI context before taking action.
 
 **Query System:**
 - Manager raises query → Employee notified
