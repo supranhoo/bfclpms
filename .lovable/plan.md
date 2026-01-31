@@ -1,116 +1,122 @@
 
-# Plan: Fix Daily KPI Submission Summary Table Visibility
+# Plan: Allow Viewing Daily Submission Summary for All KPI Statuses
 
 ## Summary
 
-The Daily Submission Summary Table is not showing for user "Dummy" even though submissions exist in the database for January 30 & 31. There are two bugs causing this:
+The Daily Submission Summary Table is currently only accessible via the Review Sheet, which only opens for KPIs with status `self_review`. This means managers/admins cannot view daily submission data for KPIs that are still in `kra_set` status (before employee has done their final self-review).
 
-1. **Null achieved_value filtering**: The component filters out submissions where `achieved_value` is null, but the database shows all Dummy's submissions have null values
-2. **Date parsing bug**: The code tries to parse `"2026-01-31"` as an integer to get the day, which yields `2026` instead of `31`
+This plan adds the ability to view KPI details and daily submissions for ALL statuses, not just `self_review`.
 
 ## Root Cause Analysis
 
-| Issue | Current Code | Problem |
-|-------|--------------|---------|
-| Filtering | `.filter(s => s.achieved_value !== null)` | Excludes all submissions with null achieved values |
-| No render | `if (sortedSubmissions.length === 0) return null` | Table doesn't show when all values are null |
-| Date parsing | `parseInt(submission.sub_period_value)` | Parses "2026-01-31" as 2026, not day 31 |
+| Issue | Current Behavior | Expected Behavior |
+|-------|------------------|-------------------|
+| Review button visibility | Only shows for `self_review` status | Should allow viewing for all statuses |
+| Daily Summary visibility | Only in Review Sheet | Should be accessible for any Daily KPI with submissions |
 
-## Proposed Fix
+## Proposed Solution
 
-### File: `src/components/review/DailySubmissionSummary.tsx`
-
-**Change 1: Show ALL submissions (not just ones with non-null values)**
-
-The table should display all submissions, showing "—" for entries without achieved values. This provides visibility into submission activity even before values are entered.
-
-```typescript
-// BEFORE (line 72-80):
-const sortedSubmissions = useMemo(() => {
-  return [...submissions]
-    .filter(s => s.achieved_value !== null)  // <-- Remove this filter
-    .sort((a, b) => {
-      const dateA = parseInt(a.sub_period_value);
-      const dateB = parseInt(b.sub_period_value);
-      return dateA - dateB;
-    });
-}, [submissions]);
-
-// AFTER:
-const sortedSubmissions = useMemo(() => {
-  return [...submissions]
-    .sort((a, b) => {
-      // Parse full date strings properly
-      const dateA = new Date(a.sub_period_value).getTime();
-      const dateB = new Date(b.sub_period_value).getTime();
-      return dateA - dateB;
-    });
-}, [submissions]);
-```
-
-**Change 2: Show table if ANY submissions exist (not just non-null values)**
-
-```typescript
-// BEFORE (line 82-85):
-if (sortedSubmissions.length === 0) {
-  return null;
-}
-
-// AFTER (no change needed - but stats calculation needs update)
-```
-
-**Change 3: Fix date extraction for display**
-
-```typescript
-// BEFORE (line 155-158):
-const dayNumber = parseInt(submission.sub_period_value);
-const monthNumber = getMonthNumber(reviewMonth);
-const dateObj = new Date(reviewYear, monthNumber - 1, dayNumber);
-const formattedDate = format(dateObj, 'dd MMM');
-
-// AFTER:
-const dateObj = new Date(submission.sub_period_value);
-const formattedDate = format(dateObj, 'dd MMM');
-```
-
-**Change 4: Update statistics to count ALL submissions**
-
-```typescript
-// BEFORE (line 36):
-const submittedCount = submissions.filter(s => s.achieved_value !== null).length;
-
-// AFTER:
-const submittedCount = submissions.length;  // Count all submissions
-const withValueCount = submissions.filter(s => s.achieved_value !== null).length;
-```
+Modify the EmployeeScorecard component to:
+1. Add a "View" button for KPIs that are not in `self_review` status (like `kra_set`)
+2. Show the Review Sheet in read-only mode for viewing daily submissions and KPI details
+3. Only show action buttons (Save Draft, Approve, Send Back, Query) when status is `self_review`
 
 ## Files to Modify
 
-| File | Changes |
-|------|---------|
-| `src/components/review/DailySubmissionSummary.tsx` | Fix filtering, date parsing, and stats |
-| `DOCUMENTATION.md` | Update documentation |
+| File | Change Type | Purpose |
+|------|-------------|---------|
+| `src/components/review/EmployeeScorecard.tsx` | Modify | Add View button for non-reviewable KPIs, conditional action buttons |
+| `DOCUMENTATION.md` | Modify | Document the change |
 
-## Detailed Code Changes
+## Technical Details
 
-### DailySubmissionSummary.tsx
+### EmployeeScorecard.tsx Changes
 
-1. **Lines 32-46 (stats calculation)**:
-   - Keep `submittedCount` as total submissions count
-   - Stats should reflect entries that exist in the system
+**Current Table Row (Actions column):**
+```tsx
+<TableCell>
+  {canReview && (
+    <Button size="sm" onClick={() => openReviewSheet(kpi)}>
+      Review
+    </Button>
+  )}
+</TableCell>
+```
 
-2. **Lines 72-80 (sorting)**:
-   - Remove the `achieved_value !== null` filter
-   - Fix date parsing to use `new Date()` instead of `parseInt()`
+**Updated Logic:**
+```tsx
+const canReview = kpi.status === 'self_review' && !isNaKpi;
+const canView = !canReview && kpi.frequency === 'Daily' && !isNaKpi;
 
-3. **Lines 155-158 (date display)**:
-   - Use `new Date(submission.sub_period_value)` directly since values are full dates
+<TableCell>
+  {canReview && (
+    <Button size="sm" onClick={() => openReviewSheet(kpi)}>
+      Review
+    </Button>
+  )}
+  {canView && (
+    <Button size="sm" variant="outline" onClick={() => openReviewSheet(kpi)}>
+      <Eye className="h-4 w-4 mr-1" /> View
+    </Button>
+  )}
+</TableCell>
+```
+
+**Sheet Footer Conditional Rendering:**
+```tsx
+<SheetFooter className="flex-wrap gap-2 sm:justify-between">
+  {selectedKpi?.status === 'self_review' ? (
+    // Show all action buttons for reviewable KPIs
+    <>...</>
+  ) : (
+    // Only show Close button for view-only mode
+    <Button variant="outline" onClick={() => setReviewSheetOpen(false)}>
+      Close
+    </Button>
+  )}
+</SheetFooter>
+```
+
+**Score Input Section:**
+Only show manager score input when status is `self_review`:
+```tsx
+{selectedKpi?.status === 'self_review' && (
+  <AchievedValueScoreInput ... />
+)}
+```
+
+## Visual Changes
+
+### Before
+| Status | Button | Can View Daily Summary |
+|--------|--------|------------------------|
+| kra_set | None | No |
+| self_review | Review | Yes |
+| manager_check+ | None | No |
+
+### After
+| Status | Button | Can View Daily Summary |
+|--------|--------|------------------------|
+| kra_set | View (for Daily KPIs) | Yes |
+| self_review | Review | Yes |
+| manager_check+ | View (for Daily KPIs) | Yes |
+
+## Implementation Steps
+
+1. Add `Eye` icon import from lucide-react
+2. Add `canView` condition for non-reviewable Daily KPIs
+3. Add "View" button that opens the same sheet but in view-only mode
+4. Wrap action buttons in conditional to hide when viewing only
+5. Wrap score input in conditional to hide when viewing only
+6. Update documentation
 
 ## Testing Checklist
 
-After implementation:
-- Open Daily KPI for user "Dummy" in Team Review - verify table now appears
-- Verify dates display correctly (30 Jan, 31 Jan not some year value)
-- Verify null achieved values show as "—" in the table
-- Verify "Submitted" stat card shows 2 (number of submissions)
-- Test with a mix of null and non-null achieved values
+- Login as admin/manager
+- Navigate to Team Review
+- Click on user "Dummy"
+- Verify "View" button appears for Daily KPIs with `kra_set` status
+- Click View - verify Daily Submission Summary table is visible
+- Verify action buttons are hidden in view mode
+- Verify score input is hidden in view mode
+- Test Review button still works for `self_review` status KPIs
