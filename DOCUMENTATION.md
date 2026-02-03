@@ -1260,7 +1260,7 @@ src/
 │   │   ├── KpiReviewPanel.tsx     # **Unified KPI view panel** - shared across all review levels
 │   │   ├── KpiHeaderSection.tsx   # Header with category, status, period badges
 │   │   ├── KpiMetricsSection.tsx  # Target, criteria, weightage, rating scale
-│   │   ├── KpiJourneySection.tsx  # 4-column review trail grid
+│   │   ├── KpiJourneySection.tsx  # 4-column review trail grid (all levels see all 4 stages for full transparency)
 │   │   ├── KpiHistoryCard.tsx     # Sparkline + history table for previous months
 │   │   ├── ReviewStageCard.tsx    # Individual stage card (Self/Manager/Auditor/Mgmt)
 │   │   ├── KpiDetailsTable.tsx    # **Unified KPI table component** - shared across all views
