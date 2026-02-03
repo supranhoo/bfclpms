@@ -1,357 +1,205 @@
 
-# Comprehensive Plan: Unified KPI Review Panel with History
+# Plan: Unified KPI View Access Across All Review Levels
 
-## Overview
+## Problem Summary
 
-This plan combines two previously discussed features into a single, cohesive implementation:
+Currently, the `KpiReviewPanel` component (which provides the complete KPI information with history, metrics, and review journey) is only integrated into:
+- **EmployeeScorecard** (Team Review - Manager level)
+- **AuditScorecard** (Audit level)
+- **ManagementScorecard** (Management level)
 
-1. **Unified KPI Review Panel** - Full-width, structured layout with all KPI information visible without scrolling
-2. **KPI History Card** - Show historical performance across previous months directly in the review sheet
+However, the **MyKpis.tsx** page (Employee level) still uses an older sheet layout that doesn't include the `KpiReviewPanel`. This creates an inconsistent experience where employees cannot see the same comprehensive view available to other review levels.
 
-The goal is to create a reusable component system that works consistently across all review levels (Employee, Manager, Auditor, Management).
-
----
-
-## Current Problems
-
-| Issue | Impact |
-|-------|--------|
-| Information is scattered across multiple small cards | Requires scrolling to see all data |
-| Sheet panels don't use full available width | Cramped layout, poor readability |
-| No historical context during reviews | Reviewers can't see performance trends |
-| Inconsistent layouts across review levels | Confusing user experience |
-| Query history and journey not visible together | Missing complete picture |
+The user wants the **same view option** (with KpiReviewPanel including history, metrics, and journey) to be accessible uniformly at all review levels.
 
 ---
 
-## Solution Architecture
+## Current State Analysis
 
-### New Component Hierarchy
-
-```text
-KpiReviewPanel (Main Container - Full Width)
-├── KpiHeaderSection
-│   ├── Category Badge, Status Badge, Period Badge
-│   └── KRA Name, KPI Name (full text, no truncation)
-│
-├── Two-Column Layout
-│   ├── LEFT COLUMN (40%)
-│   │   ├── KpiMetricsSection
-│   │   │   ├── Target, Criteria, Weightage
-│   │   │   ├── Frequency, Source
-│   │   │   └── Inline Rating Scale (R1-R5)
-│   │   │
-│   │   └── KpiHistoryCard (NEW)
-│   │       ├── Sparkline Trend Chart
-│   │       ├── Last 6 Months Table (compact)
-│   │       └── "View Full History" button → KpiTrackerModal
-│   │
-│   └── RIGHT COLUMN (60%)
-│       └── KpiJourneySection
-│           ├── 4-Column Review Trail Grid
-│           │   ├── Self (Blue)
-│           │   ├── Manager (Amber)
-│           │   ├── Auditor (Purple)
-│           │   └── Management (Emerald)
-│           │
-│           └── Query Summary Row
-│               └── Open/Resolved counts + View History button
-│
-├── DailySubmissionSummary (if Daily KPI - Full Width)
-│
-└── Assessment Form (for current reviewer - Full Width)
-```
+| Level | Page/Component | Uses KpiReviewPanel | View Button Available |
+|-------|---------------|---------------------|----------------------|
+| Employee (Self) | MyKpis.tsx | No - uses old layout | Yes, but different UI |
+| Manager | EmployeeScorecard.tsx | Yes | Yes |
+| Auditor | AuditScorecard.tsx | Yes | Yes |
+| Management | ManagementScorecard.tsx | Yes | Yes |
 
 ---
 
-## Visual Layout
+## Solution
 
-```text
-+-----------------------------------------------------------------------------------+
-| SHEET HEADER (Management Review / Audit Review / etc.)                            |
-+-----------------------------------------------------------------------------------+
-|                                                                                     |
-| ┌─────────────────────────────────────────────────────────────────────────────────┐ |
-| │ KPI HEADER                                                                       │ |
-| │ [Category Badge]     [Status: management_review]  [Jan-2026]  [Weight: 15%]      │ |
-| │ KRA: Operational Excellence                                                      │ |
-| │ KPI: Achieve 95% customer satisfaction rating                                   │ |
-| └─────────────────────────────────────────────────────────────────────────────────┘ |
-|                                                                                     |
-| ┌───────────────────────────┐  ┌─────────────────────────────────────────────────┐ |
-| │ METRICS & SCALE           │  │ REVIEW JOURNEY                                   │ |
-| │ ┌───────────────────────┐ │  │ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐│ |
-| │ │ Target: 95%           │ │  │ │  SELF    │ │ MANAGER  │ │ AUDITOR  │ │ MGMT   ││ |
-| │ │ Criteria: Higher Bettr│ │  │ │ Score: 4 │ │ Score: 4 │ │ Score: 4 │ │ (now)  ││ |
-| │ │ Weightage: 15%        │ │  │ │ Exceeds  │ │ Exceeds  │ │ Exceeds  │ │        ││ |
-| │ │ Frequency: Monthly    │ │  │ │ [Link]   │ │ [Link]   │ │ [Link]   │ │        ││ |
-| │ │ Source: Survey Data   │ │  │ │ "Good.." │ │ "Agree.."│ │ "Valid.."│ │        ││ |
-| │ └───────────────────────┘ │  │ └──────────┘ └──────────┘ └──────────┘ └────────┘│ |
-| │                           │  │                                                   │ |
-| │ RATING SCALE              │  │ Query Summary: 0 open, 2 resolved [View History] │ |
-| │ R5: >=110%  R4: >=100%    │  └─────────────────────────────────────────────────┘ |
-| │ R3: >=90%   R2: >=80%     │                                                       |
-| │ R1: >=70%                 │                                                       |
-| │                           │                                                       |
-| │ ┌───────────────────────┐ │                                                       |
-| │ │ KPI HISTORY           │ │                                                       |
-| │ │ Trend: [__/‾\__/‾]    │ │                                                       |
-| │ │ Dec-25: 4 ✓ Approved  │ │                                                       |
-| │ │ Nov-25: 4 ✓ Approved  │ │                                                       |
-| │ │ Oct-25: 3 ✓ Approved  │ │                                                       |
-| │ │     [View Full History]│ │                                                       |
-| │ └───────────────────────┘ │                                                       |
-| └───────────────────────────┘                                                       |
-|                                                                                     |
-| ┌─────────────────────────────────────────────────────────────────────────────────┐ |
-| │ MANAGEMENT ASSESSMENT (editable for current reviewer)                           │ |
-| │ [Score Input]   [Remarks Textarea]   [Evidence Upload]                          │ |
-| └─────────────────────────────────────────────────────────────────────────────────┘ |
-|                                                                                     |
-+-----------------------------------------------------------------------------------+
-| [ ↩ Send Back ]  ─────────────────────  [ Cancel ] [ Save Draft ] [ ✓ Approve ]   |
-+-----------------------------------------------------------------------------------+
-```
+Update **MyKpis.tsx** to use the same `KpiReviewPanel` component in its review sheet, ensuring employees see the exact same structured layout with:
+- KPI Header Section
+- Metrics & Rating Scale
+- KPI History Card with sparkline
+- Review Journey (showing their own submission status)
+
+This creates a uniform experience across all levels.
 
 ---
-
-## Files to Create
-
-| File | Purpose |
-|------|---------|
-| `src/components/review/KpiReviewPanel.tsx` | Main unified panel container |
-| `src/components/review/KpiHeaderSection.tsx` | Header with badges and names |
-| `src/components/review/KpiMetricsSection.tsx` | Metrics grid and rating scale |
-| `src/components/review/KpiJourneySection.tsx` | Review trail grid + query summary |
-| `src/components/review/ReviewStageCard.tsx` | Individual stage card (Self/Manager/etc) |
-| `src/components/review/KpiHistoryCard.tsx` | Historical performance card |
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/components/review/ManagementScorecard.tsx` | Replace Sheet content with KpiReviewPanel, expand width |
-| `src/components/review/AuditScorecard.tsx` | Replace Sheet content with KpiReviewPanel, expand width |
-| `src/components/review/EmployeeScorecard.tsx` | Replace Sheet content with KpiReviewPanel |
-| `src/pages/MyKpis.tsx` | Use KpiReviewPanel for view mode |
-| `DOCUMENTATION.md` | Document new component architecture |
+| `src/pages/MyKpis.tsx` | Replace old sheet content with KpiReviewPanel for both edit and view modes |
+| `DOCUMENTATION.md` | Document unified view architecture |
 
 ---
 
-## Technical Specifications
+## Technical Changes
 
-### 1. KpiReviewPanel.tsx (Main Container)
+### MyKpis.tsx Updates
 
-```typescript
-interface KpiReviewPanelProps {
-  kpi: KPI;
-  submission: ReviewSubmission | null;
-  allKpis: KPI[];  // For history lookup
-  allSubmissions: ReviewSubmission[];  // For history lookup
-  queries?: KpiQuery[];
-  
-  // View context
-  viewLevel: 'employee' | 'manager' | 'auditor' | 'management';
-  isReadOnly?: boolean;
-  
-  // Daily KPI support
-  subPeriodSubmissions?: SubPeriodSubmission[];
-  selectedPeriod: string;
-  selectedYear: number;
-  
-  // Callbacks
-  onOpenQueryHistory?: () => void;
-  onOpenFullHistory?: () => void;
-}
-```
+1. **Import KpiReviewPanel and related components**
+   - Add imports for `KpiReviewPanel`, `KpiTrackerModal`, `QueryHistoryDialog`
 
-### 2. KpiHeaderSection.tsx
+2. **Add state for modals**
+   - `trackerModalOpen` for full history modal
+   - `historyDialogOpen` for query history (if applicable)
 
-Displays:
-- Category badge with dynamic color from database
-- Status badge with workflow state
-- Period badge (e.g., "Jan-2026")
-- Weightage badge
-- Full KRA name (no truncation)
-- Full KPI name (no truncation)
+3. **Update Sheet content structure**
+   - Use the same wide sheet format: `w-[85vw] max-w-[1200px]`
+   - Add `KpiReviewPanel` at the top of the sheet for both edit and view modes
+   - Keep existing form elements below (for edit mode)
+   - Keep daily submission components where applicable
 
-### 3. KpiMetricsSection.tsx
-
-Displays in a compact grid:
-- Target value with UOM
-- Criteria (Higher/Lower is Better)
-- Weightage percentage
-- Frequency (if not Monthly)
-- Source of data (if available)
-- Inline Rating Scale (R1-R5) with tooltips
-
-### 4. KpiJourneySection.tsx
-
-Features:
-- 4-column responsive grid (Self | Manager | Auditor | Management)
-- Each column uses `ReviewStageCard` component
-- Visual indicators: completed (solid), current (ring highlight), pending (muted)
-- Query summary row with open/resolved counts
-- "View History" button for query details
-
-### 5. ReviewStageCard.tsx
-
-```typescript
-interface ReviewStageCardProps {
-  icon: LucideIcon;
-  iconColor: 'blue' | 'amber' | 'purple' | 'emerald';
-  title: string;
-  score: number | null;
-  rating: RatingLevel | null;
-  remarks: string | null;
-  evidenceUrl: string | null;
-  status: 'completed' | 'current' | 'pending';
-}
-```
-
-Displays:
-- Icon with color-coded background
-- Stage title
-- Score badge with rating label
-- Remarks (truncated with tooltip for full text)
-- Evidence link (if available)
-- Visual status (completed/current/pending)
-
-### 6. KpiHistoryCard.tsx
-
-Features:
-- Mini sparkline chart showing score trends (using Recharts)
-- Compact table showing last 6 months
-- Each row: Month | Achieved | Score | Status
-- Trend indicator (up/down/neutral arrow)
-- "View Full History" button opens KpiTrackerModal
-
-```typescript
-interface KpiHistoryCardProps {
-  kpi: KPI;
-  allKpis: KPI[];
-  submissions: ReviewSubmission[];
-  maxMonths?: number;  // Default: 6
-  onViewFullHistory?: () => void;
-}
-```
+4. **Ensure consistent layout**
+   - Read-only mode: Show `KpiReviewPanel` + view-only banners
+   - Edit mode: Show `KpiReviewPanel` + form inputs below
 
 ---
 
-## Sheet Width Changes
+## Implementation Details
 
-Update all scorecards to use wider sheets:
+### Sheet Content Structure for MyKpis
 
 ```tsx
-<SheetContent 
-  className="flex flex-col h-full w-[85vw] max-w-[1200px] sm:max-w-[1200px] overflow-y-auto"
->
+<SheetContent className="flex flex-col h-full w-[85vw] max-w-[1200px] sm:max-w-[1200px] overflow-y-auto">
+  <SheetHeader>
+    <SheetTitle>{isReadOnly ? 'View KPI Details' : 'Submit Self Review'}</SheetTitle>
+    {/* Status badges */}
+  </SheetHeader>
+
+  <div className="flex-1 overflow-y-auto py-4 space-y-6">
+    {/* KPI Review Panel - Shows header, metrics, history, journey */}
+    <KpiReviewPanel
+      kpi={selectedKpi}
+      submission={submissionMap.get(selectedKpi.id) || null}
+      allKpis={allKpis || []}
+      allSubmissions={submissions || []}
+      viewLevel="employee"
+      selectedPeriod={selectedPeriod}
+      selectedYear={selectedYear}
+      onOpenFullHistory={() => setTrackerModalOpen(true)}
+    />
+
+    {/* Daily Submission Summary (if Daily KPI) */}
+    {selectedKpi.frequency === 'Daily' && (
+      <DailySubmissionSummary ... />
+    )}
+
+    {/* Self Assessment Form (only in edit mode) */}
+    {!isReadOnly && (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Your Assessment</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Achieved Value Input */}
+          {/* Score Display */}
+          {/* Remarks */}
+          {/* Evidence Upload */}
+        </CardContent>
+      </Card>
+    )}
+  </div>
+
+  <SheetFooter>
+    {/* Cancel, Save, Submit buttons */}
+  </SheetFooter>
+</SheetContent>
 ```
 
-This ensures:
-- 85% viewport width on desktop
-- Maximum 1200px to prevent extreme stretching
-- Proper scrolling when content exceeds viewport height
+### View Level Configuration for Employee
+
+The `KpiReviewPanel` with `viewLevel="employee"` will show:
+- **KpiHeaderSection**: Full KPI details
+- **KpiMetricsSection**: Target, criteria, weightage, rating scale
+- **KpiHistoryCard**: Previous months' performance
+- **KpiJourneySection**: Only "Self" stage (since other stages aren't visible to employees)
 
 ---
 
-## Component Reusability Matrix
+## Component Modifications
 
-| Component | MyKPIs | TeamReview | Audit | Management |
-|-----------|--------|------------|-------|------------|
-| KpiReviewPanel | ✓ (read-only) | ✓ | ✓ | ✓ |
-| KpiHeaderSection | ✓ | ✓ | ✓ | ✓ |
-| KpiMetricsSection | ✓ | ✓ | ✓ | ✓ |
-| KpiJourneySection | ✓ | ✓ | ✓ | ✓ |
-| ReviewStageCard | ✓ | ✓ | ✓ | ✓ |
-| KpiHistoryCard | ✓ | ✓ | ✓ | ✓ |
-| KpiTrackerModal | ✓ | ✓ | ✓ | ✓ |
+### 1. Add Missing Imports to MyKpis.tsx
 
----
+```tsx
+import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
+import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
+```
 
-## View Level Configurations
+### 2. Add State Variables
 
-| View Level | Journey Stages Visible | Assessment Form | Actions |
-|------------|------------------------|-----------------|---------|
-| Employee (My KPIs) | Self only (if submitted) | Self input (if editable) | Submit |
-| Manager (Team Review) | Self | Manager input | Approve, Send Back |
-| Auditor | Self + Manager | Auditor input | Forward, Send Back |
-| Management | Self + Manager + Auditor | Management input | Approve, Send Back |
+```tsx
+const [trackerModalOpen, setTrackerModalOpen] = useState(false);
+```
 
----
+### 3. Update Sheet Width
 
-## Deprecation Plan
+Change from current layout to:
+```tsx
+<SheetContent className="flex flex-col h-full w-[85vw] max-w-[1200px] sm:max-w-[1200px] overflow-y-auto">
+```
 
-After integration, these components will be deprecated:
-- `ReviewTrailCard.tsx` → Replaced by `KpiJourneySection`
-- `PreviousLevelRemarks.tsx` → Replaced by `KpiJourneySection`
-- `ReviewDetailsCard.tsx` → Replaced by `KpiHeaderSection` + `KpiMetricsSection`
+### 4. Add KpiReviewPanel Before Form
 
-Keep `ReviewTrailCardCompact` for table inline use if needed.
+Insert `KpiReviewPanel` component at the top of the sheet content, before any form elements.
+
+### 5. Add KpiTrackerModal
+
+Add the modal component at the end of the page for "View Full History" functionality.
 
 ---
 
 ## Testing Checklist
 
-### All Review Levels
-- [ ] KPI names display fully without truncation
-- [ ] Category badge shows correct color
-- [ ] Status badge shows correct workflow state
-- [ ] Metrics section displays target, criteria, weightage
-- [ ] Rating scale is visible with tooltips
-- [ ] Review journey shows all completed stages
-- [ ] Current stage is highlighted
-- [ ] Pending stages are muted
-- [ ] Evidence links open in new tab
-- [ ] Remarks show tooltip on hover
+### My KPIs (Employee Level)
+- [ ] Sheet opens with full width (85vw, max 1200px)
+- [ ] KpiReviewPanel displays header section correctly
+- [ ] Metrics section shows target, criteria, weightage
+- [ ] Rating scale is visible inline
+- [ ] KPI History card shows previous months (if available)
+- [ ] "View Full History" button opens KpiTrackerModal
+- [ ] Review Journey shows Self stage only
+- [ ] Form inputs work correctly in edit mode
+- [ ] Read-only mode hides form inputs
+- [ ] Daily KPIs show submission summary
 
-### KPI History Card
-- [ ] Sparkline chart renders correctly
-- [ ] Shows last 6 months of data
-- [ ] Trend arrow shows correct direction
-- [ ] "View Full History" opens KpiTrackerModal
-- [ ] Hidden when no historical data exists
+### Consistency Across Levels
+- [ ] All levels use same sheet width
+- [ ] All levels show KpiReviewPanel with same structure
+- [ ] History card appears consistently
+- [ ] Journey section adapts to view level
 
-### Query Summary
-- [ ] Shows open query count
-- [ ] Shows resolved query count
-- [ ] "View History" opens query modal
-
-### Sheet Layout
-- [ ] Sheet uses expanded width (85vw)
-- [ ] All information visible without horizontal scroll
-- [ ] Vertical scroll only when content exceeds height
-- [ ] Works on tablet and desktop
-- [ ] Assessment form positioned correctly
-- [ ] Footer buttons remain accessible
-
-### Daily KPIs
-- [ ] Daily Submission Summary displays correctly
-- [ ] Override editor works when reviewer disagrees
-- [ ] Stats cards show correctly
+### Edge Cases
+- [ ] New KPIs (no history) - history card hidden
+- [ ] Org-level KPIs - pre-filled values shown
+- [ ] Daily/Weekly KPIs - sub-period selector works
+- [ ] Read-only KPIs - no form visible
 
 ---
 
 ## Implementation Order
 
-### Phase 1: Create Atomic Components (Parallel)
-1. `ReviewStageCard.tsx` - Single stage display
-2. `KpiHeaderSection.tsx` - Header with badges
-3. `KpiMetricsSection.tsx` - Metrics + rating scale
-4. `KpiHistoryCard.tsx` - History with sparkline
+1. Update `MyKpis.tsx`:
+   - Add imports for `KpiReviewPanel` and `KpiTrackerModal`
+   - Add `trackerModalOpen` state
+   - Update Sheet width class
+   - Add `KpiReviewPanel` component in sheet content
+   - Add `KpiTrackerModal` for full history
+   - Reorganize form elements to appear below the panel
 
-### Phase 2: Create Container Components
-5. `KpiJourneySection.tsx` - Compose ReviewStageCards + query summary
-6. `KpiReviewPanel.tsx` - Main container composing all sections
+2. Test the employee view matches other levels
 
-### Phase 3: Integration
-7. Update `ManagementScorecard.tsx` - Replace sheet content
-8. Update `AuditScorecard.tsx` - Replace sheet content
-9. Update `EmployeeScorecard.tsx` - Replace sheet content
-10. Update `MyKpis.tsx` - Use for view mode
-
-### Phase 4: Cleanup & Documentation
-11. Update `DOCUMENTATION.md`
-12. Deprecate old components (mark with comments)
-13. Write unit tests for new components
-
+3. Update `DOCUMENTATION.md` to reflect unified architecture
