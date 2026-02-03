@@ -505,6 +505,7 @@ export function ManagementScorecard({
             selectedPeriod={selectedPeriod}
             selectedYear={selectedYear}
             onReview={openReviewSheet}
+            onView={openReviewSheet}
             onSendBack={openSendBackDialog}
             onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
             expandedKpis={expandedDailyKpis}

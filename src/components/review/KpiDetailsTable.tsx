@@ -203,16 +203,11 @@ export function KpiDetailsTable({
             <CheckCircle2 className="h-3 w-3 mr-1" />
             Forwarded
           </Badge>
-        ) : isDailyKpi && !isNaKpi && onView ? (
-          <Button size="sm" variant="outline" onClick={() => onView(kpi)}>
-            <Eye className="h-4 w-4 mr-1" />
-            View
-          </Button>
         ) : isNaKpi ? (
           <Badge variant="outline" className="bg-muted text-muted-foreground">
             Not Applicable
           </Badge>
-        ) : viewType === 'my-kpis' && kpi.status !== 'kra_set' && onView ? (
+        ) : onView ? (
           <Button size="sm" variant="outline" onClick={() => onView(kpi)}>
             <Eye className="h-4 w-4 mr-1" />
             View
