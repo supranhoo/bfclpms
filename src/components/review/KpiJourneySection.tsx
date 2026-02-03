@@ -63,20 +63,9 @@ function getStageStatus(
   return 'pending';
 }
 
-// Determine which stages to show based on view level
-function getVisibleStages(viewLevel: ViewLevel): ('self' | 'manager' | 'auditor' | 'management')[] {
-  switch (viewLevel) {
-    case 'employee':
-      return ['self'];
-    case 'manager':
-      return ['self', 'manager'];
-    case 'auditor':
-      return ['self', 'manager', 'auditor'];
-    case 'management':
-      return ['self', 'manager', 'auditor', 'management'];
-    default:
-      return ['self', 'manager', 'auditor', 'management'];
-  }
+// All levels see all stages for complete transparency
+function getVisibleStages(_viewLevel: ViewLevel): ('self' | 'manager' | 'auditor' | 'management')[] {
+  return ['self', 'manager', 'auditor', 'management'];
 }
 
 export function KpiJourneySection({
@@ -132,10 +121,8 @@ export function KpiJourneySection({
     },
   };
 
-  const gridCols = visibleStages.length === 1 ? 'grid-cols-1' :
-                   visibleStages.length === 2 ? 'grid-cols-2' :
-                   visibleStages.length === 3 ? 'grid-cols-3' :
-                   'grid-cols-4';
+  // Always 4 columns for full transparency
+  const gridCols = 'grid-cols-4';
 
   return (
     <Card>
