@@ -814,6 +814,7 @@ export default function MyKpis() {
                       allKpis={allKpis || []}
                       allSubmissions={submissions || []}
                       viewLevel="employee"
+                      currentUserId={profile?.id}
                       selectedPeriod={selectedPeriod}
                       selectedYear={selectedYear}
                       onOpenFullHistory={() => setTrackerModalOpen(true)}
