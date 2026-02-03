@@ -633,6 +633,25 @@ export function AuditScorecard({
           </div>
 
           <SheetFooter className="pt-4 border-t gap-2">
+            {/* Send Back button - leftmost */}
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReviewSheetOpen(false);
+                if (selectedKpi) {
+                  setSendBackReason('');
+                  setSendBackTarget('manager');
+                  setSendBackDialogOpen(true);
+                }
+              }}
+              className="text-orange-600 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950"
+            >
+              <Undo2 className="h-4 w-4 mr-2" />
+              Send Back
+            </Button>
+            
+            <div className="flex-1" /> {/* Spacer to push other buttons right */}
+            
             <Button variant="outline" onClick={() => setReviewSheetOpen(false)}>
               Cancel
             </Button>
