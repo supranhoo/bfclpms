@@ -31,6 +31,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
+import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
+import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
@@ -148,6 +150,7 @@ export default function MyKpis() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [trackerModalOpen, setTrackerModalOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   const [expandedKpis, setExpandedKpis] = useState<Set<string>>(new Set());
   
@@ -762,7 +765,7 @@ export default function MyKpis() {
 
       {/* Self Review Sheet - Compact No-Scroll Layout */}
       <Sheet open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <SheetContent size="full" className="flex flex-col h-full p-4">
+        <SheetContent className="flex flex-col h-full w-[85vw] max-w-[1200px] sm:max-w-[1200px] overflow-y-auto">
           {(() => {
             // Compute org-level state for the selected KPI (at KPI level now)
             const isSelectedKpiOrgLevel = selectedKpi?.is_org_level || false;
@@ -781,351 +784,279 @@ export default function MyKpis() {
             
             return (
               <>
-                {/* Header with Category, KRA, KPI */}
+                {/* Header */}
                 <SheetHeader className="pb-3 border-b flex-shrink-0">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <SheetTitle className="text-lg">
-                          {isReadOnly ? 'View Submission' : 'Submit Self Review'}
-                        </SheetTitle>
-                        {isReadOnly && (
-                          <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 flex items-center gap-1">
-                            <Eye className="h-3 w-3" />
-                            Read Only
-                          </Badge>
-                        )}
-                        {!isReadOnly && (
-                          <Badge variant="outline" className="border-amber-500 text-amber-600 dark:text-amber-400">
-                            <FileCheck className="h-3 w-3 mr-1" />
-                            New KRA
-                          </Badge>
-                        )}
-                        {hasOrgData && (
-                          <Badge variant="secondary" className="flex items-center gap-1">
-                            <Building2 className="h-3 w-3" />
-                            Organization Data
-                          </Badge>
-                        )}
-                      </div>
-                      <Badge 
-                        variant="outline" 
-                        className="flex items-center gap-1.5"
-                        style={{ borderColor: selectedKpi?.kra_categories?.color }}
-                      >
-                        <div 
-                          className="w-2 h-2 rounded-full" 
-                          style={{ backgroundColor: selectedKpi?.kra_categories?.color }} 
-                        />
-                        {selectedKpi?.kra_categories?.name}
-                      </Badge>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <SheetTitle className="text-lg">
+                        {isReadOnly ? 'View KPI Details' : 'Submit Self Review'}
+                      </SheetTitle>
+                      {isReadOnly && (
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 flex items-center gap-1">
+                          <Eye className="h-3 w-3" />
+                          Read Only
+                        </Badge>
+                      )}
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-foreground">{selectedKpi?.kra_name}</p>
-                      <SheetDescription className="text-sm">{selectedKpi?.kpi_name}</SheetDescription>
-                    </div>
+                    <Badge className={statusColors[selectedKpi?.status || 'kra_set']}>
+                      {statusLabels[selectedKpi?.status || 'kra_set']}
+                    </Badge>
                   </div>
                 </SheetHeader>
                 
-                {/* KRA Acceptance Info Banner */}
-                {isKraSet && (
-                  <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg mt-3">
-                    <FileCheck className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-                    <div className="text-sm">
-                      <span className="font-medium text-amber-800 dark:text-amber-200">
-                        New KRA Assignment
-                      </span>
-                      <span className="text-amber-600 dark:text-amber-400 ml-1">
-                        - Review the KPI details below and submit your performance data
-                      </span>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Org-Level Info Banner */}
-                {hasOrgData && (
-                  <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg mt-3">
-                    <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                    <div className="text-sm">
-                      <span className="font-medium text-blue-800 dark:text-blue-200">
-                        Organization-Level KPI
-                      </span>
-                      <span className="text-blue-600 dark:text-blue-400 ml-1">
-                        - Achieved value is pre-filled from verified organizational data
-                        {selectedKpiOrgValue?.data_source && ` (Source: ${selectedKpiOrgValue.data_source})`}
-                      </span>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Read-Only Banner for submitted KPIs */}
-                {isReadOnly && (
-                  <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg mt-3">
-                    <Eye className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                    <div className="text-sm">
-                      <span className="font-medium text-blue-800 dark:text-blue-200">
-                        Viewing submitted data
-                      </span>
-                      <span className="text-blue-600 dark:text-blue-400 ml-1">
-                        - This KPI is currently at "{statusLabels[selectedKpi?.status || 'self_review']}" stage
-                      </span>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Sub-Period Selection Banner for Daily/Weekly KPIs - Show in read-only mode too for viewing */}
-                {needsSubPeriodForKpi && selectedKpi && !isReadOnly && (
-                  <div className="flex items-start gap-2 p-3 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-lg mt-3">
-                    <Calendar className="h-4 w-4 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="text-sm">
-                          <span className="font-medium text-purple-800 dark:text-purple-200">
-                            {selectedKpi.frequency} KPI
-                          </span>
-                          <span className="text-purple-600 dark:text-purple-400 ml-1">
-                            - Submit data for each {selectedKpi.frequency === 'Daily' ? 'day' : 'week'}
-                          </span>
-                        </div>
-                        {selectedKpiSubPeriods.length > 0 && (
-                          <Badge variant="secondary" className="text-xs">
-                            {selectedKpiSubPeriods.length} entries | Avg: {aggregatedSubPeriodScore?.toFixed(1) ?? '—'}
-                          </Badge>
-                        )}
-                      </div>
-                      <SubPeriodSelector
-                        frequency={selectedKpi.frequency as FrequencyType}
-                        reviewMonth={selectedPeriod}
-                        reviewYear={selectedYear}
-                        selectedSubPeriod={selectedSubPeriod}
-                        onSubPeriodChange={handleSubPeriodChange}
-                        submissions={selectedKpiSubPeriods}
-                      />
-                    </div>
-                  </div>
-                )}
-          
-          {/* Main Content - Grid Layout with Scroll */}
-          <div className="flex-1 overflow-y-auto min-h-0 py-4">
-            <div className="grid grid-cols-3 gap-4">
-            {/* Left Column - KPI Details */}
-            <div className="space-y-4">
-              {/* Key Metrics */}
-              <div className="p-3 bg-muted/50 rounded-lg space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-muted-foreground">Target</span>
-                  <span className="font-medium">{selectedKpi?.target_value} {selectedKpi?.uom}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-muted-foreground">Criteria</span>
-                  <span className="font-medium text-sm">{selectedKpi?.criteria || 'Higher is Better'}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-muted-foreground">Weightage</span>
-                  <span className="font-medium">{selectedKpi?.weightage}%</span>
-                </div>
-                {selectedKpi?.frequency && selectedKpi.frequency !== 'Monthly' && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-muted-foreground">Frequency</span>
-                    <Badge variant="outline" className="text-xs">
-                      {selectedKpi.frequency}
-                    </Badge>
-                  </div>
-                )}
-              </div>
-
-              {/* Rating Scale */}
-              <RatingScaleDisplay kpi={selectedKpi} />
-            </div>
-
-            {/* Middle Column - Score Input */}
-            <div className="space-y-4">
-              {/* N/A Toggle - Hidden in read-only mode */}
-              {!isReadOnly && (
-                <div className="flex items-center space-x-2 p-2 border rounded-lg bg-muted/30">
-                  <Checkbox
-                    id="is_na"
-                    checked={isNa}
-                    onCheckedChange={(checked) => {
-                      setIsNa(checked as boolean);
-                      if (checked) {
-                        setAchievedValue('');
-                        setCalculatedScore(null);
-                        setCalculatedPercentage(null);
-                      }
-                    }}
-                    disabled={hasOrgData}
-                  />
-                  <Label htmlFor="is_na" className="cursor-pointer text-xs">
-                    Mark as N/A (Not Applicable)
-                    {hasOrgData && (
-                      <span className="text-muted-foreground ml-1">(disabled for org data)</span>
-                    )}
-                  </Label>
-                </div>
-              )}
-
-              {/* Achieved Value */}
-              {!isNa && (
-                <div className="space-y-2">
-                  {isQualitativeKpi(selectedKpi) ? (
-                    // Qualitative input for Binary/Tiered KPIs
-                    <QualitativeValueInput
-                      uomType={selectedKpi?.uom_type as 'binary' | 'tiered'}
-                      qualitativeOptions={selectedKpi?.qualitative_options as QualitativeOption[] | null}
-                      value={achievedValue || null}
-                      onChange={handleQualitativeChange}
-                      disabled={hasOrgData}
-                      label="Achieved Value *"
+                {/* Main Content with Scroll */}
+                <div className="flex-1 overflow-y-auto py-4 space-y-6">
+                  {/* KPI Review Panel - Shows header, metrics, history, journey */}
+                  {selectedKpi && (
+                    <KpiReviewPanel
+                      kpi={selectedKpi}
+                      submission={submissionMap.get(selectedKpi.id) || null}
+                      allKpis={allKpis || []}
+                      allSubmissions={submissions || []}
+                      viewLevel="employee"
+                      selectedPeriod={selectedPeriod}
+                      selectedYear={selectedYear}
+                      onOpenFullHistory={() => setTrackerModalOpen(true)}
                     />
-                  ) : (
-                    // Numeric input for standard KPIs
-                    <>
-                      <Label htmlFor="achieved" className="text-sm flex items-center gap-2">
-                        Achieved Value *
-                        {hasOrgData && (
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Lock className="h-3 w-3 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              Verified organization data{selectedKpiOrgValue?.data_source && ` from ${selectedKpiOrgValue.data_source}`}
-                            </TooltipContent>
-                          </Tooltip>
+                  )}
+                  
+                  {/* Daily Submission Summary - Show for Daily KPIs */}
+                  {selectedKpi?.frequency === 'Daily' && selectedKpiSubPeriods.length > 0 && (
+                    <DailySubmissionSummary
+                      kpiId={selectedKpi.id}
+                      reviewMonth={selectedPeriod}
+                      reviewYear={selectedYear}
+                      submissions={selectedKpiSubPeriods}
+                      uom={selectedKpi.uom}
+                      uomType={selectedKpi.uom_type}
+                      qualitativeOptions={selectedKpi.qualitative_options as QualitativeOption[] | null}
+                      kpiStatus={selectedKpi.status}
+                    />
+                  )}
+                  
+                  {/* Self Assessment Form - Only in edit mode */}
+                  {!isReadOnly && selectedKpi && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <FileCheck className="h-4 w-4" />
+                          Your Assessment
+                        </CardTitle>
+                        <CardDescription>
+                          Enter your achieved value and provide justification
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {/* Sub-Period Selection for Daily/Weekly KPIs */}
+                        {needsSubPeriodForKpi && (
+                          <div className="p-3 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-lg">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2 text-sm">
+                                <Calendar className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                <span className="font-medium text-purple-800 dark:text-purple-200">
+                                  {selectedKpi.frequency} KPI
+                                </span>
+                                <span className="text-purple-600 dark:text-purple-400">
+                                  - Submit data for each {selectedKpi.frequency === 'Daily' ? 'day' : 'week'}
+                                </span>
+                              </div>
+                              {selectedKpiSubPeriods.length > 0 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {selectedKpiSubPeriods.length} entries | Avg: {aggregatedSubPeriodScore?.toFixed(1) ?? '—'}
+                                </Badge>
+                              )}
+                            </div>
+                            <SubPeriodSelector
+                              frequency={selectedKpi.frequency as FrequencyType}
+                              reviewMonth={selectedPeriod}
+                              reviewYear={selectedYear}
+                              selectedSubPeriod={selectedSubPeriod}
+                              onSubPeriodChange={handleSubPeriodChange}
+                              submissions={selectedKpiSubPeriods}
+                            />
+                          </div>
                         )}
-                      </Label>
-                      <Input
-                        id="achieved"
-                        type="number"
-                        value={achievedValue}
-                        onChange={(e) => handleAchievedChange(e.target.value)}
-                        placeholder="Enter value"
-                        className={`h-9 ${hasOrgData ? 'bg-muted cursor-not-allowed' : ''}`}
-                        readOnly={hasOrgData}
-                        disabled={hasOrgData}
-                      />
-                      {hasOrgData && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Building2 className="h-3 w-3" />
-                          Verified data - cannot be modified
-                        </p>
-                      )}
-                      {!hasOrgData && achievedValue && selectedKpi?.target_value && (
-                        <p className="text-xs text-muted-foreground">
-                          {((parseFloat(achievedValue) / selectedKpi.target_value) * 100).toFixed(1)}% of target
-                        </p>
-                      )}
-                    </>
+                        
+                        {/* N/A Toggle */}
+                        <div className="flex items-center space-x-2 p-2 border rounded-lg bg-muted/30">
+                          <Checkbox
+                            id="is_na"
+                            checked={isNa}
+                            onCheckedChange={(checked) => {
+                              setIsNa(checked as boolean);
+                              if (checked) {
+                                setAchievedValue('');
+                                setCalculatedScore(null);
+                                setCalculatedPercentage(null);
+                              }
+                            }}
+                            disabled={hasOrgData}
+                          />
+                          <Label htmlFor="is_na" className="cursor-pointer text-sm">
+                            Mark as N/A (Not Applicable)
+                            {hasOrgData && (
+                              <span className="text-muted-foreground ml-1">(disabled for org data)</span>
+                            )}
+                          </Label>
+                        </div>
+                        
+                        {/* Input Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Achieved Value */}
+                          {!isNa && (
+                            <div className="space-y-2">
+                              {isQualitativeKpi(selectedKpi) ? (
+                                <QualitativeValueInput
+                                  uomType={selectedKpi?.uom_type as 'binary' | 'tiered'}
+                                  qualitativeOptions={selectedKpi?.qualitative_options as QualitativeOption[] | null}
+                                  value={achievedValue || null}
+                                  onChange={handleQualitativeChange}
+                                  disabled={hasOrgData}
+                                  label="Achieved Value *"
+                                />
+                              ) : (
+                                <>
+                                  <Label htmlFor="achieved" className="text-sm flex items-center gap-2">
+                                    Achieved Value *
+                                    {hasOrgData && (
+                                      <Tooltip>
+                                        <TooltipTrigger>
+                                          <Lock className="h-3 w-3 text-muted-foreground" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          Verified organization data{selectedKpiOrgValue?.data_source && ` from ${selectedKpiOrgValue.data_source}`}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    )}
+                                  </Label>
+                                  <Input
+                                    id="achieved"
+                                    type="number"
+                                    value={achievedValue}
+                                    onChange={(e) => handleAchievedChange(e.target.value)}
+                                    placeholder="Enter value"
+                                    className={hasOrgData ? 'bg-muted cursor-not-allowed' : ''}
+                                    readOnly={hasOrgData}
+                                    disabled={hasOrgData}
+                                  />
+                                  {hasOrgData && (
+                                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                      <Building2 className="h-3 w-3" />
+                                      Verified data - cannot be modified
+                                    </p>
+                                  )}
+                                  {!hasOrgData && achievedValue && selectedKpi?.target_value && (
+                                    <p className="text-xs text-muted-foreground">
+                                      {((parseFloat(achievedValue) / selectedKpi.target_value) * 100).toFixed(1)}% of target
+                                    </p>
+                                  )}
+                                </>
+                              )}
+                              
+                              {/* Calculated Rating Display */}
+                              {!isNa && calculatedScore !== null && !isQualitativeKpi(selectedKpi) && (
+                                <div className="p-3 border rounded-lg bg-muted/50">
+                                  <Label className="text-xs text-muted-foreground">Calculated Rating</Label>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <Badge
+                                      style={{ backgroundColor: scoreDisplay[calculatedScore]?.color || '#991B1B' }}
+                                      className="text-white px-2 py-0.5"
+                                    >
+                                      {calculatedScore}
+                                    </Badge>
+                                    <span className="text-sm font-medium">{scoreDisplay[calculatedScore]?.label || 'Not Achieved'}</span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Remarks */}
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                              <Label htmlFor="remarks" className="text-sm">
+                                {isNa ? 'Reason for N/A *' : 'Justification'}
+                              </Label>
+                              {isNa && (
+                                <span className={`text-xs ${selfRemarks.trim().length < 50 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                  {selfRemarks.trim().length}/50 min
+                                </span>
+                              )}
+                            </div>
+                            <Textarea
+                              id="remarks"
+                              value={selfRemarks}
+                              onChange={(e) => setSelfRemarks(e.target.value)}
+                              placeholder={isNa ? 'Explain why this KPI is not applicable (minimum 50 characters)...' : 'Describe your achievements...'}
+                              className={`resize-none min-h-[80px] ${isNa && selfRemarks.trim().length < 50 && selfRemarks.length > 0 ? 'border-destructive' : ''}`}
+                            />
+                            {isNa && selfRemarks.trim().length < 50 && selfRemarks.length > 0 && (
+                              <p className="text-xs text-destructive">
+                                {50 - selfRemarks.trim().length} more characters needed
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Evidence Upload */}
+                        {profile?.id && selectedKpi && (
+                          <EvidenceUpload
+                            userId={profile.id}
+                            kpiId={selectedKpi.id}
+                            existingUrl={selfEvidenceUrl}
+                            onUploadComplete={(url) => setSelfEvidenceUrl(url || null)}
+                          />
+                        )}
+                        
+                        {isNa && (
+                          <div className="p-3 border rounded-lg bg-muted/50">
+                            <p className="text-xs text-muted-foreground">
+                              This KPI will be excluded from overall score calculations.
+                            </p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                  
+                  {/* Read-Only View of Submitted Data */}
+                  {isReadOnly && selectedKpi && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Eye className="h-4 w-4" />
+                          Submitted Data
+                        </CardTitle>
+                        <CardDescription>
+                          Your submission is currently at "{statusLabels[selectedKpi?.status || 'self_review']}" stage
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {selfRemarks && (
+                          <div>
+                            <Label className="text-sm mb-2 block">Justification</Label>
+                            <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                              {selfRemarks}
+                            </div>
+                          </div>
+                        )}
+                        {selfEvidenceUrl && (
+                          <div>
+                            <Label className="text-sm mb-2 block">Evidence</Label>
+                            <a 
+                              href={selfEvidenceUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-sm text-primary underline hover:no-underline"
+                            >
+                              View Evidence
+                            </a>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
                   )}
                 </div>
-              )}
-
-              {/* Calculated Rating Display - Only show for numeric KPIs (qualitative already shows in input) */}
-              {!isNa && calculatedScore !== null && !isQualitativeKpi(selectedKpi) && (
-                <div className="p-3 border rounded-lg bg-muted/50">
-                  <Label className="text-xs text-muted-foreground">Calculated Rating</Label>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge
-                      style={{ backgroundColor: scoreDisplay[calculatedScore]?.color || '#991B1B' }}
-                      className="text-white px-2 py-0.5"
-                    >
-                      {calculatedScore}
-                    </Badge>
-                    <span className="text-sm font-medium">{scoreDisplay[calculatedScore]?.label || 'Not Achieved'}</span>
-                  </div>
-                </div>
-              )}
-
-              {isNa && (
-                <div className="p-3 border rounded-lg bg-muted/50">
-                  <p className="text-xs text-muted-foreground">
-                    This KPI will be excluded from overall score calculations.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Right Column - Remarks & Evidence */}
-            <div className="flex flex-col space-y-4">
-              {/* Remarks - disabled in read-only mode */}
-              {!isReadOnly && (
-                <div className="flex-1">
-                  <div className="flex justify-between items-center mb-2">
-                    <Label htmlFor="remarks" className="text-sm">
-                      {isNa ? 'Reason for N/A *' : 'Justification'}
-                    </Label>
-                    {isNa && (
-                      <span className={`text-xs ${selfRemarks.trim().length < 50 ? 'text-destructive' : 'text-muted-foreground'}`}>
-                        {selfRemarks.trim().length}/50 characters minimum
-                      </span>
-                    )}
-                  </div>
-                  <Textarea
-                    id="remarks"
-                    value={selfRemarks}
-                    onChange={(e) => setSelfRemarks(e.target.value)}
-                    placeholder={isNa ? 'Explain why this KPI is not applicable (minimum 50 characters)...' : 'Describe your achievements...'}
-                    className={`resize-none min-h-[100px] ${isNa && selfRemarks.trim().length < 50 && selfRemarks.length > 0 ? 'border-destructive' : ''}`}
-                  />
-                  {isNa && selfRemarks.trim().length < 50 && selfRemarks.length > 0 && (
-                    <p className="text-xs text-destructive mt-1">
-                      Please provide at least 50 characters ({50 - selfRemarks.trim().length} more needed)
-                    </p>
-                  )}
-                </div>
-              )}
-              
-              {/* Show submitted remarks in read-only mode */}
-              {isReadOnly && selfRemarks && (
-                <div className="flex-1">
-                  <Label className="text-sm mb-2 block">Submitted Justification</Label>
-                  <div className="p-3 bg-muted/50 rounded-lg text-sm">
-                    {selfRemarks || <span className="text-muted-foreground italic">No remarks provided</span>}
-                  </div>
-                </div>
-              )}
-              
-              {/* Evidence Upload - Only show in edit mode */}
-              {!isReadOnly && profile?.id && selectedKpi && (
-                <EvidenceUpload
-                  userId={profile.id}
-                  kpiId={selectedKpi.id}
-                  existingUrl={selfEvidenceUrl}
-                  onUploadComplete={(url) => setSelfEvidenceUrl(url || null)}
-                />
-              )}
-              
-              {/* Show evidence link in read-only mode */}
-              {isReadOnly && selfEvidenceUrl && (
-                <div>
-                  <Label className="text-sm mb-2 block">Submitted Evidence</Label>
-                  <a 
-                    href={selfEvidenceUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-sm text-primary underline hover:no-underline"
-                  >
-                    View Evidence
-                  </a>
-                </div>
-              )}
-              
-              {/* Daily Submission Summary - Show for Daily KPIs with submissions (always visible in both modes) */}
-              {selectedKpi?.frequency === 'Daily' && selectedKpiSubPeriods.length > 0 && (
-                <DailySubmissionSummary
-                  kpiId={selectedKpi.id}
-                  reviewMonth={selectedPeriod}
-                  reviewYear={selectedYear}
-                  submissions={selectedKpiSubPeriods}
-                  uom={selectedKpi.uom}
-                  uomType={selectedKpi.uom_type}
-                  qualitativeOptions={selectedKpi.qualitative_options as QualitativeOption[] | null}
-                  kpiStatus={selectedKpi.status}
-                />
-              )}
-            </div>
-          </div>
-        </div>
 
                 {/* Footer - Fixed at bottom */}
                 <SheetFooter className="pt-3 border-t flex-shrink-0">
@@ -1242,6 +1173,15 @@ export default function MyKpis() {
         isOpen={timelineOpen}
         onClose={() => setTimelineOpen(false)}
         kpi={selectedKpi}
+      />
+
+      {/* KPI Tracker Modal - Full History */}
+      <KpiTrackerModal
+        isOpen={trackerModalOpen}
+        onClose={() => setTrackerModalOpen(false)}
+        kpi={selectedKpi}
+        allKpis={allKpis || []}
+        submissions={submissions || []}
       />
 
       {/* Resubmission Confirmation Dialog for Daily/Weekly KPIs */}
