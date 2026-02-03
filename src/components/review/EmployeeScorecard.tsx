@@ -507,6 +507,7 @@ export function EmployeeScorecard({
                 allSubmissions={submissions || []}
                 queries={queryMap.get(selectedKpi.id) || []}
                 viewLevel="manager"
+                currentUserId={user?.id}
                 selectedPeriod={selectedPeriod}
                 selectedYear={selectedYear}
                 onOpenQueryHistory={() => setHistoryDialogOpen(true)}
