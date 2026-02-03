@@ -4,6 +4,7 @@ import { KpiHeaderSection } from './KpiHeaderSection';
 import { KpiMetricsSection } from './KpiMetricsSection';
 import { KpiJourneySection } from './KpiJourneySection';
 import { KpiHistoryCard } from './KpiHistoryCard';
+import { KpiObservationsSection } from './KpiObservationsSection';
 
 export type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management';
 
@@ -62,14 +63,21 @@ export function KpiReviewPanel({
           />
         </div>
 
-        {/* RIGHT COLUMN (60%) - Review Journey */}
-        <div className="lg:col-span-3">
+        {/* RIGHT COLUMN (60%) - Review Journey & Observations */}
+        <div className="lg:col-span-3 space-y-4">
           <KpiJourneySection
             kpi={kpi}
             submission={submission}
             queries={queries}
             viewLevel={viewLevel}
             onOpenQueryHistory={onOpenQueryHistory}
+          />
+          
+          <KpiObservationsSection
+            kpiId={kpi.id}
+            kpiStatus={kpi.status || 'kra_set'}
+            viewLevel={viewLevel}
+            baseScore={submission?.final_score ?? submission?.self_score ?? null}
           />
         </div>
       </div>
