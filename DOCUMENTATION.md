@@ -1257,10 +1257,16 @@ src/
 │   │   └── KpiLogicModal.tsx
 │   │
 │   ├── review/                # Review-related components
-│   │   ├── KpiDetailsTable.tsx   # **Unified KPI table component** - shared across all views
-│   │   ├── EmployeeScorecard.tsx
-│   │   ├── AuditScorecard.tsx
-│   │   ├── ManagementScorecard.tsx
+│   │   ├── KpiReviewPanel.tsx     # **Unified KPI view panel** - shared across all review levels
+│   │   ├── KpiHeaderSection.tsx   # Header with category, status, period badges
+│   │   ├── KpiMetricsSection.tsx  # Target, criteria, weightage, rating scale
+│   │   ├── KpiJourneySection.tsx  # 4-column review trail grid
+│   │   ├── KpiHistoryCard.tsx     # Sparkline + history table for previous months
+│   │   ├── ReviewStageCard.tsx    # Individual stage card (Self/Manager/Auditor/Mgmt)
+│   │   ├── KpiDetailsTable.tsx    # **Unified KPI table component** - shared across all views
+│   │   ├── EmployeeScorecard.tsx  # Uses KpiReviewPanel for team review
+│   │   ├── AuditScorecard.tsx     # Uses KpiReviewPanel for audit review
+│   │   ├── ManagementScorecard.tsx # Uses KpiReviewPanel for mgmt review
 │   │   ├── ReviewFilters.tsx
 │   │   ├── ScoreSelector.tsx
 │   │   ├── RatingSelector.tsx
@@ -1491,8 +1497,72 @@ interface KpiDetailsTableProps {
 }
 ```
 
+#### `KpiReviewPanel` - Unified KPI View
+The central component for viewing KPI details across all review levels. Provides a consistent experience with:
+
+**Layout Structure:**
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ KPI HEADER                                                              │
+│ [Category Badge]  [Status Badge]  [Period Badge]  [Weightage Badge]     │
+│ KRA: Full KRA Name                                                      │
+│ KPI: Full KPI Name                                                      │
+└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────┐  ┌───────────────────────────────────────┐
+│ METRICS (40%)               │  │ REVIEW JOURNEY (60%)                   │
+│ • Target & UOM              │  │ [Self] [Manager] [Auditor] [Mgmt]     │
+│ • Criteria                  │  │ Scores, ratings, remarks, evidence    │
+│ • Weightage                 │  │                                        │
+│ • Rating Scale (R5-R1)      │  │ Query Summary: X open, Y resolved      │
+│                             │  │                                        │
+│ ┌─────────────────────────┐ │  └───────────────────────────────────────┘
+│ │ KPI HISTORY             │ │
+│ │ Sparkline + Last 6 Mo   │ │
+│ │ [View Full History]     │ │
+│ └─────────────────────────┘ │
+└─────────────────────────────┘
+```
+
+**View Level Configurations:**
+| Level | Visible Stages | Assessment Form | Actions |
+|-------|---------------|-----------------|---------|
+| Employee (My KPIs) | Self only | Self input | Submit |
+| Manager (Team Review) | Self | Manager input | Approve, Send Back |
+| Auditor | Self + Manager | Auditor input | Forward, Send Back |
+| Management | Self + Manager + Auditor | Management input | Approve, Send Back |
+
+**Props:**
+```typescript
+interface KpiReviewPanelProps {
+  kpi: KPI;
+  submission: ReviewSubmission | null;
+  allKpis: KPI[];           // For history lookup
+  allSubmissions: ReviewSubmission[];
+  viewLevel: 'employee' | 'manager' | 'auditor' | 'management';
+  selectedPeriod: string;
+  selectedYear: number;
+  onOpenQueryHistory?: () => void;
+  onOpenFullHistory?: () => void;
+}
+```
+
+**Usage:**
+```tsx
+<KpiReviewPanel
+  kpi={selectedKpi}
+  submission={submissionMap.get(selectedKpi.id)}
+  allKpis={allKpis}
+  allSubmissions={submissions}
+  viewLevel="manager"
+  selectedPeriod={selectedPeriod}
+  selectedYear={selectedYear}
+  onOpenFullHistory={() => setTrackerModalOpen(true)}
+/>
+```
+
 #### `EmployeeScorecard`
 Comprehensive employee performance view with:
+- **KpiReviewPanel** for unified KPI details
 - Score summary
 - Category breakdown
 - KPI table using KpiDetailsTable component
