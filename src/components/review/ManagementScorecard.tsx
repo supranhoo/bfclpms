@@ -11,18 +11,18 @@ import { useKpisByEmployee, useReviewSubmissions, useKpiQueries, RatingLevel, KP
 import { useSubPeriodSubmissions, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { ReviewLevelOverrideEditor, calculateOverriddenScore } from '@/components/review/ReviewLevelOverrideEditor';
-import { PreviousLevelRemarks } from '@/components/review/PreviousLevelRemarks';
 import { useReviewerSubPeriodOverride } from '@/hooks/useReviewerSubPeriodOverride';
 import { QualitativeOption } from '@/lib/qualitativeUom';
 import { useAuth } from '@/contexts/AuthContext';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
 import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
-import { ReviewTrailCard } from '@/components/review/ReviewTrailCard';
-import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
+import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
 import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
+import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
+import { QueryHistoryDialog } from '@/components/review/QueryHistoryDialog';
 import { KpiDetailsTable } from '@/components/review/KpiDetailsTable';
 import { scoreToRating } from '@/components/review/ScoreSelector';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -80,6 +80,8 @@ export function ManagementScorecard({
   const [reviewSheetOpen, setReviewSheetOpen] = useState(false);
   const [sendBackDialogOpen, setSendBackDialogOpen] = useState(false);
   const [logicModalOpen, setLogicModalOpen] = useState(false);
+  const [trackerModalOpen, setTrackerModalOpen] = useState(false);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   const [expandedDailyKpis, setExpandedDailyKpis] = useState<Set<string>>(new Set());
   
@@ -513,7 +515,7 @@ export function ManagementScorecard({
 
       {/* Management Review Sheet */}
       <Sheet open={reviewSheetOpen} onOpenChange={setReviewSheetOpen}>
-        <SheetContent size="lg" className="flex flex-col h-full overflow-y-auto">
+        <SheetContent className="flex flex-col h-full w-[85vw] max-w-[1200px] sm:max-w-[1200px] overflow-y-auto">
           <SheetHeader className="pb-4 border-b">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
@@ -527,40 +529,19 @@ export function ManagementScorecard({
           </SheetHeader>
 
           <div className="flex-1 space-y-4 py-4">
-            {/* KPI Info */}
+            {/* KPI Review Panel - Unified Header, Metrics, Journey & History */}
             {selectedKpi && (
-              <Card>
-                <CardContent className="pt-4 space-y-2">
-                  <p className="font-medium text-primary">{selectedKpi.kra_name}</p>
-                  <p className="text-sm text-muted-foreground">{selectedKpi.kpi_name}</p>
-                  <div className="grid grid-cols-3 gap-2 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Target:</span>
-                      <p className="font-medium">{selectedKpi.target_value} {selectedKpi.uom}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Criteria:</span>
-                      <p className="font-medium">{selectedKpi.criteria || 'Higher is Better'}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Weightage:</span>
-                      <p className="font-medium">{selectedKpi.weightage}%</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Rating Scale */}
-            <RatingScaleDisplay kpi={selectedKpi} compact />
-
-            {/* Previous Level Remarks - Self, Manager & Auditor */}
-            {selectedKpi && submissionMap.get(selectedKpi.id) && (
-              <PreviousLevelRemarks
-                submission={submissionMap.get(selectedKpi.id)!}
-                showSelf={true}
-                showManager={true}
-                showAuditor={true}
+              <KpiReviewPanel
+                kpi={selectedKpi}
+                submission={submissionMap.get(selectedKpi.id) || null}
+                allKpis={allKpis || []}
+                allSubmissions={submissions || []}
+                queries={queryMap.get(selectedKpi.id) || []}
+                viewLevel="management"
+                selectedPeriod={selectedPeriod}
+                selectedYear={selectedYear}
+                onOpenQueryHistory={() => setHistoryDialogOpen(true)}
+                onOpenFullHistory={() => setTrackerModalOpen(true)}
               />
             )}
             
@@ -759,6 +740,23 @@ export function ManagementScorecard({
         isOpen={logicModalOpen}
         onClose={() => setLogicModalOpen(false)}
         kpi={selectedKpi}
+      />
+
+      {/* KPI Tracker Modal */}
+      <KpiTrackerModal
+        isOpen={trackerModalOpen}
+        onClose={() => setTrackerModalOpen(false)}
+        kpi={selectedKpi}
+        allKpis={allKpis || []}
+        submissions={submissions || []}
+      />
+
+      {/* Query History Dialog */}
+      <QueryHistoryDialog
+        kpiId={selectedKpi?.id || ''}
+        kpiName={selectedKpi?.kpi_name || ''}
+        open={historyDialogOpen}
+        onOpenChange={setHistoryDialogOpen}
       />
     </div>
   );
