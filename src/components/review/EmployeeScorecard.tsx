@@ -18,13 +18,13 @@ import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
 import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
-import { ReviewTrailCard } from '@/components/review/ReviewTrailCard';
-import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
+import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
 import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { QueryHistoryDialog } from '@/components/review/QueryHistoryDialog';
+import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
 import { KpiDetailsTable } from '@/components/review/KpiDetailsTable';
 import { scoreToRating } from '@/components/review/ScoreSelector';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -86,6 +86,7 @@ export function EmployeeScorecard({
   const [sendBackDialogOpen, setSendBackDialogOpen] = useState(false);
   const [logicModalOpen, setLogicModalOpen] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [trackerModalOpen, setTrackerModalOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   const [expandedDailyKpis, setExpandedDailyKpis] = useState<Set<string>>(new Set());
   
@@ -484,7 +485,7 @@ export function EmployeeScorecard({
 
       {/* Review Sheet */}
       <Sheet open={reviewSheetOpen} onOpenChange={setReviewSheetOpen}>
-        <SheetContent className="sm:max-w-xl overflow-y-auto">
+        <SheetContent className="flex flex-col h-full w-[85vw] max-w-[1200px] sm:max-w-[1200px] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>
               {selectedKpi?.status === 'self_review' ? 'Manager Review' : 'View KPI Details'}
@@ -498,24 +499,19 @@ export function EmployeeScorecard({
 
           {selectedKpi && (
             <div className="space-y-6 py-6">
-              {/* KPI Info */}
-              <div className="p-4 bg-muted rounded-lg space-y-2">
-                <div className="flex items-center gap-2">
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: selectedKpi.kra_categories?.color || '#6B7280' }}
-                  />
-                  <span className="text-sm font-medium">{selectedKpi.kra_categories?.name}</span>
-                </div>
-                <p className="font-semibold">{selectedKpi.kra_name}</p>
-                <p className="text-sm text-muted-foreground">{selectedKpi.kpi_name}</p>
-              </div>
-
-              {/* Rating Scale */}
-              <RatingScaleDisplay kpi={selectedKpi} />
-
-              {/* Review Trail */}
-              <ReviewTrailCard submission={submissionMap.get(selectedKpi.id) || null} />
+              {/* KPI Review Panel */}
+              <KpiReviewPanel
+                kpi={selectedKpi}
+                submission={submissionMap.get(selectedKpi.id) || null}
+                allKpis={allKpis || []}
+                allSubmissions={submissions || []}
+                queries={queryMap.get(selectedKpi.id) || []}
+                viewLevel="manager"
+                selectedPeriod={selectedPeriod}
+                selectedYear={selectedYear}
+                onOpenQueryHistory={() => setHistoryDialogOpen(true)}
+                onOpenFullHistory={() => setTrackerModalOpen(true)}
+              />
               
               {/* Daily Submission Summary + Manager Override (for Daily Binary KPIs) */}
               <DailySubmissionSummaryWithOverride 
@@ -733,6 +729,15 @@ export function EmployeeScorecard({
         isOpen={logicModalOpen}
         onClose={() => setLogicModalOpen(false)}
         kpi={selectedKpi}
+      />
+
+      {/* KPI Tracker Modal */}
+      <KpiTrackerModal
+        isOpen={trackerModalOpen}
+        onClose={() => setTrackerModalOpen(false)}
+        kpi={selectedKpi}
+        allKpis={allKpis || []}
+        submissions={submissions || []}
       />
 
       {/* Query History Dialog */}
