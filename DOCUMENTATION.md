@@ -660,8 +660,21 @@ When a reviewer approves (whether agreeing or overriding), ALL daily entries get
 - View all KPIs in `manager_check` status
 - Validate manager assessments
 - Add auditor score and remarks
-- Approve → Moves to `audit` status
+- Forward to Management → Moves to `management_review` status
 - Audit logs for compliance
+
+**Send Back from Review Sheet:**
+Auditors can send a KPI back for revision directly from the review sheet footer:
+- **Send Back Button:** Orange-styled button at left side of footer opens Send Back dialog
+- **Target Options:** Manager or Employee
+- **Required Reason:** Must provide explanation for sending back
+- **Status Update:** KPI status resets to target's stage (`self_review` or `kra_set`)
+- **Audit Trail:** Action logged in `kpi_audit_logs` table
+
+Footer Layout:
+```
+[ ↩ Send Back ]  ───────────  [ Cancel ]  [ Save Draft ]  [ ✓ Forward to Management ]
+```
 
 ### 4.6 Management Review
 
@@ -673,6 +686,19 @@ When a reviewer approves (whether agreeing or overriding), ALL daily entries get
 - Add management remarks
 - Final approval → Status `approved`
 - Lock review periods
+
+**Send Back from Review Sheet:**
+Management can send a KPI back for revision directly from the review sheet footer without closing the dialog:
+- **Send Back Button:** Orange-styled button at left side of footer opens Send Back dialog
+- **Target Options:** Auditor, Manager, or Employee
+- **Required Reason:** Must provide explanation for sending back
+- **Status Update:** KPI status resets to target's stage (`audit`, `manager_check`, or `kra_set`)
+- **Audit Trail:** Action logged in `kpi_audit_logs` table
+
+Footer Layout:
+```
+[ ↩ Send Back ]  ───────────  [ Cancel ]  [ Save Draft ]  [ ✓ Approve ]
+```
 
 ### 4.7 Self Review Workflow
 
