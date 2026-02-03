@@ -1340,8 +1340,17 @@ src/
 │   ├── useTemplateBundles.ts  # Bundle management
 │   ├── useWorkflowConfig.ts   # Workflow settings
 │   ├── useKpiFilters.ts       # Filter state management
-│   ├── useNotifications.ts    # Notification handling
+│   ├── useNotifications.ts    # Legacy notification handling
+│   ├── usePaginatedNotifications.ts # Paginated notifications with filters
 │   └── use-toast.ts           # Toast notifications
+│
+├── components/inbox/           # Enterprise Inbox Components
+│   ├── InboxFilters.tsx       # Search, status, date filters with debounce
+│   ├── InboxTable.tsx         # Compact table view with date grouping
+│   ├── InboxRowItem.tsx       # Individual row with unread indicator
+│   ├── InboxDetailSheet.tsx   # Unified detail view for notifications/queries
+│   ├── InboxStatsCards.tsx    # Summary stat cards
+│   └── index.ts               # Barrel exports
 │
 ├── contexts/
 │   └── AuthContext.tsx        # Authentication state
