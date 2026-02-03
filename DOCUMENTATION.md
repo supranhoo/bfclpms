@@ -1487,6 +1487,17 @@ Unified, reusable KPI details table component used across all review views (My K
 - **Self Column**: Displays the employee's calculated **score** (1-5) from `review_submissions.self_score`, NOT the raw `achieved_value`
 - **Consistent Columns**: Same structure across all views for cross-stage visibility
 - **View-Type Actions**: Action buttons adapt based on `viewType` prop ('my-kpis', 'team-review', 'audit', 'management')
+- **Universal View Access**: All review levels (Manager, Auditor, Management) can access the "View KPI Details" button for non-reviewable KPIs, providing full transparency into the review journey regardless of KPI status
+
+**Action Button Logic:**
+| Status | My KPIs | Team Review | Audit | Management |
+|--------|---------|-------------|-------|------------|
+| `kra_set` | Review | View | View | View |
+| `self_review` | View | Review | View | View |
+| `manager_check` | View | View | Review | View |
+| `audit` | View | View | Continue | View |
+| `management_review` | View | View | View | Review |
+| `approved` | View | View | Forwarded | Completed |
 
 **Props:**
 ```typescript
@@ -1498,7 +1509,7 @@ interface KpiDetailsTableProps {
   selectedPeriod: string;
   selectedYear: number;
   onReview?: (kpi: KPI) => void;
-  onView?: (kpi: KPI) => void;
+  onView?: (kpi: KPI) => void;  // Always pass to enable View button for all non-reviewable KPIs
   onSendBack?: (kpi: KPI) => void;
   onShowLogic?: (kpi: KPI) => void;
   expandedKpis?: Set<string>;
