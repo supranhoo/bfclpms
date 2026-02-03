@@ -1,111 +1,119 @@
 
-# Plan: Integrate KpiDetailsTable into My KPIs Page
+# Plan: Add Send Back Button to Management Review Sheet
 
-## Overview
+## The Problem
 
-Replace the inline KPI table in `MyKpis.tsx` (lines 734-958) with the unified `KpiDetailsTable` component to ensure consistency with Team Review, Audit, and Management views.
+The Management Assessment review sheet (shown when reviewing a KPI) currently only has three buttons:
+- **Cancel** - Close without saving
+- **Save Draft** - Save progress without approving
+- **Approve** - Finalize and approve the KPI
 
----
+The **Send Back** option exists in the system but is only accessible via a separate action (table row), not from within the review dialog. This means Management must close the review sheet, find the Send Back action in the table, and then proceed - an inefficient workflow.
 
-## Current State
+## The Solution
 
-The `MyKpis.tsx` page has a custom inline table with the following columns:
-
-| Current Column | Issue |
-|----------------|-------|
-| Category | Separate column |
-| KRA | Separate column |
-| KPI | Separate column |
-| Target | OK |
-| Achieved | Shows raw achieved_value, not score |
-| Rating | Shows score with description badge (e.g., "4 - Exceeds Expectations") |
-| Status | OK |
-| Actions | Different button structure |
-
-**Lines to replace:** ~734-958 (inline Table component)
+Add a **Send Back** button directly in the Management Assessment review sheet footer, allowing reviewers to send back a KPI without closing the dialog.
 
 ---
 
-## Target State
+## Visual Change
 
-Use `<KpiDetailsTable viewType="my-kpis" />` with unified columns:
-
-| New Column | Description |
-|------------|-------------|
-| Category | Category with org-level indicator |
-| KRA / KPI | Combined with Daily badge |
-| Target | Target value with UOM |
-| Self | Employee's score (1-5), single digit |
-| Manager | Manager score (if visible) |
-| Auditor | Auditor score (if visible) |
-| Mgmt | Management score (if visible) |
-| Status | Status badge with query count |
-| Actions | Review/View buttons |
-
----
-
-## Implementation Details
-
-### Step 1: Add Import
-
-```typescript
-import { KpiDetailsTable } from '@/components/review/KpiDetailsTable';
+**Current Footer:**
+```
+[ Cancel ]  [ Save Draft ]  [ ✓ Approve ]
 ```
 
-### Step 2: Add Required State and Handlers
+**New Footer:**
+```
+[ ↩ Send Back ]  [ Cancel ]  [ Save Draft ]  [ ✓ Approve ]
+```
 
-The `MyKpis.tsx` page needs to provide:
+The Send Back button will open the existing Send Back dialog, allowing the reviewer to select a target (Auditor, Manager, or Employee) and provide a reason.
 
-1. **`expandedKpis` state** - For daily KPI expand/collapse:
+---
+
+## Technical Implementation
+
+### File: `src/components/review/ManagementScorecard.tsx`
+
+#### Change 1: Add Send Back handler function
+
+Add a function to trigger the Send Back dialog from within the review sheet:
+
 ```typescript
-const [expandedKpis, setExpandedKpis] = useState<Set<string>>(new Set());
-const toggleExpand = (kpiId: string) => {
-  setExpandedKpis(prev => {
-    const next = new Set(prev);
-    if (next.has(kpiId)) next.delete(kpiId);
-    else next.add(kpiId);
-    return next;
-  });
+const handleSendBackFromSheet = () => {
+  // Close the review sheet first
+  setReviewSheetOpen(false);
+  // Then open the Send Back dialog
+  if (selectedKpi) {
+    setSendBackReason('');
+    setSendBackTarget('auditor');
+    setSendBackDialogOpen(true);
+  }
 };
 ```
 
-2. **`isKpiFrequencyLocked` function** - Already exists in the file
+#### Change 2: Update SheetFooter
 
-3. **`openTimeline` as `onShowLogic`** - Reuse existing timeline handler
-
-### Step 3: Replace Inline Table
-
-Replace lines 734-958 with:
+Modify the footer section (lines 660-679) to include the Send Back button:
 
 ```tsx
-<div className="rounded-lg border overflow-hidden">
-  <KpiDetailsTable
-    kpis={sortedKpis}
-    submissionMap={submissionMap}
-    viewType="my-kpis"
-    selectedPeriod={selectedPeriod}
-    selectedYear={selectedYear}
-    onReview={openReviewDialog}
-    onView={openReviewDialog}
-    onShowLogic={openTimeline}
-    expandedKpis={expandedKpis}
-    onToggleExpand={toggleExpand}
-    getOrgKpiValue={getOrgKpiValue}
-    isKpiLocked={isKpiFrequencyLocked}
-  />
-</div>
+<SheetFooter className="pt-4 border-t gap-2">
+  {/* Send Back button - leftmost */}
+  <Button
+    variant="outline"
+    onClick={handleSendBackFromSheet}
+    className="text-orange-600 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950"
+  >
+    <Undo2 className="h-4 w-4 mr-2" />
+    Send Back
+  </Button>
+  
+  <div className="flex-1" /> {/* Spacer to push other buttons right */}
+  
+  <Button variant="outline" onClick={() => setReviewSheetOpen(false)}>
+    Cancel
+  </Button>
+  <Button
+    variant="secondary"
+    onClick={() => handleSubmitReview(false)}
+    disabled={managementScore === null || submitManagementReview.isPending}
+  >
+    Save Draft
+  </Button>
+  <Button
+    onClick={() => handleSubmitReview(true)}
+    disabled={managementScore === null || submitManagementReview.isPending}
+    className="bg-emerald-600 hover:bg-emerald-700"
+  >
+    <Check className="h-4 w-4 mr-2" />
+    Approve
+  </Button>
+</SheetFooter>
 ```
 
 ---
 
-## What Changes for Users
+## Consistency Check
 
-| Before | After |
-|--------|-------|
-| Separate KRA and KPI columns | Combined "KRA / KPI" column |
-| "Achieved" shows raw value (95) | "Self" shows score (4) |
-| "Rating" shows "4 - Exceeds Expectations" | Score shown as single digit (4) |
-| Fixed columns | Dynamic columns based on status |
+Apply the same pattern to **AuditScorecard** component so Auditors also have Send Back option in their review sheet.
+
+### File: `src/components/review/AuditScorecard.tsx`
+
+Same changes: add handler function and update SheetFooter with Send Back button (targeting Manager or Employee).
+
+---
+
+## Unit Test Requirements
+
+### Test File: `src/components/review/ManagementScorecard.test.tsx`
+
+Tests to write:
+1. **Send Back button renders** - Verify button appears in SheetFooter
+2. **Click triggers dialog** - Verify clicking Send Back opens the SendBackDialog
+3. **Dialog has correct targets** - Verify Auditor, Manager, and Employee options are present
+4. **Reason required** - Verify Send Back button is disabled without reason text
+5. **Successful send back** - Mock supabase and verify correct mutations are called
 
 ---
 
@@ -113,41 +121,26 @@ Replace lines 734-958 with:
 
 | File | Changes |
 |------|---------|
-| `src/pages/MyKpis.tsx` | Import component, add state, replace table |
-| `DOCUMENTATION.md` | Update to reflect My KPIs uses unified table |
-
----
-
-## Cleanup
-
-Remove unused imports from MyKpis.tsx after refactoring:
-- `Table, TableBody, TableCell, TableHead, TableHeader, TableRow` (if no longer needed elsewhere in file)
-- `Clock` icon (used in old actions column)
+| `src/components/review/ManagementScorecard.tsx` | Add Send Back button to SheetFooter |
+| `src/components/review/AuditScorecard.tsx` | Add Send Back button to SheetFooter |
+| `DOCUMENTATION.md` | Update to document Send Back from review sheet |
+| `src/components/review/ManagementScorecard.test.tsx` | Create unit tests (new file) |
+| `src/components/review/AuditScorecard.test.tsx` | Create unit tests (new file) |
 
 ---
 
 ## Testing Checklist
 
-1. **My KPIs Table Display**
-   - [ ] Self column shows score (1-5), not achieved value
-   - [ ] Score displayed as single digit without /5
-   - [ ] No rating description badges shown
-   - [ ] Dynamic columns appear based on KPI status
+1. **Management Review Sheet**
+   - [ ] Send Back button visible in footer
+   - [ ] Clicking Send Back opens the dialog
+   - [ ] Can select Auditor, Manager, or Employee
+   - [ ] Reason field is required
+   - [ ] Successful send back updates KPI status
+   - [ ] Audit log entry created
 
-2. **Actions Work Correctly**
-   - [ ] "Review" button opens review dialog for kra_set status
-   - [ ] "View" button opens dialog for submitted KPIs
-   - [ ] Timeline button (KPI click) opens timeline modal
-
-3. **Daily KPIs**
-   - [ ] Daily badge shown
-   - [ ] Expand/collapse button works
-   - [ ] Inline daily summary row displays
-
-4. **Org-Level KPIs**
-   - [ ] Scope icons display correctly
-   - [ ] Tooltip shows scope info
-
-5. **Locked KPIs**
-   - [ ] Locked badge displays for frequency-locked KPIs
-   - [ ] Row has reduced opacity
+2. **Audit Review Sheet**
+   - [ ] Send Back button visible in footer
+   - [ ] Can select Manager or Employee
+   - [ ] Reason field is required
+   - [ ] Successful send back works correctly
