@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-01-31  
-> **Version:** 1.3.0  
+> **Last Updated:** 2026-02-03  
+> **Version:** 1.4.0  
 > **Maintainer:** Lovable AI
 
 ---
@@ -208,12 +208,13 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | `pip_milestones` | PIP checkpoints | `pip_id`, `description`, `milestone_date`, `status`, `expected_outcome` |
 | `pip_audit_logs` | PIP change history | `pip_id`, `action`, `performed_by`, `old_value`, `new_value` |
 
-#### Training & Queries
+#### Training, Queries & Observations
 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
 | `training_needs` | Identified training gaps | `employee_id`, `kpi_id`, `gap_type`, `priority`, `status` |
 | `kpi_queries` | Review questions/clarifications | `kpi_id`, `raised_by`, `raised_to`, `reason`, `evidence_url`, `resolution_notes`, `resolution_evidence_url`, `status` |
+| `kpi_observations` | Reviewer tags that can impact scores | `kpi_id`, `created_by`, `observer_role`, `observation_type`, `score_impact`, `title`, `is_applied` |
 | `notifications` | User notifications | `user_id`, `type`, `title`, `message`, `is_read` |
 
 #### System & Audit
@@ -289,6 +290,7 @@ has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
 | `kpi_status` | open, submitted, approved_by_manager, locked |
 | `rating_level` | red, yellow, green, blue |
 | `query_status` | open, resolved |
+| `observation_type` | positive, concern, neutral |
 | `pip_status` | draft, pending_hr_approval, active, extended, completed, cancelled |
 | `pip_outcome` | successful, partially_successful, unsuccessful |
 | `tni_gap_type` | skill, knowledge, behavior |

@@ -372,6 +372,79 @@ export type Database = {
           },
         ]
       }
+      kpi_observations: {
+        Row: {
+          created_at: string | null
+          created_by: string
+          description: string | null
+          evidence_url: string | null
+          id: string
+          is_applied: boolean
+          kpi_id: string
+          observation_type: Database["public"]["Enums"]["observation_type"]
+          observer_role: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          score_impact: number
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by: string
+          description?: string | null
+          evidence_url?: string | null
+          id?: string
+          is_applied?: boolean
+          kpi_id: string
+          observation_type?: Database["public"]["Enums"]["observation_type"]
+          observer_role: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          score_impact?: number
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string
+          description?: string | null
+          evidence_url?: string | null
+          id?: string
+          is_applied?: boolean
+          kpi_id?: string
+          observation_type?: Database["public"]["Enums"]["observation_type"]
+          observer_role?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          score_impact?: number
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_observations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_observations_kpi_id_fkey"
+            columns: ["kpi_id"]
+            isOneToOne: false
+            referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_observations_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpi_queries: {
         Row: {
           created_at: string
@@ -1852,6 +1925,7 @@ export type Database = {
     Enums: {
       app_role: "admin" | "manager" | "employee" | "auditor" | "management"
       kpi_status: "open" | "submitted" | "approved_by_manager" | "locked"
+      observation_type: "positive" | "concern" | "neutral"
       pip_milestone_status: "pending" | "met" | "partially_met" | "not_met"
       pip_outcome: "improved" | "not_improved" | "escalated"
       pip_status:
@@ -2007,6 +2081,7 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "manager", "employee", "auditor", "management"],
       kpi_status: ["open", "submitted", "approved_by_manager", "locked"],
+      observation_type: ["positive", "concern", "neutral"],
       pip_milestone_status: ["pending", "met", "partially_met", "not_met"],
       pip_outcome: ["improved", "not_improved", "escalated"],
       pip_status: [
