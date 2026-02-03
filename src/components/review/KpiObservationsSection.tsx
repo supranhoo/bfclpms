@@ -38,6 +38,7 @@ interface KpiObservationsSectionProps {
   kpiStatus: string;
   viewLevel: 'employee' | 'manager' | 'auditor' | 'management';
   baseScore?: number | null;
+  isOwnKpi?: boolean;
 }
 
 // Map viewLevel to observer role
@@ -59,17 +60,9 @@ function canAddObservation(viewLevel: string, kpiStatus: string, isOwnKpi: boole
   // Self can always add for their own KPIs
   if (isOwnKpi) return true;
   
-  // Reviewers based on stage
-  switch (viewLevel) {
-    case 'manager':
-      return ['self_review', 'manager_check', 'audit', 'management_review'].includes(kpiStatus);
-    case 'auditor':
-      return ['manager_check', 'audit', 'management_review'].includes(kpiStatus);
-    case 'management':
-      return ['audit', 'management_review'].includes(kpiStatus);
-    default:
-      return false;
-  }
+  // All reviewers can add observations at any pre-approved stage
+  // This allows tagging findings throughout the review month
+  return ['manager', 'auditor', 'management'].includes(viewLevel);
 }
 
 // Check if user can apply impacts
@@ -87,6 +80,7 @@ export function KpiObservationsSection({
   kpiStatus,
   viewLevel,
   baseScore,
+  isOwnKpi = false,
 }: KpiObservationsSectionProps) {
   const { user } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -99,7 +93,6 @@ export function KpiObservationsSection({
   const deleteMutation = useDeleteObservation();
   const applyMutation = useApplyObservationImpact();
 
-  const isOwnKpi = false; // This would need to be passed from parent based on kpi.employee_id === user?.id
   const isReadOnly = kpiStatus === 'approved';
   const observerRole = getObserverRole(viewLevel, isOwnKpi);
   const showAddButton = canAddObservation(viewLevel, kpiStatus, isOwnKpi);

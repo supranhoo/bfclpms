@@ -18,6 +18,7 @@ interface KpiReviewPanelProps {
   // View context
   viewLevel: ViewLevel;
   isReadOnly?: boolean;
+  currentUserId?: string;
 
   // Period info
   selectedPeriod: string;
@@ -35,11 +36,13 @@ export function KpiReviewPanel({
   allSubmissions,
   queries = [],
   viewLevel,
+  currentUserId,
   selectedPeriod,
   selectedYear,
   onOpenQueryHistory,
   onOpenFullHistory,
 }: KpiReviewPanelProps) {
+  const isOwnKpi = currentUserId ? kpi.employee_id === currentUserId : false;
   return (
     <div className="space-y-4">
       {/* KPI Header - Full Width */}
@@ -78,6 +81,7 @@ export function KpiReviewPanel({
             kpiStatus={kpi.status || 'kra_set'}
             viewLevel={viewLevel}
             baseScore={submission?.final_score ?? submission?.self_score ?? null}
+            isOwnKpi={isOwnKpi}
           />
         </div>
       </div>
