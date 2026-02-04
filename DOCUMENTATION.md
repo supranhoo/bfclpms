@@ -1057,6 +1057,12 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - **Mandatory reason field** for all admin entries to ensure audit compliance
   - All admin actions are logged in `kpi_audit_logs` with `on_behalf_of` and `on_behalf_role` tracking
   - Affected employees receive notifications about admin data changes
+- **Admin Visibility in Audit Trails:**
+  - **KPI Timeline:** Admin actions display with rose/pink color theme and show "by Admin Name (on behalf of Employee Name)"
+  - **Audit Logs Page:** Includes dedicated "On Behalf Of" column showing employee name and role level
+  - **Audit Trail Report:** Exports include "On Behalf Of", "On Behalf Role", and "Admin Reason" columns
+  - **Admin Actions Stats Card:** New stat card showing count of admin/on-behalf actions for the period
+  - Admin action types include: `ADMIN_DATA_ENTRY_SELF`, `ADMIN_DATA_ENTRY_MANAGER`, `ADMIN_DATA_ENTRY_AUDITOR`, `ADMIN_DATA_ENTRY_MANAGEMENT`, `ADMIN_DAILY_ENTRY_OVERRIDE`, `ADMIN_STATUS_OVERRIDE`, `ADMIN_OVERRIDE`
 - Audit logging for all changes
 
 #### 4.9.7 Review Periods (`/admin/review-periods`)
