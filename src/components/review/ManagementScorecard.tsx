@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,13 +31,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
-  Info, Lock, MessageSquare, Undo2, Check, Briefcase, User, Shield, Calendar, ChevronDown, ChevronUp, Edit2
+  Info, Lock, MessageSquare, Undo2, Check, Briefcase, User, Shield, Calendar, ChevronDown, ChevronUp, Edit2, Send
 } from 'lucide-react';
 import { 
   statusColors,
   statusLabels,
   ratingOptions
 } from '@/lib/reviewConstants';
+import { MobileKpiCard } from '@/components/review/MobileKpiCard';
 
 interface ManagementScorecardProps {
   employee: {
@@ -61,6 +63,7 @@ export function ManagementScorecard({
   onBack,
   autoOpenKpiId 
 }: ManagementScorecardProps) {
+  const isMobile = useIsMobile();
   const { user } = useAuth();
   const { data: allKpis, isLoading } = useKpisByEmployee(employee.id);
   const queryClient = useQueryClient();
@@ -382,38 +385,38 @@ export function ManagementScorecard({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header with Back Button */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={onBack}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div className="flex items-center gap-4 flex-1">
-          <Avatar className="h-12 w-12">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <Avatar className="h-10 w-10 sm:h-12 sm:w-12 shrink-0">
             <AvatarImage src={employee.avatar_url || undefined} />
             <AvatarFallback>{getInitials(employee.full_name)}</AvatarFallback>
           </Avatar>
-          <div>
-            <h1 className="text-2xl font-bold">{employee.full_name || employee.email}</h1>
-            <p className="text-muted-foreground">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-lg sm:text-2xl font-bold truncate">{employee.full_name || employee.email}</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground truncate">
               {employee.designation || 'Employee'} {employee.employee_code ? `• ${employee.employee_code}` : ''}
             </p>
           </div>
         </div>
-        <Badge variant="outline" className="text-base px-4 py-2">
+        <Badge variant="outline" className="text-xs sm:text-base px-2 sm:px-4 py-1 sm:py-2 self-start sm:self-auto shrink-0">
           {selectedPeriod} {selectedYear}
         </Badge>
       </div>
 
       {/* Score Overview */}
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-3">
         {/* Overall Score */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Overall Score</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Overall Score</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[180px]">
+            <div className="h-[140px] sm:h-[180px]">
               <OverallScoreChart percentage={scoreData.overallScore} rating={scoreData.rating} />
             </div>
           </CardContent>
@@ -422,10 +425,10 @@ export function ManagementScorecard({
         {/* Category Breakdown */}
         <Card className="md:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Category Scores</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Category Scores</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[180px]">
+            <div className="h-[140px] sm:h-[180px]">
               <CategoryScoreChart data={scoreData.categoryScores} />
             </div>
           </CardContent>
@@ -433,31 +436,31 @@ export function ManagementScorecard({
       </div>
 
       {/* Stats Row */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-4">
         <Card className="border-l-4 border-l-primary">
-          <CardContent className="pt-4 pb-4">
+          <CardContent className="pt-3 pb-3 sm:pt-4 sm:pb-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Total KPIs</p>
-                <p className="text-2xl font-bold">{totalKpis}</p>
+                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground">Total KPIs</p>
+                <p className="text-lg sm:text-2xl font-bold">{totalKpis}</p>
               </div>
-              <Target className="h-5 w-5 text-primary" />
+              <Target className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
             </div>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-emerald-500">
-          <CardContent className="pt-4 pb-4">
+          <CardContent className="pt-3 pb-3 sm:pt-4 sm:pb-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Pending Review</p>
-                <p className="text-2xl font-bold text-emerald-600">{pendingReviewCount}</p>
+                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground">Pending</p>
+                <p className="text-lg sm:text-2xl font-bold text-emerald-600">{pendingReviewCount}</p>
               </div>
-              <Clock className="h-5 w-5 text-emerald-500" />
+              <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500" />
             </div>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-green-500">
-          <CardContent className="pt-4 pb-4">
+          <CardContent className="pt-3 pb-3 sm:pt-4 sm:pb-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Approved</p>
