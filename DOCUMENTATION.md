@@ -779,6 +779,26 @@ After an employee submits a KPI (status changes from `kra_set` to `self_review` 
 - Secondary sort applies within same values (e.g., alphabetical category within same weightage)
 - Sorting available on: Employee Dashboard, My KPIs, Team Review Scorecard
 
+**Employee Filters (Team Review, Audit Panel, Management Review):**
+
+All three review pages share a unified `EmployeeFilters` component with advanced filtering capabilities:
+
+| Filter | Description |
+|--------|-------------|
+| **Search** | Free-text search by name, email, or employee code |
+| **Department** | Filter by organizational department |
+| **Designation** | Filter by job title/designation |
+| **PMS Grade** | Filter by performance grade band |
+| **Reporting Manager** | Filter by direct supervisor |
+| **Status** | Filter by KPI workflow status (varies per page) |
+
+**Implementation:**
+- `useEmployeeFilterOptions` hook fetches distinct filter values from database
+- `EmployeeFilters` reusable component renders the filter bar
+- Active filters shown as removable badges
+- "Clear All" button resets all filters at once
+- Filters use AND logic (all conditions must match)
+
 ### 4.8 Query Inbox
 
 **Route:** `/queries`
