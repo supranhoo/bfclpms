@@ -233,9 +233,16 @@ export function KpiDetailsTable({
             )}
           </>
         ) : isNaKpi ? (
-          <Badge variant="outline" className="bg-muted text-muted-foreground">
-            Not Applicable
-          </Badge>
+          <div className="flex items-center gap-1">
+            <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-300">
+              N/A
+            </Badge>
+            {onView && (
+              <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View N/A Details">
+                <Eye className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         ) : onView ? (
           <Button size="sm" variant="outline" onClick={() => onView(kpi)}>
             <Eye className="h-4 w-4 mr-1" />
