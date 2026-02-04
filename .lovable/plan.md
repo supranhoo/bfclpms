@@ -1,324 +1,160 @@
 
-
-# Plan: Enhance Org KPI Data Entry Page with Filters and Updated Table Structure
+# Plan: Add "Assign Owner" Button to Org KPI Data Entry
 
 ## Overview
 
-This plan updates the Organization KPI Data Entry page with:
-1. Enhanced filter capabilities matching other review pages
-2. Updated table columns focusing on employee information and remarks
-3. Supporting file upload capability
+The data owner assignment functionality is fully implemented but missing a UI trigger. This plan adds an "Assign Owner" button to the Org KPI Data Entry table so admins can assign data owners to specific org-level KPIs.
 
 ---
 
-## Part 1: Database Schema Change
+## Current State
 
-### Add `evidence_url` Column to org_kpi_values
-
-The `org_kpi_values` table currently lacks a column for file attachments. Need to add:
-
-```sql
-ALTER TABLE public.org_kpi_values
-  ADD COLUMN evidence_url TEXT;
-```
-
----
-
-## Part 2: Enhanced Filters
-
-### Current Filters:
-- Review Period/Year
-- Category
-
-### New Filters to Add:
-| Filter | Source | Purpose |
-|--------|--------|---------|
-| Search | Text input | Search by Employee name, code, KPI name |
-| Department | `useEmployeeFilterOptions` | Filter by department |
-| Designation | `useEmployeeFilterOptions` | Filter by job title |
-| KRA Name | Derived from org KPIs | Filter by specific KRA |
-
-### Implementation Approach:
-
-1. Import `useEmployeeFilterOptions` hook
-2. Add state variables for each filter
-3. Update `displayRows` memo to apply filters
-4. Render filter controls in the Filters card
-
-```typescript
-// New state variables
-const [searchQuery, setSearchQuery] = useState('');
-const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
-const [selectedDesignation, setSelectedDesignation] = useState<string | null>(null);
-const [selectedKraName, setSelectedKraName] = useState<string | null>(null);
-
-// Use filter options hook
-const { departments: deptList, designations } = useEmployeeFilterOptions();
-```
-
-### Filter Logic:
-```typescript
-const filteredDisplayRows = useMemo(() => {
-  return displayRows.filter(row => {
-    // Search filter - match employee name, code, or KPI name
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      const empName = row.employeeName?.toLowerCase() || '';
-      const empCode = row.employeeCode?.toLowerCase() || '';
-      const kpiName = row.kpi.kpi_name.toLowerCase();
-      const kraName = row.kpi.kra_name.toLowerCase();
-      if (!empName.includes(query) && !empCode.includes(query) && 
-          !kpiName.includes(query) && !kraName.includes(query)) {
-        return false;
-      }
-    }
-    
-    // Department filter
-    if (selectedDepartmentId && row.departmentId !== selectedDepartmentId) {
-      return false;
-    }
-    
-    // Designation filter
-    if (selectedDesignation && row.designation !== selectedDesignation) {
-      return false;
-    }
-    
-    // KRA filter
-    if (selectedKraName && row.kpi.kra_name !== selectedKraName) {
-      return false;
-    }
-    
-    return true;
-  });
-}, [displayRows, searchQuery, selectedDepartmentId, selectedDesignation, selectedKraName]);
-```
+| Component | Status |
+|-----------|--------|
+| `org_kpi_data_owners` table | Implemented |
+| `useOrgKpiDataOwner` hook | Implemented |
+| `OrgKpiOwnerDialog` component | Implemented |
+| Dialog state in OrgKpiDataEntry | Implemented (lines 62-63) |
+| Dialog rendering | Implemented (lines 712-720) |
+| **Trigger button in table** | **MISSING** |
 
 ---
 
-## Part 3: Updated Table Structure
+## Implementation
 
-### Column Changes
+### Add "Actions" Column with Assign Owner Button
 
-| Remove | Add |
-|--------|-----|
-| Scope | Employee Name (Code) |
-| Target | Department |
-| Data Source | Designation |
-| | Remark |
-| | Supporting File |
+Add a new column to the table with an action button for each unique KPI (not per-row, since ownership is at the KPI level, not the scoped row level).
 
-### New Table Header:
-```tsx
-<TableHeader>
-  <TableRow className="bg-muted/50">
-    <TableHead>Category</TableHead>
-    <TableHead>KRA</TableHead>
-    <TableHead>KPI</TableHead>
-    <TableHead>Employee Name (Code)</TableHead>
-    <TableHead>Department</TableHead>
-    <TableHead>Designation</TableHead>
-    <TableHead className="text-center w-36">Achieved Value</TableHead>
-    <TableHead className="w-48">Remark</TableHead>
-    <TableHead className="w-36">Supporting File</TableHead>
-  </TableRow>
-</TableHeader>
-```
+**File**: `src/pages/admin/OrgKpiDataEntry.tsx`
 
-### Enhanced Display Rows:
+### Changes Required
 
-To show Employee Name, Code, Department, and Designation, the `displayRows` needs to be enhanced to include employee profile data:
+#### 1. Import UserPlus Icon
+The icon is not currently imported. Add it to the lucide-react imports:
 
 ```typescript
-const displayRows = useMemo(() => {
-  const rows: Array<{
-    kpi: typeof filteredKpis[0];
-    departmentId: string | null;
-    departmentName: string | null;
-    employeeId: string | null;
-    employeeName: string | null;
-    employeeCode: string | null;
-    designation: string | null;
-    scope: OrgLevelScope;
-  }> = [];
-
-  filteredKpis.forEach(kpi => {
-    const scope = (kpi as any).org_level_scope as OrgLevelScope || 'organization';
-    
-    if (scope === 'organization') {
-      // Single row for entire org
-      rows.push({
-        kpi,
-        departmentId: null,
-        departmentName: null,
-        employeeId: null,
-        employeeName: 'All Employees',
-        employeeCode: null,
-        designation: null,
-        scope,
-      });
-    } else if (scope === 'department') {
-      // One row per department
-      departments?.forEach(dept => {
-        rows.push({
-          kpi,
-          departmentId: dept.id,
-          departmentName: dept.name,
-          employeeId: null,
-          employeeName: `All in ${dept.name}`,
-          employeeCode: null,
-          designation: null,
-          scope,
-        });
-      });
-    } else if (scope === 'employee') {
-      // One row per employee - include full profile data
-      allProfiles?.forEach(emp => {
-        const empDept = departments?.find(d => d.id === emp.department_id);
-        rows.push({
-          kpi,
-          departmentId: emp.department_id,
-          departmentName: empDept?.name || null,
-          employeeId: emp.id,
-          employeeName: emp.full_name || emp.email,
-          employeeCode: emp.employee_code || null,
-          designation: emp.designation || null,
-          scope,
-        });
-      });
-    }
-  });
-
-  return rows;
-}, [filteredKpis, departments, allProfiles]);
+import { Building2, Save, AlertTriangle, Filter, Users, User, Search, X, UserPlus } from 'lucide-react';
 ```
 
-### Remark Column:
-
-Add a new field to `EditableKpi` interface and handling:
+#### 2. Add Helper to Open Owner Dialog
 
 ```typescript
-interface EditableKpi {
-  // ... existing fields
-  remarks: string;  // New field for remark
-  evidence_url: string | null;  // New field for supporting file
-}
+const openOwnerDialog = (categoryId: string, kraName: string, kpiName: string) => {
+  setSelectedKpiForOwner({ categoryId, kraName, kpiName });
+  setOwnerDialogOpen(true);
+};
 ```
 
-Remark input in table:
-```tsx
-<TableCell>
-  <Input
-    value={display.remarks || ''}
-    onChange={(e) => handleValueChange(..., 'remarks', e.target.value, ...)}
-    placeholder="Enter remark"
-    className="h-8"
-  />
-</TableCell>
-```
+#### 3. Add Actions Column to Table Header
 
-### Supporting File Column:
-
-Create a compact file upload component for inline use:
+After the "Supporting File" column (line 625), add:
 
 ```tsx
-<TableCell>
-  <OrgKpiFileUpload
-    categoryId={kpi.category_id}
-    kraName={kpi.kra_name}
-    kpiName={kpi.kpi_name}
-    existingUrl={display.evidence_url}
-    onUploadComplete={(url) => handleValueChange(..., 'evidence_url', url, ...)}
-  />
-</TableCell>
+{isAdmin && (
+  <TableHead className="font-semibold w-20 text-center">Actions</TableHead>
+)}
+```
+
+#### 4. Add Actions Column to Table Body
+
+After the Supporting File cell (line 700), add an action button:
+
+```tsx
+{isAdmin && (
+  <TableCell className="text-center">
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => openOwnerDialog(kpi.category_id, kpi.kra_name, kpi.kpi_name)}
+      title="Assign Data Owner"
+    >
+      <UserPlus className="h-4 w-4" />
+    </Button>
+  </TableCell>
+)}
+```
+
+#### 5. Show Current Owner Badge (Optional Enhancement)
+
+Display who currently owns this KPI by using the `ownershipMap`:
+
+```tsx
+// Get ownership info for this KPI
+const ownerKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+const ownership = ownershipMap.get(ownerKey);
+const hasOwner = ownership?.owners?.length > 0;
+```
+
+Show a subtle indicator in the Actions cell:
+
+```tsx
+{isAdmin && (
+  <TableCell className="text-center">
+    <div className="flex items-center justify-center gap-1">
+      {hasOwner && (
+        <Badge variant="outline" className="text-xs">
+          {ownership.owners.length} owner{ownership.owners.length > 1 ? 's' : ''}
+        </Badge>
+      )}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => openOwnerDialog(kpi.category_id, kpi.kra_name, kpi.kpi_name)}
+        title="Assign Data Owner"
+      >
+        <UserPlus className="h-4 w-4" />
+      </Button>
+    </div>
+  </TableCell>
+)}
 ```
 
 ---
 
-## Part 4: Update Types and Hook
-
-### Update OrgKpiValue Interface:
-```typescript
-export interface OrgKpiValue {
-  // ... existing fields
-  evidence_url: string | null;  // Add this
-}
-```
-
-### Update useBulkUpsertOrgKpiValues:
-Include `evidence_url` in the upsert logic.
-
----
-
-## Part 5: Remove Global Data Source Section
-
-Since we're removing the Data Source column, also remove the "Apply Data Source to All" section from the CardContent.
-
----
-
-## File Changes Summary
+## File Changes
 
 | File | Changes |
 |------|---------|
-| **Migration** | Add `evidence_url` column to `org_kpi_values` |
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Add filters, update table columns, remove Scope/Target/Data Source |
-| `src/hooks/useOrgKpiValues.ts` | Add `evidence_url` to interface and upsert mutation |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | Add UserPlus import, helper function, Actions column header + body cell |
 
 ---
 
-## Detailed UI Changes
+## Visual Result
 
-### Before (Current Columns):
-| Category | KRA | KPI | Scope | Target | Achieved Value | Data Source |
+### Table Header (After):
+| Category | KRA | KPI | Employee Name (Code) | Department | Designation | Achieved Value | Remark | Supporting File | Actions |
 
-### After (New Columns):
-| Category | KRA | KPI | Employee Name (Code) | Department | Designation | Achieved Value | Remark | Supporting File |
-
----
-
-## Filter Section Layout:
-
+### Actions Cell Content:
 ```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ Filters                                                                       │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ [Review Period ▼] [Year ▼] [🔍 Search employees/KPIs...]                     │
-│                                                                               │
-│ [Category ▼] [Department ▼] [Designation ▼] [KRA ▼] [Clear All]              │
-│                                                                               │
-│ Active: [× Finance] [× Manager] [× Safety KRA]                               │
-└──────────────────────────────────────────────────────────────────────────────┘
+┌──────────────┐
+│ [1 owner] 👤 │  ← Badge showing owner count + UserPlus button
+└──────────────┘
 ```
 
 ---
 
-## Implementation Sequence
+## User Flow After Implementation
 
-1. **Database Migration**: Add `evidence_url` column
-2. **Update Types**: Update `OrgKpiValue` interface
-3. **Update Hook**: Add `evidence_url` to upsert mutation
-4. **Update Page**: 
-   - Import `useEmployeeFilterOptions`
-   - Add filter state and controls
-   - Update `displayRows` to include employee details
-   - Rebuild table with new columns
-   - Add file upload component
-   - Remove global data source section
-5. **Documentation**: Update DOCUMENTATION.md
+1. Admin navigates to **Admin > Org KPI Data Entry**
+2. Table displays org-level KPIs with an **Actions** column
+3. Admin clicks the **UserPlus** icon on any KPI row
+4. **OrgKpiOwnerDialog** opens showing:
+   - KPI name and KRA
+   - Current data owners (if any)
+   - Searchable user list to add new owners
+5. Admin searches and selects a user to assign as owner
+6. User is added to `org_kpi_data_owners` table
+7. Badge updates to show owner count
 
 ---
 
 ## Validation Checklist
 
 After implementation:
-- [ ] Search filter works for employee name, code, and KPI names
-- [ ] Department filter correctly filters rows
-- [ ] Designation filter correctly filters rows
-- [ ] KRA filter correctly filters rows
-- [ ] Employee Name (Code) column displays correctly
-- [ ] Department column shows employee's department
-- [ ] Designation column shows employee's designation
-- [ ] Remark field saves to database
-- [ ] Supporting File upload works and saves URL
-- [ ] Save All button includes new fields
-- [ ] Scope, Target, Data Source columns are removed
-
+- [ ] Actions column appears for admin users only
+- [ ] UserPlus button opens the OrgKpiOwnerDialog
+- [ ] Dialog shows correct KPI information
+- [ ] Owner can be assigned and removed
+- [ ] Owner count badge updates correctly
+- [ ] Non-admin users do not see the Actions column
