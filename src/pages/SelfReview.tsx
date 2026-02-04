@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useKpisByPeriod, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI, KpiStatus } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { useKpiFilters } from '@/hooks/useKpiFilters';
@@ -24,6 +25,7 @@ import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { KeyStatCard } from '@/components/dashboard/KeyStatCard';
 import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
 import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
+import { MobileSelfReviewCard } from '@/components/review/MobileSelfReviewCard';
 import { Send, Eye, CheckCircle2, Clock, AlertCircle, Lock, Info, Target, TrendingUp, Users } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
@@ -72,6 +74,7 @@ const scoreDisplay: Record<number, { label: string; color: string; level: Rating
 
 export default function SelfReview() {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
   
   // Review period filter state
@@ -466,7 +469,7 @@ export default function SelfReview() {
               <CardDescription>Progress across all review stages</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-5">
+              <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-5">
                 {[
                   { key: 'kra_set', label: 'KRA Set', count: metrics.kraSet },
                   { key: 'self_review', label: 'Self Review', count: metrics.selfReview },
@@ -540,154 +543,189 @@ export default function SelfReview() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>KRA / KPI</TableHead>
-                <TableHead>Target</TableHead>
-                <TableHead>Weightage</TableHead>
-                <TableHead>Achieved</TableHead>
-                <TableHead>Self Rating</TableHead>
-                <TableHead>KPI Status</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          {/* Mobile View - Card Layout */}
+          {isMobile ? (
+            <div className="space-y-3">
               {filteredKpis?.map(kpi => {
                 const submission = submissionMap.get(kpi.id);
                 const employee = 'employee' in kpi ? (kpi as any).employee : null;
                 const kpiStatus = submission?.kpi_status || 'open';
                 const isLocked = kpiStatus === 'approved_by_manager' || kpiStatus === 'locked';
                 const canEdit = !isLocked && (isAdmin || kpi.employee_id === user?.id);
-                const isNaKpi = submission?.is_na || false;
                 
                 return (
-                  <TableRow 
-                    key={kpi.id} 
-                    className={`${isLocked ? 'opacity-75 bg-muted/30' : ''} ${isNaKpi ? 'opacity-60 bg-muted/20' : ''}`}
-                  >
-                    <TableCell>
-                      <div className="text-sm">
-                        <div className="font-medium">{employee?.full_name || '-'}</div>
-                        <div className="text-muted-foreground text-xs">{employee?.employee_code}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: kpi.kra_categories?.color }}
-                        />
-                        <span className="text-sm">{kpi.kra_categories?.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="max-w-[200px]">
-                      <button
-                        onClick={() => openLogicModal(kpi)}
-                        className="text-left hover:bg-muted/50 p-1 -m-1 rounded transition-colors cursor-pointer group w-full"
-                        title="Click to view KPI details"
-                      >
-                        <div className="font-medium text-primary group-hover:underline truncate">
-                          {kpi.kra_name}
-                        </div>
-                        <div className="text-sm text-muted-foreground truncate flex items-center gap-1">
-                          {kpi.kpi_name}
-                          <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      </button>
-                    </TableCell>
-                    <TableCell>
-                      {kpi.target_value} {kpi.uom && <span className="text-muted-foreground text-xs">({kpi.uom})</span>}
-                    </TableCell>
-                    <TableCell>{kpi.weightage}%</TableCell>
-                    <TableCell>
-                      {isNaKpi ? (
-                        <Badge variant="outline" className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-                          N/A
-                        </Badge>
-                      ) : submission?.achieved_value !== null && submission?.achieved_value !== undefined ? (
-                        <span className="font-medium">{submission.achieved_value}</span>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {isNaKpi ? (
-                        <Badge variant="outline" className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-                          N/A
-                        </Badge>
-                      ) : submission?.self_score !== null && submission?.self_score !== undefined ? (
-                        <Badge
-                          style={{
-                            backgroundColor: scoreDisplay[submission.self_score]?.color || '#991B1B',
-                          }}
-                          className="text-white"
-                        >
-                          {submission.self_score}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                        <Badge className={kpiStatusColors[kpiStatus]}>
-                          {kpiStatusLabels[kpiStatus]}
-                        </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        {/* Only allow editing if KPI is not locked */}
-                        {canEdit && kpiStatus === 'open' && (
-                          <Button
-                            size="sm"
-                            onClick={() => openReviewDialog(kpi)}
-                          >
-                            <Send className="h-4 w-4 mr-1" />
-                            Submit
-                          </Button>
-                        )}
-                        {canEdit && kpiStatus === 'submitted' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openReviewDialog(kpi)}
-                          >
-                            <Send className="h-4 w-4 mr-1" />
-                            Edit
-                          </Button>
-                        )}
-                        {isLocked && (
-                          <Badge variant="outline" className="text-muted-foreground">
-                            <Lock className="h-3 w-3 mr-1" />
-                            Locked
-                          </Badge>
-                        )}
-                        <Button size="sm" variant="ghost" onClick={() => openViewDialog(kpi)}>
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => openTimeline(kpi)} title="View Timeline">
-                          <Clock className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                  <MobileSelfReviewCard
+                    key={kpi.id}
+                    kpi={kpi}
+                    submission={submission}
+                    employee={employee}
+                    onSubmit={() => openReviewDialog(kpi)}
+                    onView={() => openViewDialog(kpi)}
+                    onTimeline={() => openTimeline(kpi)}
+                    onShowLogic={() => openLogicModal(kpi)}
+                    isLocked={isLocked}
+                    canEdit={canEdit}
+                    isAdmin={isAdmin}
+                  />
                 );
               })}
               {(!filteredKpis || filteredKpis.length === 0) && (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                    <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    No KPIs pending self review
-                  </TableCell>
-                </TableRow>
+                <div className="text-center py-8 text-muted-foreground">
+                  <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  No KPIs pending self review
+                </div>
               )}
-            </TableBody>
-          </Table>
+            </div>
+          ) : (
+            /* Desktop View - Table Layout */
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>KRA / KPI</TableHead>
+                  <TableHead>Target</TableHead>
+                  <TableHead>Weightage</TableHead>
+                  <TableHead>Achieved</TableHead>
+                  <TableHead>Self Rating</TableHead>
+                  <TableHead>KPI Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredKpis?.map(kpi => {
+                  const submission = submissionMap.get(kpi.id);
+                  const employee = 'employee' in kpi ? (kpi as any).employee : null;
+                  const kpiStatus = submission?.kpi_status || 'open';
+                  const isLocked = kpiStatus === 'approved_by_manager' || kpiStatus === 'locked';
+                  const canEdit = !isLocked && (isAdmin || kpi.employee_id === user?.id);
+                  const isNaKpi = submission?.is_na || false;
+                  
+                  return (
+                    <TableRow 
+                      key={kpi.id} 
+                      className={`${isLocked ? 'opacity-75 bg-muted/30' : ''} ${isNaKpi ? 'opacity-60 bg-muted/20' : ''}`}
+                    >
+                      <TableCell>
+                        <div className="text-sm">
+                          <div className="font-medium">{employee?.full_name || '-'}</div>
+                          <div className="text-muted-foreground text-xs">{employee?.employee_code}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: kpi.kra_categories?.color }}
+                          />
+                          <span className="text-sm">{kpi.kra_categories?.name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[200px]">
+                        <button
+                          onClick={() => openLogicModal(kpi)}
+                          className="text-left hover:bg-muted/50 p-1 -m-1 rounded transition-colors cursor-pointer group w-full"
+                          title="Click to view KPI details"
+                        >
+                          <div className="font-medium text-primary group-hover:underline truncate">
+                            {kpi.kra_name}
+                          </div>
+                          <div className="text-sm text-muted-foreground truncate flex items-center gap-1">
+                            {kpi.kpi_name}
+                            <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </button>
+                      </TableCell>
+                      <TableCell>
+                        {kpi.target_value} {kpi.uom && <span className="text-muted-foreground text-xs">({kpi.uom})</span>}
+                      </TableCell>
+                      <TableCell>{kpi.weightage}%</TableCell>
+                      <TableCell>
+                        {isNaKpi ? (
+                          <Badge variant="outline" className="bg-muted/50 text-muted-foreground">
+                            N/A
+                          </Badge>
+                        ) : submission?.achieved_value !== null && submission?.achieved_value !== undefined ? (
+                          <span className="font-medium">{submission.achieved_value}</span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {isNaKpi ? (
+                          <Badge variant="outline" className="bg-muted/50 text-muted-foreground">
+                            N/A
+                          </Badge>
+                        ) : submission?.self_score !== null && submission?.self_score !== undefined ? (
+                          <Badge
+                            style={{
+                              backgroundColor: scoreDisplay[submission.self_score]?.color || '#991B1B',
+                            }}
+                            className="text-primary-foreground"
+                          >
+                            {submission.self_score}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                          <Badge className={kpiStatusColors[kpiStatus]}>
+                            {kpiStatusLabels[kpiStatus]}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          {canEdit && kpiStatus === 'open' && (
+                            <Button
+                              size="sm"
+                              onClick={() => openReviewDialog(kpi)}
+                            >
+                              <Send className="h-4 w-4 mr-1" />
+                              Submit
+                            </Button>
+                          )}
+                          {canEdit && kpiStatus === 'submitted' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openReviewDialog(kpi)}
+                            >
+                              <Send className="h-4 w-4 mr-1" />
+                              Edit
+                            </Button>
+                          )}
+                          {isLocked && (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              <Lock className="h-3 w-3 mr-1" />
+                              Locked
+                            </Badge>
+                          )}
+                          <Button size="sm" variant="ghost" onClick={() => openViewDialog(kpi)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => openTimeline(kpi)} title="View Timeline">
+                            <Clock className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {(!filteredKpis || filteredKpis.length === 0) && (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      No KPIs pending self review
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
