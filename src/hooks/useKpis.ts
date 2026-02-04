@@ -50,6 +50,8 @@ export interface KPI {
   is_frequency_locked: boolean;
   // Resubmission configuration
   require_resubmit_reason: boolean;
+  // Day count type for daily KPIs
+  day_count_type: 'working_days' | 'all_days' | null;
   kra_categories?: {
     id: string;
     name: string;

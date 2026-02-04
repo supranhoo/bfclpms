@@ -108,6 +108,26 @@ export function useDailyAggregationMethod() {
   return { method, isLoading };
 }
 
+export function useWorkingDaysPerMonth() {
+  const { data, isLoading } = useSystemSetting('working_days_per_month');
+  
+  // Default to 22 working days per month
+  let days = 22;
+  if (data?.setting_value) {
+    const value = data.setting_value;
+    if (typeof value === 'number') {
+      days = value;
+    } else if (typeof value === 'string') {
+      const parsed = parseInt(value.replace(/^"|"$/g, ''), 10);
+      if (!isNaN(parsed)) {
+        days = parsed;
+      }
+    }
+  }
+  
+  return days;
+}
+
 export function useRolloverLogs() {
   return useQuery({
     queryKey: ['rollover-logs'],

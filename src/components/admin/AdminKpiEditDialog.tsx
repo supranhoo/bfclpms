@@ -67,6 +67,7 @@ const [formData, setFormData] = useState({
     uom_type: 'numeric' as UomType,
     qualitative_options: [] as QualitativeOption[],
     require_resubmit_reason: true,
+    day_count_type: 'working_days' as 'working_days' | 'all_days',
   });
   const [reason, setReason] = useState('');
   const originalStatus = kpi?.status;
@@ -97,6 +98,7 @@ const [formData, setFormData] = useState({
         uom_type: (kpi.uom_type as UomType) || 'numeric',
         qualitative_options: (kpi.qualitative_options as QualitativeOption[]) || [],
         require_resubmit_reason: kpi.require_resubmit_reason ?? true,
+        day_count_type: (kpi.day_count_type as 'working_days' | 'all_days') || 'working_days',
       });
       setReason('');
     }
@@ -147,6 +149,7 @@ const [formData, setFormData] = useState({
       uom_type: formData.uom_type,
       qualitative_options: formData.uom_type === 'tiered' ? formData.qualitative_options : null,
       require_resubmit_reason: formData.require_resubmit_reason,
+      day_count_type: formData.frequency === 'Daily' ? formData.day_count_type : null,
       reason,
     });
 
@@ -334,6 +337,30 @@ const [formData, setFormData] = useState({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+          )}
+
+          {/* Day Count Type for Daily KPIs */}
+          {formData.frequency === 'Daily' && (
+            <div className="space-y-2">
+              <Label>Day Count Type</Label>
+              <Select
+                value={formData.day_count_type}
+                onValueChange={(value: 'working_days' | 'all_days') => setFormData(prev => ({ ...prev, day_count_type: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="working_days">Working Days Only</SelectItem>
+                  <SelectItem value="all_days">All Calendar Days</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {formData.day_count_type === 'working_days' 
+                  ? 'Uses employee-specific working days for missed days calculation'
+                  : 'Uses all calendar days (e.g., 31 days in January)'}
+              </p>
             </div>
           )}
 

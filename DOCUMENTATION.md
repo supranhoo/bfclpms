@@ -969,7 +969,27 @@ ALTER TABLE kpis ADD COLUMN sub_frequency TEXT;
 ALTER TABLE kpis ADD COLUMN frequency_cycle_start TEXT;
 ALTER TABLE kpis ADD COLUMN is_frequency_locked BOOLEAN;
 ALTER TABLE kpis ADD COLUMN require_resubmit_reason BOOLEAN DEFAULT true;
+ALTER TABLE kpis ADD COLUMN day_count_type TEXT DEFAULT 'working_days'; -- 'working_days' or 'all_days'
 ```
+
+#### 4.10.6 Day Count Type Configuration
+
+For Daily KPIs, the system supports configurable day counting for missed days penalty calculation:
+
+| Day Count Type | Description | Use Case |
+|----------------|-------------|----------|
+| **Working Days Only** (default) | Uses employee-specific working days (from `employee_working_days` table) or global default | Standard employees with variable working days |
+| **All Calendar Days** | Uses all calendar days in the month (e.g., 31 for January) | Field staff, shift workers, or compliance KPIs |
+
+**Configuration Hierarchy:**
+1. **Employee-Specific**: `employee_working_days` table stores per-employee, per-month working days
+2. **Global Default**: `working_days_per_month` system setting (default: 22)
+3. **Calendar Days**: Used when `day_count_type = 'all_days'`
+
+**Related Components:**
+- `EmployeeWorkingDaysDialog.tsx` - Admin UI to configure employee working days
+- `useDailyAggregation.ts` - Hook for calculating aggregated scores with dynamic day counting
+- `dailyAggregation.ts` - Core aggregation functions
 
 #### 4.10.6 One-Time Update Policy
 
