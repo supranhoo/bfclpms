@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-02-03  
-> **Version:** 1.4.0  
+> **Last Updated:** 2026-02-04  
+> **Version:** 1.4.1  
 > **Maintainer:** Lovable AI
 
 ---
@@ -1400,6 +1400,8 @@ src/
 ├── lib/
 │   ├── utils.ts               # Utility functions (cn, etc.)
 │   ├── dateUtils.ts           # Standardized date formatting
+│   ├── textFormatting.ts      # Text normalization for KPI display (normalizeKpiText)
+│   ├── textFormatting.test.ts # Unit tests for text formatting
 │   ├── pdfExport.ts           # PDF generation logic
 │   ├── ratingCalculation.ts   # Score calculation logic
 │   ├── qualitativeUom.ts      # Qualitative KPI helpers

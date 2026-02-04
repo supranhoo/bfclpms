@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { KPI } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
+import { normalizeKpiText } from '@/lib/textFormatting';
 
 interface KpiHeaderSectionProps {
   kpi: KPI;
@@ -41,11 +42,11 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear }: KpiHeade
       </div>
 
       {/* KRA & KPI Names - Full text, no truncation */}
-      <h3 className="font-semibold text-lg text-primary leading-tight">
-        {kpi.kra_name}
+      <h3 className="font-semibold text-lg text-primary leading-tight whitespace-pre-wrap">
+        {normalizeKpiText(kpi.kra_name)}
       </h3>
-      <p className="text-muted-foreground mt-1 leading-relaxed">
-        {kpi.kpi_name}
+      <p className="text-muted-foreground mt-1 leading-relaxed whitespace-pre-wrap">
+        {normalizeKpiText(kpi.kpi_name)}
       </p>
     </div>
   );

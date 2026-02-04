@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Pencil, Save, X, Bug, ChevronDown, Calculator } from 'lucide-react';
 import type { KPI } from '@/hooks/useKpis';
 import { parseThreshold, calculateRating, ratingToLevel, levelToText } from '@/lib/ratingCalculation';
+import { normalizeKpiText } from '@/lib/textFormatting';
 
 interface KpiLogicModalProps {
   isOpen: boolean;
@@ -170,7 +171,7 @@ export function KpiLogicModal({ isOpen, onClose, kpi }: KpiLogicModalProps) {
             ) : (
               <>
                 <span className="text-xs text-muted-foreground block mb-1">KRA Name</span>
-                <span className="font-semibold text-foreground">{kpi.kra_name}</span>
+                <span className="font-semibold text-foreground whitespace-pre-wrap">{normalizeKpiText(kpi.kra_name)}</span>
               </>
             )}
           </div>
@@ -189,7 +190,7 @@ export function KpiLogicModal({ isOpen, onClose, kpi }: KpiLogicModalProps) {
             ) : (
               <>
                 <span className="text-xs text-muted-foreground block mb-1">KPI Name</span>
-                <p className="text-foreground">{kpi.kpi_name}</p>
+                <p className="text-foreground whitespace-pre-wrap">{normalizeKpiText(kpi.kpi_name)}</p>
               </>
             )}
           </div>

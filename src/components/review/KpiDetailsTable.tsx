@@ -13,6 +13,7 @@ import { KPI, ReviewSubmission, KpiQuery, ReviewStatus } from '@/hooks/useKpis';
 import { InlineDailySubmissionRow } from '@/components/review/InlineDailySubmissionRow';
 import { DailyBadge } from '@/components/review/DailyKpiExpandButton';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
+import { normalizeKpiText } from '@/lib/textFormatting';
 import { 
   Info, Lock, CheckCircle2, Calendar, ChevronDown, ChevronUp, Undo2, Eye, 
   Building2, Users, User, FileCheck
@@ -305,12 +306,12 @@ export function KpiDetailsTable({
                     title="Click to view KPI details"
                   >
                     <div className="flex items-center gap-2">
-                      <p className="font-medium text-primary group-hover:underline">{kpi.kra_name}</p>
+                      <p className="font-medium text-primary group-hover:underline whitespace-pre-wrap">{normalizeKpiText(kpi.kra_name)}</p>
                       {isDailyKpi && <DailyBadge />}
                     </div>
-                    <p className="text-sm text-muted-foreground flex items-center gap-1">
-                      {kpi.kpi_name}
-                      <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <p className="text-sm text-muted-foreground flex items-center gap-1 whitespace-pre-wrap">
+                      {normalizeKpiText(kpi.kpi_name)}
+                      <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                     </p>
                   </button>
                 </TableCell>

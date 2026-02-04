@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import type { KPI, ReviewSubmission } from '@/hooks/useKpis';
+import { normalizeKpiText } from '@/lib/textFormatting';
 
 interface KpiTrackerModalProps {
   isOpen: boolean;
@@ -68,8 +69,8 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
               </Badge>
             )}
           </div>
-          <DialogDescription>
-            <span className="font-medium">{kpi.kra_name}</span> - {kpi.kpi_name}
+          <DialogDescription className="whitespace-pre-wrap">
+            <span className="font-medium">{normalizeKpiText(kpi.kra_name)}</span> - {normalizeKpiText(kpi.kpi_name)}
           </DialogDescription>
         </DialogHeader>
 
