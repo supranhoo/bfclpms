@@ -242,7 +242,7 @@ export default function Dashboard() {
             </div>
             <div className="text-sm text-muted-foreground sm:text-right">
               Showing <span className="font-semibold text-foreground">{fullyFilteredKpis.length}</span> of{' '}
-              <span className="font-semibold text-foreground">{kpis?.length || 0}</span> KPIs
+              <span className="font-semibold text-foreground">{periodFilteredKpis.length}</span> KPIs
               {' '}for <span className="font-semibold text-foreground">{selectedPeriod} {selectedYear}</span>
             </div>
           </div>
