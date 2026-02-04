@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useKpisByEmployee, useReviewSubmissions, useKpiQueries, RatingLevel, KPI, KpiQuery } from '@/hooks/useKpis';
 import { useSubPeriodSubmissions, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
+import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { ReviewLevelOverrideEditor, calculateOverriddenScore } from '@/components/review/ReviewLevelOverrideEditor';
 import { useReviewerSubPeriodOverride } from '@/hooks/useReviewerSubPeriodOverride';
@@ -77,6 +78,38 @@ export function AuditScorecard({
     const yearMatch = k.review_year === selectedYear;
     return periodMatch && yearMatch;
   }), [allKpis, selectedPeriod, selectedYear]);
+
+  // Fetch org KPI values for this period
+  const { data: orgKpiValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
+
+  // Create org KPI values lookup map
+  const orgKpiValuesMap = useMemo(() => {
+    const map = new Map<string, { achieved_value: number | null; data_source: string | null }>();
+    orgKpiValues?.forEach(v => {
+      const deptPart = v.department_id || 'null';
+      const empPart = v.employee_id || 'null';
+      const key = `${v.category_id}||${v.kra_name}||${v.kpi_name}||${deptPart}||${empPart}`;
+      map.set(key, { achieved_value: v.achieved_value, data_source: v.data_source });
+    });
+    return map;
+  }, [orgKpiValues]);
+
+  // Helper to get org KPI value based on scope
+  const getOrgKpiValue = (kpi: KPI) => {
+    if (!kpi.is_org_level) return null;
+    const scope = (kpi as any).org_level_scope || 'organization';
+    let key: string;
+    if (scope === 'organization') {
+      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+    } else if (scope === 'department') {
+      const deptId = employee.department_id || 'null';
+      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${deptId}||null`;
+    } else {
+      const empId = employee.id || 'null';
+      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${empId}`;
+    }
+    return orgKpiValuesMap.get(key) || null;
+  };
 
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);

@@ -1106,6 +1106,55 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
 - Displays current achieved values and data sources
 - Filter by review period and category
 
+#### 4.9.14 Org KPI Data Owners & Access Control
+
+**Data Owner Assignment:**
+- Admins can assign specific users as "data owners" for org-level KPIs
+- Data owners can enter/update values for their assigned KPIs
+- Multiple owners can be assigned per KPI (primary + backup)
+- Assignment is tracked in `org_kpi_data_owners` table
+
+**Access Control Hook: `useOrgKpiDataOwner`**
+- `useIsOrgKpiDataOwner(categoryId, kraName, kpiName)`: Check if current user can edit
+- `useAssignOrgKpiOwner()`: Mutation to assign owner (admin only)
+- `useRemoveOrgKpiOwner()`: Mutation to remove owner (admin only)
+
+**Integration Across Review Stages:**
+- All scorecards (Employee, Audit, Management) fetch `useOrgKpiValues` hook
+- Org-level KPIs display org value read-only with "Org Level" badge
+- Helper function `getOrgKpiValue(kpi)` resolves correct value based on scope:
+  - Organization scope: Single value for all employees
+  - Department scope: Looks up by employee's department_id
+  - Employee scope: Looks up by employee's id
+
+#### 4.9.15 Management Send-Back Workflow for Org KPIs
+
+**Status Flow:**
+```
+┌─────────────┐  Owner submits   ┌──────────────┐  Management rejects  ┌─────────────┐
+│  PENDING    │ ──────────────► │   APPROVED   │ ◄───────────────────  │  SENT_BACK  │
+└─────────────┘                  └──────────────┘  Owner resubmits     └─────────────┘
+```
+
+**Send-Back Hook: `useSendBackOrgKpiValue`**
+- Management can reject org values with reason
+- Creates notification for data owner(s)
+- Logs action in audit trail
+- Owner resubmits → status returns to 'approved'
+
+**UI Component: `SendBackOrgKpiDialog`**
+- Shows in Management Review for org-level KPIs
+- Displays current value, data owner, and reason field
+- Triggers notification to data owner on submit
+
+#### 4.9.16 Org Value Propagation
+
+**Auto-Propagation Hook: `usePropagateOrgKpiValue`**
+- When admin/owner saves org value, automatically creates/updates `review_submissions`
+- Finds all matching KPIs by (category_id, kra_name, kpi_name, review_period, review_year)
+- Calculates score using `calculateRating()` with org value as achieved_value
+- Updates `achieved_value`, `self_score`, `self_rating` in review_submissions
+
 ### 4.10 Reports
 
 | Report | Route | Purpose |

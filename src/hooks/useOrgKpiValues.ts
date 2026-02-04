@@ -27,6 +27,12 @@ export interface OrgKpiValue {
   // Scoped values
   department_id: string | null;
   employee_id: string | null;
+  // Status and send-back workflow fields
+  status: string | null;
+  sent_back_by: string | null;
+  sent_back_at: string | null;
+  sent_back_reason: string | null;
+  submission_count: number | null;
 }
 
 export function useOrgKpiValues(categoryId?: string, reviewPeriod?: string, reviewYear?: number) {
