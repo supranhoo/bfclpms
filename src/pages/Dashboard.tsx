@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, KPI } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
 import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
 import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
+import { MobileKpiCard } from '@/components/dashboard/MobileKpiCard';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -45,6 +47,7 @@ const ratingColors: Record<string, string> = {
 
 export default function Dashboard() {
   const { profile } = useAuth();
+  const isMobile = useIsMobile();
   const { data: kpis, isLoading: kpisLoading } = useMyKpis();
   const { data: categories, isLoading: categoriesLoading } = useKraCategories();
   const kpiIds = kpis?.map(k => k.id) || [];
@@ -166,9 +169,9 @@ export default function Dashboard() {
 
       {/* 2. Filters Row - Prominent, Full Width */}
       <Card className="bg-muted/30">
-        <CardContent className="py-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-4">
+        <CardContent className="py-3 sm:py-4">
+          <div className="flex flex-col gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3 sm:gap-4">
               <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                 <Filter className="h-4 w-4" />
                 <span>Filters</span>
@@ -178,12 +181,13 @@ export default function Dashboard() {
                 selectedYear={selectedYear}
                 onPeriodChange={setSelectedPeriod}
                 onYearChange={setSelectedYear}
+                className="w-full sm:w-auto"
               />
               <Select
                 value={activeCategory}
                 onValueChange={setActiveCategory}
               >
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-full sm:w-[200px]">
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -202,15 +206,16 @@ export default function Dashboard() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-muted-foreground sm:text-right">
               Showing <span className="font-semibold text-foreground">{fullyFilteredKpis.length}</span> of{' '}
               <span className="font-semibold text-foreground">{kpis?.length || 0}</span> KPIs
+              {' '}for <span className="font-semibold text-foreground">{selectedPeriod} {selectedYear}</span>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* 3. Performance Charts Row - 1:5 ratio */}
+      {/* 3. Performance Charts Row - 1:5 ratio on desktop, stacked on mobile */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-6">
         {/* Overall Score Chart - Small (1/6) */}
         <Card className="md:col-span-1">
@@ -218,7 +223,7 @@ export default function Dashboard() {
             <CardTitle className="text-sm">Overall</CardTitle>
             <CardDescription className="text-xs">Performance</CardDescription>
           </CardHeader>
-          <CardContent className="h-[140px]">
+          <CardContent className="h-[120px] sm:h-[140px]">
             <OverallScoreChart 
               percentage={metrics.overallPercentage} 
               rating={metrics.overallRating}
@@ -238,8 +243,8 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* 4. Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* 4. Stats Cards - 2 columns on mobile, 4 on desktop */}
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         <KeyStatCard
           title="Monthly Rating"
           value={`${metrics.overallRating.toFixed(2)} / 5.00`}
@@ -268,25 +273,26 @@ export default function Dashboard() {
 
       {/* 5. Status Progress */}
       <Card>
-        <CardHeader>
-          <CardTitle>Review Status</CardTitle>
-          <CardDescription>Progress across review stages</CardDescription>
+        <CardHeader className="pb-2 sm:pb-4">
+          <CardTitle className="text-base sm:text-lg">Review Status</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">Progress across review stages</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-5">
+          <div className="flex flex-col sm:grid sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
             {Object.entries(statusLabels).map(([key, label]) => {
               const count = fullyFilteredKpis.filter(k => k.status === key).length;
               const percentage = metrics.totalKpis > 0 ? (count / metrics.totalKpis) * 100 : 0;
               
               return (
-                <div key={key} className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
+                <div key={key} className="flex sm:flex-col items-center sm:items-start gap-2 sm:space-y-2">
+                  <div className="flex items-center justify-between w-full sm:w-auto text-sm">
                     <Badge variant="secondary" className={statusColors[key]}>
                       {label}
                     </Badge>
-                    <span className="font-medium">{count}</span>
+                    <span className="font-medium sm:hidden">{count}</span>
                   </div>
-                  <Progress value={percentage} className="h-2" />
+                  <Progress value={percentage} className="h-2 flex-1 sm:flex-none sm:w-full" />
+                  <span className="font-medium hidden sm:block">{count}</span>
                 </div>
               );
             })}
@@ -294,111 +300,135 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* 6. KPI Details Table */}
+      {/* 6. KPI Details - Table on desktop, Cards on mobile */}
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-2 sm:pb-4">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
             <div>
-              <CardTitle>Detailed KPI Review</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-base sm:text-lg">Detailed KPI Review</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
                 {sortedKpis.length} KPIs {activeCategory !== 'All' ? `in ${activeCategory}` : ''} for {selectedPeriod} {selectedYear}
               </CardDescription>
             </div>
-            <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />
+            {!isMobile && <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />}
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Category</TableHead>
-                <TableHead>KRA / KPI</TableHead>
-                <TableHead className="text-center">Target</TableHead>
-                <TableHead className="text-center">Weightage</TableHead>
-                <TableHead className="text-center">Achieved</TableHead>
-                <TableHead className="text-center">Rating</TableHead>
-                <TableHead className="text-center">Status</TableHead>
-                <TableHead className="text-center">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedKpis.map(kpi => {
-                const submission = submissionMap.get(kpi.id);
-                const rating = submission?.final_rating || submission?.self_rating;
-                const score = submission?.final_score || submission?.self_score;
-                
-                return (
-                  <TableRow key={kpi.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: kpi.kra_categories?.color }}
-                        />
-                        <span className="text-sm">{kpi.kra_categories?.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-semibold text-foreground">{kpi.kra_name}</p>
-                        <p className="text-sm text-muted-foreground">{kpi.kpi_name}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {kpi.target_value}
-                      {kpi.uom && <span className="text-xs text-muted-foreground ml-1">({kpi.uom})</span>}
-                    </TableCell>
-                    <TableCell className="text-center font-medium">{kpi.weightage}%</TableCell>
-                    <TableCell className="text-center font-semibold">
-                      {submission?.achieved_value || '-'}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {rating ? (
-                        <Badge
-                          style={{ backgroundColor: ratingColors[rating] }}
-                          className="text-white"
-                        >
-                          {score?.toFixed(1) || rating}
+          {isMobile ? (
+            // Mobile: Stacked KPI Cards
+            <div className="space-y-3">
+              {sortedKpis.map(kpi => (
+                <MobileKpiCard
+                  key={kpi.id}
+                  kpi={kpi}
+                  submission={submissionMap.get(kpi.id)}
+                  statusColors={statusColors}
+                  statusLabels={statusLabels}
+                  ratingColors={ratingColors}
+                  onViewLogic={setSelectedKpiLogic}
+                  onViewTracker={setSelectedKpiTracker}
+                />
+              ))}
+              {sortedKpis.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  No KPIs found for the selected filters
+                </div>
+              )}
+            </div>
+          ) : (
+            // Desktop: Full Table
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Category</TableHead>
+                  <TableHead>KRA / KPI</TableHead>
+                  <TableHead className="text-center">Target</TableHead>
+                  <TableHead className="text-center">Weightage</TableHead>
+                  <TableHead className="text-center">Achieved</TableHead>
+                  <TableHead className="text-center">Rating</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-center">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedKpis.map(kpi => {
+                  const submission = submissionMap.get(kpi.id);
+                  const rating = submission?.final_rating || submission?.self_rating;
+                  const score = submission?.final_score || submission?.self_score;
+                  
+                  return (
+                    <TableRow key={kpi.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: kpi.kra_categories?.color }}
+                          />
+                          <span className="text-sm">{kpi.kra_categories?.name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-semibold text-foreground">{kpi.kra_name}</p>
+                          <p className="text-sm text-muted-foreground">{kpi.kpi_name}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {kpi.target_value}
+                        {kpi.uom && <span className="text-xs text-muted-foreground ml-1">({kpi.uom})</span>}
+                      </TableCell>
+                      <TableCell className="text-center font-medium">{kpi.weightage}%</TableCell>
+                      <TableCell className="text-center font-semibold">
+                        {submission?.achieved_value || '-'}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {rating ? (
+                          <Badge
+                            style={{ backgroundColor: ratingColors[rating] }}
+                            className="text-white"
+                          >
+                            {score?.toFixed(1) || rating}
+                          </Badge>
+                        ) : '-'}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge className={statusColors[kpi.status]}>
+                          {statusLabels[kpi.status]}
                         </Badge>
-                      ) : '-'}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge className={statusColors[kpi.status]}>
-                        {statusLabels[kpi.status]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-center gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setSelectedKpiLogic(kpi)}
-                          title="View Rating Logic"
-                        >
-                          <Info className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setSelectedKpiTracker(kpi)}
-                          title="View Tracker"
-                        >
-                          <BarChart3 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setSelectedKpiLogic(kpi)}
+                            title="View Rating Logic"
+                          >
+                            <Info className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setSelectedKpiTracker(kpi)}
+                            title="View Tracker"
+                          >
+                            <BarChart3 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {sortedKpis.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      No KPIs found for the selected filters
                     </TableCell>
                   </TableRow>
-                );
-              })}
-              {sortedKpis.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                    No KPIs found for the selected filters
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 

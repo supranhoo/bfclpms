@@ -1815,4 +1815,67 @@ The following are auto-configured by Lovable Cloud:
 
 ---
 
+## 9. Mobile Responsive Patterns
+
+### Overview
+
+The application uses responsive design patterns to ensure a good user experience on mobile devices (< 768px) while preserving the desktop layout on larger screens.
+
+### Key Patterns
+
+| Pattern | Implementation |
+|---------|----------------|
+| **Mobile Detection** | `useIsMobile()` hook from `src/hooks/use-mobile.tsx` |
+| **Breakpoint** | 768px (Tailwind `sm:` and `md:` prefixes) |
+| **Conditional Rendering** | `{isMobile ? <MobileComponent /> : <DesktopComponent />}` |
+| **Responsive Classes** | `text-xs sm:text-sm`, `grid-cols-2 lg:grid-cols-4`, etc. |
+
+### Dashboard Mobile Optimizations
+
+| Component | Mobile Behavior |
+|-----------|-----------------|
+| **Filter Bar** | Stacks vertically, full-width dropdowns |
+| **ReviewPeriodSelector** | Stacks label and selects vertically |
+| **Charts Grid** | Full width, stacked vertically |
+| **Stats Cards** | 2-column grid instead of 4 |
+| **Review Status** | Vertical list with inline progress bars |
+| **KPI Table** | Replaced with `MobileKpiCard` component |
+
+### MobileKpiCard Component
+
+Located at `src/components/dashboard/MobileKpiCard.tsx`, this component renders KPI data in a touch-friendly card format:
+
+```
+┌─ KPI Card ──────────────┐
+│ ● Category · Status     │
+│ KRA Name                │
+│ KPI description...      │
+│ Target  Weight  Score   │
+│ 100     15%     4.2     │
+│              [ℹ] [📊]   │
+└─────────────────────────┘
+```
+
+### Responsive Utility Classes
+
+```css
+/* Common patterns used throughout the app */
+.text-xs sm:text-sm        /* Smaller text on mobile */
+.p-4 sm:p-6                /* Reduced padding on mobile */
+.gap-3 sm:gap-4            /* Tighter spacing on mobile */
+.grid-cols-2 lg:grid-cols-4  /* Fewer columns on mobile */
+.flex-col sm:flex-row      /* Stack vertically on mobile */
+.hidden sm:block           /* Hide on mobile */
+.sm:hidden                 /* Show only on mobile */
+```
+
+### Best Practices
+
+1. **Use `useIsMobile()` sparingly** - Only for major layout changes (e.g., table → cards)
+2. **Prefer CSS breakpoints** - For simple styling adjustments use Tailwind responsive prefixes
+3. **Test at 320px** - Ensure layouts work on smallest phones (iPhone SE)
+4. **Touch targets** - Minimum 44x44px for interactive elements on mobile
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
