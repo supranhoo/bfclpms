@@ -32,16 +32,16 @@ export function ProfileCard({ profile, department, division, onViewHistory }: Pr
 
   return (
     <Card>
-      <CardContent className="p-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div className="flex items-center gap-4">
-            <Avatar className="h-16 w-16">
+      <CardContent className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <Avatar className="h-12 w-12 sm:h-16 sm:w-16">
               <AvatarImage src={profile.avatar_url || undefined} />
-              <AvatarFallback className="text-lg">{getInitials(profile.full_name)}</AvatarFallback>
+              <AvatarFallback className="text-sm sm:text-lg">{getInitials(profile.full_name)}</AvatarFallback>
             </Avatar>
-            <div className="space-y-1">
-              <h2 className="text-xl font-bold text-foreground">{displayName}</h2>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            <div className="space-y-0.5 sm:space-y-1">
+              <h2 className="text-base sm:text-xl font-bold text-foreground">{displayName}</h2>
+              <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-0.5 sm:gap-y-1 text-xs sm:text-sm text-muted-foreground">
                 {profile.designation && <span>{profile.designation}</span>}
                 {profile.designation && department && <span className="text-border">|</span>}
                 {department && <span>{department}</span>}
@@ -49,9 +49,10 @@ export function ProfileCard({ profile, department, division, onViewHistory }: Pr
             </div>
           </div>
           {onViewHistory && (
-            <Button variant="outline" onClick={onViewHistory}>
+            <Button variant="outline" size="sm" className="sm:size-default" onClick={onViewHistory}>
               <History className="h-4 w-4 mr-2" />
-              View History
+              <span className="hidden sm:inline">View History</span>
+              <span className="sm:hidden">History</span>
             </Button>
           )}
         </div>
