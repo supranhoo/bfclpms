@@ -220,6 +220,44 @@ export type Database = {
         }
         Relationships: []
       }
+      employee_working_days: {
+        Row: {
+          created_at: string | null
+          employee_id: string
+          id: string
+          month: string
+          updated_at: string | null
+          working_days: number
+          year: number
+        }
+        Insert: {
+          created_at?: string | null
+          employee_id: string
+          id?: string
+          month: string
+          updated_at?: string | null
+          working_days: number
+          year: number
+        }
+        Update: {
+          created_at?: string | null
+          employee_id?: string
+          id?: string
+          month?: string
+          updated_at?: string | null
+          working_days?: number
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_working_days_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       frequency_config: {
         Row: {
           active_month: number | null
@@ -615,6 +653,7 @@ export type Database = {
           category_id: string
           created_at: string
           criteria: string | null
+          day_count_type: string | null
           employee_id: string
           frequency: string | null
           frequency_cycle_start: string | null
@@ -647,6 +686,7 @@ export type Database = {
           category_id: string
           created_at?: string
           criteria?: string | null
+          day_count_type?: string | null
           employee_id: string
           frequency?: string | null
           frequency_cycle_start?: string | null
@@ -679,6 +719,7 @@ export type Database = {
           category_id?: string
           created_at?: string
           criteria?: string | null
+          day_count_type?: string | null
           employee_id?: string
           frequency?: string | null
           frequency_cycle_start?: string | null

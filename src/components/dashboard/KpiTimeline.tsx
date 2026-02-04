@@ -63,6 +63,10 @@ const actionConfig: Record<string, { icon: React.ElementType; color: string; lab
   'KPI_UPDATED': { icon: Edit, color: 'bg-slate-500', label: 'KPI Updated' },
   'STATUS_CHANGED': { icon: AlertCircle, color: 'bg-orange-500', label: 'Status Changed' },
   'STATUS_TRANSITION': { icon: AlertCircle, color: 'bg-blue-400', label: 'Status Changed' },
+  // N/A Confirmation actions
+  'MANAGER_NA_CONFIRMED': { icon: CheckCircle, color: 'bg-amber-500', label: 'Manager Confirmed N/A' },
+  'AUDITOR_NA_CONFIRMED': { icon: CheckCircle, color: 'bg-amber-500', label: 'Auditor Confirmed N/A' },
+  'MANAGEMENT_NA_CONFIRMED': { icon: CheckCircle, color: 'bg-amber-500', label: 'Management Confirmed N/A' },
 };
 
 export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
@@ -135,6 +139,13 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
       if (log.new_value.resolution_notes) details.push(`Resolution: ${log.new_value.resolution_notes}`);
       if (log.new_value.target) details.push(`Sent to: ${log.new_value.target}`);
       if (log.new_value.status) details.push(`New Status: ${log.new_value.status}`);
+      // N/A confirmation details
+      if (log.new_value.na_remarks) details.push(`N/A Remarks: ${log.new_value.na_remarks}`);
+      // Reviewer remarks
+      if (log.new_value.self_remarks) details.push(`Self Remarks: ${log.new_value.self_remarks}`);
+      if (log.new_value.manager_remarks) details.push(`Manager Remarks: ${log.new_value.manager_remarks}`);
+      if (log.new_value.auditor_remarks) details.push(`Auditor Remarks: ${log.new_value.auditor_remarks}`);
+      if (log.new_value.management_remarks) details.push(`Management Remarks: ${log.new_value.management_remarks}`);
     }
     
     return details;

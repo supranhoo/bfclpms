@@ -26,6 +26,7 @@ import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { QueryHistoryDialog } from '@/components/review/QueryHistoryDialog';
 import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
+import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { KpiDetailsTable } from '@/components/review/KpiDetailsTable';
 import { scoreToRating } from '@/components/review/ScoreSelector';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -90,6 +91,7 @@ export function EmployeeScorecard({
   const [logicModalOpen, setLogicModalOpen] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [trackerModalOpen, setTrackerModalOpen] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   const [expandedDailyKpis, setExpandedDailyKpis] = useState<Set<string>>(new Set());
   
@@ -750,6 +752,13 @@ export function EmployeeScorecard({
         kpiName={selectedKpi?.kpi_name || ''}
         open={historyDialogOpen}
         onOpenChange={setHistoryDialogOpen}
+      />
+
+      {/* KPI Timeline */}
+      <KpiTimeline
+        isOpen={timelineOpen}
+        onClose={() => setTimelineOpen(false)}
+        kpi={selectedKpi}
       />
     </div>
   );

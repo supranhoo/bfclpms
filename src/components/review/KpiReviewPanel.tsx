@@ -27,6 +27,7 @@ interface KpiReviewPanelProps {
   // Callbacks
   onOpenQueryHistory?: () => void;
   onOpenFullHistory?: () => void;
+  onOpenTimeline?: () => void;
 }
 
 export function KpiReviewPanel({
@@ -41,6 +42,7 @@ export function KpiReviewPanel({
   selectedYear,
   onOpenQueryHistory,
   onOpenFullHistory,
+  onOpenTimeline,
 }: KpiReviewPanelProps) {
   const isOwnKpi = currentUserId ? kpi.employee_id === currentUserId : false;
   return (
@@ -50,6 +52,7 @@ export function KpiReviewPanel({
         kpi={kpi}
         selectedPeriod={selectedPeriod}
         selectedYear={selectedYear}
+        onOpenTimeline={onOpenTimeline}
       />
 
       {/* Two-Column Layout */}

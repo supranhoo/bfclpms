@@ -1,15 +1,18 @@
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { KPI } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { normalizeKpiText } from '@/lib/textFormatting';
+import { Clock } from 'lucide-react';
 
 interface KpiHeaderSectionProps {
   kpi: KPI;
   selectedPeriod: string;
   selectedYear: number;
+  onOpenTimeline?: () => void;
 }
 
-export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear }: KpiHeaderSectionProps) {
+export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTimeline }: KpiHeaderSectionProps) {
   const categoryName = kpi.kra_categories?.name || 'Uncategorized';
   const categoryColor = kpi.kra_categories?.color || '#6B7280';
   const status = kpi.status || 'kra_set';
@@ -27,7 +30,7 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear }: KpiHeade
           {categoryName}
         </Badge>
 
-        {/* Right: Status + Period + Weightage */}
+        {/* Right: Status + Period + Weightage + Timeline */}
         <div className="flex flex-wrap items-center gap-2">
           <Badge className={statusColors[status] || statusColors.kra_set}>
             {statusLabels[status] || 'KRA Set'}
@@ -38,6 +41,18 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear }: KpiHeade
           <Badge variant="secondary">
             {weightage}% Weight
           </Badge>
+          
+          {onOpenTimeline && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onOpenTimeline}
+              className="gap-1.5"
+            >
+              <Clock className="h-4 w-4" />
+              <span className="hidden sm:inline">Timeline</span>
+            </Button>
+          )}
         </div>
       </div>
 
