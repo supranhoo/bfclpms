@@ -4,6 +4,7 @@ import { useAllKpis, useKpiQueries } from './useKpis';
 import { useProfiles } from './useOrganization';
 import { useTrainingNeeds } from './useTNI';
 import { usePIPs } from './usePIP';
+import { useSlaThresholds } from './useWorkflowSettings';
 import { format } from 'date-fns';
 
 export type IssueType = 'query' | 'training_need' | 'pip' | 'pip_milestone' | 'stalled_kpi' | 'pending_kra';
@@ -39,8 +40,8 @@ export interface IssueSummary {
   byDepartment: Record<string, { name: string; count: number; critical: number }>;
 }
 
-// Age thresholds in days
-const AGE_THRESHOLDS: Record<IssueType, { warning: number; critical: number }> = {
+// Default thresholds - will be overridden by configurable settings
+const DEFAULT_AGE_THRESHOLDS: Record<IssueType, { warning: number; critical: number }> = {
   query: { warning: 5, critical: 10 },
   training_need: { warning: 14, critical: 30 },
   pip: { warning: 7, critical: 14 },
@@ -55,11 +56,16 @@ function calculateAge(date: Date | string): number {
   return Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function getPriority(issueType: IssueType, ageInDays: number, basePriority?: string): IssuePriority {
-  const thresholds = AGE_THRESHOLDS[issueType];
+function getPriority(
+  issueType: IssueType, 
+  ageInDays: number, 
+  thresholds: Record<IssueType, { warning: number; critical: number }>,
+  basePriority?: string
+): IssuePriority {
+  const threshold = thresholds[issueType];
   
-  if (ageInDays >= thresholds.critical) return 'critical';
-  if (ageInDays >= thresholds.warning) return 'high';
+  if (ageInDays >= threshold.critical) return 'critical';
+  if (ageInDays >= threshold.warning) return 'high';
   
   if (basePriority === 'high' || basePriority === 'critical') return basePriority as IssuePriority;
   if (basePriority === 'medium') return 'medium';
@@ -67,11 +73,16 @@ function getPriority(issueType: IssueType, ageInDays: number, basePriority?: str
   return 'low';
 }
 
-function getStatus(issueType: IssueType, ageInDays: number, baseStatus?: string): IssueStatus {
-  const thresholds = AGE_THRESHOLDS[issueType];
+function getStatus(
+  issueType: IssueType, 
+  ageInDays: number, 
+  thresholds: Record<IssueType, { warning: number; critical: number }>,
+  baseStatus?: string
+): IssueStatus {
+  const threshold = thresholds[issueType];
   
   if (baseStatus === 'resolved' || baseStatus === 'completed') return 'resolved';
-  if (ageInDays >= thresholds.critical) return 'overdue';
+  if (ageInDays >= threshold.critical) return 'overdue';
   if (baseStatus === 'in_progress' || baseStatus === 'training_planned' || baseStatus === 'active') return 'in_progress';
   
   return 'open';
@@ -82,6 +93,13 @@ export function useSystemIssues() {
   const { data: profiles = [], isLoading: profilesLoading } = useProfiles();
   const { data: trainingNeeds = [], isLoading: tniLoading } = useTrainingNeeds();
   const { data: pips = [], isLoading: pipsLoading } = usePIPs();
+  const { thresholds: configuredThresholds, isLoading: thresholdsLoading } = useSlaThresholds();
+
+  // Merge configured thresholds with defaults
+  const AGE_THRESHOLDS: Record<IssueType, { warning: number; critical: number }> = {
+    ...DEFAULT_AGE_THRESHOLDS,
+    ...configuredThresholds,
+  };
 
   const kpiIds = kpis.map(k => k.id);
   const { data: queries = [], isLoading: queriesLoading } = useKpiQueries(kpiIds);
@@ -101,7 +119,7 @@ export function useSystemIssues() {
     },
   });
 
-  const isLoading = kpisLoading || profilesLoading || tniLoading || pipsLoading || queriesLoading || milestonesLoading;
+  const isLoading = kpisLoading || profilesLoading || tniLoading || pipsLoading || queriesLoading || milestonesLoading || thresholdsLoading;
 
   // Create lookup maps
   const profileMap = new Map(profiles.map(p => [p.id, p]));
@@ -131,8 +149,8 @@ export function useSystemIssues() {
         departmentName: (employee?.departments as { name?: string })?.name || 'Unknown',
         assignedTo: query.raised_to,
         assignedToName: assignedTo?.full_name || 'Unknown',
-        status: getStatus('query', ageInDays),
-        priority: getPriority('query', ageInDays),
+        status: getStatus('query', ageInDays, AGE_THRESHOLDS),
+        priority: getPriority('query', ageInDays, AGE_THRESHOLDS),
         createdAt: new Date(query.created_at),
         ageInDays,
         relatedEntityId: query.kpi_id,
@@ -165,8 +183,8 @@ export function useSystemIssues() {
         departmentName: departmentName,
         assignedTo: tn.identified_by,
         assignedToName: assignedTo?.full_name || 'HR',
-        status: getStatus('training_need', ageInDays, tn.status),
-        priority: getPriority('training_need', ageInDays, tn.priority),
+        status: getStatus('training_need', ageInDays, AGE_THRESHOLDS, tn.status),
+        priority: getPriority('training_need', ageInDays, AGE_THRESHOLDS, tn.priority),
         createdAt: new Date(tn.created_at),
         ageInDays,
         relatedEntityId: tn.kpi_id || undefined,
@@ -258,8 +276,8 @@ export function useSystemIssues() {
         departmentName: (employee?.departments as { name?: string })?.name || 'Unknown',
         assignedTo: assignedToId,
         assignedToName: assignedTo?.full_name || 'Workflow Owner',
-        status: getStatus('stalled_kpi', ageInDays),
-        priority: getPriority('stalled_kpi', ageInDays),
+        status: getStatus('stalled_kpi', ageInDays, AGE_THRESHOLDS),
+        priority: getPriority('stalled_kpi', ageInDays, AGE_THRESHOLDS),
         createdAt: new Date(kpi.updated_at || kpi.created_at),
         ageInDays,
         metadata: { kpiStatus: kpi.status },
@@ -289,8 +307,8 @@ export function useSystemIssues() {
         departmentName: (employee?.departments as { name?: string })?.name || 'Unknown',
         assignedTo: kpi.employee_id,
         assignedToName: employee?.full_name || 'Unknown',
-        status: getStatus('pending_kra', ageInDays),
-        priority: getPriority('pending_kra', ageInDays),
+        status: getStatus('pending_kra', ageInDays, AGE_THRESHOLDS),
+        priority: getPriority('pending_kra', ageInDays, AGE_THRESHOLDS),
         createdAt: new Date(kpi.created_at),
         ageInDays,
       });

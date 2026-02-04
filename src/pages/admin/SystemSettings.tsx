@@ -6,13 +6,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays } from 'lucide-react';
+import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal } from 'lucide-react';
 import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useTriggerRollover, useDailyAggregationMethod, DailyAggregationMethod } from '@/hooks/useSystemSettings';
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { EmailNotificationSettings } from '@/components/admin/EmailNotificationSettings';
 import { EmailTemplateEditor } from '@/components/admin/EmailTemplateEditor';
 import { GlobalBrandingSettings } from '@/components/admin/GlobalBrandingSettings';
+import { WorkflowSettingsTab } from '@/components/admin/WorkflowSettingsTab';
 
 const scoreCalculationOptions: { 
   value: ScoreCalculationMode; 
@@ -146,7 +147,7 @@ export default function SystemSettings() {
       </div>
 
       <Tabs defaultValue="branding" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="branding" className="gap-2">
             <Building2 className="h-4 w-4" />
             <span className="hidden sm:inline">Branding</span>
@@ -158,6 +159,10 @@ export default function SystemSettings() {
           <TabsTrigger value="scoring" className="gap-2">
             <Calculator className="h-4 w-4" />
             <span className="hidden sm:inline">Scoring</span>
+          </TabsTrigger>
+          <TabsTrigger value="controls" className="gap-2">
+            <SlidersHorizontal className="h-4 w-4" />
+            <span className="hidden sm:inline">Controls</span>
           </TabsTrigger>
           <TabsTrigger value="email" className="gap-2">
             <Mail className="h-4 w-4" />
@@ -386,6 +391,11 @@ export default function SystemSettings() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Controls Tab */}
+        <TabsContent value="controls">
+          <WorkflowSettingsTab />
         </TabsContent>
 
         {/* Email Tab */}

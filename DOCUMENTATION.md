@@ -223,10 +223,30 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 |-------|---------|-------------|
 | `app_settings` | Global branding configuration (singleton) | `id`, `organization_name`, `app_name`, `logo_url`, `login_background_url` |
 | `system_settings` | App configuration | `setting_key`, `setting_value` (JSONB) |
+| `workflow_settings` | Admin-configurable operational controls | `category`, `setting_key`, `setting_value`, `label`, `description`, `min_value`, `max_value`, `unit` |
 | `kpi_audit_logs` | KPI change tracking | `kpi_id`, `action`, `performed_by`, `old_value`, `new_value` |
 | `kra_rollover_logs` | KRA rollover history | `source_period`, `target_period`, `kpis_copied` |
 | `org_kpi_values` | Organization-level KPI scores | `category_id`, `review_period`, `achieved_value` |
 | `import_progress` | Bulk import tracking | `id`, `status`, `total_rows`, `processed_rows` |
+
+#### Workflow Settings Categories
+
+| Category | Setting Key | Default | Range | Description |
+|----------|-------------|---------|-------|-------------|
+| **submission** | `daily_submission_window_days` | 2 | 1-7 days | Days employees can backfill daily entries |
+| **submission** | `resubmission_grace_hours` | 0 | 0-72 hours | Grace period for penalty-free resubmission |
+| **submission** | `working_days_per_month` | 22 | 18-26 days | Standard working days for missed days penalty |
+| **sla** | `query_sla_warning_days` | 5 | 1-14 days | Days before query is flagged as high priority |
+| **sla** | `query_sla_critical_days` | 10 | 3-30 days | Days before query is marked critical |
+| **sla** | `stalled_kpi_warning_days` | 14 | 7-30 days | Days at same status before KPI is flagged |
+| **sla** | `stalled_kpi_critical_days` | 30 | 14-60 days | Days at same status before KPI is critical |
+| **sla** | `pending_kra_warning_days` | 7 | 3-14 days | Days after assignment before warning flag |
+| **sla** | `pending_kra_critical_days` | 14 | 7-30 days | Days after assignment before critical flag |
+| **validation** | `na_reason_min_chars` | 50 | 10-200 chars | Minimum characters for N/A reason |
+| **validation** | `require_evidence_default` | false | boolean | Default mandatory evidence for new KPIs |
+| **validation** | `password_min_length` | 6 | 6-16 chars | Minimum password length |
+| **observation** | `max_observation_impact` | 5 | 1-5 points | Maximum score impact per observation |
+| **observation** | `self_observation_auto_apply` | false | boolean | Auto-apply employee self-observations |
 
 #### Storage Buckets
 
