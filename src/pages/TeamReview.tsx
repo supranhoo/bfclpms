@@ -3,43 +3,51 @@ import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeamMembers, useProfiles } from '@/hooks/useOrganization';
 import { useKpisByPeriod } from '@/hooks/useKpis';
+import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
+import { EmployeeFilters } from '@/components/review/EmployeeFilters';
 import { EmployeeScorecard } from '@/components/review/EmployeeScorecard';
 import { supabase } from '@/integrations/supabase/client';
-import { Users, CheckCircle2, Clock, ArrowRight, Search, Target, AlertCircle, User } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Target } from 'lucide-react';
+
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'All Employees' },
+  { value: 'pending', label: 'With Pending Reviews' },
+  { value: 'reviewed', label: 'Reviewed' },
+];
 
 export default function TeamReview() {
   const { user, role } = useAuth();
   const { data: teamMembers, isLoading: teamLoading } = useTeamMembers(user?.id);
   const { data: allProfiles, isLoading: profilesLoading } = useProfiles();
+  const { departments, designations, grades, managers } = useEmployeeFilterOptions();
+  
   const [selectedMember, setSelectedMember] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
+  const [selectedDesignation, setSelectedDesignation] = useState<string | null>(null);
+  const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
+  const [selectedManager, setSelectedManager] = useState<string | null>(null);
+  
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
   const [selectedYear, setSelectedYear] = useState(defaultYear);
   const [searchParams] = useSearchParams();
   const autoOpenKpiId = searchParams.get('kpi');
 
-  // Fetch KPIs for stats calculation
   const { data: periodKpis } = useKpisByPeriod(selectedPeriod, selectedYear);
 
   const isAdmin = role === 'admin';
   const isManagement = role === 'management';
   const isLoading = isAdmin || isManagement ? profilesLoading : teamLoading;
-
-  // For admin/management: show all employees
-  // For managers: show only their direct reports
   const baseMembers = isAdmin || isManagement ? allProfiles : teamMembers;
 
-  // Filter members by search
+  // Filter members
   const displayMembers = useMemo(() => {
     let filtered = baseMembers?.filter(p => 
       p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -47,7 +55,19 @@ export default function TeamReview() {
       p.employee_code?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    // Filter by status if needed
+    if (selectedDepartment) {
+      filtered = filtered?.filter(p => p.department_id === selectedDepartment);
+    }
+    if (selectedDesignation) {
+      filtered = filtered?.filter(p => p.designation === selectedDesignation);
+    }
+    if (selectedGrade) {
+      filtered = filtered?.filter(p => p.pms_grade === selectedGrade);
+    }
+    if (selectedManager) {
+      filtered = filtered?.filter(p => p.reporting_manager_id === selectedManager);
+    }
+
     if (statusFilter !== 'all' && periodKpis) {
       const employeeIds = new Set<string>();
       periodKpis.forEach(kpi => {
@@ -61,7 +81,7 @@ export default function TeamReview() {
     }
 
     return filtered;
-  }, [baseMembers, searchQuery, statusFilter, periodKpis]);
+  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, statusFilter, periodKpis]);
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -69,19 +89,14 @@ export default function TeamReview() {
       return { totalEmployees: 0, openKpis: 0, pendingReview: 0, reviewed: 0, totalKpis: 0 };
     }
 
-    // Filter KPIs to only those belonging to team members
     const memberIds = new Set(baseMembers.map(m => m.id));
     const teamKpis = periodKpis.filter(k => memberIds.has(k.employee_id));
 
-    const openKpis = teamKpis.filter(k => k.status === 'kra_set').length;
-    const pendingReview = teamKpis.filter(k => k.status === 'self_review').length;
-    const reviewed = teamKpis.filter(k => ['manager_check', 'audit', 'management_review', 'approved'].includes(k.status || '')).length;
-
     return {
       totalEmployees: baseMembers.length,
-      openKpis,
-      pendingReview,
-      reviewed,
+      openKpis: teamKpis.filter(k => k.status === 'kra_set').length,
+      pendingReview: teamKpis.filter(k => k.status === 'self_review').length,
+      reviewed: teamKpis.filter(k => ['manager_check', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
       totalKpis: teamKpis.length,
     };
   }, [periodKpis, baseMembers]);
@@ -132,7 +147,6 @@ export default function TeamReview() {
     return <ReviewPanelSkeleton />;
   }
 
-  // Show scorecard view when employee is selected
   if (selectedMember) {
     return (
       <EmployeeScorecard
@@ -239,27 +253,26 @@ export default function TeamReview() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search employees..."
-            className="pl-10"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Employees</SelectItem>
-            <SelectItem value="pending">With Pending Reviews</SelectItem>
-            <SelectItem value="reviewed">Reviewed</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <EmployeeFilters
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        selectedDepartment={selectedDepartment}
+        onDepartmentChange={setSelectedDepartment}
+        departments={departments}
+        selectedDesignation={selectedDesignation}
+        onDesignationChange={setSelectedDesignation}
+        designations={designations}
+        selectedGrade={selectedGrade}
+        onGradeChange={setSelectedGrade}
+        grades={grades}
+        selectedManager={selectedManager}
+        onManagerChange={setSelectedManager}
+        managers={managers}
+        showManagerFilter={isAdmin || isManagement}
+        statusFilter={statusFilter}
+        onStatusChange={setStatusFilter}
+        statusOptions={STATUS_OPTIONS}
+      />
 
       {/* Team Members Grid */}
       <Card>
@@ -303,20 +316,19 @@ export default function TeamReview() {
                               Manager: {managerName}
                             </p>
                           )}
-                          {/* KPI Status Badges */}
                           <div className="flex items-center gap-2 mt-2">
                             {kpiStats.pending > 0 && (
-                              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs">
+                              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800">
                                 {kpiStats.pending} pending
                               </Badge>
                             )}
                             {kpiStats.reviewed > 0 && (
-                              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
+                              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
                                 {kpiStats.reviewed} reviewed
                               </Badge>
                             )}
                             {kpiStats.total === 0 && (
-                              <Badge variant="outline" className="bg-gray-50 text-gray-500 border-gray-200 text-xs">
+                              <Badge variant="outline" className="bg-muted text-muted-foreground border-muted text-xs">
                                 No KPIs
                               </Badge>
                             )}
@@ -333,8 +345,8 @@ export default function TeamReview() {
               <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="font-medium">{isAdmin || isManagement ? 'No employees found' : 'No team members found'}</p>
               <p className="text-sm mt-1">
-                {searchQuery 
-                  ? 'Try adjusting your search criteria' 
+                {searchQuery || selectedDepartment || selectedDesignation || selectedGrade || selectedManager
+                  ? 'Try adjusting your filters' 
                   : isAdmin || isManagement 
                     ? 'No employees in the system yet' 
                     : "You don't have any direct reports assigned"}
