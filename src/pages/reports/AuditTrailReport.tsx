@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Download, Search, ClipboardList, CheckCircle2, AlertTriangle, Edit } from 'lucide-react';
+import { Download, Search, ClipboardList, CheckCircle2, AlertTriangle, Edit, UserCog, User } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 
@@ -18,8 +18,11 @@ interface AuditLog {
   kpi_id: string;
   action: string;
   performed_by: string;
+  on_behalf_of: string | null;
+  on_behalf_role: string | null;
   old_value: Record<string, unknown> | null;
   new_value: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
   kpi?: {
     kpi_name: string;
@@ -31,34 +34,72 @@ interface AuditLog {
     full_name: string;
     email: string;
   };
+  on_behalf_profile?: {
+    full_name: string;
+    email: string;
+  } | null;
 }
 
 const actionLabels: Record<string, string> = {
   'self_review_submitted': 'Self Review',
+  'SELF_REVIEW_SUBMITTED': 'Self Review',
   'manager_approved': 'Manager Approved',
+  'MANAGER_APPROVED': 'Manager Approved',
   'manager_sent_back': 'Sent Back',
   'auditor_approved': 'Auditor Approved',
+  'AUDITOR_APPROVED': 'Auditor Approved',
   'management_approved': 'Management Approved',
+  'MANAGEMENT_APPROVED': 'Management Approved',
   'query_raised': 'Query Raised',
+  'QUERY_RAISED': 'Query Raised',
   'query_resolved': 'Query Resolved',
+  'QUERY_RESOLVED': 'Query Resolved',
   'kpi_created': 'KPI Created',
+  'KPI_CREATED': 'KPI Created',
   'kpi_updated': 'KPI Updated',
+  'KPI_UPDATED': 'KPI Updated',
   'admin_override': 'Admin Override',
   'kra_accepted': 'KRA Accepted',
+  // Admin action labels
+  'ADMIN_DATA_ENTRY_SELF': 'Admin: Self Data Entry',
+  'ADMIN_DATA_ENTRY_MANAGER': 'Admin: Manager Data Entry',
+  'ADMIN_DATA_ENTRY_AUDITOR': 'Admin: Auditor Data Entry',
+  'ADMIN_DATA_ENTRY_MANAGEMENT': 'Admin: Management Data Entry',
+  'ADMIN_DAILY_ENTRY_OVERRIDE': 'Admin: Daily Override',
+  'ADMIN_STATUS_OVERRIDE': 'Admin: Status Override',
+  'ADMIN_OVERRIDE': 'Admin: KPI Override',
+  'MANAGER_DAILY_OVERRIDE': 'Manager: Daily Override',
 };
 
 const actionColors: Record<string, string> = {
   'self_review_submitted': 'bg-blue-100 text-blue-800',
+  'SELF_REVIEW_SUBMITTED': 'bg-blue-100 text-blue-800',
   'manager_approved': 'bg-green-100 text-green-800',
+  'MANAGER_APPROVED': 'bg-green-100 text-green-800',
   'manager_sent_back': 'bg-orange-100 text-orange-800',
   'auditor_approved': 'bg-purple-100 text-purple-800',
+  'AUDITOR_APPROVED': 'bg-purple-100 text-purple-800',
   'management_approved': 'bg-emerald-100 text-emerald-800',
+  'MANAGEMENT_APPROVED': 'bg-emerald-100 text-emerald-800',
   'query_raised': 'bg-red-100 text-red-800',
+  'QUERY_RAISED': 'bg-red-100 text-red-800',
   'query_resolved': 'bg-teal-100 text-teal-800',
+  'QUERY_RESOLVED': 'bg-teal-100 text-teal-800',
   'kpi_created': 'bg-gray-100 text-gray-800',
+  'KPI_CREATED': 'bg-gray-100 text-gray-800',
   'kpi_updated': 'bg-yellow-100 text-yellow-800',
+  'KPI_UPDATED': 'bg-yellow-100 text-yellow-800',
   'admin_override': 'bg-pink-100 text-pink-800',
   'kra_accepted': 'bg-indigo-100 text-indigo-800',
+  // Admin action colors - Rose/Pink theme
+  'ADMIN_DATA_ENTRY_SELF': 'bg-rose-100 text-rose-800',
+  'ADMIN_DATA_ENTRY_MANAGER': 'bg-rose-100 text-rose-800',
+  'ADMIN_DATA_ENTRY_AUDITOR': 'bg-rose-100 text-rose-800',
+  'ADMIN_DATA_ENTRY_MANAGEMENT': 'bg-rose-100 text-rose-800',
+  'ADMIN_DAILY_ENTRY_OVERRIDE': 'bg-rose-100 text-rose-800',
+  'ADMIN_STATUS_OVERRIDE': 'bg-rose-100 text-rose-800',
+  'ADMIN_OVERRIDE': 'bg-rose-100 text-rose-800',
+  'MANAGER_DAILY_OVERRIDE': 'bg-purple-100 text-purple-800',
 };
 
 export default function AuditTrailReport() {
@@ -67,7 +108,7 @@ export default function AuditTrailReport() {
   const [selectedAction, setSelectedAction] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Fetch audit logs
+  // Fetch audit logs with on_behalf fields
   const { data: auditLogs = [], isLoading } = useQuery({
     queryKey: ['audit-trail-report'],
     queryFn: async () => {
@@ -78,8 +119,11 @@ export default function AuditTrailReport() {
           kpi_id,
           action,
           performed_by,
+          on_behalf_of,
+          on_behalf_role,
           old_value,
           new_value,
+          metadata,
           created_at
         `)
         .order('created_at', { ascending: false })
@@ -102,7 +146,7 @@ export default function AuditTrailReport() {
     },
   });
 
-  // Fetch profiles for performer names
+  // Fetch profiles for performer and on_behalf_of names
   const { data: profiles = [] } = useQuery({
     queryKey: ['audit-profiles'],
     queryFn: async () => {
@@ -118,12 +162,13 @@ export default function AuditTrailReport() {
   const kpiMap = useMemo(() => new Map(kpis.map(k => [k.id, k])), [kpis]);
   const profileMap = useMemo(() => new Map(profiles.map(p => [p.id, p])), [profiles]);
 
-  // Enrich logs with KPI and performer data
+  // Enrich logs with KPI, performer, and on_behalf_profile data
   const enrichedLogs = useMemo(() => {
     return auditLogs.map(log => ({
       ...log,
       kpi: kpiMap.get(log.kpi_id),
       performer: profileMap.get(log.performed_by),
+      on_behalf_profile: log.on_behalf_of ? profileMap.get(log.on_behalf_of) : null,
     }));
   }, [auditLogs, kpiMap, profileMap]);
 
@@ -160,7 +205,9 @@ export default function AuditTrailReport() {
                           log.kpi?.kra_name?.toLowerCase().includes(query);
         const matchesPerformer = log.performer?.full_name?.toLowerCase().includes(query) ||
                                  log.performer?.email?.toLowerCase().includes(query);
-        if (!matchesKpi && !matchesPerformer) return false;
+        const matchesOnBehalf = log.on_behalf_profile?.full_name?.toLowerCase().includes(query) ||
+                                log.on_behalf_profile?.email?.toLowerCase().includes(query);
+        if (!matchesKpi && !matchesPerformer && !matchesOnBehalf) return false;
       }
       return true;
     });
@@ -169,18 +216,23 @@ export default function AuditTrailReport() {
   // Statistics
   const stats = useMemo(() => {
     const today = new Date().toDateString();
-    const approvalActions = ['manager_approved', 'auditor_approved', 'management_approved'];
-    const modificationActions = ['kpi_updated', 'admin_override', 'self_review_submitted'];
+    const approvalActions = ['manager_approved', 'auditor_approved', 'management_approved', 
+                             'MANAGER_APPROVED', 'AUDITOR_APPROVED', 'MANAGEMENT_APPROVED'];
+    const modificationActions = ['kpi_updated', 'admin_override', 'self_review_submitted',
+                                 'KPI_UPDATED', 'ADMIN_OVERRIDE', 'SELF_REVIEW_SUBMITTED'];
+    const adminActions = filteredLogs.filter(l => 
+      l.action.startsWith('ADMIN_') || l.on_behalf_of
+    );
     
     return {
       totalActions: filteredLogs.length,
       todayActions: filteredLogs.filter(l => new Date(l.created_at).toDateString() === today).length,
       approvals: filteredLogs.filter(l => approvalActions.includes(l.action)).length,
-      modifications: filteredLogs.filter(l => modificationActions.includes(l.action)).length,
+      adminActions: adminActions.length,
     };
   }, [filteredLogs]);
 
-  // Export to Excel
+  // Export to Excel - include on_behalf info
   const handleExport = () => {
     const exportData = filteredLogs.map(log => ({
       'Timestamp': format(new Date(log.created_at), 'yyyy-MM-dd HH:mm:ss'),
@@ -190,7 +242,10 @@ export default function AuditTrailReport() {
       'Review Period': log.kpi?.review_period || 'N/A',
       'Review Year': log.kpi?.review_year || 'N/A',
       'Performed By': log.performer?.full_name || 'N/A',
-      'Email': log.performer?.email || 'N/A',
+      'Performer Email': log.performer?.email || 'N/A',
+      'On Behalf Of': log.on_behalf_profile?.full_name || '',
+      'On Behalf Role': log.on_behalf_role || '',
+      'Admin Reason': log.metadata?.reason ? String(log.metadata.reason) : '',
       'Details': log.new_value ? JSON.stringify(log.new_value) : '',
     }));
 
@@ -227,7 +282,7 @@ export default function AuditTrailReport() {
       />
 
       {/* Statistics Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -264,12 +319,12 @@ export default function AuditTrailReport() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Edit className="h-4 w-4 text-blue-500" />
-              Modifications
+              <UserCog className="h-4 w-4 text-rose-500" />
+              Admin Actions
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{stats.modifications}</div>
+            <div className="text-2xl font-bold text-rose-600">{stats.adminActions}</div>
           </CardContent>
         </Card>
       </div>
@@ -316,7 +371,7 @@ export default function AuditTrailReport() {
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search KPI or performer..."
+                placeholder="Search KPI, performer, or on-behalf..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -336,13 +391,14 @@ export default function AuditTrailReport() {
                 <TableHead>Action</TableHead>
                 <TableHead>KPI</TableHead>
                 <TableHead>Performed By</TableHead>
+                <TableHead>On Behalf Of</TableHead>
                 <TableHead>Details</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredLogs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     No audit logs found
                   </TableCell>
                 </TableRow>
@@ -367,11 +423,35 @@ export default function AuditTrailReport() {
                       <p className="font-medium">{log.performer?.full_name || 'System'}</p>
                       <p className="text-xs text-muted-foreground">{log.performer?.email}</p>
                     </TableCell>
+                    <TableCell>
+                      {log.on_behalf_of && log.on_behalf_profile ? (
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-rose-500" />
+                          <div>
+                            <p className="font-medium text-rose-600 dark:text-rose-400">
+                              {log.on_behalf_profile.full_name || log.on_behalf_profile.email}
+                            </p>
+                            {log.on_behalf_role && (
+                              <p className="text-xs text-muted-foreground">{log.on_behalf_role} level</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="max-w-[200px]">
-                      <p className="text-sm text-muted-foreground truncate">
-                        {String(log.new_value?.remarks || log.new_value?.reason || 
-                         (log.new_value?.score ? `Score: ${log.new_value.score}` : '-'))}
-                      </p>
+                      <div className="text-sm text-muted-foreground space-y-0.5">
+                        {log.metadata?.reason && (
+                          <p className="truncate text-rose-600 dark:text-rose-400">
+                            Reason: {String(log.metadata.reason)}
+                          </p>
+                        )}
+                        <p className="truncate">
+                          {String(log.new_value?.remarks || log.new_value?.reason || 
+                           (log.new_value?.score ? `Score: ${log.new_value.score}` : '-'))}
+                        </p>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

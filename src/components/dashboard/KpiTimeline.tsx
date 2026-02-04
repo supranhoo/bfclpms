@@ -16,7 +16,8 @@ import {
   Edit,
   Send,
   Briefcase,
-  Undo2
+  Undo2,
+  UserCog
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import type { KPI } from '@/hooks/useKpis';
@@ -32,6 +33,8 @@ interface AuditLog {
   kpi_id: string;
   action: string;
   performed_by: string;
+  on_behalf_of: string | null;
+  on_behalf_role: string | null;
   old_value: Record<string, unknown> | null;
   new_value: Record<string, unknown> | null;
   metadata: Record<string, unknown> | null;
@@ -67,6 +70,15 @@ const actionConfig: Record<string, { icon: React.ElementType; color: string; lab
   'MANAGER_NA_CONFIRMED': { icon: CheckCircle, color: 'bg-amber-500', label: 'Manager Confirmed N/A' },
   'AUDITOR_NA_CONFIRMED': { icon: CheckCircle, color: 'bg-amber-500', label: 'Auditor Confirmed N/A' },
   'MANAGEMENT_NA_CONFIRMED': { icon: CheckCircle, color: 'bg-amber-500', label: 'Management Confirmed N/A' },
+  // Admin Actions - Rose/Pink color theme for visibility
+  'ADMIN_DATA_ENTRY_SELF': { icon: UserCog, color: 'bg-rose-500', label: 'Admin Entered Self Data' },
+  'ADMIN_DATA_ENTRY_MANAGER': { icon: UserCog, color: 'bg-rose-500', label: 'Admin Entered Manager Data' },
+  'ADMIN_DATA_ENTRY_AUDITOR': { icon: UserCog, color: 'bg-rose-500', label: 'Admin Entered Auditor Data' },
+  'ADMIN_DATA_ENTRY_MANAGEMENT': { icon: UserCog, color: 'bg-rose-500', label: 'Admin Entered Management Data' },
+  'ADMIN_DAILY_ENTRY_OVERRIDE': { icon: UserCog, color: 'bg-rose-500', label: 'Admin Daily Entry Override' },
+  'ADMIN_STATUS_OVERRIDE': { icon: UserCog, color: 'bg-rose-600', label: 'Admin Status Override' },
+  'ADMIN_OVERRIDE': { icon: UserCog, color: 'bg-rose-500', label: 'Admin Override' },
+  'MANAGER_DAILY_OVERRIDE': { icon: User, color: 'bg-purple-500', label: 'Manager Daily Override' },
 };
 
 export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
@@ -78,7 +90,7 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
       
       const { data, error } = await supabase
         .from('kpi_audit_logs')
-        .select('*')
+        .select('id, kpi_id, action, performed_by, on_behalf_of, on_behalf_role, old_value, new_value, metadata, created_at')
         .eq('kpi_id', kpi.id)
         .order('created_at', { ascending: false });
 
@@ -88,26 +100,27 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
     enabled: !!kpi?.id && isOpen,
   });
 
-  // Fetch profiles for performed_by users
-  const performerIds = useMemo(() => 
-    [...new Set(auditLogs.map(log => log.performed_by))],
-    [auditLogs]
-  );
+  // Fetch profiles for both performed_by and on_behalf_of users
+  const allUserIds = useMemo(() => {
+    const performerIds = auditLogs.map(log => log.performed_by);
+    const onBehalfIds = auditLogs.filter(log => log.on_behalf_of).map(log => log.on_behalf_of!);
+    return [...new Set([...performerIds, ...onBehalfIds])];
+  }, [auditLogs]);
 
   const { data: profiles = [] } = useQuery({
-    queryKey: ['timeline-profiles', performerIds],
+    queryKey: ['timeline-profiles', allUserIds],
     queryFn: async () => {
-      if (performerIds.length === 0) return [];
+      if (allUserIds.length === 0) return [];
       
       const { data, error } = await supabase
         .from('profiles')
         .select('id, full_name, email')
-        .in('id', performerIds);
+        .in('id', allUserIds);
 
       if (error) throw error;
       return data as Profile[];
     },
-    enabled: performerIds.length > 0,
+    enabled: allUserIds.length > 0,
   });
 
   const profileMap = useMemo(() => 
@@ -125,6 +138,9 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
 
   const formatDetails = (log: AuditLog) => {
     const details: string[] = [];
+    
+    // Admin reason from metadata (priority display)
+    if (log.metadata?.reason) details.push(`Admin Reason: ${String(log.metadata.reason)}`);
     
     if (log.new_value) {
       if (log.new_value.self_score) details.push(`Self Score: ${log.new_value.self_score}`);
@@ -238,10 +254,11 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
                 <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
                 
                 <div className="space-y-6">
-                  {auditLogs.map((log, index) => {
+                {auditLogs.map((log, index) => {
                     const config = getActionConfig(log.action);
                     const IconComponent = config.icon;
                     const performer = profileMap.get(log.performed_by);
+                    const onBehalfProfile = log.on_behalf_of ? profileMap.get(log.on_behalf_of) : null;
                     const details = formatDetails(log);
                     
                     return (
@@ -259,6 +276,11 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
                               </h4>
                               <p className="text-sm text-muted-foreground mt-1">
                                 by {performer?.full_name || performer?.email || 'Unknown user'}
+                                {log.on_behalf_of && onBehalfProfile && (
+                                  <span className="text-rose-600 dark:text-rose-400">
+                                    {' '}(on behalf of {onBehalfProfile.full_name || onBehalfProfile.email})
+                                  </span>
+                                )}
                               </p>
                               
                               {details.length > 0 && (
