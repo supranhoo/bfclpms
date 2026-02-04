@@ -1,5 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { KpiDetailsTable } from '@/components/review/KpiDetailsTable';
+import { MobileKpiCard } from '@/components/review/MobileKpiCard';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI, OrgLevelScope } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
@@ -79,6 +81,7 @@ const scoreDisplay: Record<number, { label: string; color: string; level: Rating
 };
 
 export default function MyKpis() {
+  const isMobile = useIsMobile();
   const { profile } = useAuth();
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
@@ -607,58 +610,58 @@ export default function MyKpis() {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         <Card className="border-l-4 border-l-primary">
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total KPIs</p>
-                <p className="text-3xl font-bold">{metrics.total}</p>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Total KPIs</p>
+                <p className="text-xl sm:text-3xl font-bold">{metrics.total}</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <Target className="h-6 w-6 text-primary" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Target className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
               </div>
             </div>
           </CardContent>
         </Card>
         
         <Card className="border-l-4 border-l-yellow-500">
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Pending Review</p>
-                <p className="text-3xl font-bold text-yellow-600">{metrics.pending}</p>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Pending</p>
+                <p className="text-xl sm:text-3xl font-bold text-yellow-600">{metrics.pending}</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                <AlertCircle className="h-6 w-6 text-yellow-500" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-500" />
               </div>
             </div>
           </CardContent>
         </Card>
         
         <Card className="border-l-4 border-l-green-500">
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Completed</p>
-                <p className="text-3xl font-bold text-green-600">{metrics.approved}</p>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Completed</p>
+                <p className="text-xl sm:text-3xl font-bold text-green-600">{metrics.approved}</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
-                <CheckCircle2 className="h-6 w-6 text-green-500" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-green-500" />
               </div>
             </div>
           </CardContent>
         </Card>
         
         <Card className="border-l-4 border-l-blue-500">
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Avg. Rating</p>
-                <p className="text-3xl font-bold text-blue-600">{metrics.avgRating.toFixed(2)}</p>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Avg. Rating</p>
+                <p className="text-xl sm:text-3xl font-bold text-blue-600">{metrics.avgRating.toFixed(2)}</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-blue-500" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500" />
               </div>
             </div>
           </CardContent>
@@ -666,7 +669,7 @@ export default function MyKpis() {
       </div>
 
       {/* Progress & Category Breakdown */}
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-3">
         {/* Overall Progress */}
         <Card>
           <CardHeader className="pb-2">
@@ -723,18 +726,18 @@ export default function MyKpis() {
       {/* KPIs Table */}
       <Card>
         <CardHeader>
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <BarChart3 className="h-5 w-5" />
+              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5" />
                 KPI Details
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs sm:text-sm">
                 {sortedKpis.length} KPIs {selectedCategory ? 'in selected category' : 'found'}
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />
+              {!isMobile && <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />}
               {selectedCategory && (
                 <Button variant="ghost" size="sm" onClick={() => setSelectedCategory(null)}>
                   Clear filter
@@ -743,23 +746,52 @@ export default function MyKpis() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-lg border overflow-hidden">
-            <KpiDetailsTable
-              kpis={sortedKpis}
-              submissionMap={submissionMap}
-              viewType="my-kpis"
-              selectedPeriod={selectedPeriod}
-              selectedYear={selectedYear}
-              onReview={openReviewDialog}
-              onView={openReviewDialog}
-              onShowLogic={openTimeline}
-              expandedKpis={expandedKpis}
-              onToggleExpand={toggleExpand}
-              getOrgKpiValue={getOrgKpiValue}
-              isKpiLocked={isKpiFrequencyLocked}
-            />
-          </div>
+        <CardContent className="px-3 sm:px-6">
+          {isMobile ? (
+            <div className="space-y-3">
+              {sortedKpis.map(kpi => {
+                const submission = submissionMap.get(kpi.id);
+                const isLocked = isKpiFrequencyLocked(kpi);
+                return (
+                  <MobileKpiCard
+                    key={kpi.id}
+                    kpi={kpi}
+                    submission={submission}
+                    viewType="my-kpis"
+                    onAction={openReviewDialog}
+                    onView={openReviewDialog}
+                    onShowLogic={openTimeline}
+                    isLocked={isLocked}
+                    onToggleExpand={toggleExpand}
+                    isExpanded={expandedKpis.has(kpi.id)}
+                    getOrgKpiValue={getOrgKpiValue}
+                  />
+                );
+              })}
+              {sortedKpis.length === 0 && (
+                <p className="text-center text-muted-foreground py-8 text-sm">
+                  No KPIs found for this period
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-lg border overflow-hidden">
+              <KpiDetailsTable
+                kpis={sortedKpis}
+                submissionMap={submissionMap}
+                viewType="my-kpis"
+                selectedPeriod={selectedPeriod}
+                selectedYear={selectedYear}
+                onReview={openReviewDialog}
+                onView={openReviewDialog}
+                onShowLogic={openTimeline}
+                expandedKpis={expandedKpis}
+                onToggleExpand={toggleExpand}
+                getOrgKpiValue={getOrgKpiValue}
+                isKpiLocked={isKpiFrequencyLocked}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 

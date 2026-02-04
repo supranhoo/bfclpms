@@ -1830,20 +1830,29 @@ The application uses responsive design patterns to ensure a good user experience
 | **Conditional Rendering** | `{isMobile ? <MobileComponent /> : <DesktopComponent />}` |
 | **Responsive Classes** | `text-xs sm:text-sm`, `grid-cols-2 lg:grid-cols-4`, etc. |
 
-### Dashboard Mobile Optimizations
+### Page-Specific Mobile Optimizations
 
-| Component | Mobile Behavior |
-|-----------|-----------------|
-| **Filter Bar** | Stacks vertically, full-width dropdowns |
-| **ReviewPeriodSelector** | Stacks label and selects vertically |
-| **Charts Grid** | Full width, stacked vertically |
-| **Stats Cards** | 2-column grid instead of 4 |
-| **Review Status** | Vertical list with inline progress bars |
-| **KPI Table** | Replaced with `MobileKpiCard` component |
+| Page | Mobile Behavior |
+|------|-----------------|
+| **Dashboard** | Charts stack vertically, KPI table becomes cards, 2-col stats grid |
+| **My KPIs** | Stats become 2-col, KPI table becomes `MobileKpiCard` list |
+| **Team Review** | 2-col stats, employee cards stack single column |
+| **Audit Panel** | Same pattern as Team Review |
+| **Management Review** | Same pattern as Team Review |
+| **Query Inbox** | Tabs scrollable, table becomes `MobileInboxList` cards |
+
+### Scorecard Components (Employee, Audit, Management)
+
+| Element | Mobile Behavior |
+|---------|-----------------|
+| **Header** | Avatar/name/back button stack, period badge moves below |
+| **Charts Grid** | Stacks vertically (Overall + Category), reduced height (140px) |
+| **Stats Row** | 2-column grid, smaller text (`text-[10px]`), compact padding |
+| **KPI Table** | Uses `MobileKpiCard` component via `useIsMobile()` |
 
 ### MobileKpiCard Component
 
-Located at `src/components/dashboard/MobileKpiCard.tsx`, this component renders KPI data in a touch-friendly card format:
+Located at `src/components/review/MobileKpiCard.tsx`, this reusable component renders KPI data in a touch-friendly card format with role-aware actions:
 
 ```
 ┌─ KPI Card ──────────────┐
@@ -1852,9 +1861,18 @@ Located at `src/components/dashboard/MobileKpiCard.tsx`, this component renders 
 │ KPI description...      │
 │ Target  Weight  Score   │
 │ 100     15%     4.2     │
-│              [ℹ] [📊]   │
+│ [Review] [View] [ℹ]     │
 └─────────────────────────┘
 ```
+
+**Props:**
+- `viewType`: 'my-kpis' | 'dashboard' | 'team-review' | 'audit' | 'management'
+- `onAction`, `onView`, `onShowLogic`, `onSendBack`: Action handlers
+- `isLocked`, `isExpanded`: State flags
+
+### MobileInboxList Component
+
+Located at `src/components/inbox/MobileInboxList.tsx`, renders notifications and queries as cards with chronological grouping.
 
 ### Responsive Utility Classes
 
