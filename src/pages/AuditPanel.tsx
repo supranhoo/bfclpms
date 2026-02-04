@@ -157,12 +157,12 @@ export default function AuditPanel() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
-            <Shield className="h-5 w-5 text-white" />
+          <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+            <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Audit Panel</h1>
-            <p className="text-muted-foreground">Review and verify performance evaluations</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-foreground">Audit Panel</h1>
+            <p className="text-sm text-muted-foreground">Review and verify performance evaluations</p>
           </div>
         </div>
         <ReviewPeriodSelector
@@ -173,59 +173,59 @@ export default function AuditPanel() {
         />
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Stats Cards - 2 columns on mobile, 4 on desktop */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Card className="border-l-4 border-l-primary">
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Employees</p>
-                <p className="text-3xl font-bold">{stats.totalEmployees}</p>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Total Employees</p>
+                <p className="text-xl sm:text-3xl font-bold">{stats.totalEmployees}</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <Users className="h-6 w-6 text-primary" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Users className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
               </div>
             </div>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-amber-500">
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Pending Audit</p>
-                <p className="text-3xl font-bold text-amber-600">{stats.pendingAudit}</p>
-                <p className="text-xs text-muted-foreground">KPIs awaiting audit</p>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Pending Audit</p>
+                <p className="text-xl sm:text-3xl font-bold text-amber-600">{stats.pendingAudit}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">KPIs awaiting audit</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-amber-500/10 flex items-center justify-center">
-                <Clock className="h-6 w-6 text-amber-500" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-amber-500/10 flex items-center justify-center">
+                <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-amber-500" />
               </div>
             </div>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-purple-500">
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">In Audit</p>
-                <p className="text-3xl font-bold text-purple-600">{stats.inAudit}</p>
-                <p className="text-xs text-muted-foreground">Currently reviewing</p>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">In Audit</p>
+                <p className="text-xl sm:text-3xl font-bold text-purple-600">{stats.inAudit}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">Currently reviewing</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-purple-500/10 flex items-center justify-center">
-                <FileCheck className="h-6 w-6 text-purple-500" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-purple-500/10 flex items-center justify-center">
+                <FileCheck className="h-5 w-5 sm:h-6 sm:w-6 text-purple-500" />
               </div>
             </div>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-green-500">
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Forwarded</p>
-                <p className="text-3xl font-bold text-green-600">{stats.forwarded}</p>
-                <p className="text-xs text-muted-foreground">Sent for management</p>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Forwarded</p>
+                <p className="text-xl sm:text-3xl font-bold text-green-600">{stats.forwarded}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">Sent for management</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
-                <CheckCircle2 className="h-6 w-6 text-green-500" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-green-500" />
               </div>
             </div>
           </CardContent>
@@ -256,15 +256,15 @@ export default function AuditPanel() {
 
       {/* Employees Grid */}
       <Card>
-        <CardHeader>
-          <CardTitle>All Employees</CardTitle>
-          <CardDescription>
+        <CardHeader className="pb-3 sm:pb-6">
+          <CardTitle className="text-base sm:text-lg">All Employees</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
             Select an employee to view their scorecard and complete audit review
           </CardDescription>
         </CardHeader>
         <CardContent>
           {displayMembers && displayMembers.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {displayMembers.map(member => {
                 const managerName = getManagerName(member.reporting_manager_id);
                 const kpiStats = getEmployeeKpiStats(member.id);

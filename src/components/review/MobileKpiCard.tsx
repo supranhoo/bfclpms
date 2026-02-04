@@ -1,0 +1,271 @@
+/**
+ * Reusable Mobile KPI Card Component
+ * Touch-friendly card layout for KPIs on mobile devices
+ */
+
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { KPI, ReviewSubmission } from '@/hooks/useKpis';
+import { statusColors, statusLabels } from '@/lib/reviewConstants';
+import { normalizeKpiText } from '@/lib/textFormatting';
+import { cn } from '@/lib/utils';
+import { 
+  Lock, Info, Building2, Users, User, CheckCircle2, Eye, Calendar, 
+  Undo2, ChevronDown, ChevronUp 
+} from 'lucide-react';
+
+export type MobileKpiViewType = 'my-kpis' | 'dashboard' | 'team-review' | 'audit' | 'management';
+
+interface MobileKpiCardProps {
+  kpi: KPI;
+  submission?: ReviewSubmission;
+  viewType: MobileKpiViewType;
+  onAction?: (kpi: KPI) => void;
+  onView?: (kpi: KPI) => void;
+  onShowLogic?: (kpi: KPI) => void;
+  onSendBack?: (kpi: KPI) => void;
+  onToggleExpand?: (kpiId: string) => void;
+  isExpanded?: boolean;
+  isLocked?: boolean;
+  getOrgKpiValue?: (kpi: KPI) => { achieved_value: number | null; data_source: string | null } | null;
+}
+
+export function MobileKpiCard({
+  kpi,
+  submission,
+  viewType,
+  onAction,
+  onView,
+  onShowLogic,
+  onSendBack,
+  onToggleExpand,
+  isExpanded,
+  isLocked,
+  getOrgKpiValue,
+}: MobileKpiCardProps) {
+  const isNaKpi = submission?.is_na || false;
+  const isDailyKpi = kpi.frequency === 'Daily';
+  const orgValue = getOrgKpiValue?.(kpi);
+  const scope = kpi.org_level_scope || 'organization';
+
+  // Get appropriate score based on view type
+  const getDisplayScore = (): number | null => {
+    if (!submission) return null;
+    switch (viewType) {
+      case 'management':
+        return submission.management_score ?? submission.auditor_score ?? submission.manager_score ?? submission.self_score ?? null;
+      case 'audit':
+        return submission.auditor_score ?? submission.manager_score ?? submission.self_score ?? null;
+      case 'team-review':
+        return submission.manager_score ?? submission.self_score ?? null;
+      default:
+        return submission.self_score ?? null;
+    }
+  };
+
+  const displayScore = getDisplayScore();
+
+  // Determine if we can take action
+  const canReview = (): boolean => {
+    if (isNaKpi || isLocked) return false;
+    switch (viewType) {
+      case 'my-kpis':
+        return kpi.status === 'kra_set';
+      case 'team-review':
+        return kpi.status === 'self_review';
+      case 'audit':
+        return kpi.status === 'manager_check' || kpi.status === 'audit';
+      case 'management':
+        return kpi.status === 'management_review';
+      default:
+        return false;
+    }
+  };
+
+  // Get action button content
+  const getActionContent = () => {
+    if (isLocked && viewType === 'my-kpis') {
+      return (
+        <Badge variant="outline" className="text-muted-foreground text-xs">
+          <Lock className="h-3 w-3 mr-1" />
+          Locked
+        </Badge>
+      );
+    }
+
+    if (isNaKpi) {
+      return (
+        <Badge variant="outline" className="bg-muted text-muted-foreground text-xs">
+          N/A
+        </Badge>
+      );
+    }
+
+    const isApproved = kpi.status === 'approved';
+    const isForwarded = viewType === 'audit' && (kpi.status === 'management_review' || kpi.status === 'approved');
+    const isTeamReviewPastStage = viewType === 'team-review' && 
+      ['manager_check', 'audit', 'management_review', 'approved'].includes(kpi.status || '');
+
+    if (canReview()) {
+      return (
+        <div className="flex items-center gap-2">
+          <Button size="sm" className="h-8" onClick={() => onAction?.(kpi)}>
+            {viewType === 'audit' && kpi.status === 'audit' ? 'Continue' : 'Review'}
+          </Button>
+          {(viewType === 'team-review' || viewType === 'audit' || viewType === 'management') && onSendBack && (
+            <Button size="sm" variant="outline" className="h-8 px-2" onClick={() => onSendBack(kpi)}>
+              <Undo2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    if (isApproved && viewType === 'management') {
+      return (
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 text-xs">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Done
+          </Badge>
+          {onView && (
+            <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => onView(kpi)}>
+              <Eye className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    if (isForwarded) {
+      return (
+        <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 text-xs">
+          <CheckCircle2 className="h-3 w-3 mr-1" />
+          Fwd
+        </Badge>
+      );
+    }
+
+    if (isTeamReviewPastStage) {
+      return (
+        <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 text-xs">
+          <CheckCircle2 className="h-3 w-3 mr-1" />
+          Done
+        </Badge>
+      );
+    }
+
+    if (onView) {
+      return (
+        <Button size="sm" variant="outline" className="h-8" onClick={() => onView(kpi)}>
+          <Eye className="h-4 w-4 mr-1" />
+          View
+        </Button>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <Card className={cn(
+      "p-4",
+      isLocked && "opacity-60",
+      isNaKpi && "opacity-60 bg-muted/20"
+    )}>
+      {/* Row 1: Category + Status */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div
+            className="w-2.5 h-2.5 rounded-full shrink-0"
+            style={{ backgroundColor: kpi.kra_categories?.color || 'hsl(var(--primary))' }}
+          />
+          <span className="text-xs text-muted-foreground truncate">
+            {kpi.kra_categories?.name || 'Uncategorized'}
+          </span>
+          {kpi.is_org_level && (
+            <Tooltip>
+              <TooltipTrigger>
+                {scope === 'organization' ? (
+                  <Building2 className="h-3 w-3 text-muted-foreground shrink-0" />
+                ) : scope === 'department' ? (
+                  <Users className="h-3 w-3 text-muted-foreground shrink-0" />
+                ) : (
+                  <User className="h-3 w-3 text-muted-foreground shrink-0" />
+                )}
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Org-level ({scope})</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {isDailyKpi && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
+              Daily
+            </Badge>
+          )}
+        </div>
+        <Badge className={cn(statusColors[kpi.status || 'kra_set'], "text-xs shrink-0 ml-2")}>
+          {statusLabels[kpi.status || 'kra_set']}
+        </Badge>
+      </div>
+
+      {/* Row 2: KRA/KPI Names - Clickable for logic */}
+      <button
+        onClick={() => onShowLogic?.(kpi)}
+        className="text-left w-full mb-3 group"
+      >
+        <p className="font-medium text-sm line-clamp-1 group-hover:text-primary transition-colors">
+          {normalizeKpiText(kpi.kra_name)}
+        </p>
+        <p className="text-xs text-muted-foreground line-clamp-2 flex items-center gap-1">
+          {normalizeKpiText(kpi.kpi_name)}
+          <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+        </p>
+      </button>
+
+      {/* Row 3: Metrics + Actions */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-4 text-xs">
+          <div>
+            <span className="text-muted-foreground block text-[10px]">Target</span>
+            <span className="font-mono font-medium">{kpi.target_value ?? '-'}</span>
+            {kpi.uom && <span className="text-muted-foreground ml-0.5">{kpi.uom}</span>}
+          </div>
+          <div>
+            <span className="text-muted-foreground block text-[10px]">Weight</span>
+            <span className="font-medium">{kpi.weightage}%</span>
+          </div>
+          {displayScore !== null && !isNaKpi && (
+            <div>
+              <span className="text-muted-foreground block text-[10px]">Score</span>
+              <span className="font-medium">{displayScore}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1">
+          {getActionContent()}
+          
+          {isDailyKpi && !isNaKpi && onToggleExpand && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onToggleExpand(kpi.id)}
+              className="h-8 px-2"
+            >
+              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+              {isExpanded ? (
+                <ChevronUp className="h-3 w-3 ml-0.5" />
+              ) : (
+                <ChevronDown className="h-3 w-3 ml-0.5" />
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}

@@ -164,8 +164,8 @@ export default function TeamReview() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Team Review</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Team Review</h1>
+          <p className="text-sm text-muted-foreground">
             {isAdmin || isManagement ? 'View all employees and their performance' : "Review and manage your team's performance"}
           </p>
         </div>
@@ -177,75 +177,75 @@ export default function TeamReview() {
         />
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      {/* Stats Cards - 2 columns on mobile, 5 on desktop */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         <Card className="border-l-4 border-l-primary">
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">
                   {isAdmin || isManagement ? 'Total Employees' : 'Team Size'}
                 </p>
-                <p className="text-3xl font-bold">{stats.totalEmployees}</p>
+                <p className="text-xl sm:text-3xl font-bold">{stats.totalEmployees}</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <Users className="h-6 w-6 text-primary" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Users className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
               </div>
             </div>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-purple-500">
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Open KPIs</p>
-                <p className="text-3xl font-bold text-purple-600">{stats.openKpis}</p>
-                <p className="text-xs text-muted-foreground">Not yet submitted</p>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Open KPIs</p>
+                <p className="text-xl sm:text-3xl font-bold text-purple-600">{stats.openKpis}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">Not yet submitted</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-purple-500/10 flex items-center justify-center">
-                <Target className="h-6 w-6 text-purple-500" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-purple-500/10 flex items-center justify-center">
+                <Target className="h-5 w-5 sm:h-6 sm:w-6 text-purple-500" />
               </div>
             </div>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-yellow-500">
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Pending Review</p>
-                <p className="text-3xl font-bold text-yellow-600">{stats.pendingReview}</p>
-                <p className="text-xs text-muted-foreground">Awaiting manager</p>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Pending Review</p>
+                <p className="text-xl sm:text-3xl font-bold text-yellow-600">{stats.pendingReview}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">Awaiting manager</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                <Clock className="h-6 w-6 text-yellow-500" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-500" />
               </div>
             </div>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-green-500">
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Reviewed</p>
-                <p className="text-3xl font-bold text-green-600">{stats.reviewed}</p>
-                <p className="text-xs text-muted-foreground">KPIs completed</p>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Reviewed</p>
+                <p className="text-xl sm:text-3xl font-bold text-green-600">{stats.reviewed}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">KPIs completed</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
-                <CheckCircle2 className="h-6 w-6 text-green-500" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-green-500" />
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-blue-500">
-          <CardContent className="pt-6">
+        <Card className="border-l-4 border-l-blue-500 col-span-2 md:col-span-1">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total KPIs</p>
-                <p className="text-3xl font-bold text-blue-600">{stats.totalKpis}</p>
-                <p className="text-xs text-muted-foreground">This period</p>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Total KPIs</p>
+                <p className="text-xl sm:text-3xl font-bold text-blue-600">{stats.totalKpis}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">This period</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center">
-                <Target className="h-6 w-6 text-blue-500" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+                <Target className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500" />
               </div>
             </div>
           </CardContent>
@@ -276,15 +276,15 @@ export default function TeamReview() {
 
       {/* Team Members Grid */}
       <Card>
-        <CardHeader>
-          <CardTitle>{isAdmin || isManagement ? 'All Employees' : 'Team Members'}</CardTitle>
-          <CardDescription>
+        <CardHeader className="pb-3 sm:pb-6">
+          <CardTitle className="text-base sm:text-lg">{isAdmin || isManagement ? 'All Employees' : 'Team Members'}</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
             Select an employee to view their scorecard and review KPIs
           </CardDescription>
         </CardHeader>
         <CardContent>
           {displayMembers && displayMembers.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {displayMembers.map(member => {
                 const managerName = getManagerName(member.reporting_manager_id);
                 const kpiStats = getEmployeeKpiStats(member.id);

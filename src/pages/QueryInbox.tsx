@@ -300,10 +300,10 @@ export default function QueryInbox() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Inbox</h1>
-          <p className="text-muted-foreground">Notifications and queries for your KPIs</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Inbox</h1>
+          <p className="text-sm text-muted-foreground">Notifications and queries for your KPIs</p>
         </div>
         {unreadNotificationsCount > 0 && (
           <Button
@@ -313,49 +313,51 @@ export default function QueryInbox() {
             disabled={markAllRead.isPending}
           >
             <CheckCheck className="h-4 w-4 mr-2" />
-            Mark all as read
+            <span className="hidden sm:inline">Mark all as read</span>
+            <span className="sm:hidden">Read all</span>
           </Button>
         )}
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards - 2 columns on mobile */}
       <InboxStatsCards stats={stats} />
 
-      {/* Tabs */}
+      {/* Tabs - Scrollable on mobile */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="notifications" className="flex items-center gap-2">
+        <TabsList className="flex w-full overflow-x-auto scrollbar-none">
+          <TabsTrigger value="notifications" className="flex items-center gap-1.5 flex-shrink-0 text-xs sm:text-sm">
             <Bell className="h-4 w-4" />
-            Notifications
+            <span className="hidden sm:inline">Notifications</span>
+            <span className="sm:hidden">Notif</span>
             {unreadNotificationsCount > 0 && (
-              <Badge variant="destructive" className="ml-1 h-5 min-w-5 px-1 flex items-center justify-center text-xs">
+              <Badge variant="destructive" className="ml-0.5 h-4 sm:h-5 min-w-4 sm:min-w-5 px-1 flex items-center justify-center text-[10px] sm:text-xs">
                 {unreadNotificationsCount}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="received" className="flex items-center gap-2">
+          <TabsTrigger value="received" className="flex items-center gap-1.5 flex-shrink-0 text-xs sm:text-sm">
             <MessageSquare className="h-4 w-4" />
             Queries
             {openQueries.length > 0 && (
-              <Badge variant="destructive" className="ml-1 h-5 min-w-5 px-1 flex items-center justify-center text-xs">
+              <Badge variant="destructive" className="ml-0.5 h-4 sm:h-5 min-w-4 sm:min-w-5 px-1 flex items-center justify-center text-[10px] sm:text-xs">
                 {openQueries.length}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="sent" className="flex items-center gap-2">
+          <TabsTrigger value="sent" className="flex items-center gap-1.5 flex-shrink-0 text-xs sm:text-sm">
             <Send className="h-4 w-4" />
             Sent
             {pendingAcceptanceQueries.length > 0 && (
-              <Badge variant="outline" className="ml-1 h-5 min-w-5 px-1 flex items-center justify-center text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+              <Badge variant="outline" className="ml-0.5 h-4 sm:h-5 min-w-4 sm:min-w-5 px-1 flex items-center justify-center text-[10px] sm:text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
                 {pendingAcceptanceQueries.length}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="team" className="flex items-center gap-2">
+          <TabsTrigger value="team" className="flex items-center gap-1.5 flex-shrink-0 text-xs sm:text-sm">
             <Users className="h-4 w-4" />
             Team
             {subordinateQueries.filter(q => q.status !== 'resolved').length > 0 && (
-              <Badge variant="outline" className="ml-1 h-5 min-w-5 px-1 flex items-center justify-center text-xs">
+              <Badge variant="outline" className="ml-0.5 h-4 sm:h-5 min-w-4 sm:min-w-5 px-1 flex items-center justify-center text-[10px] sm:text-xs">
                 {subordinateQueries.filter(q => q.status !== 'resolved').length}
               </Badge>
             )}
