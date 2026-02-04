@@ -1538,10 +1538,16 @@ Unified, reusable KPI details table component used across all review views (My K
 |--------|---------|-------------|-------|------------|
 | `kra_set` | Review | View | View | View |
 | `self_review` | View | Review | View | View |
-| `manager_check` | View | View | Review | View |
-| `audit` | View | View | Continue | View |
-| `management_review` | View | View | View | Review |
-| `approved` | View | View | Forwarded | Completed |
+| `manager_check` | View | Reviewed + View | Review | View |
+| `audit` | View | Reviewed + View | Continue | View |
+| `management_review` | View | Reviewed + View | Forwarded + View | Review |
+| `approved` | View | Reviewed + View | Forwarded + View | Completed + View |
+
+**Status Badges with View Access:**
+- **Team Review**: KPIs past `self_review` show "Reviewed" badge + View icon button
+- **Audit Panel**: KPIs forwarded to management show "Forwarded" badge + View icon button  
+- **Management Review**: Approved KPIs show "Completed" badge + View icon button
+- All badges preserve access to the full KPI review panel for audit trail transparency
 
 **Props:**
 ```typescript

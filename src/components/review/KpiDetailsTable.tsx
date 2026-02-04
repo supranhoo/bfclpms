@@ -171,6 +171,8 @@ export function KpiDetailsTable({
     // Status-based completion states
     const isApproved = kpi.status === 'approved';
     const isForwarded = viewType === 'audit' && (kpi.status === 'management_review' || kpi.status === 'approved');
+    const isTeamReviewPastStage = viewType === 'team-review' && 
+      ['manager_check', 'audit', 'management_review', 'approved'].includes(kpi.status || '');
     
     if (locked && viewType === 'my-kpis') {
       return (
@@ -195,15 +197,41 @@ export function KpiDetailsTable({
             )}
           </>
         ) : isApproved && viewType === 'management' ? (
-          <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400">
-            <CheckCircle2 className="h-3 w-3 mr-1" />
-            Completed
-          </Badge>
+          <>
+            <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Completed
+            </Badge>
+            {onView && (
+              <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View KPI Details">
+                <Eye className="h-4 w-4" />
+              </Button>
+            )}
+          </>
         ) : isForwarded ? (
-          <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400">
-            <CheckCircle2 className="h-3 w-3 mr-1" />
-            Forwarded
-          </Badge>
+          <>
+            <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Forwarded
+            </Badge>
+            {onView && (
+              <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View KPI Details">
+                <Eye className="h-4 w-4" />
+              </Button>
+            )}
+          </>
+        ) : isTeamReviewPastStage ? (
+          <>
+            <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Reviewed
+            </Badge>
+            {onView && (
+              <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View KPI Details">
+                <Eye className="h-4 w-4" />
+              </Button>
+            )}
+          </>
         ) : isNaKpi ? (
           <Badge variant="outline" className="bg-muted text-muted-foreground">
             Not Applicable
