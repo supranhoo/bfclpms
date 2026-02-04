@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-04  
-> **Version:** 1.4.1  
+> **Version:** 1.5.0  
 > **Maintainer:** Lovable AI
 
 ---
@@ -228,6 +228,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | `kra_rollover_logs` | KRA rollover history | `source_period`, `target_period`, `kpis_copied` |
 | `org_kpi_values` | Organization-level KPI scores | `category_id`, `review_period`, `achieved_value` |
 | `import_progress` | Bulk import tracking | `id`, `status`, `total_rows`, `processed_rows` |
+| `employee_working_days` | Per-employee monthly working days configuration | `employee_id`, `month`, `year`, `working_days` |
 
 #### Workflow Settings Categories
 

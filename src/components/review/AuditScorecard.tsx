@@ -23,6 +23,7 @@ import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreI
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
+import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { QueryHistoryDialog } from '@/components/review/QueryHistoryDialog';
 import { KpiDetailsTable } from '@/components/review/KpiDetailsTable';
 import { scoreToRating } from '@/components/review/ScoreSelector';
@@ -85,6 +86,7 @@ export function AuditScorecard({
   const [logicModalOpen, setLogicModalOpen] = useState(false);
   const [trackerModalOpen, setTrackerModalOpen] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   const [expandedDailyKpis, setExpandedDailyKpis] = useState<Set<string>>(new Set());
   
@@ -735,6 +737,13 @@ export function AuditScorecard({
         kpiName={selectedKpi?.kpi_name || ''}
         open={historyDialogOpen}
         onOpenChange={setHistoryDialogOpen}
+      />
+
+      {/* KPI Timeline */}
+      <KpiTimeline
+        isOpen={timelineOpen}
+        onClose={() => setTimelineOpen(false)}
+        kpi={selectedKpi}
       />
     </div>
   );

@@ -14,9 +14,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package } from 'lucide-react';
+import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package, Calendar } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { SmartAssignmentDialog } from '@/components/admin/SmartAssignmentDialog';
+import { EmployeeWorkingDaysDialog } from '@/components/admin/EmployeeWorkingDaysDialog';
 
 type AppRole = 'admin' | 'manager' | 'employee' | 'auditor' | 'management';
 
@@ -93,6 +94,15 @@ export default function UserManagement() {
     name: string; 
     departmentId: string | null;
     role: string;
+  } | null>(null);
+
+  // Working Days Dialog
+  const [workingDaysDialogOpen, setWorkingDaysDialogOpen] = useState(false);
+  const [workingDaysEmployee, setWorkingDaysEmployee] = useState<{
+    id: string;
+    full_name: string | null;
+    email: string;
+    employee_code: string | null;
   } | null>(null);
 
   // Filtered and paginated profiles
@@ -654,8 +664,29 @@ export default function UserManagement() {
                         >
                           <Package className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => openResetDialog(profile)} title="Reset Password">
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          onClick={() => openResetDialog(profile)} 
+                          title="Reset Password"
+                        >
                           <KeyRound className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setWorkingDaysEmployee({
+                              id: profile.id,
+                              full_name: profile.full_name,
+                              email: profile.email,
+                              employee_code: profile.employee_code,
+                            });
+                            setWorkingDaysDialogOpen(true);
+                          }}
+                          title="Working Days"
+                        >
+                          <Calendar className="h-4 w-4" />
                         </Button>
                         <Button
                           size="sm"
@@ -1097,6 +1128,16 @@ export default function UserManagement() {
           employeeRole={assignTargetUser.role}
         />
       )}
+
+      {/* Working Days Dialog */}
+      <EmployeeWorkingDaysDialog
+        isOpen={workingDaysDialogOpen}
+        onClose={() => {
+          setWorkingDaysDialogOpen(false);
+          setWorkingDaysEmployee(null);
+        }}
+        employee={workingDaysEmployee}
+      />
     </div>
   );
 }
