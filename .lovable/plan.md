@@ -1,338 +1,199 @@
 
-# Implementation Plan - COMPLETED
+# Plan: Complete Mobile Optimization for Review Pages
 
-## Overview
+## Current State Analysis
 
-All three major features have been fully implemented:
+### Already Mobile-Optimized ✅
+| Component | Mobile Strategy |
+|-----------|-----------------|
+| `Dashboard.tsx` | Uses `useIsMobile()` → Shows `MobileKpiCard` for KPI list |
+| `MyKpis.tsx` | Uses `useIsMobile()` → Shows `MobileMyKpiCard` for KPI list |
+| `InboxTable.tsx` | Uses `useIsMobile()` → Shows `MobileInboxList` for query inbox |
+| `EmployeeFilters.tsx` | Uses Tailwind responsive → 2-column grid on mobile, inline on desktop |
+| `MobileKpiCard.tsx` | Purpose-built touch-friendly component with multiple view types |
+| `EmployeeScorecard.tsx` | Uses `useIsMobile()` → Shows mobile card layout in review sheet |
+
+### Partially Optimized ⚠️
+| Component | Current State | Issue |
+|-----------|---------------|-------|
+| `TeamReview.tsx` | Responsive grid for employee cards | ✅ Already good - no table |
+| `AuditPanel.tsx` | Responsive grid for employee cards | ✅ Already good - no table |
+| `ManagementReview.tsx` | Responsive grid for employee cards | ✅ Already good - no table |
+
+### Needs Optimization ❌
+| Component | Issue |
+|-----------|-------|
+| `SelfReview.tsx` | Uses full Table with 9 columns - **unreadable on mobile** |
 
 ---
 
-## Feature 1: Dynamic Working Days Configuration ✅ COMPLETE
+## Detailed Finding
 
-### Implementation Summary
-| Component | Status |
-|-----------|--------|
-| `employee_working_days` database table | ✅ Created |
-| `day_count_type` column on `kpis` table | ✅ Created |
-| `useEmployeeWorkingDays` hook | ✅ Created |
-| `EmployeeWorkingDaysDialog` component | ✅ Created |
-| User Management integration | ✅ Created |
-| KPI Create/Edit Dialog - `day_count_type` selector | ✅ Implemented |
-| Template Form Dialog - `day_count_type` selector | ✅ Implemented |
-| `dailyAggregation.ts` - Dynamic day calculation | ✅ Implemented |
-| `useDailyAggregation.ts` hook | ✅ Created |
-| `useWorkingDaysPerMonth` hook | ✅ Created |
-| KPI interface - `day_count_type` field | ✅ Added |
-| Documentation updated | ✅ Done |
+After analysis, the **main review pages (TeamReview, AuditPanel, ManagementReview)** are already well-optimized:
+- They use employee card grids that adapt to `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`
+- Stats cards use `grid-cols-2` on mobile
+- The actual KPI review happens inside Scorecard components which already use `MobileKpiCard`
 
-### Key Changes Made:
-1. Added `day_count_type` selector to AdminKpiCreateDialog, AdminKpiEditDialog, and TemplateFormDialog
-2. Updated `dailyAggregation.ts` with new functions:
-   - `getExpectedDaysWithConfig()` - Returns expected days based on config
-   - `calculateDailyAggregatedScoreWithExpectedDays()` - Aggregation with explicit days parameter
-   - `calculateBinaryDailyScoreWithExpectedDays()` - Binary KPI scoring with explicit days
-3. Created `useDailyAggregation.ts` hook with:
-   - `useEmployeeWorkingDaysForMonth()` - Fetches employee-specific working days
-   - `useExpectedDays()` - Determines expected days based on day_count_type
-   - `useDailyAggregatedScore()` - Full aggregation with dynamic working days
-4. Added `useWorkingDaysPerMonth()` to useSystemSettings.ts
-5. Added `day_count_type` to KPI interface in useKpis.ts
+**The only page with a significant mobile issue is `SelfReview.tsx`**, which renders a 9-column Table that is unusable on small screens.
+
+---
+
+## Implementation Plan
+
+### Phase 1: Create Mobile Self-Review KPI Card
+
+**New Component:** `src/components/review/MobileSelfReviewCard.tsx`
+
+A simplified mobile card for the Self Review page that shows:
+- Category + Status badges
+- KRA/KPI names (truncated)
+- Target, Weight, Achieved, Score
+- Submit/Edit/View actions
 
 ```
-┌─────────────────────────────────────────────────────┐
-│ Day Count Type (for Daily KPIs)                     │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │ [▼] Working Days Only                           │ │
-│ └─────────────────────────────────────────────────┘ │
-│ Uses employee-specific working days (e.g., 22/month)│
-└─────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│ [🔵 Category] [Employee Name]    [Status]   │
+├─────────────────────────────────────────────┤
+│ KRA Name (truncated)                        │
+│ KPI Name (truncated, smaller)               │
+├─────────────────────────────────────────────┤
+│ Target: 100 | Weight: 15% | Score: 4        │
+├─────────────────────────────────────────────┤
+│ [Submit] [View] [Timeline]                  │
+└─────────────────────────────────────────────┘
 ```
 
-#### Task 1.2: Update Daily Aggregation Logic
+### Phase 2: Update SelfReview.tsx with Mobile Detection
 
-**File to modify:** `src/lib/dailyAggregation.ts`
+**File:** `src/pages/SelfReview.tsx`
 
-**Current implementation:**
+Changes:
+1. Import `useIsMobile` hook
+2. Add `isMobile` state
+3. Conditionally render:
+   - **Desktop:** Existing 9-column Table
+   - **Mobile:** Stack of `MobileSelfReviewCard` components
+
 ```typescript
-export function getExpectedDaysInMonth(month: string, year: number): number {
-  const monthNum = getMonthNumber(month);
-  return getDaysInMonth(new Date(year, monthNum - 1));
-}
-```
+// At top of component
+const isMobile = useIsMobile();
 
-**Required changes:**
-- Update signature to accept `dayCountType` and `employeeId` parameters
-- Fetch employee-specific working days when `dayCountType === 'working_days'`
-- Fallback to global `working_days_per_month` setting if no employee config
-- Return calendar days when `dayCountType === 'all_days'`
-
-**New signature:**
-```typescript
-export async function getExpectedDaysInMonth(
-  month: string, 
-  year: number,
-  dayCountType: 'working_days' | 'all_days' = 'working_days',
-  employeeId?: string,
-  globalDefault?: number
-): Promise<number>
-```
-
-#### Task 1.3: Update All Aggregation Callers
-
-**Files to modify:**
-- `src/pages/MyKpis.tsx`
-- `src/components/review/DailySubmissionSummary.tsx`
-- Any other component using `calculateDailyAggregatedScore`
-
-**Changes:**
-- Pass `day_count_type` and `employee_id` to aggregation functions
-- Handle async nature of the updated function
-
----
-
-## Feature 2: N/A KPI Workflow Flow-Through
-
-### Current State (Fully Implemented ✅)
-| Component | Status |
-|-----------|--------|
-| `KpiDetailsTable.tsx` - View button for N/A | ✅ Implemented |
-| `MobileKpiCard.tsx` - View button for N/A | ✅ Implemented |
-| `NaConfirmationCard.tsx` component | ✅ Created |
-| `EmployeeScorecard.tsx` - N/A confirmation | ✅ Implemented |
-| `AuditScorecard.tsx` - N/A confirmation | ✅ Implemented |
-| `ManagementScorecard.tsx` - N/A confirmation | ✅ Implemented |
-| `KpiTimeline.tsx` - N/A action configs | ✅ Implemented |
-
-**Status: COMPLETE** - No pending tasks for this feature.
-
----
-
-## Feature 3: Universal Timeline Access
-
-### Current State (Fully Implemented ✅)
-| Component | Status |
-|-----------|--------|
-| `KpiHeaderSection.tsx` - Timeline button | ✅ Implemented |
-| `KpiReviewPanel.tsx` - Timeline prop | ✅ Implemented |
-| `EmployeeScorecard.tsx` - Timeline integration | ✅ Implemented |
-| `AuditScorecard.tsx` - Timeline integration | ✅ Implemented |
-| `ManagementScorecard.tsx` - Timeline integration | ✅ Implemented |
-| `KpiTimeline.tsx` - Enhanced details | ✅ Implemented |
-
-**Status: COMPLETE** - No pending tasks for this feature.
-
----
-
-## Summary of Pending Work
-
-| Priority | Task | Effort |
-|----------|------|--------|
-| High | Add `day_count_type` selector to `AdminKpiCreateDialog.tsx` | Small |
-| High | Add `day_count_type` selector to `AdminKpiEditDialog.tsx` | Small |
-| Medium | Add `day_count_type` selector to `TemplateFormDialog.tsx` | Small |
-| High | Update `dailyAggregation.ts` for dynamic working days | Medium |
-| Medium | Update aggregation callers to pass new parameters | Medium |
-| Low | Update `DOCUMENTATION.md` with day_count_type info | Small |
-
----
-
-## Detailed Implementation Plan
-
-### Phase 1: UI Selectors (Day Count Type)
-
-#### 1.1 AdminKpiCreateDialog.tsx
-
-**Location:** After the Frequency selector (around line 303-315)
-
-**Add:**
-```typescript
-// State
-const [dayCountType, setDayCountType] = useState<'working_days' | 'all_days'>('working_days');
-
-// UI - Show only when frequency is Daily
-{frequency === 'Daily' && (
-  <div className="space-y-2">
-    <Label className="text-sm font-medium">Day Count Type</Label>
-    <Select value={dayCountType} onValueChange={setDayCountType}>
-      <SelectTrigger>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="working_days">Working Days Only</SelectItem>
-        <SelectItem value="all_days">All Calendar Days</SelectItem>
-      </SelectContent>
-    </Select>
-    <p className="text-xs text-muted-foreground">
-      {dayCountType === 'working_days' 
-        ? 'Uses employee-specific working days for missed days calculation'
-        : 'Uses all calendar days (e.g., 31 days in January)'}
-    </p>
+// In render
+{isMobile ? (
+  <div className="space-y-3">
+    {filteredKpis?.map(kpi => (
+      <MobileSelfReviewCard
+        key={kpi.id}
+        kpi={kpi}
+        submission={submissionMap.get(kpi.id)}
+        employee={kpi.employee}
+        onSubmit={() => openReviewDialog(kpi)}
+        onView={() => openViewDialog(kpi)}
+        onTimeline={() => openTimeline(kpi)}
+        onShowLogic={() => openLogicModal(kpi)}
+        isLocked={...}
+        canEdit={...}
+      />
+    ))}
   </div>
+) : (
+  <Table>
+    {/* Existing table code */}
+  </Table>
 )}
-
-// Include in mutation payload
-day_count_type: frequency === 'Daily' ? dayCountType : null,
 ```
 
-#### 1.2 AdminKpiEditDialog.tsx
+### Phase 3: Verify Review Status Overview on Mobile
 
-**Add to formData state:**
+The "Review Status Overview" section in SelfReview (admin view) uses a 5-column grid:
 ```typescript
-day_count_type: 'working_days' as 'working_days' | 'all_days',
+<div className="grid gap-4 md:grid-cols-5">
 ```
 
-**Add to useEffect initialization:**
+This already collapses to single column on mobile, but we should update it to:
 ```typescript
-day_count_type: (kpi.day_count_type as 'working_days' | 'all_days') || 'working_days',
+<div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-5">
 ```
 
-**Add UI after frequency selector (similar to above)**
-
-**Include in mutation payload:**
-```typescript
-day_count_type: formData.frequency === 'Daily' ? formData.day_count_type : null,
-```
-
-#### 1.3 TemplateFormDialog.tsx
-
-**Same pattern as above for templates**
+This creates a better 2-column layout on mobile phones.
 
 ---
 
-### Phase 2: Update Aggregation Logic
+## Files to Create
 
-#### 2.1 dailyAggregation.ts
+| File | Purpose |
+|------|---------|
+| `src/components/review/MobileSelfReviewCard.tsx` | Touch-friendly card for Self Review KPIs |
 
-**Current function:**
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/pages/SelfReview.tsx` | Add `useIsMobile()`, conditionally render mobile cards vs table, update admin grid |
+| `DOCUMENTATION.md` | Document mobile optimization |
+
+---
+
+## Technical Details
+
+### MobileSelfReviewCard.tsx
+
 ```typescript
-export function getExpectedDaysInMonth(month: string, year: number): number {
-  const monthNum = getMonthNumber(month);
-  return getDaysInMonth(new Date(year, monthNum - 1));
+interface MobileSelfReviewCardProps {
+  kpi: KPI;
+  submission?: ReviewSubmission;
+  employee?: { full_name: string | null; employee_code: string | null } | null;
+  onSubmit?: () => void;
+  onView?: () => void;
+  onTimeline?: () => void;
+  onShowLogic?: () => void;
+  isLocked?: boolean;
+  isAdmin?: boolean;
 }
 ```
 
-**Updated function:**
-```typescript
-import { supabase } from '@/integrations/supabase/client';
-
-export async function getExpectedDaysInMonthAsync(
-  month: string, 
-  year: number,
-  dayCountType: 'working_days' | 'all_days' = 'working_days',
-  employeeId?: string,
-  globalDefaultDays: number = 22
-): Promise<number> {
-  // All calendar days - use date-fns
-  if (dayCountType === 'all_days') {
-    const monthNum = getMonthNumber(month);
-    return getDaysInMonth(new Date(year, monthNum - 1));
-  }
-  
-  // Working days mode - try employee-specific first
-  if (employeeId) {
-    const { data } = await supabase
-      .from('employee_working_days')
-      .select('working_days')
-      .eq('employee_id', employeeId)
-      .eq('month', month)
-      .eq('year', year)
-      .maybeSingle();
-    
-    if (data?.working_days) return data.working_days;
-  }
-  
-  // Fallback to global default
-  return globalDefaultDays;
-}
-
-// Keep synchronous version for backwards compatibility
-export function getExpectedDaysInMonth(month: string, year: number): number {
-  const monthNum = getMonthNumber(month);
-  return getDaysInMonth(new Date(year, monthNum - 1));
-}
-```
-
-**Update aggregation functions to use async version when employee context is available**
-
-#### 2.2 Create a React Hook for Aggregation
-
-**New file:** `src/hooks/useDailyAggregation.ts`
-
-```typescript
-export function useDailyAggregatedScore(
-  kpi: KPI,
-  submissions: SubPeriodSubmission[],
-  month: string,
-  year: number
-) {
-  const globalDefault = useWorkingDaysPerMonth();
-  const { data: employeeWorkingDays } = useEmployeeWorkingDaysForMonth(
-    kpi.employee_id,
-    month,
-    year
-  );
-
-  return useMemo(() => {
-    const dayCountType = kpi.day_count_type || 'working_days';
-    const expectedDays = dayCountType === 'all_days'
-      ? getDaysInMonth(new Date(year, getMonthNumber(month) - 1))
-      : (employeeWorkingDays ?? globalDefault);
-
-    const values = submissions
-      .filter(s => s.achieved_value !== null)
-      .map(s => s.achieved_value as number);
-
-    return calculateDailyAggregatedScoreWithExpectedDays(
-      values,
-      method,
-      expectedDays,
-      kpi.uom_type === 'binary'
-    );
-  }, [kpi, submissions, employeeWorkingDays, globalDefault]);
-}
-```
+The component will:
+1. Show employee info only if `isAdmin` is true
+2. Display N/A badge if `submission.is_na`
+3. Show Lock badge if `isLocked`
+4. Provide Submit/Edit buttons based on KPI status
+5. Include View and Timeline action buttons
+6. Make KRA/KPI names clickable to open logic modal
 
 ---
 
-### Phase 3: Update Callers
+## Validation Checklist
 
-Update all components that call `calculateDailyAggregatedScore` to use the new hook or pass the correct parameters:
-
-1. `MyKpis.tsx` - Line 212-214
-2. `DailySubmissionSummary.tsx`
-3. `InlineDailySubmissionRow.tsx`
-
----
-
-### Phase 4: Documentation
-
-Update `DOCUMENTATION.md` to include:
-- New `day_count_type` column description
-- Working days configuration workflow
-- Employee-level vs global defaults
+After implementation:
+- [ ] SelfReview page renders cards on mobile, table on desktop
+- [ ] All actions (Submit, Edit, View, Timeline) work on mobile
+- [ ] Employee info shows for admin users
+- [ ] Locked KPIs show appropriate UI
+- [ ] N/A KPIs display correctly
+- [ ] Review Status grid is 2-column on mobile
+- [ ] No horizontal scrolling required on mobile
 
 ---
 
-## Implementation Order
+## Scope Clarification
 
-1. **Phase 1** - Add UI selectors to dialogs (1-2 hours)
-2. **Phase 2** - Update aggregation logic (2-3 hours)
-3. **Phase 3** - Update callers (1-2 hours)
-4. **Phase 4** - Documentation (30 minutes)
+The following pages do **NOT** need changes as they are already optimized:
+- `TeamReview.tsx` - Uses card grid, good on mobile
+- `AuditPanel.tsx` - Uses card grid, good on mobile
+- `ManagementReview.tsx` - Uses card grid, good on mobile
+- `EmployeeFilters.tsx` - Already has mobile-responsive layout
 
-**Total Estimated Effort:** 5-8 hours
+The Scorecard components (`EmployeeScorecard`, `AuditScorecard`, `ManagementScorecard`) already use `useIsMobile()` and render `MobileKpiCard` on mobile.
 
 ---
 
-## Technical Considerations
+## Estimated Effort
 
-1. **Async vs Sync:** The aggregation logic may need to become async to fetch employee working days. This affects component rendering.
+| Task | Effort |
+|------|--------|
+| Create MobileSelfReviewCard component | 1-2 hours |
+| Update SelfReview.tsx with mobile detection | 30 minutes |
+| Update admin status grid layout | 15 minutes |
+| Testing on multiple screen sizes | 30 minutes |
 
-2. **Caching:** Use React Query caching to avoid repeated database calls for the same employee/month/year.
-
-3. **Fallback Chain:** 
-   - Employee-specific working days → Global default → Calendar days
-
-4. **Migration:** Existing KPIs without `day_count_type` should default to `'working_days'` behavior.
-
-5. **Template Sync:** When creating KPIs from templates, the `day_count_type` should be copied from the template if set.
+**Total: 2-3 hours**
