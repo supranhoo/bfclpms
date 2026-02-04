@@ -3,6 +3,39 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
+/**
+ * Check if current user is a data owner for any org-level KPI
+ * Used for route access control
+ */
+export function useIsAnyOrgKpiDataOwner() {
+  const { user, role } = useAuth();
+
+  return useQuery({
+    queryKey: ['is-any-org-kpi-owner', user?.id],
+    queryFn: async () => {
+      // Admins always have access
+      if (role === 'admin') {
+        return true;
+      }
+
+      if (!user?.id) {
+        return false;
+      }
+
+      // Check if user is designated owner for any KPI
+      const { data, error } = await supabase
+        .from('org_kpi_data_owners')
+        .select('id')
+        .eq('owner_id', user.id)
+        .limit(1);
+
+      if (error) return false;
+      return data && data.length > 0;
+    },
+    enabled: !!user?.id,
+  });
+}
+
 export interface OrgKpiDataOwner {
   id: string;
   category_id: string;

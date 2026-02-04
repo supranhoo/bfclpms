@@ -91,12 +91,26 @@ export default function OrgKpiDataEntry() {
     return Array.from(names).sort();
   }, [orgLevelKpis]);
 
+  // First filter by ownership (non-admins only see KPIs they own)
+  const ownershipFilteredKpis = useMemo(() => {
+    if (!orgLevelKpis) return [];
+    
+    // Admins see all KPIs
+    if (isAdmin) return orgLevelKpis;
+    
+    // Non-admins only see KPIs they own
+    return orgLevelKpis.filter(kpi => {
+      const ownerKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+      const ownership = ownershipMap.get(ownerKey);
+      return ownership?.canEdit === true;
+    });
+  }, [orgLevelKpis, isAdmin, ownershipMap]);
+
   // Filter KPIs by selected category
   const filteredKpis = useMemo(() => {
-    if (!orgLevelKpis) return [];
-    if (selectedCategoryId === 'all') return orgLevelKpis;
-    return orgLevelKpis.filter(k => k.category_id === selectedCategoryId);
-  }, [orgLevelKpis, selectedCategoryId]);
+    if (selectedCategoryId === 'all') return ownershipFilteredKpis;
+    return ownershipFilteredKpis.filter(k => k.category_id === selectedCategoryId);
+  }, [ownershipFilteredKpis, selectedCategoryId]);
 
   // Create a map of existing org values for quick lookup
   // Key format: categoryId||kraName||kpiName||departmentId||employeeId

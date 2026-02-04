@@ -1145,17 +1145,30 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
 - Multiple owners can be assigned per KPI (primary + backup)
 - Assignment is tracked in `org_kpi_data_owners` table
 
+**Page Access Control:**
+- **Admins**: Full access to all org-level KPIs plus owner assignment (Actions column visible)
+- **Data Owners**: Access only to their assigned KPIs (Actions column hidden)
+- **Non-owners**: No access (redirected to dashboard)
+- Route protected by `DataOwnerRoute` component (checks admin role OR ownership status)
+- Sidebar shows "Org KPI Data Entry" link under "Data Entry" section for data owners (non-admins)
+
 **UI Component: `OrgKpiOwnerDialog`**
 - Opened via UserPlus button in Actions column of Org KPI Data Entry table
 - Shows current KPI info (KRA name, KPI name)
 - Lists current data owners with remove option
 - Searchable user list to add new owners (by name, email, or employee code)
 
-**Access Control Hook: `useOrgKpiDataOwner`**
+**Access Control Hooks: `useOrgKpiDataOwner`**
+- `useIsAnyOrgKpiDataOwner()`: Check if current user owns any org KPIs (for route access)
 - `useOrgKpiOwnershipMap()`: Returns map of all ownership for quick lookup
-- `useIsOrgKpiDataOwner(categoryId, kraName, kpiName)`: Check if current user can edit
+- `useIsOrgKpiDataOwner(categoryId, kraName, kpiName)`: Check if current user can edit specific KPI
 - `useAssignOrgKpiOwner()`: Mutation to assign owner (admin only)
 - `useRemoveOrgKpiOwner()`: Mutation to remove owner (admin only)
+
+**Route Guard: `DataOwnerRoute`**
+- Custom route component at `src/components/layout/DataOwnerRoute.tsx`
+- Allows access if user is admin OR has any data owner assignments
+- Used for `/admin/org-kpi-data` route instead of `ProtectedRoute`
 
 **Integration Across Review Stages:**
 - All scorecards (Employee, Audit, Management) fetch `useOrgKpiValues` hook

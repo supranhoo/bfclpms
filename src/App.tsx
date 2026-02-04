@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { DashboardLayout } from "./components/layout/DashboardLayout";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
+import { DataOwnerRoute } from "./components/layout/DataOwnerRoute";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import MyKpis from "./pages/MyKpis";
@@ -148,9 +149,9 @@ const App = () => (
                 </ProtectedRoute>
               } />
               <Route path="/admin/org-kpi-data" element={
-                <ProtectedRoute allowedRoles={['admin']}>
+                <DataOwnerRoute>
                   <OrgKpiDataEntry />
-                </ProtectedRoute>
+                </DataOwnerRoute>
               } />
               <Route path="/admin/org-kpi-overview" element={
                 <ProtectedRoute allowedRoles={['admin']}>

@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useOpenQueryCount } from '@/hooks/useOpenQueryCount';
 import { useUnreadNotificationCount } from '@/hooks/useNotifications';
 import { useAppSettings } from '@/hooks/useAppSettings';
+import { useIsAnyOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
 import {
   Sidebar,
   SidebarContent,
@@ -95,6 +96,7 @@ export function AppSidebar() {
   const { data: openQueryCount } = useOpenQueryCount();
   const { data: unreadNotificationCount } = useUnreadNotificationCount();
   const { data: appSettings } = useAppSettings();
+  const { data: isDataOwner } = useIsAnyOrgKpiDataOwner();
   
   // Update document title based on app settings
   useEffect(() => {
@@ -234,6 +236,26 @@ export function AppSidebar() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Data Entry section for data owners (non-admins) */}
+        {role !== 'admin' && isDataOwner && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Data Entry</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={location.pathname === '/admin/org-kpi-data'}
+                    onClick={() => navigate('/admin/org-kpi-data')}
+                  >
+                    <Building2 className="h-4 w-4" />
+                    <span>Org KPI Data Entry</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
