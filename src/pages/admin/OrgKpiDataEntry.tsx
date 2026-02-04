@@ -5,6 +5,7 @@ import { useOrgKpiValues, useBulkUpsertOrgKpiValues, OrgKpiValue } from '@/hooks
 import { useOrgLevelKpis } from '@/hooks/useOrgLevelKpis';
 import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
 import { useBulkPropagateOrgKpiValues } from '@/hooks/usePropagateOrgKpiValue';
+import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { OrgLevelScope } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,7 +17,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { TableSkeleton } from '@/components/ui/LoadingSkeletons';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { OrgKpiOwnerDialog } from '@/components/admin/OrgKpiOwnerDialog';
-import { Building2, Save, AlertTriangle, Filter, Users, User, UserPlus, Lock } from 'lucide-react';
+import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
+import { Building2, Save, AlertTriangle, Filter, Users, User, Search, X } from 'lucide-react';
 
 interface EditableKpi {
   category_id: string;
@@ -26,6 +28,8 @@ interface EditableKpi {
   uom: string | null;
   achieved_value: number | null;
   data_source: string;
+  remarks: string;
+  evidence_url: string | null;
   isModified: boolean;
   // Threshold fields for uniform scoring mode
   r5: string;
@@ -47,7 +51,12 @@ export default function OrgKpiDataEntry() {
   const [selectedYear, setSelectedYear] = useState(defaultYear);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [editedValues, setEditedValues] = useState<Map<string, EditableKpi>>(new Map());
-  const [globalDataSource, setGlobalDataSource] = useState('');
+  
+  // New filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
+  const [selectedDesignation, setSelectedDesignation] = useState<string | null>(null);
+  const [selectedKraName, setSelectedKraName] = useState<string | null>(null);
   
   // Owner dialog state
   const [ownerDialogOpen, setOwnerDialogOpen] = useState(false);
@@ -66,6 +75,7 @@ export default function OrgKpiDataEntry() {
   const bulkUpsert = useBulkUpsertOrgKpiValues();
   const propagate = useBulkPropagateOrgKpiValues();
   const { ownershipMap, isAdmin } = useOrgKpiOwnershipMap();
+  const { departments: deptList, designations } = useEmployeeFilterOptions();
 
   // Get unique categories from org-level KPIs
   const orgLevelCategories = useMemo(() => {
@@ -73,6 +83,13 @@ export default function OrgKpiDataEntry() {
     const categoryIds = new Set(orgLevelKpis.map(k => k.category_id));
     return categories.filter(c => categoryIds.has(c.id));
   }, [orgLevelKpis, categories]);
+
+  // Get unique KRA names for filter
+  const kraNameOptions = useMemo(() => {
+    if (!orgLevelKpis) return [];
+    const names = new Set(orgLevelKpis.map(k => k.kra_name));
+    return Array.from(names).sort();
+  }, [orgLevelKpis]);
 
   // Filter KPIs by selected category
   const filteredKpis = useMemo(() => {
@@ -116,6 +133,8 @@ export default function OrgKpiDataEntry() {
         achieved_value: edited.achieved_value,
         data_source: edited.data_source,
         target_value: edited.target_value,
+        remarks: edited.remarks,
+        evidence_url: edited.evidence_url,
         r5: edited.r5,
         r4: edited.r4,
         r3: edited.r3,
@@ -130,6 +149,8 @@ export default function OrgKpiDataEntry() {
       achieved_value: existing?.achieved_value ?? null,
       data_source: existing?.data_source ?? '',
       target_value: existing?.target_value ?? null,
+      remarks: existing?.remarks ?? '',
+      evidence_url: existing?.evidence_url ?? null,
       r5: existing?.r5 ?? '',
       r4: existing?.r4 ?? '',
       r3: existing?.r3 ?? '',
@@ -145,7 +166,7 @@ export default function OrgKpiDataEntry() {
     kraName: string, 
     kpiName: string, 
     field: keyof EditableKpi, 
-    value: string, 
+    value: string | null, 
     kpi: typeof filteredKpis[0],
     departmentId: string | null = null,
     employeeId: string | null = null
@@ -161,6 +182,8 @@ export default function OrgKpiDataEntry() {
       uom: kpi?.uom ?? null,
       achieved_value: existing?.achieved_value ?? null,
       data_source: existing?.data_source ?? '',
+      remarks: existing?.remarks ?? '',
+      evidence_url: existing?.evidence_url ?? null,
       isModified: false,
       r5: existing?.r5 ?? '',
       r4: existing?.r4 ?? '',
@@ -175,7 +198,7 @@ export default function OrgKpiDataEntry() {
 
     let parsedValue: string | number | null = value;
     if (field === 'achieved_value' || field === 'target_value') {
-      parsedValue = value === '' ? null : parseFloat(value);
+      parsedValue = value === '' || value === null ? null : parseFloat(value);
     }
 
     const updated = {
@@ -187,39 +210,6 @@ export default function OrgKpiDataEntry() {
     setEditedValues(new Map(editedValues.set(key, updated)));
   };
 
-  const handleApplyGlobalDataSource = () => {
-    if (!globalDataSource) return;
-    
-    const newEdited = new Map(editedValues);
-    
-    // Apply to all visible rows
-    displayRows.forEach(row => {
-      const key = buildKey(row.kpi.category_id, row.kpi.kra_name, row.kpi.kpi_name, row.departmentId, row.employeeId);
-      const existing = existingValuesMap.get(key);
-      const current = newEdited.get(key) || {
-        category_id: row.kpi.category_id,
-        kra_name: row.kpi.kra_name,
-        kpi_name: row.kpi.kpi_name,
-        target_value: existing?.target_value ?? row.kpi.target_value,
-        uom: row.kpi.uom,
-        achieved_value: existing?.achieved_value ?? null,
-        data_source: '',
-        isModified: false,
-        r5: existing?.r5 ?? '',
-        r4: existing?.r4 ?? '',
-        r3: existing?.r3 ?? '',
-        r2: existing?.r2 ?? '',
-        r1: existing?.r1 ?? '',
-        r0: existing?.r0 ?? '',
-        criteria: existing?.criteria ?? 'Higher is Better',
-        department_id: row.departmentId,
-        employee_id: row.employeeId,
-      };
-      newEdited.set(key, { ...current, data_source: globalDataSource, isModified: true });
-    });
-    setEditedValues(newEdited);
-  };
-
   // Build display rows: for each KPI, expand based on scope
   const displayRows = useMemo(() => {
     const rows: Array<{
@@ -228,6 +218,8 @@ export default function OrgKpiDataEntry() {
       departmentName: string | null;
       employeeId: string | null;
       employeeName: string | null;
+      employeeCode: string | null;
+      designation: string | null;
       scope: OrgLevelScope;
     }> = [];
 
@@ -240,7 +232,9 @@ export default function OrgKpiDataEntry() {
           departmentId: null,
           departmentName: null,
           employeeId: null,
-          employeeName: null,
+          employeeName: 'All Employees',
+          employeeCode: null,
+          designation: null,
           scope,
         });
       } else if (scope === 'department') {
@@ -251,19 +245,24 @@ export default function OrgKpiDataEntry() {
             departmentId: dept.id,
             departmentName: dept.name,
             employeeId: null,
-            employeeName: null,
+            employeeName: `All in ${dept.name}`,
+            employeeCode: null,
+            designation: null,
             scope,
           });
         });
       } else if (scope === 'employee') {
-        // Create a row for each employee
+        // Create a row for each employee with full profile data
         allProfiles?.forEach(emp => {
+          const empDept = departments?.find(d => d.id === emp.department_id);
           rows.push({
             kpi,
-            departmentId: null,
-            departmentName: null,
+            departmentId: emp.department_id || null,
+            departmentName: empDept?.name || null,
             employeeId: emp.id,
             employeeName: emp.full_name || emp.email,
+            employeeCode: emp.employee_code || null,
+            designation: emp.designation || null,
             scope,
           });
         });
@@ -272,6 +271,51 @@ export default function OrgKpiDataEntry() {
 
     return rows;
   }, [filteredKpis, departments, allProfiles]);
+
+  // Apply filters to display rows
+  const filteredDisplayRows = useMemo(() => {
+    return displayRows.filter(row => {
+      // Search filter - match employee name, code, or KPI name
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const empName = row.employeeName?.toLowerCase() || '';
+        const empCode = row.employeeCode?.toLowerCase() || '';
+        const kpiName = row.kpi.kpi_name.toLowerCase();
+        const kraName = row.kpi.kra_name.toLowerCase();
+        if (!empName.includes(query) && !empCode.includes(query) && 
+            !kpiName.includes(query) && !kraName.includes(query)) {
+          return false;
+        }
+      }
+      
+      // Department filter
+      if (selectedDepartmentId && row.departmentId !== selectedDepartmentId) {
+        return false;
+      }
+      
+      // Designation filter
+      if (selectedDesignation && row.designation !== selectedDesignation) {
+        return false;
+      }
+      
+      // KRA filter
+      if (selectedKraName && row.kpi.kra_name !== selectedKraName) {
+        return false;
+      }
+      
+      return true;
+    });
+  }, [displayRows, searchQuery, selectedDepartmentId, selectedDesignation, selectedKraName]);
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchQuery('');
+    setSelectedDepartmentId(null);
+    setSelectedDesignation(null);
+    setSelectedKraName(null);
+  };
+
+  const hasActiveFilters = searchQuery || selectedDepartmentId || selectedDesignation || selectedKraName;
 
   const handleSaveAll = async () => {
     const valuesToSave = Array.from(editedValues.values())
@@ -288,6 +332,8 @@ export default function OrgKpiDataEntry() {
           review_year: selectedYear,
           achieved_value: v.achieved_value,
           data_source: v.data_source || undefined,
+          remarks: v.remarks || undefined,
+          evidence_url: v.evidence_url,
           entered_by: profile?.id,
           department_id: v.department_id || undefined,
           employee_id: v.employee_id || undefined,
@@ -361,7 +407,8 @@ export default function OrgKpiDataEntry() {
             Filters
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Row 1: Period, Year, Search */}
           <div className="flex flex-wrap items-end gap-4">
             <ReviewPeriodSelector
               selectedPeriod={selectedPeriod}
@@ -369,10 +416,26 @@ export default function OrgKpiDataEntry() {
               onPeriodChange={setSelectedPeriod}
               onYearChange={setSelectedYear}
             />
+            <div className="flex-1 min-w-[250px] space-y-2">
+              <Label>Search</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by employee name, code, or KPI..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+          </div>
+          
+          {/* Row 2: Category, Department, Designation, KRA, Clear */}
+          <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-2">
-              <Label>Filter by Category</Label>
+              <Label>Category</Label>
               <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
-                <SelectTrigger className="w-[250px]">
+                <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
                 <SelectContent>
@@ -391,11 +454,102 @@ export default function OrgKpiDataEntry() {
                 </SelectContent>
               </Select>
             </div>
+            
+            <div className="space-y-2">
+              <Label>Department</Label>
+              <Select 
+                value={selectedDepartmentId || 'all'} 
+                onValueChange={(v) => setSelectedDepartmentId(v === 'all' ? null : v)}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All Departments" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {deptList?.map(dept => (
+                    <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Designation</Label>
+              <Select 
+                value={selectedDesignation || 'all'} 
+                onValueChange={(v) => setSelectedDesignation(v === 'all' ? null : v)}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All Designations" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Designations</SelectItem>
+                  {designations?.map(d => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>KRA</Label>
+              <Select 
+                value={selectedKraName || 'all'} 
+                onValueChange={(v) => setSelectedKraName(v === 'all' ? null : v)}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All KRAs" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All KRAs</SelectItem>
+                  {kraNameOptions.map(name => (
+                    <SelectItem key={name} value={name}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1">
+                <X className="h-4 w-4" />
+                Clear All
+              </Button>
+            )}
           </div>
+          
+          {/* Active filter badges */}
+          {hasActiveFilters && (
+            <div className="flex flex-wrap gap-2">
+              {searchQuery && (
+                <Badge variant="secondary" className="gap-1">
+                  Search: "{searchQuery}"
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => setSearchQuery('')} />
+                </Badge>
+              )}
+              {selectedDepartmentId && (
+                <Badge variant="secondary" className="gap-1">
+                  {deptList?.find(d => d.id === selectedDepartmentId)?.name}
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => setSelectedDepartmentId(null)} />
+                </Badge>
+              )}
+              {selectedDesignation && (
+                <Badge variant="secondary" className="gap-1">
+                  {selectedDesignation}
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => setSelectedDesignation(null)} />
+                </Badge>
+              )}
+              {selectedKraName && (
+                <Badge variant="secondary" className="gap-1">
+                  {selectedKraName}
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => setSelectedKraName(null)} />
+                </Badge>
+              )}
+            </div>
+          )}
           
           {/* Scope summary badges */}
           {filteredKpis.length > 0 && (
-            <div className="flex gap-2 mt-4">
+            <div className="flex gap-2 pt-2 border-t">
               {scopeCounts.organization > 0 && (
                 <Badge variant="outline" className="gap-1">
                   <Building2 className="h-3 w-3" />
@@ -429,7 +583,7 @@ export default function OrgKpiDataEntry() {
                 Organization-Level KPIs - Data Entry
               </CardTitle>
               <CardDescription>
-                {displayRows.length} rows ({filteredKpis.length} unique KPIs) for {selectedPeriod} {selectedYear}
+                {filteredDisplayRows.length} rows ({filteredKpis.length} unique KPIs) for {selectedPeriod} {selectedYear}
               </CardDescription>
             </div>
             <div className="flex items-center gap-3">
@@ -448,125 +602,122 @@ export default function OrgKpiDataEntry() {
             </div>
           </CardHeader>
           <CardContent>
-            {/* Global data source input */}
-            <div className="flex items-end gap-2 mb-4 p-3 bg-muted/50 rounded-lg">
-              <div className="flex-1 space-y-1">
-                <Label className="text-xs">Apply Data Source to All</Label>
-                <Input
-                  placeholder="e.g., ERP System, Safety Report Dec 2025"
-                  value={globalDataSource}
-                  onChange={(e) => setGlobalDataSource(e.target.value)}
-                  className="h-9"
-                />
-              </div>
-              <Button size="sm" variant="secondary" onClick={handleApplyGlobalDataSource}>
-                Apply to All
-              </Button>
-            </div>
-
             {kpisLoading ? (
-              <TableSkeleton rows={5} columns={6} />
-            ) : displayRows.length === 0 ? (
+              <TableSkeleton rows={5} columns={9} />
+            ) : filteredDisplayRows.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Building2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p>No org-level KPIs found for the selected filters</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="font-semibold">Category</TableHead>
-                    <TableHead className="font-semibold">KRA</TableHead>
-                    <TableHead className="font-semibold">KPI</TableHead>
-                    <TableHead className="font-semibold">Scope</TableHead>
-                    <TableHead className="font-semibold text-center w-28">Target</TableHead>
-                    <TableHead className="font-semibold text-center w-36">Achieved Value</TableHead>
-                    <TableHead className="font-semibold w-48">Data Source</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {displayRows.map((row, idx) => {
-                    const { kpi, departmentId, departmentName, employeeId, employeeName, scope } = row;
-                    const display = getDisplayValue(kpi.category_id, kpi.kra_name, kpi.kpi_name, departmentId, employeeId);
-                    const key = buildKey(kpi.category_id, kpi.kra_name, kpi.kpi_name, departmentId, employeeId);
-                    const isModified = editedValues.get(key)?.isModified;
-                    const isUniformScoring = getCategoryScoringMode(kpi.category_id) === 'uniform';
-                    
-                    return (
-                      <TableRow 
-                        key={key} 
-                        className={`${idx % 2 === 0 ? 'bg-background' : 'bg-muted/20'} ${isModified ? 'ring-1 ring-primary/30' : ''}`}
-                      >
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div 
-                              className="w-2.5 h-2.5 rounded-full" 
-                              style={{ backgroundColor: kpi.kra_categories?.color || '#6B7280' }} 
-                            />
-                            <span className="text-sm">{kpi.kra_categories?.name}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-medium">{kpi.kra_name}</TableCell>
-                        <TableCell>{kpi.kpi_name}</TableCell>
-                        <TableCell>
-                          {scope === 'organization' ? (
-                            <Badge variant="outline" className="gap-1 text-xs">
-                              <Building2 className="h-3 w-3" />
-                              All
-                            </Badge>
-                          ) : scope === 'department' ? (
-                            <Badge variant="secondary" className="gap-1 text-xs">
-                              <Users className="h-3 w-3" />
-                              {departmentName}
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary" className="gap-1 text-xs">
-                              <User className="h-3 w-3" />
-                              {employeeName}
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {isUniformScoring ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="font-semibold">Category</TableHead>
+                      <TableHead className="font-semibold">KRA</TableHead>
+                      <TableHead className="font-semibold">KPI</TableHead>
+                      <TableHead className="font-semibold">Employee Name (Code)</TableHead>
+                      <TableHead className="font-semibold">Department</TableHead>
+                      <TableHead className="font-semibold">Designation</TableHead>
+                      <TableHead className="font-semibold text-center w-32">Achieved Value</TableHead>
+                      <TableHead className="font-semibold w-48">Remark</TableHead>
+                      <TableHead className="font-semibold w-28">Supporting File</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredDisplayRows.map((row, idx) => {
+                      const { kpi, departmentId, departmentName, employeeId, employeeName, employeeCode, designation, scope } = row;
+                      const display = getDisplayValue(kpi.category_id, kpi.kra_name, kpi.kpi_name, departmentId, employeeId);
+                      const key = buildKey(kpi.category_id, kpi.kra_name, kpi.kpi_name, departmentId, employeeId);
+                      const isModified = editedValues.get(key)?.isModified;
+                      
+                      // Format employee display: "Name (Code)" or just "Name"
+                      const employeeDisplay = employeeCode 
+                        ? `${employeeName} (${employeeCode})`
+                        : employeeName;
+                      
+                      return (
+                        <TableRow 
+                          key={key} 
+                          className={`${idx % 2 === 0 ? 'bg-background' : 'bg-muted/20'} ${isModified ? 'ring-1 ring-primary/30' : ''}`}
+                        >
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
+                                style={{ backgroundColor: kpi.kra_categories?.color || '#6B7280' }} 
+                              />
+                              <span className="text-sm">{kpi.kra_categories?.name}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">{kpi.kra_name}</TableCell>
+                          <TableCell>{kpi.kpi_name}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1.5">
+                              {scope === 'organization' ? (
+                                <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                              ) : scope === 'department' ? (
+                                <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                              ) : (
+                                <User className="h-3.5 w-3.5 text-muted-foreground" />
+                              )}
+                              <span className="text-sm">{employeeDisplay}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-muted-foreground">
+                              {departmentName || '—'}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-muted-foreground">
+                              {designation || '—'}
+                            </span>
+                          </TableCell>
+                          <TableCell>
                             <Input
                               type="number"
-                              value={display.target_value ?? ''}
-                              onChange={(e) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'target_value', e.target.value, kpi, departmentId, employeeId)}
-                              placeholder="Target"
+                              value={display.achieved_value ?? ''}
+                              onChange={(e) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'achieved_value', e.target.value, kpi, departmentId, employeeId)}
+                              placeholder="Enter value"
                               className="h-8 text-center"
                             />
-                          ) : (
-                            <>
-                              <span className="font-mono">{kpi.target_value}</span>
-                              {kpi.uom && <span className="text-xs text-muted-foreground ml-1">{kpi.uom}</span>}
-                            </>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            value={display.achieved_value ?? ''}
-                            onChange={(e) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'achieved_value', e.target.value, kpi, departmentId, employeeId)}
-                            placeholder="Enter value"
-                            className="h-8 text-center"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={display.data_source || ''}
-                            onChange={(e) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'data_source', e.target.value, kpi, departmentId, employeeId)}
-                            placeholder="Source"
-                            className="h-8"
-                          />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={display.remarks || ''}
+                              onChange={(e) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'remarks', e.target.value, kpi, departmentId, employeeId)}
+                              placeholder="Enter remark"
+                              className="h-8"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <OrgKpiFileUpload
+                              existingUrl={display.evidence_url}
+                              onUploadComplete={(url) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'evidence_url', url, kpi, departmentId, employeeId)}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
+      )}
+      
+      {/* Owner Assignment Dialog */}
+      {selectedKpiForOwner && (
+        <OrgKpiOwnerDialog
+          open={ownerDialogOpen}
+          onOpenChange={setOwnerDialogOpen}
+          categoryId={selectedKpiForOwner.categoryId}
+          kraName={selectedKpiForOwner.kraName}
+          kpiName={selectedKpiForOwner.kpiName}
+        />
       )}
     </div>
   );

@@ -988,6 +988,7 @@ export type Database = {
           department_id: string | null
           employee_id: string | null
           entered_by: string | null
+          evidence_url: string | null
           id: string
           kpi_name: string
           kra_name: string
@@ -1019,6 +1020,7 @@ export type Database = {
           department_id?: string | null
           employee_id?: string | null
           entered_by?: string | null
+          evidence_url?: string | null
           id?: string
           kpi_name: string
           kra_name: string
@@ -1050,6 +1052,7 @@ export type Database = {
           department_id?: string | null
           employee_id?: string | null
           entered_by?: string | null
+          evidence_url?: string | null
           id?: string
           kpi_name?: string
           kra_name?: string

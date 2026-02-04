@@ -1101,6 +1101,35 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - **Employee**: Different values per employee
 - Admin can set scope when marking a KPI as "Organization-Level" in the KPI Editor
 
+**Enhanced Filters:**
+| Filter | Description |
+|--------|-------------|
+| Review Period/Year | Select the review cycle |
+| Search | Search by employee name, code, or KPI name |
+| Category | Filter by KRA category |
+| Department | Filter by employee department |
+| Designation | Filter by employee job title |
+| KRA | Filter by specific KRA name |
+
+**Table Columns:**
+| Column | Description |
+|--------|-------------|
+| Category | KRA category with color indicator |
+| KRA | Key Result Area name |
+| KPI | KPI name |
+| Employee Name (Code) | Employee or scope indicator |
+| Department | Employee's department |
+| Designation | Employee's job title |
+| Achieved Value | Numeric input for value entry |
+| Remark | Text input for additional notes |
+| Supporting File | File upload for evidence |
+
+**File Upload:**
+- Supports PDF, DOC, DOCX, XLS, XLSX, PNG, JPG, JPEG
+- Maximum file size: 5MB
+- Files stored in `review-evidence` bucket
+- URL saved to `evidence_url` column in `org_kpi_values`
+
 #### 4.9.13 Org KPI Overview (`/admin/org-kpi-overview`)
 - Dashboard showing all organization-level KPIs
 - Displays current achieved values and data sources

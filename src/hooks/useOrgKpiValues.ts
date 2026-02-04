@@ -33,6 +33,8 @@ export interface OrgKpiValue {
   sent_back_at: string | null;
   sent_back_reason: string | null;
   submission_count: number | null;
+  // Evidence/supporting file
+  evidence_url: string | null;
 }
 
 export function useOrgKpiValues(categoryId?: string, reviewPeriod?: string, reviewYear?: number) {
@@ -149,6 +151,7 @@ export function useBulkUpsertOrgKpiValues() {
       r1?: string;
       r0?: string;
       criteria?: string;
+      evidence_url?: string | null;
     }>) => {
       // For scoped values, we need to handle the unique constraint properly
       // Insert/update each value individually to handle the complex unique index
@@ -195,6 +198,7 @@ export function useBulkUpsertOrgKpiValues() {
               r1: value.r1,
               r0: value.r0,
               criteria: value.criteria,
+              evidence_url: value.evidence_url,
             })
             .eq('id', existing.id)
             .select()
