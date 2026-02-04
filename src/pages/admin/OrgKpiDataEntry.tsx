@@ -3,6 +3,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useKraCategories, useDepartments, useProfiles } from '@/hooks/useOrganization';
 import { useOrgKpiValues, useBulkUpsertOrgKpiValues, OrgKpiValue } from '@/hooks/useOrgKpiValues';
 import { useOrgLevelKpis } from '@/hooks/useOrgLevelKpis';
+import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
+import { useBulkPropagateOrgKpiValues } from '@/hooks/usePropagateOrgKpiValue';
 import { OrgLevelScope } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,7 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/LoadingSkeletons';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
-import { Building2, Save, AlertTriangle, Filter, Users, User } from 'lucide-react';
+import { OrgKpiOwnerDialog } from '@/components/admin/OrgKpiOwnerDialog';
+import { Building2, Save, AlertTriangle, Filter, Users, User, UserPlus, Lock } from 'lucide-react';
 
 interface EditableKpi {
   category_id: string;
@@ -38,25 +41,31 @@ interface EditableKpi {
 }
 
 export default function OrgKpiDataEntry() {
-  const { profile } = useAuth();
+  const { profile, role } = useAuth();
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
   const [selectedYear, setSelectedYear] = useState(defaultYear);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [editedValues, setEditedValues] = useState<Map<string, EditableKpi>>(new Map());
   const [globalDataSource, setGlobalDataSource] = useState('');
+  
+  // Owner dialog state
+  const [ownerDialogOpen, setOwnerDialogOpen] = useState(false);
+  const [selectedKpiForOwner, setSelectedKpiForOwner] = useState<{ categoryId: string; kraName: string; kpiName: string } | null>(null);
 
   // Fetch org-level KPIs (where is_org_level = true at KPI level)
   const { data: orgLevelKpis, isLoading: kpisLoading } = useOrgLevelKpis(selectedPeriod, selectedYear);
   const { data: categories } = useKraCategories();
   const { data: departments } = useDepartments();
-  const { data: profiles } = useProfiles();
+  const { data: allProfiles } = useProfiles();
   const { data: existingOrgValues } = useOrgKpiValues(
     selectedCategoryId !== 'all' ? selectedCategoryId : undefined, 
     selectedPeriod, 
     selectedYear
   );
   const bulkUpsert = useBulkUpsertOrgKpiValues();
+  const propagate = useBulkPropagateOrgKpiValues();
+  const { ownershipMap, isAdmin } = useOrgKpiOwnershipMap();
 
   // Get unique categories from org-level KPIs
   const orgLevelCategories = useMemo(() => {
@@ -248,7 +257,7 @@ export default function OrgKpiDataEntry() {
         });
       } else if (scope === 'employee') {
         // Create a row for each employee
-        profiles?.forEach(emp => {
+        allProfiles?.forEach(emp => {
           rows.push({
             kpi,
             departmentId: null,
@@ -262,7 +271,7 @@ export default function OrgKpiDataEntry() {
     });
 
     return rows;
-  }, [filteredKpis, departments, profiles]);
+  }, [filteredKpis, departments, allProfiles]);
 
   const handleSaveAll = async () => {
     const valuesToSave = Array.from(editedValues.values())
