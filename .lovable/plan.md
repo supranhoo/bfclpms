@@ -1,334 +1,198 @@
 
-# Plan: Implement Global Multi-line Formatting for KPI Text Data
 
-## Overview
+# Fix: Show View Button for Completed/Forwarded KPIs Across All Review Levels
 
-This plan implements comprehensive multi-line text formatting to ensure all KPI text data (including existing data with patterns like `- Description:`, `- Formula:`, `- Scoring Logic:`) displays properly with preserved line breaks throughout the UI.
+## Problem Identified
+
+Users cannot access the "View" button to see full KPI details when a KPI has moved past their review stage or is completed. This affects all review levels:
+
+| View Type | Current Issue |
+|-----------|---------------|
+| **Team Review** | When KPI status is `manager_check`, `audit`, `management_review`, or `approved` - no View button shown |
+| **Audit Panel** | When KPI is "Forwarded" (status = `management_review` or `approved`) - only badge shown, no View button |
+| **Management Review** | When KPI is "Completed" (status = `approved`) - only badge shown, no View button |
+
+### Root Cause
+
+In `src/components/review/KpiDetailsTable.tsx`, the `getActionButton` function (lines 184-216) has a conditional chain that returns early with just a status badge, never reaching the `onView` button logic:
+
+```typescript
+// Current problematic logic:
+canReviewKpi(kpi) ? (
+  <Button>Review</Button>
+) : isApproved && viewType === 'management' ? (
+  <Badge>Completed</Badge>  // ← Returns here, no View button!
+) : isForwarded ? (
+  <Badge>Forwarded</Badge>  // ← Returns here, no View button!
+) : isNaKpi ? (
+  <Badge>Not Applicable</Badge>
+) : onView ? (
+  <Button>View</Button>  // ← Never reached for approved/forwarded
+) : null
+```
 
 ---
 
-## Current State Analysis
+## Solution
 
-### Data Pattern Observed
-
-From the database, KPI names contain structured patterns:
-
-```
-Accuracy of New Employee Documentation:
-- Description: Measures the completeness and accuracy of all required onboarding documents and HRMS master data for new hires, based on weekly reviews.
-- Formula: (1 - (Number of files with errors or missing documents / Total number of new hire files reviewed)) * 100.
-- Scoring Logic: (Scoring: 5 for 100% accuracy, 4 for 98-99.9%, 3 for 95-97.9%, 2 for 90-94.9%, 1 for 85-89.9%, 0 for <85%)
-```
-
-### Current Problem
-
-- Text is stored correctly in the database
-- Line breaks (`\n`) exist but may be inconsistent (some have `\n` before "- Description:", some don't)
-- UI components do NOT apply `white-space: pre-wrap`, so line breaks are not displayed
-- Only 3 files currently use `whitespace-pre-wrap`: `EmailTemplateEditor.tsx`, `ReviewStageCard.tsx`, and `AuditLogs.tsx`
-
-### Files Displaying KPI/KRA Names (Need Formatting)
-
-| File | Display Context |
-|------|-----------------|
-| `KpiDetailsTable.tsx` | Main table showing KRA/KPI names |
-| `KpiHeaderSection.tsx` | KPI review panel header |
-| `ReviewDetailsCard.tsx` | KPI details card in reviews |
-| `ReviewDetailsCardCompact.tsx` | Compact KPI card |
-| `KpiMetricsSection.tsx` | Metrics display with rating scale |
-| `KpiLogicModal.tsx` | KPI logic details modal |
-| `KpiTrackerModal.tsx` | Historical tracking modal |
-| `SelfReview.tsx` | Self-review page |
-| `TeamReview.tsx`, `AuditPanel.tsx`, `ManagementReview.tsx` | Review pages |
-| `AllKpis.tsx` | Admin KPI management |
-| `OrgKpiOverview.tsx` | Organization-level KPIs |
-| `MonthlyScorecardReport.tsx` | Reports |
+Modify the `getActionButton` function to show **both** the status badge AND the View button for all completed/forwarded states across all view types.
 
 ---
 
 ## Technical Implementation
 
-### Phase 1: Create Central Formatting Utilities
+### File: `src/components/review/KpiDetailsTable.tsx`
 
-**New File:** `src/lib/textFormatting.ts`
-
-```typescript
-/**
- * Text Formatting Utilities
- * Central location for text normalization and display formatting
- */
-
-/**
- * Normalize structured KPI text by ensuring newlines before section markers.
- * This handles both "clean" new data and "messy" existing data.
- * 
- * Pattern: Finds markers like "- Description:", "- Formula:", "- Scoring Logic:"
- * without a preceding newline and inserts one.
- * 
- * @param text - Raw text from database
- * @returns Normalized text with proper line breaks
- */
-export function normalizeKpiText(text: string | null | undefined): string {
-  if (!text) return '';
-  
-  // Regex pattern: Match section markers NOT preceded by a newline
-  // Matches: " - Description:", "- Formula:", etc.
-  // Does NOT match: "\n- Description:" (already has newline)
-  const sectionMarkerPattern = /(?<!\n)(\s*)(-\s*(?:Description|Formula|Scoring Logic|Criteria|Measurement|Target|Note)s?:)/gi;
-  
-  return text.replace(sectionMarkerPattern, '\n$2');
-}
-
-/**
- * CSS class utility for pre-wrap text display
- */
-export const preWrapClass = 'whitespace-pre-wrap';
-```
-
----
-
-### Phase 2: Create Reusable Display Component
-
-**New File:** `src/components/ui/FormattedText.tsx`
-
-```typescript
-import { cn } from '@/lib/utils';
-import { normalizeKpiText, preWrapClass } from '@/lib/textFormatting';
-
-interface FormattedTextProps {
-  text: string | null | undefined;
-  className?: string;
-  as?: 'p' | 'span' | 'div';
-  normalize?: boolean; // Apply section marker normalization
-}
-
-/**
- * Renders text with preserved line breaks.
- * Optionally normalizes KPI-style structured text.
- */
-export function FormattedText({ 
-  text, 
-  className, 
-  as: Tag = 'p',
-  normalize = true 
-}: FormattedTextProps) {
-  const displayText = normalize ? normalizeKpiText(text) : (text || '');
-  
-  return (
-    <Tag className={cn(preWrapClass, className)}>
-      {displayText}
-    </Tag>
-  );
-}
-```
-
----
-
-### Phase 3: Update All KPI Display Components
-
-#### 3.1 KpiDetailsTable.tsx (Primary Table)
-
-```typescript
-// Line 312 - Update KPI name display
-<p className="text-sm text-muted-foreground flex items-center gap-1 whitespace-pre-wrap">
-  {normalizeKpiText(kpi.kpi_name)}
-  <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-</p>
-```
-
-#### 3.2 KpiHeaderSection.tsx
-
-```typescript
-// Lines 44-49 - Full text display
-<h3 className="font-semibold text-lg text-primary leading-tight whitespace-pre-wrap">
-  {normalizeKpiText(kpi.kra_name)}
-</h3>
-<p className="text-muted-foreground mt-1 leading-relaxed whitespace-pre-wrap">
-  {normalizeKpiText(kpi.kpi_name)}
-</p>
-```
-
-#### 3.3 ReviewDetailsCard.tsx
-
-```typescript
-// Lines 18, 35 - Apply formatting
-<p className="font-semibold text-primary whitespace-pre-wrap">
-  {normalizeKpiText(kpi.kra_name)}
-</p>
-// ...
-<p className="text-sm whitespace-pre-wrap">
-  {normalizeKpiText(kpi.kpi_name)}
-</p>
-```
-
-#### 3.4 KpiMetricsSection.tsx
-
-Rating scale values also need `pre-wrap` for complex threshold descriptions.
-
-#### 3.5 Other Components
-
-- `ReviewDetailsCardCompact.tsx`
-- `KpiLogicModal.tsx`
-- `KpiTrackerModal.tsx`
-- `SelfReview.tsx`
-- Review pages (Team, Audit, Management)
-- `AllKpis.tsx`
-- `OrgKpiOverview.tsx`
-
----
-
-### Phase 4: Data Migration Script (One-Time Cleanup)
-
-**New Edge Function:** `supabase/functions/normalize-kpi-text/index.ts`
-
-This optional function scans existing records and normalizes text formatting:
-
-```typescript
-// Normalize patterns in kpi_name and kra_name columns
-const normalizationPattern = /(?<!\n)(\s*)(-\s*(?:Description|Formula|Scoring Logic|Criteria|Measurement|Target|Note)s?:)/gi;
-
-// For each KPI/template with the pattern:
-UPDATE kpis SET kpi_name = REGEXP_REPLACE(
-  kpi_name, 
-  '([^\n])(\s*-\s*(?:Description|Formula|Scoring Logic):)', 
-  E'\\1\n\\2',
-  'gi'
-) WHERE kpi_name ~ '-\s*(Description|Formula|Scoring Logic):';
-```
-
-This is optional since the client-side normalization handles display, but it ensures data consistency for exports/reports.
-
----
-
-### Phase 5: Unit Tests
-
-**New File:** `src/lib/textFormatting.test.ts`
-
-```typescript
-import { describe, it, expect } from 'vitest';
-import { normalizeKpiText } from './textFormatting';
-
-describe('normalizeKpiText', () => {
-  describe('messy existing data (missing newlines)', () => {
-    it('inserts newline before - Description:', () => {
-      const input = 'KPI Title - Description: Some description';
-      const expected = 'KPI Title\n- Description: Some description';
-      expect(normalizeKpiText(input)).toBe(expected);
-    });
-
-    it('inserts newlines before multiple markers', () => {
-      const input = 'KPI Name - Description: Desc - Formula: F - Scoring Logic: SL';
-      const result = normalizeKpiText(input);
-      expect(result).toContain('\n- Description:');
-      expect(result).toContain('\n- Formula:');
-      expect(result).toContain('\n- Scoring Logic:');
-    });
-  });
-
-  describe('clean new data (already has newlines)', () => {
-    it('preserves existing newlines', () => {
-      const input = 'KPI Name\n- Description: Desc\n- Formula: F';
-      expect(normalizeKpiText(input)).toBe(input);
-    });
-  });
-
-  describe('edge cases', () => {
-    it('handles null/undefined gracefully', () => {
-      expect(normalizeKpiText(null)).toBe('');
-      expect(normalizeKpiText(undefined)).toBe('');
-    });
-
-    it('handles text without markers', () => {
-      const input = 'Simple KPI without sections';
-      expect(normalizeKpiText(input)).toBe(input);
-    });
-
-    it('is case-insensitive', () => {
-      const input = 'KPI - DESCRIPTION: Desc - formula: F';
-      const result = normalizeKpiText(input);
-      expect(result).toContain('\n- DESCRIPTION:');
-      expect(result).toContain('\n- formula:');
-    });
-  });
-});
-```
-
----
-
-## Files to Create
-
-| File | Purpose |
-|------|---------|
-| `src/lib/textFormatting.ts` | Central formatting utilities with regex normalizer |
-| `src/lib/textFormatting.test.ts` | Unit tests for formatting logic |
-| `src/components/ui/FormattedText.tsx` | Reusable pre-wrap text component |
-
-## Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/components/review/KpiDetailsTable.tsx` | Add `whitespace-pre-wrap` and normalization |
-| `src/components/review/KpiHeaderSection.tsx` | Add formatting to KRA/KPI names |
-| `src/components/review/ReviewDetailsCard.tsx` | Add pre-wrap styling |
-| `src/components/review/ReviewDetailsCardCompact.tsx` | Add formatting |
-| `src/components/review/KpiMetricsSection.tsx` | Format rating scale descriptions |
-| `src/components/dashboard/KpiLogicModal.tsx` | Format modal content |
-| `src/components/dashboard/KpiTrackerModal.tsx` | Format tracker modal |
-| `src/pages/SelfReview.tsx` | Format KPI displays |
-| `src/pages/admin/AllKpis.tsx` | Format admin table |
-| `src/pages/admin/OrgKpiOverview.tsx` | Format org KPIs |
-| `src/pages/reports/MonthlyScorecardReport.tsx` | Format report output |
-| `DOCUMENTATION.md` | Document text formatting system |
-
----
-
-## Implementation Order
-
-1. **Phase 1 - Foundation**
-   - Create `src/lib/textFormatting.ts` with `normalizeKpiText()` function
-   - Create unit tests `src/lib/textFormatting.test.ts`
-
-2. **Phase 2 - Reusable Component**
-   - Create `src/components/ui/FormattedText.tsx`
-
-3. **Phase 3 - Apply to All Components**
-   - Update `KpiDetailsTable.tsx` (most used)
-   - Update `KpiHeaderSection.tsx`
-   - Update remaining display components
-
-4. **Phase 4 - Testing & Documentation**
-   - Run unit tests
-   - Verify visual output on existing data
-   - Update DOCUMENTATION.md
-
----
-
-## Regression Protection
-
-The unit tests cover:
-
-| Scenario | Test Case |
-|----------|-----------|
-| Messy existing data | Text with markers but no newlines |
-| Clean new data | Text already properly formatted |
-| Edge cases | null/undefined, no markers, case variations |
-| Idempotency | Running normalizer twice yields same result |
-
----
-
-## Expected Outcome
+Update lines 197-216 to render View button alongside status badges:
 
 **Before:**
-```
-Accuracy of New Employee Documentation: - Description: Measures the completeness... - Formula: (1 - (Number of files...
+```typescript
+} : isApproved && viewType === 'management' ? (
+  <Badge variant="outline" className="bg-green-50...">
+    <CheckCircle2 className="h-3 w-3 mr-1" />
+    Completed
+  </Badge>
+) : isForwarded ? (
+  <Badge variant="outline" className="bg-green-50...">
+    <CheckCircle2 className="h-3 w-3 mr-1" />
+    Forwarded
+  </Badge>
+) : isNaKpi ? (
+  <Badge variant="outline" className="bg-muted...">
+    Not Applicable
+  </Badge>
+) : onView ? (
+  <Button size="sm" variant="outline" onClick={() => onView(kpi)}>
+    <Eye className="h-4 w-4 mr-1" />
+    View
+  </Button>
+) : null}
 ```
 
 **After:**
-```
-Accuracy of New Employee Documentation:
-- Description: Measures the completeness...
-- Formula: (1 - (Number of files...
-- Scoring Logic: (Scoring: 5 for 100%...
+```typescript
+} : isApproved && viewType === 'management' ? (
+  <>
+    <Badge variant="outline" className="bg-green-50...">
+      <CheckCircle2 className="h-3 w-3 mr-1" />
+      Completed
+    </Badge>
+    {onView && (
+      <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View KPI Details">
+        <Eye className="h-4 w-4" />
+      </Button>
+    )}
+  </>
+) : isForwarded ? (
+  <>
+    <Badge variant="outline" className="bg-green-50...">
+      <CheckCircle2 className="h-3 w-3 mr-1" />
+      Forwarded
+    </Badge>
+    {onView && (
+      <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View KPI Details">
+        <Eye className="h-4 w-4" />
+      </Button>
+    )}
+  </>
+) : isNaKpi ? (
+  <Badge variant="outline" className="bg-muted...">
+    Not Applicable
+  </Badge>
+) : onView ? (
+  <Button size="sm" variant="outline" onClick={() => onView(kpi)}>
+    <Eye className="h-4 w-4 mr-1" />
+    View
+  </Button>
+) : null}
 ```
 
-All KPI text fields will display with proper line breaks, making structured data readable for HR administrators and employees.
+### Additional Enhancement: Team Review Past-Stage States
+
+For Team Review, add badge + View button for KPIs that have moved past `self_review`:
+
+```typescript
+// Add new condition for Team Review past-stage states
+const isTeamReviewPastStage = viewType === 'team-review' && 
+  ['manager_check', 'audit', 'management_review', 'approved'].includes(kpi.status);
+```
+
+Then in the conditional chain:
+```typescript
+} : isTeamReviewPastStage ? (
+  <>
+    <Badge variant="outline" className="bg-blue-50 text-blue-700...">
+      <CheckCircle2 className="h-3 w-3 mr-1" />
+      Reviewed
+    </Badge>
+    {onView && (
+      <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View KPI Details">
+        <Eye className="h-4 w-4" />
+      </Button>
+    )}
+  </>
+)
+```
+
+---
+
+## Complete Status Badge + View Button Matrix
+
+| View Type | KPI Status | Badge Text | View Button |
+|-----------|------------|------------|-------------|
+| Team Review | `manager_check`, `audit`, `management_review`, `approved` | "Reviewed" | ✅ Yes |
+| Audit Panel | `management_review`, `approved` | "Forwarded" | ✅ Yes |
+| Management Review | `approved` | "Completed" | ✅ Yes |
+| Any | N/A KPIs | "Not Applicable" | ❌ No (no details to view) |
+
+---
+
+## Visual Design
+
+The View button will appear as a ghost icon button next to the status badge:
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│ ... │ Status           │ Actions                              │
+├───────────────────────────────────────────────────────────────┤
+│ ... │ manager_check    │ [✓ Reviewed] [👁]    (Team Review)   │
+│ ... │ approved         │ [✓ Forwarded] [👁]   (Audit Panel)   │
+│ ... │ approved         │ [✓ Completed] [👁]   (Management)    │
+└───────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/components/review/KpiDetailsTable.tsx` | Add View button alongside all completion/forwarded badges |
+| `DOCUMENTATION.md` | Update to reflect View button availability across all levels |
+
+---
+
+## Implementation Steps
+
+1. **Add status variable for Team Review past-stage KPIs**
+   - Define `isTeamReviewPastStage` condition
+
+2. **Update conditional chain in `getActionButton`**
+   - Management "Completed" → Badge + View button
+   - Audit "Forwarded" → Badge + View button  
+   - Team Review "Reviewed" → Badge + View button (new)
+   - N/A → Badge only (unchanged)
+
+3. **Update documentation**
+
+---
+
+## Benefits
+
+| Benefit | Impact |
+|---------|--------|
+| **Full Audit Trail Access** | All reviewers can see details after their stage completes |
+| **Historical Reference** | Check scoring details and remarks at any time |
+| **Consistency** | Same View experience across all review levels |
+| **Transparency** | Managers can track KPIs through the entire workflow |
+
