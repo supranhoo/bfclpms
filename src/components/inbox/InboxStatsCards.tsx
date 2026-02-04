@@ -44,21 +44,21 @@ const colorClasses = {
 
 export function InboxStatsCards({ stats }: InboxStatsCardsProps) {
   return (
-    <div className="grid gap-4 md:grid-cols-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       {stats.map((stat, index) => {
         const colors = colorClasses[stat.color];
         return (
           <Card key={index} className={cn('border-l-4', colors.border)}>
-            <CardContent className="pt-6">
+            <CardContent className="pt-4 sm:pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">{stat.label}</p>
-                  <p className={cn('text-3xl font-bold', colors.text)}>{stat.value}</p>
+                  <p className="text-xs sm:text-sm font-medium text-muted-foreground">{stat.label}</p>
+                  <p className={cn('text-xl sm:text-3xl font-bold', colors.text)}>{stat.value}</p>
                   {stat.sublabel && (
-                    <p className="text-xs text-muted-foreground">{stat.sublabel}</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">{stat.sublabel}</p>
                   )}
                 </div>
-                <div className={cn('h-12 w-12 rounded-full flex items-center justify-center', colors.bg)}>
+                <div className={cn('h-10 w-10 sm:h-12 sm:w-12 rounded-full flex items-center justify-center', colors.bg)}>
                   {stat.icon}
                 </div>
               </div>

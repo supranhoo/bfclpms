@@ -4,7 +4,9 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { InboxRowItem } from './InboxRowItem';
+import { MobileInboxList } from './MobileInboxList';
 import { InboxItem, GroupedInboxItems, groupByDate } from '@/lib/inboxUtils';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface InboxTableProps {
   items: InboxItem[];
@@ -31,6 +33,25 @@ export function InboxTable({
   emptyDescription = 'Nothing to show here',
   enableGrouping = true,
 }: InboxTableProps) {
+  const isMobile = useIsMobile();
+
+  // Use mobile card layout on small screens
+  if (isMobile) {
+    return (
+      <MobileInboxList
+        items={items}
+        isLoading={isLoading}
+        isFetching={isFetching}
+        hasMore={hasMore}
+        onLoadMore={onLoadMore}
+        onViewItem={onViewItem}
+        emptyMessage={emptyMessage}
+        emptyDescription={emptyDescription}
+        enableGrouping={enableGrouping}
+      />
+    );
+  }
+
   if (isLoading) {
     return (
       <Card>

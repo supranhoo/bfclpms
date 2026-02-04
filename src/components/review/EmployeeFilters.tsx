@@ -88,10 +88,10 @@ export function EmployeeFilters({
 
   return (
     <div className="space-y-4">
-      {/* Filter Controls */}
-      <div className="flex flex-wrap items-center gap-3">
-        {/* Search */}
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
+      {/* Filter Controls - Stack on mobile, wrap on desktop */}
+      <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
+        {/* Search - Full width on mobile */}
+        <div className="relative w-full sm:flex-1 sm:min-w-[200px] sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search employees..."
@@ -101,97 +101,100 @@ export function EmployeeFilters({
           />
         </div>
 
-        {/* Department */}
-        <Select
-          value={selectedDepartment || 'all'}
-          onValueChange={(v) => onDepartmentChange(v === 'all' ? null : v)}
-        >
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Department" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Departments</SelectItem>
-            {departments.map((dept) => (
-              <SelectItem key={dept.id} value={dept.id}>
-                {dept.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Designation */}
-        <Select
-          value={selectedDesignation || 'all'}
-          onValueChange={(v) => onDesignationChange(v === 'all' ? null : v)}
-        >
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Designation" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Designations</SelectItem>
-            {designations.map((d) => (
-              <SelectItem key={d} value={d}>
-                {d}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* PMS Grade */}
-        <Select
-          value={selectedGrade || 'all'}
-          onValueChange={(v) => onGradeChange(v === 'all' ? null : v)}
-        >
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Grade" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Grades</SelectItem>
-            {grades.map((g) => (
-              <SelectItem key={g} value={g}>
-                {g}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Manager (optional) */}
-        {showManagerFilter && onManagerChange && (
+        {/* Dropdowns - 2-column grid on mobile, inline on desktop */}
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+          {/* Department */}
           <Select
-            value={selectedManager || 'all'}
-            onValueChange={(v) => onManagerChange(v === 'all' ? null : v)}
+            value={selectedDepartment || 'all'}
+            onValueChange={(v) => onDepartmentChange(v === 'all' ? null : v)}
           >
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Manager" />
+            <SelectTrigger className="w-full sm:w-[160px]">
+              <SelectValue placeholder="Department" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Managers</SelectItem>
-              {managers.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.name}
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments.map((dept) => (
+                <SelectItem key={dept.id} value={dept.id}>
+                  {dept.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-        )}
 
-        {/* Status */}
-        <Select value={statusFilter} onValueChange={onStatusChange}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            {statusOptions.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          {/* Designation */}
+          <Select
+            value={selectedDesignation || 'all'}
+            onValueChange={(v) => onDesignationChange(v === 'all' ? null : v)}
+          >
+            <SelectTrigger className="w-full sm:w-[160px]">
+              <SelectValue placeholder="Designation" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Designations</SelectItem>
+              {designations.map((d) => (
+                <SelectItem key={d} value={d}>
+                  {d}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* PMS Grade */}
+          <Select
+            value={selectedGrade || 'all'}
+            onValueChange={(v) => onGradeChange(v === 'all' ? null : v)}
+          >
+            <SelectTrigger className="w-full sm:w-[140px]">
+              <SelectValue placeholder="Grade" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Grades</SelectItem>
+              {grades.map((g) => (
+                <SelectItem key={g} value={g}>
+                  {g}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Manager (optional) */}
+          {showManagerFilter && onManagerChange && (
+            <Select
+              value={selectedManager || 'all'}
+              onValueChange={(v) => onManagerChange(v === 'all' ? null : v)}
+            >
+              <SelectTrigger className="w-full sm:w-[160px]">
+                <SelectValue placeholder="Manager" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Managers</SelectItem>
+                {managers.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Status */}
+          <Select value={statusFilter} onValueChange={onStatusChange}>
+            <SelectTrigger className="w-full sm:w-[160px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              {statusOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         {/* Clear All */}
         {(activeFiltersCount > 0 || searchQuery) && (
-          <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-10">
+          <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-10 self-start sm:self-auto">
             <X className="h-4 w-4 mr-1" />
             Clear All
           </Button>
