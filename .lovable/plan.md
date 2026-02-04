@@ -1,201 +1,256 @@
 
-
-# Enhanced Employee Selection Filters for Review Pages
+# Plan: Implement Global Multi-line Formatting for KPI Text Data
 
 ## Overview
 
-This plan adds comprehensive employee filtering capabilities to Team Review, Audit Panel, and Management Review pages. Currently, these pages only have basic search and status filters. The enhancement will add Department, Designation, PMS Grade, and Reporting Manager filters to help reviewers quickly find specific employees.
+This plan implements comprehensive multi-line text formatting to ensure all KPI text data (including existing data with patterns like `- Description:`, `- Formula:`, `- Scoring Logic:`) displays properly with preserved line breaks throughout the UI.
 
 ---
 
 ## Current State Analysis
 
-| Page | Current Filters |
-|------|-----------------|
-| Team Review | Search (name/email/code), Status (All/Pending/Reviewed) |
-| Audit Panel | Search (name/email/code), Status (All/Pending Audit/In Audit/Forwarded) |
-| Management Review | Search (name/email/code), Status (All/Pending/Approved) |
+### Data Pattern Observed
 
-All three pages share the same filter pattern but lack organizational filters like Department, Designation, and PMS Grade.
+From the database, KPI names contain structured patterns:
 
----
-
-## Proposed Filters
-
-### New Filter Dropdowns
-
-| Filter | Source | Purpose |
-|--------|--------|---------|
-| Department | `departments` table | Filter by organizational unit |
-| Designation | `profiles.designation` (distinct values) | Filter by job title |
-| PMS Grade | `profiles.pms_grade` (distinct values) | Filter by performance grade band |
-| Reporting Manager | `profiles` (managers only) | Filter by direct supervisor |
-
-### Filter Layout
-
-```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│  [🔍 Search employees...] [Department ▼] [Designation ▼] [Grade ▼]     │
-│  [Manager ▼] [Status ▼]                                   [✕ Clear All]│
-└─────────────────────────────────────────────────────────────────────────┘
 ```
+Accuracy of New Employee Documentation:
+- Description: Measures the completeness and accuracy of all required onboarding documents and HRMS master data for new hires, based on weekly reviews.
+- Formula: (1 - (Number of files with errors or missing documents / Total number of new hire files reviewed)) * 100.
+- Scoring Logic: (Scoring: 5 for 100% accuracy, 4 for 98-99.9%, 3 for 95-97.9%, 2 for 90-94.9%, 1 for 85-89.9%, 0 for <85%)
+```
+
+### Current Problem
+
+- Text is stored correctly in the database
+- Line breaks (`\n`) exist but may be inconsistent (some have `\n` before "- Description:", some don't)
+- UI components do NOT apply `white-space: pre-wrap`, so line breaks are not displayed
+- Only 3 files currently use `whitespace-pre-wrap`: `EmailTemplateEditor.tsx`, `ReviewStageCard.tsx`, and `AuditLogs.tsx`
+
+### Files Displaying KPI/KRA Names (Need Formatting)
+
+| File | Display Context |
+|------|-----------------|
+| `KpiDetailsTable.tsx` | Main table showing KRA/KPI names |
+| `KpiHeaderSection.tsx` | KPI review panel header |
+| `ReviewDetailsCard.tsx` | KPI details card in reviews |
+| `ReviewDetailsCardCompact.tsx` | Compact KPI card |
+| `KpiMetricsSection.tsx` | Metrics display with rating scale |
+| `KpiLogicModal.tsx` | KPI logic details modal |
+| `KpiTrackerModal.tsx` | Historical tracking modal |
+| `SelfReview.tsx` | Self-review page |
+| `TeamReview.tsx`, `AuditPanel.tsx`, `ManagementReview.tsx` | Review pages |
+| `AllKpis.tsx` | Admin KPI management |
+| `OrgKpiOverview.tsx` | Organization-level KPIs |
+| `MonthlyScorecardReport.tsx` | Reports |
 
 ---
 
 ## Technical Implementation
 
-### 1. Create Shared Filter Component
+### Phase 1: Create Central Formatting Utilities
 
-**New File:** `src/components/review/EmployeeFilters.tsx`
-
-This component will be reusable across all three review pages with configurable status options:
+**New File:** `src/lib/textFormatting.ts`
 
 ```typescript
-interface EmployeeFiltersProps {
-  // Search
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
+/**
+ * Text Formatting Utilities
+ * Central location for text normalization and display formatting
+ */
+
+/**
+ * Normalize structured KPI text by ensuring newlines before section markers.
+ * This handles both "clean" new data and "messy" existing data.
+ * 
+ * Pattern: Finds markers like "- Description:", "- Formula:", "- Scoring Logic:"
+ * without a preceding newline and inserts one.
+ * 
+ * @param text - Raw text from database
+ * @returns Normalized text with proper line breaks
+ */
+export function normalizeKpiText(text: string | null | undefined): string {
+  if (!text) return '';
   
-  // Department filter
-  selectedDepartment: string | null;
-  onDepartmentChange: (deptId: string | null) => void;
-  departments: { id: string; name: string }[];
+  // Regex pattern: Match section markers NOT preceded by a newline
+  // Matches: " - Description:", "- Formula:", etc.
+  // Does NOT match: "\n- Description:" (already has newline)
+  const sectionMarkerPattern = /(?<!\n)(\s*)(-\s*(?:Description|Formula|Scoring Logic|Criteria|Measurement|Target|Note)s?:)/gi;
   
-  // Designation filter
-  selectedDesignation: string | null;
-  onDesignationChange: (designation: string | null) => void;
-  designations: string[];
+  return text.replace(sectionMarkerPattern, '\n$2');
+}
+
+/**
+ * CSS class utility for pre-wrap text display
+ */
+export const preWrapClass = 'whitespace-pre-wrap';
+```
+
+---
+
+### Phase 2: Create Reusable Display Component
+
+**New File:** `src/components/ui/FormattedText.tsx`
+
+```typescript
+import { cn } from '@/lib/utils';
+import { normalizeKpiText, preWrapClass } from '@/lib/textFormatting';
+
+interface FormattedTextProps {
+  text: string | null | undefined;
+  className?: string;
+  as?: 'p' | 'span' | 'div';
+  normalize?: boolean; // Apply section marker normalization
+}
+
+/**
+ * Renders text with preserved line breaks.
+ * Optionally normalizes KPI-style structured text.
+ */
+export function FormattedText({ 
+  text, 
+  className, 
+  as: Tag = 'p',
+  normalize = true 
+}: FormattedTextProps) {
+  const displayText = normalize ? normalizeKpiText(text) : (text || '');
   
-  // PMS Grade filter
-  selectedGrade: string | null;
-  onGradeChange: (grade: string | null) => void;
-  grades: string[];
-  
-  // Manager filter (optional, only for Audit/Management)
-  selectedManager?: string | null;
-  onManagerChange?: (managerId: string | null) => void;
-  managers?: { id: string; name: string }[];
-  
-  // Status filter
-  statusFilter: string;
-  onStatusChange: (status: string) => void;
-  statusOptions: { value: string; label: string }[];
+  return (
+    <Tag className={cn(preWrapClass, className)}>
+      {displayText}
+    </Tag>
+  );
 }
 ```
 
-### 2. Create Hook for Employee Filter Options
+---
 
-**New File:** `src/hooks/useEmployeeFilterOptions.ts`
+### Phase 3: Update All KPI Display Components
 
-Fetches distinct values for filter dropdowns:
+#### 3.1 KpiDetailsTable.tsx (Primary Table)
 
 ```typescript
-export function useEmployeeFilterOptions() {
-  // Fetch departments
-  const { data: departments } = useDepartments();
-  
-  // Fetch distinct designations from profiles
-  const { data: designations } = useQuery({
-    queryKey: ['distinct-designations'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('designation')
-        .not('designation', 'is', null);
-      return [...new Set(data?.map(p => p.designation))].filter(Boolean).sort();
-    }
-  });
-  
-  // Fetch distinct PMS grades from profiles
-  const { data: grades } = useQuery({
-    queryKey: ['distinct-grades'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('pms_grade')
-        .not('pms_grade', 'is', null);
-      return [...new Set(data?.map(p => p.pms_grade))].filter(Boolean).sort();
-    }
-  });
-  
-  // Fetch managers (profiles who have direct reports)
-  const { data: managers } = useQuery({
-    queryKey: ['managers-list'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, full_name, reporting_manager_id')
-        .order('full_name');
-      
-      const managerIds = new Set(data?.map(p => p.reporting_manager_id).filter(Boolean));
-      return data?.filter(p => managerIds.has(p.id))
-                  .map(p => ({ id: p.id, name: p.full_name || 'Unknown' }));
-    }
-  });
-  
-  return { departments, designations, grades, managers };
-}
+// Line 312 - Update KPI name display
+<p className="text-sm text-muted-foreground flex items-center gap-1 whitespace-pre-wrap">
+  {normalizeKpiText(kpi.kpi_name)}
+  <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+</p>
 ```
 
-### 3. Update Review Pages
-
-**Files to Modify:**
-- `src/pages/TeamReview.tsx`
-- `src/pages/AuditPanel.tsx`
-- `src/pages/ManagementReview.tsx`
-
-For each page:
-1. Import `EmployeeFilters` and `useEmployeeFilterOptions`
-2. Add state for new filters: `selectedDepartment`, `selectedDesignation`, `selectedGrade`, `selectedManager`
-3. Update `displayMembers` memo to apply all filters
-4. Replace current filter UI with `EmployeeFilters` component
-5. Add "Clear All Filters" button when any filter is active
-
-### 4. Enhanced Filtering Logic
-
-Update the `displayMembers` memo in each page:
+#### 3.2 KpiHeaderSection.tsx
 
 ```typescript
-const displayMembers = useMemo(() => {
-  let filtered = baseMembers;
+// Lines 44-49 - Full text display
+<h3 className="font-semibold text-lg text-primary leading-tight whitespace-pre-wrap">
+  {normalizeKpiText(kpi.kra_name)}
+</h3>
+<p className="text-muted-foreground mt-1 leading-relaxed whitespace-pre-wrap">
+  {normalizeKpiText(kpi.kpi_name)}
+</p>
+```
 
-  // Text search (existing)
-  if (searchQuery) {
-    filtered = filtered?.filter(p => 
-      p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.employee_code?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }
+#### 3.3 ReviewDetailsCard.tsx
 
-  // Department filter (NEW)
-  if (selectedDepartment) {
-    filtered = filtered?.filter(p => p.department_id === selectedDepartment);
-  }
+```typescript
+// Lines 18, 35 - Apply formatting
+<p className="font-semibold text-primary whitespace-pre-wrap">
+  {normalizeKpiText(kpi.kra_name)}
+</p>
+// ...
+<p className="text-sm whitespace-pre-wrap">
+  {normalizeKpiText(kpi.kpi_name)}
+</p>
+```
 
-  // Designation filter (NEW)
-  if (selectedDesignation) {
-    filtered = filtered?.filter(p => p.designation === selectedDesignation);
-  }
+#### 3.4 KpiMetricsSection.tsx
 
-  // PMS Grade filter (NEW)
-  if (selectedGrade) {
-    filtered = filtered?.filter(p => p.pms_grade === selectedGrade);
-  }
+Rating scale values also need `pre-wrap` for complex threshold descriptions.
 
-  // Reporting Manager filter (NEW - for Audit/Management only)
-  if (selectedManager) {
-    filtered = filtered?.filter(p => p.reporting_manager_id === selectedManager);
-  }
+#### 3.5 Other Components
 
-  // Status filter (existing but refined)
-  if (statusFilter !== 'all' && periodKpis) {
-    // ... existing status logic
-  }
+- `ReviewDetailsCardCompact.tsx`
+- `KpiLogicModal.tsx`
+- `KpiTrackerModal.tsx`
+- `SelfReview.tsx`
+- Review pages (Team, Audit, Management)
+- `AllKpis.tsx`
+- `OrgKpiOverview.tsx`
 
-  return filtered;
-}, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, 
-    selectedGrade, selectedManager, statusFilter, periodKpis]);
+---
+
+### Phase 4: Data Migration Script (One-Time Cleanup)
+
+**New Edge Function:** `supabase/functions/normalize-kpi-text/index.ts`
+
+This optional function scans existing records and normalizes text formatting:
+
+```typescript
+// Normalize patterns in kpi_name and kra_name columns
+const normalizationPattern = /(?<!\n)(\s*)(-\s*(?:Description|Formula|Scoring Logic|Criteria|Measurement|Target|Note)s?:)/gi;
+
+// For each KPI/template with the pattern:
+UPDATE kpis SET kpi_name = REGEXP_REPLACE(
+  kpi_name, 
+  '([^\n])(\s*-\s*(?:Description|Formula|Scoring Logic):)', 
+  E'\\1\n\\2',
+  'gi'
+) WHERE kpi_name ~ '-\s*(Description|Formula|Scoring Logic):';
+```
+
+This is optional since the client-side normalization handles display, but it ensures data consistency for exports/reports.
+
+---
+
+### Phase 5: Unit Tests
+
+**New File:** `src/lib/textFormatting.test.ts`
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { normalizeKpiText } from './textFormatting';
+
+describe('normalizeKpiText', () => {
+  describe('messy existing data (missing newlines)', () => {
+    it('inserts newline before - Description:', () => {
+      const input = 'KPI Title - Description: Some description';
+      const expected = 'KPI Title\n- Description: Some description';
+      expect(normalizeKpiText(input)).toBe(expected);
+    });
+
+    it('inserts newlines before multiple markers', () => {
+      const input = 'KPI Name - Description: Desc - Formula: F - Scoring Logic: SL';
+      const result = normalizeKpiText(input);
+      expect(result).toContain('\n- Description:');
+      expect(result).toContain('\n- Formula:');
+      expect(result).toContain('\n- Scoring Logic:');
+    });
+  });
+
+  describe('clean new data (already has newlines)', () => {
+    it('preserves existing newlines', () => {
+      const input = 'KPI Name\n- Description: Desc\n- Formula: F';
+      expect(normalizeKpiText(input)).toBe(input);
+    });
+  });
+
+  describe('edge cases', () => {
+    it('handles null/undefined gracefully', () => {
+      expect(normalizeKpiText(null)).toBe('');
+      expect(normalizeKpiText(undefined)).toBe('');
+    });
+
+    it('handles text without markers', () => {
+      const input = 'Simple KPI without sections';
+      expect(normalizeKpiText(input)).toBe(input);
+    });
+
+    it('is case-insensitive', () => {
+      const input = 'KPI - DESCRIPTION: Desc - formula: F';
+      const result = normalizeKpiText(input);
+      expect(result).toContain('\n- DESCRIPTION:');
+      expect(result).toContain('\n- formula:');
+    });
+  });
+});
 ```
 
 ---
@@ -204,105 +259,76 @@ const displayMembers = useMemo(() => {
 
 | File | Purpose |
 |------|---------|
-| `src/components/review/EmployeeFilters.tsx` | Shared filter bar component |
-| `src/hooks/useEmployeeFilterOptions.ts` | Hook for fetching filter dropdown options |
+| `src/lib/textFormatting.ts` | Central formatting utilities with regex normalizer |
+| `src/lib/textFormatting.test.ts` | Unit tests for formatting logic |
+| `src/components/ui/FormattedText.tsx` | Reusable pre-wrap text component |
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/pages/TeamReview.tsx` | Add new filter state, integrate EmployeeFilters, update displayMembers |
-| `src/pages/AuditPanel.tsx` | Add new filter state, integrate EmployeeFilters, update displayMembers |
-| `src/pages/ManagementReview.tsx` | Add new filter state, integrate EmployeeFilters, update displayMembers |
-| `DOCUMENTATION.md` | Document new filter capabilities |
-
----
-
-## UI Design
-
-### Filter Bar Component
-
-```text
-┌────────────────────────────────────────────────────────────────────────────────┐
-│  Filters                                                                       │
-├────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                │
-│  [🔍 Search employees...          ] [All Departments ▼] [All Designations ▼]  │
-│                                                                                │
-│  [All Grades ▼] [All Managers ▼] [All Status ▼]               [✕ Clear All]   │
-│                                                                                │
-│  Active: Department: HR • Grade: JM-SM                        2 filters active │
-│                                                                                │
-└────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Active Filter Badges
-
-When filters are active, show removable badges:
-
-```text
-┌────────────────────────────────────────────────────────────────────────────────┐
-│  [HR-Human Resources ✕]  [JM-SM ✕]  [Deputy Manager ✕]                        │
-└────────────────────────────────────────────────────────────────────────────────┘
-```
+| `src/components/review/KpiDetailsTable.tsx` | Add `whitespace-pre-wrap` and normalization |
+| `src/components/review/KpiHeaderSection.tsx` | Add formatting to KRA/KPI names |
+| `src/components/review/ReviewDetailsCard.tsx` | Add pre-wrap styling |
+| `src/components/review/ReviewDetailsCardCompact.tsx` | Add formatting |
+| `src/components/review/KpiMetricsSection.tsx` | Format rating scale descriptions |
+| `src/components/dashboard/KpiLogicModal.tsx` | Format modal content |
+| `src/components/dashboard/KpiTrackerModal.tsx` | Format tracker modal |
+| `src/pages/SelfReview.tsx` | Format KPI displays |
+| `src/pages/admin/AllKpis.tsx` | Format admin table |
+| `src/pages/admin/OrgKpiOverview.tsx` | Format org KPIs |
+| `src/pages/reports/MonthlyScorecardReport.tsx` | Format report output |
+| `DOCUMENTATION.md` | Document text formatting system |
 
 ---
 
 ## Implementation Order
 
 1. **Phase 1 - Foundation**
-   - Create `useEmployeeFilterOptions` hook
-   - Create `EmployeeFilters` component
+   - Create `src/lib/textFormatting.ts` with `normalizeKpiText()` function
+   - Create unit tests `src/lib/textFormatting.test.ts`
 
-2. **Phase 2 - Integration**
-   - Update TeamReview page with new filters
-   - Update AuditPanel page with new filters
-   - Update ManagementReview page with new filters
+2. **Phase 2 - Reusable Component**
+   - Create `src/components/ui/FormattedText.tsx`
 
-3. **Phase 3 - Polish**
-   - Add active filter badges
-   - Add "Clear All" functionality
-   - Update documentation
+3. **Phase 3 - Apply to All Components**
+   - Update `KpiDetailsTable.tsx` (most used)
+   - Update `KpiHeaderSection.tsx`
+   - Update remaining display components
 
----
-
-## Filter Behavior
-
-| Scenario | Behavior |
-|----------|----------|
-| Multiple filters | AND logic - all conditions must match |
-| Empty filter | Shows all (no filtering applied) |
-| No matches | Shows "No employees found" with suggestion to adjust filters |
-| Filter persistence | Filters reset when leaving page (no URL persistence) |
+4. **Phase 4 - Testing & Documentation**
+   - Run unit tests
+   - Verify visual output on existing data
+   - Update DOCUMENTATION.md
 
 ---
 
-## Status Options by Page
+## Regression Protection
 
-### Team Review
-- All Employees
-- With Pending Reviews (status = 'self_review')
-- Reviewed (status in ['manager_check', 'audit', 'management_review', 'approved'])
+The unit tests cover:
 
-### Audit Panel
-- All Employees
-- With Pending Audit (status = 'manager_check')
-- In Audit (status = 'audit')
-- Forwarded (status in ['management_review', 'approved'])
-
-### Management Review
-- All Employees
-- With Pending Reviews (status = 'management_review')
-- Approved (status = 'approved')
+| Scenario | Test Case |
+|----------|-----------|
+| Messy existing data | Text with markers but no newlines |
+| Clean new data | Text already properly formatted |
+| Edge cases | null/undefined, no markers, case variations |
+| Idempotency | Running normalizer twice yields same result |
 
 ---
 
-## Benefits
+## Expected Outcome
 
-| Benefit | Impact |
-|---------|--------|
-| **Faster Employee Lookup** | Reviewers can filter by department instead of scrolling |
-| **Grade-Based Review** | Management can focus on specific performance bands |
-| **Manager Visibility** | View all employees under a specific manager |
-| **Consistent UX** | Same filter pattern across all review pages |
+**Before:**
+```
+Accuracy of New Employee Documentation: - Description: Measures the completeness... - Formula: (1 - (Number of files...
+```
 
+**After:**
+```
+Accuracy of New Employee Documentation:
+- Description: Measures the completeness...
+- Formula: (1 - (Number of files...
+- Scoring Logic: (Scoring: 5 for 100%...
+```
+
+All KPI text fields will display with proper line breaks, making structured data readable for HR administrators and employees.
