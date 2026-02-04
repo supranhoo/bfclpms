@@ -52,6 +52,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
       { label: 'No', rating: 0, definition: 'Requirement not met' },
     ] as QualitativeOption[],
     require_resubmit_reason: true,
+    day_count_type: 'working_days' as 'working_days' | 'all_days',
   });
 
   useEffect(() => {
@@ -81,6 +82,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
           { label: 'No', rating: 0, definition: 'Requirement not met' },
         ],
         require_resubmit_reason: template.require_resubmit_reason ?? true,
+        day_count_type: (template as any).day_count_type || 'working_days',
       });
     } else {
       resetForm();
@@ -113,6 +115,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
         { label: 'No', rating: 0, definition: 'Requirement not met' },
       ],
       require_resubmit_reason: true,
+      day_count_type: 'working_days',
     });
   };
 
@@ -320,6 +323,28 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                     </Select>
                   </div>
                 </div>
+                {formData.frequency === 'Daily' && (
+                  <div className="space-y-2">
+                    <Label>Day Count Type</Label>
+                    <Select
+                      value={formData.day_count_type}
+                      onValueChange={(val: 'working_days' | 'all_days') => setFormData({ ...formData, day_count_type: val })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="working_days">Working Days Only</SelectItem>
+                        <SelectItem value="all_days">All Calendar Days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {formData.day_count_type === 'working_days' 
+                        ? 'Uses employee-specific working days for missed days calculation'
+                        : 'Uses all calendar days (e.g., 31 days in January)'}
+                    </p>
+                  </div>
+                )}
 
                 {/* Rating Thresholds */}
                 <div>
@@ -371,6 +396,28 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                     </Select>
                   </div>
                 </div>
+                {formData.frequency === 'Daily' && (
+                  <div className="space-y-2">
+                    <Label>Day Count Type</Label>
+                    <Select
+                      value={formData.day_count_type}
+                      onValueChange={(val: 'working_days' | 'all_days') => setFormData({ ...formData, day_count_type: val })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="working_days">Working Days Only</SelectItem>
+                        <SelectItem value="all_days">All Calendar Days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {formData.day_count_type === 'working_days' 
+                        ? 'Uses employee-specific working days for missed days calculation'
+                        : 'Uses all calendar days (e.g., 31 days in January)'}
+                    </p>
+                  </div>
+                )}
                 <div className="p-4 bg-muted/50 rounded-lg">
                   <Label className="text-sm font-medium mb-2 block">Binary Scoring</Label>
                   <div className="flex gap-4">

@@ -52,6 +52,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
   const [targetValue, setTargetValue] = useState<string>('');
   const [weightage, setWeightage] = useState<string>('');
   const [frequency, setFrequency] = useState('Monthly');
+  const [dayCountType, setDayCountType] = useState<'working_days' | 'all_days'>('working_days');
   const [sourceOfData, setSourceOfData] = useState('');
   
   // Rating thresholds
@@ -99,6 +100,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
     setTargetValue('');
     setWeightage('');
     setFrequency('Monthly');
+    setDayCountType('working_days');
     setSourceOfData('');
     setR5('');
     setR4('');
@@ -155,6 +157,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
       frequency_cycle_start: null,
       is_frequency_locked: false,
       require_resubmit_reason: requireResubmitReason,
+      day_count_type: frequency === 'Daily' ? dayCountType : null,
     });
 
     handleClose();
@@ -313,6 +316,25 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
                       </SelectContent>
                     </Select>
                   </div>
+                  {frequency === 'Daily' && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Day Count Type</Label>
+                      <Select value={dayCountType} onValueChange={(v: 'working_days' | 'all_days') => setDayCountType(v)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="working_days">Working Days Only</SelectItem>
+                          <SelectItem value="all_days">All Calendar Days</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {dayCountType === 'working_days' 
+                          ? 'Uses employee-specific working days for missed days calculation'
+                          : 'Uses all calendar days (e.g., 31 days in January)'}
+                      </p>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Source of Data</Label>
                     <Input
@@ -420,6 +442,25 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
                       </SelectContent>
                     </Select>
                   </div>
+                  {frequency === 'Daily' && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Day Count Type</Label>
+                      <Select value={dayCountType} onValueChange={(v: 'working_days' | 'all_days') => setDayCountType(v)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="working_days">Working Days Only</SelectItem>
+                          <SelectItem value="all_days">All Calendar Days</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {dayCountType === 'working_days' 
+                          ? 'Uses employee-specific working days for missed days calculation'
+                          : 'Uses all calendar days (e.g., 31 days in January)'}
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className="p-4 bg-muted/50 rounded-lg">
                   <Label className="text-sm font-medium mb-2 block">Binary Scoring</Label>

@@ -15,6 +15,7 @@ import { getDaysInMonth } from 'date-fns';
 import { getMonthNumber } from './frequencyUtils';
 
 export type DailyAggregationMethod = 'average' | 'missed_days_penalty';
+export type DayCountType = 'working_days' | 'all_days';
 
 export interface AggregationResult {
   score: number | null;
@@ -30,12 +31,34 @@ export interface BinaryAggregationResult extends AggregationResult {
 }
 
 /**
- * Get the total number of working/expected days in a month for daily submissions
- * By default, assumes all calendar days are expected (can be customized)
+ * Get the total number of calendar days in a month
+ * This is the synchronous version for backwards compatibility
  */
 export function getExpectedDaysInMonth(month: string, year: number): number {
   const monthNum = getMonthNumber(month);
   return getDaysInMonth(new Date(year, monthNum - 1));
+}
+
+/**
+ * Get the expected days based on day_count_type
+ * For 'all_days': returns all calendar days in the month
+ * For 'working_days': returns the provided working days count (from employee config or global default)
+ */
+export function getExpectedDaysWithConfig(
+  month: string,
+  year: number,
+  dayCountType: DayCountType = 'working_days',
+  workingDaysCount?: number,
+  globalDefaultDays: number = 22
+): number {
+  // All calendar days - use date-fns
+  if (dayCountType === 'all_days') {
+    const monthNum = getMonthNumber(month);
+    return getDaysInMonth(new Date(year, monthNum - 1));
+  }
+  
+  // Working days mode - use provided count or global default
+  return workingDaysCount ?? globalDefaultDays;
 }
 
 /**
@@ -70,16 +93,14 @@ export function calculateMissedDaysPenaltyScore(
 }
 
 /**
- * Calculate score for binary daily KPIs
+ * Calculate score for binary daily KPIs with explicit expected days
  * Total No = Missed Days + "No" submissions (achieved_value = 0)
  * Score: 0 No = 5, 1 No = 4, 2 No = 3, 3 No = 2, 4 No = 1, >4 No = 0
  */
-export function calculateBinaryDailyScore(
+export function calculateBinaryDailyScoreWithExpectedDays(
   submittedValues: number[],
-  month: string,
-  year: number
+  totalDays: number
 ): BinaryAggregationResult {
-  const totalDays = getExpectedDaysInMonth(month, year);
   const submittedDays = submittedValues.length;
   const missedDays = Math.max(0, totalDays - submittedDays);
   
@@ -104,7 +125,57 @@ export function calculateBinaryDailyScore(
 }
 
 /**
+ * Calculate score for binary daily KPIs (backwards compatible version)
+ */
+export function calculateBinaryDailyScore(
+  submittedValues: number[],
+  month: string,
+  year: number
+): BinaryAggregationResult {
+  const totalDays = getExpectedDaysInMonth(month, year);
+  return calculateBinaryDailyScoreWithExpectedDays(submittedValues, totalDays);
+}
+
+/**
+ * Main aggregation function with explicit expected days parameter
+ * This version accepts pre-calculated expected days for flexibility
+ */
+export function calculateDailyAggregatedScoreWithExpectedDays(
+  submittedValues: number[],
+  method: DailyAggregationMethod,
+  totalDays: number,
+  isBinaryKpi: boolean = false
+): AggregationResult | BinaryAggregationResult {
+  // For binary KPIs with missed_days_penalty, use the binary-specific logic
+  if (isBinaryKpi && method === 'missed_days_penalty') {
+    return calculateBinaryDailyScoreWithExpectedDays(submittedValues, totalDays);
+  }
+
+  const submittedDays = submittedValues.length;
+  const missedDays = Math.max(0, totalDays - submittedDays);
+
+  let score: number | null = null;
+
+  if (method === 'average') {
+    score = calculateAverageScore(submittedValues);
+  } else if (method === 'missed_days_penalty') {
+    score = submittedDays > 0 
+      ? calculateMissedDaysPenaltyScore(submittedDays, totalDays)
+      : null;
+  }
+
+  return {
+    score,
+    method,
+    submittedDays,
+    totalDays,
+    missedDays,
+  };
+}
+
+/**
  * Main aggregation function that calculates the monthly score based on the selected method
+ * Backwards compatible version that uses calendar days
  * @param isBinaryKpi - If true and method is 'missed_days_penalty', uses binary-specific logic
  */
 export function calculateDailyAggregatedScore(
@@ -167,5 +238,19 @@ export function getAggregationMethodDescription(method: DailyAggregationMethod):
       return 'Score based on missed days: 5 (0 missed), 4 (1 missed), 3 (2 missed), etc.';
     default:
       return '';
+  }
+}
+
+/**
+ * Get the display label for the day count type
+ */
+export function getDayCountTypeLabel(type: DayCountType): string {
+  switch (type) {
+    case 'working_days':
+      return 'Working Days Only';
+    case 'all_days':
+      return 'All Calendar Days';
+    default:
+      return 'Working Days Only';
   }
 }
