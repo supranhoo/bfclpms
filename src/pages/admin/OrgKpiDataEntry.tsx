@@ -18,7 +18,7 @@ import { TableSkeleton } from '@/components/ui/LoadingSkeletons';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { OrgKpiOwnerDialog } from '@/components/admin/OrgKpiOwnerDialog';
 import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
-import { Building2, Save, AlertTriangle, Filter, Users, User, Search, X } from 'lucide-react';
+import { Building2, Save, AlertTriangle, Filter, Users, User, Search, X, UserPlus } from 'lucide-react';
 
 interface EditableKpi {
   category_id: string;
@@ -316,6 +316,12 @@ export default function OrgKpiDataEntry() {
   };
 
   const hasActiveFilters = searchQuery || selectedDepartmentId || selectedDesignation || selectedKraName;
+
+  // Helper to open owner dialog
+  const openOwnerDialog = (categoryId: string, kraName: string, kpiName: string) => {
+    setSelectedKpiForOwner({ categoryId, kraName, kpiName });
+    setOwnerDialogOpen(true);
+  };
 
   const handleSaveAll = async () => {
     const valuesToSave = Array.from(editedValues.values())
@@ -623,6 +629,9 @@ export default function OrgKpiDataEntry() {
                       <TableHead className="font-semibold text-center w-32">Achieved Value</TableHead>
                       <TableHead className="font-semibold w-48">Remark</TableHead>
                       <TableHead className="font-semibold w-28">Supporting File</TableHead>
+                      {isAdmin && (
+                        <TableHead className="font-semibold w-24 text-center">Actions</TableHead>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -698,6 +707,31 @@ export default function OrgKpiDataEntry() {
                               onUploadComplete={(url) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'evidence_url', url, kpi, departmentId, employeeId)}
                             />
                           </TableCell>
+                          {isAdmin && (() => {
+                            const ownerKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+                            const ownership = ownershipMap.get(ownerKey);
+                            const ownerCount = ownership?.owners?.length || 0;
+                            return (
+                              <TableCell className="text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  {ownerCount > 0 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {ownerCount}
+                                    </Badge>
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => openOwnerDialog(kpi.category_id, kpi.kra_name, kpi.kpi_name)}
+                                    title="Assign Data Owner"
+                                    className="h-8 w-8"
+                                  >
+                                    <UserPlus className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            );
+                          })()}
                         </TableRow>
                       );
                     })}
