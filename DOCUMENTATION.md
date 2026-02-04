@@ -1138,12 +1138,21 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
 #### 4.9.14 Org KPI Data Owners & Access Control
 
 **Data Owner Assignment:**
-- Admins can assign specific users as "data owners" for org-level KPIs
+- Admins can assign specific users as "data owners" for org-level KPIs via the **Org KPI Data Entry** page
+- Each KPI row displays an "Actions" column with a **UserPlus** button to open the owner assignment dialog
+- A badge shows the current owner count for quick visibility
 - Data owners can enter/update values for their assigned KPIs
 - Multiple owners can be assigned per KPI (primary + backup)
 - Assignment is tracked in `org_kpi_data_owners` table
 
+**UI Component: `OrgKpiOwnerDialog`**
+- Opened via UserPlus button in Actions column of Org KPI Data Entry table
+- Shows current KPI info (KRA name, KPI name)
+- Lists current data owners with remove option
+- Searchable user list to add new owners (by name, email, or employee code)
+
 **Access Control Hook: `useOrgKpiDataOwner`**
+- `useOrgKpiOwnershipMap()`: Returns map of all ownership for quick lookup
 - `useIsOrgKpiDataOwner(categoryId, kraName, kpiName)`: Check if current user can edit
 - `useAssignOrgKpiOwner()`: Mutation to assign owner (admin only)
 - `useRemoveOrgKpiOwner()`: Mutation to remove owner (admin only)
