@@ -1,0 +1,207 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+
+export interface OrgKpiDataOwner {
+  id: string;
+  category_id: string;
+  kra_name: string;
+  kpi_name: string;
+  owner_id: string;
+  assigned_by: string | null;
+  created_at: string;
+  // Joined fields
+  owner?: {
+    id: string;
+    full_name: string | null;
+    email: string;
+  };
+}
+
+/**
+ * Fetch all data owners for org-level KPIs
+ */
+export function useOrgKpiDataOwners() {
+  return useQuery({
+    queryKey: ['org-kpi-data-owners'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('org_kpi_data_owners')
+        .select(`
+          *,
+          owner:profiles!org_kpi_data_owners_owner_id_fkey(id, full_name, email)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data as OrgKpiDataOwner[];
+    },
+  });
+}
+
+/**
+ * Check if current user can edit a specific org-level KPI
+ */
+export function useIsOrgKpiDataOwner(categoryId: string, kraName: string, kpiName: string) {
+  const { user, role } = useAuth();
+
+  return useQuery({
+    queryKey: ['org-kpi-owner-check', categoryId, kraName, kpiName, user?.id],
+    queryFn: async () => {
+      // Admins always have access
+      if (role === 'admin') {
+        return { canEdit: true, isOwner: false, isAdmin: true };
+      }
+
+      if (!user?.id) {
+        return { canEdit: false, isOwner: false, isAdmin: false };
+      }
+
+      // Check if user is designated owner
+      const { data } = await supabase
+        .from('org_kpi_data_owners')
+        .select('id')
+        .eq('category_id', categoryId)
+        .eq('kra_name', kraName)
+        .eq('kpi_name', kpiName)
+        .eq('owner_id', user.id)
+        .maybeSingle();
+
+      return { canEdit: !!data, isOwner: !!data, isAdmin: false };
+    },
+    enabled: !!categoryId && !!kraName && !!kpiName,
+  });
+}
+
+/**
+ * Get owners for a specific KPI
+ */
+export function useOrgKpiOwners(categoryId: string, kraName: string, kpiName: string) {
+  return useQuery({
+    queryKey: ['org-kpi-owners', categoryId, kraName, kpiName],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('org_kpi_data_owners')
+        .select(`
+          *,
+          owner:profiles!org_kpi_data_owners_owner_id_fkey(id, full_name, email)
+        `)
+        .eq('category_id', categoryId)
+        .eq('kra_name', kraName)
+        .eq('kpi_name', kpiName);
+
+      if (error) throw error;
+      return data as OrgKpiDataOwner[];
+    },
+    enabled: !!categoryId && !!kraName && !!kpiName,
+  });
+}
+
+/**
+ * Build a map of all ownership for quick lookup
+ * Key format: categoryId||kraName||kpiName
+ */
+export function useOrgKpiOwnershipMap() {
+  const { data: owners } = useOrgKpiDataOwners();
+  const { user, role } = useAuth();
+
+  const ownershipMap = new Map<string, { owners: OrgKpiDataOwner[]; canEdit: boolean }>();
+  
+  if (owners) {
+    owners.forEach(owner => {
+      const key = `${owner.category_id}||${owner.kra_name}||${owner.kpi_name}`;
+      const existing = ownershipMap.get(key) || { owners: [], canEdit: role === 'admin' };
+      existing.owners.push(owner);
+      if (owner.owner_id === user?.id) {
+        existing.canEdit = true;
+      }
+      ownershipMap.set(key, existing);
+    });
+  }
+
+  return { ownershipMap, isAdmin: role === 'admin' };
+}
+
+/**
+ * Assign a data owner to an org-level KPI
+ */
+export function useAssignOrgKpiOwner() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      categoryId,
+      kraName,
+      kpiName,
+      ownerId,
+    }: {
+      categoryId: string;
+      kraName: string;
+      kpiName: string;
+      ownerId: string;
+    }) => {
+      const { data, error } = await supabase
+        .from('org_kpi_data_owners')
+        .insert({
+          category_id: categoryId,
+          kra_name: kraName,
+          kpi_name: kpiName,
+          owner_id: ownerId,
+          assigned_by: user?.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-data-owners'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-owners'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-owner-check'] });
+      toast({ title: 'Data owner assigned successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: 'Failed to assign data owner', 
+        description: error.message, 
+        variant: 'destructive' 
+      });
+    },
+  });
+}
+
+/**
+ * Remove a data owner from an org-level KPI
+ */
+export function useRemoveOrgKpiOwner() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (ownerId: string) => {
+      const { error } = await supabase
+        .from('org_kpi_data_owners')
+        .delete()
+        .eq('id', ownerId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-data-owners'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-owners'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-owner-check'] });
+      toast({ title: 'Data owner removed' });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: 'Failed to remove data owner', 
+        description: error.message, 
+        variant: 'destructive' 
+      });
+    },
+  });
+}

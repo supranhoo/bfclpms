@@ -926,6 +926,58 @@ export type Database = {
           },
         ]
       }
+      org_kpi_data_owners: {
+        Row: {
+          assigned_by: string | null
+          category_id: string
+          created_at: string | null
+          id: string
+          kpi_name: string
+          kra_name: string
+          owner_id: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          category_id: string
+          created_at?: string | null
+          id?: string
+          kpi_name: string
+          kra_name: string
+          owner_id: string
+        }
+        Update: {
+          assigned_by?: string | null
+          category_id?: string
+          created_at?: string | null
+          id?: string
+          kpi_name?: string
+          kra_name?: string
+          owner_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_kpi_data_owners_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_data_owners_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_data_owners_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_kpi_values: {
         Row: {
           achieved_value: number | null
@@ -949,6 +1001,11 @@ export type Database = {
           remarks: string | null
           review_period: string
           review_year: number
+          sent_back_at: string | null
+          sent_back_by: string | null
+          sent_back_reason: string | null
+          status: string | null
+          submission_count: number | null
           target_value: number | null
           uom_type: string | null
           updated_at: string
@@ -975,6 +1032,11 @@ export type Database = {
           remarks?: string | null
           review_period: string
           review_year: number
+          sent_back_at?: string | null
+          sent_back_by?: string | null
+          sent_back_reason?: string | null
+          status?: string | null
+          submission_count?: number | null
           target_value?: number | null
           uom_type?: string | null
           updated_at?: string
@@ -1001,6 +1063,11 @@ export type Database = {
           remarks?: string | null
           review_period?: string
           review_year?: number
+          sent_back_at?: string | null
+          sent_back_by?: string | null
+          sent_back_reason?: string | null
+          status?: string | null
+          submission_count?: number | null
           target_value?: number | null
           uom_type?: string | null
           updated_at?: string
@@ -1030,6 +1097,13 @@ export type Database = {
           {
             foreignKeyName: "org_kpi_values_entered_by_fkey"
             columns: ["entered_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_values_sent_back_by_fkey"
+            columns: ["sent_back_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
