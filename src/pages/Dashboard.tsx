@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, KPI } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
+import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,7 +21,8 @@ import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Target, TrendingUp, CheckCircle2, Clock, BarChart3, Info, Filter } from 'lucide-react';
+import { Target, TrendingUp, CheckCircle2, Clock, BarChart3, Info, Filter, Building2 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -60,6 +62,38 @@ export default function Dashboard() {
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
   const [selectedPeriod, setSelectedPeriod] = useState<string>(defaultPeriod);
   const [selectedYear, setSelectedYear] = useState<number>(defaultYear);
+
+  // Fetch org KPI values for this period
+  const { data: orgKpiValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
+
+  // Create org KPI values lookup map
+  const orgKpiValuesMap = useMemo(() => {
+    const map = new Map<string, { achieved_value: number | null; data_source: string | null }>();
+    orgKpiValues?.forEach(v => {
+      const deptPart = v.department_id || 'null';
+      const empPart = v.employee_id || 'null';
+      const key = `${v.category_id}||${v.kra_name}||${v.kpi_name}||${deptPart}||${empPart}`;
+      map.set(key, { achieved_value: v.achieved_value, data_source: v.data_source });
+    });
+    return map;
+  }, [orgKpiValues]);
+
+  // Helper to get org KPI value based on scope
+  const getOrgKpiValue = (kpi: KPI) => {
+    if (!kpi.is_org_level) return null;
+    const scope = (kpi as any).org_level_scope || 'organization';
+    let key: string;
+    if (scope === 'organization') {
+      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+    } else if (scope === 'department') {
+      const deptId = profile?.department_id || 'null';
+      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${deptId}||null`;
+    } else {
+      const empId = profile?.id || 'null';
+      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${empId}`;
+    }
+    return orgKpiValuesMap.get(key) || null;
+  };
 
   const isLoading = kpisLoading || categoriesLoading;
 
