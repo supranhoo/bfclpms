@@ -1,242 +1,308 @@
 
 
-# Plan: Add Custom SMTP Server Configuration for System Emails
+# Enhanced Employee Selection Filters for Review Pages
 
 ## Overview
 
-This plan adds the ability to choose between **Resend API** (current) or **Custom SMTP** for sending system emails. Administrators can configure their organization's official mail server (like BFCL's mail service) as the email provider.
+This plan adds comprehensive employee filtering capabilities to Team Review, Audit Panel, and Management Review pages. Currently, these pages only have basic search and status filters. The enhancement will add Department, Designation, PMS Grade, and Reporting Manager filters to help reviewers quickly find specific employees.
 
 ---
 
-## Current State
+## Current State Analysis
 
-| Component | Status |
-|-----------|--------|
-| Email Provider | Resend only (hardcoded) |
-| Settings Storage | `system_settings` table |
-| Edge Function | `send-email-notification/index.ts` |
-| UI Component | `EmailNotificationSettings.tsx` |
-| Settings Hook | `useEmailNotificationSettings.ts` |
+| Page | Current Filters |
+|------|-----------------|
+| Team Review | Search (name/email/code), Status (All/Pending/Reviewed) |
+| Audit Panel | Search (name/email/code), Status (All/Pending Audit/In Audit/Forwarded) |
+| Management Review | Search (name/email/code), Status (All/Pending/Approved) |
+
+All three pages share the same filter pattern but lack organizational filters like Department, Designation, and PMS Grade.
 
 ---
 
-## Proposed Architecture
+## Proposed Filters
+
+### New Filter Dropdowns
+
+| Filter | Source | Purpose |
+|--------|--------|---------|
+| Department | `departments` table | Filter by organizational unit |
+| Designation | `profiles.designation` (distinct values) | Filter by job title |
+| PMS Grade | `profiles.pms_grade` (distinct values) | Filter by performance grade band |
+| Reporting Manager | `profiles` (managers only) | Filter by direct supervisor |
+
+### Filter Layout
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│                    Email Notification Settings                   │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Email Provider                                                 │
-│  ○ Resend (Default)    ● Custom SMTP                           │
-│                                                                 │
-│  ┌─ SMTP Configuration ──────────────────────────────────────┐  │
-│  │                                                           │  │
-│  │  SMTP Host             [ mail.bfcl.com              ]     │  │
-│  │  Port                  [ 587 ] ▼ (465/587/25)             │  │
-│  │  Security              ○ TLS  ○ STARTTLS  ○ None          │  │
-│  │                                                           │  │
-│  │  Username              [ noreply@bfcl.com           ]     │  │
-│  │  Password              [ ●●●●●●●●●●●●●●●●           ]     │  │
-│  │                                                           │  │
-│  │  From Address          [ noreply@bfcl.com           ]     │  │
-│  │  From Name             [ BFCL PMS System            ]     │  │
-│  │                                                           │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│  [ Test Connection ]                                            │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│  [🔍 Search employees...] [Department ▼] [Designation ▼] [Grade ▼]     │
+│  [Manager ▼] [Status ▼]                                   [✕ Clear All]│
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Database Changes
+## Technical Implementation
 
-### New System Settings Keys
+### 1. Create Shared Filter Component
 
-```sql
-INSERT INTO system_settings (setting_key, setting_value, description) VALUES
-  ('email_provider', '"resend"', 'Email provider: resend or smtp'),
-  ('smtp_host', '""', 'SMTP server hostname'),
-  ('smtp_port', '587', 'SMTP server port'),
-  ('smtp_security', '"tls"', 'SMTP security: tls, starttls, or none'),
-  ('smtp_username', '""', 'SMTP authentication username'),
-  ('smtp_from_address', '""', 'SMTP from email address'),
-  ('smtp_from_name', '""', 'SMTP from display name')
-ON CONFLICT (setting_key) DO NOTHING;
-```
+**New File:** `src/components/review/EmployeeFilters.tsx`
 
-### New Secret for SMTP Password
-
-The SMTP password will be stored as a Lovable Cloud secret (`SMTP_PASSWORD`) to avoid storing credentials in the database.
-
----
-
-## Edge Function Updates
-
-### Modified: `send-email-notification/index.ts`
-
-Add SMTP sending capability using `nodemailer` compatible library for Deno:
+This component will be reusable across all three review pages with configurable status options:
 
 ```typescript
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
-
-// Determine which provider to use
-const provider = settingsMap.email_provider || 'resend';
-
-if (provider === 'smtp') {
-  // Use custom SMTP
-  const client = new SMTPClient({
-    connection: {
-      hostname: smtpHost,
-      port: parseInt(smtpPort),
-      tls: smtpSecurity === 'tls',
-      auth: {
-        username: smtpUsername,
-        password: Deno.env.get('SMTP_PASSWORD'),
-      },
-    },
-  });
+interface EmployeeFiltersProps {
+  // Search
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
   
-  await client.send({
-    from: `${senderName} <${senderEmail}>`,
-    to: recipient_email,
-    subject: subject,
-    html: html,
-  });
+  // Department filter
+  selectedDepartment: string | null;
+  onDepartmentChange: (deptId: string | null) => void;
+  departments: { id: string; name: string }[];
   
-  await client.close();
-} else {
-  // Use Resend (existing code)
-  await resend.emails.send({...});
+  // Designation filter
+  selectedDesignation: string | null;
+  onDesignationChange: (designation: string | null) => void;
+  designations: string[];
+  
+  // PMS Grade filter
+  selectedGrade: string | null;
+  onGradeChange: (grade: string | null) => void;
+  grades: string[];
+  
+  // Manager filter (optional, only for Audit/Management)
+  selectedManager?: string | null;
+  onManagerChange?: (managerId: string | null) => void;
+  managers?: { id: string; name: string }[];
+  
+  // Status filter
+  statusFilter: string;
+  onStatusChange: (status: string) => void;
+  statusOptions: { value: string; label: string }[];
 }
 ```
 
----
+### 2. Create Hook for Employee Filter Options
 
-## UI Changes
+**New File:** `src/hooks/useEmployeeFilterOptions.ts`
 
-### Updated: `EmailNotificationSettings.tsx`
-
-1. **Provider Selection**: Radio group to choose between Resend and Custom SMTP
-2. **Conditional SMTP Form**: Show SMTP configuration fields only when SMTP is selected
-3. **SMTP Fields**:
-   - Host (text input)
-   - Port (dropdown: 25, 465, 587)
-   - Security (radio: TLS, STARTTLS, None)
-   - Username (text input)
-   - Password (password input with visibility toggle)
-   - From Address (email input)
-   - From Name (text input)
-4. **Test Connection Button**: Verify SMTP settings before saving
-
----
-
-## Hook Updates
-
-### Updated: `useEmailNotificationSettings.ts`
-
-Extended interface and settings management:
+Fetches distinct values for filter dropdowns:
 
 ```typescript
-export interface EmailNotificationSettings {
-  // Existing fields...
-  enabled: boolean;
-  senderName: string;
-  senderEmail: string;
-  enabledEvents: EmailEventType[];
-  companyLogoUrl: string;
-  customFooterText: string;
+export function useEmployeeFilterOptions() {
+  // Fetch departments
+  const { data: departments } = useDepartments();
   
-  // New SMTP fields
-  emailProvider: 'resend' | 'smtp';
-  smtpHost: string;
-  smtpPort: number;
-  smtpSecurity: 'tls' | 'starttls' | 'none';
-  smtpUsername: string;
-  smtpPassword: string;  // Only for UI state, saved as secret
-  smtpFromAddress: string;
-  smtpFromName: string;
+  // Fetch distinct designations from profiles
+  const { data: designations } = useQuery({
+    queryKey: ['distinct-designations'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('designation')
+        .not('designation', 'is', null);
+      return [...new Set(data?.map(p => p.designation))].filter(Boolean).sort();
+    }
+  });
+  
+  // Fetch distinct PMS grades from profiles
+  const { data: grades } = useQuery({
+    queryKey: ['distinct-grades'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('pms_grade')
+        .not('pms_grade', 'is', null);
+      return [...new Set(data?.map(p => p.pms_grade))].filter(Boolean).sort();
+    }
+  });
+  
+  // Fetch managers (profiles who have direct reports)
+  const { data: managers } = useQuery({
+    queryKey: ['managers-list'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, reporting_manager_id')
+        .order('full_name');
+      
+      const managerIds = new Set(data?.map(p => p.reporting_manager_id).filter(Boolean));
+      return data?.filter(p => managerIds.has(p.id))
+                  .map(p => ({ id: p.id, name: p.full_name || 'Unknown' }));
+    }
+  });
+  
+  return { departments, designations, grades, managers };
 }
+```
+
+### 3. Update Review Pages
+
+**Files to Modify:**
+- `src/pages/TeamReview.tsx`
+- `src/pages/AuditPanel.tsx`
+- `src/pages/ManagementReview.tsx`
+
+For each page:
+1. Import `EmployeeFilters` and `useEmployeeFilterOptions`
+2. Add state for new filters: `selectedDepartment`, `selectedDesignation`, `selectedGrade`, `selectedManager`
+3. Update `displayMembers` memo to apply all filters
+4. Replace current filter UI with `EmployeeFilters` component
+5. Add "Clear All Filters" button when any filter is active
+
+### 4. Enhanced Filtering Logic
+
+Update the `displayMembers` memo in each page:
+
+```typescript
+const displayMembers = useMemo(() => {
+  let filtered = baseMembers;
+
+  // Text search (existing)
+  if (searchQuery) {
+    filtered = filtered?.filter(p => 
+      p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.employee_code?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }
+
+  // Department filter (NEW)
+  if (selectedDepartment) {
+    filtered = filtered?.filter(p => p.department_id === selectedDepartment);
+  }
+
+  // Designation filter (NEW)
+  if (selectedDesignation) {
+    filtered = filtered?.filter(p => p.designation === selectedDesignation);
+  }
+
+  // PMS Grade filter (NEW)
+  if (selectedGrade) {
+    filtered = filtered?.filter(p => p.pms_grade === selectedGrade);
+  }
+
+  // Reporting Manager filter (NEW - for Audit/Management only)
+  if (selectedManager) {
+    filtered = filtered?.filter(p => p.reporting_manager_id === selectedManager);
+  }
+
+  // Status filter (existing but refined)
+  if (statusFilter !== 'all' && periodKpis) {
+    // ... existing status logic
+  }
+
+  return filtered;
+}, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, 
+    selectedGrade, selectedManager, statusFilter, periodKpis]);
 ```
 
 ---
 
-## Security Considerations
+## Files to Create
 
-| Concern | Solution |
-|---------|----------|
-| SMTP Password Storage | Stored as Lovable Cloud secret, not in database |
-| Password Display | Masked in UI, only shown when editing |
-| Connection Testing | Test button validates before saving |
-| Fallback | If SMTP fails, error is logged (no silent fallback) |
-
----
+| File | Purpose |
+|------|---------|
+| `src/components/review/EmployeeFilters.tsx` | Shared filter bar component |
+| `src/hooks/useEmployeeFilterOptions.ts` | Hook for fetching filter dropdown options |
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `supabase/functions/send-email-notification/index.ts` | Add SMTP sending logic with provider switch |
-| `src/components/admin/EmailNotificationSettings.tsx` | Add provider selection and SMTP configuration UI |
-| `src/hooks/useEmailNotificationSettings.ts` | Extend settings interface with SMTP fields |
-| `DOCUMENTATION.md` | Document SMTP configuration options |
+| `src/pages/TeamReview.tsx` | Add new filter state, integrate EmployeeFilters, update displayMembers |
+| `src/pages/AuditPanel.tsx` | Add new filter state, integrate EmployeeFilters, update displayMembers |
+| `src/pages/ManagementReview.tsx` | Add new filter state, integrate EmployeeFilters, update displayMembers |
+| `DOCUMENTATION.md` | Document new filter capabilities |
 
-### New Secret to Add
-- `SMTP_PASSWORD` - SMTP server authentication password
+---
+
+## UI Design
+
+### Filter Bar Component
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────┐
+│  Filters                                                                       │
+├────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                │
+│  [🔍 Search employees...          ] [All Departments ▼] [All Designations ▼]  │
+│                                                                                │
+│  [All Grades ▼] [All Managers ▼] [All Status ▼]               [✕ Clear All]   │
+│                                                                                │
+│  Active: Department: HR • Grade: JM-SM                        2 filters active │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Active Filter Badges
+
+When filters are active, show removable badges:
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────┐
+│  [HR-Human Resources ✕]  [JM-SM ✕]  [Deputy Manager ✕]                        │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Implementation Order
 
-1. **Phase 1 - Database**
-   - Add new system_settings rows for SMTP configuration
-   - Request SMTP_PASSWORD secret from admin
+1. **Phase 1 - Foundation**
+   - Create `useEmployeeFilterOptions` hook
+   - Create `EmployeeFilters` component
 
-2. **Phase 2 - Edge Function**
-   - Add denomailer import
-   - Implement provider switching logic
-   - Add SMTP connection and send logic
-   - Add test connection endpoint
+2. **Phase 2 - Integration**
+   - Update TeamReview page with new filters
+   - Update AuditPanel page with new filters
+   - Update ManagementReview page with new filters
 
-3. **Phase 3 - Frontend**
-   - Extend hook with SMTP settings
-   - Add provider radio selection
-   - Add conditional SMTP configuration form
-   - Add test connection button
-   - Update save mutation to handle SMTP settings
-
-4. **Phase 4 - Documentation**
-   - Update DOCUMENTATION.md with SMTP setup guide
+3. **Phase 3 - Polish**
+   - Add active filter badges
+   - Add "Clear All" functionality
+   - Update documentation
 
 ---
 
-## Example SMTP Configuration for BFCL
+## Filter Behavior
 
-Once implemented, you would configure:
-
-| Setting | Example Value |
-|---------|---------------|
-| Provider | Custom SMTP |
-| Host | mail.bfcl.com (or your mail server) |
-| Port | 587 |
-| Security | TLS |
-| Username | noreply@bfcl.com |
-| Password | (your SMTP password) |
-| From Address | noreply@bfcl.com |
-| From Name | BFCL PMS System |
+| Scenario | Behavior |
+|----------|----------|
+| Multiple filters | AND logic - all conditions must match |
+| Empty filter | Shows all (no filtering applied) |
+| No matches | Shows "No employees found" with suggestion to adjust filters |
+| Filter persistence | Filters reset when leaving page (no URL persistence) |
 
 ---
 
-## Testing Checklist
+## Status Options by Page
 
-- [ ] Toggle between Resend and SMTP providers
-- [ ] Enter SMTP configuration details
-- [ ] Click "Test Connection" to verify SMTP settings
-- [ ] Send a test email via SMTP
-- [ ] Verify emails are sent with correct From address
-- [ ] Verify password is stored securely as secret
-- [ ] Verify fallback to Resend still works
-- [ ] Check email formatting is consistent across providers
+### Team Review
+- All Employees
+- With Pending Reviews (status = 'self_review')
+- Reviewed (status in ['manager_check', 'audit', 'management_review', 'approved'])
+
+### Audit Panel
+- All Employees
+- With Pending Audit (status = 'manager_check')
+- In Audit (status = 'audit')
+- Forwarded (status in ['management_review', 'approved'])
+
+### Management Review
+- All Employees
+- With Pending Reviews (status = 'management_review')
+- Approved (status = 'approved')
+
+---
+
+## Benefits
+
+| Benefit | Impact |
+|---------|--------|
+| **Faster Employee Lookup** | Reviewers can filter by department instead of scrolling |
+| **Grade-Based Review** | Management can focus on specific performance bands |
+| **Manager Visibility** | View all employees under a specific manager |
+| **Consistent UX** | Same filter pattern across all review pages |
 
