@@ -15,6 +15,9 @@ export type EmailEventType =
   | 'pip_milestone_reminder'
   | 'pip_completed';
 
+export type EmailProvider = 'resend' | 'smtp';
+export type SmtpSecurity = 'tls' | 'starttls' | 'none';
+
 export interface EmailNotificationSettings {
   enabled: boolean;
   senderName: string;
@@ -22,6 +25,14 @@ export interface EmailNotificationSettings {
   enabledEvents: EmailEventType[];
   companyLogoUrl: string;
   customFooterText: string;
+  // SMTP configuration
+  emailProvider: EmailProvider;
+  smtpHost: string;
+  smtpPort: number;
+  smtpSecurity: SmtpSecurity;
+  smtpUsername: string;
+  smtpFromAddress: string;
+  smtpFromName: string;
 }
 
 const EMAIL_SETTING_KEYS = [
@@ -31,6 +42,13 @@ const EMAIL_SETTING_KEYS = [
   'email_notification_events',
   'email_company_logo_url',
   'email_custom_footer',
+  'email_provider',
+  'smtp_host',
+  'smtp_port',
+  'smtp_security',
+  'smtp_username',
+  'smtp_from_address',
+  'smtp_from_name',
 ];
 
 export function useEmailNotificationSettings() {
@@ -55,6 +73,15 @@ export function useEmailNotificationSettings() {
         }
         return String(val || '');
       };
+
+      const parseNumberValue = (val: unknown, defaultVal: number): number => {
+        if (typeof val === 'number') return val;
+        if (typeof val === 'string') {
+          const parsed = parseInt(val.replace(/^"|"$/g, ''), 10);
+          return isNaN(parsed) ? defaultVal : parsed;
+        }
+        return defaultVal;
+      };
       
       let enabledEvents: EmailEventType[] = [];
       try {
@@ -75,6 +102,14 @@ export function useEmailNotificationSettings() {
         enabledEvents,
         companyLogoUrl: parseStringValue(settingsMap.email_company_logo_url) || '',
         customFooterText: parseStringValue(settingsMap.email_custom_footer) || '',
+        // SMTP configuration
+        emailProvider: (parseStringValue(settingsMap.email_provider) || 'resend') as EmailProvider,
+        smtpHost: parseStringValue(settingsMap.smtp_host) || '',
+        smtpPort: parseNumberValue(settingsMap.smtp_port, 587),
+        smtpSecurity: (parseStringValue(settingsMap.smtp_security) || 'tls') as SmtpSecurity,
+        smtpUsername: parseStringValue(settingsMap.smtp_username) || '',
+        smtpFromAddress: parseStringValue(settingsMap.smtp_from_address) || '',
+        smtpFromName: parseStringValue(settingsMap.smtp_from_name) || '',
       };
     },
   });
@@ -93,6 +128,13 @@ export function useUpdateEmailSettings() {
         { key: 'email_notification_events', value: settings.enabledEvents },
         { key: 'email_company_logo_url', value: settings.companyLogoUrl },
         { key: 'email_custom_footer', value: settings.customFooterText },
+        { key: 'email_provider', value: settings.emailProvider },
+        { key: 'smtp_host', value: settings.smtpHost },
+        { key: 'smtp_port', value: settings.smtpPort },
+        { key: 'smtp_security', value: settings.smtpSecurity },
+        { key: 'smtp_username', value: settings.smtpUsername },
+        { key: 'smtp_from_address', value: settings.smtpFromAddress },
+        { key: 'smtp_from_name', value: settings.smtpFromName },
       ];
       
       for (const { key, value } of updates) {
@@ -134,6 +176,7 @@ export function useSendTestEmail() {
       });
       
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       return data;
     },
     onSuccess: () => {
@@ -145,6 +188,52 @@ export function useSendTestEmail() {
     onError: (error: Error) => {
       toast({
         title: 'Failed to Send Test Email',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+export function useTestSmtpConnection() {
+  const { toast } = useToast();
+  
+  return useMutation({
+    mutationFn: async (params: {
+      smtpHost: string;
+      smtpPort: number;
+      smtpSecurity: SmtpSecurity;
+      smtpUsername: string;
+      smtpFromAddress: string;
+      smtpFromName: string;
+      recipientEmail: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke('send-email-notification', {
+        body: {
+          smtp_test: true,
+          smtp_host: params.smtpHost,
+          smtp_port: params.smtpPort,
+          smtp_security: params.smtpSecurity,
+          smtp_username: params.smtpUsername,
+          smtp_from_address: params.smtpFromAddress,
+          smtp_from_name: params.smtpFromName,
+          recipient_email: params.recipientEmail,
+        },
+      });
+      
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      toast({
+        title: 'SMTP Test Successful',
+        description: 'Connection verified. Check your inbox for the test email.',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'SMTP Test Failed',
         description: error.message,
         variant: 'destructive',
       });

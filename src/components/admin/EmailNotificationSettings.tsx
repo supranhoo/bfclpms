@@ -7,14 +7,19 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { Mail, Send, Save, AlertCircle, Image } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Mail, Send, Save, AlertCircle, Image, Server, Eye, EyeOff, Plug } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   useEmailNotificationSettings,
   useUpdateEmailSettings,
   useSendTestEmail,
+  useTestSmtpConnection,
   EmailEventType,
   EmailNotificationSettings as EmailSettings,
+  EmailProvider,
+  SmtpSecurity,
 } from '@/hooks/useEmailNotificationSettings';
 
 const EMAIL_EVENTS: { key: EmailEventType; label: string; description: string }[] = [
@@ -35,6 +40,7 @@ export function EmailNotificationSettings() {
   const { data: settings, isLoading } = useEmailNotificationSettings();
   const updateSettings = useUpdateEmailSettings();
   const sendTestEmail = useSendTestEmail();
+  const testSmtpConnection = useTestSmtpConnection();
   
   const [localSettings, setLocalSettings] = useState<EmailSettings>({
     enabled: false,
@@ -43,9 +49,17 @@ export function EmailNotificationSettings() {
     enabledEvents: [],
     companyLogoUrl: '',
     customFooterText: '',
+    emailProvider: 'resend',
+    smtpHost: '',
+    smtpPort: 587,
+    smtpSecurity: 'tls',
+    smtpUsername: '',
+    smtpFromAddress: '',
+    smtpFromName: '',
   });
   const [testEmail, setTestEmail] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   
   useEffect(() => {
     if (settings) {
@@ -74,6 +88,20 @@ export function EmailNotificationSettings() {
   const handleSendTest = () => {
     if (testEmail) {
       sendTestEmail.mutate(testEmail);
+    }
+  };
+
+  const handleTestSmtp = () => {
+    if (testEmail && localSettings.smtpHost) {
+      testSmtpConnection.mutate({
+        smtpHost: localSettings.smtpHost,
+        smtpPort: localSettings.smtpPort,
+        smtpSecurity: localSettings.smtpSecurity,
+        smtpUsername: localSettings.smtpUsername,
+        smtpFromAddress: localSettings.smtpFromAddress,
+        smtpFromName: localSettings.smtpFromName,
+        recipientEmail: testEmail,
+      });
     }
   };
   
@@ -121,39 +149,197 @@ export function EmailNotificationSettings() {
             onCheckedChange={(checked) => handleChange('enabled', checked)}
           />
         </div>
-        
-        {/* Sender Configuration */}
+
+        {/* Email Provider Selection */}
         <div className="space-y-4 p-4 rounded-lg border">
-          <h4 className="font-medium">Sender Configuration</h4>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="sender-name">Sender Name</Label>
-              <Input
-                id="sender-name"
-                value={localSettings.senderName}
-                onChange={(e) => handleChange('senderName', e.target.value)}
-                placeholder="PMS Notifications"
-              />
+          <h4 className="font-medium flex items-center gap-2">
+            <Server className="h-4 w-4" />
+            Email Provider
+          </h4>
+          <RadioGroup
+            value={localSettings.emailProvider}
+            onValueChange={(value) => handleChange('emailProvider', value as EmailProvider)}
+            className="grid grid-cols-2 gap-4"
+          >
+            <div className="flex items-center space-x-2 border rounded-lg p-4">
+              <RadioGroupItem value="resend" id="provider-resend" />
+              <Label htmlFor="provider-resend" className="flex-1 cursor-pointer">
+                <div className="font-medium">Resend (Default)</div>
+                <div className="text-sm text-muted-foreground">
+                  Use Resend API for email delivery
+                </div>
+              </Label>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="sender-email">Sender Email</Label>
-              <Input
-                id="sender-email"
-                type="email"
-                value={localSettings.senderEmail}
-                onChange={(e) => handleChange('senderEmail', e.target.value)}
-                placeholder="pms@yourcompany.com"
-              />
+            <div className="flex items-center space-x-2 border rounded-lg p-4">
+              <RadioGroupItem value="smtp" id="provider-smtp" />
+              <Label htmlFor="provider-smtp" className="flex-1 cursor-pointer">
+                <div className="font-medium">Custom SMTP</div>
+                <div className="text-sm text-muted-foreground">
+                  Use your own mail server
+                </div>
+              </Label>
             </div>
-          </div>
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              To use a custom email domain, you must verify it in your Resend dashboard.
-              The default <code>onboarding@resend.dev</code> can only send to verified emails during testing.
-            </AlertDescription>
-          </Alert>
+          </RadioGroup>
         </div>
+
+        {/* Resend Configuration */}
+        {localSettings.emailProvider === 'resend' && (
+          <div className="space-y-4 p-4 rounded-lg border">
+            <h4 className="font-medium">Resend Configuration</h4>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="sender-name">Sender Name</Label>
+                <Input
+                  id="sender-name"
+                  value={localSettings.senderName}
+                  onChange={(e) => handleChange('senderName', e.target.value)}
+                  placeholder="PMS Notifications"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sender-email">Sender Email</Label>
+                <Input
+                  id="sender-email"
+                  type="email"
+                  value={localSettings.senderEmail}
+                  onChange={(e) => handleChange('senderEmail', e.target.value)}
+                  placeholder="pms@yourcompany.com"
+                />
+              </div>
+            </div>
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                To use a custom email domain, you must verify it in your Resend dashboard.
+                The default <code>onboarding@resend.dev</code> can only send to verified emails during testing.
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
+
+        {/* SMTP Configuration */}
+        {localSettings.emailProvider === 'smtp' && (
+          <div className="space-y-4 p-4 rounded-lg border">
+            <h4 className="font-medium">SMTP Server Configuration</h4>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="smtp-host">SMTP Host</Label>
+                <Input
+                  id="smtp-host"
+                  value={localSettings.smtpHost}
+                  onChange={(e) => handleChange('smtpHost', e.target.value)}
+                  placeholder="mail.yourcompany.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="smtp-port">Port</Label>
+                <Select
+                  value={String(localSettings.smtpPort)}
+                  onValueChange={(value) => handleChange('smtpPort', parseInt(value))}
+                >
+                  <SelectTrigger id="smtp-port">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="25">25 (Standard)</SelectItem>
+                    <SelectItem value="465">465 (SSL/TLS)</SelectItem>
+                    <SelectItem value="587">587 (STARTTLS)</SelectItem>
+                    <SelectItem value="2525">2525 (Alternative)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Security</Label>
+              <RadioGroup
+                value={localSettings.smtpSecurity}
+                onValueChange={(value) => handleChange('smtpSecurity', value as SmtpSecurity)}
+                className="flex gap-6"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="tls" id="security-tls" />
+                  <Label htmlFor="security-tls" className="cursor-pointer">TLS</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="starttls" id="security-starttls" />
+                  <Label htmlFor="security-starttls" className="cursor-pointer">STARTTLS</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="none" id="security-none" />
+                  <Label htmlFor="security-none" className="cursor-pointer">None</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="smtp-username">Username</Label>
+                <Input
+                  id="smtp-username"
+                  value={localSettings.smtpUsername}
+                  onChange={(e) => handleChange('smtpUsername', e.target.value)}
+                  placeholder="noreply@yourcompany.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="smtp-password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="smtp-password"
+                    type={showPassword ? 'text' : 'password'}
+                    value="••••••••"
+                    readOnly
+                    className="pr-10"
+                    placeholder="Stored as secret"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Password is securely stored as SMTP_PASSWORD secret
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="smtp-from-address">From Address</Label>
+                <Input
+                  id="smtp-from-address"
+                  type="email"
+                  value={localSettings.smtpFromAddress}
+                  onChange={(e) => handleChange('smtpFromAddress', e.target.value)}
+                  placeholder="noreply@yourcompany.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="smtp-from-name">From Name</Label>
+                <Input
+                  id="smtp-from-name"
+                  value={localSettings.smtpFromName}
+                  onChange={(e) => handleChange('smtpFromName', e.target.value)}
+                  placeholder="BFCL PMS System"
+                />
+              </div>
+            </div>
+
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Enter your SMTP server details. The SMTP password is stored securely as a secret and never exposed in the UI.
+                Make sure your mail server allows connections from cloud services.
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
         
         {/* Template Customization */}
         <div className="space-y-4 p-4 rounded-lg border">
@@ -190,6 +376,7 @@ export function EmailNotificationSettings() {
             </div>
           </div>
         </div>
+
         {/* Event Selection */}
         <div className="space-y-4 p-4 rounded-lg border">
           <h4 className="font-medium">Notification Events</h4>
@@ -218,7 +405,7 @@ export function EmailNotificationSettings() {
         {/* Test Email */}
         <div className="space-y-4 p-4 rounded-lg border">
           <h4 className="font-medium">Test Configuration</h4>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <Input
               type="email"
               value={testEmail}
@@ -226,6 +413,16 @@ export function EmailNotificationSettings() {
               placeholder="Enter email to receive test"
               className="max-w-sm"
             />
+            {localSettings.emailProvider === 'smtp' && (
+              <Button
+                variant="outline"
+                onClick={handleTestSmtp}
+                disabled={!testEmail || !localSettings.smtpHost || testSmtpConnection.isPending}
+              >
+                <Plug className="h-4 w-4 mr-2" />
+                {testSmtpConnection.isPending ? 'Testing...' : 'Test SMTP'}
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={handleSendTest}
@@ -235,6 +432,12 @@ export function EmailNotificationSettings() {
               {sendTestEmail.isPending ? 'Sending...' : 'Send Test'}
             </Button>
           </div>
+          <p className="text-sm text-muted-foreground">
+            {localSettings.emailProvider === 'smtp' 
+              ? 'Click "Test SMTP" to verify connection, then "Send Test" to send a test email using saved settings.'
+              : 'Send a test email to verify your configuration is working correctly.'
+            }
+          </p>
         </div>
         
         {/* Save Button */}

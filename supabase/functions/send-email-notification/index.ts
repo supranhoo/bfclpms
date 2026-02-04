@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -11,6 +12,17 @@ const corsHeaders = {
 
 interface TestEmailRequest {
   test: true;
+  recipient_email: string;
+}
+
+interface SmtpTestRequest {
+  smtp_test: true;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_security: 'tls' | 'starttls' | 'none';
+  smtp_username: string;
+  smtp_from_address: string;
+  smtp_from_name: string;
   recipient_email: string;
 }
 
@@ -220,6 +232,64 @@ const buildEmailHtml = (
   `;
 };
 
+// Send email via SMTP
+const sendViaSmtp = async (
+  host: string,
+  port: number,
+  security: 'tls' | 'starttls' | 'none',
+  username: string,
+  password: string,
+  fromAddress: string,
+  fromName: string,
+  toEmail: string,
+  subject: string,
+  html: string
+): Promise<void> => {
+  console.log(`Connecting to SMTP server: ${host}:${port} with security: ${security}`);
+  
+  const client = new SMTPClient({
+    connection: {
+      hostname: host,
+      port: port,
+      tls: security === 'tls',
+      auth: {
+        username: username,
+        password: password,
+      },
+    },
+  });
+
+  try {
+    await client.send({
+      from: `${fromName} <${fromAddress}>`,
+      to: toEmail,
+      subject: subject,
+      html: html,
+    });
+    console.log("SMTP email sent successfully");
+  } finally {
+    await client.close();
+  }
+};
+
+// Send email via Resend
+const sendViaResend = async (
+  fromAddress: string,
+  fromName: string,
+  toEmail: string,
+  subject: string,
+  html: string
+): Promise<any> => {
+  const emailResponse = await resend.emails.send({
+    from: `${fromName} <${fromAddress}>`,
+    to: [toEmail],
+    subject,
+    html,
+  });
+  console.log("Resend email sent:", emailResponse);
+  return emailResponse;
+};
+
 const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -234,47 +304,135 @@ const handler = async (req: Request): Promise<Response> => {
     const body = await req.json();
     console.log("Received request:", JSON.stringify(body));
 
-    // Handle test email
+    // Handle SMTP connection test
+    if (body.smtp_test === true) {
+      const { smtp_host, smtp_port, smtp_security, smtp_username, smtp_from_address, smtp_from_name, recipient_email } = body as SmtpTestRequest;
+      const smtpPassword = Deno.env.get("SMTP_PASSWORD");
+      
+      if (!smtpPassword) {
+        return new Response(JSON.stringify({ success: false, error: "SMTP_PASSWORD secret not configured" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      const testHtml = buildEmailHtml('kpi_submitted', `This is a test email from the Performance Management System.
+
+If you received this email, your SMTP configuration is working correctly!
+
+SMTP Host: ${smtp_host}
+SMTP Port: ${smtp_port}
+Security: ${smtp_security}
+From Address: ${smtp_from_address}`, { logoUrl: '', footerText: '' });
+
+      try {
+        await sendViaSmtp(
+          smtp_host,
+          smtp_port,
+          smtp_security,
+          smtp_username,
+          smtpPassword,
+          smtp_from_address,
+          smtp_from_name,
+          recipient_email,
+          "[PMS] SMTP Test - Configuration Successful",
+          testHtml
+        );
+
+        return new Response(JSON.stringify({ success: true, message: "SMTP test email sent successfully" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      } catch (smtpError: any) {
+        console.error("SMTP test failed:", smtpError);
+        return new Response(JSON.stringify({ success: false, error: smtpError.message || "SMTP connection failed" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+    }
+
+    // Handle test email (uses configured provider)
     if (body.test === true) {
       const { recipient_email } = body as TestEmailRequest;
       
-      // Get sender settings
+      // Get all email settings including provider
       const { data: settings } = await supabase
         .from("system_settings")
         .select("setting_key, setting_value")
-        .in("setting_key", ["email_sender_name", "email_sender_address", "email_company_logo_url", "email_custom_footer"]);
+        .in("setting_key", [
+          "email_sender_name", "email_sender_address", "email_company_logo_url", "email_custom_footer",
+          "email_provider", "smtp_host", "smtp_port", "smtp_security", "smtp_username", "smtp_from_address", "smtp_from_name"
+        ]);
 
       const settingsMap = Object.fromEntries(
         (settings || []).map((s) => [s.setting_key, s.setting_value])
       );
 
-      const senderName = (settingsMap.email_sender_name || "PMS Notifications").replace(/^"|"$/g, "");
-      const senderEmail = (settingsMap.email_sender_address || "onboarding@resend.dev").replace(/^"|"$/g, "");
-      const logoUrl = (settingsMap.email_company_logo_url || "").replace(/^"|"$/g, "");
-      const footerText = (settingsMap.email_custom_footer || "").replace(/^"|"$/g, "");
+      const parseValue = (val: any): string => {
+        if (typeof val === 'string') return val.replace(/^"|"$/g, '');
+        if (typeof val === 'number') return String(val);
+        return String(val || '');
+      };
+
+      const provider = parseValue(settingsMap.email_provider) || 'resend';
+      const logoUrl = parseValue(settingsMap.email_company_logo_url);
+      const footerText = parseValue(settingsMap.email_custom_footer);
+
+      let senderName: string;
+      let senderEmail: string;
+
+      if (provider === 'smtp') {
+        senderName = parseValue(settingsMap.smtp_from_name) || 'PMS Notifications';
+        senderEmail = parseValue(settingsMap.smtp_from_address) || '';
+      } else {
+        senderName = parseValue(settingsMap.email_sender_name) || 'PMS Notifications';
+        senderEmail = parseValue(settingsMap.email_sender_address) || 'onboarding@resend.dev';
+      }
 
       const testHtml = buildEmailHtml('kpi_submitted', `This is a test email from the Performance Management System.
 
 If you received this email, your email notification configuration is working correctly!
 
+Provider: ${provider.toUpperCase()}
 Sender Name: ${senderName}
 Sender Email: ${senderEmail}`, { logoUrl, footerText });
 
-      console.log(`Sending test email to ${recipient_email} from ${senderName} <${senderEmail}>`);
+      console.log(`Sending test email via ${provider} to ${recipient_email} from ${senderName} <${senderEmail}>`);
 
-      const emailResponse = await resend.emails.send({
-        from: `${senderName} <${senderEmail}>`,
-        to: [recipient_email],
-        subject: "[PMS] Test Email - Configuration Successful",
-        html: testHtml,
-      });
+      if (provider === 'smtp') {
+        const smtpPassword = Deno.env.get("SMTP_PASSWORD");
+        if (!smtpPassword) {
+          return new Response(JSON.stringify({ success: false, error: "SMTP_PASSWORD secret not configured" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
 
-      console.log("Test email sent:", emailResponse);
+        await sendViaSmtp(
+          parseValue(settingsMap.smtp_host),
+          parseInt(parseValue(settingsMap.smtp_port)) || 587,
+          (parseValue(settingsMap.smtp_security) || 'tls') as 'tls' | 'starttls' | 'none',
+          parseValue(settingsMap.smtp_username),
+          smtpPassword,
+          senderEmail,
+          senderName,
+          recipient_email,
+          "[PMS] Test Email - Configuration Successful",
+          testHtml
+        );
 
-      return new Response(JSON.stringify({ success: true, data: emailResponse }), {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+        return new Response(JSON.stringify({ success: true, message: "Test email sent via SMTP" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      } else {
+        const emailResponse = await sendViaResend(senderEmail, senderName, recipient_email, "[PMS] Test Email - Configuration Successful", testHtml);
+        return new Response(JSON.stringify({ success: true, data: emailResponse }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
     }
 
     // Handle notification-triggered email
@@ -323,20 +481,40 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       });
     }
 
-    // Get sender settings and customization
+    // Get all settings including provider and SMTP config
     const { data: settings } = await supabase
       .from("system_settings")
       .select("setting_key, setting_value")
-      .in("setting_key", ["email_sender_name", "email_sender_address", "email_company_logo_url", "email_custom_footer", `email_template_${event_type}`]);
+      .in("setting_key", [
+        "email_sender_name", "email_sender_address", "email_company_logo_url", "email_custom_footer",
+        "email_provider", "smtp_host", "smtp_port", "smtp_security", "smtp_username", "smtp_from_address", "smtp_from_name",
+        `email_template_${event_type}`
+      ]);
 
     const settingsMap = Object.fromEntries(
       (settings || []).map((s) => [s.setting_key, s.setting_value])
     );
 
-    const senderName = (settingsMap.email_sender_name || "PMS Notifications").replace(/^"|"$/g, "");
-    const senderEmail = (settingsMap.email_sender_address || "onboarding@resend.dev").replace(/^"|"$/g, "");
-    const logoUrl = (settingsMap.email_company_logo_url || "").replace(/^"|"$/g, "");
-    const footerText = (settingsMap.email_custom_footer || "").replace(/^"|"$/g, "");
+    const parseValue = (val: any): string => {
+      if (typeof val === 'string') return val.replace(/^"|"$/g, '');
+      if (typeof val === 'number') return String(val);
+      return String(val || '');
+    };
+
+    const provider = parseValue(settingsMap.email_provider) || 'resend';
+    const logoUrl = parseValue(settingsMap.email_company_logo_url);
+    const footerText = parseValue(settingsMap.email_custom_footer);
+
+    let senderName: string;
+    let senderEmail: string;
+
+    if (provider === 'smtp') {
+      senderName = parseValue(settingsMap.smtp_from_name) || 'PMS Notifications';
+      senderEmail = parseValue(settingsMap.smtp_from_address) || '';
+    } else {
+      senderName = parseValue(settingsMap.email_sender_name) || 'PMS Notifications';
+      senderEmail = parseValue(settingsMap.email_sender_address) || 'onboarding@resend.dev';
+    }
 
     // Get template (custom or default)
     let template = DEFAULT_TEMPLATES[event_type] || DEFAULT_TEMPLATES.kpi_submitted;
@@ -369,21 +547,42 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     const bodyContent = replacePlaceholders(template.body, placeholderData);
     const html = buildEmailHtml(event_type, bodyContent, { logoUrl, footerText });
 
-    console.log(`Sending ${event_type} email to ${recipient_email}`);
+    console.log(`Sending ${event_type} email via ${provider} to ${recipient_email}`);
 
-    const emailResponse = await resend.emails.send({
-      from: `${senderName} <${senderEmail}>`,
-      to: [recipient_email],
-      subject,
-      html,
-    });
+    if (provider === 'smtp') {
+      const smtpPassword = Deno.env.get("SMTP_PASSWORD");
+      if (!smtpPassword) {
+        console.error("SMTP_PASSWORD secret not configured");
+        return new Response(JSON.stringify({ error: "SMTP_PASSWORD secret not configured" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
 
-    console.log("Email sent successfully:", emailResponse);
+      await sendViaSmtp(
+        parseValue(settingsMap.smtp_host),
+        parseInt(parseValue(settingsMap.smtp_port)) || 587,
+        (parseValue(settingsMap.smtp_security) || 'tls') as 'tls' | 'starttls' | 'none',
+        parseValue(settingsMap.smtp_username),
+        smtpPassword,
+        senderEmail,
+        senderName,
+        recipient_email,
+        subject,
+        html
+      );
 
-    return new Response(JSON.stringify({ success: true, data: emailResponse }), {
-      status: 200,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
+      return new Response(JSON.stringify({ success: true, message: "Email sent via SMTP" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    } else {
+      const emailResponse = await sendViaResend(senderEmail, senderName, recipient_email, subject, html);
+      return new Response(JSON.stringify({ success: true, data: emailResponse }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
   } catch (error: any) {
     console.error("Error in send-email-notification function:", error);
     return new Response(

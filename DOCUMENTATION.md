@@ -1662,7 +1662,40 @@ Constants available: `DATE_FORMAT`, `DATE_TIME_FORMAT`, `TIME_FORMAT`
 | Service | Purpose | Configuration |
 |---------|---------|---------------|
 | **Lovable Cloud (Supabase)** | Backend infrastructure | Auto-configured |
-| **Resend** | Email delivery | `RESEND_API_KEY` secret |
+| **Resend** | Email delivery (default provider) | `RESEND_API_KEY` secret |
+| **Custom SMTP** | Email delivery (optional) | `SMTP_PASSWORD` secret + settings in Admin |
+
+### Email Configuration
+
+The system supports two email providers:
+
+#### 1. Resend (Default)
+- Requires `RESEND_API_KEY` secret
+- Domain verification required for custom sender addresses
+- Configure in Admin → System Settings → Email tab
+
+#### 2. Custom SMTP
+- Use your organization's mail server
+- Requires `SMTP_PASSWORD` secret (stored securely, never exposed in UI)
+- Configure in Admin → System Settings → Email tab:
+  - **Host**: SMTP server hostname (e.g., `mail.bfcl.com`)
+  - **Port**: 25, 465 (SSL/TLS), 587 (STARTTLS), or 2525
+  - **Security**: TLS, STARTTLS, or None
+  - **Username**: SMTP authentication username
+  - **From Address**: Email address for outgoing mail
+  - **From Name**: Display name for outgoing mail
+
+#### SMTP Settings in Database
+
+| Setting Key | Description |
+|-------------|-------------|
+| `email_provider` | `resend` or `smtp` |
+| `smtp_host` | SMTP server hostname |
+| `smtp_port` | SMTP server port (default: 587) |
+| `smtp_security` | `tls`, `starttls`, or `none` |
+| `smtp_username` | SMTP authentication username |
+| `smtp_from_address` | From email address |
+| `smtp_from_name` | From display name |
 
 ### Edge Functions
 
@@ -1713,7 +1746,8 @@ The following are auto-configured by Lovable Cloud:
 | Secret | Purpose |
 |--------|---------|
 | `SUPABASE_SERVICE_ROLE_KEY` | Admin database access |
-| `RESEND_API_KEY` | Email delivery |
+| `RESEND_API_KEY` | Email delivery (Resend provider) |
+| `SMTP_PASSWORD` | SMTP authentication (custom SMTP provider) |
 | `LOVABLE_API_KEY` | Lovable AI integration |
 
 ### Deployment
