@@ -97,9 +97,16 @@ export function MobileKpiCard({
 
     if (isNaKpi) {
       return (
-        <Badge variant="outline" className="bg-muted text-muted-foreground text-xs">
-          N/A
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-300 text-xs">
+            N/A
+          </Badge>
+          {onView && (
+            <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => onView(kpi)}>
+              <Eye className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       );
     }
 
