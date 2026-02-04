@@ -1840,6 +1840,48 @@ export type Database = {
           },
         ]
       }
+      workflow_settings: {
+        Row: {
+          category: string
+          created_at: string | null
+          description: string | null
+          id: string
+          label: string
+          max_value: number | null
+          min_value: number | null
+          setting_key: string
+          setting_value: Json
+          unit: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          category: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          label: string
+          max_value?: number | null
+          min_value?: number | null
+          setting_key: string
+          setting_value: Json
+          unit?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          label?: string
+          max_value?: number | null
+          min_value?: number | null
+          setting_key?: string
+          setting_value?: Json
+          unit?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       workflow_templates: {
         Row: {
           created_at: string | null
