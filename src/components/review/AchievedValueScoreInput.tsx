@@ -98,8 +98,8 @@ export function AchievedValueScoreInput({
       thresholds,
       kpi.criteria || 'Higher is Better',
       kpi.weightage || 0,
-      'numeric',
-      null,
+      uomType,
+      kpi.qualitative_options,
       kpi.uom
     );
 
@@ -253,9 +253,11 @@ export function AchievedValueScoreInput({
                 </Badge>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Achievement: {(calculatedResult.percentage).toFixed(1)}% of target
-            </p>
+            {kpi.uom !== '%' && kpi.uom?.toLowerCase() !== 'percentage' && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Achievement: {(calculatedResult.percentage).toFixed(1)}% of target
+              </p>
+            )}
           </div>
         )}
 
@@ -298,9 +300,11 @@ export function AchievedValueScoreInput({
                 {calculatedResult.rating} - {ratingLabels[calculatedResult.ratingLevel]}
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Based on {(calculatedResult.percentage).toFixed(1)}% achievement
-            </p>
+            {kpi.uom !== '%' && kpi.uom?.toLowerCase() !== 'percentage' && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Based on {(calculatedResult.percentage).toFixed(1)}% achievement
+              </p>
+            )}
             {!currentScoreMatchesSuggestion && (
               <Button
                 variant="outline"
