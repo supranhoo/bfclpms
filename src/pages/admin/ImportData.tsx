@@ -82,6 +82,7 @@ interface KpiImportRow {
   uomType?: string; // 'numeric' | 'binary' | 'tiered'
   qualitativeOptions?: QualitativeOption[] | string; // JSON string or parsed array
   frequency?: string;
+  frequencyCycleStart?: string; // For yearly KPIs: 'Jan-Dec', 'Jul-Jun', 'Apr-Mar'
   kpiWeightage?: number;
   criteria?: string; // "Higher is Better" or "Lower is Better"
   // Rating thresholds
@@ -115,6 +116,8 @@ interface KpiImportRow {
   businessUnit?: string;
   department?: string;
   subBranch?: string;
+  // Special flags
+  isOrgLevel?: boolean | string;
 }
 
 interface EmployeeImportRow {
@@ -468,9 +471,11 @@ export default function ImportData() {
       businessUnit: getValue(['businessUnit', 'business_unit', 'bu', 'businessUnitName', 'business_unit_name']),
       department: getValue(['department', 'dept', 'departmentName', 'department_name']),
       subBranch: getValue(['subBranch', 'sub_branch', 'subBranchName', 'sub_branch_name', 'branch']),
+      // Special flags
+      isOrgLevel: getValue(['isOrgLevel', 'is_org_level', 'orgLevel', 'org_level']),
+      frequencyCycleStart: getValue(['frequencyCycleStart', 'frequency_cycle_start', 'cycleStart', 'cycle_start']),
     };
   };
-
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1235,6 +1240,12 @@ export default function ImportData() {
         reviewStatus: 'Pending',
         newCode: '100001',
         fullName: 'John Doe',
+        // Organization structure
+        division: 'Operations',
+        businessUnit: 'Plant',
+        department: 'Manufacturing',
+        subBranch: '',
+        // KPI definition
         category: 'Financial Performance',
         kra: 'Revenue Growth',
         kpi: 'Monthly Revenue Target',
@@ -1242,6 +1253,7 @@ export default function ImportData() {
         uomType: 'numeric',
         qualitativeOptions: '',
         frequency: 'Monthly',
+        frequencyCycleStart: '',
         kpiWeightage: 25,
         criteria: 'Higher is Better',
         target: '100',
@@ -1251,6 +1263,7 @@ export default function ImportData() {
         r2: '90',
         r1: '80',
         r0: '',
+        // Review data
         targetAchieved: '',
         achievedWeight: '',
         rating: '',
@@ -1264,8 +1277,10 @@ export default function ImportData() {
         auditTargetAchieved: '',
         auditRating: '',
         auditRemarks: '',
+        // Metadata
         sourceOfData: 'SAP',
         kpiStatus: 'Active',
+        isOrgLevel: '',
       },
       {
         sNo: 2,
@@ -1273,6 +1288,10 @@ export default function ImportData() {
         reviewStatus: 'Pending',
         newCode: '100001',
         fullName: 'John Doe',
+        division: '',
+        businessUnit: '',
+        department: '',
+        subBranch: '',
         category: 'Compliance',
         kra: 'Safety Compliance',
         kpi: 'Safety Audit Score',
@@ -1284,6 +1303,7 @@ export default function ImportData() {
           { label: 'Non-Compliant', rating: 0, definition: 'Critical violation identified' }
         ]),
         frequency: 'Quarterly',
+        frequencyCycleStart: '',
         kpiWeightage: 15,
         criteria: '',
         target: '',
@@ -1308,6 +1328,7 @@ export default function ImportData() {
         auditRemarks: '',
         sourceOfData: 'Internal Audit',
         kpiStatus: 'Active',
+        isOrgLevel: '',
       },
       {
         sNo: 3,
@@ -1315,13 +1336,18 @@ export default function ImportData() {
         reviewStatus: 'Pending',
         newCode: '100001',
         fullName: 'John Doe',
+        division: '',
+        businessUnit: '',
+        department: '',
+        subBranch: '',
         category: 'Training',
         kra: 'Training Completion',
         kpi: 'Mandatory Training Completed',
         uom: '',
         uomType: 'binary',
         qualitativeOptions: '',
-        frequency: 'Annual',
+        frequency: 'Yearly',
+        frequencyCycleStart: 'Jan-Dec',
         kpiWeightage: 10,
         criteria: '',
         target: '',
@@ -1346,6 +1372,7 @@ export default function ImportData() {
         auditRemarks: '',
         sourceOfData: 'LMS',
         kpiStatus: 'Active',
+        isOrgLevel: 'yes',
       },
     ];
 
@@ -1924,13 +1951,20 @@ export default function ImportData() {
                   <li><code>division</code> - Division name</li>
                   <li><code>businessUnit</code> - Business Unit name</li>
                   <li><code>department</code> - Department name</li>
+                  <li><code>subBranch</code> - Sub-branch name (optional)</li>
+                </ul>
+                <p className="font-medium mt-4 mb-2">Special flags:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li><code>isOrgLevel</code> - Set to 'yes' or 'true' for organization-level KPIs (centrally managed)</li>
+                  <li><code>frequencyCycleStart</code> - For Yearly KPIs: 'Jan-Dec', 'Jul-Jun', or 'Apr-Mar'</li>
                 </ul>
                 <p className="font-medium mt-4 mb-2">Optional columns:</p>
                 <ul className="list-disc list-inside space-y-1">
-                  <li><code>frequency</code> - Review Frequency (Monthly, Quarterly, etc.)</li>
+                  <li><code>frequency</code> - Review Frequency (Daily, Weekly, Monthly, Quarterly, Half-Yearly, Yearly)</li>
                   <li><code>sourceOfData</code> - Data Source (SAP, Excel, etc.)</li>
                   <li><code>targetAchieved</code>, <code>rating</code> - Achievement data</li>
-                  <li><code>employeeRemarks</code>, <code>managerRemarks</code>, <code>auditRemarks</code></li>
+                  <li><code>employeeTargetAchieved</code>, <code>managerTargetAchieved</code>, <code>auditTargetAchieved</code> - Stage-specific achieved values</li>
+                  <li><code>employeeRemarks</code>, <code>managerRemarks</code>, <code>auditRemarks</code> - Stage-specific remarks</li>
                 </ul>
                 <Alert className="mt-4">
                   <CheckCircle2 className="h-4 w-4" />

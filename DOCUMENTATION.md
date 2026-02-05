@@ -1144,6 +1144,75 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
 - Progress tracking
 - Error reporting
 
+##### Import Columns Reference (PMS Data)
+
+The PMS import template supports the following columns (41 total):
+
+**Identification (4 columns):**
+| Column | Required | Description |
+|--------|----------|-------------|
+| `sNo` | No | Serial number |
+| `newCode` | **Yes** | Employee code |
+| `fullName` | **Yes** | Employee full name |
+| `month` | **Yes** | Review period (e.g., "Dec-25") |
+
+**KPI Definition (9 columns):**
+| Column | Required | Description |
+|--------|----------|-------------|
+| `category` | **Yes** | KRA category name (auto-created if missing) |
+| `kra` | **Yes** | Key Result Area |
+| `kpi` | **Yes** | KPI name/description |
+| `target` | **Yes** | Target value |
+| `uom` | No | Unit of measure (%, ₹, units, etc.) |
+| `uomType` | No | Type: `numeric` (default), `binary`, `tiered` |
+| `qualitativeOptions` | No | JSON array for tiered KPIs |
+| `frequency` | No | Daily, Weekly, Monthly, Quarterly, Half-Yearly, Yearly |
+| `frequencyCycleStart` | No | For Yearly: `Jan-Dec`, `Jul-Jun`, `Apr-Mar` |
+
+**Scoring (8 columns):**
+| Column | Required | Description |
+|--------|----------|-------------|
+| `kpiWeightage` | No | Weightage (0-100) |
+| `criteria` | No | "Higher is Better" or "Lower is Better" |
+| `r5` | No | Threshold for rating 5 (Outstanding) |
+| `r4` | No | Threshold for rating 4 |
+| `r3` | No | Threshold for rating 3 |
+| `r2` | No | Threshold for rating 2 |
+| `r1` | No | Threshold for rating 1 |
+| `r0` | No | Threshold for rating 0 |
+
+**Organization Structure (4 columns):**
+| Column | Required | Description |
+|--------|----------|-------------|
+| `division` | No | Division name (auto-created if missing) |
+| `businessUnit` | No | Business Unit name (auto-created if missing) |
+| `department` | No | Department name (auto-created if missing) |
+| `subBranch` | No | Sub-branch name (optional) |
+
+**Review Data (12 columns):**
+| Column | Required | Description |
+|--------|----------|-------------|
+| `targetAchieved` | No | Achieved value |
+| `rating` | No | Calculated rating (0-5) |
+| `employeeTargetAchieved` | No | Employee's self-submitted value |
+| `employeeRating` | No | Employee's self-rating |
+| `employeeRemarks` | No | Employee's self-remarks |
+| `managerTargetAchieved` | No | Manager's override value |
+| `managerRating` | No | Manager's rating |
+| `managerRemarks` | No | Manager's remarks |
+| `auditTargetAchieved` | No | Auditor's override value |
+| `auditRating` | No | Auditor's rating |
+| `auditRemarks` | No | Auditor's remarks |
+| `achievedWeight` | No | Weighted score (calculated) |
+
+**Metadata (4 columns):**
+| Column | Required | Description |
+|--------|----------|-------------|
+| `sourceOfData` | No | Data source (e.g., SAP, Excel) |
+| `kpiStatus` | No | KPI status (Active, Inactive) |
+| `reviewStatus` | No | Review status |
+| `isOrgLevel` | No | Set to `yes`/`true` for organization-level KPIs |
+
 #### 4.9.10 System Settings (`/admin/settings`)
 - Score calculation mode
 - KRA auto-rollover settings
