@@ -6,6 +6,7 @@
  * Supports qualitative UOM types (binary, tiered)
  */
 
+export type { QualitativeOption } from '@/lib/qualitativeUom';
 import { UomType, QualitativeOption, BINARY_OPTIONS, scoreToRatingLevel } from '@/lib/qualitativeUom';
 
 export type RatingLevel = 'blue' | 'green' | 'yellow' | 'red';

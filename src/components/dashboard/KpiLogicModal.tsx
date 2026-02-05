@@ -444,7 +444,10 @@ export function KpiLogicModal({ isOpen, onClose, kpi }: KpiLogicModalProps) {
                         kpi.target_value,
                         { r5: kpi.r5, r4: kpi.r4, r3: kpi.r3, r2: kpi.r2, r1: kpi.r1, r0: kpi.r0 },
                         kpi.criteria || 'Higher is Better',
-                        kpi.weightage || 0
+                        kpi.weightage || 0,
+                        kpi.uom_type || 'numeric',
+                        kpi.qualitative_options || null,
+                        kpi.uom
                       );
 
                       const targetVal = parseThreshold(kpi.target_value, false) ?? 0;
