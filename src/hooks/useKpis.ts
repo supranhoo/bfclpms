@@ -627,7 +627,7 @@ export function useApproveKpi() {
       manager_evidence_url?: string | null;
     }) => {
       // Update submission with manager rating and set kpi_status to approved_by_manager
-      const { error: submissionError } = await supabase
+      const { data: updateData, error: submissionError } = await supabase
         .from('review_submissions')
         .update({
           manager_rating,
@@ -636,17 +636,29 @@ export function useApproveKpi() {
           manager_evidence_url,
           kpi_status: 'approved_by_manager' as const,
         })
-        .eq('kpi_id', kpi_id);
+        .eq('kpi_id', kpi_id)
+        .select();
 
       if (submissionError) throw submissionError;
 
+      // Check if any rows were actually updated (RLS may block silently)
+      if (!updateData || updateData.length === 0) {
+        throw new Error('Unable to approve KPI. You may not have permission to review this employee, or the KPI is not at the correct stage.');
+      }
+
       // Update KPI status to manager_check (manager has processed this KPI)
-      const { error: kpiError } = await supabase
+      const { data: kpiUpdateData, error: kpiError } = await supabase
         .from('kpis')
         .update({ status: 'manager_check' as const })
-        .eq('id', kpi_id);
+        .eq('id', kpi_id)
+        .select();
 
       if (kpiError) throw kpiError;
+
+      // Verify KPI was also updated
+      if (!kpiUpdateData || kpiUpdateData.length === 0) {
+        throw new Error('Unable to update KPI status. Permission denied.');
+      }
 
       // Log the approval action
       if (user?.id) {
