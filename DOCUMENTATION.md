@@ -295,6 +295,18 @@ The system enforces strict access control for KPI approvals:
 
 **Silent Failure Prevention:** All approval mutations use `.select()` after updates to verify rows were affected. If RLS blocks the update (0 rows affected), an explicit error is thrown with a descriptive message instead of showing a misleading success toast.
 
+### KPIs Table UPDATE Policies
+
+The `kpis` table has specific UPDATE policies for workflow progression:
+
+| Policy Name | Role | Condition |
+|-------------|------|-----------|
+| Users can update their own KPIs | Employee | `employee_id = auth.uid()` |
+| Managers can update reports KPI status | Manager | `reporting_manager_id = auth.uid()` |
+| Auditors can update KPI status | Auditor | Has `auditor` role |
+| Management can update KPI status during review | Management | Has `management` role AND `status = 'management_review'` |
+| Admins can manage all KPIs | Admin | Has `admin` role |
+
 ### Database Functions
 
 | Function | Purpose |
