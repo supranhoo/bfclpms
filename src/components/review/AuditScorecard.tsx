@@ -656,6 +656,8 @@ export function AuditScorecard({
                     onAchievedValueChange={setAuditorAchievedValue}
                     onScoreChange={(score, rating) => setAuditorScore(score)}
                     label="Auditor Assessment"
+                    reviewMonth={selectedPeriod}
+                    reviewYear={selectedYear}
                   />
                   <div className="space-y-2">
                     <Label>Remarks</Label>

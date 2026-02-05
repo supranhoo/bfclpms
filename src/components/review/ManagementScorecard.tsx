@@ -685,6 +685,8 @@ export function ManagementScorecard({
                     onAchievedValueChange={setManagementAchievedValue}
                     onScoreChange={(score, rating) => setManagementScore(score)}
                     label="Management Assessment"
+                    reviewMonth={selectedPeriod}
+                    reviewYear={selectedYear}
                   />
                   <div className="space-y-2">
                     <Label>Remarks</Label>

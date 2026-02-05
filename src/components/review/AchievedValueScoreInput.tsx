@@ -9,6 +9,7 @@ import { useScoreCalculationMode } from '@/hooks/useSystemSettings';
 import { calculateRating, RatingLevel } from '@/lib/ratingCalculation';
 import { UomType, QualitativeOption } from '@/lib/qualitativeUom';
 import { Calculator, Check, Edit2 } from 'lucide-react';
+import { DateCalendarInput } from './DateCalendarInput';
 
 interface KpiThresholds {
   r5: string | null;
@@ -26,6 +27,7 @@ interface AchievedValueScoreInputProps {
     weightage: number | null;
     uom_type?: UomType | null;
     qualitative_options?: QualitativeOption[] | null;
+    uom?: string | null;
   } & KpiThresholds;
   score: number | null;
   achievedValue: number | string | null;
@@ -33,6 +35,8 @@ interface AchievedValueScoreInputProps {
   onAchievedValueChange: (value: number | string | null) => void;
   disabled?: boolean;
   label?: string;
+  reviewMonth?: string;
+  reviewYear?: number;
 }
 
 const ratingColors: Record<RatingLevel, string> = {
@@ -57,10 +61,13 @@ export function AchievedValueScoreInput({
   onAchievedValueChange,
   disabled = false,
   label = 'Score',
+  reviewMonth,
+  reviewYear,
 }: AchievedValueScoreInputProps) {
   const { mode, isLoading } = useScoreCalculationMode();
   const uomType = kpi.uom_type || 'numeric';
   const isQualitative = uomType === 'binary' || uomType === 'tiered';
+  const isDateUom = kpi.uom === 'Date';
   
   const [localAchievedValue, setLocalAchievedValue] = useState<string>(
     achievedValue?.toString() || ''
@@ -70,6 +77,85 @@ export function AchievedValueScoreInput({
   useEffect(() => {
     setLocalAchievedValue(achievedValue?.toString() || '');
   }, [achievedValue]);
+
+  // Calculate score from achieved value using thresholds
+  // NOTE: Must be defined before any conditional returns that use it
+  const calculateScoreFromValue = (value: number | null) => {
+    if (value === null || value === undefined) return null;
+
+    const thresholds = {
+      r5: kpi.r5,
+      r4: kpi.r4,
+      r3: kpi.r3,
+      r2: kpi.r2,
+      r1: kpi.r1,
+      r0: kpi.r0,
+    };
+
+    const result = calculateRating(
+      value,
+      kpi.target_value,
+      thresholds,
+      kpi.criteria || 'Higher is Better',
+      kpi.weightage || 0,
+      'numeric',
+      null,
+      kpi.uom
+    );
+
+    return result;
+  };
+
+  // For Date UOM, render the calendar input component
+  if (isDateUom && reviewMonth && reviewYear) {
+    const dayValue = typeof achievedValue === 'number' 
+      ? achievedValue 
+      : (typeof achievedValue === 'string' && achievedValue ? parseInt(achievedValue) : null);
+    
+    const handleDateChange = (day: number | null) => {
+      onAchievedValueChange(day);
+      if (day !== null) {
+        const result = calculateScoreFromValue(day);
+        if (result) {
+          onScoreChange(result.rating, result.ratingLevel);
+        }
+      }
+    };
+    
+    const dateResult = dayValue !== null ? calculateScoreFromValue(dayValue) : null;
+    
+    return (
+      <div className="space-y-4">
+        <DateCalendarInput
+          value={dayValue}
+          onChange={handleDateChange}
+          reviewMonth={reviewMonth}
+          reviewYear={reviewYear}
+          disabled={disabled}
+          label="Completion Date"
+        />
+        
+        {dateResult && (
+          <div className="p-4 rounded-lg border bg-muted/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Calculator className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Calculated Score</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className={`${ratingColors[dateResult.ratingLevel]} text-white`}>
+                  {dateResult.rating} - {ratingLabels[dateResult.ratingLevel]}
+                </Badge>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Submitted on day {dayValue} of the month
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // For qualitative UOMs, render the qualitative input component
   if (isQualitative) {
@@ -88,30 +174,6 @@ export function AchievedValueScoreInput({
       />
     );
   }
-
-  // Calculate score from achieved value using thresholds
-  const calculateScoreFromValue = (value: number | null) => {
-    if (value === null || value === undefined) return null;
-
-    const thresholds = {
-      r5: kpi.r5,
-      r4: kpi.r4,
-      r3: kpi.r3,
-      r2: kpi.r2,
-      r1: kpi.r1,
-      r0: kpi.r0,
-    };
-
-    const result = calculateRating(
-      value,
-      kpi.target_value,
-      thresholds,
-      kpi.criteria || 'Higher is Better',
-      kpi.weightage || 0
-    );
-
-    return result;
-  };
 
   const handleAchievedValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;

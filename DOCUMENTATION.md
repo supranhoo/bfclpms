@@ -862,6 +862,44 @@ Standard UOM options available in dropdown selectors across all KPI forms:
 
 **Source:** `src/lib/uomConstants.ts`
 
+#### 4.9.6 Date UOM Special Handling
+
+When UOM is set to `Date`, the system provides specialized handling for date-based KPIs:
+
+**Use Cases:**
+- Submission deadlines (e.g., "Submit report by 5th of month")
+- Milestone completion dates
+- Compliance filing dates
+
+**Input Method:**
+- Calendar date picker restricted to the review month
+- Selects a day of month (1-31) as the achieved value
+- Available at all review levels (Self, Manager, Auditor, Management)
+
+**Rating Calculation:**
+- Uses "Lower is Better" logic: earlier date = higher rating
+- R5-R0 thresholds are treated as day-of-month values (not percentages)
+- Target value is ignored; thresholds determine rating directly
+
+**Example Configuration:**
+| Threshold | Value | Meaning |
+|-----------|-------|---------|
+| R5 | 5 | Submit by 5th day = Rating 5 (Outstanding) |
+| R4 | 10 | Submit by 10th day = Rating 4 (Exceeds) |
+| R3 | 15 | Submit by 15th day = Rating 3 (Meets) |
+| R2 | 20 | Submit by 20th day = Rating 2 (Below) |
+| R1 | 31 | Submit by end of month = Rating 1 (Needs Improvement) |
+
+**Example Calculation:**
+- Employee submits on day 8
+- Day 8 is between R5 (5) and R4 (10)
+- Result: Rating 4 (Exceeds Expectations)
+
+**Implementation:**
+- `calculateDateRating()` function in `src/lib/ratingCalculation.ts`
+- `DateCalendarInput` component in `src/components/review/DateCalendarInput.tsx`
+- Calendar restricted to review month using `fromDate`/`toDate` props
+
 ### 4.10 Frequency and Sub-Frequency System
 
 The PMS supports 7 frequency types, each with specific submission and scoring behavior.
