@@ -5,7 +5,7 @@ import { useKpisByPeriod, useReviewSubmissions, useSubmitSelfReview, RatingLevel
 import { useKraCategories } from '@/hooks/useOrganization';
 import { useKpiFilters } from '@/hooks/useKpiFilters';
 import { KpiFilterBar } from '@/components/ui/KpiFilterBar';
-import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
+import { calculateRating, RatingThresholds, QualitativeOption } from '@/lib/ratingCalculation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -318,7 +318,16 @@ export default function SelfReview() {
       };
     }
     
-    return calculateRating(achieved, kpi.target_value, thresholds, kpi.criteria || 'Higher is Better', kpi.weightage || 0);
+    return calculateRating(
+      achieved,
+      kpi.target_value,
+      thresholds,
+      kpi.criteria || 'Higher is Better',
+      kpi.weightage || 0,
+      uomType,
+      kpi.qualitative_options as QualitativeOption[] | null,
+      kpi.uom
+    );
   };
 
   const handleAchievedChange = (value: string) => {
