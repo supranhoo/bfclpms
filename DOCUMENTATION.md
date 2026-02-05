@@ -168,7 +168,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | `user_roles` | Role assignments | `user_id`, `role` (admin/manager/employee/auditor/management) |
 | `kpis` | Key Performance Indicators | `id`, `employee_id`, `category_id`, `kra_name`, `kpi_name`, `target_value`, `weightage`, `review_period`, `review_year`, `status`, `r5-r0` (thresholds), `require_resubmit_reason` |
 | `kpis` | Key Performance Indicators | `id`, `employee_id`, `category_id`, `kra_name`, `kpi_name`, `target_value`, `weightage`, `review_period`, `review_year`, `status`, `r5-r0` (thresholds) |
-| `review_submissions` | Review data per KPI | `kpi_id`, `achieved_value`, `self_rating`, `manager_rating`, `auditor_rating`, `final_score`, `kpi_status`, `*_remarks` |
+| `review_submissions` | Review data per KPI | `kpi_id`, `achieved_value`, `manager_achieved_value`, `auditor_achieved_value`, `management_achieved_value`, `self_rating`, `manager_rating`, `auditor_rating`, `final_score`, `kpi_status`, `*_remarks` |
 | `kra_categories` | KRA groupings | `id`, `name`, `weightage`, `color`, `is_org_level`, `org_scoring_mode` |
 
 #### Organizational Hierarchy
@@ -1785,10 +1785,19 @@ The central component for viewing KPI details across all review levels. Provides
 **View Level Configurations:**
 | Level | Visible Stages | Assessment Form | Actions |
 |-------|---------------|-----------------|---------|
-| Employee (My KPIs) | Self only | Self input | Submit |
-| Manager (Team Review) | Self | Manager input | Approve, Send Back |
-| Auditor | Self + Manager | Auditor input | Forward, Send Back |
-| Management | Self + Manager + Auditor | Management input | Approve, Send Back |
+| Employee (My KPIs) | All 4 stages | Self input | Submit |
+| Manager (Team Review) | All 4 stages | Manager input | Approve, Send Back |
+| Auditor | All 4 stages | Auditor input | Forward, Send Back |
+| Management | All 4 stages | Management input | Approve, Send Back |
+
+**Achieved Value Persistence:**
+Each review level can submit and persist their own achieved value:
+- **Self**: `achieved_value` - Employee's original submission
+- **Manager**: `manager_achieved_value` - Manager's assessed value (may differ from employee's)
+- **Auditor**: `auditor_achieved_value` - Auditor's assessed value
+- **Management**: `management_achieved_value` - Final management assessed value
+
+The Review Journey displays each level's value alongside their rating, providing full transparency into any value modifications made during the review workflow.
 
 **Props:**
 ```typescript

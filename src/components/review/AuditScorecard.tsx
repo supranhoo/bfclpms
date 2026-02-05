@@ -202,6 +202,7 @@ export function AuditScorecard({
       auditor_score,
       auditor_remarks,
       auditor_evidence_url,
+      auditor_achieved_value,
       approve,
     }: {
       kpi_id: string;
@@ -209,6 +210,7 @@ export function AuditScorecard({
       auditor_score: number;
       auditor_remarks: string;
       auditor_evidence_url?: string | null;
+      auditor_achieved_value?: number | null;
       approve: boolean;
     }) => {
       const { data: updateData, error: submissionError } = await supabase
@@ -218,6 +220,7 @@ export function AuditScorecard({
           auditor_score,
           auditor_remarks,
           auditor_evidence_url,
+          auditor_achieved_value,
         })
         .eq('kpi_id', kpi_id)
         .select();
@@ -423,6 +426,9 @@ export function AuditScorecard({
       auditor_score: auditorScore,
       auditor_remarks: auditorRemarks,
       auditor_evidence_url: auditorEvidenceUrl,
+      auditor_achieved_value: typeof auditorAchievedValue === 'number' 
+        ? auditorAchievedValue 
+        : auditorAchievedValue ? parseFloat(auditorAchievedValue) : null,
       approve,
     });
   };

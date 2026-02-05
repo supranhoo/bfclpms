@@ -223,6 +223,7 @@ export function ManagementScorecard({
       management_score,
       management_remarks,
       management_evidence_url,
+      management_achieved_value,
       approve,
     }: {
       kpi_id: string;
@@ -230,6 +231,7 @@ export function ManagementScorecard({
       management_score: number;
       management_remarks: string;
       management_evidence_url?: string | null;
+      management_achieved_value?: number | null;
       approve: boolean;
     }) => {
       const { data: updateData, error: submissionError } = await supabase
@@ -239,6 +241,7 @@ export function ManagementScorecard({
           management_score,
           management_remarks,
           management_evidence_url,
+          management_achieved_value,
           final_rating: management_rating,
           final_score: management_score,
         })
@@ -445,6 +448,9 @@ export function ManagementScorecard({
       management_score: managementScore,
       management_remarks: managementRemarks,
       management_evidence_url: managementEvidenceUrl,
+      management_achieved_value: typeof managementAchievedValue === 'number' 
+        ? managementAchievedValue 
+        : managementAchievedValue ? parseFloat(managementAchievedValue) : null,
       approve,
     });
   };
