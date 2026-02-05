@@ -576,6 +576,7 @@ export type Database = {
           require_resubmit_reason: boolean | null
           source_of_data: string | null
           target_value: number | null
+          threshold_mode: string | null
           title: string
           uom: string | null
           uom_type: string | null
@@ -604,6 +605,7 @@ export type Database = {
           require_resubmit_reason?: boolean | null
           source_of_data?: string | null
           target_value?: number | null
+          threshold_mode?: string | null
           title: string
           uom?: string | null
           uom_type?: string | null
@@ -632,6 +634,7 @@ export type Database = {
           require_resubmit_reason?: boolean | null
           source_of_data?: string | null
           target_value?: number | null
+          threshold_mode?: string | null
           title?: string
           uom?: string | null
           uom_type?: string | null
@@ -677,6 +680,7 @@ export type Database = {
           status: Database["public"]["Enums"]["review_status"] | null
           sub_frequency: string | null
           target_value: number | null
+          threshold_mode: string | null
           uom: string | null
           uom_type: string | null
           updated_at: string
@@ -710,6 +714,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["review_status"] | null
           sub_frequency?: string | null
           target_value?: number | null
+          threshold_mode?: string | null
           uom?: string | null
           uom_type?: string | null
           updated_at?: string
@@ -743,6 +748,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["review_status"] | null
           sub_frequency?: string | null
           target_value?: number | null
+          threshold_mode?: string | null
           uom?: string | null
           uom_type?: string | null
           updated_at?: string

@@ -53,6 +53,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
     ] as QualitativeOption[],
     require_resubmit_reason: true,
     day_count_type: 'working_days' as 'working_days' | 'all_days',
+    threshold_mode: 'absolute' as 'absolute' | 'ratio',
   });
 
   useEffect(() => {
@@ -83,6 +84,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
         ],
         require_resubmit_reason: template.require_resubmit_reason ?? true,
         day_count_type: (template as any).day_count_type || 'working_days',
+        threshold_mode: (template as any).threshold_mode || 'absolute',
       });
     } else {
       resetForm();
@@ -116,6 +118,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
       ],
       require_resubmit_reason: true,
       day_count_type: 'working_days',
+      threshold_mode: 'absolute',
     });
   };
 
@@ -154,6 +157,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
         ? formData.qualitative_options 
         : (formData.uom_type === 'binary' ? BINARY_OPTIONS : null),
       require_resubmit_reason: formData.require_resubmit_reason,
+      threshold_mode: formData.uom_type === 'numeric' ? formData.threshold_mode : null,
     };
 
     try {
@@ -346,6 +350,32 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                   </div>
                 )}
 
+                {/* Threshold Mode Selector */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Threshold Mode</Label>
+                  <Select
+                    value={formData.threshold_mode}
+                    onValueChange={(val: 'absolute' | 'ratio') => setFormData({ ...formData, threshold_mode: val })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="absolute">
+                        Absolute (Recommended) - Thresholds are actual values
+                      </SelectItem>
+                      <SelectItem value="ratio">
+                        Ratio / Percentage - Thresholds are % of target
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {formData.threshold_mode === 'absolute' 
+                      ? 'Thresholds are actual values (e.g., R5 = 100 means achieved ≥ 100)' 
+                      : 'Thresholds are % of target (e.g., R5 = 100% means achieved ≥ target)'}
+                  </p>
+                </div>
+
                 {/* Rating Thresholds */}
                 <div>
                   <Label className="text-sm font-medium">Rating Thresholds</Label>
@@ -356,7 +386,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                         <Input
                           value={formData[key]}
                           onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
-                          placeholder={key === 'r5' ? '≥100' : ''}
+                          placeholder={formData.threshold_mode === 'absolute' ? '100' : '100%'}
                           className="text-sm"
                         />
                       </div>

@@ -326,7 +326,8 @@ export default function SelfReview() {
       kpi.weightage || 0,
       uomType,
       kpi.qualitative_options as QualitativeOption[] | null,
-      kpi.uom
+      kpi.uom,
+      kpi.threshold_mode || 'absolute'
     );
   };
 

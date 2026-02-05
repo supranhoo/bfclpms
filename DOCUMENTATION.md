@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-05  
-> **Version:** 1.5.1  
+> **Version:** 1.6.0  
 > **Maintainer:** Lovable AI
 
 ---
@@ -980,6 +980,41 @@ When UOM is set to `%` or `percentage`, the system uses **direct threshold compa
 - `calculatePercentageRating()` function in `src/lib/ratingCalculation.ts`
 - Triggered when `uom === '%'` or `uom === 'percentage'`
 - Applies to all review stages and the Scoring Simulator
+
+#### 4.9.8 Threshold Mode: Absolute vs Ratio
+
+The system now supports two scoring modes for numeric KPIs:
+
+| Mode | Description | Threshold Example | Use When |
+|------|-------------|-------------------|----------|
+| **Absolute** (Default) | Direct value comparison | R5 = 100 (means achieved ≥ 100) | Simpler, more intuitive scoring |
+| **Ratio** (Legacy) | Percentage of target | R5 = 100% (means achieved ≥ target) | Backward compatibility |
+
+**Absolute Mode (Recommended):**
+- Thresholds are actual values, not percentages
+- No mental math required: "If you achieve 105, you get R5"
+- Works like % and Date UOM scoring
+- Example: R5=100, R4=95, R3=90 → Achieved 97 = Rating 4
+
+**Ratio Mode (Legacy):**
+- Thresholds are percentages of target value
+- Achieved/Target ratio is compared against thresholds
+- Example: Target=100, R5=100% → Need achieved ≥ 100 for R5
+
+**Configuration:**
+- Set via "Threshold Mode" selector in Admin KPI Create/Edit dialogs
+- New KPIs default to "Absolute" mode
+- Existing KPIs retain "Ratio" mode for backward compatibility
+- Stored in `kpis.threshold_mode` column
+
+**Database Column:**
+```sql
+threshold_mode text DEFAULT 'absolute'  -- 'absolute' | 'ratio'
+```
+
+**Implementation:**
+- `calculateAbsoluteRating()` function in `src/lib/ratingCalculation.ts`
+- `thresholdMode` parameter added to `calculateRating()` function
 
 ### 4.10 Frequency and Sub-Frequency System
 

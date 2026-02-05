@@ -70,6 +70,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
     { label: 'No', rating: 0, definition: 'Requirement not met' },
   ]);
   const [requireResubmitReason, setRequireResubmitReason] = useState(true);
+  const [thresholdMode, setThresholdMode] = useState<'absolute' | 'ratio'>('absolute');
 
   // Period
   const [reviewPeriod, setReviewPeriod] = useState(settings.current_review_period);
@@ -116,6 +117,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
     setReviewPeriod(settings.current_review_period);
     setReviewYear(settings.current_review_year);
     setRequireResubmitReason(true);
+    setThresholdMode('absolute');
   };
 
   const handleClose = () => {
@@ -158,6 +160,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
       is_frequency_locked: false,
       require_resubmit_reason: requireResubmitReason,
       day_count_type: frequency === 'Daily' ? dayCountType : null,
+      threshold_mode: uomType === 'numeric' ? thresholdMode : null,
     });
 
     handleClose();
@@ -347,11 +350,37 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
 
                 <Separator />
 
+                {/* Threshold Mode Selector */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Threshold Mode</Label>
+                  <Select value={thresholdMode} onValueChange={(v: 'absolute' | 'ratio') => setThresholdMode(v)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="absolute">
+                        <div className="flex flex-col items-start">
+                          <span className="font-medium">Absolute (Recommended)</span>
+                          <span className="text-xs text-muted-foreground">Thresholds are actual values (e.g., R5 = 100 means achieved ≥ 100)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="ratio">
+                        <div className="flex flex-col items-start">
+                          <span className="font-medium">Ratio / Percentage</span>
+                          <span className="text-xs text-muted-foreground">Thresholds are % of target (e.g., R5 = 100% means achieved ≥ target)</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 {/* Rating Thresholds */}
                 <div className="space-y-3">
                   <Label className="text-sm font-medium">Rating Thresholds (R1-R5)</Label>
                   <p className="text-xs text-muted-foreground">
-                    Define thresholds for automatic rating calculation. Use percentages (e.g., 95%) or absolute values.
+                    {thresholdMode === 'absolute' 
+                      ? 'Enter actual values (e.g., 100, 95, 90). Achieved value is compared directly.' 
+                      : 'Enter percentages of target (e.g., 100%, 95%, 90%). Achieved/Target ratio is compared.'}
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">

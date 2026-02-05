@@ -154,57 +154,128 @@ describe("calculateRating", () => {
     r0: "0%",
   };
 
-  describe("numeric UOM - Higher is Better", () => {
+  describe("numeric UOM - Higher is Better (ratio mode)", () => {
     it("returns rating 5 when achieved >= 100% of target", () => {
-      const result = calculateRating(100, 100, defaultThresholds, "Higher is Better", 10);
+      const result = calculateRating(100, 100, defaultThresholds, "Higher is Better", 10, 'numeric', null, null, 'ratio');
       expect(result.rating).toBe(5);
       expect(result.ratingLevel).toBe("blue");
       expect(result.percentage).toBe(100);
     });
 
     it("returns rating 4 when achieved is 95-99% of target", () => {
-      const result = calculateRating(97, 100, defaultThresholds, "Higher is Better", 10);
+      const result = calculateRating(97, 100, defaultThresholds, "Higher is Better", 10, 'numeric', null, null, 'ratio');
       expect(result.rating).toBe(4);
       expect(result.ratingLevel).toBe("blue");
     });
 
     it("returns rating 3 when achieved is 90-94% of target", () => {
-      const result = calculateRating(92, 100, defaultThresholds, "Higher is Better", 10);
+      const result = calculateRating(92, 100, defaultThresholds, "Higher is Better", 10, 'numeric', null, null, 'ratio');
       expect(result.rating).toBe(3);
       expect(result.ratingLevel).toBe("green");
     });
 
     it("returns rating 2 when achieved is 80-89% of target", () => {
-      const result = calculateRating(85, 100, defaultThresholds, "Higher is Better", 10);
+      const result = calculateRating(85, 100, defaultThresholds, "Higher is Better", 10, 'numeric', null, null, 'ratio');
       expect(result.rating).toBe(2);
       expect(result.ratingLevel).toBe("yellow");
     });
 
     it("returns rating 1 when achieved is 70-79% of target", () => {
-      const result = calculateRating(75, 100, defaultThresholds, "Higher is Better", 10);
+      const result = calculateRating(75, 100, defaultThresholds, "Higher is Better", 10, 'numeric', null, null, 'ratio');
       expect(result.rating).toBe(1);
       expect(result.ratingLevel).toBe("red");
     });
 
     it("returns rating 0 when achieved is < 70% of target", () => {
-      const result = calculateRating(50, 100, defaultThresholds, "Higher is Better", 10);
+      const result = calculateRating(50, 100, defaultThresholds, "Higher is Better", 10, 'numeric', null, null, 'ratio');
       expect(result.rating).toBe(0);
       expect(result.ratingLevel).toBe("red");
     });
 
     it("calculates weighted score correctly", () => {
-      const result = calculateRating(100, 100, defaultThresholds, "Higher is Better", 20);
+      const result = calculateRating(100, 100, defaultThresholds, "Higher is Better", 20, 'numeric', null, null, 'ratio');
       expect(result.weightedScore).toBe(100); // 20 * 5
     });
 
     it("handles exceeding target (>100%)", () => {
-      const result = calculateRating(120, 100, defaultThresholds, "Higher is Better", 10);
+      const result = calculateRating(120, 100, defaultThresholds, "Higher is Better", 10, 'numeric', null, null, 'ratio');
       expect(result.rating).toBe(5);
       expect(result.percentage).toBe(120);
     });
   });
 
-  describe("numeric UOM - Lower is Better", () => {
+  describe("numeric UOM - Higher is Better (absolute mode - default)", () => {
+    const absoluteThresholds: RatingThresholds = {
+      r5: "100",
+      r4: "95",
+      r3: "90",
+      r2: "80",
+      r1: "70",
+    };
+
+    it("returns rating 5 when achieved >= R5 threshold", () => {
+      const result = calculateRating(105, 100, absoluteThresholds, "Higher is Better", 10);
+      expect(result.rating).toBe(5);
+      expect(result.ratingLevel).toBe("blue");
+    });
+
+    it("returns rating 4 when achieved >= R4 but < R5", () => {
+      const result = calculateRating(97, 100, absoluteThresholds, "Higher is Better", 10);
+      expect(result.rating).toBe(4);
+    });
+
+    it("returns rating 3 when achieved >= R3 but < R4", () => {
+      const result = calculateRating(92, 100, absoluteThresholds, "Higher is Better", 10);
+      expect(result.rating).toBe(3);
+    });
+
+    it("returns rating 2 when achieved >= R2 but < R3", () => {
+      const result = calculateRating(85, 100, absoluteThresholds, "Higher is Better", 10);
+      expect(result.rating).toBe(2);
+    });
+
+    it("returns rating 1 when achieved >= R1 but < R2", () => {
+      const result = calculateRating(75, 100, absoluteThresholds, "Higher is Better", 10);
+      expect(result.rating).toBe(1);
+    });
+
+    it("returns rating 0 when achieved < R1", () => {
+      const result = calculateRating(50, 100, absoluteThresholds, "Higher is Better", 10);
+      expect(result.rating).toBe(0);
+    });
+
+    it("handles exceeding highest threshold", () => {
+      const result = calculateRating(120, 100, absoluteThresholds, "Higher is Better", 10);
+      expect(result.rating).toBe(5);
+    });
+  });
+
+  describe("numeric UOM - Lower is Better (absolute mode)", () => {
+    const absoluteThresholds: RatingThresholds = {
+      r5: "90",
+      r4: "95",
+      r3: "100",
+      r2: "105",
+      r1: "110",
+    };
+
+    it("returns rating 5 when achieved <= R5 threshold", () => {
+      const result = calculateRating(88, 100, absoluteThresholds, "Lower is Better", 10, 'numeric', null, null, 'absolute');
+      expect(result.rating).toBe(5);
+    });
+
+    it("returns rating 4 when achieved <= R4 but > R5", () => {
+      const result = calculateRating(93, 100, absoluteThresholds, "Lower is Better", 10, 'numeric', null, null, 'absolute');
+      expect(result.rating).toBe(4);
+    });
+
+    it("returns rating 0 when achieved > R1", () => {
+      const result = calculateRating(115, 100, absoluteThresholds, "Lower is Better", 10, 'numeric', null, null, 'absolute');
+      expect(result.rating).toBe(0);
+    });
+  });
+
+  describe("numeric UOM - Lower is Better (ratio mode)", () => {
     const lowerBetterThresholds: RatingThresholds = {
       r5: "100%",
       r4: "110%",
@@ -214,19 +285,20 @@ describe("calculateRating", () => {
     };
 
     it("returns rating 5 when achieved equals target (ratio = 1)", () => {
-      const result = calculateRating(10, 10, lowerBetterThresholds, "Lower is Better", 10);
+      // Use 'ratio' mode for legacy percentage-based thresholds
+      const result = calculateRating(10, 10, lowerBetterThresholds, "Lower is Better", 10, 'numeric', null, null, 'ratio');
       expect(result.rating).toBe(5);
     });
 
     it("returns higher rating when achieved is lower than target", () => {
       // achieved = 8, target = 10, ratio = 10/8 = 1.25 (125%)
-      const result = calculateRating(8, 10, lowerBetterThresholds, "Lower is Better", 10);
+      const result = calculateRating(8, 10, lowerBetterThresholds, "Lower is Better", 10, 'numeric', null, null, 'ratio');
       expect(result.rating).toBe(5); // 1.25 >= 1.0 threshold
     });
 
     it("returns lower rating when achieved exceeds target", () => {
       // achieved = 15, target = 10, ratio = 10/15 = 0.67
-      const result = calculateRating(15, 10, lowerBetterThresholds, "Lower is Better", 10);
+      const result = calculateRating(15, 10, lowerBetterThresholds, "Lower is Better", 10, 'numeric', null, null, 'ratio');
       expect(result.rating).toBe(0); // ratio < 1.0
     });
   });
