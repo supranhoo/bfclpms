@@ -42,8 +42,13 @@ export function parseThreshold(value: string | number | null | undefined, asRati
   const raw = String(value).trim();
   const hasPercent = raw.includes('%');
 
-  // Remove % sign and parse - handle both "99.95%" and "99,95%" formats
-  const cleanValue = raw.replace('%', '').replace(',', '.').trim();
+  // Strip comparison operators (>, <, >=, <=) and % sign
+  // Handle both "99.95%" and "99,95%" formats
+  const cleanValue = raw
+    .replace(/^[><]=?/, '')  // Remove leading >, <, >=, <=
+    .replace('%', '')
+    .replace(',', '.')
+    .trim();
   const parsed = parseFloat(cleanValue);
   if (isNaN(parsed)) return null;
 

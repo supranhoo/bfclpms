@@ -72,6 +72,41 @@ describe("parseThreshold", () => {
       expect(parseThreshold("95%", false)).toBe(95);
     });
   });
+
+  describe("with comparison operators", () => {
+    it("parses '>98' as 98 (absolute mode)", () => {
+      expect(parseThreshold(">98", false)).toBe(98);
+    });
+
+    it("parses '<94' as 94 (absolute mode)", () => {
+      expect(parseThreshold("<94", false)).toBe(94);
+    });
+
+    it("parses '>=100' as 100 (absolute mode)", () => {
+      expect(parseThreshold(">=100", false)).toBe(100);
+    });
+
+    it("parses '<=50' as 50 (absolute mode)", () => {
+      expect(parseThreshold("<=50", false)).toBe(50);
+    });
+
+    it("parses '>98%' as 0.98 (ratio mode)", () => {
+      expect(parseThreshold(">98%", true)).toBe(0.98);
+    });
+
+    it("parses '<=99.5%' as 0.995 (ratio mode)", () => {
+      expect(parseThreshold("<=99.5%", true)).toBe(0.995);
+    });
+
+    it("parses '>98' as 0.98 (ratio mode - bare number > 1 assumed %)", () => {
+      expect(parseThreshold(">98", true)).toBe(0.98);
+    });
+
+    it("handles spaces after operator", () => {
+      expect(parseThreshold("> 98", false)).toBe(98);
+      expect(parseThreshold("<= 50%", false)).toBe(50);
+    });
+  });
 });
 
 describe("ratingToLevel", () => {
