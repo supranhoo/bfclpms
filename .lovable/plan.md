@@ -162,8 +162,14 @@ For historical data where the value wasn't recorded, we simply don't show a valu
 ## Validation Checklist
 
 After implementation:
-- [ ] Self stage always shows the employee's submitted value
-- [ ] Reviewer stages only show values that were explicitly saved
-- [ ] Historical KPIs (before fix) don't show misleading inherited values
-- [ ] New submissions continue to save and display correct values
-- [ ] Ratings remain accurate and unchanged
+- [x] Self stage always shows the employee's submitted value
+- [x] Reviewer stages only show values that were explicitly saved
+- [x] Historical KPIs (before fix) don't show misleading inherited values
+- [x] New submissions continue to save and display correct values
+- [x] Ratings remain accurate and unchanged
+
+## Implementation Complete (2026-02-05)
+
+✅ Cleared incorrectly backfilled values where reviewer ratings differed from previous stage
+✅ Removed UI fallback logic - now only shows explicitly saved values
+✅ Historical data shows rating only (value hidden) for stages where original value wasn't recorded
