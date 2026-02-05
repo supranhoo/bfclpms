@@ -374,6 +374,9 @@ export function EmployeeScorecard({
       manager_score: managerScore,
       manager_remarks: managerRemarks,
       manager_evidence_url: managerEvidenceUrl,
+      manager_achieved_value: typeof managerAchievedValue === 'number' 
+        ? managerAchievedValue 
+        : managerAchievedValue ? parseFloat(managerAchievedValue) : null,
     }, {
       onSuccess: () => setReviewSheetOpen(false),
     });

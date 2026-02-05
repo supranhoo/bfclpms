@@ -619,12 +619,14 @@ export function useApproveKpi() {
       manager_score,
       manager_remarks,
       manager_evidence_url,
+      manager_achieved_value,
     }: {
       kpi_id: string;
       manager_rating: RatingLevel;
       manager_score: number;
       manager_remarks: string;
       manager_evidence_url?: string | null;
+      manager_achieved_value?: number | null;
     }) => {
       // Update submission with manager rating and set kpi_status to approved_by_manager
       const { data: updateData, error: submissionError } = await supabase
@@ -634,6 +636,7 @@ export function useApproveKpi() {
           manager_score,
           manager_remarks,
           manager_evidence_url,
+          manager_achieved_value,
           kpi_status: 'approved_by_manager' as const,
         })
         .eq('kpi_id', kpi_id)
