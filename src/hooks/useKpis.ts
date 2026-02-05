@@ -52,6 +52,8 @@ export interface KPI {
   require_resubmit_reason: boolean;
   // Day count type for daily KPIs
   day_count_type: 'working_days' | 'all_days' | null;
+  // Threshold mode: 'absolute' (direct value comparison) or 'ratio' (legacy percentage-based)
+  threshold_mode: 'absolute' | 'ratio' | null;
   kra_categories?: {
     id: string;
     name: string;

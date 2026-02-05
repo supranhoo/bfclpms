@@ -29,6 +29,7 @@ export interface KpiTemplate {
   uom_type?: string | null;
   qualitative_options?: Array<{ label: string; rating: number; definition: string }> | null;
   require_resubmit_reason?: boolean;
+  threshold_mode?: 'absolute' | 'ratio' | null;
   kra_categories?: {
     id: string;
     name: string;

@@ -48,8 +48,10 @@ export function usePropagateOrgKpiValue() {
           weightage,
           r5, r4, r3, r2, r1, r0,
           criteria,
+          uom,
           uom_type,
           qualitative_options,
+          threshold_mode,
           is_org_level,
           org_level_scope,
           profiles!kpis_employee_id_fkey(department_id)
@@ -98,7 +100,9 @@ export function usePropagateOrgKpiValue() {
           kpi.criteria || 'Higher is Better',
           kpi.weightage || 0,
           (kpi.uom_type as any) || 'numeric',
-          kpi.qualitative_options as any
+          kpi.qualitative_options as any,
+          kpi.uom,
+          (kpi as any).threshold_mode || 'absolute'
         );
 
         const ratingLevel = scoreToRating(ratingResult.rating);
@@ -212,8 +216,10 @@ export function useBulkPropagateOrgKpiValues() {
             weightage,
             r5, r4, r3, r2, r1, r0,
             criteria,
+            uom,
             uom_type,
             qualitative_options,
+            threshold_mode,
             profiles!kpis_employee_id_fkey(department_id)
           `)
           .eq('category_id', categoryId)
@@ -252,7 +258,9 @@ export function useBulkPropagateOrgKpiValues() {
             kpi.criteria || 'Higher is Better',
             kpi.weightage || 0,
             (kpi.uom_type as any) || 'numeric',
-            kpi.qualitative_options as any
+            kpi.qualitative_options as any,
+            kpi.uom,
+            (kpi as any).threshold_mode || 'absolute'
           );
 
           const ratingLevel = scoreToRating(ratingResult.rating);

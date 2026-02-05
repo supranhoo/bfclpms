@@ -116,6 +116,7 @@ export function levelToText(level: RatingLevel): string {
  * @param uomType - Type of UOM: 'numeric' | 'binary' | 'tiered' (optional, defaults to 'numeric')
  * @param qualitativeOptions - Options for tiered UOM (optional)
  * @param uom - Unit of Measure string (e.g., 'Date', '%', 'Number') for special handling
+ * @param thresholdMode - 'absolute' for direct value comparison, 'ratio' for legacy percentage-based
  */
 export function calculateRating(
   achievedValue: number | string | null | undefined,
@@ -125,7 +126,8 @@ export function calculateRating(
   weightage: number = 0,
   uomType: UomType = 'numeric',
   qualitativeOptions?: QualitativeOption[] | null,
-  uom?: string | null
+  uom?: string | null,
+  thresholdMode: 'absolute' | 'ratio' = 'absolute'
 ): RatingResult {
   // Handle Date UOM specially - compare day values directly against thresholds
   if (uom === 'Date') {
@@ -162,7 +164,7 @@ export function calculateRating(
     return { rating, ratingLevel, weightedScore, percentage, achievedWeight };
   }
 
-  // Numeric UOM handling (existing logic)
+  // Numeric UOM handling
   // If no achieved value, return zero rating
   if (achievedValue === null || achievedValue === undefined || achievedValue === '') {
     return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0, achievedWeight: 0 };
@@ -176,7 +178,15 @@ export function calculateRating(
 
   const achieved = parseThreshold(numericValue, false) ?? 0;
   const targetVal = parseThreshold(target, false) ?? 0;
-  
+
+  // Route based on threshold_mode
+  if (thresholdMode === 'absolute') {
+    // ABSOLUTE MODE: Direct value comparison (like % and Date UOMs)
+    // Thresholds are actual values, not ratios/percentages
+    return calculateAbsoluteRating(achieved, thresholds, criteria, weightage, targetVal);
+  }
+
+  // RATIO MODE (Legacy): Compare achieved/target ratio against thresholds
   // When target is 0, thresholds are absolute numbers (not percentages)
   // When target is not 0, thresholds are percentages/ratios
   const thresholdsAsRatio = targetVal !== 0;
@@ -232,6 +242,65 @@ export function calculateRating(
     rating,
     ratingLevel: ratingToLevel(rating),
     weightedScore,
+    percentage,
+    achievedWeight,
+  };
+}
+
+/**
+ * Calculate rating using ABSOLUTE threshold mode (direct value comparison)
+ * 
+ * This is the new primary scoring logic - thresholds are actual values, not percentages.
+ * - Higher is Better: achieved >= threshold → rating
+ * - Lower is Better: achieved <= threshold → rating
+ * 
+ * Examples:
+ * - R5 = 100, achieved = 105, criteria = "Higher is Better" → Rating 5 (105 >= 100)
+ * - R5 = 90, achieved = 88, criteria = "Lower is Better" → Rating 5 (88 <= 90)
+ */
+function calculateAbsoluteRating(
+  achieved: number,
+  thresholds: RatingThresholds,
+  criteria: string,
+  weightage: number,
+  targetVal: number = 0
+): RatingResult {
+  // Parse thresholds as absolute values (not ratios)
+  const r5 = parseThreshold(thresholds.r5, false);
+  const r4 = parseThreshold(thresholds.r4, false);
+  const r3 = parseThreshold(thresholds.r3, false);
+  const r2 = parseThreshold(thresholds.r2, false);
+  const r1 = parseThreshold(thresholds.r1, false);
+
+  const isLowerBetter = criteria?.toLowerCase().includes('lower');
+  let rating = 0;
+
+  if (isLowerBetter) {
+    // Lower is Better: lower achieved value = higher rating
+    // Thresholds should be in ascending order (R5 = lowest acceptable, R1 = highest)
+    if (r5 !== null && achieved <= r5) rating = 5;
+    else if (r4 !== null && achieved <= r4) rating = 4;
+    else if (r3 !== null && achieved <= r3) rating = 3;
+    else if (r2 !== null && achieved <= r2) rating = 2;
+    else if (r1 !== null && achieved <= r1) rating = 1;
+  } else {
+    // Higher is Better: higher achieved value = higher rating
+    // Thresholds should be in descending order (R5 = highest, R1 = lowest acceptable)
+    if (r5 !== null && achieved >= r5) rating = 5;
+    else if (r4 !== null && achieved >= r4) rating = 4;
+    else if (r3 !== null && achieved >= r3) rating = 3;
+    else if (r2 !== null && achieved >= r2) rating = 2;
+    else if (r1 !== null && achieved >= r1) rating = 1;
+  }
+
+  // Calculate percentage for display (achieved/target * 100) if target exists
+  const percentage = targetVal !== 0 ? (achieved / targetVal) * 100 : 0;
+  const achievedWeight = targetVal !== 0 ? achieved / targetVal : 0;
+
+  return {
+    rating,
+    ratingLevel: ratingToLevel(rating),
+    weightedScore: weightage * rating,
     percentage,
     achievedWeight,
   };

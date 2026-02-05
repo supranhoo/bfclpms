@@ -100,7 +100,8 @@ export function AchievedValueScoreInput({
       kpi.weightage || 0,
       uomType,
       kpi.qualitative_options,
-      kpi.uom
+      kpi.uom,
+      (kpi as any).threshold_mode || 'absolute'
     );
 
     return result;

@@ -52,7 +52,8 @@ export function ScoringSimulatorPopover({ kpi }: ScoringSimulatorPopoverProps) {
       kpi.weightage || 0,
       'numeric',
       null,
-      uom
+      uom,
+      (kpi as any).threshold_mode || 'absolute'
     );
     
     return result;

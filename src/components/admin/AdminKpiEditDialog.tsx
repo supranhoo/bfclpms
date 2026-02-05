@@ -68,6 +68,7 @@ const [formData, setFormData] = useState({
     qualitative_options: [] as QualitativeOption[],
     require_resubmit_reason: true,
     day_count_type: 'working_days' as 'working_days' | 'all_days',
+    threshold_mode: 'absolute' as 'absolute' | 'ratio',
   });
   const [reason, setReason] = useState('');
   const originalStatus = kpi?.status;
@@ -99,6 +100,7 @@ const [formData, setFormData] = useState({
         qualitative_options: (kpi.qualitative_options as QualitativeOption[]) || [],
         require_resubmit_reason: kpi.require_resubmit_reason ?? true,
         day_count_type: (kpi.day_count_type as 'working_days' | 'all_days') || 'working_days',
+        threshold_mode: (kpi.threshold_mode as 'absolute' | 'ratio') || 'absolute',
       });
       setReason('');
     }
@@ -150,6 +152,7 @@ const [formData, setFormData] = useState({
       qualitative_options: formData.uom_type === 'tiered' ? formData.qualitative_options : null,
       require_resubmit_reason: formData.require_resubmit_reason,
       day_count_type: formData.frequency === 'Daily' ? formData.day_count_type : null,
+      threshold_mode: formData.uom_type === 'numeric' ? formData.threshold_mode : null,
       reason,
     });
 
@@ -470,19 +473,54 @@ const [formData, setFormData] = useState({
 
           {/* Rating Thresholds - only shown for Numeric UOM Type */}
           {formData.uom_type === 'numeric' && (
-            <div className="space-y-2">
-              <Label>Rating Thresholds</Label>
-              <div className="grid grid-cols-6 gap-2">
-                {(['r5', 'r4', 'r3', 'r2', 'r1', 'r0'] as const).map((field) => (
-                  <div key={field} className="space-y-1">
-                    <Label className="text-xs uppercase">{field}</Label>
-                    <Input
-                      value={formData[field]}
-                      onChange={(e) => setFormData(prev => ({ ...prev, [field]: e.target.value }))}
-                      placeholder={field.toUpperCase()}
-                    />
-                  </div>
-                ))}
+            <div className="space-y-4">
+              {/* Threshold Mode Selector */}
+              <div className="space-y-2">
+                <Label>Threshold Mode</Label>
+                <Select
+                  value={formData.threshold_mode}
+                  onValueChange={(value: 'absolute' | 'ratio') => setFormData(prev => ({ ...prev, threshold_mode: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="absolute">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">Absolute (Recommended)</span>
+                        <span className="text-xs text-muted-foreground">Thresholds are actual values</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="ratio">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">Ratio / Percentage</span>
+                        <span className="text-xs text-muted-foreground">Thresholds are % of target</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {formData.threshold_mode === 'absolute' 
+                    ? 'Thresholds are actual values (e.g., R5 = 100 means achieved ≥ 100)' 
+                    : 'Thresholds are % of target (e.g., R5 = 100% means achieved ≥ target)'}
+                </p>
+              </div>
+              
+              {/* Rating Thresholds */}
+              <div className="space-y-2">
+                <Label>Rating Thresholds</Label>
+                <div className="grid grid-cols-6 gap-2">
+                  {(['r5', 'r4', 'r3', 'r2', 'r1', 'r0'] as const).map((field) => (
+                    <div key={field} className="space-y-1">
+                      <Label className="text-xs uppercase">{field}</Label>
+                      <Input
+                        value={formData[field]}
+                        onChange={(e) => setFormData(prev => ({ ...prev, [field]: e.target.value }))}
+                        placeholder={formData.threshold_mode === 'absolute' ? '100' : '100%'}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}

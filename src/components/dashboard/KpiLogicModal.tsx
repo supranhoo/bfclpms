@@ -447,7 +447,8 @@ export function KpiLogicModal({ isOpen, onClose, kpi }: KpiLogicModalProps) {
                         kpi.weightage || 0,
                         kpi.uom_type || 'numeric',
                         kpi.qualitative_options || null,
-                        kpi.uom
+                        kpi.uom,
+                        (kpi as any).threshold_mode || 'absolute'
                       );
 
                       const targetVal = parseThreshold(kpi.target_value, false) ?? 0;
