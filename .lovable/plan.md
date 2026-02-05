@@ -1,83 +1,123 @@
-# Plan: Implement Direct Threshold Comparison for Percentage (%) UOM
 
-## Status: ✅ COMPLETED
+# Plan: Fix Threshold Parsing for Comparison Operators
 
-## Summary
+## Problem Summary
 
-Added special handling for **Percentage UOM KPIs** that bypasses the ratio calculation and compares the achieved value **directly** against thresholds. This matches how `Date` UOM works.
+The KPI **"5ka dum / naye style k KPI Scores dalenge hum yaha"** has threshold values with comparison operators that the system cannot parse:
 
----
+| Threshold | Value | Current Parse Result | Should Be |
+|-----------|-------|---------------------|-----------|
+| R5 | `>98` | `null` (NaN) | `98` |
+| R4 | `97` | `97` | `97` |
+| R3 | `96` | `96` | `96` |
+| R2 | `95` | `95` | `95` |
+| R1 | `94` | `94` | `94` |
+| R0 | `<94` | `null` (NaN) | `94` |
 
-## Changes Made
-
-### 1. `src/lib/ratingCalculation.ts`
-
-**Added `calculatePercentageRating()` function** (lines 283-352):
-- Takes achieved value as-is (no division by target)
-- Supports both "Higher is Better" (≥) and "Lower is Better" (≤) criteria
-- Parses thresholds as absolute values, not ratios
-- Returns `percentage: 0` and `achievedWeight: 0` (not applicable for % UOM)
-
-**Updated `calculateRating()` main function** (lines 130-133):
-- Added early exit for `uom === '%'` or `uom === 'percentage'`
-- Routes to new `calculatePercentageRating()` function
-
-### 2. `src/lib/ratingCalculation.test.ts`
-
-**Added 22 new tests** covering:
-- Lower is Better (7 tests): rating 5→0 based on thresholds, target independence
-- Higher is Better (7 tests): rating 5→0 based on thresholds, target independence
-- Edge cases (8 tests): weighted score, boundary values, null handling, aliases, fractional values
-
-### 3. `DOCUMENTATION.md`
-
-**Added Section 4.9.7 "Percentage (%) UOM Special Handling"** documenting:
-- Key rule: target is ignored for % UOM
-- Example configurations for both criteria directions
-- Critical differences table vs. Numeric UOM
+Because `R5 = null`, the scoring logic skips it entirely, causing incorrect ratings.
 
 ---
 
-## Test Results
+## Root Cause
 
-```
-✓ 95 tests passed (including 22 new % UOM tests)
+The `parseThreshold()` function in `src/lib/ratingCalculation.ts` does not handle comparison operators (`>`, `<`, `>=`, `<=`):
+
+```typescript
+// Current code (line 46-48)
+const cleanValue = raw.replace('%', '').replace(',', '.').trim();
+const parsed = parseFloat(cleanValue);
+if (isNaN(parsed)) return null;  // ">98" fails here
 ```
 
----
-
-## Final Truth Table
-
-| UOM | Uses Target? | Uses Ratio? | Uses Input Value Directly? |
-|-----|--------------|-------------|---------------------------|
-| **%** | ❌ No | ❌ No | ✅ Yes |
-| Numeric | ✅ Yes | ✅ Yes | ❌ No |
-| Binary | ❌ No | ❌ No | Option-based |
-| Tiered | ❌ No | ❌ No | Option-based |
-| Date | ❌ No | ❌ No | ✅ Yes (day) |
+When `parseFloat(">98")` is called, it returns `NaN` because of the `>` prefix.
 
 ---
 
-## System-Wide Impact (All Fixed)
+## Solution
 
-All areas automatically use the new logic:
-- ✅ My KPIs
-- ✅ Self Review
-- ✅ Manager / Auditor / Management Review
-- ✅ KPI Logic Modal
-- ✅ Scoring Simulator
-- ✅ Org KPI Propagation
-- ✅ Excel Import
-- ✅ PDF Export
-- ✅ Dashboards & Reports
+Update `parseThreshold()` to strip comparison operators before parsing the numeric value:
+
+```typescript
+export function parseThreshold(value: string | number | null | undefined, asRatio: boolean = true): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return value;
+
+  const raw = String(value).trim();
+  const hasPercent = raw.includes('%');
+
+  // Strip comparison operators (>, <, >=, <=) and % sign
+  const cleanValue = raw
+    .replace(/^[><]=?/, '')  // NEW: Remove leading >, <, >=, <=
+    .replace('%', '')
+    .replace(',', '.')
+    .trim();
+  
+  const parsed = parseFloat(cleanValue);
+  if (isNaN(parsed)) return null;
+
+  // ... rest of function unchanged
+}
+```
+
+---
+
+## File Changes
+
+| File | Change |
+|------|--------|
+| `src/lib/ratingCalculation.ts` | Update `parseThreshold()` to strip comparison operators |
+| `src/lib/ratingCalculation.test.ts` | Add tests for operator-prefixed thresholds |
+| `DOCUMENTATION.md` | Document that thresholds can include operators |
+
+---
+
+## Test Cases to Add
+
+```typescript
+describe("parseThreshold with comparison operators", () => {
+  it("parses '>98' as 98", () => {
+    expect(parseThreshold(">98", false)).toBe(98);
+  });
+
+  it("parses '<94' as 94", () => {
+    expect(parseThreshold("<94", false)).toBe(94);
+  });
+
+  it("parses '>=100' as 100", () => {
+    expect(parseThreshold(">=100", false)).toBe(100);
+  });
+
+  it("parses '<=50%' as 50 (absolute mode)", () => {
+    expect(parseThreshold("<=50%", false)).toBe(50);
+  });
+
+  it("parses '>98%' as 0.98 (ratio mode)", () => {
+    expect(parseThreshold(">98%", true)).toBe(0.98);
+  });
+});
+```
+
+---
+
+## Expected Result After Fix
+
+For the problematic KPI with:
+- **Criteria**: Higher is Better
+- **R5**: `>98` → parsed as `98`
+- **Achieved**: e.g., `99`
+
+**Scoring Logic:**
+```
+if (achieved >= r5) → if (99 >= 98) → TRUE → Rating 5 ✅
+```
 
 ---
 
 ## Validation Checklist
 
-- [x] % KPIs with "Lower is Better" score correctly (lower value = higher rating)
-- [x] % KPIs with "Higher is Better" score correctly (higher value = higher rating)
-- [x] Target value is completely ignored for % UOM
-- [x] Existing numeric KPIs continue working with ratio-based logic
-- [x] Scoring Simulator shows correct results for % KPIs
-- [x] All 95 unit tests pass
+After implementation:
+- [ ] KPI "5ka dum" scores correctly with R5 = `>98`
+- [ ] Other KPIs with `>`, `<`, `>=`, `<=` prefixes work
+- [ ] Normal numeric thresholds still work (no regression)
+- [ ] All existing tests pass
+- [ ] New tests for operator parsing pass
