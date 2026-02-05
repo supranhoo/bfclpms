@@ -41,6 +41,7 @@ import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { SubPeriodSelector } from '@/components/review/SubPeriodSelector';
 import { FrequencyLockedOverlay, FrequencyLockBadge } from '@/components/review/FrequencyLockedOverlay';
 import { QualitativeValueInput } from '@/components/review/QualitativeValueInput';
+import { DateCalendarInput } from '@/components/review/DateCalendarInput';
 import { Target, TrendingUp, CheckCircle2, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import {
@@ -290,7 +291,16 @@ export default function MyKpis() {
       };
     }
     
-    return calculateRating(achieved, kpi.target_value, thresholds, kpi.criteria || 'Higher is Better', kpi.weightage || 0);
+    return calculateRating(
+      achieved, 
+      kpi.target_value, 
+      thresholds, 
+      kpi.criteria || 'Higher is Better', 
+      kpi.weightage || 0,
+      uomType,
+      kpi.qualitative_options as QualitativeOption[] | null,
+      kpi.uom
+    );
   };
 
   const handleAchievedChange = (value: string) => {
@@ -938,7 +948,16 @@ export default function MyKpis() {
                           {/* Achieved Value */}
                           {!isNa && (
                             <div className="space-y-2">
-                              {isQualitativeKpi(selectedKpi) ? (
+                              {selectedKpi?.uom === 'Date' ? (
+                                <DateCalendarInput
+                                  value={achievedValue ? parseInt(achievedValue) : null}
+                                  onChange={(day) => handleAchievedChange(day?.toString() || '')}
+                                  reviewMonth={selectedPeriod}
+                                  reviewYear={selectedYear}
+                                  disabled={hasOrgData}
+                                  label="Completion Date *"
+                                />
+                              ) : isQualitativeKpi(selectedKpi) ? (
                                 <QualitativeValueInput
                                   uomType={selectedKpi?.uom_type as 'binary' | 'tiered'}
                                   qualitativeOptions={selectedKpi?.qualitative_options as QualitativeOption[] | null}
