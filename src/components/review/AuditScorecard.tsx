@@ -211,7 +211,7 @@ export function AuditScorecard({
       auditor_evidence_url?: string | null;
       approve: boolean;
     }) => {
-      const { error: submissionError } = await supabase
+      const { data: updateData, error: submissionError } = await supabase
         .from('review_submissions')
         .update({
           auditor_rating,
@@ -219,17 +219,29 @@ export function AuditScorecard({
           auditor_remarks,
           auditor_evidence_url,
         })
-        .eq('kpi_id', kpi_id);
+        .eq('kpi_id', kpi_id)
+        .select();
 
       if (submissionError) throw submissionError;
 
+      // Check if any rows were actually updated (RLS may block silently)
+      if (!updateData || updateData.length === 0) {
+        throw new Error('Unable to submit audit review. You may not have permission, or the KPI is not at the correct stage.');
+      }
+
       const newStatus = approve ? 'management_review' : 'audit';
-      const { error: kpiError } = await supabase
+      const { data: kpiUpdateData, error: kpiError } = await supabase
         .from('kpis')
         .update({ status: newStatus as any })
-        .eq('id', kpi_id);
+        .eq('id', kpi_id)
+        .select();
 
       if (kpiError) throw kpiError;
+
+      // Verify KPI was also updated
+      if (!kpiUpdateData || kpiUpdateData.length === 0) {
+        throw new Error('Unable to update KPI status. Permission denied.');
+      }
 
       if (user?.id) {
         await supabase.from('kpi_audit_logs').insert({

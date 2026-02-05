@@ -283,6 +283,18 @@ has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
 - Managers can view direct reports
 - Admins, Auditors, and Management can view all profiles
 
+### RLS Permission Model for Reviewers
+
+The system enforces strict access control for KPI approvals:
+
+| Role | Can Approve At Stage | Condition |
+|------|---------------------|-----------|
+| **Manager** | `self_review` → `manager_check` | Must be employee's `reporting_manager_id` |
+| **Auditor** | `manager_check` → `audit`/`management_review` | Must have `auditor` role |
+| **Management** | `management_review` → `approved` | Must have `management` role AND KPI at `management_review` stage |
+
+**Silent Failure Prevention:** All approval mutations use `.select()` after updates to verify rows were affected. If RLS blocks the update (0 rows affected), an explicit error is thrown with a descriptive message instead of showing a misleading success toast.
+
 ### Database Functions
 
 | Function | Purpose |
