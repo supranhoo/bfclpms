@@ -101,9 +101,8 @@ export function KpiJourneySection({
       rating: submission?.manager_rating ?? null,
       remarks: submission?.manager_remarks ?? null,
       evidenceUrl: submission?.manager_evidence_url ?? null,
-      // Fallback to employee's value if manager reviewed but value not saved (historical data)
-      achievedValue: submission?.manager_achieved_value 
-        ?? (submission?.manager_score ? submission?.achieved_value : null),
+      // Only show explicitly saved values - no fallback to avoid showing incorrect data
+      achievedValue: submission?.manager_achieved_value ?? null,
     },
     auditor: {
       icon: Shield,
@@ -113,9 +112,8 @@ export function KpiJourneySection({
       rating: submission?.auditor_rating ?? null,
       remarks: submission?.auditor_remarks ?? null,
       evidenceUrl: submission?.auditor_evidence_url ?? null,
-      // Fallback to employee's value if auditor reviewed but value not saved (historical data)
-      achievedValue: submission?.auditor_achieved_value 
-        ?? (submission?.auditor_score ? submission?.achieved_value : null),
+      // Only show explicitly saved values - no fallback to avoid showing incorrect data
+      achievedValue: submission?.auditor_achieved_value ?? null,
     },
     management: {
       icon: Briefcase,
@@ -125,9 +123,8 @@ export function KpiJourneySection({
       rating: submission?.management_rating ?? null,
       remarks: submission?.management_remarks ?? null,
       evidenceUrl: submission?.management_evidence_url ?? null,
-      // Fallback to employee's value if management reviewed but value not saved (historical data)
-      achievedValue: submission?.management_achieved_value 
-        ?? (submission?.management_score ? submission?.achieved_value : null),
+      // Only show explicitly saved values - no fallback to avoid showing incorrect data
+      achievedValue: submission?.management_achieved_value ?? null,
     },
   };
 
