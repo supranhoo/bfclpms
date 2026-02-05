@@ -440,3 +440,86 @@ describe("isStageInWorkflow", () => {
     expect(isStageInWorkflow("unknown", workflow)).toBe(false);
   });
 });
+
+describe("calculateRating with Date UOM", () => {
+  const dateThresholds: RatingThresholds = {
+    r5: "5",    // By 5th day = Rating 5
+    r4: "10",   // By 10th day = Rating 4
+    r3: "15",   // By 15th day = Rating 3
+    r2: "20",   // By 20th day = Rating 2
+    r1: "31",   // By end of month = Rating 1
+    r0: null,
+  };
+
+  it("returns rating 5 for day <= R5 threshold", () => {
+    const result = calculateRating(5, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date");
+    expect(result.rating).toBe(5);
+    expect(result.ratingLevel).toBe("blue");
+  });
+
+  it("returns rating 4 for day between R5 and R4", () => {
+    const result = calculateRating(8, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date");
+    expect(result.rating).toBe(4);
+    expect(result.ratingLevel).toBe("blue");
+  });
+
+  it("returns rating 3 for day between R4 and R3", () => {
+    const result = calculateRating(12, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date");
+    expect(result.rating).toBe(3);
+    expect(result.ratingLevel).toBe("green");
+  });
+
+  it("returns rating 2 for day between R3 and R2", () => {
+    const result = calculateRating(18, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date");
+    expect(result.rating).toBe(2);
+    expect(result.ratingLevel).toBe("yellow");
+  });
+
+  it("returns rating 1 for day between R2 and R1", () => {
+    const result = calculateRating(25, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date");
+    expect(result.rating).toBe(1);
+    expect(result.ratingLevel).toBe("red");
+  });
+
+  it("calculates weighted score correctly for Date UOM", () => {
+    const result = calculateRating(3, null, dateThresholds, "Higher is Better", 20, "numeric", null, "Date");
+    expect(result.rating).toBe(5);
+    expect(result.weightedScore).toBe(100); // 20 * 5
+  });
+
+  it("returns zero for invalid day values", () => {
+    expect(calculateRating(0, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date").rating).toBe(0);
+    expect(calculateRating(32, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date").rating).toBe(0);
+    expect(calculateRating(-1, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date").rating).toBe(0);
+  });
+
+  it("returns zero for null achieved value", () => {
+    const result = calculateRating(null, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date");
+    expect(result.rating).toBe(0);
+    expect(result.ratingLevel).toBe("red");
+  });
+
+  it("handles string day values", () => {
+    const result = calculateRating("7", null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date");
+    expect(result.rating).toBe(4);
+  });
+
+  it("returns percentage as 0 for Date UOM", () => {
+    const result = calculateRating(5, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date");
+    expect(result.percentage).toBe(0);
+  });
+
+  it("ignores target value for Date UOM", () => {
+    // Target value should not affect Date UOM calculation
+    const result1 = calculateRating(5, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date");
+    const result2 = calculateRating(5, 100, dateThresholds, "Higher is Better", 10, "numeric", null, "Date");
+    expect(result1.rating).toBe(result2.rating);
+  });
+
+  it("ignores criteria parameter for Date UOM", () => {
+    // Date UOM always uses "Lower is Better" logic (earlier = higher rating)
+    const result1 = calculateRating(5, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date");
+    const result2 = calculateRating(5, null, dateThresholds, "Lower is Better", 10, "numeric", null, "Date");
+    expect(result1.rating).toBe(result2.rating);
+  });
+});

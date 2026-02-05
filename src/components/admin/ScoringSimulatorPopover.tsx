@@ -41,13 +41,21 @@ export function ScoringSimulatorPopover({ kpi }: ScoringSimulatorPopoverProps) {
       r0: kpi.r0,
     };
 
-    return calculateRating(
+    // Get UOM from kpi if available (for Date UOM handling)
+    const uom = (kpi as any).uom || null;
+    
+    const result = calculateRating(
       achieved,
       kpi.target_value,
       thresholds,
       kpi.criteria || 'Higher is Better',
-      kpi.weightage || 0
+      kpi.weightage || 0,
+      'numeric',
+      null,
+      uom
     );
+    
+    return result;
   }, [testValue, kpi]);
 
   const getRatingColor = (rating: number) => {

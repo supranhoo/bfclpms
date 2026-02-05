@@ -109,6 +109,7 @@ export function levelToText(level: RatingLevel): string {
  * @param weightage - KPI weightage (0-100)
  * @param uomType - Type of UOM: 'numeric' | 'binary' | 'tiered' (optional, defaults to 'numeric')
  * @param qualitativeOptions - Options for tiered UOM (optional)
+ * @param uom - Unit of Measure string (e.g., 'Date', '%', 'Number') for special handling
  */
 export function calculateRating(
   achievedValue: number | string | null | undefined,
@@ -117,8 +118,14 @@ export function calculateRating(
   criteria: string = 'Higher is Better',
   weightage: number = 0,
   uomType: UomType = 'numeric',
-  qualitativeOptions?: QualitativeOption[] | null
+  qualitativeOptions?: QualitativeOption[] | null,
+  uom?: string | null
 ): RatingResult {
+  // Handle Date UOM specially - compare day values directly against thresholds
+  if (uom === 'Date') {
+    return calculateDateRating(achievedValue, thresholds, weightage);
+  }
+
   // Handle qualitative UOM types (binary, tiered)
   if (uomType === 'binary' || uomType === 'tiered') {
     const stringValue = typeof achievedValue === 'string' ? achievedValue : null;
@@ -215,6 +222,61 @@ export function calculateRating(
     weightedScore,
     percentage,
     achievedWeight,
+  };
+}
+
+/**
+ * Calculate rating for Date UOM KPIs
+ * 
+ * For Date UOM, the achieved value is a day-of-month (1-31).
+ * Thresholds (R5-R1) are treated as absolute day values.
+ * Logic: Earlier date (lower day number) = Higher rating (Lower is Better)
+ * 
+ * Example:
+ * - R5 = 5 (by 5th day = Outstanding)
+ * - R4 = 10 (by 10th day = Exceeds)
+ * - R3 = 15 (by 15th day = Meets)
+ * - etc.
+ */
+function calculateDateRating(
+  achievedValue: number | string | null | undefined,
+  thresholds: RatingThresholds,
+  weightage: number
+): RatingResult {
+  // Parse achieved value as day-of-month
+  if (achievedValue === null || achievedValue === undefined || achievedValue === '') {
+    return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0, achievedWeight: 0 };
+  }
+
+  const achieved = typeof achievedValue === 'number' 
+    ? achievedValue 
+    : parseFloat(String(achievedValue));
+    
+  if (isNaN(achieved) || achieved < 1 || achieved > 31) {
+    return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0, achievedWeight: 0 };
+  }
+
+  // Parse thresholds as absolute day values (not ratios/percentages)
+  const r5 = parseThreshold(thresholds.r5, false);
+  const r4 = parseThreshold(thresholds.r4, false);
+  const r3 = parseThreshold(thresholds.r3, false);
+  const r2 = parseThreshold(thresholds.r2, false);
+  const r1 = parseThreshold(thresholds.r1, false);
+
+  // Lower is Better for dates - earlier day = higher rating
+  let rating = 0;
+  if (r5 !== null && achieved <= r5) rating = 5;
+  else if (r4 !== null && achieved <= r4) rating = 4;
+  else if (r3 !== null && achieved <= r3) rating = 3;
+  else if (r2 !== null && achieved <= r2) rating = 2;
+  else if (r1 !== null && achieved <= r1) rating = 1;
+
+  return {
+    rating,
+    ratingLevel: ratingToLevel(rating),
+    weightedScore: weightage * rating,
+    percentage: 0,  // Not applicable for dates
+    achievedWeight: 0,
   };
 }
 

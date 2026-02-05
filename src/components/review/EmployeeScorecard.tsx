@@ -637,6 +637,8 @@ export function EmployeeScorecard({
                     onAchievedValueChange={setManagerAchievedValue}
                     onScoreChange={(score, _rating) => setManagerScore(score)}
                     label="Manager Score"
+                    reviewMonth={selectedPeriod}
+                    reviewYear={selectedYear}
                   />
 
                   {/* Remarks */}
