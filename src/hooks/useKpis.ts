@@ -65,6 +65,9 @@ export interface ReviewSubmission {
   kpi_id: string;
   performance_review_id: string | null;
   achieved_value: number | null;
+  manager_achieved_value: number | null;
+  auditor_achieved_value: number | null;
+  management_achieved_value: number | null;
   self_rating: RatingLevel | null;
   self_score: number | null;
   self_remarks: string | null;

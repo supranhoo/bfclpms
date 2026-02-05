@@ -17,6 +17,7 @@ interface ReviewStageCardProps {
   evidenceUrl: string | null;
   status: StageStatus;
   isNA?: boolean;
+  achievedValue?: number | null;
 }
 
 const iconColorClasses = {
@@ -51,6 +52,7 @@ export function ReviewStageCard({
   evidenceUrl,
   status,
   isNA = false,
+  achievedValue,
 }: ReviewStageCardProps) {
   const isPending = status === 'pending';
   const isCurrent = status === 'current';
@@ -80,6 +82,12 @@ export function ReviewStageCard({
 
       {/* Score */}
       <div className="mb-2">
+        {/* Achieved Value */}
+        {!isPending && achievedValue !== null && achievedValue !== undefined && (
+          <div className="text-xs text-muted-foreground mb-1">
+            Value: <span className="font-medium text-foreground">{achievedValue}</span>
+          </div>
+        )}
         {isNA ? (
           <Badge variant="outline" className="text-xs">N/A</Badge>
         ) : score !== null ? (
@@ -87,7 +95,7 @@ export function ReviewStageCard({
             style={{ backgroundColor: getRatingColor(rating) }} 
             className="text-white text-xs"
           >
-            {score} - {getRatingLabel(rating)}
+            Rating: {score}
           </Badge>
         ) : (
           <Badge variant="outline" className="text-xs text-muted-foreground">

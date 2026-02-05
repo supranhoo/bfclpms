@@ -91,6 +91,7 @@ export function KpiJourneySection({
       rating: submission?.self_rating ?? null,
       remarks: submission?.self_remarks ?? null,
       evidenceUrl: submission?.self_evidence_url ?? null,
+      achievedValue: submission?.achieved_value ?? null,
     },
     manager: {
       icon: Briefcase,
@@ -100,6 +101,7 @@ export function KpiJourneySection({
       rating: submission?.manager_rating ?? null,
       remarks: submission?.manager_remarks ?? null,
       evidenceUrl: submission?.manager_evidence_url ?? null,
+      achievedValue: submission?.manager_achieved_value ?? null,
     },
     auditor: {
       icon: Shield,
@@ -109,6 +111,7 @@ export function KpiJourneySection({
       rating: submission?.auditor_rating ?? null,
       remarks: submission?.auditor_remarks ?? null,
       evidenceUrl: submission?.auditor_evidence_url ?? null,
+      achievedValue: submission?.auditor_achieved_value ?? null,
     },
     management: {
       icon: Briefcase,
@@ -118,6 +121,7 @@ export function KpiJourneySection({
       rating: submission?.management_rating ?? null,
       remarks: submission?.management_remarks ?? null,
       evidenceUrl: submission?.management_evidence_url ?? null,
+      achievedValue: submission?.management_achieved_value ?? null,
     },
   };
 
@@ -150,6 +154,7 @@ export function KpiJourneySection({
                 evidenceUrl={data.evidenceUrl}
                 status={status}
                 isNA={isNA}
+                achievedValue={data.achievedValue}
               />
             );
           })}
