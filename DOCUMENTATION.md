@@ -924,6 +924,63 @@ When UOM is set to `Date`, the system provides specialized handling for date-bas
 - `DateCalendarInput` component in `src/components/review/DateCalendarInput.tsx`
 - Calendar restricted to review month using `fromDate`/`toDate` props
 
+#### 4.9.7 Percentage (%) UOM Special Handling
+
+When UOM is set to `%` or `percentage`, the system uses **direct threshold comparison** instead of ratio-based calculation. This is critical because percentage values are already normalized—dividing by a target would cause "double-normalization."
+
+**Key Rule:**
+> For UOM = %, the system compares the achieved value **directly** against thresholds. The target value is **completely ignored**.
+
+**Use Cases:**
+- Budget variance (e.g., "Stay within 100% of budget")
+- Quality metrics (e.g., "Defect rate below 99%")
+- Success rates (e.g., "Completion rate above 100%")
+
+**Rating Calculation:**
+
+| Criteria | Logic | Example |
+|----------|-------|---------|
+| **Lower is Better** | Lower value = higher rating | Error rate: 98% better than 102% |
+| **Higher is Better** | Higher value = higher rating | Success rate: 102% better than 98% |
+
+**Example: Lower is Better (Cost Variance)**
+
+| Threshold | Value | Meaning |
+|-----------|-------|---------|
+| R5 | 99% | Achieved ≤ 99% = Rating 5 |
+| R4 | 99.5% | Achieved ≤ 99.5% = Rating 4 |
+| R3 | 100% | Achieved ≤ 100% = Rating 3 |
+| R2 | 100.5% | Achieved ≤ 100.5% = Rating 2 |
+| R1 | 101% | Achieved ≤ 101% = Rating 1 |
+
+*Example: Employee achieves 100.4% → Rating 2 (between R3 and R2)*
+
+**Example: Higher is Better (Completion Rate)**
+
+| Threshold | Value | Meaning |
+|-----------|-------|---------|
+| R5 | 101% | Achieved ≥ 101% = Rating 5 |
+| R4 | 100.5% | Achieved ≥ 100.5% = Rating 4 |
+| R3 | 100% | Achieved ≥ 100% = Rating 3 |
+| R2 | 99.5% | Achieved ≥ 99.5% = Rating 2 |
+| R1 | 99% | Achieved ≥ 99% = Rating 1 |
+
+*Example: Employee achieves 100.7% → Rating 4 (between R4 and R5)*
+
+**Critical Differences from Numeric UOM:**
+
+| Aspect | % UOM | Numeric UOM |
+|--------|-------|-------------|
+| Uses Target? | ❌ No | ✅ Yes |
+| Uses Ratio? | ❌ No | ✅ Yes (achieved/target) |
+| Direct Comparison? | ✅ Yes | ❌ No |
+| Thresholds Are | Absolute values (99, 100, 101) | Ratios (0.99, 1.0, 1.01) |
+
+**Implementation:**
+- `calculatePercentageRating()` function in `src/lib/ratingCalculation.ts`
+- Triggered when `uom === '%'` or `uom === 'percentage'`
+- Applies to all review stages and the Scoring Simulator
+
 ### 4.10 Frequency and Sub-Frequency System
 
 The PMS supports 7 frequency types, each with specific submission and scoring behavior.
