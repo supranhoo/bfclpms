@@ -126,6 +126,12 @@ export function calculateRating(
     return calculateDateRating(achievedValue, thresholds, weightage);
   }
 
+  // Handle Percentage UOM specially - compare value directly against thresholds
+  // For % UOM, the achieved value is already normalized; do NOT divide by target
+  if (uom === '%' || uom?.toLowerCase() === 'percentage') {
+    return calculatePercentageRating(achievedValue, thresholds, criteria, weightage);
+  }
+
   // Handle qualitative UOM types (binary, tiered)
   if (uomType === 'binary' || uomType === 'tiered') {
     const stringValue = typeof achievedValue === 'string' ? achievedValue : null;
@@ -277,6 +283,83 @@ function calculateDateRating(
     weightedScore: weightage * rating,
     percentage: 0,  // Not applicable for dates
     achievedWeight: 0,
+  };
+}
+
+/**
+ * Calculate rating for Percentage (%) UOM KPIs
+ * 
+ * For % UOM, the achieved value is already a normalized percentage.
+ * Compare directly against thresholds WITHOUT dividing by target.
+ * 
+ * Lower is Better: lower achieved value = higher rating (e.g., error rate, cost variance)
+ * Higher is Better: higher achieved value = higher rating (e.g., success rate, completion rate)
+ * 
+ * Example (Lower is Better):
+ * - R5 = 99%  → achieved ≤ 99% = Rating 5
+ * - R4 = 99.5% → achieved ≤ 99.5% = Rating 4
+ * - R3 = 100% → achieved ≤ 100% = Rating 3
+ * - etc.
+ * 
+ * Example (Higher is Better):
+ * - R5 = 101% → achieved ≥ 101% = Rating 5
+ * - R4 = 100.5% → achieved ≥ 100.5% = Rating 4
+ * - R3 = 100% → achieved ≥ 100% = Rating 3
+ * - etc.
+ */
+function calculatePercentageRating(
+  achievedValue: number | string | null | undefined,
+  thresholds: RatingThresholds,
+  criteria: string,
+  weightage: number
+): RatingResult {
+  // Parse achieved value
+  if (achievedValue === null || achievedValue === undefined || achievedValue === '') {
+    return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0, achievedWeight: 0 };
+  }
+
+  const achieved = typeof achievedValue === 'number' 
+    ? achievedValue 
+    : parseFloat(String(achievedValue));
+    
+  if (isNaN(achieved)) {
+    return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0, achievedWeight: 0 };
+  }
+
+  // Parse thresholds as absolute values (not ratios)
+  const r5 = parseThreshold(thresholds.r5, false);
+  const r4 = parseThreshold(thresholds.r4, false);
+  const r3 = parseThreshold(thresholds.r3, false);
+  const r2 = parseThreshold(thresholds.r2, false);
+  const r1 = parseThreshold(thresholds.r1, false);
+
+  const isLowerBetter = criteria?.toLowerCase().includes('lower');
+  let rating = 0;
+
+  if (isLowerBetter) {
+    // Lower is Better: lower value = higher rating
+    // Example: Error rate - 99% is better than 101%
+    if (r5 !== null && achieved <= r5) rating = 5;
+    else if (r4 !== null && achieved <= r4) rating = 4;
+    else if (r3 !== null && achieved <= r3) rating = 3;
+    else if (r2 !== null && achieved <= r2) rating = 2;
+    else if (r1 !== null && achieved <= r1) rating = 1;
+  } else {
+    // Higher is Better: higher value = higher rating
+    // Example: Success rate - 101% is better than 99%
+    if (r5 !== null && achieved >= r5) rating = 5;
+    else if (r4 !== null && achieved >= r4) rating = 4;
+    else if (r3 !== null && achieved >= r3) rating = 3;
+    else if (r2 !== null && achieved >= r2) rating = 2;
+    else if (r1 !== null && achieved >= r1) rating = 1;
+  }
+
+  return {
+    rating,
+    ratingLevel: ratingToLevel(rating),
+    weightedScore: weightage * rating,
+    percentage: 0,  // Not applicable - value IS a percentage
+    achievedWeight: 0,  // Not applicable - no ratio calculation
   };
 }
 

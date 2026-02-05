@@ -523,3 +523,220 @@ describe("calculateRating with Date UOM", () => {
     expect(result1.rating).toBe(result2.rating);
   });
 });
+
+describe("calculateRating with Percentage (%) UOM", () => {
+  describe("Lower is Better", () => {
+    const thresholds: RatingThresholds = {
+      r5: "99",     // ≤ 99% = Rating 5
+      r4: "99.5",   // ≤ 99.5% = Rating 4
+      r3: "100",    // ≤ 100% = Rating 3
+      r2: "100.5",  // ≤ 100.5% = Rating 2
+      r1: "101",    // ≤ 101% = Rating 1
+      r0: null,
+    };
+
+    it("returns rating 5 when achieved ≤ R5 threshold", () => {
+      const result = calculateRating(98.5, 100, thresholds, "Lower is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(5);
+      expect(result.ratingLevel).toBe("blue");
+    });
+
+    it("returns rating 4 when achieved between R5 and R4", () => {
+      const result = calculateRating(99.3, 100, thresholds, "Lower is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(4);
+      expect(result.ratingLevel).toBe("blue");
+    });
+
+    it("returns rating 3 when achieved between R4 and R3", () => {
+      const result = calculateRating(99.8, 100, thresholds, "Lower is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(3);
+      expect(result.ratingLevel).toBe("green");
+    });
+
+    it("returns rating 2 when achieved between R3 and R2", () => {
+      // Target (95) is passed but should be IGNORED - only achieved value matters
+      const result = calculateRating(100.4, 95, thresholds, "Lower is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(2);
+      expect(result.ratingLevel).toBe("yellow");
+    });
+
+    it("returns rating 1 when achieved between R2 and R1", () => {
+      const result = calculateRating(100.8, 100, thresholds, "Lower is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(1);
+      expect(result.ratingLevel).toBe("red");
+    });
+
+    it("returns rating 0 when achieved > R1 threshold", () => {
+      const result = calculateRating(102, 100, thresholds, "Lower is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(0);
+      expect(result.ratingLevel).toBe("red");
+    });
+
+    it("ignores target value completely", () => {
+      // Target should NOT affect the calculation at all
+      const result1 = calculateRating(99, null, thresholds, "Lower is Better", 10, "numeric", null, "%");
+      const result2 = calculateRating(99, 50, thresholds, "Lower is Better", 10, "numeric", null, "%");
+      const result3 = calculateRating(99, 200, thresholds, "Lower is Better", 10, "numeric", null, "%");
+      expect(result1.rating).toBe(result2.rating);
+      expect(result2.rating).toBe(result3.rating);
+      expect(result1.rating).toBe(5);
+    });
+  });
+
+  describe("Higher is Better", () => {
+    const thresholds: RatingThresholds = {
+      r5: "101",    // ≥ 101% = Rating 5
+      r4: "100.5",  // ≥ 100.5% = Rating 4
+      r3: "100",    // ≥ 100% = Rating 3
+      r2: "99.5",   // ≥ 99.5% = Rating 2
+      r1: "99",     // ≥ 99% = Rating 1
+      r0: null,
+    };
+
+    it("returns rating 5 when achieved ≥ R5 threshold", () => {
+      const result = calculateRating(102, 100, thresholds, "Higher is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(5);
+      expect(result.ratingLevel).toBe("blue");
+    });
+
+    it("returns rating 4 when achieved between R5 and R4", () => {
+      const result = calculateRating(100.7, 100, thresholds, "Higher is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(4);
+      expect(result.ratingLevel).toBe("blue");
+    });
+
+    it("returns rating 3 when achieved between R4 and R3", () => {
+      const result = calculateRating(100.2, 100, thresholds, "Higher is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(3);
+      expect(result.ratingLevel).toBe("green");
+    });
+
+    it("returns rating 2 when achieved between R3 and R2", () => {
+      const result = calculateRating(99.7, 100, thresholds, "Higher is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(2);
+      expect(result.ratingLevel).toBe("yellow");
+    });
+
+    it("returns rating 1 when achieved between R2 and R1", () => {
+      const result = calculateRating(99.2, 100, thresholds, "Higher is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(1);
+      expect(result.ratingLevel).toBe("red");
+    });
+
+    it("returns rating 0 when achieved < R1 threshold", () => {
+      const result = calculateRating(98, 100, thresholds, "Higher is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(0);
+      expect(result.ratingLevel).toBe("red");
+    });
+
+    it("ignores target value completely", () => {
+      const result1 = calculateRating(101, null, thresholds, "Higher is Better", 10, "numeric", null, "%");
+      const result2 = calculateRating(101, 50, thresholds, "Higher is Better", 10, "numeric", null, "%");
+      const result3 = calculateRating(101, 200, thresholds, "Higher is Better", 10, "numeric", null, "%");
+      expect(result1.rating).toBe(result2.rating);
+      expect(result2.rating).toBe(result3.rating);
+      expect(result1.rating).toBe(5);
+    });
+  });
+
+  describe("edge cases", () => {
+    const thresholds: RatingThresholds = {
+      r5: "99",
+      r4: "100",
+      r3: "101",
+      r2: "102",
+      r1: "103",
+      r0: null,
+    };
+
+    it("calculates weighted score correctly", () => {
+      const result = calculateRating(98, null, thresholds, "Lower is Better", 20, "numeric", null, "%");
+      expect(result.rating).toBe(5);
+      expect(result.weightedScore).toBe(100); // 20 * 5
+    });
+
+    it("returns percentage as 0 for % UOM (not applicable)", () => {
+      const result = calculateRating(98, null, thresholds, "Lower is Better", 10, "numeric", null, "%");
+      expect(result.percentage).toBe(0);
+      expect(result.achievedWeight).toBe(0);
+    });
+
+    it("handles string achieved values", () => {
+      const result = calculateRating("98.5", null, thresholds, "Lower is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(5);
+    });
+
+    it("handles threshold values with % sign", () => {
+      const thresholdsWithPercent: RatingThresholds = {
+        r5: "99%",
+        r4: "100%",
+        r3: "101%",
+        r2: "102%",
+        r1: "103%",
+        r0: null,
+      };
+      const result = calculateRating(98, null, thresholdsWithPercent, "Lower is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(5);
+    });
+
+    it("handles boundary values exactly (Lower is Better uses <=)", () => {
+      // Exactly at boundary
+      expect(calculateRating(99, null, thresholds, "Lower is Better", 10, "numeric", null, "%").rating).toBe(5);
+      expect(calculateRating(100, null, thresholds, "Lower is Better", 10, "numeric", null, "%").rating).toBe(4);
+      expect(calculateRating(101, null, thresholds, "Lower is Better", 10, "numeric", null, "%").rating).toBe(3);
+    });
+
+    it("handles boundary values exactly (Higher is Better uses >=)", () => {
+      const higherThresholds: RatingThresholds = {
+        r5: "103",
+        r4: "102",
+        r3: "101",
+        r2: "100",
+        r1: "99",
+        r0: null,
+      };
+      expect(calculateRating(103, null, higherThresholds, "Higher is Better", 10, "numeric", null, "%").rating).toBe(5);
+      expect(calculateRating(102, null, higherThresholds, "Higher is Better", 10, "numeric", null, "%").rating).toBe(4);
+      expect(calculateRating(101, null, higherThresholds, "Higher is Better", 10, "numeric", null, "%").rating).toBe(3);
+    });
+
+    it("returns zero for null achieved value", () => {
+      const result = calculateRating(null, null, thresholds, "Lower is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(0);
+      expect(result.ratingLevel).toBe("red");
+    });
+
+    it("returns zero for empty string achieved value", () => {
+      const result = calculateRating("", null, thresholds, "Lower is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(0);
+    });
+
+    it("returns zero for invalid string achieved value", () => {
+      const result = calculateRating("invalid", null, thresholds, "Lower is Better", 10, "numeric", null, "%");
+      expect(result.rating).toBe(0);
+    });
+
+    it("recognizes 'percentage' as alias for %", () => {
+      const result = calculateRating(98, null, thresholds, "Lower is Better", 10, "numeric", null, "percentage");
+      expect(result.rating).toBe(5);
+    });
+
+    it("recognizes 'Percentage' (case-insensitive) as alias for %", () => {
+      const result = calculateRating(98, null, thresholds, "Lower is Better", 10, "numeric", null, "Percentage");
+      expect(result.rating).toBe(5);
+    });
+
+    it("handles fractional values correctly", () => {
+      const preciseThresholds: RatingThresholds = {
+        r5: "99.05",
+        r4: "99.5",
+        r3: "100",
+        r2: "100.5",
+        r1: "101",
+        r0: null,
+      };
+      expect(calculateRating(99.05, null, preciseThresholds, "Lower is Better", 10, "numeric", null, "%").rating).toBe(5);
+      expect(calculateRating(99.06, null, preciseThresholds, "Lower is Better", 10, "numeric", null, "%").rating).toBe(4);
+    });
+  });
+});
