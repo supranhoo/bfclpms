@@ -1,175 +1,185 @@
 
-# Plan: Fix Incorrect Value Display in Review Journey
 
-## Problem Summary
+# Plan: Complete Import PMS Data Template with All Supported Columns
 
-The Review Journey shows "Value: 15" for all stages, but this is **incorrect** for Manager, Auditor, and Management stages.
+## Summary
 
-### Evidence
-
-| Stage | Value Shown | Rating | Expected Value |
-|-------|-------------|--------|----------------|
-| Self | 15 | 0 | 15 ✅ Correct |
-| Manager | 15 | 5 | ~8 ❌ Wrong |
-| Auditor | 15 | 4 | ~9 ❌ Wrong |
-| Management | 15 | 3 | ~10 ❌ Wrong |
-
-### KPI Configuration
-- **Criteria**: Lower is Better
-- **Target**: 8 (date of submission)
-- **Thresholds**: R5≤8, R4≤9, R3≤10, R2≤11, R1≤12, R0>12
-
-### Root Cause
-
-The data backfill migration we ran earlier copied the **employee's value (15)** to all reviewer stages:
-
-```sql
-UPDATE review_submissions
-SET manager_achieved_value = achieved_value  -- Copied 15 to all!
-WHERE manager_score IS NOT NULL AND manager_achieved_value IS NULL;
-```
-
-This was incorrect because reviewers clearly entered **different values** to justify their ratings (Manager entered ~8 to get rating 5, etc.).
+The **Import PMS Data** template download is missing several important columns that are actually supported by the system. This plan addresses the gaps to ensure users have a complete template.
 
 ---
 
-## Solution Options
+## Current State
 
-### Option A: Reverse-Calculate Values from Ratings (Recommended)
-For historical data where the original value wasn't saved but the rating exists, we can **estimate** what value the reviewer entered based on their rating and the KPI's threshold configuration.
-
-For this specific KPI:
-- Rating 5 → Value ≤ 8 → Set to 8
-- Rating 4 → Value = 9 → Set to 9
-- Rating 3 → Value = 10 → Set to 10
-- Rating 2 → Value = 11 → Set to 11
-- Rating 1 → Value = 12 → Set to 12
-- Rating 0 → Value > 12 → Keep as-is (use employee's value)
-
-### Option B: Show "Not Recorded" for Historical Data
-For stages where the achieved value wasn't originally saved (before our fix), show "Value: (not recorded)" instead of an incorrect number.
-
-### Option C: Clear the Incorrectly Backfilled Values
-Remove the backfilled values and rely on the fallback logic only when appropriate.
+| Category | Template Columns | Missing Columns |
+|----------|-----------------|-----------------|
+| **Core Fields** | All present ✅ | None |
+| **Rating Thresholds** | All present ✅ | None |
+| **Review Data** | All present ✅ | None |
+| **Organization Structure** | ❌ Missing | `division`, `businessUnit`, `department`, `subBranch` |
+| **Special Flags** | ❌ Missing | `isOrgLevel`, `frequencyCycleStart` |
 
 ---
 
-## Recommended: Option C (Immediate) + Option A (For Critical KPIs)
+## Changes Required
 
-### Step 1: Undo the Incorrect Backfill
+### 1. Update Template Download Function
 
-Only clear values where the reviewer's rating differs significantly from what the employee's value would produce:
-
-```sql
--- First, identify records where manager changed the rating
--- For "Lower is Better" with R0 = >12: if employee value was 15 (rating 0)
--- but manager gave rating 5, they clearly entered a different value
-
--- Clear manager_achieved_value where it was incorrectly backfilled
-UPDATE review_submissions rs
-SET manager_achieved_value = NULL
-FROM kpis k
-WHERE rs.kpi_id = k.id
-  AND rs.manager_achieved_value = rs.achieved_value  -- Was backfilled from employee
-  AND rs.manager_score != rs.self_score  -- But manager gave different rating
-  AND rs.manager_achieved_value IS NOT NULL;
-```
-
-Repeat for auditor and management.
-
-### Step 2: Update UI to Handle Missing Values Gracefully
-
-Modify `KpiJourneySection.tsx` to:
-1. Only show "Value: X" if we have the actual recorded value
-2. If value is NULL but stage is complete, show "Value: (see remarks)" or hide the value line entirely
+Add the missing columns to the `downloadTemplate()` function in `src/pages/admin/ImportData.tsx`:
 
 ```typescript
-// Only show achievedValue if it was explicitly saved (not inherited)
-achievedValue: submission?.manager_achieved_value ?? null,
-// Remove fallback: ?? (submission?.manager_score ? submission?.achieved_value : null)
+// Add to template object:
+division: 'Operations',           // NEW
+businessUnit: 'Plant',            // NEW
+department: 'Manufacturing',      // NEW
+subBranch: '',                    // NEW
+isOrgLevel: '',                   // NEW - 'yes'/'true' for org-level KPIs
+frequencyCycleStart: '',          // NEW - For yearly: 'Jan-Dec', 'Jul-Jun', 'Apr-Mar'
 ```
 
-### Step 3: Future-Proof the System
+### 2. Update UI Documentation
 
-The code changes we already made ensure new reviews will save the correct values. This fix addresses historical data only.
+Add the missing columns to the help text displayed under the import card (lines 1899-1941):
+
+**Organization Structure section** - Already documented but add `subBranch`:
+- `subBranch` - Sub-branch name (optional)
+
+**Add new section** for special flags:
+- `isOrgLevel` - Mark as 'yes' or 'true' for organization-level KPIs (centrally managed)
+- `frequencyCycleStart` - For Yearly KPIs: 'Jan-Dec', 'Jul-Jun', or 'Apr-Mar'
+
+**Expand Optional columns section** with reviewer achieved values:
+- `managerTargetAchieved`, `auditTargetAchieved` - Reviewer override values
+
+### 3. Update DOCUMENTATION.md
+
+Add an "Import Columns Reference" section documenting all 40+ supported columns.
 
 ---
 
-## Implementation Details
-
-### Database Update (via Insert Tool)
-
-```sql
--- Step 1: Clear incorrectly backfilled manager values
-UPDATE review_submissions
-SET manager_achieved_value = NULL
-WHERE manager_achieved_value = achieved_value  -- Was copied from employee
-  AND manager_score IS NOT NULL
-  AND manager_score != (
-    -- Only clear if manager gave a different rating than self
-    COALESCE(self_score, -1)
-  );
-
--- Step 2: Clear incorrectly backfilled auditor values  
-UPDATE review_submissions
-SET auditor_achieved_value = NULL
-WHERE auditor_achieved_value = achieved_value
-  AND auditor_score IS NOT NULL
-  AND auditor_score != COALESCE(manager_score, self_score, -1);
-
--- Step 3: Clear incorrectly backfilled management values
-UPDATE review_submissions
-SET management_achieved_value = NULL
-WHERE management_achieved_value = achieved_value
-  AND management_score IS NOT NULL
-  AND management_score != COALESCE(auditor_score, manager_score, -1);
-```
-
-### File Changes
+## File Changes
 
 | File | Change |
 |------|--------|
-| `src/components/review/KpiJourneySection.tsx` | Remove fallback logic that inherits employee value |
-| `src/components/review/ReviewStageCard.tsx` | Optionally show "Value: —" when stage is complete but value wasn't recorded |
-| `DOCUMENTATION.md` | Update to reflect correct behavior |
+| `src/pages/admin/ImportData.tsx` | Add missing columns to template + update UI help text |
+| `DOCUMENTATION.md` | Add import columns reference section |
 
 ---
 
-## Visual Result After Fix
+## Template After Fix
 
-### Before (Incorrect)
-```
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│    Self     │ │   Manager   │ │   Auditor   │ │ Management  │
-│  Value: 15  │ │  Value: 15  │ │  Value: 15  │ │  Value: 15  │
-│  Rating: 0  │ │  Rating: 5  │ │  Rating: 4  │ │  Rating: 3  │
-└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
+The download template will include these complete column groups:
+
+**Identification (4 columns):**
+- `sNo`, `newCode`, `fullName`, `month`
+
+**KPI Definition (9 columns):**
+- `category`, `kra`, `kpi`, `target`, `uom`, `uomType`, `qualitativeOptions`, `frequency`, `frequencyCycleStart`
+
+**Scoring (8 columns):**
+- `kpiWeightage`, `criteria`, `r5`, `r4`, `r3`, `r2`, `r1`, `r0`
+
+**Organization (4 columns):**
+- `division`, `businessUnit`, `department`, `subBranch`
+
+**Review Data (12 columns):**
+- `targetAchieved`, `rating`, `employeeTargetAchieved`, `employeeRating`, `employeeRemarks`
+- `managerTargetAchieved`, `managerRating`, `managerRemarks`
+- `auditTargetAchieved`, `auditRating`, `auditRemarks`
+
+**Metadata (4 columns):**
+- `sourceOfData`, `kpiStatus`, `reviewStatus`, `isOrgLevel`
+
+**Total: 41 columns** (up from 33 currently)
+
+---
+
+## Technical Details
+
+### ImportData.tsx Changes
+
+**Template object update (lines 1231-1350):**
+
+```typescript
+const template = [
+  {
+    sNo: 1,
+    month: 'Dec-25',
+    reviewStatus: 'Pending',
+    newCode: '100001',
+    fullName: 'John Doe',
+    // Organization structure
+    division: 'Operations',        // NEW
+    businessUnit: 'Plant',         // NEW
+    department: 'Manufacturing',   // NEW
+    subBranch: '',                 // NEW
+    // KPI definition
+    category: 'Financial Performance',
+    kra: 'Revenue Growth',
+    kpi: 'Monthly Revenue Target',
+    uom: '%',
+    uomType: 'numeric',
+    qualitativeOptions: '',
+    frequency: 'Monthly',
+    frequencyCycleStart: '',       // NEW
+    kpiWeightage: 25,
+    criteria: 'Higher is Better',
+    target: '100',
+    r5: '120',
+    r4: '110',
+    r3: '100',
+    r2: '90',
+    r1: '80',
+    r0: '',
+    // Review data
+    targetAchieved: '',
+    achievedWeight: '',
+    rating: '',
+    kpiWeightageScore: '',
+    employeeTargetAchieved: '',
+    employeeRating: '',
+    employeeRemarks: '',
+    managerTargetAchieved: '',     // Already exists
+    managerRating: '',              // Already exists
+    managerRemarks: '',
+    auditTargetAchieved: '',        // Already exists
+    auditRating: '',                // Already exists
+    auditRemarks: '',
+    // Metadata
+    sourceOfData: 'SAP',
+    kpiStatus: 'Active',
+    isOrgLevel: '',                // NEW
+  },
+  // ... additional sample rows
+];
 ```
 
-### After (Correct)
-```
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│    Self     │ │   Manager   │ │   Auditor   │ │ Management  │
-│  Value: 15  │ │  Rating: 5  │ │  Rating: 4  │ │  Rating: 3  │
-│  Rating: 0  │ │ No remarks  │ │ No remarks  │ │ No remarks  │
-└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
-```
+**UI documentation update (lines 1922-1934):**
 
-For historical data where the value wasn't recorded, we simply don't show a value line. The rating is still visible and accurate.
+```typescript
+<p className="font-medium mt-4 mb-2">Organization structure columns (auto-created if missing):</p>
+<ul className="list-disc list-inside space-y-1">
+  <li><code>division</code> - Division name</li>
+  <li><code>businessUnit</code> - Business Unit name</li>
+  <li><code>department</code> - Department name</li>
+  <li><code>subBranch</code> - Sub-branch name (optional)</li>
+</ul>
+
+<p className="font-medium mt-4 mb-2">Special flags:</p>
+<ul className="list-disc list-inside space-y-1">
+  <li><code>isOrgLevel</code> - Set to 'yes' or 'true' for organization-level KPIs</li>
+  <li><code>frequencyCycleStart</code> - For Yearly KPIs: 'Jan-Dec', 'Jul-Jun', or 'Apr-Mar'</li>
+</ul>
+```
 
 ---
 
 ## Validation Checklist
 
 After implementation:
-- [x] Self stage always shows the employee's submitted value
-- [x] Reviewer stages only show values that were explicitly saved
-- [x] Historical KPIs (before fix) don't show misleading inherited values
-- [x] New submissions continue to save and display correct values
-- [x] Ratings remain accurate and unchanged
+- [ ] Download template includes all 41 columns
+- [ ] Organization structure columns work with auto-creation
+- [ ] `isOrgLevel` flag correctly marks KPIs as org-level
+- [ ] `frequencyCycleStart` works for yearly KPIs
+- [ ] UI help text documents all columns
+- [ ] DOCUMENTATION.md has complete import reference
 
-## Implementation Complete (2026-02-05)
-
-✅ Cleared incorrectly backfilled values where reviewer ratings differed from previous stage
-✅ Removed UI fallback logic - now only shows explicitly saved values
-✅ Historical data shows rating only (value hidden) for stages where original value wasn't recorded
