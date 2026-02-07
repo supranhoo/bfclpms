@@ -650,6 +650,7 @@ export function AuditScorecard({
                 selectedYear={selectedYear}
                 onOpenQueryHistory={() => setHistoryDialogOpen(true)}
                 onOpenFullHistory={() => setTrackerModalOpen(true)}
+                onOpenTimeline={() => setTimelineOpen(true)}
               />
             )}
             
