@@ -1,117 +1,143 @@
 
+# Plan: Fix Background Import Progress Not Updating
 
-# Plan: Add "Review Timeline" Button to View KPI Details for All Users
+## Problem Analysis
 
-## Summary
+The background import shows "Importing data in background" indefinitely even when the import has completed. This is caused by a **race condition** in the realtime subscription flow:
 
-The "Timeline" button is already designed to appear in the KPI header section within `KpiReviewPanel`, but the callback is not being passed from the parent scorecard components. This plan wires up the existing timeline functionality to all user views.
+```text
+Timeline:
+0ms    → Edge function returns 202 with importId
+1ms    → Frontend receives response
+5ms    → Frontend sets backgroundImportId state  
+20ms   → useEffect triggers, starts subscription
+50ms   → Initial fetchProgress() call - may fetch 'running' status
+80ms   → Realtime subscription fully established
+1000ms → Import completes, UPDATE event fires
 
----
-
-## Current State
-
-| File | `timelineOpen` state | `KpiTimeline` component | `onOpenTimeline` passed | Timeline Button Shows |
-|------|---------------------|------------------------|------------------------|----------------------|
-| MyKpis.tsx | Line 156 | Line 1225 | **NO** | **NO** |
-| EmployeeScorecard.tsx | Line 128 | Line 890 | **NO** | **NO** |
-| AuditScorecard.tsx | Line 123 | Line 892 | **NO** | **NO** |
-| ManagementScorecard.tsx | Line 128 | Line 923 | **NO** | **NO** |
-
----
-
-## Root Cause
-
-The `KpiHeaderSection` component checks if `onOpenTimeline` prop exists before rendering the Timeline button:
-
-```tsx
-// src/components/review/KpiHeaderSection.tsx (lines 45-55)
-{onOpenTimeline && (
-  <Button variant="outline" size="sm" onClick={onOpenTimeline}>
-    <Clock className="h-3 w-3" />
-    Timeline
-  </Button>
-)}
+But for fast imports (< 100ms total):
+0ms    → Edge function returns 202
+50ms   → Import ALREADY COMPLETES in background
+80ms   → Frontend finally subscribes to realtime
+         → Misses the UPDATE because it already happened!
 ```
 
-Since none of the parent scorecards pass this prop, the button never renders.
+The import of 9 rows completes in ~1 second, which is often faster than the frontend can establish the realtime subscription.
+
+---
+
+## Root Causes
+
+1. **No polling fallback**: Only relies on realtime which can miss events
+2. **Race condition**: Subscription may be established after import completes
+3. **Initial fetch timing**: Single fetch at subscription start may catch intermediate state
 
 ---
 
 ## Solution
 
-Add `onOpenTimeline={() => setTimelineOpen(true)}` to each `KpiReviewPanel` instance:
+Implement a **polling fallback with interval** that runs alongside realtime:
 
-### 1. MyKpis.tsx (Employee's own KPIs view)
+1. Add a polling interval (every 2 seconds) that fetches progress status
+2. Clear interval when import completes or fails
+3. Keep realtime subscription as primary (faster for slow imports)
+4. Polling ensures completion is detected even if realtime event is missed
+
+---
+
+## Implementation
+
+### Update useEffect in ImportData.tsx
+
 ```tsx
-// Line ~854-864
-<KpiReviewPanel
-  kpi={selectedKpi}
-  submission={submissionMap.get(selectedKpi.id) || null}
-  allKpis={allKpis || []}
-  allSubmissions={submissions || []}
-  viewLevel="employee"
-  currentUserId={profile?.id}
-  selectedPeriod={selectedPeriod}
-  selectedYear={selectedYear}
-  onOpenFullHistory={() => setTrackerModalOpen(true)}
-  onOpenTimeline={() => setTimelineOpen(true)}  // ADD THIS
-/>
+useEffect(() => {
+  if (!backgroundImportId) return;
+
+  // Shared function to update progress
+  const updateProgressState = (data: any) => {
+    const progress: BackgroundImportProgress = {
+      id: data.id,
+      status: data.status as 'running' | 'completed' | 'failed',
+      total_rows: data.total_rows,
+      processed_rows: data.processed_rows,
+      kpis_imported: data.kpis_imported,
+      employees_created: data.employees_created,
+      categories_created: data.categories_created,
+      errors: typeof data.errors === 'string' ? JSON.parse(data.errors) : (data.errors || []),
+      started_at: data.started_at,
+      completed_at: data.completed_at,
+    };
+    setBackgroundProgress(progress);
+
+    if (progress.status === 'completed' || progress.status === 'failed') {
+      // Refresh data when import completes
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
+      // ... other invalidations
+
+      if (progress.status === 'completed') {
+        setImportSuccess(progress.kpis_imported);
+        toast({
+          title: 'Import Complete',
+          description: `Successfully imported ${progress.kpis_imported} KPIs...`,
+        });
+      }
+      return true; // Signal completion
+    }
+    return false;
+  };
+
+  // Polling fetch function
+  const fetchProgress = async (): Promise<boolean> => {
+    const { data } = await supabase
+      .from('import_progress')
+      .select('*')
+      .eq('id', backgroundImportId)
+      .single();
+
+    if (data) {
+      return updateProgressState(data);
+    }
+    return false;
+  };
+
+  // Initial fetch
+  fetchProgress();
+
+  // Polling interval as fallback (every 2 seconds)
+  const pollInterval = setInterval(async () => {
+    const completed = await fetchProgress();
+    if (completed) {
+      clearInterval(pollInterval);
+    }
+  }, 2000);
+
+  // Subscribe to real-time updates (primary, faster for slow imports)
+  const channel = supabase
+    .channel(`import-progress-${backgroundImportId}`)
+    .on('postgres_changes', {...}, (payload) => {
+      const completed = updateProgressState(payload.new);
+      if (completed) {
+        clearInterval(pollInterval); // Stop polling when realtime catches it
+      }
+    })
+    .subscribe();
+
+  return () => {
+    clearInterval(pollInterval);
+    supabase.removeChannel(channel);
+  };
+}, [backgroundImportId, queryClient, toast]);
 ```
 
-### 2. EmployeeScorecard.tsx (Manager viewing team member)
-```tsx
-// Line ~618-630
-<KpiReviewPanel
-  kpi={selectedKpi}
-  submission={submissionMap.get(selectedKpi.id) || null}
-  allKpis={allKpis || []}
-  allSubmissions={submissions || []}
-  queries={queryMap.get(selectedKpi.id) || []}
-  viewLevel="manager"
-  currentUserId={user?.id}
-  selectedPeriod={selectedPeriod}
-  selectedYear={selectedYear}
-  onOpenQueryHistory={() => setHistoryDialogOpen(true)}
-  onOpenFullHistory={() => setTrackerModalOpen(true)}
-  onOpenTimeline={() => setTimelineOpen(true)}  // ADD THIS
-/>
-```
+---
 
-### 3. AuditScorecard.tsx (Auditor view)
-```tsx
-// Line ~642-653
-<KpiReviewPanel
-  kpi={selectedKpi}
-  submission={submissionMap.get(selectedKpi.id) || null}
-  allKpis={allKpis || []}
-  allSubmissions={submissions || []}
-  queries={queryMap.get(selectedKpi.id) || []}
-  viewLevel="auditor"
-  selectedPeriod={selectedPeriod}
-  selectedYear={selectedYear}
-  onOpenQueryHistory={() => setHistoryDialogOpen(true)}
-  onOpenFullHistory={() => setTrackerModalOpen(true)}
-  onOpenTimeline={() => setTimelineOpen(true)}  // ADD THIS
-/>
-```
+## Additional Improvement: Delay Initial Toast
 
-### 4. ManagementScorecard.tsx (Management view)
-```tsx
-// Line ~671-682
-<KpiReviewPanel
-  kpi={selectedKpi}
-  submission={submissionMap.get(selectedKpi.id) || null}
-  allKpis={allKpis || []}
-  allSubmissions={submissions || []}
-  queries={queryMap.get(selectedKpi.id) || []}
-  viewLevel="management"
-  selectedPeriod={selectedPeriod}
-  selectedYear={selectedYear}
-  onOpenQueryHistory={() => setHistoryDialogOpen(true)}
-  onOpenFullHistory={() => setTrackerModalOpen(true)}
-  onOpenTimeline={() => setTimelineOpen(true)}  // ADD THIS
-/>
-```
+The "Import Started" toast appears immediately when the import begins. For very fast imports, this toast may still be visible when import completes, causing confusion. We can:
+
+1. Show the completion toast (which will supersede any visible toasts)
+2. This is already handled correctly - no additional change needed
 
 ---
 
@@ -119,42 +145,43 @@ Add `onOpenTimeline={() => setTimelineOpen(true)}` to each `KpiReviewPanel` inst
 
 | File | Change |
 |------|--------|
-| `src/pages/MyKpis.tsx` | Add `onOpenTimeline` prop to KpiReviewPanel |
-| `src/components/review/EmployeeScorecard.tsx` | Add `onOpenTimeline` prop to KpiReviewPanel |
-| `src/components/review/AuditScorecard.tsx` | Add `onOpenTimeline` prop to KpiReviewPanel |
-| `src/components/review/ManagementScorecard.tsx` | Add `onOpenTimeline` prop to KpiReviewPanel |
+| `src/pages/admin/ImportData.tsx` | Add polling interval as fallback to realtime subscription |
 
 ---
 
-## Visual Result
-
-After this change, the "Timeline" button will appear in the KPI header section for all users:
+## Technical Flow After Fix
 
 ```text
-+-----------------------------------------------------------------+
-| [PMS]          [Approved]  [February 2026]  [40%]  [Timeline] ←--|-- NEW BUTTON
-+-----------------------------------------------------------------+
-| Performance Review Cycle Management                              |
-| On-time Completion of Monthly Performance Reviews...             |
-+-----------------------------------------------------------------+
-```
+0ms     → Edge function returns 202
+20ms    → Frontend sets backgroundImportId
+50ms    → useEffect triggers:
+          → Initial fetchProgress() (may show 'running')
+          → Starts polling every 2s
+          → Subscribes to realtime
+1000ms  → Import completes
 
-The button will be visible:
-- For employees viewing their own KPIs (My KPIs page)
-- For managers viewing team member KPIs (Team Review)
-- For auditors reviewing KPIs (Audit Panel)
-- For management reviewing KPIs (Management Review)
-- For all statuses including "Approved"
+Case A (realtime works):
+1000ms  → Realtime UPDATE received
+          → Progress updated to 'completed'
+          → Poll interval cleared
+          → Toast shown ✓
+
+Case B (realtime missed):
+1000ms  → Import completes (UPDATE event missed)
+2000ms  → Poll runs, fetches 'completed' status
+          → Progress updated
+          → Poll interval cleared
+          → Toast shown ✓
+```
 
 ---
 
 ## Testing Checklist
 
-- [ ] Timeline button appears in View KPI Details sheet for employees
-- [ ] Timeline button appears for managers in Team Review
-- [ ] Timeline button appears for auditors in Audit Panel
-- [ ] Timeline button appears for management in Management Review
-- [ ] Timeline button works for all KPI statuses (including Approved)
-- [ ] Clicking Timeline button opens the KPI Timeline modal
-- [ ] Timeline modal displays all audit events correctly
-
+- [ ] Start a KPI import with a small file (9 rows)
+- [ ] Verify progress shows "Importing data in background"
+- [ ] Verify progress updates to "Import Complete!" within 5 seconds
+- [ ] Verify KPI counts show correct values
+- [ ] Verify "Dismiss" button appears after completion
+- [ ] Test with larger file (slower import) to verify realtime still works
+- [ ] Verify no memory leaks (interval cleared on unmount)
