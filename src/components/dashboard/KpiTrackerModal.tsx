@@ -31,17 +31,35 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
 
     const submissionMap = new Map(submissions.map(s => [s.kpi_id, s]));
 
-    return relatedKpis.map(k => {
-      const sub = submissionMap.get(k.id);
-      return {
-        month: k.review_period || 'N/A',
-        target: k.target_value || 0,
-        achieved: sub?.achieved_value || 0,
-        rating: sub?.final_score || sub?.self_score || 0,
-        status: k.status,
-      };
-    }).sort((a, b) => {
-      // Sort by month
+    // Deduplicate by period + year to avoid showing same month twice
+    const periodMap = new Map<string, {
+      month: string;
+      target: number;
+      achieved: number;
+      rating: number;
+      status: string;
+      year: number;
+    }>();
+
+    relatedKpis.forEach(k => {
+      const periodKey = `${k.review_period}-${k.review_year}`;
+      // Only keep the first occurrence (or could keep latest by checking timestamps)
+      if (!periodMap.has(periodKey)) {
+        const sub = submissionMap.get(k.id);
+        periodMap.set(periodKey, {
+          month: k.review_period || 'N/A',
+          target: k.target_value || 0,
+          achieved: sub?.achieved_value || 0,
+          rating: sub?.final_score || sub?.self_score || 0,
+          status: k.status || 'open',
+          year: k.review_year || new Date().getFullYear(),
+        });
+      }
+    });
+
+    return Array.from(periodMap.values()).sort((a, b) => {
+      // Sort by year first, then by month
+      if (a.year !== b.year) return a.year - b.year;
       const [monthA] = a.month.split('-');
       const [monthB] = b.month.split('-');
       return monthOrder.indexOf(monthA) - monthOrder.indexOf(monthB);
