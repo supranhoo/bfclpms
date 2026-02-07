@@ -1,172 +1,238 @@
-# Plan: Mobile-Optimized KPI Tables for Review Scorecards ✅ COMPLETE
 
-## Problem Identified
+# Plan: Mobile-Optimized Review Sheet for All Levels
 
-The Team Review, Audit Panel, and Management Review pages show an employee list that works well on mobile. However, when you tap an employee to view their KPIs, the **scorecard components** (EmployeeScorecard, AuditScorecard, ManagementScorecard) still use the desktop-style `KpiDetailsTable` which requires horizontal scrolling on mobile devices.
+## Problem Summary
 
-In contrast, the **My KPIs page** correctly switches to touch-friendly `MobileKpiCard` components when viewed on mobile.
+When you tap a KPI to open the Review Sheet (on Team Review, Audit Panel, or Management Review), the sheet content is not optimized for mobile screens:
 
----
+- The 4-column "Review Journey" grid gets cramped and unreadable
+- Form inputs and buttons are too small for touch
+- Content requires horizontal scrolling
+- Footer buttons are crowded together
 
-## Solution
+## Solution Overview
 
-Apply the same mobile-first pattern used in `MyKpis.tsx` to the three scorecard components, conditionally rendering `MobileKpiCard` on mobile screens instead of the full table.
+Make the Review Sheet and its child components fully responsive by:
+
+1. Converting the 4-column journey grid to 2x2 on mobile
+2. Stacking the KPI panel sections vertically on mobile
+3. Making footer buttons full-width and stacked on mobile
+4. Adding proper touch-friendly spacing throughout
 
 ---
 
 ## Components to Update
 
-| Component | Location | Issue |
-|-----------|----------|-------|
-| EmployeeScorecard | `src/components/review/EmployeeScorecard.tsx` | Uses `KpiDetailsTable` on all screen sizes |
-| AuditScorecard | `src/components/review/AuditScorecard.tsx` | Uses `KpiDetailsTable` on all screen sizes |
-| ManagementScorecard | `src/components/review/ManagementScorecard.tsx` | Uses `KpiDetailsTable` on all screen sizes |
+| Component | Issue | Fix |
+|-----------|-------|-----|
+| `KpiJourneySection` | Fixed 4-column grid | 2 columns on mobile (`grid-cols-2 lg:grid-cols-4`) |
+| `KpiReviewPanel` | Collapses at `lg` only | Collapse at `md` (`md:grid-cols-5`) |
+| `ReviewStageCard` | Content is okay but needs padding | Reduce padding on mobile |
+| `EmployeeScorecard` | Footer buttons cramped | Stack buttons vertically on mobile |
+| `AuditScorecard` | Same footer issue | Same fix |
+| `ManagementScorecard` | Same footer issue | Same fix |
+| `KpiHeaderSection` | Badges can overflow | Better wrapping |
+| `KpiMetricsSection` | Metrics grid tight | Single column on very small screens |
 
 ---
 
-## Implementation Pattern
+## Detailed Changes
 
-Replace the current table rendering:
+### 1. KpiJourneySection.tsx
 
+**Current (line 132-133):**
 ```tsx
-// CURRENT (lines ~556-570 in EmployeeScorecard.tsx)
-<CardContent>
-  <KpiDetailsTable
-    kpis={sortedKpis}
-    submissionMap={submissionMap}
-    viewType="team-review"
-    ...
-  />
-</CardContent>
+const gridCols = 'grid-cols-4';
+<div className={`grid ${gridCols} gap-3`}>
 ```
 
-With conditional mobile rendering:
-
+**Fixed:**
 ```tsx
-// NEW
-<CardContent className="px-3 sm:px-6">
-  {isMobile ? (
-    <div className="space-y-3">
-      {sortedKpis.map(kpi => {
-        const submission = submissionMap.get(kpi.id);
-        return (
-          <MobileKpiCard
-            key={kpi.id}
-            kpi={kpi}
-            submission={submission}
-            viewType="team-review"
-            onAction={openReviewSheet}
-            onView={openReviewSheet}
-            onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
-            onSendBack={openSendBackDialog}
-            onToggleExpand={toggleDailyExpand}
-            isExpanded={expandedDailyKpis.has(kpi.id)}
-            getOrgKpiValue={getOrgKpiValue}
-          />
-        );
-      })}
-      {sortedKpis.length === 0 && (
-        <p className="text-center text-muted-foreground py-8 text-sm">
-          No KPIs found for this period
-        </p>
-      )}
+// Remove const, use responsive classes directly
+<div className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-3">
+```
+
+This creates a 2x2 grid on mobile that expands to 1x4 on larger screens.
+
+---
+
+### 2. KpiReviewPanel.tsx
+
+**Current (line 59):**
+```tsx
+<div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+```
+
+**Fixed:**
+```tsx
+<div className="grid grid-cols-1 md:grid-cols-5 gap-3 md:gap-4">
+```
+
+This collapses to single column below `md` (768px) instead of `lg` (1024px).
+
+---
+
+### 3. ReviewStageCard.tsx
+
+**Current (line 60-69):**
+```tsx
+<div className={cn('p-3 rounded-lg border transition-all', ...)}>
+```
+
+**Fixed:**
+```tsx
+<div className={cn('p-2 sm:p-3 rounded-lg border transition-all', ...)}>
+```
+
+Also update inner elements:
+- Icon size: `h-5 w-5 sm:h-6 sm:w-6`
+- Title text: Already `text-xs` which is fine
+- Score badge: Reduce size on mobile
+
+---
+
+### 4. EmployeeScorecard.tsx - Footer (lines 725-796)
+
+**Current:**
+```tsx
+<SheetFooter className="flex-wrap gap-2 sm:justify-between">
+  {/* Two div groups with multiple buttons */}
+</SheetFooter>
+```
+
+**Fixed:**
+```tsx
+<SheetFooter className="flex-col sm:flex-row gap-2 sm:justify-between mt-4 pb-4">
+  {selectedKpi?.status === 'self_review' ? (
+    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+      {/* Buttons stack vertically on mobile */}
+    </div>
+    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+      {/* Action buttons stack vertically on mobile */}
     </div>
   ) : (
-    <KpiDetailsTable
-      kpis={sortedKpis}
-      submissionMap={submissionMap}
-      viewType="team-review"
-      ...existing props...
-    />
+    <Button variant="outline" className="w-full sm:w-auto" onClick={...}>
+      Close
+    </Button>
   )}
-</CardContent>
+</SheetFooter>
 ```
 
----
-
-## Changes Per File
-
-### 1. EmployeeScorecard.tsx (Team Review)
-
-**Location:** Lines 544-570
-
-- Keep the existing `isMobile` hook (already imported)
-- Replace `KpiDetailsTable` block with conditional rendering
-- Use `viewType="team-review"` for MobileKpiCard
-- Pass `onSendBack` prop for the send-back action
-
-### 2. AuditScorecard.tsx (Audit Panel)
-
-**Location:** Lines 569-593
-
-- Keep the existing `isMobile` hook (already imported)  
-- Replace `KpiDetailsTable` block with conditional rendering
-- Use `viewType="audit"` for MobileKpiCard
-- Pass `onSendBack` prop for the send-back action
-
-### 3. ManagementScorecard.tsx (Management Review)
-
-**Location:** Lines 598-620 (approximately)
-
-- Keep the existing `isMobile` hook (already imported)
-- Replace `KpiDetailsTable` block with conditional rendering  
-- Use `viewType="management"` for MobileKpiCard
-- Pass `onSendBack` prop for the send-back action
+Also add `className="w-full sm:w-auto"` to all buttons inside.
 
 ---
 
-## Additional Improvements
+### 5. AuditScorecard.tsx - Footer
 
-### Hide Sort Control on Mobile
+Apply the same footer pattern as EmployeeScorecard.
 
-The `KpiSortControl` in the header should also be hidden on mobile for cleaner UI:
+---
 
+### 6. ManagementScorecard.tsx - Footer
+
+Apply the same footer pattern.
+
+---
+
+### 7. KpiHeaderSection.tsx
+
+**Current (lines 33-56):**
 ```tsx
-// Already done in MyKpis.tsx, apply same pattern
-{!isMobile && <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />}
+<div className="flex flex-wrap items-center gap-2">
+  <Badge>...</Badge>
+  {/* Multiple badges */}
+</div>
 ```
 
-### Consistent Padding
+**Fixed:**
+```tsx
+<div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+```
 
-Add `px-3 sm:px-6` to CardContent for better mobile spacing (already used in MyKpis.tsx).
+Reduce gap on mobile for better fit.
 
 ---
 
-## Files Changed
+### 8. KpiMetricsSection.tsx
+
+**Current (line 86):**
+```tsx
+<div className="grid grid-cols-2 gap-3 text-sm">
+```
+
+**Fixed:**
+```tsx
+<div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 text-sm">
+```
+
+Stack vertically on very small screens.
+
+---
+
+## File Changes Summary
 
 | File | Change Type | Lines Affected |
 |------|-------------|----------------|
-| `src/components/review/EmployeeScorecard.tsx` | Modify | ~544-570 |
-| `src/components/review/AuditScorecard.tsx` | Modify | ~569-593 |
-| `src/components/review/ManagementScorecard.tsx` | Modify | ~598-620 |
-| `DOCUMENTATION.md` | Update | Add mobile UI section note |
+| `src/components/review/KpiJourneySection.tsx` | Modify | ~132-144 |
+| `src/components/review/KpiReviewPanel.tsx` | Modify | ~59 |
+| `src/components/review/ReviewStageCard.tsx` | Modify | ~60-75 |
+| `src/components/review/EmployeeScorecard.tsx` | Modify | ~725-796 (footer) |
+| `src/components/review/AuditScorecard.tsx` | Modify | Footer section |
+| `src/components/review/ManagementScorecard.tsx` | Modify | Footer section |
+| `src/components/review/KpiHeaderSection.tsx` | Modify | ~24, 34 |
+| `src/components/review/KpiMetricsSection.tsx` | Modify | ~86 |
+| `DOCUMENTATION.md` | Update | Mobile UI section |
 
 ---
 
-## Mobile UX After Implementation
+## Visual Comparison
 
-When viewing an employee's KPIs on mobile:
+### Before (Mobile)
+```
++---------------------------+
+| [Cat] [Status] [Period].. | <- Badges overflow
+|---------------------------|
+| KRA Name                  |
+| KPI Name                  |
+|---------------------------|
+| [S][M][A][Mg] <- 4 tiny   | <- Unreadable columns
+|   columns squeezed        |
+|---------------------------|
+| [Cancel][Back][Query]     | <- Buttons cramped
+| [Draft][Approve]          |
++---------------------------+
+```
 
-1. Each KPI displays as a **touch-friendly card** showing:
-   - Category color dot + name
-   - Status badge
-   - KRA/KPI names (tappable for logic)
-   - Target, Weight, Score metrics
-   - Review/View button + Daily expand toggle
-
-2. **Action buttons** are appropriately sized for touch targets
-
-3. **No horizontal scrolling** required
-
-4. **Consistent with My KPIs page** user experience
+### After (Mobile)
+```
++---------------------------+
+| [Category Badge]          |
+| [Status] [Period] [Wt%]   | <- Wrapped nicely
+|---------------------------|
+| KRA Name                  |
+| KPI Name                  |
+|---------------------------|
+| [Self]    [Manager]       | <- 2x2 grid
+| [Auditor] [Mgmt]          |    readable
+|---------------------------|
+| [Cancel]                  | <- Full width
+| [Send Back]               |    stacked
+| [Raise Query]             |    buttons
+| [Save Draft]              |
+| [Approve]                 |
++---------------------------+
+```
 
 ---
 
 ## Testing Checklist
 
-- Team Review: Click employee → verify cards on mobile, table on desktop
-- Audit Panel: Same verification
-- Management Review: Same verification
-- Daily KPIs: Verify expand/collapse works on mobile cards
-- Send Back: Verify action works from mobile cards
-- Review button: Opens review sheet correctly
+- [ ] Team Review sheet opens correctly on mobile
+- [ ] Review Journey shows as 2x2 grid on mobile, 4 columns on desktop
+- [ ] Footer buttons are full-width and stacked on mobile
+- [ ] All form inputs (score, remarks, evidence) are usable on mobile
+- [ ] Audit Panel sheet has same mobile-friendly layout
+- [ ] Management Review sheet has same mobile-friendly layout
+- [ ] N/A confirmation card displays properly on mobile
+- [ ] Daily submission summary is scrollable on mobile
+- [ ] No horizontal scroll required on any view
