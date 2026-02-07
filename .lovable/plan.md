@@ -1,144 +1,313 @@
 
-# Plan: Fix Missing UOM Parameter in Rating Calculations
+# Plan: User-Friendly Import with R-Column Based Qualitative Options
 
 ## Problem Summary
 
-The KPI **"naye style k KPI Scores dalenge hum yaha"** with:
-- **UOM**: `%` (Percentage)
-- **Criteria**: Higher is Better
-- **R5**: `>98` → parsed as `98`
-- **Achieved Value**: `98`
-
-**Expected**: Rating 5 (since 98 ≥ 98)  
-**Actual**: Rating 4
-
-## Root Cause
-
-Two components call `calculateRating()` without passing the `uom` parameter. When `uom` is not passed, the function falls back to **ratio-based calculation** instead of using the **direct threshold comparison** logic for Percentage UOM.
-
-| File | Line | Issue |
-|------|------|-------|
-| `src/pages/SelfReview.tsx` | 321 | Missing `uomType`, `qualitativeOptions`, `uom` parameters |
-| `src/components/dashboard/KpiLogicModal.tsx` | 442-448 | Missing last 3 parameters |
-
-### Current (WRONG) Call in SelfReview.tsx:
-```typescript
-return calculateRating(
-  achieved,
-  kpi.target_value,
-  thresholds,
-  kpi.criteria || 'Higher is Better',
-  kpi.weightage || 0
-);  // ❌ Missing uomType, qualitativeOptions, uom
+Currently, importing Tiered KPIs requires users to define `qualitativeOptions` as a complex JSON array:
+```
+[{"label":"Compliant","rating":5,"definition":"All audits passed"},{"label":"Partial","rating":3,"definition":"Minor issues"}]
 ```
 
-### Correct Call (from MyKpis.tsx for reference):
-```typescript
-return calculateRating(
-  achieved,
-  kpi.target_value,
-  thresholds,
-  kpi.criteria || 'Higher is Better',
-  kpi.weightage || 0,
-  uomType,                         // ✅
-  kpi.qualitative_options,         // ✅
-  kpi.uom                          // ✅ Required for % UOM handling
-);
+This is error-prone and not user-friendly for non-technical users.
+
+---
+
+## Solution Overview
+
+**Use the existing R5-R0 columns to define qualitative option labels!**
+
+When `uomType = binary` or `uomType = tiered`:
+1. Check if `qualitativeOptions` contains a trigger flag (`auto`, `true`, blank)
+2. Scan R5, R4, R3, R2, R1, R0 columns for **text labels**
+3. Auto-generate the `qualitative_options` array
+4. **Only the defined options will appear in the frontend** (no hardcoded Yes/No)
+
+---
+
+## Excel Examples
+
+### Example 1: Yes/No Binary (2 options only visible)
+
+| uomType | R5  | R4 | R3 | R2 | R1 | R0 | qualitativeOptions |
+|---------|-----|----|----|----|----|----|--------------------|
+| binary  | Yes |    |    |    |    | No | auto               |
+
+**Result:**
+- `qualitative_options = [{label: "Yes", rating: 5}, {label: "No", rating: 0}]`
+- Frontend shows only **Yes** and **No** buttons
+
+### Example 2: Custom Binary Labels
+
+| uomType | R5   | R4 | R3 | R2 | R1 | R0      | qualitativeOptions |
+|---------|------|----|----|----|----|---------|-------------------|
+| binary  | Done |    |    |    |    | Pending | auto              |
+
+**Result:**
+- `qualitative_options = [{label: "Done", rating: 5}, {label: "Pending", rating: 0}]`
+- Frontend shows only **Done** and **Pending** buttons
+
+### Example 3: 3-Tier Compliance
+
+| uomType | R5        | R4 | R3      | R2 | R1 | R0            | qualitativeOptions |
+|---------|-----------|----|---------|----|----|--------------|--------------------|
+| tiered  | Compliant |    | Partial |    |    | Non-Compliant | auto               |
+
+**Result:**
+- `qualitative_options = [{label: "Compliant", rating: 5}, {label: "Partial", rating: 3}, {label: "Non-Compliant", rating: 0}]`
+- Frontend shows only these **3 options**
+
+### Example 4: 5-Level Risk Rating
+
+| uomType | R5  | R4     | R3     | R2       | R1 | R0     | qualitativeOptions |
+|---------|-----|--------|--------|----------|----|---------|--------------------|
+| tiered  | Low | Medium | High   | Critical |    | Severe | auto               |
+
+**Result:**
+- `qualitative_options = [{label: "Low", rating: 5}, {label: "Medium", rating: 4}, {label: "High", rating: 3}, {label: "Critical", rating: 2}, {label: "Severe", rating: 0}]`
+- Frontend shows only these **5 options**
+
+---
+
+## Logic Flow
+
+```text
++--------------------------------------------------+
+|          Parse Qualitative Options               |
++--------------------------------------------------+
+              |
+              v
+  Is uomType = 'binary' or 'tiered'?
+              |
+     No ------+------> Skip qualitative processing
+              |
+             Yes
+              |
+              v
+  qualitativeOptions = 'auto' | 'true' | empty?
+              |
+     No ------+------> Use existing JSON/template parsing
+              |
+             Yes
+              |
+              v
+   +---------------------------------+
+   |  Scan R5, R4, R3, R2, R1, R0    |
+   |  for non-empty text labels     |
+   +---------------------------------+
+              |
+              v
+   Create qualitative_options array:
+   - label = text from R column
+   - rating = column number (5, 4, 3, 2, 1, 0)
+   - definition = same as label (or use "|" syntax)
+              |
+              v
+   Store in database
+              |
+              v
+   Frontend renders ONLY these options
 ```
 
 ---
 
-## Solution
+## Frontend Behavior Change
 
-### 1. Fix SelfReview.tsx (Line 321)
+### Current Behavior (Binary)
+- Uses hardcoded `BINARY_OPTIONS` constant: `[{label: "Yes", rating: 5}, {label: "No", rating: 0}]`
+- Always shows "Yes" and "No" regardless of what was imported
 
-Add the missing parameters:
+### New Behavior (After Fix)
+- For binary/tiered KPIs with `qualitative_options` stored in database, use those
+- Only fallback to `BINARY_OPTIONS` if `qualitative_options` is null AND `uomType === 'binary'`
+- This means imported options like "Done/Pending" will display correctly
 
-```typescript
-// Line 321 - Change from:
-return calculateRating(achieved, kpi.target_value, thresholds, kpi.criteria || 'Higher is Better', kpi.weightage || 0);
+---
 
-// To:
-return calculateRating(
-  achieved,
-  kpi.target_value,
-  thresholds,
-  kpi.criteria || 'Higher is Better',
-  kpi.weightage || 0,
-  uomType,
-  kpi.qualitative_options as QualitativeOption[] | null,
-  kpi.uom
-);
-```
+## Extended Syntax (Optional)
 
-Also need to add import for `QualitativeOption` type.
+For custom definitions, support `Label|Definition` format:
 
-### 2. Fix KpiLogicModal.tsx (Lines 442-448)
+| R5 | R0 |
+|----|----|
+| Yes\|Task completed successfully | No\|Task not completed |
 
-Add the missing parameters:
-
-```typescript
-// Lines 442-448 - Change from:
-const result = calculateRating(
-  achievedNum,
-  kpi.target_value,
-  { r5: kpi.r5, r4: kpi.r4, r3: kpi.r3, r2: kpi.r2, r1: kpi.r1, r0: kpi.r0 },
-  kpi.criteria || 'Higher is Better',
-  kpi.weightage || 0
-);
-
-// To:
-const result = calculateRating(
-  achievedNum,
-  kpi.target_value,
-  { r5: kpi.r5, r4: kpi.r4, r3: kpi.r3, r2: kpi.r2, r1: kpi.r1, r0: kpi.r0 },
-  kpi.criteria || 'Higher is Better',
-  kpi.weightage || 0,
-  kpi.uom_type || 'numeric',
-  kpi.qualitative_options || null,
-  kpi.uom
-);
+**Result:**
+```json
+[
+  { "label": "Yes", "rating": 5, "definition": "Task completed successfully" },
+  { "label": "No", "rating": 0, "definition": "Task not completed" }
+]
 ```
 
 ---
 
-## File Changes
+## Technical Implementation
 
-| File | Change |
-|------|--------|
-| `src/pages/SelfReview.tsx` | Add missing `uomType`, `qualitativeOptions`, `uom` parameters to line 321 |
-| `src/components/dashboard/KpiLogicModal.tsx` | Add missing parameters to lines 442-448 |
+### Phase 1: Update Import Parsing Logic
+
+**File: `src/pages/admin/ImportData.tsx`**
+
+Add new `buildOptionsFromRColumns()` function:
+
+```typescript
+const buildOptionsFromRColumns = (row: KpiImportRow): QualitativeOption[] | undefined => {
+  const rColumns: { key: keyof KpiImportRow; rating: number }[] = [
+    { key: 'r5', rating: 5 },
+    { key: 'r4', rating: 4 },
+    { key: 'r3', rating: 3 },
+    { key: 'r2', rating: 2 },
+    { key: 'r1', rating: 1 },
+    { key: 'r0', rating: 0 },
+  ];
+
+  const options: QualitativeOption[] = [];
+
+  for (const { key, rating } of rColumns) {
+    const value = row[key];
+    if (!value || typeof value !== 'string' && typeof value !== 'number') continue;
+    
+    const strValue = String(value).trim();
+    if (!strValue || !isNaN(Number(strValue))) continue; // Skip empty or numeric values
+    
+    // Check for extended syntax: "Label|Definition"
+    if (strValue.includes('|')) {
+      const [label, definition] = strValue.split('|').map(s => s.trim());
+      if (label) {
+        options.push({ label, rating, definition: definition || label });
+      }
+    } else {
+      // Plain label - use label as definition
+      options.push({ label: strValue, rating, definition: strValue });
+    }
+  }
+
+  return options.length >= 2 ? options : undefined;
+};
+```
+
+Update `parseQualitativeOptions()`:
+
+```typescript
+const parseQualitativeOptions = (value: any, row: KpiImportRow): QualitativeOption[] | undefined => {
+  const uomType = String(row.uomType || 'numeric').toLowerCase();
+  
+  // 1. For binary/tiered, check for auto-build flag
+  if (uomType === 'binary' || uomType === 'tiered') {
+    const flagValue = String(value || '').toLowerCase().trim();
+    if (!value || flagValue === 'auto' || flagValue === 'true' || flagValue === 'tiered' || flagValue === 'binary') {
+      return buildOptionsFromRColumns(row);
+    }
+  }
+
+  // 2. Check for template shorthand (e.g., "compliance_3")
+  if (typeof value === 'string' && TIERED_TEMPLATES[value.trim()]) {
+    return TIERED_TEMPLATES[value.trim()];
+  }
+
+  // 3. Existing JSON parsing
+  if (typeof value === 'object' && Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed;
+    } catch { /* ignore */ }
+  }
+
+  return undefined;
+};
+```
+
+### Phase 2: Update Edge Function
+
+**File: `supabase/functions/import-kpis/index.ts`**
+
+Mirror the same logic server-side for background imports.
+
+### Phase 3: Update Frontend Components
+
+**Key Change:** When `qualitative_options` is stored in the database, use those instead of hardcoded `BINARY_OPTIONS`.
+
+**Files to Update:**
+- `src/components/review/QualitativeValueInput.tsx`
+- `src/components/review/QualitativeSelect.tsx`
+- `src/components/review/DailySubmissionGrid.tsx`
+- `src/components/review/WeeklySubmissionTable.tsx`
+- `src/components/review/DailySubmissionSummary.tsx`
+
+**Example Change (QualitativeValueInput.tsx):**
+
+```typescript
+// BEFORE: Always uses BINARY_OPTIONS for binary type
+const options = uomType === 'binary' ? BINARY_OPTIONS : qualitativeOptions || [];
+
+// AFTER: Use qualitativeOptions if available, fallback to BINARY_OPTIONS only if null
+const options = qualitativeOptions?.length 
+  ? qualitativeOptions 
+  : (uomType === 'binary' ? BINARY_OPTIONS : []);
+```
+
+### Phase 4: Update Template Download
+
+Update the downloadable Excel template to include:
+- Reference sheet showing R-column format for qualitative KPIs
+- Examples for Yes/No, 3-tier, 5-tier configurations
 
 ---
 
-## Expected Behavior After Fix
+## Validation Logic
 
-For the problematic KPI:
-1. `calculateRating()` receives `uom = '%'`
-2. Function branches to `calculatePercentageRating()`
-3. Compares `98 >= 98` (R5 threshold) → **TRUE**
-4. Returns **Rating 5**
+Add helpful error messages:
 
----
-
-## Components Affected
-
-All these areas will now correctly calculate % UOM KPIs:
-
-| Component | Status After Fix |
-|-----------|-----------------|
-| Self Review Page | ✅ Fixed |
-| KPI Logic Modal (debug tool) | ✅ Fixed |
-| My KPIs Page | Already correct |
-| Scoring Simulator | Already correct |
-| AchievedValueScoreInput | Already correct |
+```typescript
+// In validation logic
+if ((uomType === 'binary' || uomType === 'tiered') && !qualitativeOptions) {
+  const rOptions = buildOptionsFromRColumns(row);
+  if (!rOptions || rOptions.length < 2) {
+    errors.push(
+      `Row ${i}: ${uomType} KPI requires at least 2 options. ` +
+      `Enter labels in R5-R0 columns (e.g., R5="Yes", R0="No") and set qualitativeOptions to "auto" or leave blank.`
+    );
+  }
+}
+```
 
 ---
 
-## Validation Checklist
+## File Changes Summary
 
-After implementation:
-- [ ] % KPIs on Self Review page calculate correctly
-- [ ] % KPIs in KPI Logic Modal debug tool show correct ratings
-- [ ] Existing numeric KPIs still work (no regression)
-- [ ] The specific KPI "5ka dum" shows Rating 5 when achieved = 98
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `src/pages/admin/ImportData.tsx` | Modify | Add `buildOptionsFromRColumns()`, update `parseQualitativeOptions()` |
+| `supabase/functions/import-kpis/index.ts` | Modify | Mirror R-column parsing logic for background imports |
+| `src/components/review/QualitativeValueInput.tsx` | Modify | Use stored options if available |
+| `src/components/review/QualitativeSelect.tsx` | Modify | Use stored options if available |
+| `src/components/review/DailySubmissionGrid.tsx` | Modify | Use stored options if available |
+| `src/components/review/WeeklySubmissionTable.tsx` | Modify | Use stored options if available |
+| `src/components/review/DailySubmissionSummary.tsx` | Modify | Use stored options if available |
+| `DOCUMENTATION.md` | Modify | Add section on simplified import syntax |
+
+---
+
+## Backward Compatibility
+
+| Format | Status |
+|--------|--------|
+| Existing JSON arrays | Still works |
+| Template shorthand (`compliance_3`) | Still works |
+| New R-column + `auto` flag | New feature |
+| New `Label\|Definition` extended syntax | New feature |
+| Existing binary KPIs without options | Still use default Yes/No |
+
+---
+
+## Testing Checklist
+
+- [ ] Yes/No binary import shows only "Yes" and "No" buttons
+- [ ] Custom binary labels (Done/Pending) display correctly
+- [ ] 3-tier compliance shows only defined options
+- [ ] Empty R columns are skipped correctly
+- [ ] Extended `Label|Definition` syntax works
+- [ ] Template shorthand still works (`compliance_3`)
+- [ ] JSON format still works (backward compatibility)
+- [ ] Background import handles all new formats
+- [ ] Existing binary KPIs (without stored options) still work
