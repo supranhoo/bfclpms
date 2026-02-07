@@ -161,7 +161,7 @@ export function DailySubmissionSummary({
   const content = (
     <>
       {/* Stats Row */}
-      <div className={`grid grid-cols-4 ${compact ? 'gap-2' : 'gap-3'}`}>
+      <div className={`grid grid-cols-2 sm:grid-cols-4 ${compact ? 'gap-2' : 'gap-3'}`}>
         <div className={`${compact ? 'p-2' : 'p-3'} bg-muted/50 rounded-lg text-center`}>
           <div className="flex items-center justify-center gap-1 mb-1">
             <Calendar className={`${compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} text-muted-foreground`} />
@@ -209,21 +209,22 @@ export function DailySubmissionSummary({
 
       {/* Submissions Table with Dynamic Reviewer Columns */}
       <ScrollArea className={`${compact ? 'h-[200px]' : 'h-[250px]'} rounded-md border mt-3`}>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[80px] sticky left-0 bg-background">Date</TableHead>
-              {visibleColumns.map(col => (
-                <TableHead 
-                  key={col.key} 
-                  className={cn('text-center min-w-[80px]', col.colorClass)}
-                >
-                  {compact ? col.shortLabel : col.label}
-                </TableHead>
-              ))}
-              <TableHead className="text-right">Submitted At</TableHead>
-            </TableRow>
-          </TableHeader>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[60px] sm:w-[80px] sticky left-0 bg-background">Date</TableHead>
+                {visibleColumns.map(col => (
+                  <TableHead 
+                    key={col.key} 
+                    className={cn('text-center min-w-[60px] sm:min-w-[80px]', col.colorClass)}
+                  >
+                    {col.shortLabel}
+                  </TableHead>
+                ))}
+                <TableHead className="text-right hidden sm:table-cell">Submitted At</TableHead>
+              </TableRow>
+            </TableHeader>
           <TableBody>
             {sortedSubmissions.map((submission) => {
               // Parse full date string directly (YYYY-MM-DD format)
@@ -312,14 +313,15 @@ export function DailySubmissionSummary({
                     );
                   })}
                   
-                  <TableCell className="text-right text-sm text-muted-foreground">
+                  <TableCell className="text-right text-sm text-muted-foreground hidden sm:table-cell">
                     {formattedTimestamp}
                   </TableCell>
                 </TableRow>
               );
             })}
           </TableBody>
-        </Table>
+          </Table>
+        </div>
       </ScrollArea>
     </>
   );

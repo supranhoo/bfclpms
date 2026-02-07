@@ -172,10 +172,11 @@ export function ManagerDailyOverrideEditor({
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Bulk Actions */}
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex flex-col sm:flex-row gap-2">
           <Button
             variant="outline"
             size="sm"
+            className="w-full sm:w-auto"
             onClick={handleMarkAllMissingNo}
             disabled={dayEntries.filter(e => e.isMissing && !overrides.has(e.date)).length === 0}
           >
@@ -185,6 +186,7 @@ export function ManagerDailyOverrideEditor({
           <Button
             variant="outline"
             size="sm"
+            className="w-full sm:w-auto"
             onClick={handleResetAll}
             disabled={overrides.size === 0}
           >
@@ -198,10 +200,10 @@ export function ManagerDailyOverrideEditor({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[80px]">Date</TableHead>
-                <TableHead>Current Value</TableHead>
-                <TableHead>Manager Override</TableHead>
-                <TableHead className="text-right">Status</TableHead>
+                <TableHead className="w-[60px] sm:w-[80px]">Date</TableHead>
+                <TableHead className="min-w-[70px]">Current</TableHead>
+                <TableHead className="min-w-[100px]">Override</TableHead>
+                <TableHead className="text-right hidden sm:table-cell">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -248,7 +250,7 @@ export function ManagerDailyOverrideEditor({
                         </SelectContent>
                       </Select>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right hidden sm:table-cell">
                       {entry.hasOverride ? (
                         <Badge variant="outline" className="bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200">
                           {entry.isMissing ? 'Filled' : 'Changed'}
@@ -265,17 +267,17 @@ export function ManagerDailyOverrideEditor({
         </ScrollArea>
 
         {/* Recalculated Score Preview */}
-        <div className="p-4 bg-muted rounded-lg space-y-3">
-          <div className="flex items-center justify-between text-sm">
+        <div className="p-3 sm:p-4 bg-muted rounded-lg space-y-2 sm:space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-sm">
             <span className="text-muted-foreground">Original Score:</span>
             <Badge className={getScoreBadgeClass(originalScore || 0)}>
               {originalScore ?? '—'} - {getScoreLabel(originalScore || 0)}
             </Badge>
           </div>
           <div className="flex items-center justify-center">
-            <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            <ArrowRight className="h-4 w-4 text-muted-foreground rotate-90 sm:rotate-0" />
           </div>
-          <div className="flex items-center justify-between text-sm font-medium">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-sm font-medium">
             <span>New Score:</span>
             <Badge className={getScoreBadgeClass(recalculatedResult.score || 0)}>
               {recalculatedResult.score ?? '—'} - {getScoreLabel(recalculatedResult.score || 0)}
