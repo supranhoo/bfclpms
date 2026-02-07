@@ -1,239 +1,160 @@
 
 
-# Plan: Sidebar Design Refresh - "Brand Cohesive" Polish
+# Plan: Add "Review Timeline" Button to View KPI Details for All Users
 
 ## Summary
 
-This plan elevates the sidebar from its current "default" look to a polished, professional design that aligns with the colorful dashboard cards. The approach combines the **Brand Cohesive Refresh** (primary blue accents, better typography) with **Modern Pill** elements (floating shapes, better spacing).
+The "Timeline" button is already designed to appear in the KPI header section within `KpiReviewPanel`, but the callback is not being passed from the parent scorecard components. This plan wires up the existing timeline functionality to all user views.
 
 ---
 
-## Current Issues Analysis
+## Current State
 
-| Issue | Current State | Impact |
-|-------|--------------|--------|
-| **Harsh active state** | Black/dark background on active item | Disconnects from soft blue dashboard palette |
-| **Weak section headers** | Light gray, too subtle | Poor scannability |
-| **Inconsistent icons** | Only some items have visible icons | Hard to scan quickly |
-| **"Back to Hub" prominence** | Large outline button in header | Takes prime real estate |
-| **Flat menu items** | Full-width highlight bars | Feels dated compared to modern SaaS apps |
-| **Profile section** | Attached to bottom edge | Feels cramped |
+| File | `timelineOpen` state | `KpiTimeline` component | `onOpenTimeline` passed | Timeline Button Shows |
+|------|---------------------|------------------------|------------------------|----------------------|
+| MyKpis.tsx | Line 156 | Line 1225 | **NO** | **NO** |
+| EmployeeScorecard.tsx | Line 128 | Line 890 | **NO** | **NO** |
+| AuditScorecard.tsx | Line 123 | Line 892 | **NO** | **NO** |
+| ManagementScorecard.tsx | Line 128 | Line 923 | **NO** | **NO** |
 
 ---
 
-## Design Changes
+## Root Cause
 
-### 1. Brand-Aligned Active State
+The `KpiHeaderSection` component checks if `onOpenTimeline` prop exists before rendering the Timeline button:
 
-Replace the dark accent with primary blue styling:
-
-```text
-Before:
-+---------------------------+
-| [icon] Team Review        |  <- Black/dark background
-+---------------------------+
-
-After:
-+---------------------------+
-|▌ [icon] Team Review       |  <- Light blue bg + left accent bar + blue text
-+---------------------------+
+```tsx
+// src/components/review/KpiHeaderSection.tsx (lines 45-55)
+{onOpenTimeline && (
+  <Button variant="outline" size="sm" onClick={onOpenTimeline}>
+    <Clock className="h-3 w-3" />
+    Timeline
+  </Button>
+)}
 ```
 
-**CSS Changes (sidebar.tsx & index.css):**
-- Active background: `bg-primary/10` (light blue tint)
-- Active text: `text-primary` (brand blue)
-- Left accent bar: 3px `border-l-primary` on active items
-- Remove dark `sidebar-accent` for active state
-
-### 2. Enhanced Section Headers
-
-Make headers more prominent and readable:
-
-```text
-Before:                      After:
-MAIN ▼                       MAIN ▼
-(light gray, barely visible) (slate-700, semi-bold, better contrast)
-```
-
-**Changes (CollapsibleSidebarGroup.tsx):**
-- Text color: `text-sidebar-foreground/80` (from `/60`)
-- Font weight: `font-semibold` (from `font-medium`)
-- Add subtle separator line below header
-
-### 3. Modern "Pill" Active States
-
-Menu items become floating pills with rounded corners and margins:
-
-```text
-Before:                        After:
-+----------------------------+ +----------------------------+
-|[icon] Dashboard            | |  ▌ [icon] Dashboard      | <- Pill with margin
-+----------------------------+ +----------------------------+
-|[icon] My KPIs              | |    [icon] My KPIs          |
-+----------------------------+ +----------------------------+
-```
-
-**Changes (SidebarMenuButton styles):**
-- Add `mx-2` horizontal margin
-- Rounder corners: `rounded-lg` (from `rounded-md`)
-- Increase gap between items: `gap-1.5` (from `gap-1`)
-
-### 4. Relocate "Back to Hub"
-
-Move from header to footer, as a subtle link:
-
-```text
-Before (Header):              After (Footer):
-+---------------------------+ +---------------------------+
-| [Logo] Performance Mgmt   | | [Avatar] Ankit Choudhary  |
-| [←] Back to Hub (button)  | | Admin                     |
-+---------------------------+ | ← Back to Hub    [logout] |
-                              +---------------------------+
-```
-
-**Changes (AppSidebar.tsx):**
-- Remove "Back to Hub" button from header
-- Add as text link in footer, left of logout icon
-- Separator between user info and hub link
-
-### 5. Refined Profile Section
-
-Add subtle card styling and better spacing:
-
-```text
-+---------------------------+
-| ← Back to Hub             |  <- Subtle link
-|---------------------------|
-| [AC] Ankit Choudhary   →  |  <- Floating card look
-|      Admin                |
-+---------------------------+
-```
-
-**Changes (AppSidebar.tsx):**
-- Wrap profile in subtle bordered container
-- Add "Back to Hub" above profile
-- Increase footer padding
+Since none of the parent scorecards pass this prop, the button never renders.
 
 ---
 
-## Color Palette Alignment
+## Solution
 
-Matching the dashboard's colorful cards:
+Add `onOpenTimeline={() => setTimelineOpen(true)}` to each `KpiReviewPanel` instance:
 
-| Element | Current | New |
-|---------|---------|-----|
-| Active item bg | `sidebar-accent` (dark gray) | `primary/10` (soft blue) |
-| Active item text | `sidebar-accent-foreground` (white) | `primary` (brand blue) |
-| Active left bar | None | `border-l-3 border-primary` |
-| Section headers | `sidebar-foreground/60` | `sidebar-foreground/80` |
-| Hover state | `sidebar-accent/50` | `primary/5` |
+### 1. MyKpis.tsx (Employee's own KPIs view)
+```tsx
+// Line ~854-864
+<KpiReviewPanel
+  kpi={selectedKpi}
+  submission={submissionMap.get(selectedKpi.id) || null}
+  allKpis={allKpis || []}
+  allSubmissions={submissions || []}
+  viewLevel="employee"
+  currentUserId={profile?.id}
+  selectedPeriod={selectedPeriod}
+  selectedYear={selectedYear}
+  onOpenFullHistory={() => setTrackerModalOpen(true)}
+  onOpenTimeline={() => setTimelineOpen(true)}  // ADD THIS
+/>
+```
+
+### 2. EmployeeScorecard.tsx (Manager viewing team member)
+```tsx
+// Line ~618-630
+<KpiReviewPanel
+  kpi={selectedKpi}
+  submission={submissionMap.get(selectedKpi.id) || null}
+  allKpis={allKpis || []}
+  allSubmissions={submissions || []}
+  queries={queryMap.get(selectedKpi.id) || []}
+  viewLevel="manager"
+  currentUserId={user?.id}
+  selectedPeriod={selectedPeriod}
+  selectedYear={selectedYear}
+  onOpenQueryHistory={() => setHistoryDialogOpen(true)}
+  onOpenFullHistory={() => setTrackerModalOpen(true)}
+  onOpenTimeline={() => setTimelineOpen(true)}  // ADD THIS
+/>
+```
+
+### 3. AuditScorecard.tsx (Auditor view)
+```tsx
+// Line ~642-653
+<KpiReviewPanel
+  kpi={selectedKpi}
+  submission={submissionMap.get(selectedKpi.id) || null}
+  allKpis={allKpis || []}
+  allSubmissions={submissions || []}
+  queries={queryMap.get(selectedKpi.id) || []}
+  viewLevel="auditor"
+  selectedPeriod={selectedPeriod}
+  selectedYear={selectedYear}
+  onOpenQueryHistory={() => setHistoryDialogOpen(true)}
+  onOpenFullHistory={() => setTrackerModalOpen(true)}
+  onOpenTimeline={() => setTimelineOpen(true)}  // ADD THIS
+/>
+```
+
+### 4. ManagementScorecard.tsx (Management view)
+```tsx
+// Line ~671-682
+<KpiReviewPanel
+  kpi={selectedKpi}
+  submission={submissionMap.get(selectedKpi.id) || null}
+  allKpis={allKpis || []}
+  allSubmissions={submissions || []}
+  queries={queryMap.get(selectedKpi.id) || []}
+  viewLevel="management"
+  selectedPeriod={selectedPeriod}
+  selectedYear={selectedYear}
+  onOpenQueryHistory={() => setHistoryDialogOpen(true)}
+  onOpenFullHistory={() => setTrackerModalOpen(true)}
+  onOpenTimeline={() => setTimelineOpen(true)}  // ADD THIS
+/>
+```
 
 ---
 
 ## Files to Modify
 
-| File | Changes |
-|------|---------|
-| `src/index.css` | Update sidebar CSS variables for brand alignment |
-| `src/components/ui/sidebar.tsx` | Update `sidebarMenuButtonVariants` for pill styling and active states |
-| `src/components/layout/CollapsibleSidebarGroup.tsx` | Enhanced section headers, better spacing |
-| `src/components/layout/AppSidebar.tsx` | Relocate "Back to Hub" to footer, enhanced profile section |
+| File | Change |
+|------|--------|
+| `src/pages/MyKpis.tsx` | Add `onOpenTimeline` prop to KpiReviewPanel |
+| `src/components/review/EmployeeScorecard.tsx` | Add `onOpenTimeline` prop to KpiReviewPanel |
+| `src/components/review/AuditScorecard.tsx` | Add `onOpenTimeline` prop to KpiReviewPanel |
+| `src/components/review/ManagementScorecard.tsx` | Add `onOpenTimeline` prop to KpiReviewPanel |
 
 ---
 
-## Technical Implementation
+## Visual Result
 
-### index.css Updates
-```css
-:root {
-  /* Existing sidebar vars - adjust accent */
-  --sidebar-accent: 200 98% 39%;         /* Primary blue for active */
-  --sidebar-accent-foreground: 200 98% 39%; /* Blue text on active */
-  
-  /* New custom property for soft highlight */
-  --sidebar-active-bg: 200 98% 95%;      /* Very light blue */
-}
-```
-
-### SidebarMenuButton Variant Updates (sidebar.tsx)
-```tsx
-// Active state styling
-"data-[active=true]:bg-primary/10 data-[active=true]:text-primary data-[active=true]:border-l-[3px] data-[active=true]:border-primary data-[active=true]:font-medium"
-
-// Add horizontal margins for pill effect
-"mx-2 rounded-lg"
-```
-
-### CollapsibleSidebarGroup Updates
-```tsx
-// Section header styling
-<span className="text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/80">
-  {label}
-</span>
-
-// Add separator after header
-<div className="h-px bg-sidebar-border/30 mt-1" />
-```
-
-### AppSidebar Footer Updates
-```tsx
-<SidebarFooter className="border-t border-sidebar-border p-4">
-  {/* Back to Hub link */}
-  <button 
-    onClick={() => handleNavigation('/home')}
-    className="flex items-center gap-2 text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground mb-3"
-  >
-    <ArrowLeft className="h-3 w-3" />
-    Back to Hub
-  </button>
-  
-  {/* Profile card with subtle border */}
-  <div className="flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent/5 border border-sidebar-border/30">
-    <Avatar />
-    <UserInfo />
-    <LogoutButton />
-  </div>
-</SidebarFooter>
-```
-
----
-
-## Visual Comparison
+After this change, the "Timeline" button will appear in the KPI header section for all users:
 
 ```text
-BEFORE:                           AFTER:
-+---------------------------+     +---------------------------+
-| [Logo] Performance Mgmt   |     | [Logo] Performance Mgmt   |
-| [←] Back to Hub (button)  |     |        BFCL               |
-+---------------------------+     +---------------------------+
-| MAIN ▼                    |     | MAIN ▼                    |
-|   Dashboard               |     | ┃ Dashboard         (blue)|
-|   My KPIs                 |     |   My KPIs                 |
-|   Inbox [3]               |     |   Inbox [3]               |
-+---------------------------+     +---------------------------+
-| MANAGER ▼                 |     | MANAGER ▼                 |
-| ███ Team Review ███       |     | ▌ Team Review       (blue)|
-+---------------------------+     +---------------------------+
-|                           |     |                           |
-| [AC] Ankit Choudhary  →   |     | ← Back to Hub             |
-| Admin                     |     | ┌─────────────────────────┐
-+---------------------------+     | │ [AC] Ankit Choudhary  → │
-                                  | │ Admin                   │
-                                  | └─────────────────────────┘
-                                  +---------------------------+
++-----------------------------------------------------------------+
+| [PMS]          [Approved]  [February 2026]  [40%]  [Timeline] ←--|-- NEW BUTTON
++-----------------------------------------------------------------+
+| Performance Review Cycle Management                              |
+| On-time Completion of Monthly Performance Reviews...             |
++-----------------------------------------------------------------+
 ```
+
+The button will be visible:
+- For employees viewing their own KPIs (My KPIs page)
+- For managers viewing team member KPIs (Team Review)
+- For auditors reviewing KPIs (Audit Panel)
+- For management reviewing KPIs (Management Review)
+- For all statuses including "Approved"
 
 ---
 
 ## Testing Checklist
 
-- [ ] Active menu item shows light blue background with left accent bar
-- [ ] Active menu item text is primary blue color
-- [ ] Section headers are more visible (darker, bolder)
-- [ ] Menu items have pill shape with slight horizontal margins
-- [ ] "Back to Hub" appears in footer as subtle link
-- [ ] Profile section has subtle card styling
-- [ ] Hover states use soft blue tint
-- [ ] Mobile sidebar retains all functionality
-- [ ] Dark mode (if applicable) maintains contrast
+- [ ] Timeline button appears in View KPI Details sheet for employees
+- [ ] Timeline button appears for managers in Team Review
+- [ ] Timeline button appears for auditors in Audit Panel
+- [ ] Timeline button appears for management in Management Review
+- [ ] Timeline button works for all KPI statuses (including Approved)
+- [ ] Clicking Timeline button opens the KPI Timeline modal
+- [ ] Timeline modal displays all audit events correctly
 
