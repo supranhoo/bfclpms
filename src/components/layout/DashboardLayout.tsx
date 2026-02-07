@@ -5,6 +5,7 @@ import { AppSidebar } from './AppSidebar';
 import { Separator } from '@/components/ui/separator';
 import { Loader2 } from 'lucide-react';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 export function DashboardLayout() {
   const { user, loading } = useAuth();
@@ -29,6 +30,7 @@ export function DashboardLayout() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
           <div className="flex-1" />
+          <ThemeToggle />
         </header>
         <main className="flex-1 overflow-auto p-6 bg-muted/30">
           <ErrorBoundary>

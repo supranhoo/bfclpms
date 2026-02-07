@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { BarChart3, Loader2, CheckCircle, AlertCircle, Eye, EyeOff, Lock, Mail, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { LoginSlideshow } from '@/components/auth/LoginSlideshow';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { cn } from '@/lib/utils';
 
 export default function Auth() {
@@ -132,6 +133,11 @@ export default function Auth() {
 
       {/* Right Side: Login Card */}
       <div className="flex-1 flex items-center justify-center p-4 sm:p-8 relative overflow-hidden">
+        {/* Theme Toggle - Top Right */}
+        <div className="absolute top-4 right-4 z-20">
+          <ThemeToggle />
+        </div>
+
         {/* Mobile background - subtle gradient or single wallpaper */}
         <div className="absolute inset-0 lg:hidden">
           {wallpapers.length > 0 ? (
