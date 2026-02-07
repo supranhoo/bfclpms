@@ -55,8 +55,8 @@ export function KpiReviewPanel({
         onOpenTimeline={onOpenTimeline}
       />
 
-      {/* Two-Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      {/* Two-Column Layout - collapses at md breakpoint for mobile sheets */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3 md:gap-4">
         {/* LEFT COLUMN (40%) - Metrics & History */}
         <div className="lg:col-span-2 space-y-4">
           <KpiMetricsSection kpi={kpi} />

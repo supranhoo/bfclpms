@@ -722,16 +722,16 @@ export function EmployeeScorecard({
             </div>
           )}
 
-          <SheetFooter className="flex-wrap gap-2 sm:justify-between">
+          <SheetFooter className="flex-col sm:flex-row gap-2 sm:justify-between mt-4 pb-4">
             {selectedKpi?.status === 'self_review' ? (
               <>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setReviewSheetOpen(false)}>
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                  <Button variant="outline" className="w-full sm:w-auto" onClick={() => setReviewSheetOpen(false)}>
                     Cancel
                   </Button>
                   <Button
                     variant="outline"
-                    className="border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
+                    className="w-full sm:w-auto border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
                     onClick={() => {
                       if (selectedKpi) {
                         openSendBackDialog(selectedKpi);
@@ -743,7 +743,7 @@ export function EmployeeScorecard({
                   </Button>
                   <Button
                     variant="outline"
-                    className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
+                    className="w-full sm:w-auto border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
                     onClick={() => {
                       if (selectedKpi) {
                         openQueryDialog(selectedKpi);
@@ -754,10 +754,11 @@ export function EmployeeScorecard({
                     Raise Query
                   </Button>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                   {!submissionMap.get(selectedKpi?.id || '')?.is_na && (
                     <Button
                       variant="secondary"
+                      className="w-full sm:w-auto"
                       onClick={handleSubmitReview}
                       disabled={managerScore === null || submitManagerReview.isPending}
                     >
@@ -766,7 +767,7 @@ export function EmployeeScorecard({
                   )}
                   <Button
                     variant="default"
-                    className="bg-green-600 hover:bg-green-700"
+                    className="w-full sm:w-auto bg-green-600 hover:bg-green-700"
                     onClick={handleApprove}
                     disabled={
                       // For N/A KPIs: require confirmation
@@ -789,7 +790,7 @@ export function EmployeeScorecard({
                 </div>
               </>
             ) : (
-              <Button variant="outline" onClick={() => setReviewSheetOpen(false)}>
+              <Button variant="outline" className="w-full sm:w-auto" onClick={() => setReviewSheetOpen(false)}>
                 Close
               </Button>
             )}
