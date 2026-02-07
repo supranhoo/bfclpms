@@ -228,63 +228,84 @@ export default function ImportData() {
     }
   };
 
-  // Subscribe to real-time updates for background import
+  // Subscribe to real-time updates for background import with polling fallback
   useEffect(() => {
     if (!backgroundImportId) return;
 
-    // Initial fetch
-    const fetchProgress = async () => {
+    let pollIntervalId: ReturnType<typeof setInterval> | null = null;
+
+    // Shared function to update progress and handle completion
+    const updateProgressState = (data: any): boolean => {
+      const progress: BackgroundImportProgress = {
+        id: data.id,
+        status: data.status as 'running' | 'completed' | 'failed',
+        total_rows: data.total_rows,
+        processed_rows: data.processed_rows,
+        kpis_imported: data.kpis_imported,
+        employees_created: data.employees_created,
+        categories_created: data.categories_created,
+        errors: typeof data.errors === 'string' ? JSON.parse(data.errors) : (data.errors || []),
+        started_at: data.started_at,
+        completed_at: data.completed_at,
+      };
+      setBackgroundProgress(progress);
+
+      if (progress.status === 'completed' || progress.status === 'failed') {
+        // Refresh data when import completes
+        queryClient.invalidateQueries({ queryKey: ['kpis'] });
+        queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
+        queryClient.invalidateQueries({ queryKey: ['profiles'] });
+        queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+        queryClient.invalidateQueries({ queryKey: ['divisions'] });
+        queryClient.invalidateQueries({ queryKey: ['business-units'] });
+        queryClient.invalidateQueries({ queryKey: ['departments'] });
+
+        if (progress.status === 'completed') {
+          setImportSuccess(progress.kpis_imported);
+          toast({
+            title: 'Import Complete',
+            description: `Successfully imported ${progress.kpis_imported} KPIs, created ${progress.employees_created} employees and ${progress.categories_created} categories.`,
+          });
+        } else {
+          toast({
+            title: 'Import Failed',
+            description: progress.errors?.[0] || 'An error occurred during import',
+            variant: 'destructive',
+          });
+        }
+        return true; // Signal completion
+      }
+      return false;
+    };
+
+    // Polling fetch function
+    const fetchProgress = async (): Promise<boolean> => {
       const { data } = await supabase
         .from('import_progress')
         .select('*')
         .eq('id', backgroundImportId)
         .single();
-      
+
       if (data) {
-        const progress: BackgroundImportProgress = {
-          id: data.id,
-          status: data.status as 'running' | 'completed' | 'failed',
-          total_rows: data.total_rows,
-          processed_rows: data.processed_rows,
-          kpis_imported: data.kpis_imported,
-          employees_created: data.employees_created,
-          categories_created: data.categories_created,
-          errors: typeof data.errors === 'string' ? JSON.parse(data.errors) : (data.errors || []),
-          started_at: data.started_at,
-          completed_at: data.completed_at,
-        };
-        setBackgroundProgress(progress);
-        
-        if (progress.status === 'completed' || progress.status === 'failed') {
-          // Refresh data when import completes
-          queryClient.invalidateQueries({ queryKey: ['kpis'] });
-          queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
-          queryClient.invalidateQueries({ queryKey: ['profiles'] });
-          queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
-          queryClient.invalidateQueries({ queryKey: ['divisions'] });
-          queryClient.invalidateQueries({ queryKey: ['business-units'] });
-          queryClient.invalidateQueries({ queryKey: ['departments'] });
-          
-          if (progress.status === 'completed') {
-            setImportSuccess(progress.kpis_imported);
-            toast({
-              title: 'Import Complete',
-              description: `Successfully imported ${progress.kpis_imported} KPIs, created ${progress.employees_created} employees and ${progress.categories_created} categories.`,
-            });
-          } else {
-            toast({
-              title: 'Import Failed',
-              description: progress.errors?.[0] || 'An error occurred during import',
-              variant: 'destructive',
-            });
-          }
-        }
+        return updateProgressState(data);
       }
+      return false;
     };
-    
+
+    // Initial fetch
     fetchProgress();
 
-    // Subscribe to real-time updates
+    // Polling interval as fallback (every 2 seconds)
+    // This ensures we catch completion even if realtime event is missed
+    pollIntervalId = setInterval(async () => {
+      const completed = await fetchProgress();
+      if (completed && pollIntervalId) {
+        clearInterval(pollIntervalId);
+        pollIntervalId = null;
+      }
+    }, 2000);
+
+    // Subscribe to real-time updates (primary, faster for slow imports)
     const channel = supabase
       .channel(`import-progress-${backgroundImportId}`)
       .on(
@@ -296,43 +317,19 @@ export default function ImportData() {
           filter: `id=eq.${backgroundImportId}`,
         },
         (payload) => {
-          const data = payload.new as any;
-          const progress: BackgroundImportProgress = {
-            id: data.id,
-            status: data.status as 'running' | 'completed' | 'failed',
-            total_rows: data.total_rows,
-            processed_rows: data.processed_rows,
-            kpis_imported: data.kpis_imported,
-            employees_created: data.employees_created,
-            categories_created: data.categories_created,
-            errors: typeof data.errors === 'string' ? JSON.parse(data.errors) : (data.errors || []),
-            started_at: data.started_at,
-            completed_at: data.completed_at,
-          };
-          setBackgroundProgress(progress);
-          
-          if (progress.status === 'completed' || progress.status === 'failed') {
-            queryClient.invalidateQueries({ queryKey: ['kpis'] });
-            queryClient.invalidateQueries({ queryKey: ['kra-categories'] });
-            queryClient.invalidateQueries({ queryKey: ['profiles'] });
-            queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
-            queryClient.invalidateQueries({ queryKey: ['divisions'] });
-            queryClient.invalidateQueries({ queryKey: ['business-units'] });
-            queryClient.invalidateQueries({ queryKey: ['departments'] });
-            
-            if (progress.status === 'completed') {
-              setImportSuccess(progress.kpis_imported);
-              toast({
-                title: 'Import Complete',
-                description: `Successfully imported ${progress.kpis_imported} KPIs.`,
-              });
-            }
+          const completed = updateProgressState(payload.new);
+          if (completed && pollIntervalId) {
+            clearInterval(pollIntervalId);
+            pollIntervalId = null;
           }
         }
       )
       .subscribe();
 
     return () => {
+      if (pollIntervalId) {
+        clearInterval(pollIntervalId);
+      }
       supabase.removeChannel(channel);
     };
   }, [backgroundImportId, queryClient, toast]);
