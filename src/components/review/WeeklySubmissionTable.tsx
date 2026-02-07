@@ -106,7 +106,10 @@ export function WeeklySubmissionTable({
   const getDisplayValue = (entry: WeekEntry) => {
     if (!entry.achieved_value) return '-';
     if (isQualitative) {
-      const options = uomType === 'binary' ? BINARY_OPTIONS : (qualitativeOptions || []);
+      // Use stored qualitativeOptions if available, fallback to BINARY_OPTIONS only if null
+      const options = qualitativeOptions?.length 
+        ? qualitativeOptions 
+        : (uomType === 'binary' ? BINARY_OPTIONS : []);
       const numVal = parseFloat(entry.achieved_value);
       if (!isNaN(numVal)) {
         const match = options.find(o => o.rating === numVal);
@@ -144,7 +147,10 @@ export function WeeklySubmissionTable({
     
     // For qualitative, try to find matching rating
     if (isQualitative && entry.achieved_value) {
-      const options = uomType === 'binary' ? BINARY_OPTIONS : (qualitativeOptions || []);
+      // Use stored qualitativeOptions if available, fallback to BINARY_OPTIONS only if null
+      const options = qualitativeOptions?.length 
+        ? qualitativeOptions 
+        : (uomType === 'binary' ? BINARY_OPTIONS : []);
       const match = options.find(o => o.label === entry.achieved_value);
       setTempRating(match?.rating ?? null);
     } else {

@@ -105,7 +105,10 @@ export function DailySubmissionGrid({
   const getDisplayValue = (entry: DayEntry) => {
     if (!entry.achieved_value) return '-';
     if (isQualitative) {
-      const options = uomType === 'binary' ? BINARY_OPTIONS : (qualitativeOptions || []);
+      // Use stored qualitativeOptions if available, fallback to BINARY_OPTIONS only if null
+      const options = qualitativeOptions?.length 
+        ? qualitativeOptions 
+        : (uomType === 'binary' ? BINARY_OPTIONS : []);
       const numVal = parseFloat(entry.achieved_value);
       if (!isNaN(numVal)) {
         const match = options.find(o => o.rating === numVal);
@@ -143,7 +146,10 @@ export function DailySubmissionGrid({
     
     // For qualitative, try to find matching rating
     if (isQualitative && entry.achieved_value) {
-      const options = uomType === 'binary' ? BINARY_OPTIONS : (qualitativeOptions || []);
+      // Use stored qualitativeOptions if available, fallback to BINARY_OPTIONS only if null
+      const options = qualitativeOptions?.length 
+        ? qualitativeOptions 
+        : (uomType === 'binary' ? BINARY_OPTIONS : []);
       const numVal = parseFloat(entry.achieved_value);
       
       // First try to match by rating (achieved_value is stored as a number)

@@ -62,11 +62,7 @@ const determineReviewStatus = (row: KpiImportRow): 'kra_set' | 'self_review' | '
   return 'kra_set';
 };
 
-interface QualitativeOption {
-  label: string;
-  rating: number;
-  definition: string;
-}
+import { QualitativeOption, TIERED_TEMPLATES } from '@/lib/qualitativeUom';
 
 interface KpiImportRow {
   sNo?: number | string;
@@ -400,18 +396,88 @@ export default function ImportData() {
       return strValue;
     };
 
-    // Parse qualitative options from JSON string if provided
-    const parseQualitativeOptions = (value: any): QualitativeOption[] | undefined => {
-      if (!value) return undefined;
+    // Build qualitative options from R5-R0 columns when uomType is binary/tiered
+    const buildOptionsFromRColumns = (row: Record<string, any>): QualitativeOption[] | undefined => {
+      const rColumns: { key: string; rating: number }[] = [
+        { key: 'r5', rating: 5 },
+        { key: 'r4', rating: 4 },
+        { key: 'r3', rating: 3 },
+        { key: 'r2', rating: 2 },
+        { key: 'r1', rating: 1 },
+        { key: 'r0', rating: 0 },
+      ];
+
+      const options: QualitativeOption[] = [];
+
+      for (const { key, rating } of rColumns) {
+        // Get value from possible column name variations
+        const possibleNames = [key, key.toUpperCase(), `rating${rating}`];
+        let value: any;
+        for (const name of possibleNames) {
+          for (const rowKey of Object.keys(row)) {
+            if (rowKey.toLowerCase() === name.toLowerCase()) {
+              value = row[rowKey];
+              break;
+            }
+          }
+          if (value !== undefined) break;
+        }
+        
+        if (!value) continue;
+        
+        const strValue = String(value).trim();
+        // Skip empty or pure numeric values (these are standard thresholds, not labels)
+        if (!strValue || (!isNaN(Number(strValue)) && !strValue.includes('|'))) continue;
+        
+        // Check for extended syntax: "Label|Definition"
+        if (strValue.includes('|')) {
+          const [label, definition] = strValue.split('|').map(s => s.trim());
+          if (label) {
+            options.push({ label, rating, definition: definition || label });
+          }
+        } else {
+          // Plain label - use label as definition
+          options.push({ label: strValue, rating, definition: strValue });
+        }
+      }
+
+      return options.length >= 2 ? options : undefined;
+    };
+
+    // Parse qualitative options - supports R-column format, template shorthand, or JSON
+    const parseQualitativeOptions = (value: any, row: Record<string, any>, uomType: string): QualitativeOption[] | undefined => {
+      // 1. For binary/tiered, check for auto-build flag or empty value
+      if (uomType === 'binary' || uomType === 'tiered') {
+        const flagValue = String(value || '').toLowerCase().trim();
+        if (!value || flagValue === 'auto' || flagValue === 'true' || flagValue === 'tiered' || flagValue === 'binary' || flagValue === '') {
+          const rOptions = buildOptionsFromRColumns(row);
+          if (rOptions && rOptions.length >= 2) {
+            return rOptions;
+          }
+        }
+      }
+
+      // 2. Check for template shorthand (e.g., "compliance_3", "yes_no")
+      if (typeof value === 'string') {
+        const templateKey = value.trim().toLowerCase().replace(/[- ]/g, '_');
+        if (TIERED_TEMPLATES[templateKey]) {
+          return TIERED_TEMPLATES[templateKey];
+        }
+      }
+
+      // 3. Existing JSON array
       if (typeof value === 'object' && Array.isArray(value)) return value;
+      
+      // 4. JSON string parsing
       if (typeof value === 'string') {
         try {
           const parsed = JSON.parse(value);
           if (Array.isArray(parsed)) return parsed;
         } catch {
-          return undefined;
+          // Not valid JSON, continue
         }
       }
+
       return undefined;
     };
 
@@ -424,6 +490,8 @@ export default function ImportData() {
       return 'numeric';
     };
 
+    const uomType = normalizeUomType(getValue(['uomType', 'uom_type', 'uomtype', 'measureType', 'measure_type']));
+
     return {
       sNo: getValue(['sNo', 'sno', 's_no', 'sr', 'srNo', 'serialNo', 'serial']),
       month: getValue(['month', 'reviewMonth', 'review_month', 'period']),
@@ -435,8 +503,8 @@ export default function ImportData() {
       kpi: String(getValue(['kpi', 'kpiName', 'kpi_name', 'keyPerformanceIndicator']) || ''),
       target: parseNumericValue(getValue(['target', 'targetValue', 'target_value', 'targetVal'])),
       uom: getValue(['uom', 'unit', 'unitOfMeasure', 'unit_of_measure']),
-      uomType: normalizeUomType(getValue(['uomType', 'uom_type', 'uomtype', 'measureType', 'measure_type'])),
-      qualitativeOptions: parseQualitativeOptions(getValue(['qualitativeOptions', 'qualitative_options', 'tieredOptions', 'tiered_options', 'options'])),
+      uomType,
+      qualitativeOptions: parseQualitativeOptions(getValue(['qualitativeOptions', 'qualitative_options', 'tieredOptions', 'tiered_options', 'options']), rawRow, uomType),
       frequency: getValue(['frequency', 'freq', 'reviewFrequency']),
       kpiWeightage: getValue(['kpiWeightage', 'kpi_weightage', 'weightage', 'weight']),
       criteria: getValue(['criteria', 'scoringCriteria', 'scoring_criteria']),

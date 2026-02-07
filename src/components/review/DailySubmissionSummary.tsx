@@ -119,11 +119,15 @@ export function DailySubmissionSummary({
     if (value === null) return '—';
     
     if (uomType === 'binary') {
-      const option = BINARY_OPTIONS.find(o => o.rating === value);
+      // Use stored qualitativeOptions if available, fallback to BINARY_OPTIONS only if null
+      const options = qualitativeOptions?.length 
+        ? qualitativeOptions 
+        : BINARY_OPTIONS;
+      const option = options.find(o => o.rating === value);
       return option?.label || value.toString();
     }
     
-    if (uomType === 'tiered' && qualitativeOptions) {
+    if (uomType === 'tiered' && qualitativeOptions?.length) {
       const option = qualitativeOptions.find(o => o.rating === value);
       return option?.label || value.toString();
     }
