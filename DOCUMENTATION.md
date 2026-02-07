@@ -1349,12 +1349,13 @@ Full JSON format for maximum control:
 | `auditRemarks` | No | Auditor's remarks |
 | `achievedWeight` | No | Weighted score (calculated) |
 
-**Metadata (4 columns):**
+**Status & Metadata (5 columns):**
 | Column | Required | Description |
 |--------|----------|-------------|
+| `reviewStatus` | No | Workflow status: `kra_set`, `self_review`, `manager_check`, `audit`, `management_review`, `approved` |
+| `kpiStatus` | No | Submission status: `open`, `submitted`, `approved_by_manager`, `locked`, `sent_back` |
 | `sourceOfData` | No | Data source (e.g., SAP, Excel) |
-| `kpiStatus` | No | KPI status (Active, Inactive) |
-| `reviewStatus` | No | Review status |
+| `kpiWeightageScore` | No | Calculated weightage score |
 | `isOrgLevel` | No | Set to `yes`/`true` for organization-level KPIs |
 
 #### 4.9.10 System Settings (`/admin/settings`)
