@@ -549,24 +549,52 @@ export function EmployeeScorecard({
               <CardTitle>KPI Details</CardTitle>
               <CardDescription>Click on a KPI to review and update scores</CardDescription>
             </div>
-            <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />
+            {!isMobile && <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />}
           </div>
         </CardHeader>
-        <CardContent>
-          <KpiDetailsTable
-            kpis={sortedKpis}
-            submissionMap={submissionMap}
-            queryMap={queryMap as Map<string, KpiQuery[]>}
-            viewType="team-review"
-            selectedPeriod={selectedPeriod}
-            selectedYear={selectedYear}
-            onReview={openReviewSheet}
-            onView={openReviewSheet}
-            onSendBack={openSendBackDialog}
-            onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
-            expandedKpis={expandedDailyKpis}
-            onToggleExpand={toggleDailyExpand}
-          />
+        <CardContent className="px-3 sm:px-6">
+          {isMobile ? (
+            <div className="space-y-3">
+              {sortedKpis.map(kpi => {
+                const submission = submissionMap.get(kpi.id);
+                return (
+                  <MobileKpiCard
+                    key={kpi.id}
+                    kpi={kpi}
+                    submission={submission}
+                    viewType="team-review"
+                    onAction={openReviewSheet}
+                    onView={openReviewSheet}
+                    onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
+                    onSendBack={openSendBackDialog}
+                    onToggleExpand={toggleDailyExpand}
+                    isExpanded={expandedDailyKpis.has(kpi.id)}
+                    getOrgKpiValue={getOrgKpiValue}
+                  />
+                );
+              })}
+              {sortedKpis.length === 0 && (
+                <p className="text-center text-muted-foreground py-8 text-sm">
+                  No KPIs found for this period
+                </p>
+              )}
+            </div>
+          ) : (
+            <KpiDetailsTable
+              kpis={sortedKpis}
+              submissionMap={submissionMap}
+              queryMap={queryMap as Map<string, KpiQuery[]>}
+              viewType="team-review"
+              selectedPeriod={selectedPeriod}
+              selectedYear={selectedYear}
+              onReview={openReviewSheet}
+              onView={openReviewSheet}
+              onSendBack={openSendBackDialog}
+              onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
+              expandedKpis={expandedDailyKpis}
+              onToggleExpand={toggleDailyExpand}
+            />
+          )}
         </CardContent>
       </Card>
 

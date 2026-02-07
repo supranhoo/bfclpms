@@ -575,21 +575,49 @@ export function AuditScorecard({
           </CardTitle>
           <CardDescription>Verify and validate KPI evaluations</CardDescription>
         </CardHeader>
-        <CardContent>
-          <KpiDetailsTable
-            kpis={kpis || []}
-            submissionMap={submissionMap}
-            queryMap={queryMap as Map<string, KpiQuery[]>}
-            viewType="audit"
-            selectedPeriod={selectedPeriod}
-            selectedYear={selectedYear}
-            onReview={openReviewSheet}
-            onView={openReviewSheet}
-            onSendBack={openSendBackDialog}
-            onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
-            expandedKpis={expandedDailyKpis}
-            onToggleExpand={toggleDailyExpand}
-          />
+        <CardContent className="px-3 sm:px-6">
+          {isMobile ? (
+            <div className="space-y-3">
+              {(kpis || []).map(kpi => {
+                const submission = submissionMap.get(kpi.id);
+                return (
+                  <MobileKpiCard
+                    key={kpi.id}
+                    kpi={kpi}
+                    submission={submission}
+                    viewType="audit"
+                    onAction={openReviewSheet}
+                    onView={openReviewSheet}
+                    onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
+                    onSendBack={openSendBackDialog}
+                    onToggleExpand={toggleDailyExpand}
+                    isExpanded={expandedDailyKpis.has(kpi.id)}
+                    getOrgKpiValue={getOrgKpiValue}
+                  />
+                );
+              })}
+              {(!kpis || kpis.length === 0) && (
+                <p className="text-center text-muted-foreground py-8 text-sm">
+                  No KPIs found for this period
+                </p>
+              )}
+            </div>
+          ) : (
+            <KpiDetailsTable
+              kpis={kpis || []}
+              submissionMap={submissionMap}
+              queryMap={queryMap as Map<string, KpiQuery[]>}
+              viewType="audit"
+              selectedPeriod={selectedPeriod}
+              selectedYear={selectedYear}
+              onReview={openReviewSheet}
+              onView={openReviewSheet}
+              onSendBack={openSendBackDialog}
+              onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
+              expandedKpis={expandedDailyKpis}
+              onToggleExpand={toggleDailyExpand}
+            />
+          )}
         </CardContent>
       </Card>
 
