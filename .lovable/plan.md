@@ -1,189 +1,268 @@
 
-# Plan: Additional Mobile Optimizations for Review System
 
-## Summary
+# Plan: Mobile Sidebar Improvements - Auto-Hide & Expandable Sections
 
-Based on my analysis of the current implementation, I've identified several components within the Review Sheet and scorecard view that still need mobile optimization. While the previous changes addressed the main grid layouts and footers, there are smaller but impactful areas that can be improved for a better mobile experience.
+## Overview
 
----
-
-## Areas Identified for Optimization
-
-### 1. DailySubmissionSummary Stats Grid
-**Location:** `src/components/review/DailySubmissionSummary.tsx` (lines 164-208)
-
-**Issue:** The stats row uses a fixed `grid-cols-4` layout which becomes cramped on mobile devices. Each stat card is too small to read comfortably.
-
-**Fix:** Change to responsive grid `grid-cols-2 sm:grid-cols-4` so stats display in a 2x2 grid on mobile.
+This plan improves the mobile sidebar experience with two key features:
+1. **Auto-hide on navigation**: Sidebar automatically closes after tapping a menu item
+2. **Expandable sections**: Menu groups can collapse/expand to reduce scrolling
 
 ---
 
-### 2. DailySubmissionSummary Table Headers
-**Location:** `src/components/review/DailySubmissionSummary.tsx` (lines 211-226)
+## Current Issues
 
-**Issue:** The table header columns ("Self (Employee)", "Manager Approved", etc.) are too wide for mobile screens, causing horizontal overflow.
-
-**Fix:** Always use `shortLabel` on mobile-sized columns. Reduce minimum width and make "Submitted At" column hidden on mobile (it's secondary information).
-
----
-
-### 3. ScoreSelector Buttons
-**Location:** `src/components/review/ScoreSelector.tsx` (lines 23-42)
-
-**Issue:** The 4-column grid for score selection buttons becomes too tight on mobile. Button text gets truncated and touch targets are small.
-
-**Fix:** Change to `grid-cols-2 sm:grid-cols-4` layout. The 2x2 grid provides larger touch targets on mobile while maintaining the 4-column layout on desktop.
+| Issue | Impact |
+|-------|--------|
+| Sidebar stays open after navigation | User must manually close it every time |
+| All menu groups always expanded | Long scroll, especially for admins with 14+ items |
+| Hard to find current section | No visual indication of which group is active |
 
 ---
 
-### 4. ManagerDailyOverrideEditor
-**Location:** `src/components/review/ManagerDailyOverrideEditor.tsx`
+## Solution 1: Auto-Hide on Navigation (Mobile)
 
-**Issue:** The override table and score preview section need mobile optimization:
-- Table columns too wide
-- Score preview badges cramped
-- Bulk action buttons wrap awkwardly
+### How It Works
 
-**Fix:** 
-- Make the table scrollable with smaller column widths
-- Stack score preview vertically on mobile
-- Full-width bulk action buttons on mobile
+When on mobile, after tapping any menu item, the sidebar will automatically close after a brief delay to let the user see the selection.
 
----
+### Implementation
 
-### 5. KpiHistoryCard Compact View
-**Location:** `src/components/review/KpiHistoryCard.tsx` (lines 115-134)
+**AppSidebar.tsx changes:**
 
-**Issue:** The history rows show 4 columns inline which gets cramped on very small screens.
-
-**Fix:** Reduce font sizes further on mobile, truncate status text more aggressively.
-
----
-
-### 6. Review Sheet Inputs (Textarea/Evidence)
-**Location:** `src/components/review/EmployeeScorecard.tsx` (lines 676-694)
-
-**Issue:** The input sections (remarks, evidence upload) need better mobile spacing.
-
-**Fix:** Reduce padding and adjust label sizing for mobile.
-
----
-
-## Detailed Changes
-
-### File 1: DailySubmissionSummary.tsx
-
-**Stats Grid (line 164):**
+1. Import `useSidebar` hook:
 ```tsx
-// BEFORE
-<div className={`grid grid-cols-4 ${compact ? 'gap-2' : 'gap-3'}`}>
-
-// AFTER
-<div className={`grid grid-cols-2 sm:grid-cols-4 ${compact ? 'gap-2' : 'gap-3'}`}>
+import { useSidebar } from '@/components/ui/sidebar';
 ```
 
-**Table Container (line 211):**
+2. Add auto-close logic:
 ```tsx
-// BEFORE
-<ScrollArea className={`${compact ? 'h-[200px]' : 'h-[250px]'} rounded-md border mt-3`}>
-
-// AFTER  
-<ScrollArea className={`${compact ? 'h-[200px]' : 'h-[250px]'} rounded-md border mt-3 overflow-x-auto`}>
+export function AppSidebar() {
+  const { setOpenMobile, isMobile } = useSidebar();
+  
+  const handleNavigation = (path: string) => {
+    navigate(path);
+    // Auto-close sidebar on mobile after navigation
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
+  
+  // Use handleNavigation instead of direct navigate() calls
+}
 ```
 
-**Always use short labels on mobile-sized screens (line 217-222):**
-- Hide "Submitted At" column on very small screens using `hidden sm:table-cell`
-
----
-
-### File 2: ScoreSelector.tsx
-
-**Grid Layout (line 23):**
+3. Update all `SidebarMenuButton` onClick handlers:
 ```tsx
-// BEFORE
-<div className="grid grid-cols-4 gap-2">
-
-// AFTER
-<div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-```
-
-**Button padding (line 29):**
-```tsx
-// BEFORE
-className="h-auto py-3 flex flex-col gap-1"
-
-// AFTER
-className="h-auto py-2 sm:py-3 flex flex-col gap-0.5 sm:gap-1"
+<SidebarMenuButton
+  isActive={location.pathname === item.path}
+  onClick={() => handleNavigation(item.path)}  // Changed from navigate()
+>
 ```
 
 ---
 
-### File 3: ManagerDailyOverrideEditor.tsx
+## Solution 2: Expandable/Collapsible Menu Sections
 
-**Bulk Actions (line 175-194):**
+### How It Works
+
+- Each menu group (Main, Manager, Admin, Reports, etc.) becomes collapsible
+- Clicking the group header toggles expand/collapse
+- The group containing the current route auto-expands
+- Other groups stay collapsed to reduce scrolling
+
+### Visual Design
+
+```
++---------------------------+
+| [Logo] App Name           |
+| [←] Back to Hub           |
++---------------------------+
+| ▼ Main                    |  <- Expanded (active route)
+|   • Dashboard             |
+|   • My KPIs ←(active)     |
+|   • Inbox [3]             |
+|   • PMS Policy            |
++---------------------------+
+| ► Manager                 |  <- Collapsed
++---------------------------+
+| ► Administration (14)     |  <- Collapsed, shows count
++---------------------------+
+| ► Reports                 |  <- Collapsed
++---------------------------+
+| [User Profile] Sign Out   |
++---------------------------+
+```
+
+### Implementation
+
+**AppSidebar.tsx changes:**
+
+1. Import Collapsible components:
 ```tsx
-// BEFORE
-<div className="flex gap-2 flex-wrap">
-
-// AFTER
-<div className="flex flex-col sm:flex-row gap-2">
-  <Button className="w-full sm:w-auto" ...>
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronDown } from 'lucide-react';
 ```
 
-**Score Preview Layout (lines 268-295):**
-- Stack original and new score vertically on mobile with centered arrow
-
-**Table Header Widths:**
-- Make "Date" column narrower: `w-[60px] sm:w-[80px]`
-- Hide "Status" column on mobile: `hidden sm:table-cell`
-
----
-
-### File 4: KpiHistoryCard.tsx
-
-**History Row (line 118-132):**
+2. Create state to track which sections are open:
 ```tsx
-// BEFORE
-<div className="flex items-center justify-between py-1.5 px-2 rounded bg-muted/30">
-  <span className="font-medium w-16">
-  ...
-  <span className="text-muted-foreground uppercase text-[10px] w-16 text-right truncate">
+// Determine which section contains the current path
+const getCurrentSection = () => {
+  if (menuItems.main.some(item => location.pathname === item.path)) return 'main';
+  if (menuItems.manager.some(item => location.pathname === item.path)) return 'manager';
+  if (menuItems.management.some(item => location.pathname === item.path)) return 'management';
+  if (menuItems.audit.some(item => location.pathname === item.path)) return 'audit';
+  if (menuItems.admin.some(item => location.pathname.startsWith(item.path))) return 'admin';
+  if (menuItems.reports.some(item => location.pathname.startsWith(item.path))) return 'reports';
+  return 'main';
+};
 
-// AFTER
-<div className="flex items-center justify-between py-1 sm:py-1.5 px-1.5 sm:px-2 rounded bg-muted/30">
-  <span className="font-medium w-12 sm:w-16 text-[10px] sm:text-xs">
-  ...
-  <span className="text-muted-foreground uppercase text-[10px] w-10 sm:w-16 text-right truncate hidden sm:inline">
+const [openSections, setOpenSections] = useState<Set<string>>(
+  new Set([getCurrentSection()])
+);
+
+// Auto-open section when route changes
+useEffect(() => {
+  const section = getCurrentSection();
+  if (!openSections.has(section)) {
+    setOpenSections(prev => new Set([...prev, section]));
+  }
+}, [location.pathname]);
+
+const toggleSection = (section: string) => {
+  setOpenSections(prev => {
+    const next = new Set(prev);
+    if (next.has(section)) {
+      next.delete(section);
+    } else {
+      next.add(section);
+    }
+    return next;
+  });
+};
 ```
 
----
+3. Create a reusable CollapsibleSidebarGroup component:
+```tsx
+function CollapsibleSidebarGroup({ 
+  label, 
+  sectionKey, 
+  items, 
+  isOpen, 
+  onToggle,
+  filterByRole,
+  currentPath,
+  onNavigate,
+  badge,
+  inboxBadgeCount
+}: {
+  label: string;
+  sectionKey: string;
+  items: typeof menuItems.main;
+  isOpen: boolean;
+  onToggle: () => void;
+  filterByRole: (items: typeof menuItems.main) => typeof menuItems.main;
+  currentPath: string;
+  onNavigate: (path: string) => void;
+  badge?: number;
+  inboxBadgeCount?: number;
+}) {
+  const filteredItems = filterByRole(items);
+  if (filteredItems.length === 0) return null;
 
-## Visual Impact
+  return (
+    <Collapsible open={isOpen} onOpenChange={onToggle}>
+      <SidebarGroup className="py-0">
+        <CollapsibleTrigger asChild>
+          <SidebarGroupLabel className="cursor-pointer hover:bg-sidebar-accent/50 rounded-md px-2 flex justify-between items-center">
+            <span>{label}</span>
+            <div className="flex items-center gap-1">
+              {badge && badge > 0 && (
+                <Badge variant="secondary" className="h-4 px-1 text-[10px]">
+                  {badge}
+                </Badge>
+              )}
+              <ChevronDown 
+                className={cn(
+                  "h-3.5 w-3.5 transition-transform duration-200",
+                  isOpen && "rotate-180"
+                )} 
+              />
+            </div>
+          </SidebarGroupLabel>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {filteredItems.map((item) => (
+                <SidebarMenuItem key={item.path}>
+                  <SidebarMenuButton
+                    isActive={currentPath === item.path}
+                    onClick={() => onNavigate(item.path)}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.title}</span>
+                    {'showBadge' in item && item.showBadge && inboxBadgeCount && inboxBadgeCount > 0 && (
+                      <Badge variant="destructive" className="ml-auto h-5 min-w-5 px-1 flex items-center justify-center text-xs">
+                        {inboxBadgeCount}
+                      </Badge>
+                    )}
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </CollapsibleContent>
+      </SidebarGroup>
+    </Collapsible>
+  );
+}
+```
 
-### Stats Grid (Mobile)
-```
-BEFORE:               AFTER:
-+--+--+--+--+        +-----+-----+
-|31|28| 3| 5|  →     | 31  | 28  |
-+--+--+--+--+        |Days |Subm.|
-(cramped)            +-----+-----+
-                     |  3  |  5  |
-                     |Miss |No   |
-                     +-----+-----+
-                     (readable)
-```
-
-### Score Selector (Mobile)
-```
-BEFORE:              AFTER:
-+--+--+--+--+        +------+------+
-|5 |4 |3 |2 |  →     |  5   |  4   |
-+--+--+--+--+        | Out  |Exceed|
-(tiny buttons)       +------+------+
-                     |  3   |  2   |
-                     |Meets |Below |
-                     +------+------+
-                     (touch-friendly)
+4. Replace static SidebarGroups with CollapsibleSidebarGroup:
+```tsx
+<SidebarContent>
+  <CollapsibleSidebarGroup
+    label="Main"
+    sectionKey="main"
+    items={menuItems.main}
+    isOpen={openSections.has('main')}
+    onToggle={() => toggleSection('main')}
+    filterByRole={filterByRole}
+    currentPath={location.pathname}
+    onNavigate={handleNavigation}
+    inboxBadgeCount={inboxBadgeCount}
+  />
+  
+  {(role === 'manager' || role === 'management' || role === 'admin') && (
+    <CollapsibleSidebarGroup
+      label="Manager"
+      sectionKey="manager"
+      items={menuItems.manager}
+      isOpen={openSections.has('manager')}
+      onToggle={() => toggleSection('manager')}
+      filterByRole={filterByRole}
+      currentPath={location.pathname}
+      onNavigate={handleNavigation}
+    />
+  )}
+  
+  {/* ... similar for other sections ... */}
+  
+  {role === 'admin' && (
+    <CollapsibleSidebarGroup
+      label="Administration"
+      sectionKey="admin"
+      items={menuItems.admin}
+      isOpen={openSections.has('admin')}
+      onToggle={() => toggleSection('admin')}
+      filterByRole={filterByRole}
+      currentPath={location.pathname}
+      onNavigate={handleNavigation}
+      badge={menuItems.admin.length}  // Shows (14) count when collapsed
+    />
+  )}
+</SidebarContent>
 ```
 
 ---
@@ -192,18 +271,40 @@ BEFORE:              AFTER:
 
 | File | Changes |
 |------|---------|
-| `src/components/review/DailySubmissionSummary.tsx` | Responsive stats grid, hide timestamp on mobile |
-| `src/components/review/ScoreSelector.tsx` | 2x2 grid on mobile, adjusted padding |
-| `src/components/review/ManagerDailyOverrideEditor.tsx` | Stack buttons, simplify table |
-| `src/components/review/KpiHistoryCard.tsx` | Tighter spacing, hide status on mobile |
+| `src/components/layout/AppSidebar.tsx` | Add auto-close, collapsible groups |
+
+---
+
+## Mobile UX After Implementation
+
+### Before
+1. Tap hamburger → Sidebar opens
+2. Tap "My KPIs" → Page loads, sidebar stays open
+3. Tap X or outside → Sidebar closes
+4. **3 taps total**
+
+### After  
+1. Tap hamburger → Sidebar opens
+2. Tap "My KPIs" → Page loads, sidebar auto-closes
+3. **2 taps total** (33% fewer taps!)
+
+### Collapsed Sections Benefit
+
+For admins with 14+ items in Administration:
+- **Before**: Scroll ~400px to reach Reports section
+- **After**: Click to collapse Admin, see all sections at once
 
 ---
 
 ## Testing Checklist
 
-- [ ] DailySubmissionSummary stats display in 2x2 grid on mobile
-- [ ] Score selector buttons are large enough for touch on mobile
-- [ ] Manager override editor is usable on mobile screens
-- [ ] KPI history card is readable on mobile
-- [ ] All changes maintain desktop layout as-is
-- [ ] Review sheet content doesn't overflow horizontally on mobile
+- [ ] Mobile: Sidebar auto-closes after tapping any menu item
+- [ ] Desktop: Sidebar behavior unchanged (stays open)
+- [ ] Collapsible groups expand/collapse on click
+- [ ] Active route's group auto-expands
+- [ ] Multiple groups can be open simultaneously
+- [ ] Chevron icon rotates on expand/collapse
+- [ ] Admin section shows item count badge when collapsed
+- [ ] "Back to Hub" link still works
+- [ ] Inbox badge count displays correctly
+
