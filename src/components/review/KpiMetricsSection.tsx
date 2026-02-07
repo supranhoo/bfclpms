@@ -75,15 +75,15 @@ export function KpiMetricsSection({ kpi }: KpiMetricsSectionProps) {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-          <Target className="h-4 w-4" />
+      <CardHeader className="pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+        <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-1.5 sm:gap-2">
+          <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           Metrics & Scale
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 sm:space-y-4 px-3 sm:px-6 pb-3 sm:pb-6">
         {/* Metrics Grid - single column on very small screens */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm">
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground flex items-center gap-1">
               <Target className="h-3 w-3" />
@@ -105,7 +105,7 @@ export function KpiMetricsSection({ kpi }: KpiMetricsSectionProps) {
               <Clock className="h-3 w-3" />
               Frequency
             </span>
-            <Badge variant="outline" className="text-xs">
+            <Badge variant="outline" className="text-[10px] sm:text-xs h-5">
               {frequency}
             </Badge>
           </div>
@@ -114,7 +114,7 @@ export function KpiMetricsSection({ kpi }: KpiMetricsSectionProps) {
               <Database className="h-3 w-3" />
               Source
             </span>
-            <span className="font-medium text-xs truncate max-w-[100px]" title={source}>
+            <span className="font-medium text-xs truncate max-w-[80px] sm:max-w-[100px]" title={source}>
               {source}
             </span>
           </div>
@@ -122,12 +122,12 @@ export function KpiMetricsSection({ kpi }: KpiMetricsSectionProps) {
 
         {/* Rating Scale */}
         {ratings.length > 0 && (
-          <div className="pt-3 border-t">
-            <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1 mb-2">
+          <div className="pt-2 sm:pt-3 border-t">
+            <Label className="text-[10px] sm:text-xs font-medium text-muted-foreground flex items-center gap-1 mb-1.5 sm:mb-2">
               <Info className="h-3 w-3" />
               Rating Scale
             </Label>
-            <div className="space-y-1">
+            <div className="space-y-0.5 sm:space-y-1">
               {ratings.map(r => (
                 <RatingRow
                   key={r.key}

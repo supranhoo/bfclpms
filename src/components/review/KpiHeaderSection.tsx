@@ -19,27 +19,27 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   const weightage = kpi.weightage || 0;
 
   return (
-    <div className="p-4 bg-muted/30 rounded-lg border">
+    <div className="p-3 sm:p-4 bg-muted/30 rounded-lg border">
       {/* Badges Row */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 mb-2 sm:mb-3">
         {/* Left: Category */}
         <Badge 
           style={{ backgroundColor: categoryColor }} 
-          className="text-white"
+          className="text-white text-xs"
         >
           {categoryName}
         </Badge>
 
         {/* Right: Status + Period + Weightage + Timeline */}
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          <Badge className={statusColors[status] || statusColors.kra_set}>
+        <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
+          <Badge className={`${statusColors[status] || statusColors.kra_set} text-xs`}>
             {statusLabels[status] || 'KRA Set'}
           </Badge>
-          <Badge variant="outline">
+          <Badge variant="outline" className="text-xs">
             {selectedPeriod} {selectedYear}
           </Badge>
-          <Badge variant="secondary">
-            {weightage}% Weight
+          <Badge variant="secondary" className="text-xs">
+            {weightage}%
           </Badge>
           
           {onOpenTimeline && (
@@ -47,9 +47,9 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
               variant="outline"
               size="sm"
               onClick={onOpenTimeline}
-              className="gap-1.5"
+              className="gap-1 h-6 sm:h-7 px-2 text-xs"
             >
-              <Clock className="h-4 w-4" />
+              <Clock className="h-3 w-3 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Timeline</span>
             </Button>
           )}
@@ -57,10 +57,10 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
       </div>
 
       {/* KRA & KPI Names - Full text, no truncation */}
-      <h3 className="font-semibold text-lg text-primary leading-tight whitespace-pre-wrap">
+      <h3 className="font-semibold text-sm sm:text-lg text-primary leading-tight whitespace-pre-wrap">
         {normalizeKpiText(kpi.kra_name)}
       </h3>
-      <p className="text-muted-foreground mt-1 leading-relaxed whitespace-pre-wrap">
+      <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed whitespace-pre-wrap">
         {normalizeKpiText(kpi.kpi_name)}
       </p>
     </div>
