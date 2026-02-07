@@ -40,7 +40,7 @@ import {
   GraduationCap,
   UserX,
   Eye,
-  LayoutGrid,
+  ArrowLeft,
 } from 'lucide-react';
 import { CollapsibleSidebarGroup } from './CollapsibleSidebarGroup';
 
@@ -177,28 +177,16 @@ export function AppSidebar() {
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <div className="flex items-center gap-3">
           {appSettings?.logo_url ? (
-            <img src={appSettings.logo_url} alt="Logo" className="h-9 w-9 rounded-lg object-contain" />
+            <img src={appSettings.logo_url} alt="Logo" className="h-10 w-10 rounded-lg object-contain" />
           ) : (
-            <div className="p-2 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-              <BarChart3 className="h-5 w-5" />
+            <div className="p-2.5 rounded-lg bg-primary/10">
+              <BarChart3 className="h-5 w-5 text-primary" />
             </div>
           )}
           <div>
             <h2 className="font-semibold text-sidebar-foreground">{displayAppName}</h2>
             <p className="text-xs text-sidebar-foreground/60">{displayOrgName}</p>
           </div>
-        </div>
-        {/* Back to Hub link */}
-        <div className="mt-3 pt-3 border-t border-sidebar-border/50">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full justify-start text-sidebar-foreground/80 hover:text-sidebar-foreground border-sidebar-border/50"
-            onClick={() => handleNavigation('/home')}
-          >
-            <LayoutGrid className="h-4 w-4 mr-2" />
-            Back to Hub
-          </Button>
         </div>
       </SidebarHeader>
 
@@ -301,11 +289,21 @@ export function AppSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-4">
-        <div className="flex items-center gap-3">
+      <SidebarFooter className="border-t border-sidebar-border p-4 space-y-3">
+        {/* Back to Hub link */}
+        <button 
+          onClick={() => handleNavigation('/home')}
+          className="flex items-center gap-2 text-xs text-sidebar-foreground/60 hover:text-primary transition-colors duration-200"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          <span>Back to Hub</span>
+        </button>
+        
+        {/* Profile card */}
+        <div className="flex items-center gap-3 p-2.5 rounded-lg bg-sidebar-accent/5 border border-sidebar-border/30">
           <Avatar className="h-9 w-9">
             <AvatarImage src={profile?.avatar_url || undefined} />
-            <AvatarFallback className="bg-sidebar-accent text-sidebar-accent-foreground text-sm">
+            <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
               {getInitials(profile?.full_name)}
             </AvatarFallback>
           </Avatar>
@@ -318,7 +316,7 @@ export function AppSidebar() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-sidebar-foreground/60 hover:text-sidebar-foreground"
+            className="h-8 w-8 text-sidebar-foreground/60 hover:text-destructive transition-colors"
             onClick={handleSignOut}
           >
             <LogOut className="h-4 w-4" />

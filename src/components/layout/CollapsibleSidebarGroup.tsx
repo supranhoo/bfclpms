@@ -54,26 +54,26 @@ export function CollapsibleSidebarGroup({
     <Collapsible open={isOpen} onOpenChange={onToggle}>
       <SidebarGroup className="py-0">
         <CollapsibleTrigger asChild>
-          <SidebarGroupLabel className="cursor-pointer hover:bg-sidebar-accent/50 rounded-md px-2 py-1.5 flex justify-between items-center min-h-[32px]">
-            <div className="flex items-center gap-1.5">
+          <SidebarGroupLabel className="cursor-pointer hover:bg-primary/5 rounded-lg mx-1 px-2 py-1.5 flex justify-between items-center min-h-[32px] transition-colors duration-200">
+            <div className="flex items-center gap-2">
               {hasActiveRoute && !isOpen && (
                 <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
               )}
-              <span className="text-xs font-medium uppercase tracking-wider text-sidebar-foreground/60">
+              <span className="text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/80">
                 {label}
               </span>
             </div>
             <ChevronDown
               className={cn(
-                'h-3.5 w-3.5 text-sidebar-foreground/40 transition-transform duration-200',
+                'h-3.5 w-3.5 text-sidebar-foreground/50 transition-transform duration-200',
                 isOpen && 'rotate-180'
               )}
             />
           </SidebarGroupLabel>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <SidebarGroupContent>
-            <SidebarMenu>
+          <SidebarGroupContent className="mt-1">
+            <SidebarMenu className="gap-0.5">
               {filteredItems.map((item) => (
                 <SidebarMenuItem key={item.path}>
                   <SidebarMenuButton
