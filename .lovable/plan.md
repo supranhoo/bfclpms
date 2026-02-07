@@ -1,313 +1,173 @@
 
-# Plan: User-Friendly Import with R-Column Based Qualitative Options
+# Plan: Mobile-Optimized KPI Tables for Review Scorecards
 
-## Problem Summary
+## Problem Identified
 
-Currently, importing Tiered KPIs requires users to define `qualitativeOptions` as a complex JSON array:
+The Team Review, Audit Panel, and Management Review pages show an employee list that works well on mobile. However, when you tap an employee to view their KPIs, the **scorecard components** (EmployeeScorecard, AuditScorecard, ManagementScorecard) still use the desktop-style `KpiDetailsTable` which requires horizontal scrolling on mobile devices.
+
+In contrast, the **My KPIs page** correctly switches to touch-friendly `MobileKpiCard` components when viewed on mobile.
+
+---
+
+## Solution
+
+Apply the same mobile-first pattern used in `MyKpis.tsx` to the three scorecard components, conditionally rendering `MobileKpiCard` on mobile screens instead of the full table.
+
+---
+
+## Components to Update
+
+| Component | Location | Issue |
+|-----------|----------|-------|
+| EmployeeScorecard | `src/components/review/EmployeeScorecard.tsx` | Uses `KpiDetailsTable` on all screen sizes |
+| AuditScorecard | `src/components/review/AuditScorecard.tsx` | Uses `KpiDetailsTable` on all screen sizes |
+| ManagementScorecard | `src/components/review/ManagementScorecard.tsx` | Uses `KpiDetailsTable` on all screen sizes |
+
+---
+
+## Implementation Pattern
+
+Replace the current table rendering:
+
+```tsx
+// CURRENT (lines ~556-570 in EmployeeScorecard.tsx)
+<CardContent>
+  <KpiDetailsTable
+    kpis={sortedKpis}
+    submissionMap={submissionMap}
+    viewType="team-review"
+    ...
+  />
+</CardContent>
 ```
-[{"label":"Compliant","rating":5,"definition":"All audits passed"},{"label":"Partial","rating":3,"definition":"Minor issues"}]
-```
 
-This is error-prone and not user-friendly for non-technical users.
+With conditional mobile rendering:
 
----
-
-## Solution Overview
-
-**Use the existing R5-R0 columns to define qualitative option labels!**
-
-When `uomType = binary` or `uomType = tiered`:
-1. Check if `qualitativeOptions` contains a trigger flag (`auto`, `true`, blank)
-2. Scan R5, R4, R3, R2, R1, R0 columns for **text labels**
-3. Auto-generate the `qualitative_options` array
-4. **Only the defined options will appear in the frontend** (no hardcoded Yes/No)
-
----
-
-## Excel Examples
-
-### Example 1: Yes/No Binary (2 options only visible)
-
-| uomType | R5  | R4 | R3 | R2 | R1 | R0 | qualitativeOptions |
-|---------|-----|----|----|----|----|----|--------------------|
-| binary  | Yes |    |    |    |    | No | auto               |
-
-**Result:**
-- `qualitative_options = [{label: "Yes", rating: 5}, {label: "No", rating: 0}]`
-- Frontend shows only **Yes** and **No** buttons
-
-### Example 2: Custom Binary Labels
-
-| uomType | R5   | R4 | R3 | R2 | R1 | R0      | qualitativeOptions |
-|---------|------|----|----|----|----|---------|-------------------|
-| binary  | Done |    |    |    |    | Pending | auto              |
-
-**Result:**
-- `qualitative_options = [{label: "Done", rating: 5}, {label: "Pending", rating: 0}]`
-- Frontend shows only **Done** and **Pending** buttons
-
-### Example 3: 3-Tier Compliance
-
-| uomType | R5        | R4 | R3      | R2 | R1 | R0            | qualitativeOptions |
-|---------|-----------|----|---------|----|----|--------------|--------------------|
-| tiered  | Compliant |    | Partial |    |    | Non-Compliant | auto               |
-
-**Result:**
-- `qualitative_options = [{label: "Compliant", rating: 5}, {label: "Partial", rating: 3}, {label: "Non-Compliant", rating: 0}]`
-- Frontend shows only these **3 options**
-
-### Example 4: 5-Level Risk Rating
-
-| uomType | R5  | R4     | R3     | R2       | R1 | R0     | qualitativeOptions |
-|---------|-----|--------|--------|----------|----|---------|--------------------|
-| tiered  | Low | Medium | High   | Critical |    | Severe | auto               |
-
-**Result:**
-- `qualitative_options = [{label: "Low", rating: 5}, {label: "Medium", rating: 4}, {label: "High", rating: 3}, {label: "Critical", rating: 2}, {label: "Severe", rating: 0}]`
-- Frontend shows only these **5 options**
-
----
-
-## Logic Flow
-
-```text
-+--------------------------------------------------+
-|          Parse Qualitative Options               |
-+--------------------------------------------------+
-              |
-              v
-  Is uomType = 'binary' or 'tiered'?
-              |
-     No ------+------> Skip qualitative processing
-              |
-             Yes
-              |
-              v
-  qualitativeOptions = 'auto' | 'true' | empty?
-              |
-     No ------+------> Use existing JSON/template parsing
-              |
-             Yes
-              |
-              v
-   +---------------------------------+
-   |  Scan R5, R4, R3, R2, R1, R0    |
-   |  for non-empty text labels     |
-   +---------------------------------+
-              |
-              v
-   Create qualitative_options array:
-   - label = text from R column
-   - rating = column number (5, 4, 3, 2, 1, 0)
-   - definition = same as label (or use "|" syntax)
-              |
-              v
-   Store in database
-              |
-              v
-   Frontend renders ONLY these options
+```tsx
+// NEW
+<CardContent className="px-3 sm:px-6">
+  {isMobile ? (
+    <div className="space-y-3">
+      {sortedKpis.map(kpi => {
+        const submission = submissionMap.get(kpi.id);
+        return (
+          <MobileKpiCard
+            key={kpi.id}
+            kpi={kpi}
+            submission={submission}
+            viewType="team-review"
+            onAction={openReviewSheet}
+            onView={openReviewSheet}
+            onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
+            onSendBack={openSendBackDialog}
+            onToggleExpand={toggleDailyExpand}
+            isExpanded={expandedDailyKpis.has(kpi.id)}
+            getOrgKpiValue={getOrgKpiValue}
+          />
+        );
+      })}
+      {sortedKpis.length === 0 && (
+        <p className="text-center text-muted-foreground py-8 text-sm">
+          No KPIs found for this period
+        </p>
+      )}
+    </div>
+  ) : (
+    <KpiDetailsTable
+      kpis={sortedKpis}
+      submissionMap={submissionMap}
+      viewType="team-review"
+      ...existing props...
+    />
+  )}
+</CardContent>
 ```
 
 ---
 
-## Frontend Behavior Change
+## Changes Per File
 
-### Current Behavior (Binary)
-- Uses hardcoded `BINARY_OPTIONS` constant: `[{label: "Yes", rating: 5}, {label: "No", rating: 0}]`
-- Always shows "Yes" and "No" regardless of what was imported
+### 1. EmployeeScorecard.tsx (Team Review)
 
-### New Behavior (After Fix)
-- For binary/tiered KPIs with `qualitative_options` stored in database, use those
-- Only fallback to `BINARY_OPTIONS` if `qualitative_options` is null AND `uomType === 'binary'`
-- This means imported options like "Done/Pending" will display correctly
+**Location:** Lines 544-570
 
----
+- Keep the existing `isMobile` hook (already imported)
+- Replace `KpiDetailsTable` block with conditional rendering
+- Use `viewType="team-review"` for MobileKpiCard
+- Pass `onSendBack` prop for the send-back action
 
-## Extended Syntax (Optional)
+### 2. AuditScorecard.tsx (Audit Panel)
 
-For custom definitions, support `Label|Definition` format:
+**Location:** Lines 569-593
 
-| R5 | R0 |
-|----|----|
-| Yes\|Task completed successfully | No\|Task not completed |
+- Keep the existing `isMobile` hook (already imported)  
+- Replace `KpiDetailsTable` block with conditional rendering
+- Use `viewType="audit"` for MobileKpiCard
+- Pass `onSendBack` prop for the send-back action
 
-**Result:**
-```json
-[
-  { "label": "Yes", "rating": 5, "definition": "Task completed successfully" },
-  { "label": "No", "rating": 0, "definition": "Task not completed" }
-]
-```
+### 3. ManagementScorecard.tsx (Management Review)
 
----
+**Location:** Lines 598-620 (approximately)
 
-## Technical Implementation
-
-### Phase 1: Update Import Parsing Logic
-
-**File: `src/pages/admin/ImportData.tsx`**
-
-Add new `buildOptionsFromRColumns()` function:
-
-```typescript
-const buildOptionsFromRColumns = (row: KpiImportRow): QualitativeOption[] | undefined => {
-  const rColumns: { key: keyof KpiImportRow; rating: number }[] = [
-    { key: 'r5', rating: 5 },
-    { key: 'r4', rating: 4 },
-    { key: 'r3', rating: 3 },
-    { key: 'r2', rating: 2 },
-    { key: 'r1', rating: 1 },
-    { key: 'r0', rating: 0 },
-  ];
-
-  const options: QualitativeOption[] = [];
-
-  for (const { key, rating } of rColumns) {
-    const value = row[key];
-    if (!value || typeof value !== 'string' && typeof value !== 'number') continue;
-    
-    const strValue = String(value).trim();
-    if (!strValue || !isNaN(Number(strValue))) continue; // Skip empty or numeric values
-    
-    // Check for extended syntax: "Label|Definition"
-    if (strValue.includes('|')) {
-      const [label, definition] = strValue.split('|').map(s => s.trim());
-      if (label) {
-        options.push({ label, rating, definition: definition || label });
-      }
-    } else {
-      // Plain label - use label as definition
-      options.push({ label: strValue, rating, definition: strValue });
-    }
-  }
-
-  return options.length >= 2 ? options : undefined;
-};
-```
-
-Update `parseQualitativeOptions()`:
-
-```typescript
-const parseQualitativeOptions = (value: any, row: KpiImportRow): QualitativeOption[] | undefined => {
-  const uomType = String(row.uomType || 'numeric').toLowerCase();
-  
-  // 1. For binary/tiered, check for auto-build flag
-  if (uomType === 'binary' || uomType === 'tiered') {
-    const flagValue = String(value || '').toLowerCase().trim();
-    if (!value || flagValue === 'auto' || flagValue === 'true' || flagValue === 'tiered' || flagValue === 'binary') {
-      return buildOptionsFromRColumns(row);
-    }
-  }
-
-  // 2. Check for template shorthand (e.g., "compliance_3")
-  if (typeof value === 'string' && TIERED_TEMPLATES[value.trim()]) {
-    return TIERED_TEMPLATES[value.trim()];
-  }
-
-  // 3. Existing JSON parsing
-  if (typeof value === 'object' && Array.isArray(value)) return value;
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) return parsed;
-    } catch { /* ignore */ }
-  }
-
-  return undefined;
-};
-```
-
-### Phase 2: Update Edge Function
-
-**File: `supabase/functions/import-kpis/index.ts`**
-
-Mirror the same logic server-side for background imports.
-
-### Phase 3: Update Frontend Components
-
-**Key Change:** When `qualitative_options` is stored in the database, use those instead of hardcoded `BINARY_OPTIONS`.
-
-**Files to Update:**
-- `src/components/review/QualitativeValueInput.tsx`
-- `src/components/review/QualitativeSelect.tsx`
-- `src/components/review/DailySubmissionGrid.tsx`
-- `src/components/review/WeeklySubmissionTable.tsx`
-- `src/components/review/DailySubmissionSummary.tsx`
-
-**Example Change (QualitativeValueInput.tsx):**
-
-```typescript
-// BEFORE: Always uses BINARY_OPTIONS for binary type
-const options = uomType === 'binary' ? BINARY_OPTIONS : qualitativeOptions || [];
-
-// AFTER: Use qualitativeOptions if available, fallback to BINARY_OPTIONS only if null
-const options = qualitativeOptions?.length 
-  ? qualitativeOptions 
-  : (uomType === 'binary' ? BINARY_OPTIONS : []);
-```
-
-### Phase 4: Update Template Download
-
-Update the downloadable Excel template to include:
-- Reference sheet showing R-column format for qualitative KPIs
-- Examples for Yes/No, 3-tier, 5-tier configurations
+- Keep the existing `isMobile` hook (already imported)
+- Replace `KpiDetailsTable` block with conditional rendering  
+- Use `viewType="management"` for MobileKpiCard
+- Pass `onSendBack` prop for the send-back action
 
 ---
 
-## Validation Logic
+## Additional Improvements
 
-Add helpful error messages:
+### Hide Sort Control on Mobile
 
-```typescript
-// In validation logic
-if ((uomType === 'binary' || uomType === 'tiered') && !qualitativeOptions) {
-  const rOptions = buildOptionsFromRColumns(row);
-  if (!rOptions || rOptions.length < 2) {
-    errors.push(
-      `Row ${i}: ${uomType} KPI requires at least 2 options. ` +
-      `Enter labels in R5-R0 columns (e.g., R5="Yes", R0="No") and set qualitativeOptions to "auto" or leave blank.`
-    );
-  }
-}
+The `KpiSortControl` in the header should also be hidden on mobile for cleaner UI:
+
+```tsx
+// Already done in MyKpis.tsx, apply same pattern
+{!isMobile && <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />}
 ```
 
----
+### Consistent Padding
 
-## File Changes Summary
-
-| File | Change Type | Description |
-|------|-------------|-------------|
-| `src/pages/admin/ImportData.tsx` | Modify | Add `buildOptionsFromRColumns()`, update `parseQualitativeOptions()` |
-| `supabase/functions/import-kpis/index.ts` | Modify | Mirror R-column parsing logic for background imports |
-| `src/components/review/QualitativeValueInput.tsx` | Modify | Use stored options if available |
-| `src/components/review/QualitativeSelect.tsx` | Modify | Use stored options if available |
-| `src/components/review/DailySubmissionGrid.tsx` | Modify | Use stored options if available |
-| `src/components/review/WeeklySubmissionTable.tsx` | Modify | Use stored options if available |
-| `src/components/review/DailySubmissionSummary.tsx` | Modify | Use stored options if available |
-| `DOCUMENTATION.md` | Modify | Add section on simplified import syntax |
+Add `px-3 sm:px-6` to CardContent for better mobile spacing (already used in MyKpis.tsx).
 
 ---
 
-## Backward Compatibility
+## Files Changed
 
-| Format | Status |
-|--------|--------|
-| Existing JSON arrays | Still works |
-| Template shorthand (`compliance_3`) | Still works |
-| New R-column + `auto` flag | New feature |
-| New `Label\|Definition` extended syntax | New feature |
-| Existing binary KPIs without options | Still use default Yes/No |
+| File | Change Type | Lines Affected |
+|------|-------------|----------------|
+| `src/components/review/EmployeeScorecard.tsx` | Modify | ~544-570 |
+| `src/components/review/AuditScorecard.tsx` | Modify | ~569-593 |
+| `src/components/review/ManagementScorecard.tsx` | Modify | ~598-620 |
+| `DOCUMENTATION.md` | Update | Add mobile UI section note |
+
+---
+
+## Mobile UX After Implementation
+
+When viewing an employee's KPIs on mobile:
+
+1. Each KPI displays as a **touch-friendly card** showing:
+   - Category color dot + name
+   - Status badge
+   - KRA/KPI names (tappable for logic)
+   - Target, Weight, Score metrics
+   - Review/View button + Daily expand toggle
+
+2. **Action buttons** are appropriately sized for touch targets
+
+3. **No horizontal scrolling** required
+
+4. **Consistent with My KPIs page** user experience
 
 ---
 
 ## Testing Checklist
 
-- [ ] Yes/No binary import shows only "Yes" and "No" buttons
-- [ ] Custom binary labels (Done/Pending) display correctly
-- [ ] 3-tier compliance shows only defined options
-- [ ] Empty R columns are skipped correctly
-- [ ] Extended `Label|Definition` syntax works
-- [ ] Template shorthand still works (`compliance_3`)
-- [ ] JSON format still works (backward compatibility)
-- [ ] Background import handles all new formats
-- [ ] Existing binary KPIs (without stored options) still work
+- Team Review: Click employee → verify cards on mobile, table on desktop
+- Audit Panel: Same verification
+- Management Review: Same verification
+- Daily KPIs: Verify expand/collapse works on mobile cards
+- Send Back: Verify action works from mobile cards
+- Review button: Opens review sheet correctly
