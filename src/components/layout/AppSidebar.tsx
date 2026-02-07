@@ -189,15 +189,17 @@ export function AppSidebar() {
           </div>
         </div>
         {/* Back to Hub link */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full mt-3 justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-          onClick={() => handleNavigation('/home')}
-        >
-          <LayoutGrid className="h-4 w-4 mr-2" />
-          Back to Hub
-        </Button>
+        <div className="mt-3 pt-3 border-t border-sidebar-border/50">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-start text-sidebar-foreground/80 hover:text-sidebar-foreground border-sidebar-border/50"
+            onClick={() => handleNavigation('/home')}
+          >
+            <LayoutGrid className="h-4 w-4 mr-2" />
+            Back to Hub
+          </Button>
+        </div>
       </SidebarHeader>
 
       <SidebarContent>
@@ -210,6 +212,7 @@ export function AppSidebar() {
           filterByRole={filterByRole}
           currentPath={location.pathname}
           onNavigate={handleNavigation}
+          hasActiveRoute={getSectionForPath(location.pathname) === 'main'}
           inboxBadgeCount={inboxBadgeCount}
         />
 
@@ -223,6 +226,7 @@ export function AppSidebar() {
             filterByRole={filterByRole}
             currentPath={location.pathname}
             onNavigate={handleNavigation}
+            hasActiveRoute={getSectionForPath(location.pathname) === 'manager'}
           />
         )}
 
@@ -236,6 +240,7 @@ export function AppSidebar() {
             filterByRole={filterByRole}
             currentPath={location.pathname}
             onNavigate={handleNavigation}
+            hasActiveRoute={getSectionForPath(location.pathname) === 'management'}
           />
         )}
 
@@ -249,6 +254,7 @@ export function AppSidebar() {
             filterByRole={filterByRole}
             currentPath={location.pathname}
             onNavigate={handleNavigation}
+            hasActiveRoute={getSectionForPath(location.pathname) === 'audit'}
           />
         )}
 
@@ -262,6 +268,7 @@ export function AppSidebar() {
             filterByRole={filterByRole}
             currentPath={location.pathname}
             onNavigate={handleNavigation}
+            hasActiveRoute={getSectionForPath(location.pathname) === 'dataEntry'}
           />
         )}
 
@@ -275,7 +282,7 @@ export function AppSidebar() {
             filterByRole={filterByRole}
             currentPath={location.pathname}
             onNavigate={handleNavigation}
-            badge={menuItems.admin.length}
+            hasActiveRoute={getSectionForPath(location.pathname) === 'admin'}
           />
         )}
 
@@ -289,7 +296,7 @@ export function AppSidebar() {
             filterByRole={filterByRole}
             currentPath={location.pathname}
             onNavigate={handleNavigation}
-            badge={filterByRole(menuItems.reports).length}
+            hasActiveRoute={getSectionForPath(location.pathname) === 'reports'}
           />
         )}
       </SidebarContent>

@@ -32,7 +32,7 @@ interface CollapsibleSidebarGroupProps {
   filterByRole: (items: MenuItem[]) => MenuItem[];
   currentPath: string;
   onNavigate: (path: string) => void;
-  badge?: number;
+  hasActiveRoute?: boolean;
   inboxBadgeCount?: number;
 }
 
@@ -44,7 +44,7 @@ export function CollapsibleSidebarGroup({
   filterByRole,
   currentPath,
   onNavigate,
-  badge,
+  hasActiveRoute,
   inboxBadgeCount,
 }: CollapsibleSidebarGroupProps) {
   const filteredItems = filterByRole(items);
@@ -54,21 +54,21 @@ export function CollapsibleSidebarGroup({
     <Collapsible open={isOpen} onOpenChange={onToggle}>
       <SidebarGroup className="py-0">
         <CollapsibleTrigger asChild>
-          <SidebarGroupLabel className="cursor-pointer hover:bg-sidebar-accent/50 rounded-md px-2 flex justify-between items-center h-8">
-            <span>{label}</span>
-            <div className="flex items-center gap-1">
-              {badge !== undefined && badge > 0 && !isOpen && (
-                <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">
-                  {badge}
-                </Badge>
+          <SidebarGroupLabel className="cursor-pointer hover:bg-sidebar-accent/50 rounded-md px-2 py-1.5 flex justify-between items-center min-h-[32px]">
+            <div className="flex items-center gap-1.5">
+              {hasActiveRoute && !isOpen && (
+                <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
               )}
-              <ChevronDown
-                className={cn(
-                  'h-3.5 w-3.5 transition-transform duration-200',
-                  isOpen && 'rotate-180'
-                )}
-              />
+              <span className="text-xs font-medium uppercase tracking-wider text-sidebar-foreground/60">
+                {label}
+              </span>
             </div>
+            <ChevronDown
+              className={cn(
+                'h-3.5 w-3.5 text-sidebar-foreground/40 transition-transform duration-200',
+                isOpen && 'rotate-180'
+              )}
+            />
           </SidebarGroupLabel>
         </CollapsibleTrigger>
         <CollapsibleContent>
