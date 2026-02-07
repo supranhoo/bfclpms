@@ -861,6 +861,7 @@ export default function MyKpis() {
                       selectedPeriod={selectedPeriod}
                       selectedYear={selectedYear}
                       onOpenFullHistory={() => setTrackerModalOpen(true)}
+                      onOpenTimeline={() => setTimelineOpen(true)}
                     />
                   )}
                   

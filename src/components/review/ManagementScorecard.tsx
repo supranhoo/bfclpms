@@ -679,6 +679,7 @@ export function ManagementScorecard({
                 selectedYear={selectedYear}
                 onOpenQueryHistory={() => setHistoryDialogOpen(true)}
                 onOpenFullHistory={() => setTrackerModalOpen(true)}
+                onOpenTimeline={() => setTimelineOpen(true)}
               />
             )}
             
