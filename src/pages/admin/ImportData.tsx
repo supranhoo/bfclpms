@@ -2005,7 +2005,7 @@ export default function ImportData() {
                 <p className="font-medium mt-4 mb-2">Rating threshold columns (for auto-rating calculation):</p>
                 <ul className="list-disc list-inside space-y-1">
                   <li><code>criteria</code> - "Higher is Better" or "Lower is Better"</li>
-                  <li><code>r5</code>, <code>r4</code>, <code>r3</code>, <code>r2</code>, <code>r1</code> - Rating thresholds (5=Exceptional, 1=Needs Improvement)</li>
+                  <li><code>r5</code>, <code>r4</code>, <code>r3</code>, <code>r2</code>, <code>r1</code>, <code>r0</code> - Rating thresholds (5=Exceptional, 0=Zero)</li>
                   <li><code>uom</code> - Unit of Measure (%, ₹, units, etc.)</li>
                   <li><code>kpiWeightage</code> - KPI Weightage (0-100)</li>
                 </ul>
@@ -2036,13 +2036,20 @@ export default function ImportData() {
                   <li><code>isOrgLevel</code> - Set to 'yes' or 'true' for organization-level KPIs (centrally managed)</li>
                   <li><code>frequencyCycleStart</code> - For Yearly KPIs: 'Jan-Dec', 'Jul-Jun', or 'Apr-Mar'</li>
                 </ul>
+                <p className="font-medium mt-4 mb-2">Status columns:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li><code>reviewStatus</code> - Workflow status: <code>kra_set</code>, <code>self_review</code>, <code>manager_check</code>, <code>audit</code>, <code>management_review</code>, <code>approved</code></li>
+                  <li><code>kpiStatus</code> - Submission status: <code>open</code>, <code>submitted</code>, <code>approved_by_manager</code>, <code>locked</code></li>
+                </ul>
                 <p className="font-medium mt-4 mb-2">Optional columns:</p>
                 <ul className="list-disc list-inside space-y-1">
+                  <li><code>sNo</code> - Serial Number (for reference only)</li>
                   <li><code>frequency</code> - Review Frequency (Daily, Weekly, Monthly, Quarterly, Half-Yearly, Yearly)</li>
                   <li><code>sourceOfData</code> - Data Source (SAP, Excel, etc.)</li>
-                  <li><code>targetAchieved</code>, <code>rating</code> - Achievement data</li>
-                  <li><code>employeeTargetAchieved</code>, <code>managerTargetAchieved</code>, <code>auditTargetAchieved</code> - Stage-specific achieved values</li>
-                  <li><code>employeeRemarks</code>, <code>managerRemarks</code>, <code>auditRemarks</code> - Stage-specific remarks</li>
+                  <li><code>targetAchieved</code>, <code>rating</code>, <code>achievedWeight</code>, <code>kpiWeightageScore</code> - Achievement data</li>
+                  <li><code>employeeTargetAchieved</code>, <code>employeeRating</code>, <code>employeeRemarks</code> - Self review data</li>
+                  <li><code>managerTargetAchieved</code>, <code>managerRating</code>, <code>managerRemarks</code> - Manager review data</li>
+                  <li><code>auditTargetAchieved</code>, <code>auditRating</code>, <code>auditRemarks</code> - Audit review data</li>
                 </ul>
                 <Alert className="mt-4">
                   <CheckCircle2 className="h-4 w-4" />
