@@ -2011,8 +2011,18 @@ export default function ImportData() {
                 </ul>
                 <p className="font-medium mt-4 mb-2">Qualitative UOM columns (for non-numeric KPIs):</p>
                 <ul className="list-disc list-inside space-y-1">
-                  <li><code>uomType</code> - Type of measure: <code>numeric</code> (default), <code>binary</code> (Yes/No), or <code>tiered</code> (custom levels)</li>
-                  <li><code>qualitativeOptions</code> - JSON array for tiered KPIs, e.g.: <code>[{`{"label":"Full","rating":5,"definition":"100% achieved"}`}]</code></li>
+                  <li><code>uomType</code> - Type of measure: <code>numeric</code> (default), <code>binary</code>, or <code>tiered</code></li>
+                  <li><code>qualitativeOptions</code> - Set to <code>auto</code> (or leave blank) to auto-build options from R5-R0 labels</li>
+                </ul>
+                <p className="text-xs text-muted-foreground mt-2 mb-2">
+                  <strong>Simplified syntax:</strong> For binary/tiered KPIs, enter text labels in R5-R0 columns instead of JSON. Example:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-xs text-muted-foreground">
+                  <li>Binary Yes/No: <code>R5="Yes"</code>, <code>R0="No"</code> → shows only Yes/No buttons</li>
+                  <li>Custom labels: <code>R5="Done"</code>, <code>R0="Pending"</code> → shows Done/Pending</li>
+                  <li>3-tier: <code>R5="Compliant"</code>, <code>R3="Partial"</code>, <code>R0="Non-Compliant"</code></li>
+                  <li>With tooltip: <code>R5="Yes|Task completed successfully"</code> (Label|Definition)</li>
+                  <li>Template shorthand: <code>qualitativeOptions="yes_no"</code>, <code>"compliance_3"</code>, <code>"pass_fail"</code></li>
                 </ul>
                 <p className="font-medium mt-4 mb-2">Organization structure columns (auto-created if missing):</p>
                 <ul className="list-disc list-inside space-y-1">
