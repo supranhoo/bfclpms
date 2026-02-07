@@ -31,7 +31,7 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
         </Badge>
 
         {/* Right: Status + Period + Weightage + Timeline */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <Badge className={statusColors[status] || statusColors.kra_set}>
             {statusLabels[status] || 'KRA Set'}
           </Badge>

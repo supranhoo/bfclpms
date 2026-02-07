@@ -128,9 +128,6 @@ export function KpiJourneySection({
     },
   };
 
-  // Always 4 columns for full transparency
-  const gridCols = 'grid-cols-4';
-
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -140,8 +137,8 @@ export function KpiJourneySection({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Review Stages Grid */}
-        <div className={`grid ${gridCols} gap-3`}>
+        {/* Review Stages Grid - 2x2 on mobile, 1x4 on desktop */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-3">
           {visibleStages.map(stage => {
             const data = stageData[stage];
             const status = getStageStatus(stage, kpiStatus, viewLevel);

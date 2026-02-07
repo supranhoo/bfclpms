@@ -760,10 +760,11 @@ export function AuditScorecard({
             )}
           </div>
 
-          <SheetFooter className="pt-4 border-t gap-2">
-            {/* Send Back button - leftmost */}
+          <SheetFooter className="flex-col sm:flex-row pt-4 border-t gap-2">
+            {/* Send Back button */}
             <Button
               variant="outline"
+              className="w-full sm:w-auto text-orange-600 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950"
               onClick={() => {
                 setReviewSheetOpen(false);
                 if (selectedKpi) {
@@ -772,20 +773,20 @@ export function AuditScorecard({
                   setSendBackDialogOpen(true);
                 }
               }}
-              className="text-orange-600 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950"
             >
               <Undo2 className="h-4 w-4 mr-2" />
               Send Back
             </Button>
             
-            <div className="flex-1" /> {/* Spacer to push other buttons right */}
+            <div className="hidden sm:block flex-1" /> {/* Spacer - hidden on mobile */}
             
-            <Button variant="outline" onClick={() => setReviewSheetOpen(false)}>
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setReviewSheetOpen(false)}>
               Cancel
             </Button>
             {!submissionMap.get(selectedKpi?.id || '')?.is_na && (
               <Button
                 variant="secondary"
+                className="w-full sm:w-auto"
                 onClick={() => handleSubmitReview(false)}
                 disabled={auditorScore === null || submitAuditReview.isPending}
               >
@@ -793,13 +794,13 @@ export function AuditScorecard({
               </Button>
             )}
             <Button
+              className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700"
               onClick={() => handleSubmitReview(true)}
               disabled={
                 submissionMap.get(selectedKpi?.id || '')?.is_na 
                   ? !naConfirmed 
                   : (auditorScore === null || submitAuditReview.isPending)
               }
-              className="bg-purple-600 hover:bg-purple-700"
             >
               <Check className="h-4 w-4 mr-2" />
               {submissionMap.get(selectedKpi?.id || '')?.is_na 

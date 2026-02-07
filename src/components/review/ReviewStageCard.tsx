@@ -60,7 +60,7 @@ export function ReviewStageCard({
   return (
     <div
       className={cn(
-        'p-3 rounded-lg border transition-all',
+        'p-2 sm:p-3 rounded-lg border transition-all',
         borderColorClasses[iconColor],
         isPending && 'opacity-50 bg-muted/30',
         isCurrent && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
@@ -68,9 +68,9 @@ export function ReviewStageCard({
       )}
     >
       {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        <div className={cn('h-6 w-6 rounded-full flex items-center justify-center', iconColorClasses[iconColor])}>
-          <Icon className="h-3.5 w-3.5" />
+      <div className="flex items-center gap-1.5 sm:gap-2 mb-2">
+        <div className={cn('h-5 w-5 sm:h-6 sm:w-6 rounded-full flex items-center justify-center', iconColorClasses[iconColor])}>
+          <Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
         </div>
         <span className="text-xs font-medium">{title}</span>
         {isCurrent && (
