@@ -20,19 +20,19 @@ export function ScoreSelector({ value, onChange, label = 'Score', disabled = fal
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {scoreOptions.map(opt => (
           <Button
             key={opt.score}
             type="button"
             variant={value === opt.score ? 'default' : 'outline'}
-            className="h-auto py-3 flex flex-col gap-1"
+            className="h-auto py-2 sm:py-3 flex flex-col gap-0.5 sm:gap-1"
             style={value === opt.score ? { backgroundColor: opt.color, borderColor: opt.color } : {}}
             onClick={() => onChange(opt.score, opt.level)}
             disabled={disabled}
           >
             <div 
-              className="w-4 h-4 rounded-full border-2 border-current" 
+              className="w-3 h-3 sm:w-4 sm:h-4 rounded-full border-2 border-current" 
               style={{ backgroundColor: value === opt.score ? 'white' : opt.color }}
             />
             <span className="text-xs font-semibold">{opt.score}</span>

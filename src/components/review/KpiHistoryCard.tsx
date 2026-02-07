@@ -115,18 +115,18 @@ export function KpiHistoryCard({
           {monthlyData.map((entry, idx) => (
             <div
               key={idx}
-              className="flex items-center justify-between py-1.5 px-2 rounded bg-muted/30"
+              className="flex items-center justify-between py-1 sm:py-1.5 px-1.5 sm:px-2 rounded bg-muted/30"
             >
-              <span className="font-medium w-16">
+              <span className="font-medium w-12 sm:w-16 text-[10px] sm:text-xs">
                 {entry.month?.slice(0, 3)}-{String(entry.year).slice(-2)}
               </span>
-              <span className="text-muted-foreground">
+              <span className="text-muted-foreground text-[10px] sm:text-xs">
                 {entry.achieved}/{entry.target}
               </span>
-              <Badge variant="outline" className="text-xs px-1.5">
+              <Badge variant="outline" className="text-[10px] sm:text-xs px-1 sm:px-1.5">
                 {entry.score || '-'}
               </Badge>
-              <span className="text-muted-foreground uppercase text-[10px] w-16 text-right truncate">
+              <span className="text-muted-foreground uppercase text-[10px] w-10 sm:w-16 text-right truncate hidden sm:inline">
                 {(entry.status || '').replace(/_/g, ' ')}
               </span>
             </div>
