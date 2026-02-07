@@ -46,7 +46,7 @@ export function KpiReviewPanel({
 }: KpiReviewPanelProps) {
   const isOwnKpi = currentUserId ? kpi.employee_id === currentUserId : false;
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {/* KPI Header - Full Width */}
       <KpiHeaderSection
         kpi={kpi}
@@ -58,7 +58,7 @@ export function KpiReviewPanel({
       {/* Two-Column Layout - collapses at md breakpoint for mobile sheets */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-3 md:gap-4">
         {/* LEFT COLUMN (40%) - Metrics & History */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="md:col-span-2 space-y-3 sm:space-y-4">
           <KpiMetricsSection kpi={kpi} />
           
           <KpiHistoryCard
@@ -70,7 +70,7 @@ export function KpiReviewPanel({
         </div>
 
         {/* RIGHT COLUMN (60%) - Review Journey & Observations */}
-        <div className="lg:col-span-3 space-y-4">
+        <div className="md:col-span-3 space-y-3 sm:space-y-4">
           <KpiJourneySection
             kpi={kpi}
             submission={submission}

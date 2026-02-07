@@ -600,12 +600,12 @@ export function EmployeeScorecard({
 
       {/* Review Sheet */}
       <Sheet open={reviewSheetOpen} onOpenChange={setReviewSheetOpen}>
-        <SheetContent className="flex flex-col h-full w-[85vw] max-w-[1200px] sm:max-w-[1200px] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>
+        <SheetContent className="flex flex-col h-full w-full sm:w-[85vw] sm:max-w-[1200px] overflow-y-auto p-4 sm:p-6">
+          <SheetHeader className="pb-2 sm:pb-4">
+            <SheetTitle className="text-base sm:text-lg">
               {selectedKpi?.status === 'self_review' ? 'Manager Review' : 'View KPI Details'}
             </SheetTitle>
-            <SheetDescription>
+            <SheetDescription className="text-xs sm:text-sm">
               {selectedKpi?.status === 'self_review' 
                 ? 'Review and provide your assessment for this KPI'
                 : 'View daily submission details for this KPI'}
@@ -613,7 +613,7 @@ export function EmployeeScorecard({
           </SheetHeader>
 
           {selectedKpi && (
-            <div className="space-y-6 py-6">
+            <div className="space-y-4 sm:space-y-6 py-4 sm:py-6">
               {/* KPI Review Panel */}
               <KpiReviewPanel
                 kpi={selectedKpi}

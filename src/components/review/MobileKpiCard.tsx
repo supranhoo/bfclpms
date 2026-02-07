@@ -178,18 +178,18 @@ export function MobileKpiCard({
 
   return (
     <Card className={cn(
-      "p-4",
+      "p-3",
       isLocked && "opacity-60",
       isNaKpi && "opacity-60 bg-muted/20"
     )}>
       {/* Row 1: Category + Status */}
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <div
-            className="w-2.5 h-2.5 rounded-full shrink-0"
+            className="w-2 h-2 rounded-full shrink-0"
             style={{ backgroundColor: kpi.kra_categories?.color || 'hsl(var(--primary))' }}
           />
-          <span className="text-xs text-muted-foreground truncate">
+          <span className="text-[10px] text-muted-foreground truncate">
             {kpi.kra_categories?.name || 'Uncategorized'}
           </span>
           {kpi.is_org_level && (
@@ -209,12 +209,12 @@ export function MobileKpiCard({
             </Tooltip>
           )}
           {isDailyKpi && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
+            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0">
               Daily
             </Badge>
           )}
         </div>
-        <Badge className={cn(statusColors[kpi.status || 'kra_set'], "text-xs shrink-0 ml-2")}>
+        <Badge className={cn(statusColors[kpi.status || 'kra_set'], "text-[10px] shrink-0 ml-1.5")}>
           {statusLabels[kpi.status || 'kra_set']}
         </Badge>
       </div>
@@ -222,33 +222,33 @@ export function MobileKpiCard({
       {/* Row 2: KRA/KPI Names - Clickable for logic */}
       <button
         onClick={() => onShowLogic?.(kpi)}
-        className="text-left w-full mb-3 group"
+        className="text-left w-full mb-2 group"
       >
-        <p className="font-medium text-sm line-clamp-1 group-hover:text-primary transition-colors">
+        <p className="font-medium text-xs line-clamp-1 group-hover:text-primary transition-colors">
           {normalizeKpiText(kpi.kra_name)}
         </p>
-        <p className="text-xs text-muted-foreground line-clamp-2 flex items-center gap-1">
+        <p className="text-[10px] text-muted-foreground line-clamp-2 flex items-center gap-1">
           {normalizeKpiText(kpi.kpi_name)}
-          <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+          <Info className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
         </p>
       </button>
 
       {/* Row 3: Metrics + Actions */}
       <div className="flex items-center justify-between">
-        <div className="flex gap-4 text-xs">
+        <div className="flex gap-3 text-[10px]">
           <div>
-            <span className="text-muted-foreground block text-[10px]">Target</span>
-            <span className="font-mono font-medium">{kpi.target_value ?? '-'}</span>
-            {kpi.uom && <span className="text-muted-foreground ml-0.5">{kpi.uom}</span>}
+            <span className="text-muted-foreground block text-[9px]">Target</span>
+            <span className="font-mono font-medium text-xs">{kpi.target_value ?? '-'}</span>
+            {kpi.uom && <span className="text-muted-foreground ml-0.5 text-[9px]">{kpi.uom}</span>}
           </div>
           <div>
-            <span className="text-muted-foreground block text-[10px]">Weight</span>
-            <span className="font-medium">{kpi.weightage}%</span>
+            <span className="text-muted-foreground block text-[9px]">Weight</span>
+            <span className="font-medium text-xs">{kpi.weightage}%</span>
           </div>
           {displayScore !== null && !isNaKpi && (
             <div>
-              <span className="text-muted-foreground block text-[10px]">Score</span>
-              <span className="font-medium">{displayScore}</span>
+              <span className="text-muted-foreground block text-[9px]">Score</span>
+              <span className="font-medium text-xs">{displayScore}</span>
             </div>
           )}
         </div>

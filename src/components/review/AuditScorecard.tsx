@@ -623,20 +623,20 @@ export function AuditScorecard({
 
       {/* Audit Review Sheet */}
       <Sheet open={reviewSheetOpen} onOpenChange={setReviewSheetOpen}>
-        <SheetContent className="flex flex-col h-full w-[85vw] max-w-[1200px] sm:max-w-[1200px] overflow-y-auto">
-          <SheetHeader className="pb-4 border-b">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <Shield className="h-5 w-5 text-purple-500" />
+        <SheetContent className="flex flex-col h-full w-full sm:w-[85vw] sm:max-w-[1200px] overflow-y-auto p-4 sm:p-6">
+          <SheetHeader className="pb-3 sm:pb-4 border-b">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-purple-500" />
               </div>
               <div>
-                <SheetTitle>Audit Review</SheetTitle>
-                <SheetDescription>Verify and validate KPI evaluation</SheetDescription>
+                <SheetTitle className="text-base sm:text-lg">Audit Review</SheetTitle>
+                <SheetDescription className="text-xs sm:text-sm">Verify and validate KPI evaluation</SheetDescription>
               </div>
             </div>
           </SheetHeader>
 
-          <div className="flex-1 space-y-4 py-4">
+          <div className="flex-1 space-y-3 sm:space-y-4 py-3 sm:py-4">
             {/* KPI Review Panel */}
             {selectedKpi && (
               <KpiReviewPanel
