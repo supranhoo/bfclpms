@@ -50,7 +50,10 @@ export function QualitativeValueInput({
   disabled = false,
   label = 'Achieved Value',
 }: QualitativeValueInputProps) {
-  const options = uomType === 'binary' ? BINARY_OPTIONS : qualitativeOptions || [];
+  // Use stored qualitativeOptions if available, fallback to BINARY_OPTIONS only if null
+  const options = qualitativeOptions?.length 
+    ? qualitativeOptions 
+    : (uomType === 'binary' ? BINARY_OPTIONS : []);
 
   if (options.length === 0) {
     return (

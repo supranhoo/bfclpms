@@ -43,6 +43,46 @@ const QualitativeOptionSchema = z.object({
   definition: z.string().max(500).optional().default(''),
 });
 
+type QualitativeOption = z.infer<typeof QualitativeOptionSchema>;
+
+// Template presets for qualitative KPIs
+const TIERED_TEMPLATES: Record<string, QualitativeOption[]> = {
+  'yes_no': [
+    { label: 'Yes', rating: 5, definition: 'Requirement fully met' },
+    { label: 'No', rating: 0, definition: 'Requirement not met' },
+  ],
+  'pass_fail': [
+    { label: 'Pass', rating: 5, definition: 'Successfully passed' },
+    { label: 'Fail', rating: 0, definition: 'Did not pass' },
+  ],
+  'compliance_3': [
+    { label: 'Compliant', rating: 5, definition: 'Fully compliant with all requirements' },
+    { label: 'Partial', rating: 3, definition: 'Partially compliant with documented gaps' },
+    { label: 'Non-Compliant', rating: 0, definition: 'Failed to meet compliance requirements' },
+  ],
+  'compliance_4': [
+    { label: 'Full', rating: 5, definition: 'Fully compliant' },
+    { label: 'Substantial', rating: 4, definition: 'Substantially compliant with minor gaps' },
+    { label: 'Partial', rating: 2, definition: 'Partially compliant with significant gaps' },
+    { label: 'None', rating: 0, definition: 'Non-compliant' },
+  ],
+  'achievement': [
+    { label: 'Achieved', rating: 5, definition: 'Target fully achieved' },
+    { label: 'Partial', rating: 3, definition: 'Target partially achieved' },
+    { label: 'Not Achieved', rating: 0, definition: 'Target not achieved' },
+  ],
+  'risk_rating': [
+    { label: 'Low', rating: 5, definition: 'Low risk - within acceptable limits' },
+    { label: 'Medium', rating: 3, definition: 'Medium risk - requires monitoring' },
+    { label: 'High', rating: 0, definition: 'High risk - immediate action required' },
+  ],
+  'timeliness': [
+    { label: 'On-time', rating: 5, definition: 'Delivered on or before deadline' },
+    { label: 'Late', rating: 2, definition: 'Delivered after deadline' },
+    { label: 'Not Submitted', rating: 0, definition: 'Not delivered' },
+  ],
+};
+
 const KpiImportRowSchema = z.object({
   sNo: z.union([z.number(), z.string()]).optional(),
   month: optionalString(MAX_TEXT_LENGTH),
@@ -659,10 +699,69 @@ async function processImport(
       
       const kpiId = crypto.randomUUID();
       
-      // Parse uomType and qualitativeOptions
+      // Parse uomType and qualitativeOptions with R-column support
       const uomType = row.uomType || 'numeric';
       let qualitativeOptions = null;
-      if (row.qualitativeOptions) {
+      
+      // Build options from R-columns for binary/tiered KPIs
+      const buildOptionsFromRColumns = (row: KpiImportRow): QualitativeOption[] | null => {
+        const rColumns: { key: keyof KpiImportRow; rating: number }[] = [
+          { key: 'r5', rating: 5 },
+          { key: 'r4', rating: 4 },
+          { key: 'r3', rating: 3 },
+          { key: 'r2', rating: 2 },
+          { key: 'r1', rating: 1 },
+          { key: 'r0', rating: 0 },
+        ];
+
+        const options: QualitativeOption[] = [];
+
+        for (const { key, rating } of rColumns) {
+          const value = row[key];
+          if (!value) continue;
+          
+          const strValue = String(value).trim();
+          // Skip empty or pure numeric values (these are standard thresholds, not labels)
+          if (!strValue || (!isNaN(Number(strValue)) && !strValue.includes('|'))) continue;
+          
+          // Check for extended syntax: "Label|Definition"
+          if (strValue.includes('|')) {
+            const parts = strValue.split('|').map((s: string) => s.trim());
+            const label = parts[0];
+            const definition = parts[1] || label;
+            if (label) {
+              options.push({ label, rating, definition });
+            }
+          } else {
+            // Plain label - use label as definition
+            options.push({ label: strValue, rating, definition: strValue });
+          }
+        }
+
+        return options.length >= 2 ? options : null;
+      };
+
+      // Check for auto-build from R-columns
+      if (uomType === 'binary' || uomType === 'tiered') {
+        const flagValue = String(row.qualitativeOptions || '').toLowerCase().trim();
+        if (!row.qualitativeOptions || flagValue === 'auto' || flagValue === 'true' || flagValue === 'tiered' || flagValue === 'binary' || flagValue === '') {
+          const rOptions = buildOptionsFromRColumns(row);
+          if (rOptions && rOptions.length >= 2) {
+            qualitativeOptions = rOptions;
+          }
+        }
+        
+        // Check for template shorthand
+        if (!qualitativeOptions && typeof row.qualitativeOptions === 'string') {
+          const templateKey = row.qualitativeOptions.trim().toLowerCase().replace(/[- ]/g, '_');
+          if (TIERED_TEMPLATES[templateKey]) {
+            qualitativeOptions = TIERED_TEMPLATES[templateKey];
+          }
+        }
+      }
+      
+      // Fallback to JSON parsing if still no options
+      if (!qualitativeOptions && row.qualitativeOptions) {
         if (typeof row.qualitativeOptions === 'string') {
           try {
             qualitativeOptions = JSON.parse(row.qualitativeOptions);

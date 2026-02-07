@@ -28,7 +28,10 @@ export function QualitativeSelect({
   placeholder = 'Select...',
   className = '',
 }: QualitativeSelectProps) {
-  const options = uomType === 'binary' ? BINARY_OPTIONS : qualitativeOptions || [];
+  // Use stored qualitativeOptions if available, fallback to BINARY_OPTIONS only if null
+  const options = qualitativeOptions?.length 
+    ? qualitativeOptions 
+    : (uomType === 'binary' ? BINARY_OPTIONS : []);
 
   if (options.length === 0) {
     return <span className="text-sm text-muted-foreground">No options</span>;

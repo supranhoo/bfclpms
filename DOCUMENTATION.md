@@ -1257,7 +1257,7 @@ The PMS import template supports the following columns (41 total):
 | `target` | **Yes** | Target value |
 | `uom` | No | Unit of measure (%, ₹, units, etc.) |
 | `uomType` | No | Type: `numeric` (default), `binary`, `tiered` |
-| `qualitativeOptions` | No | JSON array for tiered KPIs |
+| `qualitativeOptions` | No | R-column format (preferred), template shorthand, or JSON array |
 | `frequency` | No | Daily, Weekly, Monthly, Quarterly, Half-Yearly, Yearly |
 | `frequencyCycleStart` | No | For Yearly: `Jan-Dec`, `Jul-Jun`, `Apr-Mar` |
 
@@ -1266,12 +1266,64 @@ The PMS import template supports the following columns (41 total):
 |--------|----------|-------------|
 | `kpiWeightage` | No | Weightage (0-100) |
 | `criteria` | No | "Higher is Better" or "Lower is Better" |
-| `r5` | No | Threshold for rating 5 (Outstanding) |
-| `r4` | No | Threshold for rating 4 |
-| `r3` | No | Threshold for rating 3 |
-| `r2` | No | Threshold for rating 2 |
-| `r1` | No | Threshold for rating 1 |
-| `r0` | No | Threshold for rating 0 |
+| `r5` | No | Rating 5 threshold OR qualitative label (e.g., "Compliant") |
+| `r4` | No | Rating 4 threshold OR qualitative label |
+| `r3` | No | Rating 3 threshold OR qualitative label |
+| `r2` | No | Rating 2 threshold OR qualitative label |
+| `r1` | No | Rating 1 threshold OR qualitative label |
+| `r0` | No | Rating 0 threshold OR qualitative label |
+
+##### Qualitative KPI Import (Binary/Tiered)
+
+For **binary** and **tiered** KPIs, the system provides user-friendly options to define qualitative choices without complex JSON:
+
+**Method 1: R-Column Labels (Recommended)**
+
+Enter text labels directly in the R5-R0 columns. Only the columns with text will become selectable options:
+
+| uomType | R5 | R4 | R3 | R2 | R1 | R0 | qualitativeOptions |
+|---------|-----------|----|---------|----|----|--------------|--------------------|
+| binary  | Yes |    |    |    |    | No | auto |
+| tiered  | Compliant |    | Partial |    |    | Non-Compliant | auto |
+| tiered  | Low | Medium | High | Critical |    | Severe | auto |
+
+**Result:** Only the defined options appear in the frontend (e.g., "Yes/No" or "Compliant/Partial/Non-Compliant").
+
+**Extended Syntax with Definitions:**
+Use `Label|Definition` format for custom tooltips:
+
+| R5 | R0 |
+|----|----|
+| Yes\|Task fully completed | No\|Task not completed |
+
+**Method 2: Template Shorthand**
+
+Use predefined template names in the `qualitativeOptions` column:
+
+| Code | Options |
+|------|---------|
+| `yes_no` | Yes (R5), No (R0) |
+| `pass_fail` | Pass (R5), Fail (R0) |
+| `compliance_3` | Compliant (R5), Partial (R3), Non-Compliant (R0) |
+| `compliance_4` | Full (R5), Substantial (R4), Partial (R2), None (R0) |
+| `achievement` | Achieved (R5), Partial (R3), Not Achieved (R0) |
+| `risk_rating` | Low (R5), Medium (R3), High (R0) |
+| `timeliness` | On-time (R5), Late (R2), Not Submitted (R0) |
+
+**Example:**
+
+| uomType | qualitativeOptions |
+|---------|-------------------|
+| tiered  | compliance_3      |
+
+**Method 3: JSON Array (Legacy)**
+
+Full JSON format for maximum control:
+
+```
+[{"label":"Compliant","rating":5,"definition":"All requirements met"},{"label":"Non-Compliant","rating":0,"definition":"Requirements not met"}]
+```
+
 
 **Organization Structure (4 columns):**
 | Column | Required | Description |
