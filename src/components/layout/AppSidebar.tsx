@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOpenQueryCount } from '@/hooks/useOpenQueryCount';
@@ -9,17 +9,14 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   BarChart3,
   ClipboardList,
@@ -45,11 +42,11 @@ import {
   Eye,
   LayoutGrid,
 } from 'lucide-react';
+import { CollapsibleSidebarGroup } from './CollapsibleSidebarGroup';
 
 const menuItems = {
   main: [
     { title: 'Dashboard', icon: Home, path: '/dashboard', roles: ['admin', 'manager', 'employee', 'auditor', 'management'] },
-    // My KPIs combines KPI viewing and self-review submission
     { title: 'My KPIs', icon: Target, path: '/my-kpis', roles: ['employee', 'manager', 'auditor', 'admin', 'management'] },
     { title: 'Inbox', icon: MessageSquare, path: '/queries', roles: ['employee', 'manager', 'admin', 'auditor', 'management'], showBadge: true },
     { title: 'PMS Policy', icon: FileText, path: '/pms-policy', roles: ['employee', 'manager', 'admin', 'auditor', 'management'] },
@@ -81,6 +78,9 @@ const menuItems = {
     { title: 'System Settings', icon: Settings, path: '/admin/settings', roles: ['admin'] },
     { title: 'Audit Logs', icon: History, path: '/audit-logs', roles: ['admin'] },
   ],
+  dataEntry: [
+    { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', roles: ['employee', 'manager', 'auditor', 'management'] },
+  ],
   reports: [
     { title: 'View Reports', icon: BarChart3, path: '/reports', roles: ['admin', 'manager', 'auditor', 'management'] },
     { title: 'Performance Report', icon: BarChart3, path: '/reports/performance', roles: ['admin', 'manager', 'auditor'] },
@@ -89,31 +89,78 @@ const menuItems = {
   ],
 };
 
+// Helper to determine which section contains a given path
+const getSectionForPath = (pathname: string): string => {
+  if (menuItems.main.some(item => pathname === item.path)) return 'main';
+  if (menuItems.manager.some(item => pathname === item.path)) return 'manager';
+  if (menuItems.management.some(item => pathname === item.path)) return 'management';
+  if (menuItems.audit.some(item => pathname === item.path)) return 'audit';
+  if (menuItems.admin.some(item => pathname.startsWith(item.path))) return 'admin';
+  if (menuItems.reports.some(item => pathname.startsWith(item.path))) return 'reports';
+  if (pathname === '/admin/org-kpi-data') return 'dataEntry';
+  return 'main';
+};
+
 export function AppSidebar() {
   const { profile, role, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const { setOpenMobile, isMobile } = useSidebar();
   const { data: openQueryCount } = useOpenQueryCount();
   const { data: unreadNotificationCount } = useUnreadNotificationCount();
   const { data: appSettings } = useAppSettings();
   const { data: isDataOwner } = useIsAnyOrgKpiDataOwner();
-  
+
+  // Track which sections are open
+  const [openSections, setOpenSections] = useState<Set<string>>(() => {
+    return new Set([getSectionForPath(location.pathname)]);
+  });
+
+  // Auto-expand section when route changes
+  useEffect(() => {
+    const section = getSectionForPath(location.pathname);
+    setOpenSections(prev => {
+      if (prev.has(section)) return prev;
+      return new Set([...prev, section]);
+    });
+  }, [location.pathname]);
+
   // Update document title based on app settings
   useEffect(() => {
     if (appSettings?.app_name) {
       document.title = appSettings.app_name;
     }
   }, [appSettings?.app_name]);
-  
+
   // Combine query count and notification count for inbox badge
   const inboxBadgeCount = (openQueryCount || 0) + (unreadNotificationCount || 0);
-  
+
   const displayAppName = appSettings?.app_name || 'PMS Dashboard';
   const displayOrgName = appSettings?.organization_name || 'Performance Management';
-  
-  const filterByRole = (items: typeof menuItems.main) => {
+
+  const filterByRole = useCallback((items: typeof menuItems.main) => {
     return items.filter(item => role && item.roles.includes(role));
-  };
+  }, [role]);
+
+  const toggleSection = useCallback((section: string) => {
+    setOpenSections(prev => {
+      const next = new Set(prev);
+      if (next.has(section)) {
+        next.delete(section);
+      } else {
+        next.add(section);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleNavigation = useCallback((path: string) => {
+    navigate(path);
+    // Auto-close sidebar on mobile after navigation
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  }, [navigate, isMobile, setOpenMobile]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -146,7 +193,7 @@ export function AppSidebar() {
           variant="ghost"
           size="sm"
           className="w-full mt-3 justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-          onClick={() => navigate('/home')}
+          onClick={() => handleNavigation('/home')}
         >
           <LayoutGrid className="h-4 w-4 mr-2" />
           Back to Hub
@@ -154,153 +201,96 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Main</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {filterByRole(menuItems.main).map((item) => (
-                <SidebarMenuItem key={item.path}>
-                  <SidebarMenuButton
-                    isActive={location.pathname === item.path}
-                    onClick={() => navigate(item.path)}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.title}</span>
-                    {'showBadge' in item && item.showBadge && inboxBadgeCount > 0 && (
-                      <Badge variant="destructive" className="ml-auto h-5 min-w-5 px-1 flex items-center justify-center text-xs">
-                        {inboxBadgeCount}
-                      </Badge>
-                    )}
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* Main Section */}
+        <CollapsibleSidebarGroup
+          label="Main"
+          items={menuItems.main}
+          isOpen={openSections.has('main')}
+          onToggle={() => toggleSection('main')}
+          filterByRole={filterByRole}
+          currentPath={location.pathname}
+          onNavigate={handleNavigation}
+          inboxBadgeCount={inboxBadgeCount}
+        />
 
+        {/* Manager Section */}
         {(role === 'manager' || role === 'management' || role === 'admin') && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Manager</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {filterByRole(menuItems.manager).map((item) => (
-                  <SidebarMenuItem key={item.path}>
-                    <SidebarMenuButton
-                      isActive={location.pathname === item.path}
-                      onClick={() => navigate(item.path)}
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          <CollapsibleSidebarGroup
+            label="Manager"
+            items={menuItems.manager}
+            isOpen={openSections.has('manager')}
+            onToggle={() => toggleSection('manager')}
+            filterByRole={filterByRole}
+            currentPath={location.pathname}
+            onNavigate={handleNavigation}
+          />
         )}
 
+        {/* Management Section */}
         {(role === 'management' || role === 'admin') && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Management</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {filterByRole(menuItems.management).map((item) => (
-                  <SidebarMenuItem key={item.path}>
-                    <SidebarMenuButton
-                      isActive={location.pathname === item.path}
-                      onClick={() => navigate(item.path)}
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          <CollapsibleSidebarGroup
+            label="Management"
+            items={menuItems.management}
+            isOpen={openSections.has('management')}
+            onToggle={() => toggleSection('management')}
+            filterByRole={filterByRole}
+            currentPath={location.pathname}
+            onNavigate={handleNavigation}
+          />
         )}
 
+        {/* Audit Section */}
         {(role === 'auditor' || role === 'admin') && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Audit</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {filterByRole(menuItems.audit).map((item) => (
-                  <SidebarMenuItem key={item.path}>
-                    <SidebarMenuButton
-                      isActive={location.pathname === item.path}
-                      onClick={() => navigate(item.path)}
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          <CollapsibleSidebarGroup
+            label="Audit"
+            items={menuItems.audit}
+            isOpen={openSections.has('audit')}
+            onToggle={() => toggleSection('audit')}
+            filterByRole={filterByRole}
+            currentPath={location.pathname}
+            onNavigate={handleNavigation}
+          />
         )}
 
         {/* Data Entry section for data owners (non-admins) */}
         {role !== 'admin' && isDataOwner && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Data Entry</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    isActive={location.pathname === '/admin/org-kpi-data'}
-                    onClick={() => navigate('/admin/org-kpi-data')}
-                  >
-                    <Building2 className="h-4 w-4" />
-                    <span>Org KPI Data Entry</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          <CollapsibleSidebarGroup
+            label="Data Entry"
+            items={menuItems.dataEntry}
+            isOpen={openSections.has('dataEntry')}
+            onToggle={() => toggleSection('dataEntry')}
+            filterByRole={filterByRole}
+            currentPath={location.pathname}
+            onNavigate={handleNavigation}
+          />
         )}
 
+        {/* Administration Section */}
         {role === 'admin' && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Administration</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {filterByRole(menuItems.admin).map((item) => (
-                  <SidebarMenuItem key={item.path}>
-                    <SidebarMenuButton
-                      isActive={location.pathname === item.path}
-                      onClick={() => navigate(item.path)}
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          <CollapsibleSidebarGroup
+            label="Administration"
+            items={menuItems.admin}
+            isOpen={openSections.has('admin')}
+            onToggle={() => toggleSection('admin')}
+            filterByRole={filterByRole}
+            currentPath={location.pathname}
+            onNavigate={handleNavigation}
+            badge={menuItems.admin.length}
+          />
         )}
 
-        {(role === 'admin' || role === 'manager' || role === 'auditor') && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Reports</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {filterByRole(menuItems.reports).map((item) => (
-                  <SidebarMenuItem key={item.path}>
-                    <SidebarMenuButton
-                      isActive={location.pathname === item.path}
-                      onClick={() => navigate(item.path)}
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+        {/* Reports Section */}
+        {(role === 'admin' || role === 'manager' || role === 'auditor' || role === 'management') && (
+          <CollapsibleSidebarGroup
+            label="Reports"
+            items={menuItems.reports}
+            isOpen={openSections.has('reports')}
+            onToggle={() => toggleSection('reports')}
+            filterByRole={filterByRole}
+            currentPath={location.pathname}
+            onNavigate={handleNavigation}
+            badge={filterByRole(menuItems.reports).length}
+          />
         )}
       </SidebarContent>
 
