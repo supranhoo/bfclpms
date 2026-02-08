@@ -1,73 +1,74 @@
 
+# Plan: Mobile Sidebar Fix + Dashboard Enhancement
 
-# Plan: Unified Dashboard and Sidebar Unhide Feature
+## Overview
 
-## Understanding
-
-Based on your feedback, I'll implement two changes:
-
-1. **Same Dashboard for all roles**: Currently there are 3 separate dashboards (Employee, Admin, Management). You want to use the main Dashboard at `/dashboard` for all roles instead of separate ones.
-
-2. **Sidebar unhide option**: When the sidebar is collapsed/hidden, add a visible trigger button in the main content area so users can easily re-expand it.
+This plan addresses the three issues:
+1. Fix mobile sidebar toggle visibility
+2. Confirm unified dashboard is working (already done)
+3. Optionally merge "My KPIs" submission into Dashboard
 
 ---
 
-## Technical Approach
+## Part 1: Fix Mobile Sidebar Toggle
 
-### 1. Add Floating Sidebar Trigger for Collapsed State
+### Problem
+The floating `SidebarTrigger` only appears when desktop sidebar is collapsed. On mobile, the sidebar uses a `Sheet` component with separate `openMobile` state, so the trigger never shows.
+
+### Solution
 
 **File**: `src/components/layout/DashboardLayout.tsx`
 
-Add a floating `SidebarTrigger` button that appears when the sidebar is collapsed:
+Update the condition to handle both mobile and desktop scenarios:
 
 ```tsx
-// Inside DashboardLayout, using useSidebar hook to detect state
-const { state } = useSidebar();
-
-// Add a floating trigger that only shows when sidebar is collapsed
-{state === 'collapsed' && (
-  <div className="fixed top-4 left-4 z-50">
-    <SidebarTrigger className="bg-background border shadow-sm" />
-  </div>
-)}
+function DashboardContent() {
+  const { state, isMobile, openMobile, setOpenMobile } = useSidebar();
+  
+  // Show floating trigger when:
+  // - Mobile: sidebar sheet is closed (openMobile === false)
+  // - Desktop: sidebar is collapsed (state === 'collapsed')
+  const showFloatingTrigger = isMobile ? !openMobile : state === 'collapsed';
+  
+  return (
+    <>
+      {showFloatingTrigger && (
+        <div className="fixed top-4 left-4 z-50">
+          <SidebarTrigger className="bg-background border shadow-sm rounded-md p-2 hover:bg-accent" />
+        </div>
+      )}
+      <SidebarInset>
+        ...
+      </SidebarInset>
+    </>
+  );
+}
 ```
 
-This creates a floating button in the top-left corner that appears only when the sidebar is hidden.
+---
 
-### 2. Route Management Dashboard to Main Dashboard
+## Part 2: Dashboard Submission Capability (Optional)
 
-**File**: `src/App.tsx`
+If you want to eliminate "My KPIs" and make Dashboard the single entry point:
 
-Update the `/management-dashboard` route to redirect to `/dashboard`:
+### Changes Required
 
-```tsx
-// Change from separate ManagementDashboard to redirect
-<Route path="/management-dashboard" element={
-  <Navigate to="/dashboard" replace />
-} />
-```
+1. **Add "Review" action to Dashboard KPI table**
+   - Add a "Submit" button in the Actions column
+   - Opens the `KpiReviewPanel` sheet (already exists)
 
-### 3. Update Admin Dashboard Route
+2. **Import submission hooks in Dashboard**
+   - `useSubmitSelfReview` from `useKpis`
+   - `useSubPeriodSubmissionsByKpis` for daily/weekly KPIs
 
-**File**: `src/App.tsx`
+3. **Remove "My KPIs" from sidebar navigation**
+   - Remove the menu item from `AppSidebar.tsx`
+   - Optionally redirect `/my-kpis` to `/dashboard`
 
-Similarly update the `/admin` route to redirect to the main dashboard:
-
-```tsx
-// Change from separate AdminDashboard to redirect
-<Route path="/admin" element={
-  <Navigate to="/dashboard" replace />
-} />
-```
-
-### 4. Update Sidebar Navigation
-
-**File**: `src/components/layout/AppSidebar.tsx`
-
-Update the sidebar menu items to point all dashboard links to `/dashboard`:
-
-- Change Admin section's "Admin Dashboard" from `/admin` to `/dashboard`
-- Change Management section's "Management Dashboard" from `/management-dashboard` to `/dashboard`
+### Impact
+- Single unified workspace for all users
+- Dashboard becomes the primary KPI management interface
+- Simpler navigation with fewer pages
 
 ---
 
@@ -75,16 +76,18 @@ Update the sidebar menu items to point all dashboard links to `/dashboard`:
 
 | File | Change |
 |------|--------|
-| `src/components/layout/DashboardLayout.tsx` | Add floating SidebarTrigger for collapsed state |
-| `src/App.tsx` | Redirect `/management-dashboard` and `/admin` to `/dashboard` |
-| `src/components/layout/AppSidebar.tsx` | Update sidebar menu paths |
+| `src/components/layout/DashboardLayout.tsx` | Fix mobile sidebar trigger visibility |
+| `src/pages/Dashboard.tsx` | (Optional) Add submission capability |
+| `src/components/layout/AppSidebar.tsx` | (Optional) Remove "My KPIs" menu item |
+| `src/App.tsx` | (Optional) Redirect `/my-kpis` to `/dashboard` |
 
 ---
 
-## Result
+## Recommended Approach
 
-After implementation:
-- All roles (employee, manager, auditor, management, admin) will see the same unified Dashboard with charts, workflow tracker, and KPI table
-- When the sidebar is collapsed, a floating button appears in the top-left corner to re-expand it
-- The sidebar trigger inside the header still works for toggling
+**Phase 1 (Immediate)**: Fix mobile sidebar trigger - quick fix
+**Phase 2 (Your Choice)**: Decide whether to merge My KPIs into Dashboard
 
+Would you like to:
+- Just fix the mobile sidebar issue?
+- Also add submission to Dashboard and remove My KPIs?
