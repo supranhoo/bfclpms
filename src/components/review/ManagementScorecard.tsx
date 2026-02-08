@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
@@ -56,6 +57,8 @@ interface ManagementScorecardProps {
   };
   selectedPeriod: string;
   selectedYear: number;
+  onPeriodChange: (period: string) => void;
+  onYearChange: (year: number) => void;
   onBack: () => void;
   autoOpenKpiId?: string | null;
 }
@@ -64,6 +67,8 @@ export function ManagementScorecard({
   employee, 
   selectedPeriod, 
   selectedYear, 
+  onPeriodChange,
+  onYearChange,
   onBack,
   autoOpenKpiId 
 }: ManagementScorecardProps) {
@@ -508,9 +513,28 @@ export function ManagementScorecard({
             </p>
           </div>
         </div>
-        <Badge variant="outline" className="text-xs sm:text-base px-2 sm:px-4 py-1 sm:py-2 self-start sm:self-auto shrink-0">
-          {selectedPeriod} {selectedYear}
-        </Badge>
+        <div className="flex items-center gap-1 shrink-0 self-start sm:self-auto">
+          <Select value={selectedPeriod} onValueChange={onPeriodChange}>
+            <SelectTrigger className="h-8 w-[100px] sm:w-[130px] text-xs sm:text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(month => (
+                <SelectItem key={month} value={month}>{month}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedYear.toString()} onValueChange={(v) => onYearChange(parseInt(v))}>
+            <SelectTrigger className="h-8 w-[70px] sm:w-[80px] text-xs sm:text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2].map(year => (
+                <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Score Overview */}
