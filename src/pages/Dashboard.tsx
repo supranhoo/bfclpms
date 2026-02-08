@@ -201,25 +201,27 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* 1. Profile Card - Full Width */}
-      <ProfileCard
-        profile={{
-          full_name: profile?.full_name,
-          designation: profile?.designation,
-          employee_code: profile?.employee_code,
-          avatar_url: profile?.avatar_url,
-          email: profile?.email,
-        }}
-      />
+      {/* 1. Profile + Filters Row - Compact Layout */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        {/* Profile Card - Left */}
+        <ProfileCard
+          profile={{
+            full_name: profile?.full_name,
+            designation: profile?.designation,
+            employee_code: profile?.employee_code,
+            avatar_url: profile?.avatar_url,
+            email: profile?.email,
+          }}
+          compact
+        />
 
-      {/* 2. Filters Row - Prominent, Full Width */}
-      <Card className="bg-muted/30">
-        <CardContent className="py-3 sm:py-4">
-          <div className="flex flex-col gap-3 sm:gap-4">
-            <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3 sm:gap-4">
+        {/* Filters - Right */}
+        <Card className="bg-muted/30 flex-shrink-0">
+          <CardContent className="py-3 px-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                 <Filter className="h-4 w-4" />
-                <span>Filters</span>
+                <span className="hidden sm:inline">Filters</span>
               </div>
               <ReviewPeriodSelector
                 selectedPeriod={selectedPeriod}
@@ -232,7 +234,7 @@ export default function Dashboard() {
                 value={activeCategory}
                 onValueChange={setActiveCategory}
               >
-                <SelectTrigger className="w-full sm:w-[200px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -250,15 +252,13 @@ export default function Dashboard() {
                   ))}
                 </SelectContent>
               </Select>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {fullyFilteredKpis.length}/{periodFilteredKpis.length} KPIs
+              </span>
             </div>
-            <div className="text-sm text-muted-foreground sm:text-right">
-              Showing <span className="font-semibold text-foreground">{fullyFilteredKpis.length}</span> of{' '}
-              <span className="font-semibold text-foreground">{periodFilteredKpis.length}</span> KPIs
-              {' '}for <span className="font-semibold text-foreground">{selectedPeriod} {selectedYear}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* 3. Performance Charts Row - 1:5 ratio on desktop, stacked on mobile */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-6">
