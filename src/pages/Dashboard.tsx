@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DashboardSkeleton } from '@/components/ui/LoadingSkeletons';
-import { Progress } from '@/components/ui/progress';
+import { ReviewStatusTracker } from '@/components/review/ReviewStatusTracker';
 import { ProfileCard } from '@/components/dashboard/ProfileCard';
 import { KeyStatCard } from '@/components/dashboard/KeyStatCard';
 import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
@@ -305,34 +305,8 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* 5. Status Progress */}
-      <Card>
-        <CardHeader className="pb-2 sm:pb-4">
-          <CardTitle className="text-base sm:text-lg">Review Status</CardTitle>
-          <CardDescription className="text-xs sm:text-sm">Progress across review stages</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:grid sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
-            {Object.entries(statusLabels).map(([key, label]) => {
-              const count = fullyFilteredKpis.filter(k => k.status === key).length;
-              const percentage = metrics.totalKpis > 0 ? (count / metrics.totalKpis) * 100 : 0;
-              
-              return (
-                <div key={key} className="flex sm:flex-col items-center sm:items-start gap-2 sm:space-y-2">
-                  <div className="flex items-center justify-between w-full sm:w-auto text-sm">
-                    <Badge variant="secondary" className={statusColors[key]}>
-                      {label}
-                    </Badge>
-                    <span className="font-medium sm:hidden">{count}</span>
-                  </div>
-                  <Progress value={percentage} className="h-2 flex-1 sm:flex-none sm:w-full" />
-                  <span className="font-medium hidden sm:block">{count}</span>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+      {/* 5. Status Progress - Compact Tracker */}
+      <ReviewStatusTracker kpis={fullyFilteredKpis} queries={[]} />
 
       {/* 6. KPI Details - Table on desktop, Cards on mobile */}
       <Card>
