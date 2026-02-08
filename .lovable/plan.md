@@ -1,93 +1,49 @@
 
-# Plan: Mobile Sidebar Fix + Dashboard Enhancement
+# Plan: Mobile Sidebar Fix + Unified Dashboard - COMPLETED
 
-## Overview
+## Summary of Changes
 
-This plan addresses the three issues:
-1. Fix mobile sidebar toggle visibility
-2. Confirm unified dashboard is working (already done)
-3. Optionally merge "My KPIs" submission into Dashboard
+All three items from the original plan have been implemented:
 
----
-
-## Part 1: Fix Mobile Sidebar Toggle
-
-### Problem
-The floating `SidebarTrigger` only appears when desktop sidebar is collapsed. On mobile, the sidebar uses a `Sheet` component with separate `openMobile` state, so the trigger never shows.
-
-### Solution
-
+### 1. ✅ Fixed Mobile Sidebar Toggle Visibility
 **File**: `src/components/layout/DashboardLayout.tsx`
 
-Update the condition to handle both mobile and desktop scenarios:
+Updated the floating trigger visibility logic to handle both mobile and desktop scenarios:
+- Mobile: Shows trigger when sidebar sheet is closed (`openMobile === false`)
+- Desktop: Shows trigger when sidebar is collapsed (`state === 'collapsed'`)
 
-```tsx
-function DashboardContent() {
-  const { state, isMobile, openMobile, setOpenMobile } = useSidebar();
-  
-  // Show floating trigger when:
-  // - Mobile: sidebar sheet is closed (openMobile === false)
-  // - Desktop: sidebar is collapsed (state === 'collapsed')
-  const showFloatingTrigger = isMobile ? !openMobile : state === 'collapsed';
-  
-  return (
-    <>
-      {showFloatingTrigger && (
-        <div className="fixed top-4 left-4 z-50">
-          <SidebarTrigger className="bg-background border shadow-sm rounded-md p-2 hover:bg-accent" />
-        </div>
-      )}
-      <SidebarInset>
-        ...
-      </SidebarInset>
-    </>
-  );
-}
-```
+### 2. ✅ Unified Dashboard for All Roles
+**File**: `src/App.tsx`
 
----
+All dashboard routes now redirect to the main `/dashboard`:
+- `/my-kpis` → `/dashboard`
+- `/self-review` → `/dashboard`
+- `/kra-acceptance` → `/dashboard`
+- `/management-dashboard` → `/dashboard`
+- `/admin` → `/dashboard`
 
-## Part 2: Dashboard Submission Capability (Optional)
+### 3. ✅ Removed "My KPIs" from Navigation
+**File**: `src/components/layout/AppSidebar.tsx`
 
-If you want to eliminate "My KPIs" and make Dashboard the single entry point:
+Removed the "My KPIs" menu item from the main navigation section.
 
-### Changes Required
+### 4. ✅ Added Review Action to Dashboard
+**Files**: 
+- `src/pages/Dashboard.tsx`
+- `src/components/dashboard/MobileKpiCard.tsx`
 
-1. **Add "Review" action to Dashboard KPI table**
-   - Add a "Submit" button in the Actions column
-   - Opens the `KpiReviewPanel` sheet (already exists)
-
-2. **Import submission hooks in Dashboard**
-   - `useSubmitSelfReview` from `useKpis`
-   - `useSubPeriodSubmissionsByKpis` for daily/weekly KPIs
-
-3. **Remove "My KPIs" from sidebar navigation**
-   - Remove the menu item from `AppSidebar.tsx`
-   - Optionally redirect `/my-kpis` to `/dashboard`
-
-### Impact
-- Single unified workspace for all users
-- Dashboard becomes the primary KPI management interface
-- Simpler navigation with fewer pages
+The Dashboard now includes:
+- A "Review" button in the Actions column for pending KPIs (`kra_set` status)
+- An "Eye" icon for viewing details of already-submitted KPIs
+- A slide-out Sheet with `KpiReviewPanel` for viewing KPI details
+- Updated mobile cards with review action
 
 ---
 
-## Files to Modify
+## Architecture
 
-| File | Change |
-|------|--------|
-| `src/components/layout/DashboardLayout.tsx` | Fix mobile sidebar trigger visibility |
-| `src/pages/Dashboard.tsx` | (Optional) Add submission capability |
-| `src/components/layout/AppSidebar.tsx` | (Optional) Remove "My KPIs" menu item |
-| `src/App.tsx` | (Optional) Redirect `/my-kpis` to `/dashboard` |
-
----
-
-## Recommended Approach
-
-**Phase 1 (Immediate)**: Fix mobile sidebar trigger - quick fix
-**Phase 2 (Your Choice)**: Decide whether to merge My KPIs into Dashboard
-
-Would you like to:
-- Just fix the mobile sidebar issue?
-- Also add submission to Dashboard and remove My KPIs?
+The Dashboard is now the single entry point for all KPI-related activities:
+- View performance analytics (charts, stats)
+- Filter by period, category, and workflow status
+- Review and submit KPIs directly from the table
+- Access detailed KPI information via the review sheet

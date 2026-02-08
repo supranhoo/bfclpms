@@ -6,11 +6,16 @@ import { Loader2 } from 'lucide-react';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
 function DashboardContent() {
-  const { state } = useSidebar();
+  const { state, isMobile, openMobile } = useSidebar();
+  
+  // Show floating trigger when:
+  // - Mobile: sidebar sheet is closed (openMobile === false)
+  // - Desktop: sidebar is collapsed (state === 'collapsed')
+  const showFloatingTrigger = isMobile ? !openMobile : state === 'collapsed';
   
   return (
     <>
-      {state === 'collapsed' && (
+      {showFloatingTrigger && (
         <div className="fixed top-4 left-4 z-50">
           <SidebarTrigger className="bg-background border shadow-sm rounded-md p-2 hover:bg-accent" />
         </div>
