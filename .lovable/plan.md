@@ -1,97 +1,105 @@
 
 
-# Filter Section Aesthetic Redesign
+# Cumulative Performance View for All Review Levels
 
-## Current Issues
+## Overview
 
-Looking at the screenshot, the filter section has several visual problems:
-
-1. **Vertical stacking wastes space** - Mode toggle and period selectors are on separate rows
-2. **Disconnected elements** - The trend icon (↗), "Filters" label, and controls feel scattered
-3. **Redundant labels** - "Filters" label, "Period:" label, and Calendar icon are all saying similar things
-4. **Too much visual noise** - Multiple icons (trend, filter, calendar) competing for attention
-5. **Period summary badge** adds another row when in cumulative mode
+Extending the YTD/QTD/Custom period selection from the Self Dashboard to all reviewer views (Manager, Audit, Management). This enables reviewers to analyze employee performance across multiple periods.
 
 ---
 
-## Proposed Redesign
+## Current State
 
-### Design Principles
-- **Single horizontal row** on desktop, graceful stack on mobile
-- **Group related controls** together visually
-- **Remove redundant labels** - let the controls speak for themselves
-- **Consistent visual weight** across all filter elements
-
-### New Layout (Desktop)
-
-```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ [Month] [YTD] [QTD] [Custom]  │  📅 [February ▼] [2026 ▼]  │  [All Categories ▼]  │  9/9 KPIs │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                                                        
-When in YTD/QTD/Custom mode, show subtle period range text:
-                                           "Jan - Feb 2026 (2 months)"
-```
-
-### New Layout (Mobile)
-
-```text
-┌────────────────────────────┐
-│ [Month] [YTD] [QTD] [Custom]│
-├────────────────────────────┤
-│ [February ▼]   [2026 ▼]    │
-│ [All Categories ▼]  9 KPIs │
-└────────────────────────────┘
-```
-
-### Custom Range Mode (Desktop)
-
-```text
-┌──────────────────────────────────────────────────────────────────────────────────────────┐
-│ [Month] [YTD] [QTD] [Custom]  │  From [Jan ▼] [2025 ▼]  To [Feb ▼] [2026 ▼]  │  [All ▼] │
-└──────────────────────────────────────────────────────────────────────────────────────────┘
-```
+| Component | Current Implementation |
+|-----------|------------------------|
+| EmployeeSelectorGrid | Uses `ReviewPeriodSelector` (single month only) |
+| UnifiedScorecard | Uses inline `Select` dropdowns (single month only) |
+| Dashboard.tsx (reviewer) | Passes `selectedPeriod` + `selectedYear` only |
 
 ---
 
-## Changes
+## Changes Required
 
-### 1. Update `ReviewPeriodSelectorEnhanced.tsx`
+### 1. Update EmployeeSelectorGrid
 
-**Remove:**
-- TrendingUp icon before mode toggle
-- Calendar icon before period selector
-- "Period:" and "To:" labels
-- Period summary badge (move inline)
+**Replace** the old `ReviewPeriodSelector` with `ReviewPeriodSelectorEnhanced`:
 
-**Add:**
-- Compact horizontal layout with visual separators
-- Inline period count badge for cumulative modes
-- Better visual grouping using dividers
+```text
+Before:
+┌─────────────────────────────────────────────────────────┐
+│ 🛡️ Audit Panel                    [January ▼] [2026 ▼] │
+└─────────────────────────────────────────────────────────┘
 
-### 2. Update `Dashboard.tsx` Filter Section
+After:
+┌───────────────────────────────────────────────────────────────────────────┐
+│ 🛡️ Audit Panel        [Month][YTD][QTD][Custom] │ [Jan▼] [2026▼] │ 3 mo │
+└───────────────────────────────────────────────────────────────────────────┘
+```
 
-**Remove:**
-- Filter icon and "Filters" label
-- Nested card structure
-
-**Add:**
-- Single-row flex layout with gap separators
-- Clean background with subtle border
-- Improved mobile responsiveness
+**Props Update:**
+- Accept `periodSelection: PeriodSelection` instead of individual `selectedPeriod`/`selectedYear`
+- Accept `onPeriodSelectionChange` callback
 
 ---
 
-## Visual Improvements
+### 2. Update UnifiedScorecard
 
-| Element | Before | After |
-|---------|--------|-------|
-| Mode Toggle | Has TrendingUp icon | Clean toggle only |
-| Period Selector | Has Calendar icon + "Period:" label | Just the dropdowns |
-| Category Filter | Separate element | Flows naturally in row |
-| KPI Count | Plain text | Subtle badge style |
-| Period Summary | Separate badge row | Inline in toggle area |
-| Overall Height | ~100px (3 rows) | ~48px (1 row desktop) |
+**Replace** the inline period selectors in the header with `ReviewPeriodSelectorEnhanced`:
+
+```text
+Before:
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ← 👤 John Doe (EMP001)  │  📅 Review Period: [January▼] [2026▼] 9 KPIs │
+└─────────────────────────────────────────────────────────────────────────┘
+
+After:
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│ ← 👤 John Doe (EMP001)  │  [Month][YTD][QTD][Custom] │ [Jan▼] [2026▼] │ 3 mo │ 9 KPIs │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Props Update:**
+- Accept `periodSelection: PeriodSelection` instead of individual props
+- Accept `onPeriodSelectionChange` callback
+
+---
+
+### 3. Update Dashboard.tsx (Reviewer Views)
+
+**Changes:**
+- Pass the full `periodSelection` state to both `EmployeeSelectorGrid` and `UnifiedScorecard`
+- Handle cumulative data fetching in reviewer views (future enhancement - basic pass-through first)
+
+---
+
+## Implementation Phases
+
+### Phase 1: Update Props Interface
+
+Both components will accept:
+```typescript
+interface PeriodSelectionProps {
+  periodSelection: PeriodSelection;
+  onPeriodSelectionChange: (selection: PeriodSelection) => void;
+}
+```
+
+### Phase 2: Update EmployeeSelectorGrid
+
+- Import `ReviewPeriodSelectorEnhanced`
+- Replace `ReviewPeriodSelector` with the new component
+- Adjust layout to match the compact horizontal style
+
+### Phase 3: Update UnifiedScorecard
+
+- Import `ReviewPeriodSelectorEnhanced`
+- Replace the `Card` with inline `Select` components
+- Adjust header layout for the new compact filter bar
+
+### Phase 4: Update Dashboard.tsx
+
+- Pass `periodSelection` and `setPeriodSelection` to reviewer components
+- Remove the inline period/year change handlers
 
 ---
 
@@ -99,86 +107,19 @@ When in YTD/QTD/Custom mode, show subtle period range text:
 
 | File | Changes |
 |------|---------|
-| `src/components/ui/ReviewPeriodSelectorEnhanced.tsx` | Redesign for horizontal layout, remove icons/labels |
-| `src/pages/Dashboard.tsx` | Simplify filter card structure |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Replace period selector, update props |
+| `src/components/review/UnifiedScorecard.tsx` | Replace period selectors in header, update props |
+| `src/pages/Dashboard.tsx` | Pass periodSelection to reviewer views |
 
 ---
 
-## Implementation Details
+## Visual Result
 
-### ReviewPeriodSelectorEnhanced.tsx Changes
+After implementation, all review levels will have the same compact period filter bar:
 
-```typescript
-// New compact layout prop
-interface ReviewPeriodSelectorEnhancedProps {
-  // ... existing props
-  compact?: boolean; // Single-row mode for dashboard
-}
-
-// New render structure
-<div className="flex items-center gap-3 flex-wrap">
-  {/* Mode Toggle - clean buttons */}
-  <ToggleGroup type="single" value={mode} onValueChange={handleModeChange}>
-    <ToggleGroupItem value="single">Month</ToggleGroupItem>
-    <ToggleGroupItem value="ytd">YTD</ToggleGroupItem>
-    {/* ... */}
-  </ToggleGroup>
-  
-  {/* Divider */}
-  <div className="h-6 w-px bg-border hidden sm:block" />
-  
-  {/* Period Selectors - compact */}
-  {mode === 'custom' && (
-    <div className="flex items-center gap-1.5">
-      <Select>{/* From month */}</Select>
-      <Select>{/* From year */}</Select>
-      <span className="text-muted-foreground">→</span>
-    </div>
-  )}
-  <div className="flex items-center gap-1.5">
-    <Select>{/* Month */}</Select>
-    <Select>{/* Year */}</Select>
-  </div>
-  
-  {/* Inline period count for cumulative */}
-  {mode !== 'single' && (
-    <Badge variant="secondary" className="text-xs">
-      {periodRanges.length} months
-    </Badge>
-  )}
-</div>
+```text
+[Month] [YTD] [QTD] [Custom]  │  [Feb ▼] [2026 ▼]  │  3 months
 ```
 
-### Dashboard.tsx Filter Changes
-
-```typescript
-{/* Simplified filter row */}
-<div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-  <ReviewPeriodSelectorEnhanced
-    value={periodSelection}
-    onChange={setPeriodSelection}
-    compact
-  />
-  
-  <div className="h-6 w-px bg-border hidden sm:block" />
-  
-  <Select value={activeCategory} onValueChange={setActiveCategory}>
-    {/* Category options */}
-  </Select>
-  
-  <Badge variant="outline" className="ml-auto text-xs">
-    {filteredCount}/{totalCount} KPIs
-  </Badge>
-</div>
-```
-
----
-
-## Result
-
-The filter section will be:
-- **50% shorter** (single row vs. stacked)
-- **Cleaner** (no redundant icons/labels)
-- **More scannable** (logical visual grouping)
-- **Mobile-friendly** (graceful wrapping)
+This provides a consistent user experience across all views and enables multi-period performance analysis for reviewers.
 
