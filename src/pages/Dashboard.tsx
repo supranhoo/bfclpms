@@ -258,7 +258,7 @@ export default function Dashboard() {
   if (viewMode !== 'self') {
     // If an employee is selected, show their scorecard
     if (selectedEmployee) {
-      const viewLevelForScorecard = viewMode === 'team' ? 'manager' : viewMode;
+      const viewLevelForScorecard = viewMode === 'team' ? 'manager' : viewMode === 'audit' ? 'auditor' : viewMode;
       return (
         <div className="space-y-4">
           {/* View Mode Toggle at top */}
