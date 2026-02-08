@@ -1,8 +1,8 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Calendar, TrendingUp } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 const MONTHS = [
@@ -231,143 +231,109 @@ export function ReviewPeriodSelectorEnhanced({
     });
   }, [value, onChange]);
 
-  // Generate period label
-  const periodLabel = useMemo(() => {
-    if (value.mode === 'single') {
-      return `${value.selectedMonth} ${value.selectedYear}`;
-    }
-    if (value.mode === 'ytd') {
-      return `Jan - ${value.selectedMonth.substring(0, 3)} ${value.selectedYear}`;
-    }
-    if (value.mode === 'qtd') {
-      const quarterStart = getQuarterStart(value.selectedMonth);
-      return `${quarterStart.substring(0, 3)} - ${value.selectedMonth.substring(0, 3)} ${value.selectedYear}`;
-    }
-    if (value.mode === 'custom' && value.customStartMonth && value.customStartYear) {
-      if (value.customStartYear === value.selectedYear) {
-        return `${value.customStartMonth.substring(0, 3)} - ${value.selectedMonth.substring(0, 3)} ${value.selectedYear}`;
-      }
-      return `${value.customStartMonth.substring(0, 3)} ${value.customStartYear} - ${value.selectedMonth.substring(0, 3)} ${value.selectedYear}`;
-    }
-    return `${value.selectedMonth} ${value.selectedYear}`;
-  }, [value]);
-
   return (
-    <div className={cn('space-y-3', className)}>
-      {/* Mode Toggle */}
+    <div className={cn('flex items-center gap-2 flex-wrap', className)}>
+      {/* Mode Toggle - Clean buttons */}
       {showModeToggle && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <TrendingUp className="h-4 w-4 text-muted-foreground" />
+        <>
           <ToggleGroup
             type="single"
             value={value.mode}
             onValueChange={handleModeChange}
-            className="justify-start"
+            className="h-8"
           >
-            <ToggleGroupItem value="single" size="sm" className="text-xs px-3">
+            <ToggleGroupItem value="single" size="sm" className="text-xs px-2.5 h-8">
               Month
             </ToggleGroupItem>
-            <ToggleGroupItem value="ytd" size="sm" className="text-xs px-3">
+            <ToggleGroupItem value="ytd" size="sm" className="text-xs px-2.5 h-8">
               YTD
             </ToggleGroupItem>
-            <ToggleGroupItem value="qtd" size="sm" className="text-xs px-3">
+            <ToggleGroupItem value="qtd" size="sm" className="text-xs px-2.5 h-8">
               QTD
             </ToggleGroupItem>
-            <ToggleGroupItem value="custom" size="sm" className="text-xs px-3">
+            <ToggleGroupItem value="custom" size="sm" className="text-xs px-2.5 h-8">
               Custom
             </ToggleGroupItem>
           </ToggleGroup>
-        </div>
+          
+          {/* Divider */}
+          <div className="h-6 w-px bg-border hidden sm:block" />
+        </>
       )}
-
-      {/* Date Selectors */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium text-muted-foreground">
-            {value.mode === 'custom' ? 'To:' : 'Period:'}
-          </span>
-        </div>
-        
-        {/* Custom Mode: From selectors */}
-        {value.mode === 'custom' && (
-          <>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">From:</span>
-              <Select 
-                value={value.customStartMonth || value.selectedMonth} 
-                onValueChange={handleCustomStartMonthChange}
-              >
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue placeholder="Month" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MONTHS.map(month => (
-                    <SelectItem key={month} value={month}>
-                      {month}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select 
-                value={(value.customStartYear || value.selectedYear).toString()} 
-                onValueChange={(v) => handleCustomStartYearChange(parseInt(v))}
-              >
-                <SelectTrigger className="w-[90px]">
-                  <SelectValue placeholder="Year" />
-                </SelectTrigger>
-                <SelectContent>
-                  {years.map(year => (
-                    <SelectItem key={year} value={year.toString()}>
-                      {year}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <span className="text-sm text-muted-foreground">To:</span>
-          </>
-        )}
-        
-        {/* Main month/year selectors */}
-        <div className="flex gap-2 w-full sm:w-auto">
-          <Select value={value.selectedMonth} onValueChange={handleMonthChange}>
-            <SelectTrigger className="flex-1 sm:w-[140px]">
-              <SelectValue placeholder="Select month" />
+      
+      {/* Custom Mode: From selectors */}
+      {value.mode === 'custom' && (
+        <div className="flex items-center gap-1.5">
+          <Select 
+            value={value.customStartMonth || value.selectedMonth} 
+            onValueChange={handleCustomStartMonthChange}
+          >
+            <SelectTrigger className="w-[100px] h-8 text-xs">
+              <SelectValue placeholder="From" />
             </SelectTrigger>
             <SelectContent>
               {MONTHS.map(month => (
-                <SelectItem key={month} value={month}>
-                  {month}
+                <SelectItem key={month} value={month} className="text-xs">
+                  {month.substring(0, 3)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           <Select 
-            value={value.selectedYear.toString()} 
-            onValueChange={(v) => handleYearChange(parseInt(v))}
+            value={(value.customStartYear || value.selectedYear).toString()} 
+            onValueChange={(v) => handleCustomStartYearChange(parseInt(v))}
           >
-            <SelectTrigger className="w-[90px] sm:w-[100px]">
+            <SelectTrigger className="w-[70px] h-8 text-xs">
               <SelectValue placeholder="Year" />
             </SelectTrigger>
             <SelectContent>
               {years.map(year => (
-                <SelectItem key={year} value={year.toString()}>
+                <SelectItem key={year} value={year.toString()} className="text-xs">
                   {year}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <span className="text-muted-foreground text-xs">→</span>
         </div>
+      )}
+      
+      {/* Main month/year selectors */}
+      <div className="flex items-center gap-1.5">
+        <Select value={value.selectedMonth} onValueChange={handleMonthChange}>
+          <SelectTrigger className="w-[100px] h-8 text-xs">
+            <SelectValue placeholder="Month" />
+          </SelectTrigger>
+          <SelectContent>
+            {MONTHS.map(month => (
+              <SelectItem key={month} value={month} className="text-xs">
+                {month.substring(0, 3)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select 
+          value={value.selectedYear.toString()} 
+          onValueChange={(v) => handleYearChange(parseInt(v))}
+        >
+          <SelectTrigger className="w-[70px] h-8 text-xs">
+            <SelectValue placeholder="Year" />
+          </SelectTrigger>
+          <SelectContent>
+            {years.map(year => (
+              <SelectItem key={year} value={year.toString()} className="text-xs">
+                {year}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {/* Period Summary Badge */}
+      {/* Inline period count badge for cumulative modes */}
       {value.mode !== 'single' && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="px-2 py-1 bg-muted rounded-md">
-            {periodLabel} ({value.periodRanges.length} {value.periodRanges.length === 1 ? 'month' : 'months'})
-          </span>
-        </div>
+        <Badge variant="secondary" className="text-xs h-6 px-2">
+          {value.periodRanges.length} {value.periodRanges.length === 1 ? 'month' : 'months'}
+        </Badge>
       )}
     </div>
   );
