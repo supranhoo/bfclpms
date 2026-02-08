@@ -15,9 +15,10 @@ interface ProfileCardProps {
   department?: string;
   division?: string;
   onViewHistory?: () => void;
+  compact?: boolean;
 }
 
-export function ProfileCard({ profile, department, division, onViewHistory }: ProfileCardProps) {
+export function ProfileCard({ profile, department, division, onViewHistory, compact }: ProfileCardProps) {
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -29,6 +30,21 @@ export function ProfileCard({ profile, department, division, onViewHistory }: Pr
       ? `${profile.full_name} (${profile.employee_code})`
       : profile.full_name
     : 'User';
+
+  if (compact) {
+    return (
+      <div className="flex items-center gap-3">
+        <Avatar className="h-10 w-10">
+          <AvatarImage src={profile.avatar_url || undefined} />
+          <AvatarFallback className="text-sm">{getInitials(profile.full_name)}</AvatarFallback>
+        </Avatar>
+        <div>
+          <h2 className="text-base font-semibold text-foreground">{displayName}</h2>
+          <p className="text-sm text-muted-foreground">{profile.designation}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Card>
