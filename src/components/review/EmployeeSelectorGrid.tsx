@@ -7,7 +7,7 @@ import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ReviewPeriodSelector } from '@/components/ui/ReviewPeriodSelector';
+import { ReviewPeriodSelectorEnhanced, type PeriodSelection } from '@/components/ui/ReviewPeriodSelectorEnhanced';
 import { EmployeeFilters } from '@/components/review/EmployeeFilters';
 import { supabase } from '@/integrations/supabase/client';
 import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck } from 'lucide-react';
@@ -26,10 +26,8 @@ interface EmployeeProfile {
 
 interface EmployeeSelectorGridProps {
   viewLevel: Exclude<ViewMode, 'self'>;
-  selectedPeriod: string;
-  selectedYear: number;
-  onPeriodChange: (period: string) => void;
-  onYearChange: (year: number) => void;
+  periodSelection: PeriodSelection;
+  onPeriodSelectionChange: (selection: PeriodSelection) => void;
   onSelectEmployee: (employee: EmployeeProfile, autoOpenKpiId?: string | null) => void;
 }
 
@@ -77,10 +75,8 @@ const HEADER_CONFIG: Record<Exclude<ViewMode, 'self'>, { icon: React.ElementType
 
 export function EmployeeSelectorGrid({
   viewLevel,
-  selectedPeriod,
-  selectedYear,
-  onPeriodChange,
-  onYearChange,
+  periodSelection,
+  onPeriodSelectionChange,
   onSelectEmployee,
 }: EmployeeSelectorGridProps) {
   const { user, role } = useAuth();
@@ -89,6 +85,10 @@ export function EmployeeSelectorGrid({
   const { departments, designations, grades, managers } = useEmployeeFilterOptions();
   const [searchParams] = useSearchParams();
   const autoOpenKpiId = searchParams.get('kpi');
+
+  // Derived values from period selection
+  const selectedPeriod = periodSelection.selectedMonth;
+  const selectedYear = periodSelection.selectedYear;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -119,8 +119,15 @@ export function EmployeeSelectorGrid({
 
       const targetEmployee = allProfiles.find(p => p.id === data.employee_id);
       if (targetEmployee) {
-        if (data.review_period) onPeriodChange(data.review_period);
-        if (data.review_year) onYearChange(data.review_year);
+        if (data.review_period || data.review_year) {
+          onPeriodSelectionChange({
+            ...periodSelection,
+            selectedMonth: data.review_period || periodSelection.selectedMonth,
+            selectedYear: data.review_year || periodSelection.selectedYear,
+            months: [data.review_period || periodSelection.selectedMonth],
+            periodRanges: [{ month: data.review_period || periodSelection.selectedMonth, year: data.review_year || periodSelection.selectedYear }]
+          });
+        }
         onSelectEmployee(targetEmployee, autoOpenKpiId);
       }
     })();
@@ -390,12 +397,14 @@ export function EmployeeSelectorGrid({
             <p className="text-sm text-muted-foreground">{headerConfig.description}</p>
           </div>
         </div>
-        <ReviewPeriodSelector
-          selectedPeriod={selectedPeriod}
-          selectedYear={selectedYear}
-          onPeriodChange={onPeriodChange}
-          onYearChange={onYearChange}
-        />
+        
+        {/* Compact Period Selector */}
+        <div className="p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
+          <ReviewPeriodSelectorEnhanced
+            value={periodSelection}
+            onChange={onPeriodSelectionChange}
+          />
+        </div>
       </div>
 
       {/* Stats Cards */}

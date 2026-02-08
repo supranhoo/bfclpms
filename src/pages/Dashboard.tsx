@@ -316,19 +316,8 @@ export default function Dashboard() {
           <UnifiedScorecard
             viewLevel={viewLevelForScorecard as 'manager' | 'auditor' | 'management'}
             employee={selectedEmployee}
-            selectedPeriod={selectedPeriod}
-            selectedYear={selectedYear}
-            onPeriodChange={(period) => setPeriodSelection(prev => ({
-              ...prev, 
-              selectedMonth: period, 
-              months: [period], 
-              periodRanges: [{ month: period, year: prev.selectedYear }]
-            }))}
-            onYearChange={(year) => setPeriodSelection(prev => ({
-              ...prev, 
-              selectedYear: year,
-              periodRanges: [{ month: prev.selectedMonth, year }]
-            }))}
+            periodSelection={periodSelection}
+            onPeriodSelectionChange={setPeriodSelection}
             onBack={() => {
               setSelectedEmployee(null);
               setAutoOpenKpiId(null);
@@ -352,19 +341,8 @@ export default function Dashboard() {
         )}
         <EmployeeSelectorGrid
           viewLevel={viewMode as Exclude<ViewMode, 'self'>}
-          selectedPeriod={selectedPeriod}
-          selectedYear={selectedYear}
-          onPeriodChange={(period) => setPeriodSelection(prev => ({
-            ...prev, 
-            selectedMonth: period, 
-            months: [period], 
-            periodRanges: [{ month: period, year: prev.selectedYear }]
-          }))}
-          onYearChange={(year) => setPeriodSelection(prev => ({
-            ...prev, 
-            selectedYear: year,
-            periodRanges: [{ month: prev.selectedMonth, year }]
-          }))}
+          periodSelection={periodSelection}
+          onPeriodSelectionChange={setPeriodSelection}
           onSelectEmployee={handleSelectEmployee}
         />
       </div>

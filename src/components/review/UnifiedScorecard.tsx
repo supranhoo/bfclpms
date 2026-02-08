@@ -40,7 +40,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
-  Info, Lock, MessageSquare, Undo2, Check, Eye, Calendar, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User
+  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User
 } from 'lucide-react';
 import { 
   kpiStatusColors, 
@@ -65,13 +65,14 @@ interface EmployeeProfile {
   department_id: string | null;
 }
 
+// Import PeriodSelection type
+import { ReviewPeriodSelectorEnhanced, type PeriodSelection } from '@/components/ui/ReviewPeriodSelectorEnhanced';
+
 interface UnifiedScorecardProps {
   viewLevel: ScorecardViewLevel;
   employee: EmployeeProfile;
-  selectedPeriod: string;
-  selectedYear: number;
-  onPeriodChange: (period: string) => void;
-  onYearChange: (year: number) => void;
+  periodSelection: PeriodSelection;
+  onPeriodSelectionChange: (selection: PeriodSelection) => void;
   onBack: () => void;
   autoOpenKpiId?: string | null;
 }
@@ -137,13 +138,14 @@ const VIEW_LEVEL_CONFIG: Record<ScorecardViewLevel, {
 export function UnifiedScorecard({ 
   viewLevel,
   employee, 
-  selectedPeriod, 
-  selectedYear, 
-  onPeriodChange,
-  onYearChange,
+  periodSelection,
+  onPeriodSelectionChange,
   onBack,
   autoOpenKpiId 
 }: UnifiedScorecardProps) {
+  // Derived values from period selection
+  const selectedPeriod = periodSelection.selectedMonth;
+  const selectedYear = periodSelection.selectedYear;
   const isMobile = useIsMobile();
   const { user } = useAuth();
   const { data: allKpis, isLoading } = useKpisByEmployee(employee.id);
@@ -699,40 +701,19 @@ export function UnifiedScorecard({
           </div>
         </div>
 
-        {/* Filters - Right (matching Dashboard) */}
-        <Card className="bg-muted/30 flex-shrink-0">
-          <CardContent className="py-3 px-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <Calendar className="h-4 w-4" />
-                <span className="hidden sm:inline">Review Period:</span>
-              </div>
-              <Select value={selectedPeriod} onValueChange={onPeriodChange}>
-                <SelectTrigger className="w-full sm:w-[130px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(month => (
-                    <SelectItem key={month} value={month}>{month}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={selectedYear.toString()} onValueChange={(v) => onYearChange(parseInt(v))}>
-                <SelectTrigger className="w-full sm:w-[90px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2].map(year => (
-                    <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {kpis?.length || 0} KPIs
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Filters - Right (matching Dashboard with Cumulative Mode) */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 flex-shrink-0">
+          <ReviewPeriodSelectorEnhanced
+            value={periodSelection}
+            onChange={onPeriodSelectionChange}
+          />
+          
+          <div className="h-6 w-px bg-border hidden sm:block" />
+          
+          <Badge variant="outline" className="text-xs h-6 px-2 whitespace-nowrap">
+            {kpis?.length || 0} KPIs
+          </Badge>
+        </div>
       </div>
 
       {/* 2. Performance Charts Row - 1:5 ratio matching Dashboard */}
