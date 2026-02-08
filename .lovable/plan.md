@@ -1,334 +1,198 @@
 
-# Implementation Plan: Unified Dashboard for All Review Levels
+# Phase 4 & 5: Dashboard Integration and Route Updates
 
 ## Overview
 
-This plan unifies the four separate interfaces (Dashboard, TeamReview, AuditPanel, ManagementReview) into a single adaptive Dashboard that switches between view modes based on user role. The employee selector grid remains fully preserved for reviewer modes.
+This plan integrates the newly created components (`ViewModeToggle`, `EmployeeSelectorGrid`, `UnifiedScorecard`) into the Dashboard and updates the routing/navigation to create a unified experience.
 
 ---
 
-## Current Architecture Summary
+## Current State
 
-| Page | Lines | Scorecard Component | Lines |
-|------|-------|---------------------|-------|
-| Dashboard.tsx | 523 | (inline) | - |
-| TeamReview.tsx | 362 | EmployeeScorecard | 1081 |
-| AuditPanel.tsx | 345 | AuditScorecard | 1100 |
-| ManagementReview.tsx | 335 | ManagementScorecard | 1118 |
+**What's Built (Phases 1-3):**
+- `ViewModeToggle.tsx` - Tab switcher component with role-based modes
+- `EmployeeSelectorGrid.tsx` - Employee selection grid with level-specific stats
+- `UnifiedScorecard.tsx` - Consolidated scorecard for manager/auditor/management views
 
-**Total: ~4,864 lines across 7 files**
-
-The scorecard components share approximately 85% identical code with differences only in:
-- Stats cards (different status labels)
-- Score field names (manager_score vs auditor_score vs management_score)
-- Send-back target options
-- Score cascade logic (which prior level score to use)
+**What's Missing (Phases 4-5):**
+- Dashboard.tsx doesn't use these new components yet
+- Routes still point to separate TeamReview, AuditPanel, ManagementReview pages
+- Sidebar still shows separate navigation items
 
 ---
 
-## Unified Architecture
+## Phase 4: Dashboard Enhancement
 
-### New Component Structure
+### Changes to `src/pages/Dashboard.tsx`
 
-```text
-Dashboard.tsx (Enhanced)
-├── ViewModeToggle (new - for role-based switching)
-├── [Self Mode] - Current self-dashboard UI
-└── [Reviewer Mode]
-    ├── [No employee selected] → EmployeeSelectorGrid (new)
-    └── [Employee selected] → UnifiedScorecard (new)
+**New Imports:**
+```typescript
+import { useSearchParams } from 'react-router-dom';
+import { ViewModeToggle, ViewMode } from '@/components/review/ViewModeToggle';
+import { EmployeeSelectorGrid } from '@/components/review/EmployeeSelectorGrid';
+import { UnifiedScorecard } from '@/components/review/UnifiedScorecard';
 ```
 
-### View Modes
-
-| Mode | Visible To | Data Source | Primary Actions |
-|------|-----------|-------------|-----------------|
-| `self` | All | `useMyKpis()` | Review, Submit |
-| `team` | Manager, Admin, Management | `useKpisByEmployee()` | Approve, Query, Send Back |
-| `audit` | Auditor, Admin | `useKpisByEmployee()` | Verify, Forward, Send Back |
-| `management` | Management, Admin | `useKpisByEmployee()` | Final Approve, Send Back |
-
----
-
-## Phase 1: Create ViewModeToggle Component
-
-**New File**: `src/components/review/ViewModeToggle.tsx`
-
-A segmented control that shows available view modes based on user role:
-
+**New State:**
 ```typescript
-interface ViewModeToggleProps {
-  currentMode: 'self' | 'team' | 'audit' | 'management';
-  availableModes: Array<'self' | 'team' | 'audit' | 'management'>;
-  onModeChange: (mode: ViewMode) => void;
-}
-```
-
-**UI**: Horizontal tabs/pills with icons:
-- Self: Home icon - "My Dashboard"
-- Team: Users icon - "Team Review" 
-- Audit: Shield icon - "Audit"
-- Management: Briefcase icon - "Management"
-
----
-
-## Phase 2: Create EmployeeSelectorGrid Component
-
-**New File**: `src/components/review/EmployeeSelectorGrid.tsx`
-
-Extracts the employee card grid from TeamReview/AuditPanel/ManagementReview into a reusable component:
-
-```typescript
-interface EmployeeSelectorGridProps {
-  viewLevel: 'team' | 'audit' | 'management';
-  employees: EmployeeProfile[];
-  periodKpis: KPI[];
-  selectedPeriod: string;
-  selectedYear: number;
-  onSelectEmployee: (employee: EmployeeProfile) => void;
-}
-```
-
-**Features**:
-- Reuses `EmployeeFilters` component (already shared)
-- Stats cards adapt based on `viewLevel`:
-  - Team: Open KPIs, Pending Review, Reviewed, Total
-  - Audit: Pending Audit, In Audit, Forwarded
-  - Management: Pending Review, Approved, Total
-- Employee card badges show level-appropriate status counts
-
----
-
-## Phase 3: Create UnifiedScorecard Component
-
-**New File**: `src/components/review/UnifiedScorecard.tsx` (~600 lines)
-
-This consolidates the 3 scorecard components (EmployeeScorecard, AuditScorecard, ManagementScorecard) into one, using `viewLevel` prop to control behavior:
-
-```typescript
-interface UnifiedScorecardProps {
-  viewLevel: 'manager' | 'auditor' | 'management';
-  employee: EmployeeProfile;
-  selectedPeriod: string;
-  selectedYear: number;
-  onPeriodChange: (period: string) => void;
-  onYearChange: (year: number) => void;
-  onBack: () => void;
-  autoOpenKpiId?: string | null;
-}
-```
-
-**Key Differences Handled by viewLevel**:
-
-| Aspect | Manager | Auditor | Management |
-|--------|---------|---------|------------|
-| Score field | manager_score | auditor_score | management_score |
-| Prior score | self_score | manager_score | auditor_score |
-| Forward status | manager_check | management_review | approved |
-| Send-back targets | employee | manager, employee | auditor, manager, employee |
-| Action labels | Approve | Forward | Final Approve |
-
-**Score cascade logic (consolidated)**:
-```typescript
-const getRelevantScore = (submission, viewLevel) => {
-  switch (viewLevel) {
-    case 'manager': return submission?.manager_score || submission?.self_score || 0;
-    case 'auditor': return submission?.auditor_score || submission?.manager_score || submission?.self_score || 0;
-    case 'management': return submission?.management_score || submission?.auditor_score || submission?.manager_score || submission?.self_score || 0;
-  }
-};
-```
-
----
-
-## Phase 4: Enhance Dashboard.tsx
-
-**Modified File**: `src/pages/Dashboard.tsx`
-
-Add view mode state and conditional rendering:
-
-```typescript
-// New state
-const [viewMode, setViewMode] = useState<'self' | 'team' | 'audit' | 'management'>('self');
+const [searchParams] = useSearchParams();
+const [viewMode, setViewMode] = useState<ViewMode>('self');
 const [selectedEmployee, setSelectedEmployee] = useState<EmployeeProfile | null>(null);
 
-// Role-based available modes
+// Initialize from URL query param
+useEffect(() => {
+  const viewFromUrl = searchParams.get('view') as ViewMode | null;
+  if (viewFromUrl && availableModes.includes(viewFromUrl)) {
+    setViewMode(viewFromUrl);
+  }
+}, [searchParams, availableModes]);
+```
+
+**Role-Based Available Modes:**
+```typescript
 const availableModes = useMemo(() => {
   const modes: ViewMode[] = ['self'];
-  if (['manager', 'admin', 'management'].includes(role)) modes.push('team');
-  if (['auditor', 'admin'].includes(role)) modes.push('audit');
-  if (['management', 'admin'].includes(role)) modes.push('management');
+  if (['manager', 'admin', 'management'].includes(role || '')) modes.push('team');
+  if (['auditor', 'admin'].includes(role || '')) modes.push('audit');
+  if (['management', 'admin'].includes(role || '')) modes.push('management');
   return modes;
 }, [role]);
 ```
 
-**Rendering Logic**:
+**Conditional Rendering Logic:**
 ```typescript
-// Show mode toggle only if user has multiple modes
+// At the top of the component return
 {availableModes.length > 1 && (
   <ViewModeToggle
     currentMode={viewMode}
     availableModes={availableModes}
-    onModeChange={setViewMode}
+    onModeChange={(mode) => {
+      setViewMode(mode);
+      setSelectedEmployee(null);
+    }}
   />
 )}
 
-// Conditional content
+// Main content
 {viewMode === 'self' ? (
-  // Current self-dashboard (unchanged)
+  // Current self-dashboard UI (unchanged)
 ) : selectedEmployee ? (
-  // UnifiedScorecard for selected employee
   <UnifiedScorecard
     viewLevel={viewMode === 'team' ? 'manager' : viewMode}
     employee={selectedEmployee}
+    selectedPeriod={selectedPeriod}
+    selectedYear={selectedYear}
+    onPeriodChange={setSelectedPeriod}
+    onYearChange={setSelectedYear}
     onBack={() => setSelectedEmployee(null)}
-    ...
   />
 ) : (
-  // Employee selector grid
   <EmployeeSelectorGrid
     viewLevel={viewMode}
+    selectedPeriod={selectedPeriod}
+    selectedYear={selectedYear}
+    onPeriodChange={setSelectedPeriod}
+    onYearChange={setSelectedYear}
     onSelectEmployee={setSelectedEmployee}
-    ...
   />
 )}
 ```
 
 ---
 
-## Phase 5: Update Routing & Navigation
+## Phase 5: Routing & Navigation Updates
 
-**Modified Files**: 
-- `src/App.tsx`: Redirect legacy routes to dashboard with query params
-- `src/components/layout/AppSidebar.tsx`: Update navigation links
+### Changes to `src/App.tsx`
 
-**Route Changes**:
+**Convert legacy routes to redirects:**
 ```typescript
-// Redirect legacy routes
+// Replace these routes with redirects
 <Route path="/team-review" element={<Navigate to="/dashboard?view=team" replace />} />
 <Route path="/audit" element={<Navigate to="/dashboard?view=audit" replace />} />
 <Route path="/management-review" element={<Navigate to="/dashboard?view=management" replace />} />
 ```
 
-**URL-Based Mode Initialization** (in Dashboard.tsx):
-```typescript
-const [searchParams] = useSearchParams();
-const viewFromUrl = searchParams.get('view') as ViewMode | null;
+### Changes to `src/components/layout/AppSidebar.tsx`
 
-useEffect(() => {
-  if (viewFromUrl && availableModes.includes(viewFromUrl)) {
-    setViewMode(viewFromUrl);
-  }
-}, [viewFromUrl, availableModes]);
+**Update menu items paths to use query params:**
+```typescript
+const menuItems = {
+  // ... main stays the same
+  manager: [
+    { title: 'Team Review', icon: Users, path: '/dashboard?view=team', roles: ['manager', 'admin', 'management'] },
+  ],
+  management: [
+    { title: 'Management Review', icon: Briefcase, path: '/dashboard?view=management', roles: ['management', 'admin'] },
+  ],
+  audit: [
+    { title: 'Audit Panel', icon: Shield, path: '/dashboard?view=audit', roles: ['auditor', 'admin'] },
+  ],
+  // ...
+};
 ```
 
-**Sidebar Navigation Changes**:
-- Replace separate menu items with unified "Dashboard" entry
-- Keep visual distinction using badges or secondary text for modes
-
----
-
-## Phase 6: Permission Validation
-
-Add role-based access control in Dashboard:
-
+**Update path matching logic** to handle query params:
 ```typescript
-// Validate mode access on mode change
-const handleModeChange = (mode: ViewMode) => {
-  if (!availableModes.includes(mode)) {
-    toast({ title: 'Access denied', variant: 'destructive' });
-    return;
-  }
-  setViewMode(mode);
-  setSelectedEmployee(null);
+const getSectionForPath = (pathname: string, search: string): string => {
+  const fullPath = pathname + search;
+  if (fullPath.includes('view=team')) return 'manager';
+  if (fullPath.includes('view=audit')) return 'audit';
+  if (fullPath.includes('view=management')) return 'management';
+  // existing logic...
 };
 ```
 
 ---
 
-## Files Summary
+## Files to Modify
 
-### New Files (3)
-| File | Purpose | Est. Lines |
-|------|---------|------------|
-| `src/components/review/ViewModeToggle.tsx` | Mode switching tabs | ~80 |
-| `src/components/review/EmployeeSelectorGrid.tsx` | Employee grid (extracted) | ~250 |
-| `src/components/review/UnifiedScorecard.tsx` | Consolidated scorecard | ~600 |
-
-### Modified Files (3)
 | File | Changes |
 |------|---------|
-| `src/pages/Dashboard.tsx` | Add view mode state, conditional rendering |
-| `src/App.tsx` | Redirect legacy routes |
-| `src/components/layout/AppSidebar.tsx` | Update navigation |
-
-### Deprecated Files (6) - Keep for Backward Compatibility
-- `src/pages/TeamReview.tsx`
-- `src/pages/AuditPanel.tsx`
-- `src/pages/ManagementReview.tsx`
-- `src/components/review/EmployeeScorecard.tsx`
-- `src/components/review/AuditScorecard.tsx`
-- `src/components/review/ManagementScorecard.tsx`
+| `src/pages/Dashboard.tsx` | Add view mode state, import new components, conditional rendering |
+| `src/App.tsx` | Redirect legacy routes to `/dashboard?view=X` |
+| `src/components/layout/AppSidebar.tsx` | Update navigation paths to use query params |
 
 ---
 
-## User Experience Flow
+## User Experience After Implementation
 
-### Employee View (role: employee)
-1. Opens Dashboard → sees only "My Dashboard" mode
-2. Reviews their own KPIs (unchanged experience)
-
-### Manager View (role: manager)
-1. Opens Dashboard → sees [My Dashboard] [Team Review] tabs
-2. Clicks "Team Review" → sees employee selector grid with team members
-3. Clicks an employee card → sees UnifiedScorecard for that employee
-4. Clicks "Back" → returns to employee grid
-
-### Auditor View (role: auditor)
-1. Opens Dashboard → sees [My Dashboard] [Audit] tabs
-2. Clicks "Audit" → sees all employees grid with audit-specific stats
-3. Reviews employees with UnifiedScorecard in auditor mode
-
-### Management View (role: management)
-1. Opens Dashboard → sees [My Dashboard] [Team Review] [Management] tabs
-2. Can switch between any available mode
-3. Each mode shows appropriate data and actions
-
-### Admin View (role: admin)
-1. Sees all tabs: [My Dashboard] [Team Review] [Audit] [Management]
-2. Full access to all review modes
+| Role | Dashboard Tabs | Flow |
+|------|---------------|------|
+| Employee | (none - single mode) | Sees only self-dashboard |
+| Manager | [My Dashboard] [Team Review] | Toggle between modes, employee grid → scorecard |
+| Auditor | [My Dashboard] [Audit] | Toggle modes, employee grid → scorecard |
+| Management | [My Dashboard] [Team Review] [Management] | All three modes available |
+| Admin | [My Dashboard] [Team Review] [Audit] [Management] | Full access to all modes |
 
 ---
 
 ## Technical Benefits
 
-1. **Code Reduction**: ~4,800 lines → ~2,500 lines (~48% reduction)
-2. **Single Source of Truth**: One scorecard component with consistent logic
-3. **Easier Maintenance**: Bug fixes apply to all levels automatically
-4. **Consistent UX**: Same layout, navigation, and patterns across roles
-5. **Better Mobile**: Single responsive implementation
-6. **Preserved Workflows**: All existing actions and permissions work identically
+1. **Single Entry Point**: One Dashboard component handles all views
+2. **URL State**: View mode persisted in URL (`/dashboard?view=team`)
+3. **Deep Links**: Legacy routes automatically redirect with preserved query params
+4. **Consistent UX**: Same layout across all roles
+5. **Code Reduction**: Leverages shared components instead of 4 separate pages
 
 ---
 
-## Implementation Order
+## Implementation Steps
 
-1. **ViewModeToggle** - Simple component, foundation for switching
-2. **EmployeeSelectorGrid** - Extract from existing pages
-3. **UnifiedScorecard** - Consolidate scorecard logic
-4. **Dashboard Enhancement** - Wire everything together
-5. **Routing Updates** - Redirect legacy routes
-6. **Navigation Updates** - Update sidebar
-7. **Testing** - Verify all role/mode combinations
-8. **Documentation** - Update DOCUMENTATION.md
+1. Modify `Dashboard.tsx`:
+   - Add imports for ViewModeToggle, EmployeeSelectorGrid, UnifiedScorecard
+   - Add viewMode and selectedEmployee state
+   - Add availableModes calculation based on role
+   - Add URL query param initialization
+   - Wrap existing self-dashboard content in conditional
+   - Add ViewModeToggle at top
+   - Add conditional rendering for reviewer modes
 
----
+2. Modify `App.tsx`:
+   - Change `/team-review`, `/audit`, `/management-review` routes to redirects
 
-## Risk Mitigation
+3. Modify `AppSidebar.tsx`:
+   - Update paths to use query params
+   - Update path matching to handle query params
 
-| Risk | Mitigation |
-|------|------------|
-| Regression in review workflows | Keep old pages as fallback, thorough testing |
-| Permission errors | Explicit role validation before mode switch |
-| Mobile UX issues | Test each phase on mobile |
-| Deep link breakage | Maintain route redirects with query param preservation |
+4. Update `DOCUMENTATION.md`:
+   - Document unified dashboard architecture
