@@ -21,7 +21,7 @@ import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
 import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
 import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
-import { ReviewStatusTracker } from '@/components/review/ReviewStatusTracker';
+import { WorkflowProgressTracker } from '@/components/review/WorkflowProgressTracker';
 import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
 import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
@@ -538,8 +538,8 @@ export function ManagementScorecard({
         </div>
       </div>
 
-      {/* Review Status Tracker */}
-      <ReviewStatusTracker kpis={kpis || []} queries={queries || []} compact />
+      {/* Workflow Progress Tracker */}
+      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} compact />
 
       {/* Score Overview */}
       <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-3">

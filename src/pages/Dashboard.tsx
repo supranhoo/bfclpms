@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DashboardSkeleton } from '@/components/ui/LoadingSkeletons';
-import { ReviewStatusTracker } from '@/components/review/ReviewStatusTracker';
+import { WorkflowProgressTracker } from '@/components/review/WorkflowProgressTracker';
 import { ProfileCard } from '@/components/dashboard/ProfileCard';
 import { KeyStatCard } from '@/components/dashboard/KeyStatCard';
 import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
@@ -58,6 +58,7 @@ export default function Dashboard() {
   const [selectedKpiTracker, setSelectedKpiTracker] = useState<KPI | null>(null);
   const [selectedKpiLogic, setSelectedKpiLogic] = useState<KPI | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>('All');
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
   const [selectedPeriod, setSelectedPeriod] = useState<string>(defaultPeriod);
@@ -109,12 +110,22 @@ export default function Dashboard() {
     ) || [];
   }, [kpis, selectedPeriod, selectedYear]);
 
-  // Step 2: Apply category filter on top of period filter
+  // Step 2: Apply category and status filters on top of period filter
   const fullyFilteredKpis = useMemo(() => {
-    if (activeCategory === 'All') return periodFilteredKpis;
-    const cat = categories?.find(c => c.name === activeCategory);
-    return periodFilteredKpis.filter(k => k.category_id === cat?.id);
-  }, [periodFilteredKpis, activeCategory, categories]);
+    let filtered = periodFilteredKpis;
+    
+    if (activeCategory !== 'All') {
+      const cat = categories?.find(c => c.name === activeCategory);
+      filtered = filtered.filter(k => k.category_id === cat?.id);
+    }
+    
+    // Apply status filter from workflow tracker
+    if (statusFilter) {
+      filtered = filtered.filter(k => k.status === statusFilter);
+    }
+    
+    return filtered;
+  }, [periodFilteredKpis, activeCategory, categories, statusFilter]);
 
   // Calculate metrics from FILTERED KPIs (global filtering applied)
   const metrics = useMemo(() => {
@@ -306,7 +317,11 @@ export default function Dashboard() {
       </div>
 
       {/* 5. Status Progress - Compact Tracker */}
-      <ReviewStatusTracker kpis={fullyFilteredKpis} queries={[]} />
+      <WorkflowProgressTracker 
+        kpis={periodFilteredKpis}
+        activeFilter={statusFilter}
+        onFilterChange={setStatusFilter}
+      />
 
       {/* 6. KPI Details - Table on desktop, Cards on mobile */}
       <Card>

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-08  
-> **Version:** 1.9.0
+> **Version:** 1.10.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -47,7 +47,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 
 - **Dark Mode Support**: Full dark/light theme toggle with system preference detection via `next-themes`
 - **In-Scorecard Period Selection**: Reviewers can change the review month/year directly within employee scorecards without navigating back to the employee list
-- **Review Status Tracker**: Compact, reusable component showing KPI workflow progress across all stages with open query indicators. Displayed on Dashboard and all reviewer scorecards (Employee, Audit, Management)
+- **Workflow Progress Tracker**: Visual pipeline component showing KPI workflow progress with clickable stage cards (KRA Set → Self Review → Manager Check → Audit → Management → Approved). Each card shows count, icon, and progress bar. Clicking a stage on the Dashboard filters the KPI table by that status. Query indicators (orange dots) appear on stages with open queries. Displayed on Dashboard (interactive) and all reviewer scorecards (compact, read-only).
 - **Multi-Module Architecture**: Hub page for navigating between enterprise modules (PMS, future HRMS, LMS)
 - Multi-stage workflow with configurable review stages
 - KPI templates and bundles for standardized goal-setting
