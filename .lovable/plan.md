@@ -1,198 +1,240 @@
 
-# Phase 4 & 5: Dashboard Integration and Route Updates
+# Cumulative Performance View - Implementation Plan
 
 ## Overview
 
-This plan integrates the newly created components (`ViewModeToggle`, `EmployeeSelectorGrid`, `UnifiedScorecard`) into the Dashboard and updates the routing/navigation to create a unified experience.
+This feature adds the ability to view performance across multiple periods - supporting **Year-to-Date (YTD)**, **Quarter-to-Date (QTD)**, and **Custom Date Ranges** - giving stakeholders a holistic view of employee performance over time.
 
 ---
 
-## Current State
+## Current State Analysis
 
-**What's Built (Phases 1-3):**
-- `ViewModeToggle.tsx` - Tab switcher component with role-based modes
-- `EmployeeSelectorGrid.tsx` - Employee selection grid with level-specific stats
-- `UnifiedScorecard.tsx` - Consolidated scorecard for manager/auditor/management views
+**How it works today:**
+- `ReviewPeriodSelector` allows selecting a single month + year
+- Dashboard/Scorecards filter KPIs where `review_period === selectedPeriod && review_year === selectedYear`
+- Charts and scores show data for that single month only
+- No aggregation across multiple periods exists
 
-**What's Missing (Phases 4-5):**
-- Dashboard.tsx doesn't use these new components yet
-- Routes still point to separate TeamReview, AuditPanel, ManagementReview pages
-- Sidebar still shows separate navigation items
+**Database Structure:**
+- KPIs have `review_period` (month name) and `review_year` (integer)
+- Each month's KPI is a separate record (same KPI template creates new records per period)
+- `review_submissions` stores scores per KPI (which is per-period)
 
 ---
 
-## Phase 4: Dashboard Enhancement
+## Proposed Solution
 
-### Changes to `src/pages/Dashboard.tsx`
+### New Period Selection Modes
 
-**New Imports:**
-```typescript
-import { useSearchParams } from 'react-router-dom';
-import { ViewModeToggle, ViewMode } from '@/components/review/ViewModeToggle';
-import { EmployeeSelectorGrid } from '@/components/review/EmployeeSelectorGrid';
-import { UnifiedScorecard } from '@/components/review/UnifiedScorecard';
-```
+| Mode | Description | Months Included |
+|------|-------------|-----------------|
+| **Single Month** | Current behavior | 1 month |
+| **YTD** | January to selected month | 1-12 months |
+| **QTD** | Quarter start to selected month | 1-3 months |
+| **Custom Range** | User-defined start/end months | Variable |
 
-**New State:**
-```typescript
-const [searchParams] = useSearchParams();
-const [viewMode, setViewMode] = useState<ViewMode>('self');
-const [selectedEmployee, setSelectedEmployee] = useState<EmployeeProfile | null>(null);
+---
 
-// Initialize from URL query param
-useEffect(() => {
-  const viewFromUrl = searchParams.get('view') as ViewMode | null;
-  if (viewFromUrl && availableModes.includes(viewFromUrl)) {
-    setViewMode(viewFromUrl);
-  }
-}, [searchParams, availableModes]);
-```
+## Phase 1: Enhanced Period Selector Component
 
-**Role-Based Available Modes:**
-```typescript
-const availableModes = useMemo(() => {
-  const modes: ViewMode[] = ['self'];
-  if (['manager', 'admin', 'management'].includes(role || '')) modes.push('team');
-  if (['auditor', 'admin'].includes(role || '')) modes.push('audit');
-  if (['management', 'admin'].includes(role || '')) modes.push('management');
-  return modes;
-}, [role]);
-```
+### New Component: `ReviewPeriodSelectorEnhanced.tsx`
 
-**Conditional Rendering Logic:**
-```typescript
-// At the top of the component return
-{availableModes.length > 1 && (
-  <ViewModeToggle
-    currentMode={viewMode}
-    availableModes={availableModes}
-    onModeChange={(mode) => {
-      setViewMode(mode);
-      setSelectedEmployee(null);
-    }}
-  />
-)}
+**Features:**
+- Mode toggle: Single Month | YTD | QTD | Custom
+- When YTD: Auto-calculates January through selected month
+- When QTD: Auto-calculates quarter start through selected month
+- When Custom: Shows "From" and "To" month/year pickers
+- Returns: `{ mode, months: string[], year: number }` or `{ mode, startMonth, endMonth, startYear, endYear }`
 
-// Main content
-{viewMode === 'self' ? (
-  // Current self-dashboard UI (unchanged)
-) : selectedEmployee ? (
-  <UnifiedScorecard
-    viewLevel={viewMode === 'team' ? 'manager' : viewMode}
-    employee={selectedEmployee}
-    selectedPeriod={selectedPeriod}
-    selectedYear={selectedYear}
-    onPeriodChange={setSelectedPeriod}
-    onYearChange={setSelectedYear}
-    onBack={() => setSelectedEmployee(null)}
-  />
-) : (
-  <EmployeeSelectorGrid
-    viewLevel={viewMode}
-    selectedPeriod={selectedPeriod}
-    selectedYear={selectedYear}
-    onPeriodChange={setSelectedPeriod}
-    onYearChange={setSelectedYear}
-    onSelectEmployee={setSelectedEmployee}
-  />
-)}
+**UI Preview:**
+```text
+[Single Month] [YTD] [QTD] [Custom]
+              [January v] [2026 v]
+              
+-- OR for Custom --
+
+[Single Month] [YTD] [QTD] [Custom]
+From: [January v] [2025 v]  To: [December v] [2025 v]
 ```
 
 ---
 
-## Phase 5: Routing & Navigation Updates
+## Phase 2: Cumulative Data Fetching Hook
 
-### Changes to `src/App.tsx`
+### New Hook: `useCumulativeKpis.ts`
 
-**Convert legacy routes to redirects:**
+**Purpose:** Fetch and aggregate KPIs across multiple periods
+
+**Logic:**
 ```typescript
-// Replace these routes with redirects
-<Route path="/team-review" element={<Navigate to="/dashboard?view=team" replace />} />
-<Route path="/audit" element={<Navigate to="/dashboard?view=audit" replace />} />
-<Route path="/management-review" element={<Navigate to="/dashboard?view=management" replace />} />
+interface CumulativeKpisResult {
+  // All KPIs across the period range
+  allKpis: KPI[];
+  // Aggregated by KPI template (same kra_name + kpi_name + employee_id)
+  aggregatedKpis: AggregatedKpi[];
+  // Period summary
+  periodSummary: {
+    totalPeriods: number;
+    periodsWithData: number;
+    startPeriod: string;
+    endPeriod: string;
+  };
+}
+
+interface AggregatedKpi {
+  kpi_name: string;
+  kra_name: string;
+  category_id: string;
+  employee_id: string;
+  // Aggregate metrics
+  avgScore: number | null;
+  totalSubmissions: number;
+  periodScores: { period: string; year: number; score: number | null }[];
+  // Trend
+  trend: 'improving' | 'declining' | 'stable';
+  weightage: number;
+}
 ```
 
-### Changes to `src/components/layout/AppSidebar.tsx`
+**Aggregation Method:**
+- Group KPIs by `kra_name + kpi_name + employee_id + category_id`
+- For each group, calculate weighted average of `final_score` (or `manager_score`/`self_score` as fallback)
+- Track individual period scores for trend visualization
 
-**Update menu items paths to use query params:**
+---
+
+## Phase 3: Dashboard Integration
+
+### Changes to `Dashboard.tsx`
+
+**State Updates:**
 ```typescript
-const menuItems = {
-  // ... main stays the same
-  manager: [
-    { title: 'Team Review', icon: Users, path: '/dashboard?view=team', roles: ['manager', 'admin', 'management'] },
-  ],
-  management: [
-    { title: 'Management Review', icon: Briefcase, path: '/dashboard?view=management', roles: ['management', 'admin'] },
-  ],
-  audit: [
-    { title: 'Audit Panel', icon: Shield, path: '/dashboard?view=audit', roles: ['auditor', 'admin'] },
-  ],
-  // ...
-};
+const [periodMode, setPeriodMode] = useState<'single' | 'ytd' | 'qtd' | 'custom'>('single');
+const [selectedPeriods, setSelectedPeriods] = useState<string[]>([currentMonth]);
 ```
 
-**Update path matching logic** to handle query params:
+**Conditional Data Fetching:**
 ```typescript
-const getSectionForPath = (pathname: string, search: string): string => {
-  const fullPath = pathname + search;
-  if (fullPath.includes('view=team')) return 'manager';
-  if (fullPath.includes('view=audit')) return 'audit';
-  if (fullPath.includes('view=management')) return 'management';
-  // existing logic...
-};
+// If single month - use existing hooks
+// If cumulative - use new useCumulativeKpis hook
+
+const { data: kpis } = periodMode === 'single' 
+  ? useMyKpis() 
+  : useCumulativeKpis(userId, selectedPeriods, selectedYear);
+```
+
+**Chart Adjustments:**
+- Overall Score: Show weighted average across all periods
+- Category Chart: Aggregate category scores across periods
+- KPI Table: Show period-by-period breakdown with mini sparkline
+
+---
+
+## Phase 4: Cumulative Score Calculations
+
+### New Utility: `src/lib/cumulativeScoring.ts`
+
+**Functions:**
+```typescript
+// Calculate weighted average across periods
+function calculateCumulativeScore(
+  periodScores: { score: number; weightage: number }[]
+): number;
+
+// Determine performance trend
+function calculateTrend(
+  periodScores: number[]
+): 'improving' | 'declining' | 'stable';
+
+// Calculate category cumulative performance
+function calculateCategoryCumulative(
+  kpis: AggregatedKpi[],
+  categoryId: string
+): { avgScore: number; trend: string };
 ```
 
 ---
 
-## Files to Modify
+## Phase 5: UI Enhancements for Cumulative View
 
-| File | Changes |
-|------|---------|
-| `src/pages/Dashboard.tsx` | Add view mode state, import new components, conditional rendering |
-| `src/App.tsx` | Redirect legacy routes to `/dashboard?view=X` |
-| `src/components/layout/AppSidebar.tsx` | Update navigation paths to use query params |
+### KPI Table with Period Breakdown
 
----
+When in cumulative mode, the KPI details table shows:
 
-## User Experience After Implementation
+| KPI Name | Category | Jan | Feb | Mar | Avg Score | Trend |
+|----------|----------|-----|-----|-----|-----------|-------|
+| Sales Target | Revenue | 4 | 3 | 5 | 4.0 | ↗ |
+| Customer Calls | Service | 3 | 4 | 4 | 3.7 | → |
 
-| Role | Dashboard Tabs | Flow |
-|------|---------------|------|
-| Employee | (none - single mode) | Sees only self-dashboard |
-| Manager | [My Dashboard] [Team Review] | Toggle between modes, employee grid → scorecard |
-| Auditor | [My Dashboard] [Audit] | Toggle modes, employee grid → scorecard |
-| Management | [My Dashboard] [Team Review] [Management] | All three modes available |
-| Admin | [My Dashboard] [Team Review] [Audit] [Management] | Full access to all modes |
+### Trend Indicators
+- ↗ Improving (last 3 periods trending up)
+- → Stable (variance < 10%)
+- ↘ Declining (last 3 periods trending down)
 
----
-
-## Technical Benefits
-
-1. **Single Entry Point**: One Dashboard component handles all views
-2. **URL State**: View mode persisted in URL (`/dashboard?view=team`)
-3. **Deep Links**: Legacy routes automatically redirect with preserved query params
-4. **Consistent UX**: Same layout across all roles
-5. **Code Reduction**: Leverages shared components instead of 4 separate pages
+### Period Summary Card
+```text
+┌─────────────────────────────────────┐
+│ YTD Performance Summary             │
+│ Jan 2026 - Mar 2026 (3 months)     │
+│                                     │
+│ Avg Score: 3.8/5  │  Trend: ↗      │
+│ Completed: 24/30  │  Pending: 6    │
+└─────────────────────────────────────┘
+```
 
 ---
 
-## Implementation Steps
+## Phase 6: UnifiedScorecard Cumulative Support
 
-1. Modify `Dashboard.tsx`:
-   - Add imports for ViewModeToggle, EmployeeSelectorGrid, UnifiedScorecard
-   - Add viewMode and selectedEmployee state
-   - Add availableModes calculation based on role
-   - Add URL query param initialization
-   - Wrap existing self-dashboard content in conditional
-   - Add ViewModeToggle at top
-   - Add conditional rendering for reviewer modes
+### Changes to `UnifiedScorecard.tsx`
 
-2. Modify `App.tsx`:
-   - Change `/team-review`, `/audit`, `/management-review` routes to redirects
+- Accept period mode from parent Dashboard
+- When cumulative, fetch employee KPIs across all selected periods
+- Aggregate scores with period-by-period visibility
+- Maintain ability to drill into individual period details
 
-3. Modify `AppSidebar.tsx`:
-   - Update paths to use query params
-   - Update path matching to handle query params
+---
 
-4. Update `DOCUMENTATION.md`:
-   - Document unified dashboard architecture
+## Files to Create/Modify
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/components/ui/ReviewPeriodSelectorEnhanced.tsx` | Create | Multi-period selection UI |
+| `src/hooks/useCumulativeKpis.ts` | Create | Aggregate KPIs across periods |
+| `src/lib/cumulativeScoring.ts` | Create | Scoring calculation utilities |
+| `src/pages/Dashboard.tsx` | Modify | Integrate cumulative mode |
+| `src/components/review/UnifiedScorecard.tsx` | Modify | Support cumulative view |
+| `src/components/dashboard/CumulativeSummaryCard.tsx` | Create | Period summary display |
+| `src/components/dashboard/KpiTrendIndicator.tsx` | Create | Trend arrow component |
+| `DOCUMENTATION.md` | Update | Document cumulative feature |
+
+---
+
+## Technical Considerations
+
+### Performance
+- Cumulative queries may return large datasets (12 months × n KPIs)
+- Implement pagination or lazy loading for large teams
+- Cache aggregated results with React Query
+
+### Edge Cases
+- KPIs that don't exist in all periods (new assignments mid-year)
+- Period-specific KPIs (quarterly KPIs shouldn't be averaged monthly)
+- Handle mix of approved/pending statuses across periods
+
+### Scoring Logic
+- Use `final_score` when available (approved)
+- Fallback to `manager_score` → `auditor_score` → `self_score`
+- Weight by KPI weightage when aggregating
+
+---
+
+## Implementation Order
+
+1. **Phase 1**: Create `ReviewPeriodSelectorEnhanced` with mode toggle
+2. **Phase 2**: Build `useCumulativeKpis` hook with aggregation logic
+3. **Phase 3**: Create scoring utilities in `cumulativeScoring.ts`
+4. **Phase 4**: Integrate into Dashboard with conditional rendering
+5. **Phase 5**: Add cumulative support to UnifiedScorecard
+6. **Phase 6**: Build summary cards and trend indicators
+7. **Phase 7**: Update documentation
