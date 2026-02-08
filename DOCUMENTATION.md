@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-08  
-> **Version:** 1.11.0
+> **Version:** 1.12.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -472,8 +472,13 @@ login_hero_description text  -- Configurable description text
 └────────────────────────────────────────────────────────────────────────────┘
 ┌────────────────────────────────────────────────────────────────────────────┐
 │  Filters Row (Prominent, Full Width with subtle background)                │
-│  [Filter Icon] Review Period: [Month ▼] [Year ▼]   Category: [All ▼]      │
+│  [Month][YTD][QTD][Custom] Period: [Month ▼] [Year ▼]   Category: [All ▼] │
 │  Showing X of Y KPIs                                                       │
+└────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│  Cumulative Summary Card (Only in YTD/QTD/Custom mode)                     │
+│  [Period Range] (X months) | Avg Score: 3.8/5 | Trend: ↗ Improving        │
+│  Completed: 24/30 | Pending: 6                                             │
 └────────────────────────────────────────────────────────────────────────────┘
 ┌─────────────┬──────────────────────────────────────────────────────────────┐
 │ [1/6] Donut │ [5/6] Performance by Category (Horizontal Bar Chart)        │
@@ -486,6 +491,16 @@ login_hero_description text  -- Configurable description text
 
 **Features:**
 - **Global Filters:** Period and Category filters affect ALL dashboard sections (metrics, charts, status, table)
+- **Cumulative Performance Views:** Support for multiple period selection modes:
+  - **Single Month:** Traditional single-period view (default)
+  - **YTD (Year-to-Date):** Aggregates from January to selected month
+  - **QTD (Quarter-to-Date):** Aggregates from quarter start to selected month
+  - **Custom Range:** User-defined start/end months with cross-year support
+- **Cumulative Summary Card:** Appears in YTD/QTD/Custom modes showing:
+  - Period range and month count
+  - Weighted average score across periods
+  - Performance trend indicator (Improving ↗ / Stable → / Declining ↘)
+  - Completed vs pending KPI counts
 - Profile card with compact layout: "Name (Employee Code) / Designation / Department"
 - Key stat cards: Monthly Rating, Total Weighted Score, Completed, Pending
 - Overall score chart (compact radial donut - 1/6 width)
@@ -497,7 +512,7 @@ login_hero_description text  -- Configurable description text
 
 **Data Flow:**
 ```
-useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculate metrics → Render
+useAuth() → user.id → useMyKpis() / useCumulativeKpis() → Filter by Period/Category → Calculate metrics → Render
 ```
 
 **Key Components:**
@@ -505,7 +520,9 @@ useAuth() → user.id → useMyKpis() → Filter by Period/Category → Calculat
 - `OverallScoreChart.tsx`: Small radial chart (innerRadius: 35, outerRadius: 50)
 - `CategoryScoreChart.tsx`: Horizontal bar chart with 180px Y-axis width
 - `KeyStatCard.tsx`: Stat cards with icons
-- `ReviewPeriodSelector.tsx`: Month/Year dropdowns
+- `ReviewPeriodSelectorEnhanced.tsx`: Mode toggle + Month/Year dropdowns with cumulative support
+- `CumulativeSummaryCard.tsx`: Period summary with trend indicator
+- `KpiTrendIndicator.tsx`: Visual trend arrows (improving/stable/declining)
 
 ### 4.3 KPI Self-Review
 
@@ -1813,6 +1830,7 @@ src/
 │   ├── textFormatting.test.ts # Unit tests for text formatting
 │   ├── pdfExport.ts           # PDF generation logic
 │   ├── ratingCalculation.ts   # Score calculation logic
+│   ├── cumulativeScoring.ts   # Cumulative performance calculations (YTD/QTD/Custom)
 │   ├── qualitativeUom.ts      # Qualitative KPI helpers
 │   ├── uomConstants.ts        # UOM dropdown options
 │   ├── reviewConstants.ts     # Status/rating constants
