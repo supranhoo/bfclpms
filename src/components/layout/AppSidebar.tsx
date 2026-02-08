@@ -57,14 +57,12 @@ const menuItems = {
     { title: 'Team Review', icon: Users, path: '/team-review', roles: ['manager', 'admin', 'management'] },
   ],
   management: [
-    { title: 'Management Dashboard', icon: LayoutDashboard, path: '/management-dashboard', roles: ['management', 'admin'] },
     { title: 'Management Review', icon: Briefcase, path: '/management-review', roles: ['management', 'admin'] },
   ],
   audit: [
     { title: 'Audit Panel', icon: Shield, path: '/audit', roles: ['auditor', 'admin'] },
   ],
   admin: [
-    { title: 'Admin Dashboard', icon: LayoutDashboard, path: '/admin', roles: ['admin'] },
     { title: 'User Management', icon: Users, path: '/admin/users', roles: ['admin'] },
     { title: 'KRA Library', icon: Library, path: '/admin/templates', roles: ['admin'] },
     { title: 'KRA Bundles', icon: Package, path: '/admin/bundles', roles: ['admin'] },
