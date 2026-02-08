@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import {
   BarChart3,
   ClipboardList,
@@ -294,14 +295,17 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-4 space-y-3">
-        {/* Back to Hub link */}
-        <button 
-          onClick={() => handleNavigation('/home')}
-          className="flex items-center gap-2 text-xs text-sidebar-foreground/60 hover:text-primary transition-colors duration-200"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          <span>Back to Hub</span>
-        </button>
+        {/* Back to Hub + Theme Toggle row */}
+        <div className="flex items-center justify-between">
+          <button 
+            onClick={() => handleNavigation('/home')}
+            className="flex items-center gap-2 text-xs text-sidebar-foreground/60 hover:text-primary transition-colors duration-200"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span>Back to Hub</span>
+          </button>
+          <ThemeToggle />
+        </div>
         
         {/* Profile card */}
         <div className="flex items-center gap-3 p-2.5 rounded-lg bg-sidebar-accent/5 border border-sidebar-border/30">

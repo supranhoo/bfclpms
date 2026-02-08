@@ -4,7 +4,6 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
 import { Loader2 } from 'lucide-react';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
 export function DashboardLayout() {
   const { user, loading } = useAuth();
 
@@ -24,9 +23,6 @@ export function DashboardLayout() {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <header className="flex h-12 shrink-0 items-center justify-end border-b border-border bg-background px-4">
-          <ThemeToggle />
-        </header>
         <main className="flex-1 overflow-auto p-6 bg-muted/30">
           <ErrorBoundary>
             <Outlet />
