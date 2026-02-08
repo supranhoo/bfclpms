@@ -160,7 +160,7 @@ export function WorkflowProgressTracker({
           "grid gap-2",
           isMobile || compact 
             ? "grid-cols-3" 
-            : "flex items-center"
+            : "grid-cols-6"
         )}>
           {stageConfig.map((stage, index) => {
             const count = statusCounts[stage.key];
@@ -168,9 +168,6 @@ export function WorkflowProgressTracker({
             const queryCount = queriesByStage[stage.key] || 0;
             const isActive = activeFilter === stage.key;
             const Icon = stage.icon;
-            
-            // Calculate progress width for this stage
-            const progressWidth = total > 0 ? (count / total) * 100 : 0;
 
             return (
               <React.Fragment key={stage.key}>
@@ -198,19 +195,19 @@ export function WorkflowProgressTracker({
                       
                       {/* Top row: Icon + Count */}
                       <div className={cn(
-                        "flex items-start justify-between",
+                        "flex items-center justify-between",
                         compact ? "mb-1" : "mb-2"
                       )}>
                         <div className={cn(
                           "rounded-full flex items-center justify-center",
                           stage.iconBgClass,
-                          compact ? "h-6 w-6" : "h-8 w-8"
+                          compact ? "h-7 w-7" : "h-9 w-9"
                         )}>
-                          <Icon className={compact ? "h-3 w-3" : "h-4 w-4"} />
+                          <Icon className={compact ? "h-3.5 w-3.5" : "h-5 w-5"} />
                         </div>
                         <span className={cn(
                           "font-bold text-foreground",
-                          compact ? "text-lg" : "text-2xl"
+                          compact ? "text-xl" : "text-3xl"
                         )}>
                           {count}
                         </span>
@@ -218,19 +215,18 @@ export function WorkflowProgressTracker({
                       
                       {/* Stage Label */}
                       <p className={cn(
-                        "font-medium text-muted-foreground uppercase tracking-wide truncate",
-                        compact ? "text-[9px]" : "text-[10px]"
+                        "font-semibold text-muted-foreground uppercase tracking-wide truncate",
+                        compact ? "text-[10px]" : "text-xs"
                       )}>
                         {isMobile || compact ? stage.shortLabel : stage.label}
                       </p>
                       
-                      {/* Progress Bar */}
-                      <div className="h-1 w-full bg-muted rounded-full mt-2 overflow-hidden">
-                        <div 
-                          className={cn("h-full rounded-full transition-all", stage.progressColor)}
-                          style={{ width: `${progressWidth}%` }}
-                        />
-                      </div>
+                      {/* Full-width colored accent bar */}
+                      <div className={cn(
+                        "w-full rounded-full mt-2 overflow-hidden",
+                        stage.progressColor,
+                        compact ? "h-1" : "h-1.5"
+                      )} />
                     </div>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -238,13 +234,6 @@ export function WorkflowProgressTracker({
                     {hasQuery && <p className="text-orange-500">{queryCount} open {queryCount === 1 ? 'query' : 'queries'}</p>}
                   </TooltipContent>
                 </Tooltip>
-                
-                {/* Arrow between cards (desktop only, not after last) */}
-                {!isMobile && !compact && index < stageConfig.length - 1 && (
-                  <div className="flex items-center text-muted-foreground shrink-0">
-                    <ChevronRight className="h-5 w-5" />
-                  </div>
-                )}
               </React.Fragment>
             );
           })}
