@@ -1,249 +1,167 @@
 
-# Plan: Full Dark Mode Implementation
+# Plan: Add Month Selection to Employee Scorecards
 
 ## Summary
 
-Add a dark mode toggle to the top-right corner of the app and ensure all screens, tables, and components are fully compatible with dark mode. The project already has `next-themes` installed and dark mode CSS variables defined in `index.css`, but the ThemeProvider is not wired up and several components use hardcoded colors that need dark mode variants.
+Enable reviewers at all levels (Manager, Auditor, Management) to change the review month/year directly within the employee scorecard view without navigating back to the employee list.
 
 ---
 
 ## Current State
 
-| Component | Status |
-|-----------|--------|
-| CSS Variables (index.css) | Dark mode variables already defined |
-| next-themes package | Installed but not configured |
-| ThemeProvider | **NOT WIRED UP** in App.tsx |
-| Components with `dark:` classes | 47 files already have partial dark mode support |
-| Hardcoded colors (text-white, bg-*) | 24+ files need review |
+The scorecard header shows a static badge:
+```text
+[← Back]  [Avatar] Ankit Choudhary     [February 2026]  ← Static badge
+                   Senior Manager • 101785
+```
+
+The month/year is passed as read-only props from the parent page.
 
 ---
 
-## Implementation Steps
+## Solution
 
-### 1. Create ThemeProvider Wrapper
+Replace the static Badge with a compact ReviewPeriodSelector that updates the parent's state:
 
-Create a new component that wraps next-themes:
+```text
+[← Back]  [Avatar] Ankit Choudhary     [February ▼] [2026 ▼]  ← Interactive dropdowns
+                   Senior Manager • 101785
+```
 
-**File:** `src/components/ThemeProvider.tsx`
+---
+
+## Implementation
+
+### 1. Update Scorecard Props
+
+Add callback props to each scorecard interface:
 
 ```tsx
-import { ThemeProvider as NextThemesProvider } from "next-themes";
-import { type ThemeProviderProps } from "next-themes";
-
-export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
-  return <NextThemesProvider {...props}>{children}</NextThemesProvider>;
+interface EmployeeScorecardProps {
+  employee: { ... };
+  selectedPeriod: string;
+  selectedYear: number;
+  onPeriodChange: (period: string) => void;    // NEW
+  onYearChange: (year: number) => void;        // NEW
+  onBack: () => void;
+  autoOpenKpiId?: string | null;
 }
 ```
 
-### 2. Create Dark Mode Toggle Component
+### 2. Replace Badge with Selector in Scorecard Headers
 
-Create a toggle button for the header:
-
-**File:** `src/components/ui/ThemeToggle.tsx`
+In each scorecard, replace the static Badge:
 
 ```tsx
-import { Moon, Sun } from "lucide-react";
-import { useTheme } from "next-themes";
-import { Button } from "@/components/ui/button";
+// BEFORE
+<Badge variant="outline" className="...">
+  {selectedPeriod} {selectedYear}
+</Badge>
 
-export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-    >
-      <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-      <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-      <span className="sr-only">Toggle theme</span>
-    </Button>
-  );
-}
-```
-
-### 3. Wire ThemeProvider in App.tsx
-
-Wrap the app with ThemeProvider:
-
-```tsx
-import { ThemeProvider } from "@/components/ThemeProvider";
-
-const App = () => (
-  <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-    <QueryClientProvider client={queryClient}>
-      {/* ... rest of app */}
-    </QueryClientProvider>
-  </ThemeProvider>
-);
-```
-
-### 4. Add Theme Toggle to Headers
-
-**DashboardLayout.tsx** - Add toggle to the header:
-```tsx
-<header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-4">
-  <SidebarTrigger className="-ml-1" />
-  <Separator orientation="vertical" className="mr-2 h-4" />
-  <div className="flex-1" />
-  <ThemeToggle /> {/* ADD THIS */}
-</header>
-```
-
-**MinimalHeader.tsx** - Add toggle before user menu:
-```tsx
-<div className="flex items-center gap-2">
-  <ThemeToggle /> {/* ADD THIS */}
-  <DropdownMenu>
-    {/* User menu */}
-  </DropdownMenu>
+// AFTER
+<div className="flex items-center gap-1 shrink-0">
+  <Select value={selectedPeriod} onValueChange={onPeriodChange}>
+    <SelectTrigger className="h-8 w-[110px] sm:w-[130px] text-xs sm:text-sm">
+      <SelectValue />
+    </SelectTrigger>
+    <SelectContent>
+      {months.map(month => (
+        <SelectItem key={month} value={month}>{month}</SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+  <Select value={selectedYear.toString()} onValueChange={(v) => onYearChange(parseInt(v))}>
+    <SelectTrigger className="h-8 w-[70px] sm:w-[80px] text-xs sm:text-sm">
+      <SelectValue />
+    </SelectTrigger>
+    <SelectContent>
+      {years.map(year => (
+        <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
 </div>
 ```
 
-**Auth.tsx** - Add toggle in top-right corner for login page
+### 3. Update Parent Pages to Pass Callbacks
 
----
-
-## 5. Component Dark Mode Audit & Fixes
-
-### Files Requiring Updates
-
-The following files use hardcoded Tailwind colors that need dark mode variants:
-
-| File | Issue | Fix |
-|------|-------|-----|
-| `src/pages/reports/AuditTrailReport.tsx` | Uses `bg-gray-100`, `bg-yellow-100`, etc. | Add `dark:bg-*-900` variants |
-| `src/components/dashboard/KpiTimeline.tsx` | Uses `bg-slate-500`, `bg-sky-500` | Already contrast-safe, but verify |
-| `src/pages/Dashboard.tsx` | Status badges with light backgrounds | Already has dark mode variants |
-| `src/components/admin/ScoringSimulatorPopover.tsx` | `bg-blue-500 text-white`, etc. | These are fine (white on color) |
-| `src/components/review/QualitativeValueInput.tsx` | `text-white` on colored badges | These are fine |
-| Multiple Badge usages | `bg-*-100 text-*-800` pattern | Add `dark:bg-*-900 dark:text-*-200` |
-
-### Pattern to Apply
-
-For status/category badges using the pattern:
-```tsx
-// Before
-className="bg-blue-100 text-blue-800"
-
-// After
-className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-```
-
-### Files Already Dark-Mode Ready
-
-These 47 files already have `dark:` classes and need minimal or no changes:
-- Most scorecard components
-- Review components
-- Many admin components
-
----
-
-## 6. Specific Component Fixes
-
-### AuditTrailReport.tsx - Action Colors
+In TeamReview.tsx, AuditPanel.tsx, and ManagementReview.tsx:
 
 ```tsx
-const actionColors: Record<string, string> = {
-  'kpi_created': 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
-  'kpi_updated': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-200',
-  // ... add dark variants to all entries
-};
+// BEFORE
+<EmployeeScorecard
+  employee={selectedMember}
+  selectedPeriod={selectedPeriod}
+  selectedYear={selectedYear}
+  onBack={() => setSelectedMember(null)}
+  autoOpenKpiId={autoOpenKpiId}
+/>
+
+// AFTER
+<EmployeeScorecard
+  employee={selectedMember}
+  selectedPeriod={selectedPeriod}
+  selectedYear={selectedYear}
+  onPeriodChange={setSelectedPeriod}
+  onYearChange={setSelectedYear}
+  onBack={() => setSelectedMember(null)}
+  autoOpenKpiId={autoOpenKpiId}
+/>
 ```
-
-### Status Color Maps (Multiple Files)
-
-Ensure all status color maps include dark mode variants:
-
-```tsx
-const statusColors: Record<string, string> = {
-  kra_set: 'bg-muted text-muted-foreground',
-  self_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  manager_check: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-  audit: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-};
-```
-
-### Table Styling
-
-Tables use semantic colors (`bg-muted`, `border-border`) which automatically adapt. No changes needed for base table components.
-
-### Card & Sheet Components
-
-Already use semantic tokens (`bg-card`, `bg-background`). No changes needed.
 
 ---
-
-## Files to Create
-
-| File | Purpose |
-|------|---------|
-| `src/components/ThemeProvider.tsx` | Wrapper for next-themes |
-| `src/components/ui/ThemeToggle.tsx` | Dark/light mode toggle button |
 
 ## Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/App.tsx` | Add ThemeProvider wrapper |
-| `src/components/layout/DashboardLayout.tsx` | Add ThemeToggle to header |
-| `src/components/layout/MinimalHeader.tsx` | Add ThemeToggle before user menu |
-| `src/pages/Auth.tsx` | Add ThemeToggle in top-right corner |
-| `src/pages/reports/AuditTrailReport.tsx` | Add dark mode variants to action colors |
-| `src/pages/MyKpis.tsx` | Verify/add dark variants to badges |
-| `src/pages/SelfReview.tsx` | Verify/add dark variants to badges |
-| `src/pages/Dashboard.tsx` | Already has dark variants - verify |
-| `src/pages/TeamReview.tsx` | Add dark variants to status badges |
-| `src/pages/AuditPanel.tsx` | Already has dark variants - verify |
-| `src/pages/ManagementReview.tsx` | Already has dark variants - verify |
-| `src/components/review/EmployeeScorecard.tsx` | Add dark variants to score badges |
-| `src/components/review/AuditScorecard.tsx` | Already has dark variants - verify |
-| `src/components/review/ManagementScorecard.tsx` | Already has dark variants - verify |
-| `src/components/dashboard/KpiTrackerModal.tsx` | Add dark variants to rating badges |
-| `src/components/admin/AdminDailyEntryDialog.tsx` | Verify dark mode compatibility |
-| `DOCUMENTATION.md` | Document dark mode feature |
+| `src/components/review/EmployeeScorecard.tsx` | Add callbacks to props, replace Badge with Select components |
+| `src/components/review/AuditScorecard.tsx` | Add callbacks to props, replace Badge with Select components |
+| `src/components/review/ManagementScorecard.tsx` | Add callbacks to props, replace Badge with Select components |
+| `src/pages/TeamReview.tsx` | Pass `onPeriodChange` and `onYearChange` callbacks |
+| `src/pages/AuditPanel.tsx` | Pass `onPeriodChange` and `onYearChange` callbacks |
+| `src/pages/ManagementReview.tsx` | Pass `onPeriodChange` and `onYearChange` callbacks |
+| `DOCUMENTATION.md` | Document the new feature |
 
 ---
 
 ## Visual Result
 
 After implementation:
-- Sun/Moon toggle button in top-right corner of all pages
-- All backgrounds, text, and borders adapt to theme
-- Charts use theme-aware colors via CSS variables
-- Smooth transition between light and dark modes
-- User preference persisted in localStorage
+
+```text
++-------------------------------------------------------------------------------+
+| [←]  [AC] Ankit Choudhary              [February ▼] [2026 ▼]                  |
+|            Senior Manager • 101785                                             |
++-------------------------------------------------------------------------------+
+```
+
+- Compact dropdowns maintain the clean header design
+- Reviewers can quickly switch months to compare performance
+- No need to navigate back to the employee list
+- State syncs back to parent page (so if user goes back and returns, the selection persists)
 
 ---
 
 ## Technical Notes
 
-1. **CSS Variables**: Already defined in `index.css` - no changes needed
-2. **Tailwind Config**: Already has `darkMode: ["class"]` - no changes needed
-3. **Chart Colors**: Use `--chart-*` variables which are theme-aware
-4. **Sonner Toast**: Already uses `useTheme` hook - will work automatically
-5. **localStorage Persistence**: Handled by next-themes automatically
+1. **Reactivity**: When period changes, all hooks that depend on `selectedPeriod` and `selectedYear` automatically refetch data
+2. **State Sync**: Parent page maintains the source of truth - scorecard just calls callbacks
+3. **Mobile-Friendly**: Compact Select triggers work well on small screens
+4. **Dark Mode**: Select components already have dark mode support
 
 ---
 
 ## Testing Checklist
 
-After implementation, verify dark mode works on:
-
-- [ ] Login page (Auth.tsx)
-- [ ] Module Hub page
-- [ ] Dashboard page
-- [ ] My KPIs page with all status badges
-- [ ] Team Review page with employee cards
-- [ ] Audit Panel with all review states
-- [ ] Management Review page
-- [ ] All admin pages (User Management, Import Data, Settings, etc.)
-- [ ] All report pages (Audit Trail, Performance, etc.)
-- [ ] All modals, sheets, and dialogs
-- [ ] All dropdowns and select menus
-- [ ] Charts and graphs
-- [ ] Tables with hover states
-- [ ] Toast notifications
+- [ ] Month dropdown works in Team Review (Manager level)
+- [ ] Year dropdown works in Team Review (Manager level)
+- [ ] Month dropdown works in Audit Panel (Auditor level)
+- [ ] Year dropdown works in Audit Panel (Auditor level)
+- [ ] Month dropdown works in Management Review (Management level)
+- [ ] Year dropdown works in Management Review (Management level)
+- [ ] KPI data updates when month/year is changed
+- [ ] Stats cards update when month/year is changed
+- [ ] Category scores update when month/year is changed
+- [ ] Going back and returning preserves the selected period
+- [ ] Works correctly on mobile screens
