@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, KPI } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
@@ -20,11 +21,25 @@ import { MobileKpiCard } from '@/components/dashboard/MobileKpiCard';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
+import { ViewModeToggle, ViewMode } from '@/components/review/ViewModeToggle';
+import { EmployeeSelectorGrid } from '@/components/review/EmployeeSelectorGrid';
+import { UnifiedScorecard } from '@/components/review/UnifiedScorecard';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Target, TrendingUp, CheckCircle2, Clock, BarChart3, Info, Filter, Building2, ClipboardEdit, Eye } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+
+interface EmployeeProfile {
+  id: string;
+  full_name: string | null;
+  email: string;
+  designation: string | null;
+  employee_code: string | null;
+  avatar_url: string | null;
+  department_id: string | null;
+  reporting_manager_id: string | null;
+}
 
 const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -50,8 +65,9 @@ const ratingColors: Record<string, string> = {
 };
 
 export default function Dashboard() {
-  const { profile } = useAuth();
+  const { profile, role } = useAuth();
   const isMobile = useIsMobile();
+  const [searchParams] = useSearchParams();
   const { data: kpis, isLoading: kpisLoading } = useMyKpis();
   const { data: categories, isLoading: categoriesLoading } = useKraCategories();
   const kpiIds = kpis?.map(k => k.id) || [];
@@ -66,6 +82,28 @@ export default function Dashboard() {
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
   const [selectedPeriod, setSelectedPeriod] = useState<string>(defaultPeriod);
   const [selectedYear, setSelectedYear] = useState<number>(defaultYear);
+
+  // View mode state for unified dashboard
+  const [viewMode, setViewMode] = useState<ViewMode>('self');
+  const [selectedEmployee, setSelectedEmployee] = useState<EmployeeProfile | null>(null);
+  const [autoOpenKpiId, setAutoOpenKpiId] = useState<string | null>(null);
+
+  // Calculate available modes based on role
+  const availableModes = useMemo(() => {
+    const modes: ViewMode[] = ['self'];
+    if (['manager', 'admin', 'management'].includes(role || '')) modes.push('team');
+    if (['auditor', 'admin'].includes(role || '')) modes.push('audit');
+    if (['management', 'admin'].includes(role || '')) modes.push('management');
+    return modes;
+  }, [role]);
+
+  // Initialize from URL query param
+  useEffect(() => {
+    const viewFromUrl = searchParams.get('view') as ViewMode | null;
+    if (viewFromUrl && availableModes.includes(viewFromUrl)) {
+      setViewMode(viewFromUrl);
+    }
+  }, [searchParams, availableModes]);
 
   // Fetch org KPI values for this period
   const { data: orgKpiValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
@@ -198,12 +236,91 @@ export default function Dashboard() {
   // Sorting with default Weightage (High to Low)
   const { sortedKpis, sortConfig, setSort } = useKpiSorting(fullyFilteredKpis);
 
-  if (isLoading) {
+  // Handle mode change
+  const handleModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    setSelectedEmployee(null);
+    setAutoOpenKpiId(null);
+  };
+
+  // Handle employee selection from grid
+  const handleSelectEmployee = (employee: EmployeeProfile, kpiId?: string | null) => {
+    setSelectedEmployee(employee);
+    setAutoOpenKpiId(kpiId || null);
+  };
+
+  // Loading state only for self view
+  if (isLoading && viewMode === 'self') {
     return <DashboardSkeleton />;
   }
 
+  // Render reviewer views (team, audit, management)
+  if (viewMode !== 'self') {
+    // If an employee is selected, show their scorecard
+    if (selectedEmployee) {
+      const viewLevelForScorecard = viewMode === 'team' ? 'manager' : viewMode;
+      return (
+        <div className="space-y-4">
+          {/* View Mode Toggle at top */}
+          {availableModes.length > 1 && (
+            <ViewModeToggle
+              currentMode={viewMode}
+              availableModes={availableModes}
+              onModeChange={handleModeChange}
+            />
+          )}
+          <UnifiedScorecard
+            viewLevel={viewLevelForScorecard as 'manager' | 'auditor' | 'management'}
+            employee={selectedEmployee}
+            selectedPeriod={selectedPeriod}
+            selectedYear={selectedYear}
+            onPeriodChange={setSelectedPeriod}
+            onYearChange={setSelectedYear}
+            onBack={() => {
+              setSelectedEmployee(null);
+              setAutoOpenKpiId(null);
+            }}
+            autoOpenKpiId={autoOpenKpiId}
+          />
+        </div>
+      );
+    }
+
+    // Show employee selection grid
+    return (
+      <div className="space-y-4">
+        {/* View Mode Toggle at top */}
+        {availableModes.length > 1 && (
+          <ViewModeToggle
+            currentMode={viewMode}
+            availableModes={availableModes}
+            onModeChange={handleModeChange}
+          />
+        )}
+        <EmployeeSelectorGrid
+          viewLevel={viewMode as Exclude<ViewMode, 'self'>}
+          selectedPeriod={selectedPeriod}
+          selectedYear={selectedYear}
+          onPeriodChange={setSelectedPeriod}
+          onYearChange={setSelectedYear}
+          onSelectEmployee={handleSelectEmployee}
+        />
+      </div>
+    );
+  }
+
+  // Self dashboard view (existing UI)
   return (
     <div className="space-y-6">
+      {/* View Mode Toggle for users with multiple modes */}
+      {availableModes.length > 1 && (
+        <ViewModeToggle
+          currentMode={viewMode}
+          availableModes={availableModes}
+          onModeChange={handleModeChange}
+        />
+      )}
+
       {/* 1. Profile + Filters Row - Compact Layout */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         {/* Profile Card - Left */}
