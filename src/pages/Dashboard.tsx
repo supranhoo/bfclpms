@@ -19,9 +19,11 @@ import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { MobileKpiCard } from '@/components/dashboard/MobileKpiCard';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
+import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Target, TrendingUp, CheckCircle2, Clock, BarChart3, Info, Filter, Building2 } from 'lucide-react';
+import { Target, TrendingUp, CheckCircle2, Clock, BarChart3, Info, Filter, Building2, ClipboardEdit, Eye } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const statusColors: Record<string, string> = {
@@ -57,6 +59,7 @@ export default function Dashboard() {
 
   const [selectedKpiTracker, setSelectedKpiTracker] = useState<KPI | null>(null);
   const [selectedKpiLogic, setSelectedKpiLogic] = useState<KPI | null>(null);
+  const [selectedKpiReview, setSelectedKpiReview] = useState<KPI | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   
@@ -331,6 +334,7 @@ export default function Dashboard() {
                   ratingColors={ratingColors}
                   onViewLogic={setSelectedKpiLogic}
                   onViewTracker={setSelectedKpiTracker}
+                  onReview={setSelectedKpiReview}
                 />
               ))}
               {sortedKpis.length === 0 && (
@@ -359,6 +363,7 @@ export default function Dashboard() {
                   const submission = submissionMap.get(kpi.id);
                   const rating = submission?.final_rating || submission?.self_rating;
                   const score = submission?.final_score || submission?.self_score;
+                  const isKraSet = kpi.status === 'kra_set';
                   
                   return (
                     <TableRow key={kpi.id}>
@@ -402,6 +407,28 @@ export default function Dashboard() {
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-center gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant={isKraSet ? "default" : "ghost"}
+                                onClick={() => setSelectedKpiReview(kpi)}
+                                className={isKraSet ? "gap-1" : ""}
+                              >
+                                {isKraSet ? (
+                                  <>
+                                    <ClipboardEdit className="h-4 w-4" />
+                                    Review
+                                  </>
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {isKraSet ? 'Submit Review' : 'View Details'}
+                            </TooltipContent>
+                          </Tooltip>
                           <Button
                             size="sm"
                             variant="ghost"
@@ -435,6 +462,47 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* KPI Review Sheet */}
+      <Sheet open={!!selectedKpiReview} onOpenChange={(open) => !open && setSelectedKpiReview(null)}>
+        <SheetContent className="w-full sm:w-[85vw] sm:max-w-[1200px] overflow-y-auto p-4 sm:p-6">
+          <SheetHeader className="pb-3 border-b">
+            <div className="flex items-center justify-between">
+              <SheetTitle className="text-base sm:text-lg">
+                {selectedKpiReview?.status === 'kra_set' ? 'Review KPI' : 'KPI Details'}
+              </SheetTitle>
+              {selectedKpiReview && (
+                <Badge className={statusColors[selectedKpiReview.status]}>
+                  {statusLabels[selectedKpiReview.status]}
+                </Badge>
+              )}
+            </div>
+          </SheetHeader>
+          
+          {selectedKpiReview && (
+            <div className="py-4">
+              <KpiReviewPanel
+                kpi={selectedKpiReview}
+                submission={submissionMap.get(selectedKpiReview.id) || null}
+                allKpis={kpis || []}
+                allSubmissions={submissions || []}
+                viewLevel="employee"
+                currentUserId={profile?.id}
+                selectedPeriod={selectedPeriod}
+                selectedYear={selectedYear}
+                onOpenFullHistory={() => {
+                  setSelectedKpiReview(null);
+                  setSelectedKpiTracker(selectedKpiReview);
+                }}
+                onOpenTimeline={() => {
+                  setSelectedKpiReview(null);
+                  setSelectedKpiLogic(selectedKpiReview);
+                }}
+              />
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* Modals */}
       <KpiTrackerModal

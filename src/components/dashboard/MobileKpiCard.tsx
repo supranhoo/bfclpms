@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Info, BarChart3 } from 'lucide-react';
+import { Info, BarChart3, ClipboardEdit } from 'lucide-react';
 import { KPI } from '@/hooks/useKpis';
 
 interface MobileKpiCardProps {
@@ -18,6 +18,7 @@ interface MobileKpiCardProps {
   ratingColors: Record<string, string>;
   onViewLogic: (kpi: KPI) => void;
   onViewTracker: (kpi: KPI) => void;
+  onReview?: (kpi: KPI) => void;
 }
 
 export function MobileKpiCard({
@@ -28,6 +29,7 @@ export function MobileKpiCard({
   ratingColors,
   onViewLogic,
   onViewTracker,
+  onReview,
 }: MobileKpiCardProps) {
   const rating = submission?.final_rating || submission?.self_rating;
   const score = submission?.final_score || submission?.self_score;
@@ -84,6 +86,17 @@ export function MobileKpiCard({
 
         {/* Action buttons */}
         <div className="flex gap-1">
+          {onReview && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              onClick={() => onReview(kpi)}
+              title="Review KPI"
+            >
+              <ClipboardEdit className="h-4 w-4" />
+            </Button>
+          )}
           <Button
             size="icon"
             variant="ghost"

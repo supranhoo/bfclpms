@@ -65,11 +65,10 @@ const App = () => (
             <Route path="/" element={<Navigate to="/home" replace />} />
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/my-kpis" element={<MyKpis />} />
-              {/* Redirect old self-review route to my-kpis for backward compatibility */}
-              <Route path="/self-review" element={<Navigate to="/my-kpis" replace />} />
-              {/* Redirect old kra-acceptance route to my-kpis for backward compatibility */}
-              <Route path="/kra-acceptance" element={<Navigate to="/my-kpis" replace />} />
+              {/* Redirect legacy routes to dashboard */}
+              <Route path="/my-kpis" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/self-review" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/kra-acceptance" element={<Navigate to="/dashboard" replace />} />
               <Route path="/queries" element={<QueryInbox />} />
               <Route path="/pms-policy" element={<PMSPolicy />} />
               
