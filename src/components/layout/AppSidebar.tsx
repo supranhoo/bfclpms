@@ -14,6 +14,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
+  SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -175,18 +176,21 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border p-4">
-        <div className="flex items-center gap-3">
-          {appSettings?.logo_url ? (
-            <img src={appSettings.logo_url} alt="Logo" className="h-10 w-10 rounded-lg object-contain" />
-          ) : (
-            <div className="p-2.5 rounded-lg bg-primary/10">
-              <BarChart3 className="h-5 w-5 text-primary" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {appSettings?.logo_url ? (
+              <img src={appSettings.logo_url} alt="Logo" className="h-10 w-10 rounded-lg object-contain" />
+            ) : (
+              <div className="p-2.5 rounded-lg bg-primary/10">
+                <BarChart3 className="h-5 w-5 text-primary" />
+              </div>
+            )}
+            <div>
+              <h2 className="font-semibold text-sidebar-foreground">{displayAppName}</h2>
+              <p className="text-xs text-sidebar-foreground/60">{displayOrgName}</p>
             </div>
-          )}
-          <div>
-            <h2 className="font-semibold text-sidebar-foreground">{displayAppName}</h2>
-            <p className="text-xs text-sidebar-foreground/60">{displayOrgName}</p>
           </div>
+          <SidebarTrigger className="text-sidebar-foreground/60 hover:text-sidebar-foreground" />
         </div>
       </SidebarHeader>
 
