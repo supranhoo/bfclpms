@@ -320,31 +320,6 @@ export function UnifiedScorecard({
     return { overallScore, rating: overallRating, categoryScores };
   }, [kpis, submissions, submissionMap, viewLevel]);
 
-  // Calculate stats based on view level
-  const stats = useMemo(() => {
-    const total = kpis?.length || 0;
-    
-    if (viewLevel === 'manager') {
-      return {
-        pending: kpis?.filter(k => k.status === 'self_review').length || 0,
-        reviewed: kpis?.filter(k => ['manager_check', 'audit', 'management_review', 'approved'].includes(k.status || '')).length || 0,
-        total,
-      };
-    } else if (viewLevel === 'auditor') {
-      return {
-        pending: kpis?.filter(k => k.status === 'manager_check').length || 0,
-        reviewed: kpis?.filter(k => ['audit', 'management_review', 'approved'].includes(k.status || '')).length || 0,
-        total,
-      };
-    } else {
-      return {
-        pending: kpis?.filter(k => k.status === 'management_review').length || 0,
-        reviewed: kpis?.filter(k => k.status === 'approved').length || 0,
-        total,
-      };
-    }
-  }, [kpis, viewLevel]);
-
   // Submit review mutation
   const submitReview = useMutation({
     mutationFn: async ({
@@ -697,132 +672,109 @@ export function UnifiedScorecard({
   const RoleIcon = config.roleIcon;
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Header with Back Button */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+    <div className="space-y-6">
+      {/* 1. Profile + Filters Row - Matches Dashboard Layout */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        {/* Profile Card - Left with Back Button */}
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0">
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <Avatar className="h-10 w-10 sm:h-12 sm:w-12 shrink-0">
+          <Avatar className="h-10 w-10 sm:h-12 sm:w-12 shrink-0 border-2 border-primary/20">
             <AvatarImage src={employee.avatar_url || undefined} />
-            <AvatarFallback>{getInitials(employee.full_name)}</AvatarFallback>
+            <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+              {getInitials(employee.full_name)}
+            </AvatarFallback>
           </Avatar>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-lg sm:text-2xl font-bold truncate">{employee.full_name || employee.email}</h1>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg sm:text-xl font-bold truncate">{employee.full_name || employee.email}</h1>
+              {employee.employee_code && (
+                <span className="text-xs sm:text-sm text-muted-foreground">({employee.employee_code})</span>
+              )}
+            </div>
             <p className="text-xs sm:text-sm text-muted-foreground truncate">
-              {employee.designation || 'Employee'} {employee.employee_code ? `• ${employee.employee_code}` : ''}
+              {employee.designation || 'Employee'}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0 self-start sm:self-auto">
-          <Select value={selectedPeriod} onValueChange={onPeriodChange}>
-            <SelectTrigger className="h-8 w-[100px] sm:w-[130px] text-xs sm:text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(month => (
-                <SelectItem key={month} value={month}>{month}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={selectedYear.toString()} onValueChange={(v) => onYearChange(parseInt(v))}>
-            <SelectTrigger className="h-8 w-[70px] sm:w-[80px] text-xs sm:text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2].map(year => (
-                <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+
+        {/* Filters - Right (matching Dashboard) */}
+        <Card className="bg-muted/30 flex-shrink-0">
+          <CardContent className="py-3 px-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <Calendar className="h-4 w-4" />
+                <span className="hidden sm:inline">Review Period:</span>
+              </div>
+              <Select value={selectedPeriod} onValueChange={onPeriodChange}>
+                <SelectTrigger className="w-full sm:w-[130px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(month => (
+                    <SelectItem key={month} value={month}>{month}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={selectedYear.toString()} onValueChange={(v) => onYearChange(parseInt(v))}>
+                <SelectTrigger className="w-full sm:w-[90px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2].map(year => (
+                    <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {kpis?.length || 0} KPIs
+              </span>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Workflow Progress Tracker */}
-      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} compact />
-
-      {/* Score Overview */}
-      <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-3">
-        <Card>
+      {/* 2. Performance Charts Row - 1:5 ratio matching Dashboard */}
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-6">
+        {/* Overall Score Chart - Small (1/6) */}
+        <Card className="md:col-span-1">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Overall Score</CardTitle>
+            <CardTitle className="text-sm">Overall</CardTitle>
+            <CardDescription className="text-xs">Performance</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="h-[140px] sm:h-[180px]">
+          <CardContent className="flex flex-col items-center">
+            <div className="h-[120px] sm:h-[140px] w-full">
               <OverallScoreChart percentage={scoreData.overallScore} rating={scoreData.rating} />
             </div>
+            {/* Weighted Score below donut */}
+            <div className="text-center mt-2 pt-2 border-t border-border w-full">
+              <p className="text-xs text-muted-foreground">Weighted Score</p>
+              <p className="text-lg font-bold text-foreground">
+                {(scoreData.rating * (kpis?.reduce((sum, k) => sum + (k.weightage || 0), 0) || 0)).toFixed(1)} 
+                <span className="text-muted-foreground font-normal"> / {((kpis?.reduce((sum, k) => sum + (k.weightage || 0), 0) || 0) * 5).toFixed(0)}</span>
+              </p>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="md:col-span-2">
+        {/* Category Breakdown - Wide (5/6) */}
+        <Card className="md:col-span-5">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Category Scores</CardTitle>
+            <CardTitle className="text-sm">Performance by Category</CardTitle>
+            <CardDescription className="text-xs">Score breakdown across KRA categories</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="h-[140px] sm:h-[180px]">
-              <CategoryScoreChart data={scoreData.categoryScores} />
-            </div>
+          <CardContent style={{ height: Math.max(180, scoreData.categoryScores.length * 50) }}>
+            <CategoryScoreChart data={scoreData.categoryScores} />
           </CardContent>
         </Card>
       </div>
 
-      {/* Stats Row */}
-      <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-4">
-        <Card className="border-l-4 border-l-primary">
-          <CardContent className="pt-3 pb-3 sm:pt-4 sm:pb-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground">Total KPIs</p>
-                <p className="text-lg sm:text-2xl font-bold">{stats.total}</p>
-              </div>
-              <Target className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-yellow-500">
-          <CardContent className="pt-3 pb-3 sm:pt-4 sm:pb-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground">Pending</p>
-                <p className="text-lg sm:text-2xl font-bold text-yellow-600">{stats.pending}</p>
-              </div>
-              <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-green-500">
-          <CardContent className="pt-3 pb-3 sm:pt-4 sm:pb-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground">Reviewed</p>
-                <p className="text-lg sm:text-2xl font-bold text-green-600">{stats.reviewed}</p>
-              </div>
-              <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 text-green-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-blue-500">
-          <CardContent className="pt-3 pb-3 sm:pt-4 sm:pb-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground">Progress</p>
-                <p className="text-lg sm:text-2xl font-bold text-blue-600">
-                  {stats.total > 0 ? Math.round((stats.reviewed / stats.total) * 100) : 0}%
-                </p>
-              </div>
-              <div className="h-4 w-4 sm:h-5 sm:w-5 rounded-full border-2 border-blue-500 flex items-center justify-center">
-                <div 
-                  className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full bg-blue-500" 
-                  style={{ transform: `scale(${stats.reviewed / stats.total || 0})` }}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* 3. Status Progress - Full Width Workflow Tracker (not compact) */}
+      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} />
 
-      {/* KPI Table */}
+
+      {/* 4. KPI Table */}
       <Card>
         <CardHeader>
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
