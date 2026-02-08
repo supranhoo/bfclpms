@@ -6,6 +6,7 @@ import { useKraCategories } from '@/hooks/useOrganization';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useCumulativeKpis } from '@/hooks/useCumulativeKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,8 +19,10 @@ import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
 import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { MobileKpiCard } from '@/components/dashboard/MobileKpiCard';
+import { CumulativeSummaryCard } from '@/components/dashboard/CumulativeSummaryCard';
+import { TrendArrow } from '@/components/dashboard/KpiTrendIndicator';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
-import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
+import { ReviewPeriodSelectorEnhanced, useDefaultPeriodSelection, type PeriodSelection } from '@/components/ui/ReviewPeriodSelectorEnhanced';
 import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
 import { ViewModeToggle, ViewMode } from '@/components/review/ViewModeToggle';
 import { EmployeeSelectorGrid } from '@/components/review/EmployeeSelectorGrid';
@@ -29,6 +32,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Target, TrendingUp, CheckCircle2, Clock, BarChart3, Info, Filter, Building2, ClipboardEdit, Eye } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { calculateOverallCumulativeScore, calculateCategoryCumulative, getScoreForPeriod } from '@/lib/cumulativeScoring';
 
 interface EmployeeProfile {
   id: string;
@@ -79,14 +83,26 @@ export default function Dashboard() {
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   
-  const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
-  const [selectedPeriod, setSelectedPeriod] = useState<string>(defaultPeriod);
-  const [selectedYear, setSelectedYear] = useState<number>(defaultYear);
+  // Enhanced period selection with cumulative mode support
+  const defaultPeriodSelection = useDefaultPeriodSelection();
+  const [periodSelection, setPeriodSelection] = useState<PeriodSelection>(defaultPeriodSelection);
+  
+  // Derived values for backward compatibility
+  const selectedPeriod = periodSelection.selectedMonth;
+  const selectedYear = periodSelection.selectedYear;
+  const isCumulativeMode = periodSelection.mode !== 'single';
 
   // View mode state for unified dashboard
   const [viewMode, setViewMode] = useState<ViewMode>('self');
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeProfile | null>(null);
   const [autoOpenKpiId, setAutoOpenKpiId] = useState<string | null>(null);
+  
+  // Cumulative KPI data (only fetched in cumulative modes)
+  const cumulativeData = useCumulativeKpis({
+    employeeId: profile?.id || '',
+    periodRanges: periodSelection.periodRanges,
+    enabled: isCumulativeMode && viewMode === 'self' && !!profile?.id,
+  });
 
   // Calculate available modes based on role
   const availableModes = useMemo(() => {
@@ -168,8 +184,8 @@ export default function Dashboard() {
     return filtered;
   }, [periodFilteredKpis, activeCategory, categories, statusFilter]);
 
-  // Calculate metrics from FILTERED KPIs (global filtering applied)
-  const metrics = useMemo(() => {
+  // Calculate metrics from FILTERED KPIs (global filtering applied) - for single month mode
+  const singleMonthMetrics = useMemo(() => {
     const data = fullyFilteredKpis;
     const totalKpis = data.length;
     const completedKpis = data.filter(k => k.status === 'approved').length;
@@ -193,6 +209,34 @@ export default function Dashboard() {
 
     return { totalKpis, completedKpis, pendingKpis, totalScore, totalMaxScore, overallRating, overallPercentage };
   }, [fullyFilteredKpis, submissionMap]);
+
+  // Calculate cumulative metrics - for YTD/QTD/Custom modes
+  const cumulativeMetrics = useMemo(() => {
+    if (!isCumulativeMode || cumulativeData.aggregatedKpis.length === 0) {
+      return null;
+    }
+    
+    const overall = calculateOverallCumulativeScore(cumulativeData.aggregatedKpis);
+    const completedKpis = cumulativeData.aggregatedKpis.filter(k => k.totalSubmissions > 0).length;
+    const totalKpis = cumulativeData.aggregatedKpis.length;
+    
+    return {
+      score: overall.score,
+      trend: overall.trend,
+      completedKpis,
+      totalKpis,
+      pendingKpis: totalKpis - completedKpis,
+      overallPercentage: overall.score !== null ? (overall.score / 5) * 100 : 0,
+      overallRating: overall.score || 0,
+    };
+  }, [isCumulativeMode, cumulativeData.aggregatedKpis]);
+
+  // Use appropriate metrics based on mode
+  const metrics = isCumulativeMode && cumulativeMetrics ? {
+    ...cumulativeMetrics,
+    totalScore: (cumulativeMetrics.overallRating || 0) * 100, // Approximate for display
+    totalMaxScore: 500, // Approximate
+  } : singleMonthMetrics;
 
   // Category metrics from FILTERED KPIs
   const categoryMetrics = useMemo(() => {
@@ -274,8 +318,17 @@ export default function Dashboard() {
             employee={selectedEmployee}
             selectedPeriod={selectedPeriod}
             selectedYear={selectedYear}
-            onPeriodChange={setSelectedPeriod}
-            onYearChange={setSelectedYear}
+            onPeriodChange={(period) => setPeriodSelection(prev => ({
+              ...prev, 
+              selectedMonth: period, 
+              months: [period], 
+              periodRanges: [{ month: period, year: prev.selectedYear }]
+            }))}
+            onYearChange={(year) => setPeriodSelection(prev => ({
+              ...prev, 
+              selectedYear: year,
+              periodRanges: [{ month: prev.selectedMonth, year }]
+            }))}
             onBack={() => {
               setSelectedEmployee(null);
               setAutoOpenKpiId(null);
@@ -301,8 +354,17 @@ export default function Dashboard() {
           viewLevel={viewMode as Exclude<ViewMode, 'self'>}
           selectedPeriod={selectedPeriod}
           selectedYear={selectedYear}
-          onPeriodChange={setSelectedPeriod}
-          onYearChange={setSelectedYear}
+          onPeriodChange={(period) => setPeriodSelection(prev => ({
+            ...prev, 
+            selectedMonth: period, 
+            months: [period], 
+            periodRanges: [{ month: period, year: prev.selectedYear }]
+          }))}
+          onYearChange={(year) => setPeriodSelection(prev => ({
+            ...prev, 
+            selectedYear: year,
+            periodRanges: [{ month: prev.selectedMonth, year }]
+          }))}
           onSelectEmployee={handleSelectEmployee}
         />
       </div>
@@ -343,11 +405,9 @@ export default function Dashboard() {
                 <Filter className="h-4 w-4" />
                 <span className="hidden sm:inline">Filters</span>
               </div>
-              <ReviewPeriodSelector
-                selectedPeriod={selectedPeriod}
-                selectedYear={selectedYear}
-                onPeriodChange={setSelectedPeriod}
-                onYearChange={setSelectedYear}
+              <ReviewPeriodSelectorEnhanced
+                value={periodSelection}
+                onChange={setPeriodSelection}
                 className="w-full sm:w-auto"
               />
               <Select
@@ -380,12 +440,26 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* Cumulative Summary Card - Only shown in cumulative mode */}
+      {isCumulativeMode && cumulativeMetrics && (
+        <CumulativeSummaryCard
+          periodSelection={periodSelection}
+          avgScore={cumulativeMetrics.score}
+          trend={cumulativeMetrics.trend}
+          completedCount={cumulativeMetrics.completedKpis}
+          totalCount={cumulativeMetrics.totalKpis}
+          pendingCount={cumulativeMetrics.pendingKpis}
+        />
+      )}
+
       {/* 2. Performance Charts Row - 1:5 ratio on desktop, stacked on mobile */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-6">
         {/* Overall Score Chart - Small (1/6) */}
         <Card className="md:col-span-1">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Overall</CardTitle>
+            <CardTitle className="text-sm">
+              {isCumulativeMode ? 'Avg' : 'Overall'}
+            </CardTitle>
             <CardDescription className="text-xs">Performance</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col items-center">
@@ -397,10 +471,18 @@ export default function Dashboard() {
             </div>
             {/* Weighted Score below donut */}
             <div className="text-center mt-2 pt-2 border-t border-border w-full">
-              <p className="text-xs text-muted-foreground">Weighted Score</p>
-              <p className="text-lg font-bold text-foreground">
-                {metrics.totalScore.toFixed(1)} <span className="text-muted-foreground font-normal">/ {metrics.totalMaxScore.toFixed(0)}</span>
+              <p className="text-xs text-muted-foreground">
+                {isCumulativeMode ? 'Avg Score' : 'Weighted Score'}
               </p>
+              {isCumulativeMode ? (
+                <p className="text-lg font-bold text-foreground">
+                  {metrics.overallRating.toFixed(1)} <span className="text-muted-foreground font-normal">/ 5</span>
+                </p>
+              ) : (
+                <p className="text-lg font-bold text-foreground">
+                  {metrics.totalScore.toFixed(1)} <span className="text-muted-foreground font-normal">/ {metrics.totalMaxScore.toFixed(0)}</span>
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
