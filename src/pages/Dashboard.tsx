@@ -30,7 +30,7 @@ import { UnifiedScorecard } from '@/components/review/UnifiedScorecard';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Target, TrendingUp, CheckCircle2, Clock, BarChart3, Info, Filter, Building2, ClipboardEdit, Eye } from 'lucide-react';
+import { Target, TrendingUp, CheckCircle2, Clock, BarChart3, Info, Building2, ClipboardEdit, Eye } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { calculateOverallCumulativeScore, calculateCategoryCumulative, getScoreForPeriod } from '@/lib/cumulativeScoring';
 
@@ -397,47 +397,42 @@ export default function Dashboard() {
           compact
         />
 
-        {/* Filters - Right */}
-        <Card className="bg-muted/30 flex-shrink-0">
-          <CardContent className="py-3 px-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <Filter className="h-4 w-4" />
-                <span className="hidden sm:inline">Filters</span>
-              </div>
-              <ReviewPeriodSelectorEnhanced
-                value={periodSelection}
-                onChange={setPeriodSelection}
-                className="w-full sm:w-auto"
-              />
-              <Select
-                value={activeCategory}
-                onValueChange={setActiveCategory}
-              >
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">All Categories</SelectItem>
-                  {availableCategories.map(cat => (
-                    <SelectItem key={cat.id} value={cat.name}>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: cat.color || 'hsl(var(--primary))' }}
-                        />
-                        {cat.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {fullyFilteredKpis.length}/{periodFilteredKpis.length} KPIs
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Filters - Compact Horizontal Row */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 flex-shrink-0">
+          <ReviewPeriodSelectorEnhanced
+            value={periodSelection}
+            onChange={setPeriodSelection}
+          />
+          
+          <div className="h-6 w-px bg-border hidden sm:block" />
+          
+          <Select
+            value={activeCategory}
+            onValueChange={setActiveCategory}
+          >
+            <SelectTrigger className="w-full sm:w-[140px] h-8 text-xs">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All" className="text-xs">All Categories</SelectItem>
+              {availableCategories.map(cat => (
+                <SelectItem key={cat.id} value={cat.name} className="text-xs">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: cat.color || 'hsl(var(--primary))' }}
+                    />
+                    {cat.name}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          <Badge variant="outline" className="text-xs h-6 px-2 ml-auto whitespace-nowrap">
+            {fullyFilteredKpis.length}/{periodFilteredKpis.length} KPIs
+          </Badge>
+        </div>
       </div>
 
       {/* Cumulative Summary Card - Only shown in cumulative mode */}
