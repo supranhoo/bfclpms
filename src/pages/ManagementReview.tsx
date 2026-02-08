@@ -141,6 +141,8 @@ export default function ManagementReview() {
         employee={selectedMember}
         selectedPeriod={selectedPeriod}
         selectedYear={selectedYear}
+        onPeriodChange={setSelectedPeriod}
+        onYearChange={setSelectedYear}
         onBack={() => setSelectedMember(null)}
         autoOpenKpiId={autoOpenKpiId}
       />

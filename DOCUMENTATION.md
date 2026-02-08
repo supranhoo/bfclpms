@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-02-07  
-> **Version:** 1.7.0
+> **Last Updated:** 2026-02-08  
+> **Version:** 1.8.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -46,6 +46,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 ### Key Features
 
 - **Dark Mode Support**: Full dark/light theme toggle with system preference detection via `next-themes`
+- **In-Scorecard Period Selection**: Reviewers can change the review month/year directly within employee scorecards without navigating back to the employee list
 - **Multi-Module Architecture**: Hub page for navigating between enterprise modules (PMS, future HRMS, LMS)
 - Multi-stage workflow with configurable review stages
 - KPI templates and bundles for standardized goal-setting
