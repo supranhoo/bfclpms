@@ -260,7 +260,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* 3. Performance Charts Row - 1:5 ratio on desktop, stacked on mobile */}
+      {/* 2. Performance Charts Row - 1:5 ratio on desktop, stacked on mobile */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-6">
         {/* Overall Score Chart - Small (1/6) */}
         <Card className="md:col-span-1">
@@ -268,11 +268,20 @@ export default function Dashboard() {
             <CardTitle className="text-sm">Overall</CardTitle>
             <CardDescription className="text-xs">Performance</CardDescription>
           </CardHeader>
-          <CardContent className="h-[120px] sm:h-[140px]">
-            <OverallScoreChart 
-              percentage={metrics.overallPercentage} 
-              rating={metrics.overallRating}
-            />
+          <CardContent className="flex flex-col items-center">
+            <div className="h-[120px] sm:h-[140px] w-full">
+              <OverallScoreChart 
+                percentage={metrics.overallPercentage} 
+                rating={metrics.overallRating}
+              />
+            </div>
+            {/* Weighted Score below donut */}
+            <div className="text-center mt-2 pt-2 border-t border-border w-full">
+              <p className="text-xs text-muted-foreground">Weighted Score</p>
+              <p className="text-lg font-bold text-foreground">
+                {metrics.totalScore.toFixed(1)} <span className="text-muted-foreground font-normal">/ {metrics.totalMaxScore.toFixed(0)}</span>
+              </p>
+            </div>
           </CardContent>
         </Card>
 
@@ -286,34 +295,6 @@ export default function Dashboard() {
             <CategoryScoreChart data={categoryMetrics} />
           </CardContent>
         </Card>
-      </div>
-
-      {/* 4. Stats Cards - 2 columns on mobile, 4 on desktop */}
-      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
-        <KeyStatCard
-          title="Monthly Rating"
-          value={`${metrics.overallRating.toFixed(2)} / 5.00`}
-          icon={TrendingUp}
-        />
-        <KeyStatCard
-          title="Total Weighted Score"
-          value={`${metrics.totalScore.toFixed(1)} / ${metrics.totalMaxScore.toFixed(0)}`}
-          icon={Target}
-        />
-        <KeyStatCard
-          title="Completed KPIs"
-          value={metrics.completedKpis}
-          subtitle={`of ${metrics.totalKpis} total`}
-          icon={CheckCircle2}
-          valueClassName="text-green-600"
-        />
-        <KeyStatCard
-          title="Pending KPIs"
-          value={metrics.pendingKpis}
-          subtitle="Awaiting action"
-          icon={Clock}
-          valueClassName="text-yellow-600"
-        />
       </div>
 
       {/* 5. Status Progress - Compact Tracker */}
