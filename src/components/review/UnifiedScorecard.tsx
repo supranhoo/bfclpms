@@ -1190,8 +1190,7 @@ export function UnifiedScorecard({
         kpi={selectedKpi}
       />
 
-      {/* Org KPI Send Back Dialog (Management) - Removed, handled differently */}
-      )}
+      {/* Org KPI Send Back Dialog handled in KpiReviewPanel */}
     </div>
   );
 }
