@@ -53,13 +53,13 @@ const menuItems = {
     { title: 'PMS Policy', icon: FileText, path: '/pms-policy', roles: ['employee', 'manager', 'admin', 'auditor', 'management'] },
   ],
   manager: [
-    { title: 'Team Review', icon: Users, path: '/team-review', roles: ['manager', 'admin', 'management'] },
+    { title: 'Team Review', icon: Users, path: '/dashboard?view=team', roles: ['manager', 'admin', 'management'] },
   ],
   management: [
-    { title: 'Management Review', icon: Briefcase, path: '/management-review', roles: ['management', 'admin'] },
+    { title: 'Management Review', icon: Briefcase, path: '/dashboard?view=management', roles: ['management', 'admin'] },
   ],
   audit: [
-    { title: 'Audit Panel', icon: Shield, path: '/audit', roles: ['auditor', 'admin'] },
+    { title: 'Audit Panel', icon: Shield, path: '/dashboard?view=audit', roles: ['auditor', 'admin'] },
   ],
   admin: [
     { title: 'User Management', icon: Users, path: '/admin/users', roles: ['admin'] },
@@ -88,12 +88,15 @@ const menuItems = {
   ],
 };
 
-// Helper to determine which section contains a given path
-const getSectionForPath = (pathname: string): string => {
-  if (menuItems.main.some(item => pathname === item.path)) return 'main';
-  if (menuItems.manager.some(item => pathname === item.path)) return 'manager';
-  if (menuItems.management.some(item => pathname === item.path)) return 'management';
-  if (menuItems.audit.some(item => pathname === item.path)) return 'audit';
+// Helper to determine which section contains a given path (handles query params)
+const getSectionForPath = (pathname: string, search: string = ''): string => {
+  const fullPath = pathname + search;
+  // Check for view query params first
+  if (fullPath.includes('view=team')) return 'manager';
+  if (fullPath.includes('view=audit')) return 'audit';
+  if (fullPath.includes('view=management')) return 'management';
+  // Existing path checks
+  if (menuItems.main.some(item => pathname === item.path.split('?')[0])) return 'main';
   if (menuItems.admin.some(item => pathname.startsWith(item.path))) return 'admin';
   if (menuItems.reports.some(item => pathname.startsWith(item.path))) return 'reports';
   if (pathname === '/admin/org-kpi-data') return 'dataEntry';
@@ -112,17 +115,17 @@ export function AppSidebar() {
 
   // Track which sections are open
   const [openSections, setOpenSections] = useState<Set<string>>(() => {
-    return new Set([getSectionForPath(location.pathname)]);
+    return new Set([getSectionForPath(location.pathname, location.search)]);
   });
 
   // Auto-expand section when route changes
   useEffect(() => {
-    const section = getSectionForPath(location.pathname);
+    const section = getSectionForPath(location.pathname, location.search);
     setOpenSections(prev => {
       if (prev.has(section)) return prev;
       return new Set([...prev, section]);
     });
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 
   // Update document title based on app settings
   useEffect(() => {
@@ -200,9 +203,9 @@ export function AppSidebar() {
           isOpen={openSections.has('main')}
           onToggle={() => toggleSection('main')}
           filterByRole={filterByRole}
-          currentPath={location.pathname}
+          currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
-          hasActiveRoute={getSectionForPath(location.pathname) === 'main'}
+          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'main'}
           inboxBadgeCount={inboxBadgeCount}
         />
 
@@ -214,9 +217,9 @@ export function AppSidebar() {
             isOpen={openSections.has('manager')}
             onToggle={() => toggleSection('manager')}
             filterByRole={filterByRole}
-            currentPath={location.pathname}
+            currentPath={location.pathname + location.search}
             onNavigate={handleNavigation}
-            hasActiveRoute={getSectionForPath(location.pathname) === 'manager'}
+            hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'manager'}
           />
         )}
 
@@ -228,9 +231,9 @@ export function AppSidebar() {
             isOpen={openSections.has('management')}
             onToggle={() => toggleSection('management')}
             filterByRole={filterByRole}
-            currentPath={location.pathname}
+            currentPath={location.pathname + location.search}
             onNavigate={handleNavigation}
-            hasActiveRoute={getSectionForPath(location.pathname) === 'management'}
+            hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'management'}
           />
         )}
 
@@ -242,9 +245,9 @@ export function AppSidebar() {
             isOpen={openSections.has('audit')}
             onToggle={() => toggleSection('audit')}
             filterByRole={filterByRole}
-            currentPath={location.pathname}
+            currentPath={location.pathname + location.search}
             onNavigate={handleNavigation}
-            hasActiveRoute={getSectionForPath(location.pathname) === 'audit'}
+            hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'audit'}
           />
         )}
 
@@ -256,9 +259,9 @@ export function AppSidebar() {
             isOpen={openSections.has('dataEntry')}
             onToggle={() => toggleSection('dataEntry')}
             filterByRole={filterByRole}
-            currentPath={location.pathname}
+            currentPath={location.pathname + location.search}
             onNavigate={handleNavigation}
-            hasActiveRoute={getSectionForPath(location.pathname) === 'dataEntry'}
+            hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'dataEntry'}
           />
         )}
 
@@ -270,9 +273,9 @@ export function AppSidebar() {
             isOpen={openSections.has('admin')}
             onToggle={() => toggleSection('admin')}
             filterByRole={filterByRole}
-            currentPath={location.pathname}
+            currentPath={location.pathname + location.search}
             onNavigate={handleNavigation}
-            hasActiveRoute={getSectionForPath(location.pathname) === 'admin'}
+            hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'admin'}
           />
         )}
 
@@ -284,9 +287,9 @@ export function AppSidebar() {
             isOpen={openSections.has('reports')}
             onToggle={() => toggleSection('reports')}
             filterByRole={filterByRole}
-            currentPath={location.pathname}
+            currentPath={location.pathname + location.search}
             onNavigate={handleNavigation}
-            hasActiveRoute={getSectionForPath(location.pathname) === 'reports'}
+            hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'reports'}
           />
         )}
       </SidebarContent>

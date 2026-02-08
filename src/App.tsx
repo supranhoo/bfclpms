@@ -72,27 +72,13 @@ const App = () => (
               <Route path="/queries" element={<QueryInbox />} />
               <Route path="/pms-policy" element={<PMSPolicy />} />
               
-              {/* Manager-protected routes */}
-              <Route path="/team-review" element={
-                <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>
-                  <TeamReview />
-                </ProtectedRoute>
-              } />
-              
-              {/* Management-protected routes */}
+              {/* Legacy routes - redirect to unified dashboard with view mode */}
+              <Route path="/team-review" element={<Navigate to="/dashboard?view=team" replace />} />
               <Route path="/management-dashboard" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/management-review" element={
-                <ProtectedRoute allowedRoles={['management', 'admin']}>
-                  <ManagementReview />
-                </ProtectedRoute>
-              } />
+              <Route path="/management-review" element={<Navigate to="/dashboard?view=management" replace />} />
+              <Route path="/audit" element={<Navigate to="/dashboard?view=audit" replace />} />
               
               {/* Auditor-protected routes */}
-              <Route path="/audit" element={
-                <ProtectedRoute allowedRoles={['auditor', 'admin']}>
-                  <AuditPanel />
-                </ProtectedRoute>
-              } />
               <Route path="/audit-logs" element={
                 <ProtectedRoute allowedRoles={['auditor', 'admin']}>
                   <AuditLogs />
