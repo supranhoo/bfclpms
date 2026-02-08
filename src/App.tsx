@@ -81,11 +81,7 @@ const App = () => (
               } />
               
               {/* Management-protected routes */}
-              <Route path="/management-dashboard" element={
-                <ProtectedRoute allowedRoles={['management', 'admin']}>
-                  <ManagementDashboard />
-                </ProtectedRoute>
-              } />
+              <Route path="/management-dashboard" element={<Navigate to="/dashboard" replace />} />
               <Route path="/management-review" element={
                 <ProtectedRoute allowedRoles={['management', 'admin']}>
                   <ManagementReview />
@@ -105,11 +101,7 @@ const App = () => (
               } />
               
               {/* Admin-protected routes */}
-              <Route path="/admin" element={
-                <ProtectedRoute allowedRoles={['admin']}>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              } />
+              <Route path="/admin" element={<Navigate to="/dashboard" replace />} />
               <Route path="/admin/users" element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <UserManagement />
