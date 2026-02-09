@@ -246,6 +246,21 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | `org_kpi_values` | Organization-level KPI scores | `category_id`, `review_period`, `achieved_value` |
 | `import_progress` | Bulk import tracking | `id`, `status`, `total_rows`, `processed_rows` |
 | `employee_working_days` | Per-employee monthly working days configuration | `employee_id`, `month`, `year`, `working_days` |
+| `backup_logs` | Database backup history | `id`, `backup_type`, `status`, `file_path`, `file_size_bytes`, `tables_count`, `total_rows` |
+
+#### Backup & Restore
+
+The system includes a full-database backup and restore feature accessible from **System Settings → Backups**.
+
+| Feature | Description |
+|---------|-------------|
+| **Manual Backup** | Admin clicks "Backup Now" to create an immediate full snapshot of all ~40 public tables as JSON |
+| **Scheduled Backup** | Automated weekly backup every Sunday at 2:00 AM UTC via pg_cron |
+| **Download** | Download any completed backup as a JSON file |
+| **Restore** | Restore the entire database from a previous backup (double-confirmation required) |
+| **Auto-Backup Toggle** | Enable/disable the weekly scheduled backup from the UI |
+
+**Storage**: `database-backups` private bucket (admin-only). **Edge Functions**: `create-backup`, `restore-backup`. **Excluded**: `auth.users` (managed by auth system).
 
 #### Workflow Settings Categories
 
