@@ -2072,6 +2072,7 @@ Unified, reusable KPI details table component used across all review views (My K
   - `management_review` / `approved`: All four columns
 - **Simplified Score Display**: Scores shown as single digit (1-5) without denominator or rating labels
 - **Self Column**: Displays the employee's calculated **score** (1-5) from `review_submissions.self_score`, NOT the raw `achieved_value`
+- **Weightage Column**: Displays each KPI's weightage percentage after the Target column (e.g., "10%"), defaults to 0% if unset
 - **Consistent Columns**: Same structure across all views for cross-stage visibility
 - **View-Type Actions**: Action buttons adapt based on `viewType` prop ('my-kpis', 'team-review', 'audit', 'management')
 - **Universal View Access**: All review levels (Manager, Auditor, Management) can access the "View KPI Details" button for non-reviewable KPIs, providing full transparency into the review journey regardless of KPI status
