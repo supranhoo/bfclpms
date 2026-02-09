@@ -126,10 +126,11 @@ export function usePaginatedNotifications(options: UsePaginatedNotificationsOpti
     }
   }, [query.data, page]);
 
-  // Reset when filters change
+  // Reset page when filters change -- don't clear allItems to avoid
+  // "No notifications" flash; the accumulation effect replaces them
+  // when page === 0 and new data arrives
   useEffect(() => {
     setPage(0);
-    setAllItems([]);
   }, [filters.search, filters.readStatus, filters.type, filters.dateRange]);
 
   const totalCount = query.data?.count || 0;
