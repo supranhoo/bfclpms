@@ -1,4 +1,6 @@
-import { isToday, isAfter, isBefore, startOfWeek, startOfToday, formatDistanceToNow } from 'date-fns';
+import { isToday, isAfter, isBefore, startOfWeek, startOfToday, startOfMonth, formatDistanceToNow, differenceInHours } from 'date-fns';
+import { parseSearchSyntax } from './inboxSearchParser';
+import type { InboxFiltersState } from '@/components/inbox/InboxFilters';
 
 export interface InboxItem {
   id: string;
@@ -119,4 +121,81 @@ export function getQuickAction(item: InboxItem, currentUserId: string): QuickAct
     }
   }
   return null;
+}
+
+/**
+ * Compute SLA status for a query item.
+ * SLA target is 48 hours (2 days).
+ */
+const SLA_TARGET_HOURS = 48;
+const SLA_AT_RISK_HOURS = 36; // 75% of SLA
+
+export type SlaStatus = 'on-time' | 'at-risk' | 'overdue';
+
+export function getItemSlaStatus(item: InboxItem): SlaStatus | null {
+  if (item.type !== 'query' || item.queryStatus === 'resolved') return null;
+
+  const elapsed = differenceInHours(new Date(), new Date(item.createdAt));
+  if (elapsed > SLA_TARGET_HOURS) return 'overdue';
+  if (elapsed > SLA_AT_RISK_HOURS) return 'at-risk';
+  return 'on-time';
+}
+
+/**
+ * Apply client-side filters (including advanced search syntax) to inbox items.
+ */
+export function filterInboxItems(items: InboxItem[], filters: InboxFiltersState): InboxItem[] {
+  const parsed = parseSearchSyntax(filters.search);
+  const textLower = parsed.plainText.toLowerCase();
+
+  return items.filter(item => {
+    // Text search
+    if (textLower) {
+      const searchable = [item.title, item.message, item.kpiName, item.kraName, item.fromUser?.fullName, item.toUser?.fullName]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (!searchable.includes(textLower)) return false;
+    }
+
+    // Advanced syntax: type
+    if (parsed.type && item.type !== parsed.type) return false;
+
+    // Advanced syntax: status (queries only)
+    if (parsed.status && item.queryStatus !== parsed.status) return false;
+
+    // Advanced syntax: sla
+    if (parsed.sla) {
+      const sla = getItemSlaStatus(item);
+      if (!sla || sla !== parsed.sla) return false;
+    }
+
+    // Advanced syntax: notiftype
+    if (parsed.notificationType && item.notificationType !== parsed.notificationType) return false;
+
+    // Dropdown: query status
+    if (filters.queryStatus !== 'all' && item.queryStatus !== filters.queryStatus) return false;
+
+    // Dropdown: SLA status
+    if (filters.slaStatus !== 'all') {
+      const sla = getItemSlaStatus(item);
+      if (!sla || sla !== filters.slaStatus) return false;
+    }
+
+    // Dropdown: notification type
+    if (filters.notificationType !== 'all' && item.notificationType !== filters.notificationType) return false;
+
+    // Dropdown: date range
+    if (filters.dateRange !== 'all') {
+      const date = new Date(item.createdAt);
+      const today = startOfToday();
+      if (filters.dateRange === 'today' && !isToday(date)) return false;
+      if (filters.dateRange === 'week' && !isAfter(date, startOfWeek(today, { weekStartsOn: 1 }))) return false;
+      if (filters.dateRange === 'month' && !isAfter(date, startOfMonth(today))) return false;
+    }
+
+    // Dropdown: read status
+    if (filters.readStatus === 'unread' && item.isRead) return false;
+    if (filters.readStatus === 'read' && !item.isRead) return false;
+
+    return true;
+  });
 }

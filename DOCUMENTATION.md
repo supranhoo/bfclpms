@@ -1357,6 +1357,14 @@ Full JSON format for maximum control:
 [{"label":"Compliant","rating":5,"definition":"All requirements met"},{"label":"Non-Compliant","rating":0,"definition":"Requirements not met"}]
 ```
 
+**Advanced Inbox Search & Filters:**
+- **Multi-criteria dropdowns**: Query Status (open/responded/resolved), SLA Status (on-time/at-risk/overdue), Notification Type, Date Range, Read Status — contextually shown per tab
+- **SLA computation**: Items open > 48h are "overdue", > 36h are "at-risk", otherwise "on-time"; computed via `getItemSlaStatus()` in `inboxUtils.ts`
+- **Advanced search syntax**: Supports `type:query`, `status:open`, `sla:overdue`, `period:Q4`, `notiftype:kpi_submitted` — parsed by `inboxSearchParser.ts`
+- **Client-side filtering**: `filterInboxItems()` in `inboxUtils.ts` applies both dropdown and parsed-syntax filters to query tabs
+- **Filter visibility**: Filters appear on all tabs (Notifications, Queries, Sent, Team) with tab-specific controls
+- Tests: `src/lib/inboxSearchParser.test.ts`
+
 **Inbox Insights Tab:**
 - **Health Score** (0–100): Composite metric factoring SLA compliance, open query backlog, and average response time
 - **Response Time Metrics**: Average, fastest, and slowest resolution times computed from `created_at` → `resolved_at`
