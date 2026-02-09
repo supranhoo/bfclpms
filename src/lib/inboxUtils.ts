@@ -100,3 +100,23 @@ export function getQueryStatusClasses(status: 'open' | 'responded' | 'resolved')
       return 'bg-muted text-muted-foreground';
   }
 }
+
+/**
+ * Determine the available quick action for an inbox item
+ */
+export interface QuickAction {
+  type: 'respond' | 'accept';
+  label: string;
+}
+
+export function getQuickAction(item: InboxItem, currentUserId: string): QuickAction | null {
+  if (item.type === 'query') {
+    if (item.queryStatus === 'open' && item.toUser?.id === currentUserId) {
+      return { type: 'respond', label: 'Respond' };
+    }
+    if (item.queryStatus === 'responded' && item.fromUser?.id === currentUserId) {
+      return { type: 'accept', label: 'Accept' };
+    }
+  }
+  return null;
+}
