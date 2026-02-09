@@ -1367,6 +1367,16 @@ Full JSON format for maximum control:
 - **Weekly Comparison**: Week-over-week change in query volume
 - Component: `InboxInsights` in `src/components/inbox/InboxInsights.tsx`
 
+**Personal Productivity Insights** (within Insights tab):
+- **My Avg Response Time**: Personal average compared to team average with percentage difference
+- **My SLA Compliance**: Personal SLA % vs team average
+- **Weekly Trend**: Queries resolved this week vs last week with percentage change
+- **Open Backlog**: Current open query count with resolution ratio
+- **Achievements/Badges**: Earned based on behavior — Speed Demon (all within 24h), SLA Champion (100% SLA), On Fire (5+ resolved/week), Zero Backlog (no open queries)
+- **Bottleneck Areas**: KRA categories ranked by average resolution time with progress bars identifying slowest areas
+- **Team Comparison Banner**: Side-by-side personal vs team average with faster/slower badge
+- Component: `PersonalProductivityInsights` in `src/components/inbox/PersonalProductivityInsights.tsx`
+
 **Organization Structure (4 columns):**
 | Column | Required | Description |
 |--------|----------|-------------|

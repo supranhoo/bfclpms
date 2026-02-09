@@ -5,3 +5,4 @@ export { InboxDetailSheet } from './InboxDetailSheet';
 export { InboxStatsCards, buildInboxStats } from './InboxStatsCards';
 export { InlineQuickAction } from './InlineQuickAction';
 export { InboxInsights } from './InboxInsights';
+export { PersonalProductivityInsights } from './PersonalProductivityInsights';
