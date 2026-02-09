@@ -258,6 +258,7 @@ The system includes a full-database backup and restore feature accessible from *
 | **Scheduled Backup** | Automated weekly backup every Sunday at 2:00 AM UTC via pg_cron |
 | **Download** | Download any completed backup as a JSON file |
 | **Restore** | Restore the entire database from a previous backup (double-confirmation required) |
+| **Upload & Restore** | Upload an external backup JSON file (e.g. downloaded from another instance) and restore the database from it. The file is validated client-side, uploaded to the `database-backups` bucket under `uploads/`, logged with `backup_type = 'uploaded'`, and then restored via the same `restore-backup` Edge Function. Double-confirmation required. |
 | **Auto-Backup Toggle** | Enable/disable the weekly scheduled backup from the UI |
 
 **Storage**: `database-backups` private bucket (admin-only). **Edge Functions**: `create-backup`, `restore-backup`. **Excluded**: `auth.users` (managed by auth system).

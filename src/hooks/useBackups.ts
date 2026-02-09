@@ -130,3 +130,76 @@ export function useDownloadBackup() {
     },
   });
 }
+
+type UploadRestorePhase = 'idle' | 'validating' | 'uploading' | 'restoring' | 'done';
+
+export function useUploadAndRestore() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (file: File): Promise<{ phase: UploadRestorePhase; tables_restored?: number }> => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      // 1. Read and validate JSON
+      const text = await file.text();
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new Error('Invalid JSON file. Please upload a valid backup file.');
+      }
+
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        throw new Error('Backup file must be a JSON object with table names as keys.');
+      }
+
+      const keys = Object.keys(parsed);
+      if (keys.length === 0) {
+        throw new Error('Backup file contains no tables.');
+      }
+
+      // 2. Upload to storage
+      const filePath = `uploads/restore-${Date.now()}.json`;
+      const blob = new Blob([text], { type: 'application/json' });
+
+      const { error: uploadError } = await supabase.storage
+        .from('database-backups')
+        .upload(filePath, blob);
+
+      if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+
+      // 3. Insert backup_logs row
+      const { data: logRow, error: logError } = await supabase
+        .from('backup_logs')
+        .insert({
+          backup_type: 'uploaded',
+          status: 'completed',
+          file_path: filePath,
+          file_size_bytes: file.size,
+          tables_count: keys.length,
+          total_rows: keys.reduce((sum, k) => sum + (Array.isArray((parsed as Record<string, unknown[]>)[k]) ? (parsed as Record<string, unknown[]>)[k].length : 0), 0),
+          created_by: session.user.id,
+        })
+        .select('id')
+        .single();
+
+      if (logError) throw new Error(`Failed to log backup: ${logError.message}`);
+
+      // 4. Call restore edge function
+      const response = await supabase.functions.invoke('restore-backup', {
+        body: { backup_id: logRow.id },
+      });
+
+      if (response.error) throw response.error;
+      return { phase: 'done' as UploadRestorePhase, tables_restored: response.data?.tables_restored };
+    },
+    onSuccess: (data) => {
+      toast.success(`Restore from uploaded file completed: ${data.tables_restored ?? 0} tables restored`);
+      queryClient.invalidateQueries();
+    },
+    onError: (error: Error) => {
+      toast.error(`Upload & Restore failed: ${error.message}`);
+    },
+  });
+}
