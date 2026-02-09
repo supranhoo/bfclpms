@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import postgres from "https://deno.land/x/postgresjs@v3.4.5/mod.js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,8 +42,8 @@ Deno.serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const dbUrl = Deno.env.get("SUPABASE_DB_URL")!;
 
     // Verify caller is admin
     const authHeader = req.headers.get("Authorization");
@@ -66,7 +67,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check admin role
     const { data: roleData } = await userClient
       .from("user_roles")
       .select("role")
@@ -82,81 +82,47 @@ Deno.serve(async (req) => {
 
     const { frequency, day, hour, dayOfMonth, enabled } = await req.json();
 
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    // Connect directly to Postgres to manage cron jobs
+    const sql = postgres(dbUrl, { ssl: "require" });
 
-    // Unschedule existing job
-    await adminClient.rpc("extensions.unschedule" as never, {
-      job_name: "weekly-database-backup",
-    }).catch(() => {
-      // Job may not exist yet, ignore
-    });
+    try {
+      // Unschedule existing job (ignore if not found)
+      await sql`SELECT cron.unschedule('weekly-database-backup')`.catch(() => {});
 
-    // Also try direct SQL to unschedule (more reliable)
-    await adminClient.rpc("pg_cron_unschedule" as never, {
-      jobname: "weekly-database-backup",
-    }).catch(() => {});
+      if (enabled !== false) {
+        const cronExpr = buildCron(frequency, hour, day, dayOfMonth);
 
-    if (enabled !== false) {
-      const cronExpr = buildCron(frequency, hour, day, dayOfMonth);
+        // Schedule the new cron job that calls create-backup via net.http_post
+        await sql.unsafe(`
+          SELECT cron.schedule(
+            'weekly-database-backup',
+            '${cronExpr}',
+            $$
+            SELECT net.http_post(
+              url := '${supabaseUrl}/functions/v1/create-backup',
+              headers := '{"Content-Type": "application/json", "Authorization": "Bearer ${anonKey}"}'::jsonb,
+              body := '{"backup_type": "scheduled"}'::jsonb
+            ) AS request_id;
+            $$
+          );
+        `);
+      }
 
-      // Schedule via net.http_post calling create-backup
-      const scheduleSQL = `
-        SELECT cron.schedule(
-          'weekly-database-backup',
-          '${cronExpr}',
-          $$
-          SELECT net.http_post(
-            url := '${supabaseUrl}/functions/v1/create-backup',
-            headers := '{"Content-Type": "application/json", "Authorization": "Bearer ${anonKey}"}'::jsonb,
-            body := '{"backup_type": "scheduled"}'::jsonb
-          ) AS request_id;
-          $$
-        );
-      `;
-
-      // Use service role to execute the scheduling SQL
-      const { error: scheduleError } = await adminClient.rpc(
-        "execute_schedule_sql" as never,
-        { sql_text: scheduleSQL }
-      ).catch(async () => {
-        // Fallback: try inserting via cron.job directly
-        // This is a workaround if the RPC doesn't exist
-        return { error: { message: "RPC not available" } };
+      // Save schedule to system_settings
+      const scheduleValue = JSON.stringify({
+        frequency: frequency ?? "weekly",
+        day: day ?? "sunday",
+        hour: hour ?? 2,
+        dayOfMonth: dayOfMonth ?? 1,
       });
 
-      // If RPC failed, we still save the setting - the cron job may need manual setup
-      if (scheduleError) {
-        console.warn("Could not auto-schedule cron job:", scheduleError);
-      }
-    }
-
-    // Save schedule to system_settings
-    const scheduleValue = JSON.stringify({
-      frequency: frequency ?? "weekly",
-      day: day ?? "sunday",
-      hour: hour ?? 2,
-      dayOfMonth: dayOfMonth ?? 1,
-    });
-
-    const { error: settingsError } = await adminClient
-      .from("system_settings")
-      .upsert(
-        {
-          setting_key: "backup_schedule",
-          setting_value: scheduleValue,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "setting_key" }
-      );
-
-    if (settingsError) {
-      return new Response(
-        JSON.stringify({ error: settingsError.message }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      await sql`
+        INSERT INTO public.system_settings (setting_key, setting_value, updated_at)
+        VALUES ('backup_schedule', ${scheduleValue}, now())
+        ON CONFLICT (setting_key) DO UPDATE SET setting_value = ${scheduleValue}, updated_at = now()
+      `;
+    } finally {
+      await sql.end();
     }
 
     return new Response(
@@ -164,9 +130,7 @@ Deno.serve(async (req) => {
         success: true,
         schedule: { frequency, day, hour, dayOfMonth },
       }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     return new Response(
