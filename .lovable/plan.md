@@ -1,131 +1,176 @@
 
 
-# Restore Management Dashboard Access
+# Inline Quick Actions for Inbox
 
-## Problem Analysis
+## Overview
 
-The application has **two distinct management features** that serve different purposes:
-
-| Feature | Purpose | Route | Current State |
-|---------|---------|-------|---------------|
-| **Management Dashboard** | Executive analytics overview with department performance, rating distributions, charts | `/management-dashboard` | Exists but redirected away |
-| **Management Review** | Review individual employee KPIs at management level | `/dashboard?view=management` | Working correctly |
-
-Currently, the **Management Dashboard** route is being redirected to the unified `/dashboard`, making this executive-level analytics page inaccessible.
+Add inline quick actions directly in the inbox rows so users can respond to queries, accept responses, and manage notifications without navigating away or opening the detail sheet.
 
 ---
 
-## What the Management Dashboard Provides
+## Current Flow vs. Proposed Flow
 
-The existing `ManagementDashboard.tsx` (914 lines) includes:
-
-- **Hierarchical filters** (Division, Business Unit, Department, Manager, Employee)
-- **Key stats cards** with trend indicators:
-  - Total Employees
-  - Pending My Review (with link to Management Review)
-  - Completion Rate with progress bar
-  - Open Queries
-  - Total KPIs
-- **Rating Distribution** pie chart (Excellent, Good, Average, Needs Improvement)
-- **Department Performance** bar chart
-- **Pending Reviews table** (employees awaiting management action)
-- **Department performance table** with scores and completion rates
-- **Period-to-period trend comparison**
-
----
-
-## Solution
-
-### 1. Restore the Route in App.tsx
-
-Remove the redirect and add a proper protected route:
-
-```typescript
-// Remove this redirect:
-<Route path="/management-dashboard" element={<Navigate to="/dashboard" replace />} />
-
-// Add this protected route:
-<Route path="/management-dashboard" element={
-  <ProtectedRoute allowedRoles={['management', 'admin']}>
-    <ManagementDashboard />
-  </ProtectedRoute>
-} />
-```
-
-### 2. Add Sidebar Navigation Link
-
-Add "Management Dashboard" to the management section in `AppSidebar.tsx`:
-
-```typescript
-management: [
-  { title: 'Management Dashboard', icon: LayoutDashboard, path: '/management-dashboard', roles: ['management', 'admin'] },
-  { title: 'Management Review', icon: Briefcase, path: '/dashboard?view=management', roles: ['management', 'admin'] },
-],
-```
-
-### 3. Update Route Detection Helper
-
-Update `getSectionForPath()` to properly detect the management-dashboard route.
-
----
-
-## Sidebar Navigation After Fix
-
-**Management Section (for management/admin roles):**
 ```text
-▼ Management
-  ├── Management Dashboard (NEW - Analytics overview)
-  └── Management Review (Existing - Individual reviews)
+CURRENT:
+  Row Click --> Detail Sheet --> Action Button --> Dialog --> Done
+
+PROPOSED:
+  Row Quick Action Button --> Expandable Inline Panel --> Done
+  (Detail Sheet still available via "View" button)
 ```
 
 ---
+
+## Changes Required
+
+### 1. Expandable Inline Response Panel (New Component)
+
+Create `src/components/inbox/InlineQuickAction.tsx` -- a collapsible panel that renders below an inbox row when triggered.
+
+**For Queries (status: open, user is recipient):**
+```text
+┌────────────────────────────────────────────────────────────┐
+│ [Textarea: Type your response...]                          │
+│ [Attach Evidence]                    [Cancel] [Submit]     │
+└────────────────────────────────────────────────────────────┘
+```
+
+**For Queries (status: responded, user is raiser):**
+```text
+┌────────────────────────────────────────────────────────────┐
+│ Response: "The target was adjusted per Q3 revision..."     │
+│                                 [Dismiss] [Accept Response]│
+└────────────────────────────────────────────────────────────┘
+```
+
+**For Notifications:**
+```text
+┌────────────────────────────────────────────────────────────┐
+│ [Mark as Read]  [Open in App -->]                          │
+└────────────────────────────────────────────────────────────┘
+```
+
+### 2. Update InboxRowItem
+
+Add a contextual quick action button that appears on hover/always visible:
+- **Open query (recipient):** "Quick Respond" button
+- **Responded query (raiser):** "Accept" button  
+- **Notification:** "Open" button
+
+Clicking the quick action button expands the `InlineQuickAction` panel below the row instead of opening the detail sheet.
+
+### 3. Update InboxTable
+
+- Track which row's inline panel is expanded via `expandedItemId` state
+- Pass expand/collapse handlers and action callbacks down to `InboxRowItem`
+- Render the `InlineQuickAction` panel as a full-width table row beneath the expanded item
+
+### 4. Update MobileInboxList
+
+- Same expandable pattern but using card-based layout
+- Tap the quick action chip to expand inline panel below the card
+
+### 5. Update QueryInbox (Parent Page)
+
+- Lift the inline response submission logic (currently only in the Dialog) to shared callbacks
+- Pass `onInlineRespond` and `onInlineAccept` to `InboxTable`
+- Keep the existing Dialog as a fallback for "View Full Details"
+
+### 6. Keyboard Shortcuts
+
+Add keyboard event listener at the `QueryInbox` level:
+- **R** - Expand inline respond panel for selected/focused query
+- **A** - Accept response for selected query  
+- **Escape** - Collapse expanded panel
+
+Focus management: The currently hovered or last-clicked row becomes the "active" row for keyboard shortcuts.
+
+---
+
+## New Files
+
+| File | Purpose |
+|------|---------|
+| `src/components/inbox/InlineQuickAction.tsx` | Expandable inline action panel component |
 
 ## Files to Modify
 
-| File | Change |
-|------|--------|
-| `src/App.tsx` | Replace redirect with protected route |
-| `src/components/layout/AppSidebar.tsx` | Add Management Dashboard link |
-| `DOCUMENTATION.md` | Update navigation docs |
+| File | Changes |
+|------|---------|
+| `src/components/inbox/InboxRowItem.tsx` | Add quick action button, expand/collapse props |
+| `src/components/inbox/InboxTable.tsx` | Track expanded row, render inline panel |
+| `src/components/inbox/MobileInboxList.tsx` | Add inline expand for mobile cards |
+| `src/pages/QueryInbox.tsx` | Add keyboard shortcuts, shared inline handlers |
+| `src/lib/inboxUtils.ts` | Add helper to determine available quick actions |
+| `DOCUMENTATION.md` | Document quick actions feature |
 
 ---
 
 ## Technical Details
 
-### Route Change in App.tsx (line 77)
+### InlineQuickAction Component Interface
 
-**Before:**
 ```typescript
-<Route path="/management-dashboard" element={<Navigate to="/dashboard" replace />} />
+interface InlineQuickActionProps {
+  item: InboxItem;
+  currentUserId: string;
+  onSubmitResponse: (itemId: string, notes: string, evidenceUrl?: string) => void;
+  onAcceptResponse: (item: InboxItem) => void;
+  onNavigate: (path: string) => void;
+  onMarkRead: (item: InboxItem) => void;
+  onCollapse: () => void;
+  isSubmitting?: boolean;
+}
 ```
 
-**After:**
+### Quick Action Button Logic in InboxRowItem
+
 ```typescript
-<Route path="/management-dashboard" element={
-  <ProtectedRoute allowedRoles={['management', 'admin']}>
-    <ManagementDashboard />
-  </ProtectedRoute>
-} />
+function getQuickAction(item: InboxItem, currentUserId: string) {
+  if (item.type === 'query') {
+    if (item.queryStatus === 'open' && item.toUser?.id === currentUserId)
+      return { label: 'Respond', icon: Send, variant: 'default' };
+    if (item.queryStatus === 'responded' && item.fromUser?.id === currentUserId)
+      return { label: 'Accept', icon: CheckCircle2, variant: 'default' };
+  }
+  return null; // No quick action for resolved queries or read notifications
+}
 ```
 
-### Sidebar Menu Update in AppSidebar.tsx (line 58-60)
+### Keyboard Shortcut Implementation
 
-**Before:**
 ```typescript
-management: [
-  { title: 'Management Review', icon: Briefcase, path: '/dashboard?view=management', roles: ['management', 'admin'] },
-],
+useEffect(() => {
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+    
+    switch (e.key.toLowerCase()) {
+      case 'r': // Respond to active query
+        if (activeItem?.type === 'query' && activeItem.queryStatus === 'open') {
+          setExpandedItemId(activeItem.id);
+        }
+        break;
+      case 'a': // Accept response
+        if (activeItem?.type === 'query' && activeItem.queryStatus === 'responded') {
+          handleInlineAccept(activeItem);
+        }
+        break;
+      case 'escape':
+        setExpandedItemId(null);
+        break;
+    }
+  };
+  
+  window.addEventListener('keydown', handleKeyDown);
+  return () => window.removeEventListener('keydown', handleKeyDown);
+}, [activeItem]);
 ```
 
-**After:**
-```typescript
-management: [
-  { title: 'Management Dashboard', icon: LayoutDashboard, path: '/management-dashboard', roles: ['management', 'admin'] },
-  { title: 'Management Review', icon: Briefcase, path: '/dashboard?view=management', roles: ['management', 'admin'] },
-],
-```
+### Table Row Expansion Pattern
 
-### Route Detection Update (line 92-104)
+The expanded inline panel renders as a full-width `TableRow` with `colSpan={7}` immediately after the item row, using a collapsible animation via Radix Collapsible.
 
-Add detection for management-dashboard path in `getSectionForPath()`.
+### Evidence Upload in Inline Panel
+
+The inline response panel uses the existing `EvidenceUpload` component (or `MultiFileUpload` if available) in a compact layout to allow attaching evidence without opening a dialog.
 
