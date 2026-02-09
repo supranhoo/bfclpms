@@ -390,7 +390,7 @@ export default function QueryInbox() {
     pendingAcceptanceCount: pendingAcceptanceQueries.length,
   }), [unreadNotificationsCount, openQueries.length, totalResolvedQueries, sentQueries.length, pendingAcceptanceQueries.length]);
 
-  if (loadingQueries && loadingNotifications) {
+  if (loadingQueries || loadingNotifications) {
     return (
       <div className="space-y-6 animate-fade-in">
         <div className="flex justify-between items-center">
