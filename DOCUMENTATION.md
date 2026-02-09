@@ -255,13 +255,21 @@ The system includes a full-database backup and restore feature accessible from *
 | Feature | Description |
 |---------|-------------|
 | **Manual Backup** | Admin clicks "Backup Now" to create an immediate full snapshot of all ~40 public tables as JSON |
-| **Scheduled Backup** | Automated weekly backup every Sunday at 2:00 AM UTC via pg_cron |
+| **Scheduled Backup** | Configurable recurring backup via pg_cron. Admins choose frequency (Daily, Weekly, Monthly), day, and hour (UTC) from the UI. Schedule is saved as `backup_schedule` system setting and applied via the `update-backup-schedule` Edge Function |
 | **Download** | Download any completed backup as a JSON file |
 | **Restore** | Restore the entire database from a previous backup (double-confirmation required) |
 | **Upload & Restore** | Upload an external backup JSON file (e.g. downloaded from another instance) and restore the database from it. The file is validated client-side, uploaded to the `database-backups` bucket under `uploads/`, logged with `backup_type = 'uploaded'`, and then restored via the same `restore-backup` Edge Function. Double-confirmation required. |
-| **Auto-Backup Toggle** | Enable/disable the weekly scheduled backup from the UI |
+| **Auto-Backup Toggle** | Enable/disable the scheduled backup from the UI. When disabled, the cron job is removed entirely. |
 
-**Storage**: `database-backups` private bucket (admin-only). **Edge Functions**: `create-backup`, `restore-backup`. **Excluded**: `auth.users` (managed by auth system).
+**Schedule Options:**
+
+| Frequency | Additional Options | Cron Example |
+|-----------|-------------------|--------------|
+| Daily | Hour (0-23) | `0 2 * * *` |
+| Weekly | Day of week + Hour | `0 2 * * 0` (Sunday) |
+| Monthly | Day of month (1-28) + Hour | `0 2 15 * *` (15th) |
+
+**Storage**: `database-backups` private bucket (admin-only). **Edge Functions**: `create-backup`, `restore-backup`, `update-backup-schedule`. **Excluded**: `auth.users` (managed by auth system).
 
 #### Workflow Settings Categories
 
