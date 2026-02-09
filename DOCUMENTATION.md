@@ -1309,8 +1309,10 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
 
 #### 4.9.9 Data Import (`/admin/import`)
 - **Organization Structure Import** (first tab)
-  - Bulk import divisions, business units, departments, sub-branches, designations, and PMS grades from Excel
-  - Hierarchy validation: BU requires division, dept requires BU, sub-branch requires dept
+  - Bulk import divisions, business units, departments, sub-branches, designations, PMS grades, and levels from Excel
+  - **Flexible row format:** Each column can be filled independently — rows don't need to be connected across all columns. You can add all Divisions in separate rows, all Business Units in other rows, etc.
+  - **Smart parent resolution:** If a child entity (e.g. Business Unit) is on a row without its parent (Division), the system auto-assigns if only one parent exists (in the file or database). If multiple parents exist and none is specified, the entry is skipped with a warning.
+  - Warnings (not blocking errors) are shown for entities that can't be resolved; all other valid entries are imported
   - Deduplication by name (case-insensitive); codes updated if provided for existing entries
   - Download template and export current data supported
 - Bulk import employees from Excel
