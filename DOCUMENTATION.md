@@ -1357,6 +1357,15 @@ Full JSON format for maximum control:
 [{"label":"Compliant","rating":5,"definition":"All requirements met"},{"label":"Non-Compliant","rating":0,"definition":"Requirements not met"}]
 ```
 
+**Inbox Insights Tab:**
+- **Health Score** (0–100): Composite metric factoring SLA compliance, open query backlog, and average response time
+- **Response Time Metrics**: Average, fastest, and slowest resolution times computed from `created_at` → `resolved_at`
+- **SLA Compliance**: Percentage of queries resolved within the 2-day target, with progress bar
+- **Volume Trends**: Bar chart showing query volume over the last 14 days
+- **Status Distribution**: Donut chart of open/responded/resolved queries
+- **Resolution Rate**: Percentage of total queries that are resolved, with breakdown
+- **Weekly Comparison**: Week-over-week change in query volume
+- Component: `InboxInsights` in `src/components/inbox/InboxInsights.tsx`
 
 **Organization Structure (4 columns):**
 | Column | Required | Description |

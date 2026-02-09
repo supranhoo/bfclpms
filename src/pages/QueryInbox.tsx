@@ -18,8 +18,9 @@ import { InboxTable } from '@/components/inbox/InboxTable';
 import { InboxDetailSheet } from '@/components/inbox/InboxDetailSheet';
 import { InboxStatsCards, buildInboxStats } from '@/components/inbox/InboxStatsCards';
 import { InboxItem } from '@/lib/inboxUtils';
+import { InboxInsights } from '@/components/inbox/InboxInsights';
 import { StatsRowSkeleton } from '@/components/ui/LoadingSkeletons';
-import { Bell, MessageSquare, Send, Users, CheckCheck, Paperclip } from 'lucide-react';
+import { Bell, MessageSquare, Send, Users, CheckCheck, Paperclip, BarChart3 } from 'lucide-react';
 
 interface QueryWithDetails {
   id: string;
@@ -61,7 +62,7 @@ export default function QueryInbox() {
     dateRange: 'all',
   });
 
-  const [activeTab, setActiveTab] = useState<'notifications' | 'received' | 'sent' | 'team'>('notifications');
+  const [activeTab, setActiveTab] = useState<'notifications' | 'received' | 'sent' | 'team' | 'insights'>('notifications');
   const [selectedItem, setSelectedItem] = useState<InboxItem | null>(null);
   const [detailSheetOpen, setDetailSheetOpen] = useState(false);
 
@@ -397,6 +398,10 @@ export default function QueryInbox() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="insights" className="flex items-center gap-1.5 flex-shrink-0 text-xs sm:text-sm">
+            <BarChart3 className="h-4 w-4" />
+            Insights
+          </TabsTrigger>
         </TabsList>
 
         {/* Notifications Tab */}
@@ -461,6 +466,24 @@ export default function QueryInbox() {
             emptyDescription="Queries raised to your direct reports will appear here"
             enableGrouping={true}
             currentUserId={user?.id}
+          />
+        </TabsContent>
+
+        {/* Insights Tab */}
+        <TabsContent value="insights" className="mt-6">
+          <InboxInsights
+            allQueries={(allQueries || []).map(q => ({
+              id: q.id,
+              status: q.status,
+              created_at: q.created_at,
+              resolved_at: q.resolved_at,
+              updated_at: q.updated_at,
+              raised_by: q.raised_by,
+              raised_to: q.raised_to,
+            }))}
+            notificationsCount={notificationsTotalCount}
+            unreadCount={unreadNotificationsCount}
+            isLoading={loadingQueries}
           />
         </TabsContent>
       </Tabs>
