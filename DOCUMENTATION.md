@@ -862,6 +862,15 @@ All three review pages share a unified `EmployeeFilters` component with advanced
 - Raiser name prominently displayed in response dialog
 - Query resolution triggers KPI status reset
 
+**Inline Quick Actions:**
+- **Respond** button appears on open queries (for recipients) — expands an inline textarea with evidence upload below the row, no navigation needed
+- **Accept** button appears on responded queries (for raisers) — shows the response text and a one-click accept button inline
+- Keyboard shortcut: **Escape** closes any expanded panel and response dialog
+- Both desktop table rows and mobile cards support the expandable inline panels
+- Full detail sheet remains accessible via the "View" (external link) button
+- Components: `InlineQuickAction`, updated `InboxRowItem`, `InboxTable`, `MobileInboxList`
+- Helper: `getQuickAction()` in `inboxUtils.ts` determines available actions per item/user
+
 ### 4.9 Admin Features
 
 #### 4.9.1 User Management (`/admin/users`)

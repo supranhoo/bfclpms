@@ -1,17 +1,20 @@
-import { Bell, MessageSquare, Send, CheckCircle2, Clock, AlertCircle, CheckCheck, ExternalLink, MessageCircle } from 'lucide-react';
+import { Bell, MessageSquare, Send, CheckCircle2, Clock, AlertCircle, CheckCheck, ExternalLink, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TableRow, TableCell } from '@/components/ui/table';
-import { InboxItem, formatRelativeTime, getQueryStatusClasses } from '@/lib/inboxUtils';
+import { InboxItem, formatRelativeTime, getQueryStatusClasses, getQuickAction } from '@/lib/inboxUtils';
 import { cn } from '@/lib/utils';
 
 interface InboxRowItemProps {
   item: InboxItem;
   onView: (item: InboxItem) => void;
   onMarkRead?: (item: InboxItem) => void;
+  onToggleExpand?: (itemId: string) => void;
+  isExpanded?: boolean;
+  currentUserId?: string;
 }
 
-export function InboxRowItem({ item, onView, onMarkRead }: InboxRowItemProps) {
+export function InboxRowItem({ item, onView, onMarkRead, onToggleExpand, isExpanded, currentUserId }: InboxRowItemProps) {
   const getTypeIcon = () => {
     if (item.type === 'query') {
       switch (item.queryStatus) {
@@ -52,12 +55,15 @@ export function InboxRowItem({ item, onView, onMarkRead }: InboxRowItemProps) {
     }
   };
 
+  const quickAction = currentUserId ? getQuickAction(item, currentUserId) : null;
+
   return (
     <TableRow
       className={cn(
         'cursor-pointer transition-colors',
         !item.isRead && 'bg-primary/5 hover:bg-primary/10',
-        item.isRead && 'hover:bg-muted/50'
+        item.isRead && 'hover:bg-muted/50',
+        isExpanded && 'bg-muted/30'
       )}
       onClick={handleRowClick}
     >
@@ -111,18 +117,40 @@ export function InboxRowItem({ item, onView, onMarkRead }: InboxRowItemProps) {
       </TableCell>
 
       {/* Actions */}
-      <TableCell className="w-12 px-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={(e) => {
-            e.stopPropagation();
-            onView(item);
-          }}
-        >
-          <ExternalLink className="h-4 w-4" />
-        </Button>
+      <TableCell className="w-24 px-2">
+        <div className="flex items-center gap-1 justify-end">
+          {/* Quick Action Button */}
+          {quickAction && onToggleExpand && (
+            <Button
+              variant={isExpanded ? 'secondary' : 'outline'}
+              size="sm"
+              className="h-7 text-xs px-2"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleExpand(item.id);
+              }}
+            >
+              {quickAction.label}
+              {isExpanded ? (
+                <ChevronUp className="h-3 w-3 ml-1" />
+              ) : (
+                <ChevronDown className="h-3 w-3 ml-1" />
+              )}
+            </Button>
+          )}
+          {/* View Details */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={(e) => {
+              e.stopPropagation();
+              onView(item);
+            }}
+          >
+            <ExternalLink className="h-4 w-4" />
+          </Button>
+        </div>
       </TableCell>
     </TableRow>
   );

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -274,6 +274,41 @@ export default function QueryInbox() {
     });
   };
 
+  // Inline quick action handlers
+  const handleInlineRespond = useCallback((itemId: string, notes: string, evidenceUrl?: string) => {
+    const query = receivedQueries.find(q => q.id === itemId);
+    if (!query || !notes.trim()) return;
+    respondToQuery.mutate({
+      query_id: query.id,
+      kpi_id: query.kpi_id,
+      resolution_notes: notes,
+      resolution_evidence_url: evidenceUrl,
+    });
+  }, [receivedQueries, respondToQuery]);
+
+  const handleInlineAccept = useCallback((item: InboxItem) => {
+    const query = sentQueries.find(q => q.id === item.id);
+    if (query) {
+      acceptQueryResponse.mutate({
+        query_id: query.id,
+        kpi_id: query.kpi_id,
+      });
+    }
+  }, [sentQueries, acceptQueryResponse]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+      if (e.key === 'Escape') {
+        // Collapse is handled by child component state, but close dialog if open
+        setResponseDialogOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Stats
   const stats = buildInboxStats({
     unreadCount: unreadNotificationsCount,
@@ -382,6 +417,7 @@ export default function QueryInbox() {
             onMarkRead={handleMarkRead}
             emptyMessage="No notifications yet"
             emptyDescription="You'll receive notifications when there are updates to your KPIs"
+            currentUserId={user?.id}
           />
         </TabsContent>
 
@@ -394,6 +430,9 @@ export default function QueryInbox() {
             emptyMessage="No queries received"
             emptyDescription="Queries raised to you will appear here"
             enableGrouping={true}
+            currentUserId={user?.id}
+            onInlineRespond={handleInlineRespond}
+            isInlineSubmitting={respondToQuery.isPending}
           />
         </TabsContent>
 
@@ -406,6 +445,9 @@ export default function QueryInbox() {
             emptyMessage="No queries sent"
             emptyDescription="Queries you've raised will appear here"
             enableGrouping={true}
+            currentUserId={user?.id}
+            onInlineAccept={handleInlineAccept}
+            isInlineSubmitting={acceptQueryResponse.isPending}
           />
         </TabsContent>
 
@@ -418,6 +460,7 @@ export default function QueryInbox() {
             emptyMessage="No team queries"
             emptyDescription="Queries raised to your direct reports will appear here"
             enableGrouping={true}
+            currentUserId={user?.id}
           />
         </TabsContent>
       </Tabs>

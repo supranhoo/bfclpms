@@ -1,9 +1,10 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import { Loader2, Inbox } from 'lucide-react';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { InboxRowItem } from './InboxRowItem';
+import { InlineQuickAction } from './InlineQuickAction';
 import { MobileInboxList } from './MobileInboxList';
 import { InboxItem, GroupedInboxItems, groupByDate } from '@/lib/inboxUtils';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -19,6 +20,10 @@ interface InboxTableProps {
   emptyMessage?: string;
   emptyDescription?: string;
   enableGrouping?: boolean;
+  currentUserId?: string;
+  onInlineRespond?: (itemId: string, notes: string, evidenceUrl?: string) => void;
+  onInlineAccept?: (item: InboxItem) => void;
+  isInlineSubmitting?: boolean;
 }
 
 export function InboxTable({
@@ -32,8 +37,21 @@ export function InboxTable({
   emptyMessage = 'No items',
   emptyDescription = 'Nothing to show here',
   enableGrouping = true,
+  currentUserId,
+  onInlineRespond,
+  onInlineAccept,
+  isInlineSubmitting,
 }: InboxTableProps) {
   const isMobile = useIsMobile();
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+
+  const handleToggleExpand = (itemId: string) => {
+    setExpandedItemId(prev => prev === itemId ? null : itemId);
+  };
+
+  const handleCollapseExpand = () => {
+    setExpandedItemId(null);
+  };
 
   // Use mobile card layout on small screens
   if (isMobile) {
@@ -48,6 +66,10 @@ export function InboxTable({
         emptyMessage={emptyMessage}
         emptyDescription={emptyDescription}
         enableGrouping={enableGrouping}
+        currentUserId={currentUserId}
+        onInlineRespond={onInlineRespond}
+        onInlineAccept={onInlineAccept}
+        isInlineSubmitting={isInlineSubmitting}
       />
     );
   }
@@ -88,7 +110,7 @@ export function InboxTable({
               <TableHead className="w-28 hidden md:table-cell">Status</TableHead>
               <TableHead className="w-32 hidden lg:table-cell">From</TableHead>
               <TableHead className="w-28 text-right">Time</TableHead>
-              <TableHead className="w-12"></TableHead>
+              <TableHead className="w-24"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -106,12 +128,37 @@ export function InboxTable({
                 )}
                 {/* Items */}
                 {group.items.map((item) => (
-                  <InboxRowItem
-                    key={item.id}
-                    item={item}
-                    onView={onViewItem}
-                    onMarkRead={onMarkRead}
-                  />
+                  <Fragment key={item.id}>
+                    <InboxRowItem
+                      item={item}
+                      onView={onViewItem}
+                      onMarkRead={onMarkRead}
+                      onToggleExpand={currentUserId ? handleToggleExpand : undefined}
+                      isExpanded={expandedItemId === item.id}
+                      currentUserId={currentUserId}
+                    />
+                    {/* Inline Quick Action Panel */}
+                    {expandedItemId === item.id && currentUserId && (
+                      <TableRow className="hover:bg-transparent">
+                        <TableCell colSpan={7} className="p-0">
+                          <InlineQuickAction
+                            item={item}
+                            currentUserId={currentUserId}
+                            onSubmitResponse={(id, notes, url) => {
+                              onInlineRespond?.(id, notes, url);
+                              setExpandedItemId(null);
+                            }}
+                            onAcceptResponse={(item) => {
+                              onInlineAccept?.(item);
+                              setExpandedItemId(null);
+                            }}
+                            onCollapse={handleCollapseExpand}
+                            isSubmitting={isInlineSubmitting}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
                 ))}
               </Fragment>
             ))}
