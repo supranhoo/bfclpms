@@ -480,7 +480,19 @@ export default function QueryInbox() {
               updated_at: q.updated_at,
               raised_by: q.raised_by,
               raised_to: q.raised_to,
+              kpiName: q.kpi?.kpi_name || null,
+              kraName: q.kpi?.kra_name || null,
             }))}
+            teamQueries={(subordinateQueries as unknown as QueryWithDetails[]).map(q => ({
+              id: q.id,
+              status: q.status,
+              created_at: q.created_at,
+              resolved_at: q.resolved_at,
+              updated_at: q.updated_at,
+              raised_by: q.raised_by,
+              raised_to: q.raised_to,
+            }))}
+            currentUserId={user?.id}
             notificationsCount={notificationsTotalCount}
             unreadCount={unreadNotificationsCount}
             isLoading={loadingQueries}

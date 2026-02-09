@@ -9,8 +9,9 @@ import {
   LineChart, Line, CartesianGrid, PieChart, Pie, Cell,
 } from 'recharts';
 import { Activity, Clock, CheckCircle2, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
+import { PersonalProductivityInsights } from './PersonalProductivityInsights';
 
-interface QueryData {
+export interface QueryData {
   id: string;
   status: string;
   created_at: string;
@@ -18,10 +19,14 @@ interface QueryData {
   updated_at: string;
   raised_by: string;
   raised_to: string;
+  kpiName?: string | null;
+  kraName?: string | null;
 }
 
 interface InboxInsightsProps {
   allQueries: QueryData[];
+  teamQueries?: QueryData[];
+  currentUserId?: string;
   notificationsCount: number;
   unreadCount: number;
   isLoading?: boolean;
@@ -109,7 +114,7 @@ function formatHours(hours: number): string {
   return days < 2 ? `${days.toFixed(1)}d` : `${Math.round(days)}d`;
 }
 
-export function InboxInsights({ allQueries, notificationsCount, unreadCount, isLoading }: InboxInsightsProps) {
+export function InboxInsights({ allQueries, teamQueries = [], currentUserId, notificationsCount, unreadCount, isLoading }: InboxInsightsProps) {
   const metrics = useMemo(() => computeMetrics(allQueries), [allQueries]);
 
   if (isLoading) {
@@ -278,6 +283,16 @@ export function InboxInsights({ allQueries, notificationsCount, unreadCount, isL
           </CardContent>
         </Card>
       </div>
+
+      {/* Personal Productivity Insights */}
+      {currentUserId && (
+        <PersonalProductivityInsights
+          allQueries={allQueries}
+          teamQueries={teamQueries}
+          currentUserId={currentUserId}
+          isLoading={isLoading}
+        />
+      )}
     </div>
   );
 }
