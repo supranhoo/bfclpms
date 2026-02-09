@@ -1,176 +1,72 @@
 
-
-# Inline Quick Actions for Inbox
+# Snooze & Reminders for Inbox
 
 ## Overview
+Add the ability to snooze notifications and queries so they disappear from the main inbox and re-surface at a chosen time. Includes a dedicated "Snoozed" tab, snooze count tracking, and smart suggestions for repeatedly-snoozed items.
 
-Add inline quick actions directly in the inbox rows so users can respond to queries, accept responses, and manage notifications without navigating away or opening the detail sheet.
-
----
-
-## Current Flow vs. Proposed Flow
-
-```text
-CURRENT:
-  Row Click --> Detail Sheet --> Action Button --> Dialog --> Done
-
-PROPOSED:
-  Row Quick Action Button --> Expandable Inline Panel --> Done
-  (Detail Sheet still available via "View" button)
-```
-
----
-
-## Changes Required
-
-### 1. Expandable Inline Response Panel (New Component)
-
-Create `src/components/inbox/InlineQuickAction.tsx` -- a collapsible panel that renders below an inbox row when triggered.
-
-**For Queries (status: open, user is recipient):**
-```text
-┌────────────────────────────────────────────────────────────┐
-│ [Textarea: Type your response...]                          │
-│ [Attach Evidence]                    [Cancel] [Submit]     │
-└────────────────────────────────────────────────────────────┘
-```
-
-**For Queries (status: responded, user is raiser):**
-```text
-┌────────────────────────────────────────────────────────────┐
-│ Response: "The target was adjusted per Q3 revision..."     │
-│                                 [Dismiss] [Accept Response]│
-└────────────────────────────────────────────────────────────┘
-```
-
-**For Notifications:**
-```text
-┌────────────────────────────────────────────────────────────┐
-│ [Mark as Read]  [Open in App -->]                          │
-└────────────────────────────────────────────────────────────┘
-```
-
-### 2. Update InboxRowItem
-
-Add a contextual quick action button that appears on hover/always visible:
-- **Open query (recipient):** "Quick Respond" button
-- **Responded query (raiser):** "Accept" button  
-- **Notification:** "Open" button
-
-Clicking the quick action button expands the `InlineQuickAction` panel below the row instead of opening the detail sheet.
-
-### 3. Update InboxTable
-
-- Track which row's inline panel is expanded via `expandedItemId` state
-- Pass expand/collapse handlers and action callbacks down to `InboxRowItem`
-- Render the `InlineQuickAction` panel as a full-width table row beneath the expanded item
-
-### 4. Update MobileInboxList
-
-- Same expandable pattern but using card-based layout
-- Tap the quick action chip to expand inline panel below the card
-
-### 5. Update QueryInbox (Parent Page)
-
-- Lift the inline response submission logic (currently only in the Dialog) to shared callbacks
-- Pass `onInlineRespond` and `onInlineAccept` to `InboxTable`
-- Keep the existing Dialog as a fallback for "View Full Details"
-
-### 6. Keyboard Shortcuts
-
-Add keyboard event listener at the `QueryInbox` level:
-- **R** - Expand inline respond panel for selected/focused query
-- **A** - Accept response for selected query  
-- **Escape** - Collapse expanded panel
-
-Focus management: The currently hovered or last-clicked row becomes the "active" row for keyboard shortcuts.
-
----
-
-## New Files
-
-| File | Purpose |
-|------|---------|
-| `src/components/inbox/InlineQuickAction.tsx` | Expandable inline action panel component |
-
-## Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/components/inbox/InboxRowItem.tsx` | Add quick action button, expand/collapse props |
-| `src/components/inbox/InboxTable.tsx` | Track expanded row, render inline panel |
-| `src/components/inbox/MobileInboxList.tsx` | Add inline expand for mobile cards |
-| `src/pages/QueryInbox.tsx` | Add keyboard shortcuts, shared inline handlers |
-| `src/lib/inboxUtils.ts` | Add helper to determine available quick actions |
-| `DOCUMENTATION.md` | Document quick actions feature |
-
----
+## What You'll Get
+- A snooze button on each inbox row with preset options (1 hour, 4 hours, Tomorrow, Next Week) plus a custom date/time picker
+- Snoozed items hidden from the main tabs until their snooze time expires, then they reappear automatically
+- A new "Snoozed" tab showing all currently-snoozed items with the option to un-snooze early
+- Smart suggestion banner: items snoozed 3+ times prompt "Mark as resolved?" or "Dismiss permanently?"
+- Snooze count badge visible on items that have been deferred multiple times
 
 ## Technical Details
 
-### InlineQuickAction Component Interface
+### 1. Database Migration
+Add two columns to the `notifications` table:
 
-```typescript
-interface InlineQuickActionProps {
-  item: InboxItem;
-  currentUserId: string;
-  onSubmitResponse: (itemId: string, notes: string, evidenceUrl?: string) => void;
-  onAcceptResponse: (item: InboxItem) => void;
-  onNavigate: (path: string) => void;
-  onMarkRead: (item: InboxItem) => void;
-  onCollapse: () => void;
-  isSubmitting?: boolean;
-}
+```sql
+ALTER TABLE notifications
+  ADD COLUMN snoozed_until TIMESTAMPTZ,
+  ADD COLUMN snooze_count INTEGER NOT NULL DEFAULT 0;
 ```
 
-### Quick Action Button Logic in InboxRowItem
+### 2. New Hook: `src/hooks/useSnoozeNotification.ts`
+- `useSnoozeNotification()` mutation: updates `snoozed_until` and increments `snooze_count` for a given notification ID
+- `useUnsnoozeNotification()` mutation: clears `snoozed_until` (sets to null)
+- Both invalidate the `paginated-notifications` and `unread-notification-count` query keys on success
 
-```typescript
-function getQuickAction(item: InboxItem, currentUserId: string) {
-  if (item.type === 'query') {
-    if (item.queryStatus === 'open' && item.toUser?.id === currentUserId)
-      return { label: 'Respond', icon: Send, variant: 'default' };
-    if (item.queryStatus === 'responded' && item.fromUser?.id === currentUserId)
-      return { label: 'Accept', icon: CheckCircle2, variant: 'default' };
-  }
-  return null; // No quick action for resolved queries or read notifications
-}
-```
+### 3. Snooze Popover Component: `src/components/inbox/SnoozePopover.tsx`
+- Triggered from a clock/snooze icon button on each `InboxRowItem`
+- Preset options: 1 Hour, 4 Hours, Tomorrow 9 AM, Next Monday 9 AM
+- "Custom" option opens a date-time picker (using the existing calendar component + time input)
+- On selection, calls the snooze mutation and shows a toast confirmation with the snooze-until time
 
-### Keyboard Shortcut Implementation
+### 4. Update `InboxRowItem.tsx`
+- Add the `SnoozePopover` trigger button in the Actions cell (next to the existing quick-action and view buttons)
+- Show a small snooze-count badge (e.g., "Snoozed x3") if `snooze_count >= 2`
 
-```typescript
-useEffect(() => {
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
-    
-    switch (e.key.toLowerCase()) {
-      case 'r': // Respond to active query
-        if (activeItem?.type === 'query' && activeItem.queryStatus === 'open') {
-          setExpandedItemId(activeItem.id);
-        }
-        break;
-      case 'a': // Accept response
-        if (activeItem?.type === 'query' && activeItem.queryStatus === 'responded') {
-          handleInlineAccept(activeItem);
-        }
-        break;
-      case 'escape':
-        setExpandedItemId(null);
-        break;
-    }
-  };
-  
-  window.addEventListener('keydown', handleKeyDown);
-  return () => window.removeEventListener('keydown', handleKeyDown);
-}, [activeItem]);
-```
+### 5. Update `usePaginatedNotifications.ts`
+- Default query: add filter `.or('snoozed_until.is.null,snoozed_until.lte.${now}')` to exclude currently-snoozed items from the main notifications tab
+- New option `showSnoozed?: boolean`: when true, query only items where `snoozed_until > now` (for the Snoozed tab)
 
-### Table Row Expansion Pattern
+### 6. New "Snoozed" Tab in `QueryInbox.tsx`
+- Add a tab with a clock icon between "Team" and "Insights"
+- Uses `usePaginatedNotifications` with `showSnoozed: true`
+- Each row shows the snooze-until time and an "Un-snooze" button
+- Smart suggestion: if an item has `snooze_count >= 3`, show a banner/badge saying "Snoozed 3 times -- Mark as read?" with a one-click action
 
-The expanded inline panel renders as a full-width `TableRow` with `colSpan={7}` immediately after the item row, using a collapsible animation via Radix Collapsible.
+### 7. Update `InboxItem` type in `inboxUtils.ts`
+- Add optional fields: `snoozedUntil?: string | null` and `snoozeCount?: number`
+- Pass these through when mapping notifications to `InboxItem` objects in `QueryInbox.tsx`
 
-### Evidence Upload in Inline Panel
+### 8. Client-side Filter Update
+- `filterInboxItems()` in `inboxUtils.ts`: items with a future `snoozedUntil` are excluded from non-snoozed views (defense-in-depth alongside the server filter)
 
-The inline response panel uses the existing `EvidenceUpload` component (or `MultiFileUpload` if available) in a compact layout to allow attaching evidence without opening a dialog.
+### 9. Update `DOCUMENTATION.md`
+- Document the snooze feature, new columns, hook, and smart suggestion logic
 
+## File Changes Summary
+| File | Action |
+|------|--------|
+| Database migration (notifications table) | New columns |
+| `src/hooks/useSnoozeNotification.ts` | New file |
+| `src/components/inbox/SnoozePopover.tsx` | New file |
+| `src/components/inbox/InboxRowItem.tsx` | Add snooze button + count badge |
+| `src/components/inbox/InboxTable.tsx` | Pass snooze handlers through |
+| `src/hooks/usePaginatedNotifications.ts` | Filter snoozed items, add snoozed-only mode |
+| `src/pages/QueryInbox.tsx` | Add Snoozed tab, wire snooze handlers |
+| `src/lib/inboxUtils.ts` | Extend InboxItem type, add client filter |
+| `src/components/inbox/index.ts` | Export new component |
+| `DOCUMENTATION.md` | Document feature |
