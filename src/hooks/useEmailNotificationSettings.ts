@@ -158,8 +158,10 @@ export function useUpdateEmailSettings() {
       for (const { key, value } of updates) {
         const { error } = await supabase
           .from('system_settings')
-          .update({ setting_value: typeof value === 'string' ? JSON.stringify(value) : value })
-          .eq('setting_key', key);
+          .upsert(
+            { setting_key: key, setting_value: typeof value === 'string' ? JSON.stringify(value) : value },
+            { onConflict: 'setting_key' }
+          );
         
         if (error) throw error;
       }
