@@ -1,24 +1,52 @@
-import { useState, useEffect } from 'react';
-import { Search, X, Filter } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Search, X, Filter, Info } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { hasAdvancedSyntax } from '@/lib/inboxSearchParser';
 
 export interface InboxFiltersState {
   search: string;
   readStatus: 'all' | 'unread' | 'read';
   dateRange: 'today' | 'week' | 'month' | 'all';
+  queryStatus: 'all' | 'open' | 'responded' | 'resolved';
+  slaStatus: 'all' | 'on-time' | 'at-risk' | 'overdue';
+  notificationType: 'all' | string;
 }
+
+export const DEFAULT_FILTERS: InboxFiltersState = {
+  search: '',
+  readStatus: 'all',
+  dateRange: 'all',
+  queryStatus: 'all',
+  slaStatus: 'all',
+  notificationType: 'all',
+};
 
 interface InboxFiltersProps {
   filters: InboxFiltersState;
   onFiltersChange: (filters: InboxFiltersState) => void;
   totalCount?: number;
   showingCount?: number;
+  /** Which tab is active — controls which dropdowns to show */
+  activeTab?: 'notifications' | 'received' | 'sent' | 'team' | 'insights';
 }
 
-export function InboxFilters({ filters, onFiltersChange, totalCount, showingCount }: InboxFiltersProps) {
+const NOTIFICATION_TYPES = [
+  { value: 'all', label: 'All Types' },
+  { value: 'kpi_submitted', label: 'KPI Submitted' },
+  { value: 'kpi_approved', label: 'KPI Approved' },
+  { value: 'kpi_finalized', label: 'KPI Finalized' },
+  { value: 'kpi_ready_for_audit', label: 'Ready for Audit' },
+  { value: 'kpi_ready_for_management', label: 'Ready for Management' },
+  { value: 'query_raised', label: 'Query Raised' },
+  { value: 'query_resolved', label: 'Query Resolved' },
+  { value: 'query_responded', label: 'Query Responded' },
+];
+
+export function InboxFilters({ filters, onFiltersChange, totalCount, showingCount, activeTab = 'notifications' }: InboxFiltersProps) {
   const [searchValue, setSearchValue] = useState(filters.search);
 
   // Debounce search
@@ -33,57 +61,100 @@ export function InboxFilters({ filters, onFiltersChange, totalCount, showingCoun
 
   const handleClearFilters = () => {
     setSearchValue('');
-    onFiltersChange({
-      search: '',
-      readStatus: 'all',
-      dateRange: 'all',
-    });
+    onFiltersChange({ ...DEFAULT_FILTERS });
   };
 
-  const hasActiveFilters = filters.search || filters.readStatus !== 'all' || filters.dateRange !== 'all';
+  const isQueryTab = activeTab === 'received' || activeTab === 'sent' || activeTab === 'team';
+  const isNotificationTab = activeTab === 'notifications';
+  const showAdvancedHint = useMemo(() => hasAdvancedSyntax(searchValue), [searchValue]);
 
   const activeFilterCount = [
     filters.search ? 1 : 0,
     filters.readStatus !== 'all' ? 1 : 0,
     filters.dateRange !== 'all' ? 1 : 0,
+    filters.queryStatus !== 'all' ? 1 : 0,
+    filters.slaStatus !== 'all' ? 1 : 0,
+    filters.notificationType !== 'all' ? 1 : 0,
   ].reduce((a, b) => a + b, 0);
+
+  const hasActiveFilters = activeFilterCount > 0;
 
   return (
     <div className="space-y-3">
+      {/* Row 1: Search + core filters */}
       <div className="flex flex-col sm:flex-row gap-3">
-        {/* Search */}
+        {/* Search with advanced syntax support */}
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search notifications..."
+            placeholder={isQueryTab ? 'Search queries... (try type:query status:open)' : 'Search notifications...'}
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
-            className="pl-9 pr-9"
+            className="pl-9 pr-16"
           />
-          {searchValue && (
-            <button
-              onClick={() => setSearchValue('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            {searchValue && (
+              <button
+                onClick={() => setSearchValue('')}
+                className="text-muted-foreground hover:text-foreground p-0.5"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="text-muted-foreground hover:text-foreground p-0.5">
+                    <Info className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs text-xs">
+                  <p className="font-semibold mb-1">Advanced search syntax:</p>
+                  <p><code>type:query</code> or <code>type:notification</code></p>
+                  <p><code>status:open</code>, <code>status:responded</code>, <code>status:resolved</code></p>
+                  <p><code>sla:overdue</code>, <code>sla:at-risk</code>, <code>sla:on-time</code></p>
+                  <p><code>period:Q4</code>, <code>notiftype:kpi_submitted</code></p>
+                  <p className="mt-1 text-muted-foreground">Combine with text: <code>type:query status:open target</code></p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
 
-        {/* Status Filter */}
-        <Select
-          value={filters.readStatus}
-          onValueChange={(value) => onFiltersChange({ ...filters, readStatus: value as InboxFiltersState['readStatus'] })}
-        >
-          <SelectTrigger className="w-full sm:w-[140px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="unread">Unread</SelectItem>
-            <SelectItem value="read">Read</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Status Filter (Read/Unread) — notifications only */}
+        {isNotificationTab && (
+          <Select
+            value={filters.readStatus}
+            onValueChange={(value) => onFiltersChange({ ...filters, readStatus: value as InboxFiltersState['readStatus'] })}
+          >
+            <SelectTrigger className="w-full sm:w-[140px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="unread">Unread</SelectItem>
+              <SelectItem value="read">Read</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Query Status — query tabs only */}
+        {isQueryTab && (
+          <Select
+            value={filters.queryStatus}
+            onValueChange={(value) => onFiltersChange({ ...filters, queryStatus: value as InboxFiltersState['queryStatus'] })}
+          >
+            <SelectTrigger className="w-full sm:w-[150px]">
+              <SelectValue placeholder="Query Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="responded">Responded</SelectItem>
+              <SelectItem value="resolved">Resolved</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
 
         {/* Date Range Filter */}
         <Select
@@ -109,9 +180,47 @@ export function InboxFilters({ filters, onFiltersChange, totalCount, showingCoun
         )}
       </div>
 
+      {/* Row 2: Additional filters (SLA, notification type) */}
+      <div className="flex flex-wrap gap-3">
+        {/* SLA Status — query tabs only */}
+        {isQueryTab && (
+          <Select
+            value={filters.slaStatus}
+            onValueChange={(value) => onFiltersChange({ ...filters, slaStatus: value as InboxFiltersState['slaStatus'] })}
+          >
+            <SelectTrigger className="w-full sm:w-[150px]">
+              <SelectValue placeholder="SLA Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All SLA</SelectItem>
+              <SelectItem value="on-time">✅ On-time</SelectItem>
+              <SelectItem value="at-risk">⚠️ At-risk</SelectItem>
+              <SelectItem value="overdue">🔴 Overdue</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Notification Type — notifications tab only */}
+        {isNotificationTab && (
+          <Select
+            value={filters.notificationType}
+            onValueChange={(value) => onFiltersChange({ ...filters, notificationType: value })}
+          >
+            <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectValue placeholder="Notification Type" />
+            </SelectTrigger>
+            <SelectContent>
+              {NOTIFICATION_TYPES.map(t => (
+                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+
       {/* Active Filters Summary */}
       <div className="flex items-center justify-between text-sm">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {activeFilterCount > 0 && (
             <>
               <Filter className="h-3.5 w-3.5 text-muted-foreground" />
@@ -126,7 +235,21 @@ export function InboxFilters({ filters, onFiltersChange, totalCount, showingCoun
                   {filters.dateRange === 'week' ? 'This Week' : filters.dateRange === 'month' ? 'This Month' : filters.dateRange}
                 </Badge>
               )}
+              {filters.queryStatus !== 'all' && (
+                <Badge variant="secondary" className="text-xs capitalize">{filters.queryStatus}</Badge>
+              )}
+              {filters.slaStatus !== 'all' && (
+                <Badge variant="secondary" className="text-xs capitalize">{filters.slaStatus}</Badge>
+              )}
+              {filters.notificationType !== 'all' && (
+                <Badge variant="secondary" className="text-xs">
+                  {NOTIFICATION_TYPES.find(t => t.value === filters.notificationType)?.label || filters.notificationType}
+                </Badge>
+              )}
             </>
+          )}
+          {showAdvancedHint && (
+            <Badge variant="outline" className="text-xs text-primary">Advanced syntax active</Badge>
           )}
         </div>
         {showingCount !== undefined && totalCount !== undefined && (

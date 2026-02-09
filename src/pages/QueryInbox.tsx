@@ -17,7 +17,7 @@ import { InboxFilters, InboxFiltersState } from '@/components/inbox/InboxFilters
 import { InboxTable } from '@/components/inbox/InboxTable';
 import { InboxDetailSheet } from '@/components/inbox/InboxDetailSheet';
 import { InboxStatsCards, buildInboxStats } from '@/components/inbox/InboxStatsCards';
-import { InboxItem } from '@/lib/inboxUtils';
+import { InboxItem, filterInboxItems } from '@/lib/inboxUtils';
 import { InboxInsights } from '@/components/inbox/InboxInsights';
 import { StatsRowSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Bell, MessageSquare, Send, Users, CheckCheck, Paperclip, BarChart3 } from 'lucide-react';
@@ -60,6 +60,9 @@ export default function QueryInbox() {
     search: '',
     readStatus: 'all',
     dateRange: 'all',
+    queryStatus: 'all',
+    slaStatus: 'all',
+    notificationType: 'all',
   });
 
   const [activeTab, setActiveTab] = useState<'notifications' | 'received' | 'sent' | 'team' | 'insights'>('notifications');
@@ -215,6 +218,11 @@ export default function QueryInbox() {
     subordinateQueries.map(q => queryToInboxItem(q as unknown as QueryWithDetails, false)),
     [subordinateQueries, queryToInboxItem]
   );
+
+  // Apply client-side filters to query items
+  const filteredReceivedItems = useMemo(() => filterInboxItems(receivedQueryItems, filters), [receivedQueryItems, filters]);
+  const filteredSentItems = useMemo(() => filterInboxItems(sentQueryItems, filters), [sentQueryItems, filters]);
+  const filteredTeamItems = useMemo(() => filterInboxItems(teamQueryItems, filters), [teamQueryItems, filters]);
 
   // Handlers
   const handleViewItem = useCallback((item: InboxItem) => {
@@ -411,6 +419,7 @@ export default function QueryInbox() {
             onFiltersChange={setFilters}
             totalCount={notificationsTotalCount}
             showingCount={notifications.length}
+            activeTab="notifications"
           />
           <InboxTable
             items={notificationItems}
@@ -427,9 +436,16 @@ export default function QueryInbox() {
         </TabsContent>
 
         {/* Received Queries Tab */}
-        <TabsContent value="received" className="mt-6">
+        <TabsContent value="received" className="mt-6 space-y-4">
+          <InboxFilters
+            filters={filters}
+            onFiltersChange={setFilters}
+            totalCount={receivedQueryItems.length}
+            showingCount={filteredReceivedItems.length}
+            activeTab="received"
+          />
           <InboxTable
-            items={receivedQueryItems}
+            items={filteredReceivedItems}
             isLoading={loadingQueries}
             onViewItem={handleViewItem}
             emptyMessage="No queries received"
@@ -442,9 +458,16 @@ export default function QueryInbox() {
         </TabsContent>
 
         {/* Sent Queries Tab */}
-        <TabsContent value="sent" className="mt-6">
+        <TabsContent value="sent" className="mt-6 space-y-4">
+          <InboxFilters
+            filters={filters}
+            onFiltersChange={setFilters}
+            totalCount={sentQueryItems.length}
+            showingCount={filteredSentItems.length}
+            activeTab="sent"
+          />
           <InboxTable
-            items={sentQueryItems}
+            items={filteredSentItems}
             isLoading={loadingQueries}
             onViewItem={handleViewItem}
             emptyMessage="No queries sent"
@@ -457,9 +480,16 @@ export default function QueryInbox() {
         </TabsContent>
 
         {/* Team Queries Tab */}
-        <TabsContent value="team" className="mt-6">
+        <TabsContent value="team" className="mt-6 space-y-4">
+          <InboxFilters
+            filters={filters}
+            onFiltersChange={setFilters}
+            totalCount={teamQueryItems.length}
+            showingCount={filteredTeamItems.length}
+            activeTab="team"
+          />
           <InboxTable
-            items={teamQueryItems}
+            items={filteredTeamItems}
             isLoading={loadingSubordinateQueries}
             onViewItem={handleViewItem}
             emptyMessage="No team queries"
