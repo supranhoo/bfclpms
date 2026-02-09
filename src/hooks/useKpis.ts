@@ -428,6 +428,7 @@ export function useSubmitSelfReview() {
       self_score,
       self_remarks,
       self_evidence_url,
+      self_evidence_urls,
       is_na = false,
     }: {
       kpi_id: string;
@@ -436,6 +437,7 @@ export function useSubmitSelfReview() {
       self_score: number | null;
       self_remarks: string;
       self_evidence_url?: string | null;
+      self_evidence_urls?: string[];
       is_na?: boolean;
     }) => {
       // First upsert the submission
@@ -448,6 +450,7 @@ export function useSubmitSelfReview() {
           self_score: is_na ? null : self_score,
           self_remarks,
           self_evidence_url,
+          self_evidence_urls: self_evidence_urls || [],
           is_na,
           kpi_status: 'submitted' as const,
         }, {

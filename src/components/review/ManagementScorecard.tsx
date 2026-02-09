@@ -23,7 +23,7 @@ import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
 import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
 import { WorkflowProgressTracker } from '@/components/review/WorkflowProgressTracker';
 import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
-import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
+import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
@@ -137,7 +137,7 @@ export function ManagementScorecard({
   
   const [managementScore, setManagementScore] = useState<number | null>(null);
   const [managementRemarks, setManagementRemarks] = useState('');
-  const [managementEvidenceUrl, setManagementEvidenceUrl] = useState<string | null>(null);
+  const [managementEvidenceUrls, setManagementEvidenceUrls] = useState<string[]>([]);
   const [managementAchievedValue, setManagementAchievedValue] = useState<number | string | null>(null);
   const [sendBackReason, setSendBackReason] = useState('');
   const [sendBackTarget, setSendBackTarget] = useState<'auditor' | 'manager' | 'employee'>('auditor');
@@ -356,7 +356,11 @@ export function ManagementScorecard({
     const existing = submissionMap.get(kpi.id);
     setManagementScore(existing?.management_score || existing?.auditor_score || null);
     setManagementRemarks(existing?.management_remarks || '');
-    setManagementEvidenceUrl(existing?.management_evidence_url || null);
+    // Support both new array and legacy single URL
+    const existingUrls = (existing as any)?.management_evidence_urls;
+    setManagementEvidenceUrls(Array.isArray(existingUrls) && existingUrls.length > 0 
+      ? existingUrls 
+      : existing?.management_evidence_url ? [existing.management_evidence_url] : []);
     setManagementAchievedValue((existing as any)?.management_achieved_value || (existing as any)?.auditor_achieved_value || existing?.achieved_value || null);
     // Reset override state
     setManagementAgrees(null);
@@ -453,7 +457,7 @@ export function ManagementScorecard({
       management_rating: rating,
       management_score: managementScore,
       management_remarks: managementRemarks,
-      management_evidence_url: managementEvidenceUrl,
+      management_evidence_url: managementEvidenceUrls.length > 0 ? managementEvidenceUrls[0] : null,
       management_achieved_value: typeof managementAchievedValue === 'number' 
         ? managementAchievedValue 
         : managementAchievedValue ? parseFloat(managementAchievedValue) : null,
@@ -774,11 +778,13 @@ export function ManagementScorecard({
                   </div>
                   <div className="space-y-2">
                     <Label>Evidence</Label>
-                    <EvidenceUpload
+                    <MultiFileUpload
                       userId={user?.id || ''}
-                      kpiId={selectedKpi?.id || ''}
-                      onUploadComplete={(url) => setManagementEvidenceUrl(url)}
-                      existingUrl={managementEvidenceUrl}
+                      contextId={selectedKpi?.id || ''}
+                      folder="management-evidence"
+                      existingUrls={managementEvidenceUrls}
+                      onUploadComplete={setManagementEvidenceUrls}
+                      label="Management Evidence"
                     />
                   </div>
                 </CardContent>
@@ -806,11 +812,13 @@ export function ManagementScorecard({
                   </div>
                   <div className="space-y-2">
                     <Label>Evidence</Label>
-                    <EvidenceUpload
+                    <MultiFileUpload
                       userId={user?.id || ''}
-                      kpiId={selectedKpi?.id || ''}
-                      onUploadComplete={(url) => setManagementEvidenceUrl(url)}
-                      existingUrl={managementEvidenceUrl}
+                      contextId={selectedKpi?.id || ''}
+                      folder="management-evidence"
+                      existingUrls={managementEvidenceUrls}
+                      onUploadComplete={setManagementEvidenceUrls}
+                      label="Management Evidence"
                     />
                   </div>
                 </CardContent>

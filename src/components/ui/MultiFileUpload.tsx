@@ -1,0 +1,305 @@
+import { useState, useRef, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
+import { useToast } from '@/hooks/use-toast';
+import { Upload, X, FileText, Image, FileSpreadsheet, Loader2, Plus } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface MultiFileUploadProps {
+  userId: string;
+  contextId: string; // KPI ID, Query ID, etc.
+  folder: string; // 'self-evidence', 'manager-evidence', etc.
+  existingUrls: string[];
+  onUploadComplete: (urls: string[]) => void;
+  maxFiles?: number;
+  disabled?: boolean;
+  label?: string;
+}
+
+interface UploadingFile {
+  id: string;
+  name: string;
+  progress: number;
+}
+
+const ACCEPTED_TYPES = {
+  'image/jpeg': { ext: 'jpg', icon: Image },
+  'image/jpg': { ext: 'jpg', icon: Image },
+  'image/png': { ext: 'png', icon: Image },
+  'application/pdf': { ext: 'pdf', icon: FileText },
+  'application/vnd.ms-excel': { ext: 'xls', icon: FileSpreadsheet },
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': { ext: 'xlsx', icon: FileSpreadsheet },
+};
+
+const ACCEPTED_EXTENSIONS = '.jpg,.jpeg,.png,.pdf,.xls,.xlsx';
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+export function MultiFileUpload({
+  userId,
+  contextId,
+  folder,
+  existingUrls,
+  onUploadComplete,
+  maxFiles = 5,
+  disabled = false,
+  label = 'Evidence Attachments',
+}: MultiFileUploadProps) {
+  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const currentCount = existingUrls.length;
+  const canUploadMore = currentCount < maxFiles && !disabled;
+  const remainingSlots = maxFiles - currentCount;
+
+  const getFileIcon = (url: string) => {
+    if (url.includes('.pdf')) return FileText;
+    if (url.includes('.xls')) return FileSpreadsheet;
+    return Image;
+  };
+
+  const getFileName = (url: string) => {
+    try {
+      const parts = url.split('/');
+      const fileName = parts[parts.length - 1];
+      // Decode URL-encoded characters
+      return decodeURIComponent(fileName);
+    } catch {
+      return 'File';
+    }
+  };
+
+  const uploadFile = async (file: File): Promise<string | null> => {
+    const fileId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Validate file type
+    if (!Object.keys(ACCEPTED_TYPES).includes(file.type)) {
+      toast({
+        title: 'Invalid file type',
+        description: `"${file.name}" is not a supported format. Use JPEG, PNG, PDF, or Excel.`,
+        variant: 'destructive',
+      });
+      return null;
+    }
+
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      toast({
+        title: 'File too large',
+        description: `"${file.name}" exceeds the 10MB limit.`,
+        variant: 'destructive',
+      });
+      return null;
+    }
+
+    // Add to uploading list
+    setUploadingFiles(prev => [...prev, { id: fileId, name: file.name, progress: 0 }]);
+
+    try {
+      const fileExt = ACCEPTED_TYPES[file.type as keyof typeof ACCEPTED_TYPES]?.ext || 'file';
+      const timestamp = Date.now();
+      const filePath = `${userId}/${contextId}/${folder}/${timestamp}.${fileExt}`;
+
+      // Simulate progress (Supabase doesn't provide upload progress)
+      const progressInterval = setInterval(() => {
+        setUploadingFiles(prev =>
+          prev.map(f =>
+            f.id === fileId ? { ...f, progress: Math.min(f.progress + 10, 90) } : f
+          )
+        );
+      }, 100);
+
+      const { error: uploadError } = await supabase.storage
+        .from('review-evidence')
+        .upload(filePath, file, { upsert: true });
+
+      clearInterval(progressInterval);
+
+      if (uploadError) throw uploadError;
+
+      // Set progress to 100%
+      setUploadingFiles(prev =>
+        prev.map(f => (f.id === fileId ? { ...f, progress: 100 } : f))
+      );
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('review-evidence')
+        .getPublicUrl(filePath);
+
+      // Remove from uploading list after short delay
+      setTimeout(() => {
+        setUploadingFiles(prev => prev.filter(f => f.id !== fileId));
+      }, 500);
+
+      return publicUrl;
+    } catch (error: any) {
+      setUploadingFiles(prev => prev.filter(f => f.id !== fileId));
+      toast({
+        title: 'Upload failed',
+        description: error.message || `Failed to upload "${file.name}"`,
+        variant: 'destructive',
+      });
+      return null;
+    }
+  };
+
+  const handleFilesSelected = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const filesToUpload = Array.from(files).slice(0, remainingSlots);
+    
+    if (files.length > remainingSlots) {
+      toast({
+        title: 'Too many files',
+        description: `You can only upload ${remainingSlots} more file(s). Max ${maxFiles} total.`,
+        variant: 'destructive',
+      });
+    }
+
+    const uploadedUrls: string[] = [];
+    
+    for (const file of filesToUpload) {
+      const url = await uploadFile(file);
+      if (url) {
+        uploadedUrls.push(url);
+      }
+    }
+
+    if (uploadedUrls.length > 0) {
+      onUploadComplete([...existingUrls, ...uploadedUrls]);
+      toast({
+        title: 'Files uploaded',
+        description: `${uploadedUrls.length} file(s) uploaded successfully.`,
+      });
+    }
+  };
+
+  const handleRemove = (urlToRemove: string) => {
+    const newUrls = existingUrls.filter(url => url !== urlToRemove);
+    onUploadComplete(newUrls);
+  };
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (!disabled && canUploadMore) {
+      setIsDragOver(true);
+    }
+  }, [disabled, canUploadMore]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (!disabled && canUploadMore) {
+      handleFilesSelected(e.dataTransfer.files);
+    }
+  }, [disabled, canUploadMore]);
+
+  const isUploading = uploadingFiles.length > 0;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label>{label} ({currentCount}/{maxFiles})</Label>
+      </div>
+      
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={(e) => handleFilesSelected(e.target.files)}
+        accept={ACCEPTED_EXTENSIONS}
+        multiple
+        className="hidden"
+        disabled={disabled || !canUploadMore}
+      />
+
+      {/* File Grid */}
+      <div className="flex flex-wrap gap-2">
+        {/* Existing Files */}
+        {existingUrls.map((url, index) => {
+          const FileIcon = getFileIcon(url);
+          return (
+            <div
+              key={url}
+              className="relative group flex items-center gap-2 p-2 pr-8 border rounded-lg bg-muted/50 max-w-[200px]"
+            >
+              <FileIcon className="h-4 w-4 text-primary flex-shrink-0" />
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline truncate"
+                title={getFileName(url)}
+              >
+                {getFileName(url)}
+              </a>
+              {!disabled && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleRemove(url)}
+                  className="absolute right-0 top-0 h-full w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Uploading Files */}
+        {uploadingFiles.map((file) => (
+          <div
+            key={file.id}
+            className="flex items-center gap-2 p-2 border rounded-lg bg-muted/50 min-w-[150px]"
+          >
+            <Loader2 className="h-4 w-4 animate-spin text-primary flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs truncate">{file.name}</p>
+              <Progress value={file.progress} className="h-1 mt-1" />
+            </div>
+          </div>
+        ))}
+
+        {/* Add More Button / Drop Zone */}
+        {canUploadMore && (
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={cn(
+              'flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors min-w-[140px]',
+              isDragOver
+                ? 'border-primary bg-primary/5'
+                : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/30',
+              isUploading && 'pointer-events-none opacity-50'
+            )}
+          >
+            <Plus className="h-5 w-5 text-muted-foreground mb-1" />
+            <span className="text-xs text-muted-foreground text-center">
+              {isUploading ? 'Uploading...' : 'Add files'}
+            </span>
+            <span className="text-[10px] text-muted-foreground/70 text-center mt-0.5">
+              Drop or click
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Help Text */}
+      <p className="text-xs text-muted-foreground">
+        Supported: JPEG, PNG, PDF, Excel (max 10MB each)
+      </p>
+    </div>
+  );
+}
+

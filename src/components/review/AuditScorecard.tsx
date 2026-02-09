@@ -23,7 +23,7 @@ import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
 import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
 import { WorkflowProgressTracker } from '@/components/review/WorkflowProgressTracker';
 import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
-import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
+import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
@@ -132,7 +132,7 @@ export function AuditScorecard({
   
   const [auditorScore, setAuditorScore] = useState<number | null>(null);
   const [auditorRemarks, setAuditorRemarks] = useState('');
-  const [auditorEvidenceUrl, setAuditorEvidenceUrl] = useState<string | null>(null);
+  const [auditorEvidenceUrls, setAuditorEvidenceUrls] = useState<string[]>([]);
   const [auditorAchievedValue, setAuditorAchievedValue] = useState<number | string | null>(null);
   const [sendBackReason, setSendBackReason] = useState('');
   const [sendBackTarget, setSendBackTarget] = useState<'manager' | 'employee'>('manager');
@@ -334,7 +334,11 @@ export function AuditScorecard({
     const existing = submissionMap.get(kpi.id);
     setAuditorScore(existing?.auditor_score || existing?.manager_score || null);
     setAuditorRemarks(existing?.auditor_remarks || '');
-    setAuditorEvidenceUrl(existing?.auditor_evidence_url || null);
+    // Support both new array and legacy single URL
+    const existingUrls = (existing as any)?.auditor_evidence_urls;
+    setAuditorEvidenceUrls(Array.isArray(existingUrls) && existingUrls.length > 0 
+      ? existingUrls 
+      : existing?.auditor_evidence_url ? [existing.auditor_evidence_url] : []);
     setAuditorAchievedValue((existing as any)?.auditor_achieved_value || (existing as any)?.manager_achieved_value || existing?.achieved_value || null);
     // Reset override state
     setAuditorAgrees(null);
@@ -431,7 +435,7 @@ export function AuditScorecard({
       auditor_rating: rating,
       auditor_score: auditorScore,
       auditor_remarks: auditorRemarks,
-      auditor_evidence_url: auditorEvidenceUrl,
+      auditor_evidence_url: auditorEvidenceUrls.length > 0 ? auditorEvidenceUrls[0] : null,
       auditor_achieved_value: typeof auditorAchievedValue === 'number' 
         ? auditorAchievedValue 
         : auditorAchievedValue ? parseFloat(auditorAchievedValue) : null,
@@ -745,11 +749,13 @@ export function AuditScorecard({
                   </div>
                   <div className="space-y-2">
                     <Label>Evidence</Label>
-                    <EvidenceUpload
+                    <MultiFileUpload
                       userId={user?.id || ''}
-                      kpiId={selectedKpi?.id || ''}
-                      onUploadComplete={(url) => setAuditorEvidenceUrl(url)}
-                      existingUrl={auditorEvidenceUrl}
+                      contextId={selectedKpi?.id || ''}
+                      folder="auditor-evidence"
+                      existingUrls={auditorEvidenceUrls}
+                      onUploadComplete={setAuditorEvidenceUrls}
+                      label="Auditor Evidence"
                     />
                   </div>
                 </CardContent>
@@ -777,11 +783,13 @@ export function AuditScorecard({
                   </div>
                   <div className="space-y-2">
                     <Label>Evidence</Label>
-                    <EvidenceUpload
+                    <MultiFileUpload
                       userId={user?.id || ''}
-                      kpiId={selectedKpi?.id || ''}
-                      onUploadComplete={(url) => setAuditorEvidenceUrl(url)}
-                      existingUrl={auditorEvidenceUrl}
+                      contextId={selectedKpi?.id || ''}
+                      folder="auditor-evidence"
+                      existingUrls={auditorEvidenceUrls}
+                      onUploadComplete={setAuditorEvidenceUrls}
+                      label="Auditor Evidence"
                     />
                   </div>
                 </CardContent>

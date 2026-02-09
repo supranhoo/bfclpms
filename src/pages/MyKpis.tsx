@@ -35,7 +35,7 @@ import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/R
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
 import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
-import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
+import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
 import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { SubPeriodSelector } from '@/components/review/SubPeriodSelector';
@@ -174,7 +174,7 @@ export default function MyKpis() {
   const [calculatedPercentage, setCalculatedPercentage] = useState<number | null>(null);
   const [calculatedRatingLevel, setCalculatedRatingLevel] = useState<RatingLevel | null>(null);
   const [selfRemarks, setSelfRemarks] = useState('');
-  const [selfEvidenceUrl, setSelfEvidenceUrl] = useState<string | null>(null);
+  const [selfEvidenceUrls, setSelfEvidenceUrls] = useState<string[]>([]);
   const [isNa, setIsNa] = useState(false);
   
   // Resubmission confirmation state for Daily/Weekly KPIs
@@ -386,7 +386,11 @@ export default function MyKpis() {
     }
     
     setSelfRemarks(existing?.self_remarks || '');
-    setSelfEvidenceUrl(existing?.self_evidence_url || null);
+    // Support both new array and legacy single URL
+    const existingUrls = (existing as any)?.self_evidence_urls;
+    setSelfEvidenceUrls(Array.isArray(existingUrls) && existingUrls.length > 0 
+      ? existingUrls 
+      : existing?.self_evidence_url ? [existing.self_evidence_url] : []);
     setIsNa(existing?.is_na || false);
     setReviewDialogOpen(true);
   };
@@ -471,7 +475,7 @@ export default function MyKpis() {
         self_rating: selfRating,
         self_score: result.rating,
         self_remarks: selfRemarks || defaultRemarks,
-        self_evidence_url: selfEvidenceUrl,
+        self_evidence_url: selfEvidenceUrls.length > 0 ? selfEvidenceUrls[0] : null,
         is_na: false,
       });
       
@@ -508,7 +512,7 @@ export default function MyKpis() {
       sub_period_value: selectedSubPeriod,
       achieved_value: isNa ? null : (isQualitativeKpi(selectedKpi) ? calculatedScore : (parseFloat(achievedValue) || null)),
       remarks: selfRemarks || null,
-      evidence_url: selfEvidenceUrl,
+      evidence_url: selfEvidenceUrls.length > 0 ? selfEvidenceUrls[0] : null,
       review_month: selectedPeriod,
       review_year: selectedYear,
       update_reason: updateReason,
@@ -577,7 +581,7 @@ export default function MyKpis() {
       self_rating: selfRating,
       self_score: isNa ? null : calculatedScore,
       self_remarks: selfRemarks,
-      self_evidence_url: selfEvidenceUrl,
+      self_evidence_url: selfEvidenceUrls.length > 0 ? selfEvidenceUrls[0] : null,
       is_na: isNa,
     });
 
@@ -1054,11 +1058,13 @@ export default function MyKpis() {
                         
                         {/* Evidence Upload */}
                         {profile?.id && selectedKpi && (
-                          <EvidenceUpload
+                          <MultiFileUpload
                             userId={profile.id}
-                            kpiId={selectedKpi.id}
-                            existingUrl={selfEvidenceUrl}
-                            onUploadComplete={(url) => setSelfEvidenceUrl(url || null)}
+                            contextId={selectedKpi.id}
+                            folder="self-evidence"
+                            existingUrls={selfEvidenceUrls}
+                            onUploadComplete={setSelfEvidenceUrls}
+                            label="Evidence Attachments"
                           />
                         )}
                         
@@ -1094,17 +1100,20 @@ export default function MyKpis() {
                             </div>
                           </div>
                         )}
-                        {selfEvidenceUrl && (
+                        {selfEvidenceUrls.length > 0 && (
                           <div>
                             <Label className="text-sm mb-2 block">Evidence</Label>
-                            <a 
-                              href={selfEvidenceUrl} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-sm text-primary underline hover:no-underline"
-                            >
-                              View Evidence
-                            </a>
+                            {selfEvidenceUrls.map((url, idx) => (
+                              <a 
+                                key={idx}
+                                href={url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-sm text-primary underline hover:no-underline block"
+                              >
+                                View Evidence {selfEvidenceUrls.length > 1 ? idx + 1 : ''}
+                              </a>
+                            ))}
                           </div>
                         )}
                       </CardContent>
