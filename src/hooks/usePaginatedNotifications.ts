@@ -14,6 +14,8 @@ export interface Notification {
   is_read: boolean;
   metadata: Record<string, any>;
   created_at: string;
+  snoozed_until: string | null;
+  snooze_count: number;
 }
 
 export interface NotificationFilters {
@@ -26,12 +28,13 @@ export interface NotificationFilters {
 export interface UsePaginatedNotificationsOptions {
   pageSize?: number;
   filters?: NotificationFilters;
+  showSnoozed?: boolean;
 }
 
 export function usePaginatedNotifications(options: UsePaginatedNotificationsOptions = {}) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { pageSize = 20, filters = {} } = options;
+  const { pageSize = 20, filters = {}, showSnoozed = false } = options;
   
   const [page, setPage] = useState(0);
   const [allItems, setAllItems] = useState<Notification[]>([]);
@@ -55,7 +58,7 @@ export function usePaginatedNotifications(options: UsePaginatedNotificationsOpti
   }, [filters.dateRange]);
 
   const query = useQuery({
-    queryKey: ['paginated-notifications', user?.id, page, pageSize, filters],
+    queryKey: ['paginated-notifications', user?.id, page, pageSize, filters, showSnoozed],
     queryFn: async () => {
       if (!user?.id) return { data: [], count: 0 };
       
@@ -85,6 +88,16 @@ export function usePaginatedNotifications(options: UsePaginatedNotificationsOpti
         queryBuilder = queryBuilder.or(
           `title.ilike.%${filters.search}%,message.ilike.%${filters.search}%`
         );
+      }
+
+      // Snooze filtering
+      const now = new Date().toISOString();
+      if (showSnoozed) {
+        // Show only currently-snoozed items
+        queryBuilder = queryBuilder.gt('snoozed_until', now);
+      } else {
+        // Exclude currently-snoozed items
+        queryBuilder = queryBuilder.or(`snoozed_until.is.null,snoozed_until.lte.${now}`);
       }
 
       // Apply pagination

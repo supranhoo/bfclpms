@@ -6,3 +6,4 @@ export { InboxStatsCards, buildInboxStats } from './InboxStatsCards';
 export { InlineQuickAction } from './InlineQuickAction';
 export { InboxInsights } from './InboxInsights';
 export { PersonalProductivityInsights } from './PersonalProductivityInsights';
+export { SnoozePopover } from './SnoozePopover';

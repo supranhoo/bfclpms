@@ -2369,4 +2369,36 @@ Located at `src/components/inbox/MobileInboxList.tsx`, renders notifications and
 
 ---
 
+### Snooze & Reminders
+
+The inbox supports snoozing notifications to defer them for later review.
+
+#### Database Columns
+- `notifications.snoozed_until` (TIMESTAMPTZ, nullable) — when set to a future timestamp, the notification is hidden from the main inbox
+- `notifications.snooze_count` (INTEGER, default 0) — tracks how many times an item has been snoozed
+
+#### Snooze Options
+- **Presets:** 1 Hour, 4 Hours, Tomorrow 9 AM, Next Monday 9 AM
+- **Custom:** Date picker + time input for arbitrary future times
+
+#### Behavior
+- Snoozed items are filtered server-side via `snoozed_until` column (items with future `snoozed_until` excluded from main queries)
+- Client-side defense-in-depth filter also excludes snoozed items in `filterInboxItems()`
+- When snooze expires, items automatically reappear in the Notifications tab
+- A dedicated **Snoozed** tab shows all currently-snoozed items with un-snooze capability
+
+#### Smart Suggestions
+- Items snoozed 3+ times trigger a banner in the Snoozed tab suggesting the user mark them as read
+- Snooze count badge (`Snoozed x3`) appears on items snoozed 2+ times in the main inbox
+
+#### Key Files
+| File | Purpose |
+|------|---------|
+| `src/hooks/useSnoozeNotification.ts` | Snooze/un-snooze mutations |
+| `src/components/inbox/SnoozePopover.tsx` | Snooze UI with presets + custom picker |
+| `src/hooks/usePaginatedNotifications.ts` | `showSnoozed` option for filtering |
+| `src/components/inbox/InboxRowItem.tsx` | Snooze button + count badge per row |
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
