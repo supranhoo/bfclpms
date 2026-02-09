@@ -11,9 +11,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { TrendingUp, TrendingDown, Minus, Link } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   ObservationType, 
   ObserverRole, 
@@ -27,7 +28,7 @@ interface AddObservationDialogProps {
   onOpenChange: (open: boolean) => void;
   kpiId: string;
   observerRole: ObserverRole;
-  autoApply: boolean; // true for Management/Admin
+  autoApply: boolean;
   editingObservation?: KpiObservation | null;
   onSubmit: (data: CreateObservationInput | { id: string } & Partial<CreateObservationInput>) => void;
   isLoading?: boolean;
@@ -49,42 +50,34 @@ export function AddObservationDialog({
   onSubmit,
   isLoading,
 }: AddObservationDialogProps) {
+  const { user } = useAuth();
   const isEditing = !!editingObservation;
   
   const [observationType, setObservationType] = useState<ObservationType>('neutral');
-  const [scoreImpact, setScoreImpact] = useState<number>(0);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [evidenceUrl, setEvidenceUrl] = useState('');
+  const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
 
-  // Reset form when editing observation changes
   useEffect(() => {
     if (editingObservation) {
       setObservationType(editingObservation.observation_type);
-      setScoreImpact(editingObservation.score_impact);
       setTitle(editingObservation.title);
       setDescription(editingObservation.description || '');
-      setEvidenceUrl(editingObservation.evidence_url || '');
+      setEvidenceUrls((editingObservation as any).evidence_urls || []);
     } else {
       setObservationType('neutral');
-      setScoreImpact(0);
       setTitle('');
       setDescription('');
-      setEvidenceUrl('');
+      setEvidenceUrls([]);
     }
   }, [editingObservation, open]);
 
-  const resetForm = () => {
-    setObservationType(editingObservation?.observation_type || 'neutral');
-    setScoreImpact(editingObservation?.score_impact || 0);
-    setTitle(editingObservation?.title || '');
-    setDescription(editingObservation?.description || '');
-    setEvidenceUrl(editingObservation?.evidence_url || '');
-  };
-
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
-      resetForm();
+      setObservationType(editingObservation?.observation_type || 'neutral');
+      setTitle(editingObservation?.title || '');
+      setDescription(editingObservation?.description || '');
+      setEvidenceUrls((editingObservation as any)?.evidence_urls || []);
     }
     onOpenChange(newOpen);
   };
@@ -96,34 +89,25 @@ export function AddObservationDialog({
       onSubmit({
         id: editingObservation.id,
         observation_type: observationType,
-        score_impact: scoreImpact,
+        score_impact: 0,
         title: title.trim(),
         description: description.trim() || undefined,
-        evidence_url: evidenceUrl.trim() || undefined,
-      });
+        evidence_urls: evidenceUrls.length > 0 ? evidenceUrls : undefined,
+      } as any);
     } else {
       onSubmit({
         kpi_id: kpiId,
         observer_role: observerRole,
         observation_type: observationType,
-        score_impact: scoreImpact,
+        score_impact: 0,
         title: title.trim(),
         description: description.trim() || undefined,
-        evidence_url: evidenceUrl.trim() || undefined,
+        evidence_urls: evidenceUrls.length > 0 ? evidenceUrls : undefined,
         is_applied: autoApply,
-      });
+      } as any);
     }
     
     handleOpenChange(false);
-  };
-
-  // Suggest score impact based on type
-  const handleTypeChange = (type: ObservationType) => {
-    setObservationType(type);
-    if (scoreImpact === 0) {
-      if (type === 'positive') setScoreImpact(1);
-      else if (type === 'concern') setScoreImpact(-1);
-    }
   };
 
   return (
@@ -135,11 +119,6 @@ export function AddObservationDialog({
             {isEditing
               ? 'Update your observation details below.'
               : 'Add an observation that will be visible throughout the review process.'}
-            {autoApply && (
-              <span className="block mt-1 text-primary font-medium">
-                Your observations will be auto-applied to the score.
-              </span>
-            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -149,7 +128,7 @@ export function AddObservationDialog({
             <Label>Observation Type</Label>
             <RadioGroup
               value={observationType}
-              onValueChange={(val) => handleTypeChange(val as ObservationType)}
+              onValueChange={(val) => setObservationType(val as ObservationType)}
               className="grid grid-cols-3 gap-2"
             >
               {typeOptions.map((option) => {
@@ -187,36 +166,6 @@ export function AddObservationDialog({
             </RadioGroup>
           </div>
 
-          {/* Score Impact */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Score Impact</Label>
-              <span
-                className={cn(
-                  'text-sm font-medium',
-                  scoreImpact > 0 && 'text-primary',
-                  scoreImpact < 0 && 'text-destructive',
-                  scoreImpact === 0 && 'text-muted-foreground'
-                )}
-              >
-                {scoreImpact > 0 ? '+' : ''}{scoreImpact}
-              </span>
-            </div>
-            <Slider
-              value={[scoreImpact]}
-              onValueChange={([val]) => setScoreImpact(val)}
-              min={-5}
-              max={5}
-              step={1}
-              className="w-full"
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>-5 (Major Issue)</span>
-              <span>0 (No Impact)</span>
-              <span>+5 (Exceptional)</span>
-            </div>
-          </div>
-
           {/* Title */}
           <div className="space-y-2">
             <Label htmlFor="title">Title *</Label>
@@ -241,23 +190,18 @@ export function AddObservationDialog({
             />
           </div>
 
-          {/* Evidence URL */}
-          <div className="space-y-2">
-            <Label htmlFor="evidenceUrl">Evidence URL (Optional)</Label>
-            <div className="flex items-center gap-2">
-              <Link className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <Input
-                id="evidenceUrl"
-                value={evidenceUrl}
-                onChange={(e) => setEvidenceUrl(e.target.value)}
-                placeholder="https://..."
-                type="url"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Link to supporting evidence (document, screenshot, etc.)
-            </p>
-          </div>
+          {/* Evidence Upload */}
+          {user && (
+            <MultiFileUpload
+              userId={user.id}
+              contextId={kpiId}
+              folder="observation-evidence"
+              existingUrls={evidenceUrls}
+              onUploadComplete={setEvidenceUrls}
+              maxFiles={5}
+              label="Evidence (Optional)"
+            />
+          )}
         </div>
 
         <DialogFooter>

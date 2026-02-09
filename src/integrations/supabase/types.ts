@@ -452,6 +452,48 @@ export type Database = {
           },
         ]
       }
+      kpi_observation_replies: {
+        Row: {
+          created_at: string
+          evidence_urls: Json | null
+          id: string
+          observation_id: string
+          reply_by: string
+          reply_text: string
+        }
+        Insert: {
+          created_at?: string
+          evidence_urls?: Json | null
+          id?: string
+          observation_id: string
+          reply_by: string
+          reply_text: string
+        }
+        Update: {
+          created_at?: string
+          evidence_urls?: Json | null
+          id?: string
+          observation_id?: string
+          reply_by?: string
+          reply_text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_observation_replies_observation_id_fkey"
+            columns: ["observation_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_observations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_observation_replies_reply_by_fkey"
+            columns: ["reply_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpi_observations: {
         Row: {
           created_at: string | null
@@ -467,6 +509,7 @@ export type Database = {
           reviewed_at: string | null
           reviewed_by: string | null
           score_impact: number
+          status: string
           title: string
           updated_at: string | null
         }
@@ -484,6 +527,7 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           score_impact?: number
+          status?: string
           title: string
           updated_at?: string | null
         }
@@ -501,6 +545,7 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           score_impact?: number
+          status?: string
           title?: string
           updated_at?: string | null
         }

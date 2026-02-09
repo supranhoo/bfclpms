@@ -2,20 +2,22 @@ import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import {
   TrendingUp,
   TrendingDown,
   Minus,
-  ExternalLink,
   Pencil,
   Trash2,
   ChevronDown,
   ChevronUp,
+  FileText,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { KpiObservation, ObservationType, ObserverRole } from '@/hooks/useKpiObservations';
+import { ObservationReplyThread } from './ObservationReplyThread';
 import { cn } from '@/lib/utils';
+
+export type ObservationStatus = 'open' | 'acknowledged' | 'resolved';
 
 interface ObservationCardProps {
   observation: KpiObservation;
@@ -48,6 +50,12 @@ const typeConfig: Record<ObservationType, { icon: typeof TrendingUp; color: stri
   },
 };
 
+const statusConfig: Record<ObservationStatus, { label: string; className: string }> = {
+  open: { label: 'Open', className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700' },
+  acknowledged: { label: 'Acknowledged', className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-300 dark:border-blue-700' },
+  resolved: { label: 'Resolved', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700' },
+};
+
 const roleLabels: Record<ObserverRole, string> = {
   self: 'Self',
   manager: 'Manager',
@@ -72,13 +80,15 @@ export function ObservationCard({
   const isCreator = observation.created_by === currentUserId;
   const canEditDelete = isCreator && !isReadOnly;
   const hasDescription = observation.description && observation.description.length > 0;
+  const status = ((observation as any).status as ObservationStatus) || 'open';
+  const statusCfg = statusConfig[status];
   
   const observerName = observation.created_by_profile?.full_name || observation.created_by_profile?.email || 'Unknown';
   const formattedDate = format(new Date(observation.created_at), 'dd MMM yyyy');
-  
-  const impactText = observation.score_impact > 0
-    ? `+${observation.score_impact}`
-    : observation.score_impact.toString();
+
+  // Evidence files (multi-file)
+  const evidenceUrls: string[] = (observation as any).evidence_urls || [];
+  const legacyUrl = observation.evidence_url;
 
   return (
     <Card className={cn('border', config.bgColor)}>
@@ -91,37 +101,19 @@ export function ObservationCard({
               <span className="text-xs font-medium uppercase">{config.label}</span>
             </div>
             
-            {observation.score_impact !== 0 && (
-              <Badge
-                variant="outline"
-                className={cn(
-                  'text-xs',
-                  observation.score_impact > 0
-                    ? 'border-emerald-300 text-emerald-700 dark:text-emerald-400'
-                    : 'border-red-300 text-red-700 dark:text-red-400'
-                )}
-              >
-                {impactText} Score
-              </Badge>
-            )}
-            
-            <Badge
-              variant={observation.is_applied ? 'default' : 'secondary'}
-              className="text-xs"
-            >
-              {observation.is_applied ? 'Applied ✓' : 'Pending'}
+            <Badge variant="outline" className={cn('text-xs border', statusCfg.className)}>
+              {statusCfg.label}
             </Badge>
           </div>
 
-          {/* Apply Toggle (for Management/Admin) */}
-          {canApply && !isReadOnly && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Apply</span>
-              <Switch
-                checked={observation.is_applied}
-                onCheckedChange={(checked) => onToggleApplied?.(observation.id, checked)}
-                className="scale-75"
-              />
+          {canEditDelete && (
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onEdit?.(observation)}>
+                <Pencil className="h-3 w-3" />
+              </Button>
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive hover:text-destructive" onClick={() => onDelete?.(observation.id)}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
             </div>
           )}
         </div>
@@ -146,72 +138,57 @@ export function ObservationCard({
               {observation.description}
             </p>
             {observation.description && observation.description.length > 100 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-1 text-xs"
-                onClick={() => setIsExpanded(!isExpanded)}
-              >
-                {isExpanded ? (
-                  <>
-                    <ChevronUp className="h-3 w-3 mr-1" />
-                    Show Less
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="h-3 w-3 mr-1" />
-                    Show More
-                  </>
-                )}
+              <Button variant="ghost" size="sm" className="h-6 px-1 text-xs" onClick={() => setIsExpanded(!isExpanded)}>
+                {isExpanded ? <><ChevronUp className="h-3 w-3 mr-1" />Show Less</> : <><ChevronDown className="h-3 w-3 mr-1" />Show More</>}
               </Button>
             )}
           </div>
         )}
 
-        {/* Evidence & Actions */}
-        <div className="flex items-center justify-between pt-1">
-          {observation.evidence_url ? (
-            <a
-              href={observation.evidence_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-primary hover:underline flex items-center gap-1"
-            >
-              <ExternalLink className="h-3 w-3" />
-              View Evidence
-            </a>
-          ) : (
-            <span />
-          )}
-
-          {canEditDelete && (
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
-                onClick={() => onEdit?.(observation)}
+        {/* Evidence Files */}
+        {(evidenceUrls.length > 0 || legacyUrl) && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {evidenceUrls.map((url, i) => (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline flex items-center gap-1"
               >
-                <Pencil className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                onClick={() => onDelete?.(observation.id)}
+                <FileText className="h-3 w-3" />
+                Attachment {i + 1}
+              </a>
+            ))}
+            {!evidenceUrls.length && legacyUrl && (
+              <a
+                href={legacyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline flex items-center gap-1"
               >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {/* Reviewed By Info */}
-        {observation.is_applied && observation.reviewed_by_profile && (
-          <div className="text-xs text-muted-foreground border-t pt-2">
-            Applied by {observation.reviewed_by_profile.full_name || observation.reviewed_by_profile.email}
-            {observation.reviewed_at && ` on ${format(new Date(observation.reviewed_at), 'dd MMM yyyy')}`}
+                <FileText className="h-3 w-3" />
+                View Evidence
+              </a>
+            )}
           </div>
+        )}
+
+        {/* Reply Thread */}
+        {status !== 'resolved' ? (
+          <ObservationReplyThread
+            observationId={observation.id}
+            kpiId={observation.kpi_id}
+            observationCreatedBy={observation.created_by}
+            isReadOnly={isReadOnly}
+          />
+        ) : (
+          <ObservationReplyThread
+            observationId={observation.id}
+            kpiId={observation.kpi_id}
+            observationCreatedBy={observation.created_by}
+            isReadOnly={true}
+          />
         )}
       </CardContent>
     </Card>
