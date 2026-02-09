@@ -2207,7 +2207,7 @@ Constants available: `DATE_FORMAT`, `DATE_TIME_FORMAT`, `TIME_FORMAT`
 |---------|---------|---------------|
 | **Lovable Cloud (Supabase)** | Backend infrastructure | Auto-configured |
 | **Resend** | Email delivery (default provider) | `RESEND_API_KEY` secret |
-| **Custom SMTP** | Email delivery (optional) | `SMTP_PASSWORD` secret + settings in Admin |
+| **Custom SMTP** | Email delivery (optional) | Password via Admin UI or `SMTP_PASSWORD` secret |
 
 ### Email Configuration
 
@@ -2220,8 +2220,11 @@ The system supports two email providers:
 
 #### 2. Custom SMTP
 - Use your organization's mail server
-- Requires `SMTP_PASSWORD` secret (stored securely, never exposed in UI)
-- Configure in Admin → System Settings → Email tab:
+- **SMTP Password** can be set in two ways (priority order):
+  1. **Admin UI** (recommended): Enter the password in System Settings → Email → SMTP Password field and click "Update Password". The password is stored securely in the `system_settings` table (key: `smtp_password`), protected by admin-only RLS, and never displayed after saving.
+  2. **Environment secret**: Set `SMTP_PASSWORD` as a Lovable Cloud secret. If both are set, the environment secret takes priority.
+- The `update-smtp-password` edge function handles secure storage with admin role verification.
+- Configure other SMTP settings in Admin → System Settings → Email tab:
   - **Host**: SMTP server hostname (e.g., `mail.bfcl.com`)
   - **Port**: 25, 465 (SSL/TLS), 587 (STARTTLS), or 2525
   - **Security**: TLS, STARTTLS, or None

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Mail, Send, Save, AlertCircle, Image, Server, Eye, EyeOff, Plug } from 'lucide-react';
+import { Mail, Send, Save, AlertCircle, Image, Server, Eye, EyeOff, Plug, Lock, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   useEmailNotificationSettings,
@@ -21,6 +21,8 @@ import {
   EmailProvider,
   SmtpSecurity,
 } from '@/hooks/useEmailNotificationSettings';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 const EMAIL_EVENTS: { key: EmailEventType; label: string; description: string }[] = [
   { key: 'kpi_submitted', label: 'KPI Submission', description: 'Notify manager when employee submits self-review' },
@@ -60,6 +62,34 @@ export function EmailNotificationSettings() {
   const [testEmail, setTestEmail] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [smtpPassword, setSmtpPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const { toast } = useToast();
+
+  const handleUpdatePassword = useCallback(async () => {
+    if (!smtpPassword.trim()) return;
+    setIsUpdatingPassword(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('update-smtp-password', {
+        body: { password: smtpPassword },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({
+        title: 'Password Updated',
+        description: 'SMTP password has been stored securely.',
+      });
+      setSmtpPassword('');
+    } catch (err: any) {
+      toast({
+        title: 'Failed to Update Password',
+        description: err.message || 'An error occurred.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  }, [smtpPassword, toast]);
   
   useEffect(() => {
     if (settings) {
@@ -284,27 +314,42 @@ export function EmailNotificationSettings() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="smtp-password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="smtp-password"
-                    type={showPassword ? 'text' : 'password'}
-                    value="••••••••"
-                    readOnly
-                    className="pr-10"
-                    placeholder="Stored as secret"
-                  />
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      id="smtp-password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={smtpPassword}
+                      onChange={(e) => setSmtpPassword(e.target.value)}
+                      className="pr-10"
+                      placeholder="Enter SMTP password"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full px-3"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
                   <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full px-3"
-                    onClick={() => setShowPassword(!showPassword)}
+                    variant="outline"
+                    onClick={handleUpdatePassword}
+                    disabled={!smtpPassword.trim() || isUpdatingPassword}
+                    className="shrink-0"
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {isUpdatingPassword ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Lock className="h-4 w-4 mr-2" />
+                    )}
+                    {isUpdatingPassword ? 'Saving...' : 'Update Password'}
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Password is securely stored as SMTP_PASSWORD secret
+                  Enter your SMTP password. It will be stored securely and never displayed again.
                 </p>
               </div>
             </div>
