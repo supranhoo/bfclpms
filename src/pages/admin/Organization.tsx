@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useDivisions, useBusinessUnits, useDepartments, useSubBranches, useProfiles, useDesignations, usePmsGrades } from '@/hooks/useOrganization';
+import { useDivisions, useBusinessUnits, useDepartments, useSubBranches, useProfiles, useDesignations, usePmsGrades, useLevels } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,12 +23,13 @@ export default function Organization() {
   const { data: subBranches, isLoading: subLoading } = useSubBranches();
   const { data: designations, isLoading: designationsLoading } = useDesignations();
   const { data: pmsGrades, isLoading: pmsGradesLoading } = usePmsGrades();
+  const { data: levels, isLoading: levelsLoading } = useLevels();
   const { data: profiles } = useProfiles();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogType, setDialogType] = useState<'division' | 'bu' | 'department' | 'sub-branch' | 'designation' | 'pms-grade'>('division');
+  const [dialogType, setDialogType] = useState<'division' | 'bu' | 'department' | 'sub-branch' | 'designation' | 'pms-grade' | 'level'>('division');
   const [formName, setFormName] = useState('');
   const [formCode, setFormCode] = useState('');
   const [formParentId, setFormParentId] = useState('');
@@ -103,6 +104,9 @@ export default function Organization() {
         case 'pms-grade':
           table = 'pms_grades';
           break;
+        case 'level':
+          table = 'levels';
+          break;
       }
 
       const { error } = await supabase.from(table as any).insert(data);
@@ -115,6 +119,7 @@ export default function Organization() {
       queryClient.invalidateQueries({ queryKey: ['sub-branches'] });
       queryClient.invalidateQueries({ queryKey: ['designations'] });
       queryClient.invalidateQueries({ queryKey: ['pms-grades'] });
+      queryClient.invalidateQueries({ queryKey: ['levels'] });
       toast({ title: 'Created successfully' });
       setDialogOpen(false);
       resetForm();
@@ -146,6 +151,9 @@ export default function Organization() {
         case 'pms-grade':
           table = 'pms_grades';
           break;
+        case 'level':
+          table = 'levels';
+          break;
       }
 
       const { error } = await supabase.from(table as any).delete().eq('id', id);
@@ -158,6 +166,7 @@ export default function Organization() {
       queryClient.invalidateQueries({ queryKey: ['sub-branches'] });
       queryClient.invalidateQueries({ queryKey: ['designations'] });
       queryClient.invalidateQueries({ queryKey: ['pms-grades'] });
+      queryClient.invalidateQueries({ queryKey: ['levels'] });
       toast({ title: 'Deleted successfully' });
       setDeleteDialogOpen(false);
       setDeleteTarget(null);
@@ -189,6 +198,9 @@ export default function Organization() {
         case 'pms-grade':
           table = 'pms_grades';
           break;
+        case 'level':
+          table = 'levels';
+          break;
       }
 
       const { error } = await supabase.from(table as any).update({ code }).eq('id', id);
@@ -201,6 +213,7 @@ export default function Organization() {
       queryClient.invalidateQueries({ queryKey: ['sub-branches'] });
       queryClient.invalidateQueries({ queryKey: ['designations'] });
       queryClient.invalidateQueries({ queryKey: ['pms-grades'] });
+      queryClient.invalidateQueries({ queryKey: ['levels'] });
       toast({ title: 'Code updated successfully' });
       setEditingCode(null);
     },
@@ -293,7 +306,7 @@ export default function Organization() {
     );
   };
 
-  const isLoading = divisionsLoading || busLoading || deptsLoading || subLoading || designationsLoading || pmsGradesLoading;
+  const isLoading = divisionsLoading || busLoading || deptsLoading || subLoading || designationsLoading || pmsGradesLoading || levelsLoading;
 
   if (isLoading) {
     return (
@@ -312,7 +325,7 @@ export default function Organization() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Organization Structure</h1>
-        <p className="text-muted-foreground">Manage divisions, business units, departments, sub-branches, designations and PMS grades</p>
+        <p className="text-muted-foreground">Manage divisions, business units, departments, sub-branches, designations, PMS grades and levels</p>
       </div>
 
       <Tabs defaultValue="divisions">
@@ -323,6 +336,7 @@ export default function Organization() {
           <TabsTrigger value="sub-branches">Sub-Branches ({subBranches?.length || 0})</TabsTrigger>
           <TabsTrigger value="designations">Designations ({designations?.length || 0})</TabsTrigger>
           <TabsTrigger value="pms-grades">PMS Grades ({pmsGrades?.length || 0})</TabsTrigger>
+          <TabsTrigger value="levels">Levels ({levels?.length || 0})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="divisions">
@@ -637,6 +651,49 @@ export default function Organization() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="levels">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Levels</CardTitle>
+                <CardDescription>Employee classification levels</CardDescription>
+              </div>
+              <Button onClick={() => openCreateDialog('level')}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Level
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead className="w-[80px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {levels?.map((l: any) => (
+                    <TableRow key={l.id}>
+                      <TableCell className="font-medium">{l.name}</TableCell>
+                      <TableCell>{renderCodeCell('level', l.id, l.code)}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => confirmDelete('level', l.id, l.name)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Create Dialog */}
@@ -644,7 +701,7 @@ export default function Organization() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Add {dialogType === 'bu' ? 'Business Unit' : dialogType === 'sub-branch' ? 'Sub-Branch' : dialogType === 'pms-grade' ? 'PMS Grade' : dialogType.charAt(0).toUpperCase() + dialogType.slice(1)}
+              Add {dialogType === 'bu' ? 'Business Unit' : dialogType === 'sub-branch' ? 'Sub-Branch' : dialogType === 'pms-grade' ? 'PMS Grade' : dialogType === 'level' ? 'Level' : dialogType.charAt(0).toUpperCase() + dialogType.slice(1)}
             </DialogTitle>
           </DialogHeader>
 

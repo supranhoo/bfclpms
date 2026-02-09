@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useDivisions, useBusinessUnits, useDepartments, useSubBranches, useDesignations, usePmsGrades } from '@/hooks/useOrganization';
+import { useDivisions, useBusinessUnits, useDepartments, useSubBranches, useDesignations, usePmsGrades, useLevels } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +26,8 @@ interface OrgImportRow {
   designationCode?: string;
   pmsGrade?: string;
   pmsGradeCode?: string;
+  level?: string;
+  levelCode?: string;
 }
 
 export default function OrgStructureImport() {
@@ -36,6 +38,7 @@ export default function OrgStructureImport() {
   const { data: subBranches } = useSubBranches();
   const { data: designations } = useDesignations();
   const { data: pmsGrades } = usePmsGrades();
+  const { data: levels } = useLevels();
   const { toast } = useToast();
 
   const [importData, setImportData] = useState<OrgImportRow[]>([]);
@@ -48,28 +51,29 @@ export default function OrgStructureImport() {
     subBranches: number;
     designations: number;
     pmsGrades: number;
+    levels: number;
   } | null>(null);
 
   const downloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['division', 'divisionCode', 'businessUnit', 'businessUnitCode', 'department', 'departmentCode', 'subBranch', 'subBranchCode', 'designation', 'designationCode', 'pmsGrade', 'pmsGradeCode'],
-      ['Head Office', 'HO', 'Technology', 'TECH', 'Software Development', 'SD', 'Frontend Team', 'FE', 'Senior Engineer', 'SE', 'Grade A', 'GA'],
-      ['Head Office', 'HO', 'Technology', 'TECH', 'QA', 'QA', '', '', 'Junior Engineer', 'JE', 'Grade B', 'GB'],
-      ['Regional', 'REG', 'Sales', 'SALES', 'North Region', 'NR', '', '', 'Manager', 'MGR', '', ''],
+      ['division', 'divisionCode', 'businessUnit', 'businessUnitCode', 'department', 'departmentCode', 'subBranch', 'subBranchCode', 'designation', 'designationCode', 'pmsGrade', 'pmsGradeCode', 'level', 'levelCode'],
+      ['Head Office', 'HO', 'Technology', 'TECH', 'Software Development', 'SD', 'Frontend Team', 'FE', 'Senior Engineer', 'SE', 'Grade A', 'GA', 'Level 1', 'L1'],
+      ['Head Office', 'HO', 'Technology', 'TECH', 'QA', 'QA', '', '', 'Junior Engineer', 'JE', 'Grade B', 'GB', 'Level 2', 'L2'],
+      ['Regional', 'REG', 'Sales', 'SALES', 'North Region', 'NR', '', '', 'Manager', 'MGR', '', '', '', ''],
     ]);
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Org Structure');
 
     // Set column widths
-    ws['!cols'] = Array(12).fill({ wch: 20 });
+    ws['!cols'] = Array(14).fill({ wch: 20 });
 
     XLSX.writeFile(wb, 'org_structure_template.xlsx');
   };
 
   const exportCurrentData = () => {
     const rows: any[][] = [
-      ['division', 'divisionCode', 'businessUnit', 'businessUnitCode', 'department', 'departmentCode', 'subBranch', 'subBranchCode', 'designation', 'designationCode', 'pmsGrade', 'pmsGradeCode'],
+      ['division', 'divisionCode', 'businessUnit', 'businessUnitCode', 'department', 'departmentCode', 'subBranch', 'subBranchCode', 'designation', 'designationCode', 'pmsGrade', 'pmsGradeCode', 'level', 'levelCode'],
     ];
 
     // Build hierarchy rows
@@ -85,7 +89,7 @@ export default function OrgStructureImport() {
             bu?.name || '', bu?.code || '',
             dept.name, dept.code || '',
             sub.name, sub.code || '',
-            '', '', '', '',
+            '', '', '', '', '', '',
           ]);
         });
       } else {
@@ -93,17 +97,17 @@ export default function OrgStructureImport() {
           div?.name || '', div?.code || '',
           bu?.name || '', bu?.code || '',
           dept.name, dept.code || '',
-          '', '', '', '', '', '',
+          '', '', '', '', '', '', '', '',
         ]);
       }
     });
 
     // Add standalone designations and grades as separate rows if not already covered
-    const maxRows = Math.max(rows.length - 1, designations?.length || 0, pmsGrades?.length || 0);
+    const maxRows = Math.max(rows.length - 1, designations?.length || 0, pmsGrades?.length || 0, levels?.length || 0);
     for (let i = 0; i < maxRows; i++) {
       const rowIdx = i + 1; // +1 for header
       if (rowIdx >= rows.length) {
-        rows.push(['', '', '', '', '', '', '', '', '', '', '', '']);
+        rows.push(['', '', '', '', '', '', '', '', '', '', '', '', '', '']);
       }
       if (designations && i < designations.length) {
         rows[rowIdx][8] = designations[i].name;
@@ -113,10 +117,14 @@ export default function OrgStructureImport() {
         rows[rowIdx][10] = pmsGrades[i].name;
         rows[rowIdx][11] = pmsGrades[i].code || '';
       }
+      if (levels && i < levels.length) {
+        rows[rowIdx][12] = levels[i].name;
+        rows[rowIdx][13] = levels[i].code || '';
+      }
     }
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = Array(12).fill({ wch: 20 });
+    ws['!cols'] = Array(14).fill({ wch: 20 });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Org Structure');
     XLSX.writeFile(wb, 'org_structure_export.xlsx');
@@ -165,11 +173,13 @@ export default function OrgStructureImport() {
           designationCode: getValue(row, ['designationCode', 'desigCode']),
           pmsGrade: getValue(row, ['pmsGrade', 'pmsGradeName', 'grade']),
           pmsGradeCode: getValue(row, ['pmsGradeCode', 'gradeCode']),
+          level: getValue(row, ['level', 'levelName', 'employeeLevel']),
+          levelCode: getValue(row, ['levelCode', 'lvlCode']),
         }));
 
         // Filter out completely empty rows
         const filtered = parsed.filter(row =>
-          row.division || row.businessUnit || row.department || row.subBranch || row.designation || row.pmsGrade
+          row.division || row.businessUnit || row.department || row.subBranch || row.designation || row.pmsGrade || row.level
         );
 
         if (filtered.length === 0) {
@@ -205,7 +215,7 @@ export default function OrgStructureImport() {
     setIsImporting(true);
     setImportResult(null);
 
-    const result = { divisions: 0, businessUnits: 0, departments: 0, subBranches: 0, designations: 0, pmsGrades: 0 };
+    const result = { divisions: 0, businessUnits: 0, departments: 0, subBranches: 0, designations: 0, pmsGrades: 0, levels: 0 };
 
     try {
       // Collect unique entries
@@ -215,7 +225,7 @@ export default function OrgStructureImport() {
       const uniqueSubBranches = new Map<string, { code: string; department: string }>();
       const uniqueDesignations = new Map<string, string>();
       const uniquePmsGrades = new Map<string, string>();
-
+      const uniqueLevels = new Map<string, string>();
       for (const row of importData) {
         if (row.division) uniqueDivisions.set(row.division, row.divisionCode || '');
         if (row.businessUnit && row.division) uniqueBUs.set(row.businessUnit, { code: row.businessUnitCode || '', division: row.division });
@@ -223,6 +233,7 @@ export default function OrgStructureImport() {
         if (row.subBranch && row.department) uniqueSubBranches.set(row.subBranch, { code: row.subBranchCode || '', department: row.department });
         if (row.designation) uniqueDesignations.set(row.designation, row.designationCode || '');
         if (row.pmsGrade) uniquePmsGrades.set(row.pmsGrade, row.pmsGradeCode || '');
+        if (row.level) uniqueLevels.set(row.level, row.levelCode || '');
       }
 
       // 1. Create divisions
@@ -320,6 +331,20 @@ export default function OrgStructureImport() {
         }
       }
 
+      // 7. Create levels
+      const levelMap = new Map<string, string>();
+      levels?.forEach((l: any) => levelMap.set(l.name.toLowerCase(), l.id));
+
+      for (const [name, code] of uniqueLevels) {
+        if (!levelMap.has(name.toLowerCase())) {
+          const { error } = await supabase.from('levels' as any).insert({ name: sanitizeText(name), code: code || null });
+          if (error) throw new Error(`Failed to create level "${name}": ${error.message}`);
+          result.levels++;
+        } else if (code) {
+          await supabase.from('levels' as any).update({ code }).eq('id', levelMap.get(name.toLowerCase())!);
+        }
+      }
+
       // Refresh all caches
       queryClient.invalidateQueries({ queryKey: ['divisions'] });
       queryClient.invalidateQueries({ queryKey: ['business-units'] });
@@ -327,6 +352,7 @@ export default function OrgStructureImport() {
       queryClient.invalidateQueries({ queryKey: ['sub-branches'] });
       queryClient.invalidateQueries({ queryKey: ['designations'] });
       queryClient.invalidateQueries({ queryKey: ['pms-grades'] });
+      queryClient.invalidateQueries({ queryKey: ['levels'] });
 
       setImportResult(result);
       const total = Object.values(result).reduce((a, b) => a + b, 0);
@@ -351,6 +377,7 @@ export default function OrgStructureImport() {
     subBranches: new Set(importData.map(r => r.subBranch).filter(Boolean)).size,
     designations: new Set(importData.map(r => r.designation).filter(Boolean)).size,
     pmsGrades: new Set(importData.map(r => r.pmsGrade).filter(Boolean)).size,
+    levels: new Set(importData.map(r => r.level).filter(Boolean)).size,
   } : null;
 
   return (
@@ -361,7 +388,7 @@ export default function OrgStructureImport() {
             <Building2 className="h-5 w-5" />
             Organization Structure Import
           </CardTitle>
-          <CardDescription>Upload an Excel file to bulk import divisions, business units, departments, sub-branches, designations and PMS grades</CardDescription>
+          <CardDescription>Upload an Excel file to bulk import divisions, business units, departments, sub-branches, designations, PMS grades and levels</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-4">
@@ -400,6 +427,7 @@ export default function OrgStructureImport() {
                 <ul className="list-disc list-inside space-y-1">
                   <li><code>designation</code> / <code>designationCode</code></li>
                   <li><code>pmsGrade</code> / <code>pmsGradeCode</code></li>
+                  <li><code>level</code> / <code>levelCode</code></li>
                 </ul>
               </div>
             </div>
@@ -438,6 +466,7 @@ export default function OrgStructureImport() {
               {importResult.subBranches > 0 && <Badge>{importResult.subBranches} Sub-Branches</Badge>}
               {importResult.designations > 0 && <Badge>{importResult.designations} Designations</Badge>}
               {importResult.pmsGrades > 0 && <Badge>{importResult.pmsGrades} PMS Grades</Badge>}
+              {importResult.levels > 0 && <Badge>{importResult.levels} Levels</Badge>}
               {Object.values(importResult).every(v => v === 0) && <span>All entries already exist.</span>}
             </div>
           </AlertDescription>
@@ -453,7 +482,7 @@ export default function OrgStructureImport() {
                 {importData.length} rows parsed
                 {summary && (
                   <span className="ml-2">
-                    — {summary.divisions} divisions, {summary.businessUnits} BUs, {summary.departments} depts, {summary.subBranches} sub-branches, {summary.designations} designations, {summary.pmsGrades} grades
+                    — {summary.divisions} divisions, {summary.businessUnits} BUs, {summary.departments} depts, {summary.subBranches} sub-branches, {summary.designations} designations, {summary.pmsGrades} grades, {summary.levels} levels
                   </span>
                 )}
               </CardDescription>
@@ -486,6 +515,8 @@ export default function OrgStructureImport() {
                     <TableHead>Des Code</TableHead>
                     <TableHead>PMS Grade</TableHead>
                     <TableHead>Grade Code</TableHead>
+                    <TableHead>Level</TableHead>
+                    <TableHead>Level Code</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -503,6 +534,8 @@ export default function OrgStructureImport() {
                       <TableCell>{row.designationCode || '-'}</TableCell>
                       <TableCell>{row.pmsGrade || '-'}</TableCell>
                       <TableCell>{row.pmsGradeCode || '-'}</TableCell>
+                      <TableCell>{row.level || '-'}</TableCell>
+                      <TableCell>{row.levelCode || '-'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

@@ -162,6 +162,7 @@ export type Database = {
           created_at: string
           division_id: string | null
           id: string
+          level: string | null
           name: string
         }
         Insert: {
@@ -169,6 +170,7 @@ export type Database = {
           created_at?: string
           division_id?: string | null
           id?: string
+          level?: string | null
           name: string
         }
         Update: {
@@ -176,6 +178,7 @@ export type Database = {
           created_at?: string
           division_id?: string | null
           id?: string
+          level?: string | null
           name?: string
         }
         Relationships: [
@@ -194,6 +197,7 @@ export type Database = {
           code: string | null
           created_at: string
           id: string
+          level: string | null
           name: string
         }
         Insert: {
@@ -201,6 +205,7 @@ export type Database = {
           code?: string | null
           created_at?: string
           id?: string
+          level?: string | null
           name: string
         }
         Update: {
@@ -208,6 +213,7 @@ export type Database = {
           code?: string | null
           created_at?: string
           id?: string
+          level?: string | null
           name?: string
         }
         Relationships: [
@@ -225,18 +231,21 @@ export type Database = {
           code: string | null
           created_at: string
           id: string
+          level: string | null
           name: string
         }
         Insert: {
           code?: string | null
           created_at?: string
           id?: string
+          level?: string | null
           name: string
         }
         Update: {
           code?: string | null
           created_at?: string
           id?: string
+          level?: string | null
           name?: string
         }
         Relationships: []
@@ -246,18 +255,21 @@ export type Database = {
           code: string | null
           created_at: string
           id: string
+          level: string | null
           name: string
         }
         Insert: {
           code?: string | null
           created_at?: string
           id?: string
+          level?: string | null
           name: string
         }
         Update: {
           code?: string | null
           created_at?: string
           id?: string
+          level?: string | null
           name?: string
         }
         Relationships: []
@@ -942,6 +954,30 @@ export type Database = {
         }
         Relationships: []
       }
+      levels: {
+        Row: {
+          code: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          code?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       modules: {
         Row: {
           code: string
@@ -1470,6 +1506,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          level: string | null
           name: string
         }
         Insert: {
@@ -1477,6 +1514,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          level?: string | null
           name: string
         }
         Update: {
@@ -1484,6 +1522,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          level?: string | null
           name?: string
         }
         Relationships: []
@@ -1498,6 +1537,7 @@ export type Database = {
           employee_code: string | null
           full_name: string | null
           id: string
+          level: string | null
           pms_grade: string | null
           reporting_manager_id: string | null
           updated_at: string
@@ -1511,6 +1551,7 @@ export type Database = {
           employee_code?: string | null
           full_name?: string | null
           id: string
+          level?: string | null
           pms_grade?: string | null
           reporting_manager_id?: string | null
           updated_at?: string
@@ -1524,6 +1565,7 @@ export type Database = {
           employee_code?: string | null
           full_name?: string | null
           id?: string
+          level?: string | null
           pms_grade?: string | null
           reporting_manager_id?: string | null
           updated_at?: string
@@ -1721,6 +1763,7 @@ export type Database = {
           created_at: string
           department_id: string | null
           id: string
+          level: string | null
           name: string
         }
         Insert: {
@@ -1728,6 +1771,7 @@ export type Database = {
           created_at?: string
           department_id?: string | null
           id?: string
+          level?: string | null
           name: string
         }
         Update: {
@@ -1735,6 +1779,7 @@ export type Database = {
           created_at?: string
           department_id?: string | null
           id?: string
+          level?: string | null
           name?: string
         }
         Relationships: [

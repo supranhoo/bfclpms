@@ -181,7 +181,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
-| `profiles` | User profiles linked to auth.users | `id`, `email`, `full_name`, `employee_code`, `designation`, `department_id`, `reporting_manager_id`, `pms_grade` |
+| `profiles` | User profiles linked to auth.users | `id`, `email`, `full_name`, `employee_code`, `designation`, `department_id`, `reporting_manager_id`, `pms_grade`, `level` |
 | `user_roles` | Role assignments | `user_id`, `role` (admin/manager/employee/auditor/management) |
 | `kpis` | Key Performance Indicators | `id`, `employee_id`, `category_id`, `kra_name`, `kpi_name`, `target_value`, `weightage`, `review_period`, `review_year`, `status`, `r5-r0` (thresholds), `require_resubmit_reason` |
 | `kpis` | Key Performance Indicators | `id`, `employee_id`, `category_id`, `kra_name`, `kpi_name`, `target_value`, `weightage`, `review_period`, `review_year`, `status`, `r5-r0` (thresholds) |
@@ -198,6 +198,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | `sub_branches` | Department subdivisions | `id`, `department_id`, `name`, `code` |
 | `designations` | Job titles | `id`, `name`, `code` |
 | `pms_grades` | Performance grade levels | `id`, `name`, `code`, `description` |
+| `levels` | Employee classification levels | `id`, `name`, `code`, `description` |
 
 #### Review & Workflow
 

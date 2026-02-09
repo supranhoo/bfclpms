@@ -126,6 +126,7 @@ interface EmployeeImportRow {
   businessUnit?: string;
   department?: string;
   pmsGrade?: string;
+  level?: string;
   managerEmployeeId?: string;
   managerName?: string;
   role?: string;
@@ -635,7 +636,8 @@ export default function ImportData() {
       division: getValue(['division', 'div']),
       businessUnit: getValue(['businessUnit', 'businessunit', 'business_unit', 'bu', 'unit']),
       department: getValue(['department', 'dept', 'dep', 'departmentName', 'departmentname', 'department_name']),
-      pmsGrade: getValue(['pmsGrade', 'pmsgrade', 'pms_grade', 'grade', 'level']),
+      pmsGrade: getValue(['pmsGrade', 'pmsgrade', 'pms_grade', 'grade']),
+      level: getValue(['level', 'employeeLevel', 'employee_level', 'lvl']),
       managerEmployeeId: getValue(['managerEmployeeId', 'manageremployeeid', 'manager_employee_id', 'managerId', 'managerid', 'manager_id', 'reportingTo', 'reportingto', 'reporting_to', 'reportsTo', 'reportsto', 'reports_to']),
       managerName: getValue(['managerName', 'managername', 'manager_name', 'reportingManager', 'reportingmanager', 'reporting_manager', 'supervisor']),
       role: getValue(['role', 'appRole', 'approle', 'app_role', 'userRole', 'userrole', 'user_role', 'systemRole', 'systemrole', 'system_role']),
@@ -1138,6 +1140,7 @@ export default function ImportData() {
               designation: row.designation || existingEmployee.designation,
               department_id: departmentId || existingEmployee.department_id,
               pms_grade: row.pmsGrade || existingEmployee.pms_grade,
+              level: row.level || (existingEmployee as any).level,
               reporting_manager_id: managerId || existingEmployee.reporting_manager_id,
             })
             .eq('id', existingEmployee.id);
@@ -1164,6 +1167,7 @@ export default function ImportData() {
               designation: sanitizeText(row.designation) || undefined,
               department_id: departmentId || undefined,
               pms_grade: sanitizeText(row.pmsGrade) || undefined,
+              level: sanitizeText(row.level) || undefined,
               reporting_manager_id: managerId || undefined,
             },
           });
@@ -1443,6 +1447,7 @@ export default function ImportData() {
         businessUnit: 'Plant',
         department: 'HR',
         pmsGrade: 'A',
+        level: 'Level 1',
         managerEmployeeId: '100002',
         managerName: 'Jane Smith',
       },
@@ -1468,6 +1473,7 @@ export default function ImportData() {
           email,
           designation,
           pms_grade,
+          level,
           department_id,
           reporting_manager_id,
           departments!profiles_department_fk(
@@ -1511,6 +1517,7 @@ export default function ImportData() {
           businessUnit: bu?.name || '',
           department: dept?.name || '',
           pmsGrade: profile.pms_grade || '',
+          level: (profile as any).level || '',
           managerEmployeeId: manager?.employee_code || '',
           managerName: manager?.full_name || '',
         };
@@ -1724,6 +1731,7 @@ export default function ImportData() {
                   <li><code>businessUnit</code> - Business Unit Name</li>
                   <li><code>department</code> - Department Name (must exist in system)</li>
                   <li><code>pmsGrade</code> - PMS Grade</li>
+                  <li><code>level</code> - Employee Level</li>
                   <li><code>managerEmployeeId</code> - Manager's Employee Code</li>
                   <li><code>managerName</code> - Manager's Full Name</li>
                 </ul>
@@ -1787,6 +1795,7 @@ export default function ImportData() {
                         <TableHead>Business Unit</TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>Grade</TableHead>
+                        <TableHead>Level</TableHead>
                         <TableHead>Manager ID</TableHead>
                         <TableHead>Manager Name</TableHead>
                       </TableRow>
@@ -1813,6 +1822,7 @@ export default function ImportData() {
                           <TableCell>{row.businessUnit || '-'}</TableCell>
                           <TableCell>{row.department || '-'}</TableCell>
                           <TableCell>{row.pmsGrade || '-'}</TableCell>
+                          <TableCell>{row.level || '-'}</TableCell>
                           <TableCell>{row.managerEmployeeId || '-'}</TableCell>
                           <TableCell>{row.managerName || '-'}</TableCell>
                         </TableRow>
