@@ -43,6 +43,7 @@ export default function OrgStructureImport() {
 
   const [importData, setImportData] = useState<OrgImportRow[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{
     divisions: number;
@@ -57,9 +58,15 @@ export default function OrgStructureImport() {
   const downloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
       ['division', 'divisionCode', 'businessUnit', 'businessUnitCode', 'department', 'departmentCode', 'subBranch', 'subBranchCode', 'designation', 'designationCode', 'pmsGrade', 'pmsGradeCode', 'level', 'levelCode'],
-      ['Head Office', 'HO', 'Technology', 'TECH', 'Software Development', 'SD', 'Frontend Team', 'FE', 'Senior Engineer', 'SE', 'Grade A', 'GA', 'Level 1', 'L1'],
-      ['Head Office', 'HO', 'Technology', 'TECH', 'QA', 'QA', '', '', 'Junior Engineer', 'JE', 'Grade B', 'GB', 'Level 2', 'L2'],
-      ['Regional', 'REG', 'Sales', 'SALES', 'North Region', 'NR', '', '', 'Manager', 'MGR', '', '', '', ''],
+      ['Head Office', 'HO', '', '', '', '', '', '', '', '', '', '', '', ''],
+      ['Regional', 'REG', '', '', '', '', '', '', '', '', '', '', '', ''],
+      ['', '', 'Technology', 'TECH', '', '', '', '', '', '', '', '', '', ''],
+      ['', '', 'Sales', 'SALES', '', '', '', '', '', '', '', '', '', ''],
+      ['', '', '', '', 'Software Dev', 'SD', '', '', '', '', '', '', '', ''],
+      ['', '', '', '', 'QA', 'QA', '', '', '', '', '', '', '', ''],
+      ['Head Office', 'HO', 'Technology', 'TECH', 'Frontend', 'FE', 'Team A', 'TA', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', '', '', 'Senior Engineer', 'SE', 'Grade A', 'GA', 'Level 1', 'L1'],
+      ['', '', '', '', '', '', '', '', 'Manager', 'MGR', 'Grade B', 'GB', 'Level 2', 'L2'],
     ]);
 
     const wb = XLSX.utils.book_new();
@@ -135,6 +142,7 @@ export default function OrgStructureImport() {
     if (!file) return;
 
     setErrors([]);
+    setWarnings([]);
     setImportResult(null);
 
     const reader = new FileReader();
@@ -187,21 +195,67 @@ export default function OrgStructureImport() {
           return;
         }
 
-        // Validate hierarchy: BU needs division, dept needs BU, sub-branch needs dept
-        const validationErrors: string[] = [];
-        filtered.forEach((row, i) => {
+        // Smart parent resolution: collect all entities from file, then check DB for unresolved parents
+        const fileDivisions = new Set(filtered.map(r => r.division?.toLowerCase()).filter(Boolean) as string[]);
+        const fileBUs = new Set(filtered.map(r => r.businessUnit?.toLowerCase()).filter(Boolean) as string[]);
+        const fileDepts = new Set(filtered.map(r => r.department?.toLowerCase()).filter(Boolean) as string[]);
+        const dbDivisions = divisions?.map(d => d.name.toLowerCase()) || [];
+        const dbBUs = businessUnits?.map(b => b.name.toLowerCase()) || [];
+        const dbDepts = departments?.map(d => d.name.toLowerCase()) || [];
+        const allDivisions = new Set([...fileDivisions, ...dbDivisions]);
+        const allBUs = new Set([...fileBUs, ...dbBUs]);
+        const allDepts = new Set([...fileDepts, ...dbDepts]);
+
+        const importWarnings: string[] = [];
+
+        // BUs without same-row division: check if parent can be resolved
+        const busWithoutDiv = new Set<string>();
+        filtered.forEach(row => {
           if (row.businessUnit && !row.division) {
-            validationErrors.push(`Row ${i + 2}: Business Unit "${row.businessUnit}" requires a Division`);
-          }
-          if (row.department && !row.businessUnit) {
-            validationErrors.push(`Row ${i + 2}: Department "${row.department}" requires a Business Unit`);
-          }
-          if (row.subBranch && !row.department) {
-            validationErrors.push(`Row ${i + 2}: Sub-Branch "${row.subBranch}" requires a Department`);
+            if (!businessUnits?.some(b => b.name.toLowerCase() === row.businessUnit!.toLowerCase())) {
+              // New BU without same-row parent
+              if (allDivisions.size === 1) {
+                // Auto-assign — will be handled in import logic
+              } else if (allDivisions.size === 0) {
+                busWithoutDiv.add(row.businessUnit);
+              } else {
+                busWithoutDiv.add(row.businessUnit);
+              }
+            }
           }
         });
+        if (busWithoutDiv.size > 0 && allDivisions.size !== 1) {
+          importWarnings.push(`Business Units without a Division specified: ${[...busWithoutDiv].join(', ')}. ${allDivisions.size === 0 ? 'No divisions found — these will be skipped.' : 'Multiple divisions exist — these will be skipped unless only one division is available.'}`);
+        }
 
-        setErrors(validationErrors);
+        // Depts without same-row BU
+        const deptsWithoutBU = new Set<string>();
+        filtered.forEach(row => {
+          if (row.department && !row.businessUnit) {
+            if (!departments?.some(d => d.name.toLowerCase() === row.department!.toLowerCase())) {
+              if (allBUs.size !== 1) deptsWithoutBU.add(row.department);
+            }
+          }
+        });
+        if (deptsWithoutBU.size > 0 && allBUs.size !== 1) {
+          importWarnings.push(`Departments without a Business Unit specified: ${[...deptsWithoutBU].join(', ')}. ${allBUs.size === 0 ? 'No business units found — these will be skipped.' : 'Multiple business units exist — these will be skipped unless only one BU is available.'}`);
+        }
+
+        // Sub-branches without same-row dept
+        const subsWithoutDept = new Set<string>();
+        filtered.forEach(row => {
+          if (row.subBranch && !row.department) {
+            if (!subBranches?.some(s => s.name.toLowerCase() === row.subBranch!.toLowerCase())) {
+              if (allDepts.size !== 1) subsWithoutDept.add(row.subBranch);
+            }
+          }
+        });
+        if (subsWithoutDept.size > 0 && allDepts.size !== 1) {
+          importWarnings.push(`Sub-Branches without a Department specified: ${[...subsWithoutDept].join(', ')}. ${allDepts.size === 0 ? 'No departments found — these will be skipped.' : 'Multiple departments exist — these will be skipped unless only one department is available.'}`);
+        }
+
+        setWarnings(importWarnings);
+        setErrors([]);
         setImportData(filtered);
       } catch (err: any) {
         setErrors([`Failed to parse file: ${err.message}`]);
@@ -226,14 +280,77 @@ export default function OrgStructureImport() {
       const uniqueDesignations = new Map<string, string>();
       const uniquePmsGrades = new Map<string, string>();
       const uniqueLevels = new Map<string, string>();
+      // First pass: collect all divisions from file
       for (const row of importData) {
         if (row.division) uniqueDivisions.set(row.division, row.divisionCode || '');
-        if (row.businessUnit && row.division) uniqueBUs.set(row.businessUnit, { code: row.businessUnitCode || '', division: row.division });
-        if (row.department && row.businessUnit) uniqueDepts.set(row.department, { code: row.departmentCode || '', businessUnit: row.businessUnit });
-        if (row.subBranch && row.department) uniqueSubBranches.set(row.subBranch, { code: row.subBranchCode || '', department: row.department });
         if (row.designation) uniqueDesignations.set(row.designation, row.designationCode || '');
         if (row.pmsGrade) uniquePmsGrades.set(row.pmsGrade, row.pmsGradeCode || '');
         if (row.level) uniqueLevels.set(row.level, row.levelCode || '');
+      }
+
+      // Build division lookup (file + DB) for parent resolution
+      const allDivNames = new Set<string>();
+      uniqueDivisions.forEach((_, name) => allDivNames.add(name.toLowerCase()));
+      divisions?.forEach(d => allDivNames.add(d.name.toLowerCase()));
+
+      const allBUNames = new Set<string>();
+      const allDeptNames = new Set<string>();
+
+      // Second pass: collect BUs with smart parent resolution
+      for (const row of importData) {
+        if (row.businessUnit) {
+          let resolvedDivision = row.division || '';
+          if (!resolvedDivision) {
+            // Try auto-assign if exactly one division exists
+            if (allDivNames.size === 1) {
+              const singleDiv = [...allDivNames][0];
+              // Find original-case name from file or DB
+              resolvedDivision = [...uniqueDivisions.keys()].find(n => n.toLowerCase() === singleDiv) ||
+                divisions?.find(d => d.name.toLowerCase() === singleDiv)?.name || '';
+            }
+          }
+          if (resolvedDivision) {
+            uniqueBUs.set(row.businessUnit, { code: row.businessUnitCode || '', division: resolvedDivision });
+          }
+          allBUNames.add(row.businessUnit.toLowerCase());
+        }
+      }
+      businessUnits?.forEach(b => allBUNames.add(b.name.toLowerCase()));
+
+      // Third pass: collect Depts with smart parent resolution
+      for (const row of importData) {
+        if (row.department) {
+          let resolvedBU = row.businessUnit || '';
+          if (!resolvedBU) {
+            if (allBUNames.size === 1) {
+              const singleBU = [...allBUNames][0];
+              resolvedBU = [...uniqueBUs.keys()].find(n => n.toLowerCase() === singleBU) ||
+                businessUnits?.find(b => b.name.toLowerCase() === singleBU)?.name || '';
+            }
+          }
+          if (resolvedBU) {
+            uniqueDepts.set(row.department, { code: row.departmentCode || '', businessUnit: resolvedBU });
+          }
+          allDeptNames.add(row.department.toLowerCase());
+        }
+      }
+      departments?.forEach(d => allDeptNames.add(d.name.toLowerCase()));
+
+      // Fourth pass: collect Sub-Branches with smart parent resolution
+      for (const row of importData) {
+        if (row.subBranch) {
+          let resolvedDept = row.department || '';
+          if (!resolvedDept) {
+            if (allDeptNames.size === 1) {
+              const singleDept = [...allDeptNames][0];
+              resolvedDept = [...uniqueDepts.keys()].find(n => n.toLowerCase() === singleDept) ||
+                departments?.find(d => d.name.toLowerCase() === singleDept)?.name || '';
+            }
+          }
+          if (resolvedDept) {
+            uniqueSubBranches.set(row.subBranch, { code: row.subBranchCode || '', department: resolvedDept });
+          }
+        }
       }
 
       // 1. Create divisions
@@ -388,7 +505,7 @@ export default function OrgStructureImport() {
             <Building2 className="h-5 w-5" />
             Organization Structure Import
           </CardTitle>
-          <CardDescription>Upload an Excel file to bulk import divisions, business units, departments, sub-branches, designations, PMS grades and levels</CardDescription>
+          <CardDescription>Upload an Excel file to bulk import divisions, business units, departments, sub-branches, designations, PMS grades and levels. Each column can be filled independently — rows don't need to be connected across all columns.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-4">
@@ -434,8 +551,8 @@ export default function OrgStructureImport() {
             <Alert className="mt-4">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                <strong>Hierarchy rules:</strong> Business Unit requires a Division, Department requires a Business Unit, Sub-Branch requires a Department.
-                Existing entries are skipped (matched by name). Codes are updated if provided.
+                <strong>Flexible import:</strong> You can add all Divisions in separate rows, all Business Units in other rows, etc. — they don't need to be on the same row.
+                If a child entity (e.g. Business Unit) doesn't have a parent on the same row, it will be auto-assigned if only one parent exists. Existing entries are matched by name and codes are updated if provided.
               </AlertDescription>
             </Alert>
           </div>
@@ -449,6 +566,18 @@ export default function OrgStructureImport() {
           <AlertDescription>
             <ul className="list-disc list-inside mt-2 max-h-32 overflow-auto">
               {errors.map((err, i) => <li key={i}>{err}</li>)}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {warnings.length > 0 && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Warnings (import will proceed without these items)</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc list-inside mt-2 max-h-32 overflow-auto">
+              {warnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>
           </AlertDescription>
         </Alert>
@@ -487,7 +616,7 @@ export default function OrgStructureImport() {
                 )}
               </CardDescription>
             </div>
-            <Button onClick={handleImport} disabled={isImporting || errors.length > 0}>
+            <Button onClick={handleImport} disabled={isImporting}>
               {isImporting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
