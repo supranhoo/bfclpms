@@ -2232,23 +2232,45 @@ The system supports two email providers:
   - **From Address**: Email address for outgoing mail
   - **From Name**: Display name for outgoing mail
 
-#### SMTP Settings in Database
+#### 3. Microsoft 365 / Graph API (OAuth2)
+- Best for organizations using Outlook / Microsoft 365 where SMTP STARTTLS is required (not supported in edge runtime)
+- Uses Microsoft Graph API with OAuth2 client credentials flow — no SMTP connection needed
+- **Azure AD Setup**:
+  1. Register an app in [Azure Portal → App Registrations](https://portal.azure.com/#blade/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/RegisteredApps)
+  2. Note the **Tenant ID** and **Client ID**
+  3. Create a **Client Secret**
+  4. Add API Permission: **Microsoft Graph → Application → Mail.Send** and grant admin consent
+  5. The "From Address" must be a valid mailbox (user or shared) in the tenant
+- Configure in Admin → System Settings → Email tab:
+  - **Tenant ID**: Azure AD Tenant ID
+  - **Client ID**: Application (client) ID
+  - **Client Secret**: Stored securely via "Update Secret" button (same mechanism as SMTP password)
+  - **From Address**: Must be a valid Microsoft 365 mailbox
+  - **From Name**: Display name for outgoing mail
+
+#### Email Settings in Database
 
 | Setting Key | Description |
 |-------------|-------------|
-| `email_provider` | `resend` or `smtp` |
+| `email_provider` | `resend`, `smtp`, or `microsoft_graph` |
 | `smtp_host` | SMTP server hostname |
 | `smtp_port` | SMTP server port (default: 587) |
 | `smtp_security` | `tls`, `starttls`, or `none` |
 | `smtp_username` | SMTP authentication username |
-| `smtp_from_address` | From email address |
-| `smtp_from_name` | From display name |
+| `smtp_from_address` | SMTP from email address |
+| `smtp_from_name` | SMTP from display name |
+| `graph_tenant_id` | Azure AD Tenant ID |
+| `graph_client_id` | Azure AD Application Client ID |
+| `graph_from_address` | Microsoft 365 mailbox address |
+| `graph_from_name` | Graph API from display name |
+| `graph_client_secret` | Stored securely in system_settings (admin-only) |
 
 ### Edge Functions
 
 | Function | Endpoint | Purpose |
 |----------|----------|---------|
-| `send-email-notification` | POST | Send transactional emails |
+| `send-email-notification` | POST | Send transactional emails (Resend, SMTP, or Microsoft Graph) |
+| `update-smtp-password` | POST | Securely store SMTP password or Graph client secret |
 | `create-employee` | POST | Create new employee accounts |
 | `reset-password` | POST | Generate password reset links |
 | `auto-rollover-kpis` | POST | Copy KPIs to new period |

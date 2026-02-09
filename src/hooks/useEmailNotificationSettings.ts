@@ -15,7 +15,7 @@ export type EmailEventType =
   | 'pip_milestone_reminder'
   | 'pip_completed';
 
-export type EmailProvider = 'resend' | 'smtp';
+export type EmailProvider = 'resend' | 'smtp' | 'microsoft_graph';
 export type SmtpSecurity = 'tls' | 'starttls' | 'none';
 
 export interface EmailNotificationSettings {
@@ -33,6 +33,11 @@ export interface EmailNotificationSettings {
   smtpUsername: string;
   smtpFromAddress: string;
   smtpFromName: string;
+  // Microsoft Graph configuration
+  graphTenantId: string;
+  graphClientId: string;
+  graphFromAddress: string;
+  graphFromName: string;
 }
 
 const EMAIL_SETTING_KEYS = [
@@ -49,6 +54,10 @@ const EMAIL_SETTING_KEYS = [
   'smtp_username',
   'smtp_from_address',
   'smtp_from_name',
+  'graph_tenant_id',
+  'graph_client_id',
+  'graph_from_address',
+  'graph_from_name',
 ];
 
 export function useEmailNotificationSettings() {
@@ -110,6 +119,11 @@ export function useEmailNotificationSettings() {
         smtpUsername: parseStringValue(settingsMap.smtp_username) || '',
         smtpFromAddress: parseStringValue(settingsMap.smtp_from_address) || '',
         smtpFromName: parseStringValue(settingsMap.smtp_from_name) || '',
+        // Microsoft Graph configuration
+        graphTenantId: parseStringValue(settingsMap.graph_tenant_id) || '',
+        graphClientId: parseStringValue(settingsMap.graph_client_id) || '',
+        graphFromAddress: parseStringValue(settingsMap.graph_from_address) || '',
+        graphFromName: parseStringValue(settingsMap.graph_from_name) || '',
       };
     },
   });
@@ -135,6 +149,10 @@ export function useUpdateEmailSettings() {
         { key: 'smtp_username', value: settings.smtpUsername },
         { key: 'smtp_from_address', value: settings.smtpFromAddress },
         { key: 'smtp_from_name', value: settings.smtpFromName },
+        { key: 'graph_tenant_id', value: settings.graphTenantId },
+        { key: 'graph_client_id', value: settings.graphClientId },
+        { key: 'graph_from_address', value: settings.graphFromAddress },
+        { key: 'graph_from_name', value: settings.graphFromName },
       ];
       
       for (const { key, value } of updates) {

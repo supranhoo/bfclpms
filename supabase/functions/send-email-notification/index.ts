@@ -32,6 +32,97 @@ const getSmtpPassword = async (supabase: any): Promise<string | null> => {
   return null;
 };
 
+// Get a secret from system_settings
+const getSecretFromSettings = async (supabase: any, key: string): Promise<string | null> => {
+  try {
+    const { data } = await supabase
+      .from("system_settings")
+      .select("setting_value")
+      .eq("setting_key", key)
+      .single();
+    if (data?.setting_value) {
+      const val = data.setting_value;
+      if (typeof val === "string") return val.replace(/^"|"$/g, "");
+      return String(val);
+    }
+  } catch (e) {
+    console.error(`Failed to read ${key} from system_settings:`, e);
+  }
+  return null;
+};
+
+// Send email via Microsoft Graph API (OAuth2 client credentials)
+const sendViaMicrosoftGraph = async (
+  supabase: any,
+  tenantId: string,
+  clientId: string,
+  fromAddress: string,
+  fromName: string,
+  toEmail: string,
+  subject: string,
+  html: string
+): Promise<void> => {
+  const clientSecret = await getSecretFromSettings(supabase, "graph_client_secret");
+  if (!clientSecret) {
+    throw new Error("Microsoft Graph Client Secret not configured. Please set it in System Settings → Email.");
+  }
+
+  console.log(`Getting OAuth2 token for tenant ${tenantId}`);
+
+  const tokenUrl = `https://login.microsoftonline.com/${tenantId.trim()}/oauth2/v2.0/token`;
+  const tokenBody = new URLSearchParams({
+    client_id: clientId.trim(),
+    client_secret: clientSecret,
+    scope: "https://graph.microsoft.com/.default",
+    grant_type: "client_credentials",
+  });
+
+  const tokenResponse = await fetch(tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: tokenBody.toString(),
+  });
+
+  if (!tokenResponse.ok) {
+    const tokenError = await tokenResponse.text();
+    console.error("OAuth2 token error:", tokenError);
+    throw new Error(`Failed to get Microsoft OAuth2 token: ${tokenResponse.status}`);
+  }
+
+  const tokenData = await tokenResponse.json();
+  const accessToken = tokenData.access_token;
+
+  console.log(`Sending email via Graph API from ${fromAddress} to ${toEmail}`);
+
+  const graphUrl = `https://graph.microsoft.com/v1.0/users/${fromAddress.trim()}/sendMail`;
+  const graphBody = {
+    message: {
+      subject,
+      body: { contentType: "HTML", content: html },
+      from: { emailAddress: { address: fromAddress.trim(), name: fromName.trim() } },
+      toRecipients: [{ emailAddress: { address: toEmail.trim() } }],
+    },
+    saveToSentItems: false,
+  };
+
+  const graphResponse = await fetch(graphUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(graphBody),
+  });
+
+  if (!graphResponse.ok) {
+    const graphError = await graphResponse.text();
+    console.error("Graph API send error:", graphError);
+    throw new Error(`Microsoft Graph API error: ${graphResponse.status} - ${graphError}`);
+  }
+
+  console.log("Microsoft Graph email sent successfully");
+};
+
 interface TestEmailRequest {
   test: true;
   recipient_email: string;
@@ -395,7 +486,8 @@ From Address: ${smtp_from_address}`, { logoUrl: '', footerText: '' });
         .select("setting_key, setting_value")
         .in("setting_key", [
           "email_sender_name", "email_sender_address", "email_company_logo_url", "email_custom_footer",
-          "email_provider", "smtp_host", "smtp_port", "smtp_security", "smtp_username", "smtp_from_address", "smtp_from_name"
+          "email_provider", "smtp_host", "smtp_port", "smtp_security", "smtp_username", "smtp_from_address", "smtp_from_name",
+          "graph_tenant_id", "graph_client_id", "graph_from_address", "graph_from_name"
         ]);
 
       const settingsMap = Object.fromEntries(
@@ -418,6 +510,9 @@ From Address: ${smtp_from_address}`, { logoUrl: '', footerText: '' });
       if (provider === 'smtp') {
         senderName = parseValue(settingsMap.smtp_from_name) || 'PMS Notifications';
         senderEmail = parseValue(settingsMap.smtp_from_address) || '';
+      } else if (provider === 'microsoft_graph') {
+        senderName = parseValue(settingsMap.graph_from_name) || 'PMS Notifications';
+        senderEmail = parseValue(settingsMap.graph_from_address) || '';
       } else {
         senderName = parseValue(settingsMap.email_sender_name) || 'PMS Notifications';
         senderEmail = parseValue(settingsMap.email_sender_address) || 'onboarding@resend.dev';
@@ -456,6 +551,22 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
         );
 
         return new Response(JSON.stringify({ success: true, message: "Test email sent via SMTP" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      } else if (provider === 'microsoft_graph') {
+        await sendViaMicrosoftGraph(
+          supabase,
+          parseValue(settingsMap.graph_tenant_id),
+          parseValue(settingsMap.graph_client_id),
+          senderEmail,
+          senderName,
+          recipient_email,
+          "[PMS] Test Email - Configuration Successful",
+          testHtml
+        );
+
+        return new Response(JSON.stringify({ success: true, message: "Test email sent via Microsoft Graph" }), {
           status: 200,
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
@@ -521,6 +632,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       .in("setting_key", [
         "email_sender_name", "email_sender_address", "email_company_logo_url", "email_custom_footer",
         "email_provider", "smtp_host", "smtp_port", "smtp_security", "smtp_username", "smtp_from_address", "smtp_from_name",
+        "graph_tenant_id", "graph_client_id", "graph_from_address", "graph_from_name",
         `email_template_${event_type}`
       ]);
 
@@ -544,6 +656,9 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     if (provider === 'smtp') {
       senderName = parseValue(settingsMap.smtp_from_name) || 'PMS Notifications';
       senderEmail = parseValue(settingsMap.smtp_from_address) || '';
+    } else if (provider === 'microsoft_graph') {
+      senderName = parseValue(settingsMap.graph_from_name) || 'PMS Notifications';
+      senderEmail = parseValue(settingsMap.graph_from_address) || '';
     } else {
       senderName = parseValue(settingsMap.email_sender_name) || 'PMS Notifications';
       senderEmail = parseValue(settingsMap.email_sender_address) || 'onboarding@resend.dev';
@@ -606,6 +721,22 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       );
 
       return new Response(JSON.stringify({ success: true, message: "Email sent via SMTP" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    } else if (provider === 'microsoft_graph') {
+      await sendViaMicrosoftGraph(
+        supabase,
+        parseValue(settingsMap.graph_tenant_id),
+        parseValue(settingsMap.graph_client_id),
+        senderEmail,
+        senderName,
+        recipient_email,
+        subject,
+        html
+      );
+
+      return new Response(JSON.stringify({ success: true, message: "Email sent via Microsoft Graph" }), {
         status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });

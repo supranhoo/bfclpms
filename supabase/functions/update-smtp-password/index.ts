@@ -7,6 +7,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const ALLOWED_KEYS = ["smtp_password", "graph_client_secret"];
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -55,35 +57,45 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Parse request body
-    const { password } = await req.json();
-    if (!password || typeof password !== "string" || password.trim().length === 0) {
-      return new Response(JSON.stringify({ error: "Password is required" }), {
+    const body = await req.json();
+    const password = body.password;
+    const settingKey = body.setting_key || "smtp_password";
+
+    if (!ALLOWED_KEYS.includes(settingKey)) {
+      return new Response(JSON.stringify({ error: "Invalid setting key" }), {
         status: 400,
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
     }
 
-    // Upsert the password into system_settings
+    if (!password || typeof password !== "string" || password.trim().length === 0) {
+      return new Response(JSON.stringify({ error: "Value is required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Upsert the secret into system_settings
     const { error: upsertError } = await serviceClient
       .from("system_settings")
       .upsert(
         {
-          setting_key: "smtp_password",
+          setting_key: settingKey,
           setting_value: password,
-          description: "SMTP password stored via admin UI",
+          description: `${settingKey} stored via admin UI`,
         },
         { onConflict: "setting_key" }
       );
 
     if (upsertError) {
-      console.error("Failed to store SMTP password:", upsertError);
-      return new Response(JSON.stringify({ error: "Failed to store password" }), {
+      console.error(`Failed to store ${settingKey}:`, upsertError);
+      return new Response(JSON.stringify({ error: "Failed to store secret" }), {
         status: 500,
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
     }
 
-    console.log(`SMTP password updated by admin ${user.id}`);
+    console.log(`${settingKey} updated by admin ${user.id}`);
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
