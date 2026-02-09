@@ -2410,4 +2410,45 @@ The inbox supports snoozing notifications to defer them for later review.
 
 ---
 
+### Testing
+
+The project uses **Vitest** with **React Testing Library** for automated testing. Tests are co-located with source files using the `*.test.ts(x)` naming convention.
+
+#### Test Coverage Summary
+
+| Test File | Module | Tests |
+|-----------|--------|-------|
+| `src/lib/ratingCalculation.test.ts` | Rating engine (thresholds, scoring) | 110+ |
+| `src/lib/inboxSearchParser.test.ts` | Advanced search syntax parsing | 8 |
+| `src/lib/textFormatting.test.ts` | Text formatting utilities | ~10 |
+| `src/lib/dailyAggregation.test.ts` | Daily KPI scoring & aggregation | 33 |
+| `src/lib/cumulativeScoring.test.ts` | Cumulative scores & trend detection | 19 |
+| `src/lib/frequencyUtils.test.ts` | Frequency cycles & locking logic | 25 |
+| `src/lib/inboxUtils.test.ts` | Inbox grouping, filtering, SLA | 25 |
+| `src/lib/importValidation.test.ts` | Import schema validation | 11 |
+| `src/lib/dateUtils.test.ts` | Date/time formatting | 5 |
+| `src/components/ui/ErrorBoundary.test.tsx` | Error boundary rendering & recovery | 5 |
+
+**Total: ~250+ tests**
+
+#### Running Tests
+
+Tests are run via Vitest:
+```bash
+npx vitest run              # Run all tests
+npx vitest run src/lib/     # Run only lib tests
+npx vitest --watch           # Watch mode
+```
+
+#### Performance Optimizations
+
+The application implements several performance optimizations:
+
+- **Code Splitting**: All page components use `React.lazy()` with `Suspense` boundaries, reducing initial bundle size by loading pages on demand.
+- **Query Caching**: React Query configured with 5-minute `staleTime` and 10-minute `gcTime`, with `refetchOnWindowFocus` disabled to minimize redundant API calls.
+- **Memoization**: Dashboard and QueryInbox pages use targeted `useMemo`/`useCallback` for expensive derived data and event handlers.
+- **Error Boundaries**: Top-level boundary in `App.tsx` plus per-route boundary in `DashboardLayout` for graceful error recovery.
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
