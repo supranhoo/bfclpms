@@ -1,73 +1,77 @@
 
 
-# Configurable Backup Schedules
+# RLS Security Fixes
 
-## Overview
-Replace the fixed "Weekly Sunday 2 AM" backup toggle with a configurable schedule builder. Admins can choose the frequency (daily, weekly, monthly), the day of the week (for weekly), and the time -- all from the UI.
+## Summary
+Fix 3 overly permissive INSERT policies and tighten 2 public READ policies to require authentication.
 
-## How It Works
+## Changes (single database migration)
 
-1. Admin enables scheduled backups and picks frequency, day, and time from dropdowns.
-2. The selected schedule is saved as a system setting (`backup_schedule`), e.g. `{"frequency":"weekly","day":"sunday","hour":2}`.
-3. A backend function (`update-backup-schedule`) receives the new schedule, deletes the old `pg_cron` job, and creates a new one with the correct cron expression.
-4. The UI shows a human-readable summary of the active schedule.
+### 1. Fix "Always True" INSERT policies
+Replace `WITH CHECK (true)` on these 3 tables so only service-role or admin can insert:
 
-## Schedule Options
+- **`kra_rollover_logs`**: Drop "System can insert rollover logs", replace with admin-or-service-role policy
+- **`notifications`**: Drop "System can insert notifications", replace with a policy allowing:
+  - Service role (for triggers/edge functions)
+  - Authenticated users inserting their own notifications (where `user_id = auth.uid()`)
+- **`pip_audit_logs`**: Drop "System can insert audit logs", replace with admin-or-service-role policy
 
-| Frequency | Additional Options | Cron Example |
-|-----------|-------------------|--------------|
-| Daily | Hour (0-23) | `0 2 * * *` |
-| Weekly | Day of week + Hour | `0 2 * * 0` (Sunday) |
-| Monthly | Day of month (1-28) + Hour | `0 2 15 * *` (15th) |
+### 2. Tighten public READ policies
+- **`app_settings`**: Change "Anyone can read app_settings" from `USING (true)` on `public` role to `USING (true)` on `authenticated` role only
+- **`workflow_settings`**: Change "Anyone can view workflow settings" from public to `authenticated` role only
 
-## Database Changes
+### 3. Tighten profiles READ
+- Review existing profiles SELECT policy; if it allows unauthenticated access, restrict to `authenticated` role
 
-### New/Updated System Setting
-- Key: `backup_schedule` 
-- Value: JSON object `{"frequency":"weekly","day":"sunday","hour":2,"dayOfMonth":1}`
-- The existing `auto_backup_enabled` setting stays as the on/off toggle.
+## Technical Details
 
-### Edge Function: `update-backup-schedule`
-- Accepts `{ frequency, day, hour, dayOfMonth }` from the admin UI
-- Builds the cron expression from the parameters
-- Calls `cron.unschedule('weekly-database-backup')` to remove the old job
-- Calls `cron.schedule(...)` to create the new job with the updated expression
-- Saves the schedule JSON to `system_settings`
-- Requires admin role
+All changes will be in a single SQL migration:
 
-## Frontend Changes
+```sql
+-- 1a. kra_rollover_logs: replace permissive INSERT
+DROP POLICY IF EXISTS "System can insert rollover logs" ON kra_rollover_logs;
+CREATE POLICY "Admins and service role can insert rollover logs"
+  ON kra_rollover_logs FOR INSERT
+  TO authenticated
+  WITH CHECK (has_role(auth.uid(), 'admin'));
 
-### `src/hooks/useBackups.ts`
-- Add `useBackupSchedule()` hook: reads the `backup_schedule` system setting
-- Add `useUpdateBackupSchedule()` mutation: calls the `update-backup-schedule` edge function
-- Keep `useAutoBackupSetting()` for the enable/disable toggle
+-- 1b. notifications: replace permissive INSERT
+DROP POLICY IF EXISTS "System can insert notifications" ON notifications;
+CREATE POLICY "Users and service role can insert notifications"
+  ON notifications FOR INSERT
+  TO authenticated
+  WITH CHECK (user_id = auth.uid() OR has_role(auth.uid(), 'admin'));
 
-### `src/components/admin/BackupRestoreTab.tsx`
-- Replace the simple toggle section with a "Scheduled Backup" card containing:
-  - Enable/disable switch (existing toggle)
-  - Frequency dropdown: Daily, Weekly, Monthly
-  - Day of week dropdown (shown only when frequency = weekly): Monday through Sunday
-  - Day of month dropdown (shown only when frequency = monthly): 1-28
-  - Hour dropdown: 00:00 - 23:00 UTC
-  - "Save Schedule" button to apply changes
-  - Human-readable summary: e.g. "Every Sunday at 02:00 UTC"
+-- 1c. pip_audit_logs: replace permissive INSERT
+DROP POLICY IF EXISTS "System can insert audit logs" ON pip_audit_logs;
+CREATE POLICY "Admins and service role can insert audit logs"
+  ON pip_audit_logs FOR INSERT
+  TO authenticated
+  WITH CHECK (has_role(auth.uid(), 'admin'));
 
-### `DOCUMENTATION.md`
-- Update the backup section to document configurable schedules
+-- 2a. app_settings: restrict to authenticated
+DROP POLICY IF EXISTS "Anyone can read app_settings" ON app_settings;
+CREATE POLICY "Authenticated users can read app_settings"
+  ON app_settings FOR SELECT
+  TO authenticated
+  USING (true);
 
-## File Summary
+-- 2b. workflow_settings: restrict to authenticated
+DROP POLICY IF EXISTS "Anyone can view workflow settings" ON workflow_settings;
+CREATE POLICY "Authenticated users can view workflow settings"
+  ON workflow_settings FOR SELECT
+  TO authenticated
+  USING (true);
+```
 
-| File | Action |
-|------|--------|
-| `supabase/functions/update-backup-schedule/index.ts` | Create |
-| `src/hooks/useBackups.ts` | Modify (add schedule hooks) |
-| `src/components/admin/BackupRestoreTab.tsx` | Modify (schedule UI) |
-| `DOCUMENTATION.md` | Update |
+Profiles table policy will be reviewed and tightened similarly if needed.
 
-## Technical Considerations
+## Files Modified
+- New SQL migration only
+- `DOCUMENTATION.md` updated with security policy changes
 
-- Day of month is capped at 28 to avoid issues with shorter months (Feb).
-- The cron job name stays `weekly-database-backup` (reused) so there is always exactly one scheduled job.
-- If the admin disables scheduled backups, the cron job is unscheduled entirely. Re-enabling recreates it with the saved schedule.
-- The edge function uses `supabase_functions.http_request` or direct SQL via service role to manage cron jobs.
+## Risk Assessment
+- **Low risk**: These are policy tightening changes only
+- **Edge functions** using service role key bypass RLS entirely, so triggers/cron jobs (rollover, notifications) will continue working
+- **Frontend** already requires authentication before accessing any admin pages, so restricting to `authenticated` role won't break anything
 
