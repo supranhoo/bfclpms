@@ -1,111 +1,112 @@
 
-# Email Notification Audit: Gap Analysis and Recommendations
 
-## Current Architecture
+# Enhanced KPI Observations System
 
-The system uses a **database trigger** (`trigger_send_email_on_notification`) that fires on every INSERT into the `notifications` table. This trigger calls the `send-email-notification` edge function via `pg_net`, passing the notification's `type` as the `event_type`.
+## Overview
 
-## Critical Issue: Notification Type Mismatch
+Upgrade the Observation system with 3 changes: replace URL field with file upload, remove score impact, and add reply threads with resolution status. Keep Queries as the separate formal escalation channel.
 
-The **biggest problem** is that the notification types used in the database triggers **do not match** the email template event types. The email system will silently skip these notifications because the event types are not in the enabled events list.
+## What Changes
 
-### Notification types inserted by DB triggers vs. Email template types:
+### 1. Replace Evidence URL with File Upload
+
+Replace the text URL input in AddObservationDialog with the existing `MultiFileUpload` component (already used throughout the app for up to 5 files).
+
+- **Remove**: The `<Input type="url">` field and `Link` icon
+- **Add**: The `MultiFileUpload` component pointing to the `review-evidence` storage bucket
+- **DB**: Already has `evidence_urls` (JSONB) column -- just start using it instead of `evidence_url`
+
+### 2. Remove Score Impact
+
+Remove the score impact slider from the Add/Edit dialog, the score impact badge from ObservationCard, and the score summary section from KpiObservationsSection.
+
+- **Remove from dialog**: The `Slider` for score_impact (-5 to +5) and its labels
+- **Remove from card**: The "+X Score" badge display
+- **Remove from section**: The "Score Impact: Base → Final" summary footer
+- **DB**: Set `score_impact` default to 0, keep column for backward compatibility
+- **Code**: Remove `calculateScoreWithObservations` usage and the import
+
+### 3. Add Reply Thread and Resolution Status
+
+This is the biggest change. Add a `kpi_observation_replies` table and new status flow.
+
+#### New Database Table: `kpi_observation_replies`
 
 ```text
-DB Trigger Type              Email Template Type     Status
---------------------------   ---------------------   --------
-kpi_submitted                kpi_submitted           MATCH
-kpi_approved                 manager_approved        MISMATCH
-kpi_ready_for_audit          (none)                  NO TEMPLATE
-kpi_ready_for_management     (none)                  NO TEMPLATE
-kpi_finalized                final_approved           MISMATCH
-query_raised                 query_raised             MATCH
-query_resolved               query_resolved           MATCH
-query_response_received      (none)                  NO TEMPLATE
-admin_status_change          (none)                  NO TEMPLATE
-admin_data_entry             (none)                  NO TEMPLATE
-admin_data_override          (none)                  NO TEMPLATE
-org_kpi_sent_back            (none)                  NO TEMPLATE
+id              UUID (PK)
+observation_id  UUID (FK -> kpi_observations)
+reply_by        UUID (FK -> profiles)
+reply_text      TEXT (not null)
+evidence_urls   JSONB (nullable, multi-file)
+created_at      TIMESTAMPTZ
 ```
 
-### Email templates defined but NEVER triggered (no matching notification inserts):
+#### New Column on `kpi_observations`
 
 ```text
-Email Template Type          Status
---------------------------   --------------------------
-manager_approved             Never triggered (DB uses 'kpi_approved')
-manager_rejected             Never triggered (no notification insert)
-kra_assigned                 Never triggered (no notification insert)
-period_locked                Never triggered (no notification insert)
-pip_initiated                Never triggered (no notification insert)
-pip_milestone_reminder       Never triggered (no notification insert)
-pip_completed                Never triggered (no notification insert)
+status  TEXT  DEFAULT 'open'   -- values: 'open', 'acknowledged', 'resolved'
 ```
 
-## Plan: Fix All Gaps
+#### Status Flow
 
-### Step 1: Fix Type Mismatches in DB Trigger
+- **open**: Default when observation is created (replaces current `is_applied` = false)
+- **acknowledged**: The KPI owner or recipient has seen and replied to it
+- **resolved**: The observation raiser marks it as resolved (no negative impact counted)
 
-Update the `send_email_on_notification()` trigger function to **map** the internal notification types to the email template event types. This avoids breaking in-app notification display while ensuring emails use the correct templates.
+#### Who Can Do What
 
-Add a type mapping inside the trigger:
-- `kpi_approved` (with metadata stage=manager) maps to `manager_approved`
-- `kpi_approved` (with metadata stage=auditor) maps to `audit_approved` (new template needed, or reuse `manager_approved`)
-- `kpi_finalized` maps to `final_approved`
-- `kpi_ready_for_audit` maps to `manager_approved` (as FYI to auditors)
-- `kpi_ready_for_management` maps to a new or existing template
+- **Raiser** (person who created observation): Can mark as "resolved"
+- **KPI Owner** (employee whose KPI it is): Can reply to observations
+- **Any reviewer in chain**: Can reply to observations
+- **Resolution**: Only the raiser can close/resolve -- this ensures accountability
 
-### Step 2: Add Missing Notification Triggers
+#### UI Changes
 
-Create new database triggers/inserts for events that currently have email templates but no notification sources:
+**ObservationCard** -- expanded with:
+- Status badge: Open (yellow) / Acknowledged (blue) / Resolved (green)
+- Inline reply thread (expandable, like a mini chat)
+- "Reply" button for the KPI owner and reviewers
+- "Mark Resolved" button (only visible to the observation raiser)
 
-1. **manager_rejected / Send Back**: Add a notification INSERT in the KPI status trigger when status goes from `self_review`/`manager_check` back to `kra_set` (send-back flow).
-2. **kra_assigned**: Add a notification INSERT when KPIs are created (admin import or manual creation).
-3. **period_locked**: Add a notification INSERT in the review period lock logic.
-4. **pip_initiated**: Add a notification INSERT in `usePIP.ts` when a PIP is created.
-5. **pip_milestone_reminder**: This requires a scheduled/cron job to check upcoming milestones. Add a database function or edge function that runs periodically.
-6. **pip_completed**: Add a notification INSERT in `usePIP.ts` when PIP status changes to completed.
+**AddObservationDialog** -- simplified:
+- Remove score impact slider
+- Replace URL input with MultiFileUpload
+- Keep: observation type (positive/concern/neutral), title, description
 
-### Step 3: Add Missing Email Templates
+**KpiObservationsSection** -- updated summary:
+- Remove score impact summary
+- Add status counts: "2 Open, 1 Resolved"
 
-Add email templates for notification types that exist but have no email template:
+### 4. Notification Integration
 
-1. **kpi_ready_for_audit**: "A KPI is ready for your audit review"
-2. **kpi_ready_for_management**: "A KPI is ready for management review"
-3. **query_response_received**: "Employee has responded to your query"
-4. **admin_status_change**: "Admin has changed your KPI status"
-5. **org_kpi_sent_back**: "Org KPI data sent back for revision"
+Add notification inserts when:
+- A reply is posted on an observation (notify the raiser)
+- An observation is resolved (notify the KPI owner)
 
-### Step 4: Update Edge Function
+No email templates needed initially -- these will use in-app notifications only.
 
-Add the new event types to `DEFAULT_TEMPLATES` and `EVENT_STYLES` in `send-email-notification/index.ts`.
-
-### Step 5: Update Frontend Event Toggles
-
-Add the new event types to:
-- `EmailEventType` in `useEmailNotificationSettings.ts`
-- Event toggle list in `EmailNotificationSettings.tsx`
-- Template editor in `EmailTemplateEditor.tsx`
-
-### Step 6: Update DOCUMENTATION.md
-
-Sync documentation with all changes.
-
-## Summary of Changes
+## Files to Change
 
 | File | Change |
 |------|--------|
-| New migration SQL | Fix type mapping in trigger, add notification inserts for send-back, KRA assignment, period lock, PIP events |
-| `supabase/functions/send-email-notification/index.ts` | Add new templates + event styles for all missing types |
-| `src/hooks/useEmailNotificationSettings.ts` | Add new `EmailEventType` values |
-| `src/components/admin/EmailNotificationSettings.tsx` | Add new event toggles |
-| `src/components/admin/EmailTemplateEditor.tsx` | Add new template entries |
-| `src/hooks/usePIP.ts` | Add notification inserts for PIP lifecycle events |
-| `DOCUMENTATION.md` | Update with complete notification mapping |
+| **New migration SQL** | Add `kpi_observation_replies` table with RLS, add `status` column to `kpi_observations`, set `score_impact` default to 0 |
+| `src/hooks/useKpiObservations.ts` | Add `status` field to types, remove `calculateScoreWithObservations`, add `useObservationReplies` and `useCreateObservationReply` hooks, add `useResolveObservation` mutation |
+| `src/components/review/AddObservationDialog.tsx` | Remove score impact slider, replace URL input with MultiFileUpload |
+| `src/components/review/ObservationCard.tsx` | Add status badge, inline reply thread, Reply button, Mark Resolved button |
+| `src/components/review/KpiObservationsSection.tsx` | Remove score summary, update status counts |
+| `DOCUMENTATION.md` | Update observation system documentation |
 
-## Technical Considerations
+## Why Keep Queries Separate
 
-- The trigger function uses `pg_net` for async HTTP calls -- this architecture remains unchanged
-- Type mapping is done in the trigger to keep backward compatibility with in-app notification display
-- PIP milestone reminders require either a cron-triggered edge function or a database scheduled job (recommend a pg_cron approach or manual "check milestones" button for now)
-- All new notification types will respect the existing enabled/disabled toggle per event type
+- **Queries** = formal escalation with inbox visibility, email notifications, and a strict open/responded/resolved workflow between two specific people
+- **Observations** = lightweight feedback with optional discussion, visible on the KPI review panel, accessible to all reviewers in the chain
+
+The key difference: queries demand a response and appear in the inbox. Observations are opt-in discussions that live on the KPI itself.
+
+## Technical Notes
+
+- The `score_impact` column is kept in the database (set to 0 by default) for backward compatibility with existing data
+- The `is_applied` column remains but becomes driven by the new `status` field (resolved = not applied as negative)
+- RLS on `kpi_observation_replies`: authenticated users can SELECT all replies for observations they can see; INSERT only for users in the review chain of the KPI
+- The reply thread UI will use a simple expandable section within ObservationCard, not a separate dialog
+
