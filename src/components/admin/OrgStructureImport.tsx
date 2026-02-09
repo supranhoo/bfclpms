@@ -16,16 +16,22 @@ import { sanitizeText } from '@/lib/importValidation';
 interface OrgImportRow {
   division?: string;
   divisionCode?: string;
+  divisionLevel?: string;
   businessUnit?: string;
   businessUnitCode?: string;
+  businessUnitLevel?: string;
   department?: string;
   departmentCode?: string;
+  departmentLevel?: string;
   subBranch?: string;
   subBranchCode?: string;
+  subBranchLevel?: string;
   designation?: string;
   designationCode?: string;
+  designationLevel?: string;
   pmsGrade?: string;
   pmsGradeCode?: string;
+  pmsGradeLevel?: string;
 }
 
 export default function OrgStructureImport() {
@@ -52,17 +58,17 @@ export default function OrgStructureImport() {
 
   const downloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['division', 'divisionCode', 'businessUnit', 'businessUnitCode', 'department', 'departmentCode', 'subBranch', 'subBranchCode', 'designation', 'designationCode', 'pmsGrade', 'pmsGradeCode'],
-      ['Head Office', 'HO', 'Technology', 'TECH', 'Software Development', 'SD', 'Frontend Team', 'FE', 'Senior Engineer', 'SE', 'Grade A', 'GA'],
-      ['Head Office', 'HO', 'Technology', 'TECH', 'QA', 'QA', '', '', 'Junior Engineer', 'JE', 'Grade B', 'GB'],
-      ['Regional', 'REG', 'Sales', 'SALES', 'North Region', 'NR', '', '', 'Manager', 'MGR', '', ''],
+      ['division', 'divisionCode', 'divisionLevel', 'businessUnit', 'businessUnitCode', 'businessUnitLevel', 'department', 'departmentCode', 'departmentLevel', 'subBranch', 'subBranchCode', 'subBranchLevel', 'designation', 'designationCode', 'designationLevel', 'pmsGrade', 'pmsGradeCode', 'pmsGradeLevel'],
+      ['Head Office', 'HO', 'L1', 'Technology', 'TECH', 'L2', 'Software Development', 'SD', 'L3', 'Frontend Team', 'FE', 'L4', 'Senior Engineer', 'SE', 'Senior', 'Grade A', 'GA', 'A'],
+      ['Head Office', 'HO', 'L1', 'Technology', 'TECH', 'L2', 'QA', 'QA', 'L3', '', '', '', 'Junior Engineer', 'JE', 'Junior', 'Grade B', 'GB', 'B'],
+      ['Regional', 'REG', 'L1', 'Sales', 'SALES', 'L2', 'North Region', 'NR', 'L3', '', '', '', 'Manager', 'MGR', 'Mid', '', '', ''],
     ]);
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Org Structure');
 
     // Set column widths
-    ws['!cols'] = Array(12).fill({ wch: 20 });
+    ws['!cols'] = Array(18).fill({ wch: 18 });
 
     XLSX.writeFile(wb, 'org_structure_template.xlsx');
   };
@@ -155,16 +161,22 @@ export default function OrgStructureImport() {
         const parsed: OrgImportRow[] = rawData.map(row => ({
           division: getValue(row, ['division', 'divisionName']),
           divisionCode: getValue(row, ['divisionCode', 'divCode']),
+          divisionLevel: getValue(row, ['divisionLevel', 'divLevel']),
           businessUnit: getValue(row, ['businessUnit', 'businessUnitName', 'bu', 'buName']),
           businessUnitCode: getValue(row, ['businessUnitCode', 'buCode']),
+          businessUnitLevel: getValue(row, ['businessUnitLevel', 'buLevel']),
           department: getValue(row, ['department', 'departmentName', 'dept', 'deptName']),
           departmentCode: getValue(row, ['departmentCode', 'deptCode']),
+          departmentLevel: getValue(row, ['departmentLevel', 'deptLevel']),
           subBranch: getValue(row, ['subBranch', 'subBranchName', 'branch']),
           subBranchCode: getValue(row, ['subBranchCode', 'branchCode']),
+          subBranchLevel: getValue(row, ['subBranchLevel', 'branchLevel']),
           designation: getValue(row, ['designation', 'designationName', 'title', 'jobTitle']),
           designationCode: getValue(row, ['designationCode', 'desigCode']),
+          designationLevel: getValue(row, ['designationLevel', 'desigLevel']),
           pmsGrade: getValue(row, ['pmsGrade', 'pmsGradeName', 'grade']),
           pmsGradeCode: getValue(row, ['pmsGradeCode', 'gradeCode']),
+          pmsGradeLevel: getValue(row, ['pmsGradeLevel', 'gradeLevel']),
         }));
 
         // Filter out completely empty rows
@@ -209,35 +221,37 @@ export default function OrgStructureImport() {
 
     try {
       // Collect unique entries
-      const uniqueDivisions = new Map<string, string>(); // name -> code
-      const uniqueBUs = new Map<string, { code: string; division: string }>(); // name -> {code, division}
-      const uniqueDepts = new Map<string, { code: string; businessUnit: string }>(); 
-      const uniqueSubBranches = new Map<string, { code: string; department: string }>();
-      const uniqueDesignations = new Map<string, string>();
-      const uniquePmsGrades = new Map<string, string>();
+      const uniqueDivisions = new Map<string, { code: string; level: string }>();
+      const uniqueBUs = new Map<string, { code: string; level: string; division: string }>();
+      const uniqueDepts = new Map<string, { code: string; level: string; businessUnit: string }>(); 
+      const uniqueSubBranches = new Map<string, { code: string; level: string; department: string }>();
+      const uniqueDesignations = new Map<string, { code: string; level: string }>();
+      const uniquePmsGrades = new Map<string, { code: string; level: string }>();
 
       for (const row of importData) {
-        if (row.division) uniqueDivisions.set(row.division, row.divisionCode || '');
-        if (row.businessUnit && row.division) uniqueBUs.set(row.businessUnit, { code: row.businessUnitCode || '', division: row.division });
-        if (row.department && row.businessUnit) uniqueDepts.set(row.department, { code: row.departmentCode || '', businessUnit: row.businessUnit });
-        if (row.subBranch && row.department) uniqueSubBranches.set(row.subBranch, { code: row.subBranchCode || '', department: row.department });
-        if (row.designation) uniqueDesignations.set(row.designation, row.designationCode || '');
-        if (row.pmsGrade) uniquePmsGrades.set(row.pmsGrade, row.pmsGradeCode || '');
+        if (row.division) uniqueDivisions.set(row.division, { code: row.divisionCode || '', level: row.divisionLevel || '' });
+        if (row.businessUnit && row.division) uniqueBUs.set(row.businessUnit, { code: row.businessUnitCode || '', level: row.businessUnitLevel || '', division: row.division });
+        if (row.department && row.businessUnit) uniqueDepts.set(row.department, { code: row.departmentCode || '', level: row.departmentLevel || '', businessUnit: row.businessUnit });
+        if (row.subBranch && row.department) uniqueSubBranches.set(row.subBranch, { code: row.subBranchCode || '', level: row.subBranchLevel || '', department: row.department });
+        if (row.designation) uniqueDesignations.set(row.designation, { code: row.designationCode || '', level: row.designationLevel || '' });
+        if (row.pmsGrade) uniquePmsGrades.set(row.pmsGrade, { code: row.pmsGradeCode || '', level: row.pmsGradeLevel || '' });
       }
 
       // 1. Create divisions
       const divisionMap = new Map<string, string>(); // name -> id
       divisions?.forEach(d => divisionMap.set(d.name.toLowerCase(), d.id));
 
-      for (const [name, code] of uniqueDivisions) {
+      for (const [name, { code, level }] of uniqueDivisions) {
         if (!divisionMap.has(name.toLowerCase())) {
-          const { data, error } = await supabase.from('divisions').insert({ name: sanitizeText(name), code: code || null }).select('id').single();
+          const { data, error } = await supabase.from('divisions').insert({ name: sanitizeText(name), code: code || null, level: level || null }).select('id').single();
           if (error) throw new Error(`Failed to create division "${name}": ${error.message}`);
           divisionMap.set(name.toLowerCase(), data.id);
           result.divisions++;
-        } else if (code) {
-          // Update code if provided
-          await supabase.from('divisions').update({ code }).eq('id', divisionMap.get(name.toLowerCase())!);
+        } else {
+          const updates: any = {};
+          if (code) updates.code = code;
+          if (level) updates.level = level;
+          if (Object.keys(updates).length > 0) await supabase.from('divisions').update(updates).eq('id', divisionMap.get(name.toLowerCase())!);
         }
       }
 
@@ -245,16 +259,19 @@ export default function OrgStructureImport() {
       const buMap = new Map<string, string>();
       businessUnits?.forEach(b => buMap.set(b.name.toLowerCase(), b.id));
 
-      for (const [name, { code, division }] of uniqueBUs) {
+      for (const [name, { code, level, division }] of uniqueBUs) {
         if (!buMap.has(name.toLowerCase())) {
           const divId = divisionMap.get(division.toLowerCase());
           if (!divId) continue;
-          const { data, error } = await supabase.from('business_units').insert({ name: sanitizeText(name), code: code || null, division_id: divId }).select('id').single();
+          const { data, error } = await supabase.from('business_units').insert({ name: sanitizeText(name), code: code || null, level: level || null, division_id: divId }).select('id').single();
           if (error) throw new Error(`Failed to create business unit "${name}": ${error.message}`);
           buMap.set(name.toLowerCase(), data.id);
           result.businessUnits++;
-        } else if (code) {
-          await supabase.from('business_units').update({ code }).eq('id', buMap.get(name.toLowerCase())!);
+        } else {
+          const updates: any = {};
+          if (code) updates.code = code;
+          if (level) updates.level = level;
+          if (Object.keys(updates).length > 0) await supabase.from('business_units').update(updates).eq('id', buMap.get(name.toLowerCase())!);
         }
       }
 
@@ -262,16 +279,19 @@ export default function OrgStructureImport() {
       const deptMap = new Map<string, string>();
       departments?.forEach(d => deptMap.set(d.name.toLowerCase(), d.id));
 
-      for (const [name, { code, businessUnit }] of uniqueDepts) {
+      for (const [name, { code, level, businessUnit }] of uniqueDepts) {
         if (!deptMap.has(name.toLowerCase())) {
           const buId = buMap.get(businessUnit.toLowerCase());
           if (!buId) continue;
-          const { data, error } = await supabase.from('departments').insert({ name: sanitizeText(name), code: code || null, business_unit_id: buId }).select('id').single();
+          const { data, error } = await supabase.from('departments').insert({ name: sanitizeText(name), code: code || null, level: level || null, business_unit_id: buId }).select('id').single();
           if (error) throw new Error(`Failed to create department "${name}": ${error.message}`);
           deptMap.set(name.toLowerCase(), data.id);
           result.departments++;
-        } else if (code) {
-          await supabase.from('departments').update({ code }).eq('id', deptMap.get(name.toLowerCase())!);
+        } else {
+          const updates: any = {};
+          if (code) updates.code = code;
+          if (level) updates.level = level;
+          if (Object.keys(updates).length > 0) await supabase.from('departments').update(updates).eq('id', deptMap.get(name.toLowerCase())!);
         }
       }
 
@@ -279,16 +299,19 @@ export default function OrgStructureImport() {
       const subMap = new Map<string, string>();
       subBranches?.forEach(s => subMap.set(s.name.toLowerCase(), s.id));
 
-      for (const [name, { code, department }] of uniqueSubBranches) {
+      for (const [name, { code, level, department }] of uniqueSubBranches) {
         if (!subMap.has(name.toLowerCase())) {
           const deptId = deptMap.get(department.toLowerCase());
           if (!deptId) continue;
-          const { data, error } = await supabase.from('sub_branches').insert({ name: sanitizeText(name), code: code || null, department_id: deptId }).select('id').single();
+          const { data, error } = await supabase.from('sub_branches').insert({ name: sanitizeText(name), code: code || null, level: level || null, department_id: deptId }).select('id').single();
           if (error) throw new Error(`Failed to create sub-branch "${name}": ${error.message}`);
           subMap.set(name.toLowerCase(), data.id);
           result.subBranches++;
-        } else if (code) {
-          await supabase.from('sub_branches').update({ code }).eq('id', subMap.get(name.toLowerCase())!);
+        } else {
+          const updates: any = {};
+          if (code) updates.code = code;
+          if (level) updates.level = level;
+          if (Object.keys(updates).length > 0) await supabase.from('sub_branches').update(updates).eq('id', subMap.get(name.toLowerCase())!);
         }
       }
 
@@ -296,13 +319,16 @@ export default function OrgStructureImport() {
       const desigMap = new Map<string, string>();
       designations?.forEach(d => desigMap.set(d.name.toLowerCase(), d.id));
 
-      for (const [name, code] of uniqueDesignations) {
+      for (const [name, { code, level }] of uniqueDesignations) {
         if (!desigMap.has(name.toLowerCase())) {
-          const { error } = await supabase.from('designations').insert({ name: sanitizeText(name), code: code || null });
+          const { error } = await supabase.from('designations').insert({ name: sanitizeText(name), code: code || null, level: level || null });
           if (error) throw new Error(`Failed to create designation "${name}": ${error.message}`);
           result.designations++;
-        } else if (code) {
-          await supabase.from('designations').update({ code }).eq('id', desigMap.get(name.toLowerCase())!);
+        } else {
+          const updates: any = {};
+          if (code) updates.code = code;
+          if (level) updates.level = level;
+          if (Object.keys(updates).length > 0) await supabase.from('designations').update(updates).eq('id', desigMap.get(name.toLowerCase())!);
         }
       }
 
@@ -310,13 +336,16 @@ export default function OrgStructureImport() {
       const gradeMap = new Map<string, string>();
       pmsGrades?.forEach(g => gradeMap.set(g.name.toLowerCase(), g.id));
 
-      for (const [name, code] of uniquePmsGrades) {
+      for (const [name, { code, level }] of uniquePmsGrades) {
         if (!gradeMap.has(name.toLowerCase())) {
-          const { error } = await supabase.from('pms_grades').insert({ name: sanitizeText(name), code: code || null });
+          const { error } = await supabase.from('pms_grades').insert({ name: sanitizeText(name), code: code || null, level: level || null });
           if (error) throw new Error(`Failed to create PMS grade "${name}": ${error.message}`);
           result.pmsGrades++;
-        } else if (code) {
-          await supabase.from('pms_grades').update({ code }).eq('id', gradeMap.get(name.toLowerCase())!);
+        } else {
+          const updates: any = {};
+          if (code) updates.code = code;
+          if (level) updates.level = level;
+          if (Object.keys(updates).length > 0) await supabase.from('pms_grades').update(updates).eq('id', gradeMap.get(name.toLowerCase())!);
         }
       }
 
@@ -476,16 +505,22 @@ export default function OrgStructureImport() {
                   <TableRow>
                     <TableHead>Division</TableHead>
                     <TableHead>Div Code</TableHead>
+                    <TableHead>Div Level</TableHead>
                     <TableHead>Business Unit</TableHead>
                     <TableHead>BU Code</TableHead>
+                    <TableHead>BU Level</TableHead>
                     <TableHead>Department</TableHead>
                     <TableHead>Dept Code</TableHead>
+                    <TableHead>Dept Level</TableHead>
                     <TableHead>Sub-Branch</TableHead>
                     <TableHead>SB Code</TableHead>
+                    <TableHead>SB Level</TableHead>
                     <TableHead>Designation</TableHead>
                     <TableHead>Des Code</TableHead>
+                    <TableHead>Des Level</TableHead>
                     <TableHead>PMS Grade</TableHead>
                     <TableHead>Grade Code</TableHead>
+                    <TableHead>Grade Level</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -493,16 +528,22 @@ export default function OrgStructureImport() {
                     <TableRow key={i}>
                       <TableCell>{row.division || '-'}</TableCell>
                       <TableCell>{row.divisionCode || '-'}</TableCell>
+                      <TableCell>{row.divisionLevel || '-'}</TableCell>
                       <TableCell>{row.businessUnit || '-'}</TableCell>
                       <TableCell>{row.businessUnitCode || '-'}</TableCell>
+                      <TableCell>{row.businessUnitLevel || '-'}</TableCell>
                       <TableCell>{row.department || '-'}</TableCell>
                       <TableCell>{row.departmentCode || '-'}</TableCell>
+                      <TableCell>{row.departmentLevel || '-'}</TableCell>
                       <TableCell>{row.subBranch || '-'}</TableCell>
                       <TableCell>{row.subBranchCode || '-'}</TableCell>
+                      <TableCell>{row.subBranchLevel || '-'}</TableCell>
                       <TableCell>{row.designation || '-'}</TableCell>
                       <TableCell>{row.designationCode || '-'}</TableCell>
+                      <TableCell>{row.designationLevel || '-'}</TableCell>
                       <TableCell>{row.pmsGrade || '-'}</TableCell>
                       <TableCell>{row.pmsGradeCode || '-'}</TableCell>
+                      <TableCell>{row.pmsGradeLevel || '-'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
