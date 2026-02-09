@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, KPI } from '@/hooks/useKpis';
@@ -137,7 +137,7 @@ export default function Dashboard() {
   }, [orgKpiValues]);
 
   // Helper to get org KPI value based on scope
-  const getOrgKpiValue = (kpi: KPI) => {
+  const getOrgKpiValue = useCallback((kpi: KPI) => {
     if (!kpi.is_org_level) return null;
     const scope = (kpi as any).org_level_scope || 'organization';
     let key: string;
@@ -151,7 +151,7 @@ export default function Dashboard() {
       key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${empId}`;
     }
     return orgKpiValuesMap.get(key) || null;
-  };
+  }, [orgKpiValuesMap, profile?.department_id, profile?.id]);
 
   const isLoading = kpisLoading || categoriesLoading;
 
@@ -281,17 +281,17 @@ export default function Dashboard() {
   const { sortedKpis, sortConfig, setSort } = useKpiSorting(fullyFilteredKpis);
 
   // Handle mode change
-  const handleModeChange = (mode: ViewMode) => {
+  const handleModeChange = useCallback((mode: ViewMode) => {
     setViewMode(mode);
     setSelectedEmployee(null);
     setAutoOpenKpiId(null);
-  };
+  }, []);
 
   // Handle employee selection from grid
-  const handleSelectEmployee = (employee: EmployeeProfile, kpiId?: string | null) => {
+  const handleSelectEmployee = useCallback((employee: EmployeeProfile, kpiId?: string | null) => {
     setSelectedEmployee(employee);
     setAutoOpenKpiId(kpiId || null);
-  };
+  }, []);
 
   // Loading state only for self view
   if (isLoading && viewMode === 'self') {

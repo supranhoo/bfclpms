@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { SidebarProvider, SidebarInset, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
@@ -23,7 +24,13 @@ function DashboardContent() {
       <SidebarInset>
         <main className="flex-1 overflow-auto p-6 bg-muted/30">
           <ErrorBoundary>
-            <Outlet />
+            <Suspense fallback={
+              <div className="min-h-[200px] flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            }>
+              <Outlet />
+            </Suspense>
           </ErrorBoundary>
         </main>
       </SidebarInset>

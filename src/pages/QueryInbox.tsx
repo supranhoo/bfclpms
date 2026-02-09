@@ -168,12 +168,13 @@ export default function QueryInbox() {
     [allQueries, user?.id]
   );
 
-  const openQueries = receivedQueries.filter(q => q.status === 'open');
-  const respondedQueries = receivedQueries.filter(q => q.status === 'responded');
-  const pendingAcceptanceQueries = sentQueries.filter(q => q.status === 'responded');
-  const resolvedReceivedQueries = receivedQueries.filter(q => q.status === 'resolved');
-  const resolvedSentQueries = sentQueries.filter(q => q.status === 'resolved');
-  const totalResolvedQueries = resolvedReceivedQueries.length + resolvedSentQueries.length;
+  const openQueries = useMemo(() => receivedQueries.filter(q => q.status === 'open'), [receivedQueries]);
+  const pendingAcceptanceQueries = useMemo(() => sentQueries.filter(q => q.status === 'responded'), [sentQueries]);
+  const totalResolvedQueries = useMemo(() => {
+    const resolvedReceived = receivedQueries.filter(q => q.status === 'resolved').length;
+    const resolvedSent = sentQueries.filter(q => q.status === 'resolved').length;
+    return resolvedReceived + resolvedSent;
+  }, [receivedQueries, sentQueries]);
 
   // Convert notifications to InboxItems
   const notificationItems: InboxItem[] = useMemo(() =>
@@ -256,6 +257,35 @@ export default function QueryInbox() {
   const filteredReceivedItems = useMemo(() => filterInboxItems(receivedQueryItems, filters), [receivedQueryItems, filters]);
   const filteredSentItems = useMemo(() => filterInboxItems(sentQueryItems, filters), [sentQueryItems, filters]);
   const filteredTeamItems = useMemo(() => filterInboxItems(teamQueryItems, filters), [teamQueryItems, filters]);
+
+  // Memoized insights data to avoid re-creating objects on every render
+  const insightsAllQueries = useMemo(() =>
+    (allQueries || []).map(q => ({
+      id: q.id,
+      status: q.status,
+      created_at: q.created_at,
+      resolved_at: q.resolved_at,
+      updated_at: q.updated_at,
+      raised_by: q.raised_by,
+      raised_to: q.raised_to,
+      kpiName: q.kpi?.kpi_name || null,
+      kraName: q.kpi?.kra_name || null,
+    })),
+    [allQueries]
+  );
+
+  const insightsTeamQueries = useMemo(() =>
+    (subordinateQueries as unknown as QueryWithDetails[]).map(q => ({
+      id: q.id,
+      status: q.status,
+      created_at: q.created_at,
+      resolved_at: q.resolved_at,
+      updated_at: q.updated_at,
+      raised_by: q.raised_by,
+      raised_to: q.raised_to,
+    })),
+    [subordinateQueries]
+  );
 
   // Handlers
   const handleViewItem = useCallback((item: InboxItem) => {
@@ -352,13 +382,13 @@ export default function QueryInbox() {
   }, []);
 
   // Stats
-  const stats = buildInboxStats({
+  const stats = useMemo(() => buildInboxStats({
     unreadCount: unreadNotificationsCount,
     openQueriesCount: openQueries.length,
     resolvedQueriesCount: totalResolvedQueries,
     sentQueriesCount: sentQueries.length,
     pendingAcceptanceCount: pendingAcceptanceQueries.length,
-  });
+  }), [unreadNotificationsCount, openQueries.length, totalResolvedQueries, sentQueries.length, pendingAcceptanceQueries.length]);
 
   if (loadingQueries && loadingNotifications) {
     return (
@@ -575,26 +605,8 @@ export default function QueryInbox() {
         {/* Insights Tab */}
         <TabsContent value="insights" className="mt-6">
           <InboxInsights
-            allQueries={(allQueries || []).map(q => ({
-              id: q.id,
-              status: q.status,
-              created_at: q.created_at,
-              resolved_at: q.resolved_at,
-              updated_at: q.updated_at,
-              raised_by: q.raised_by,
-              raised_to: q.raised_to,
-              kpiName: q.kpi?.kpi_name || null,
-              kraName: q.kpi?.kra_name || null,
-            }))}
-            teamQueries={(subordinateQueries as unknown as QueryWithDetails[]).map(q => ({
-              id: q.id,
-              status: q.status,
-              created_at: q.created_at,
-              resolved_at: q.resolved_at,
-              updated_at: q.updated_at,
-              raised_by: q.raised_by,
-              raised_to: q.raised_to,
-            }))}
+            allQueries={insightsAllQueries}
+            teamQueries={insightsTeamQueries}
             currentUserId={user?.id}
             notificationsCount={notificationsTotalCount}
             unreadCount={unreadNotificationsCount}
