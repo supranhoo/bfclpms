@@ -1308,6 +1308,8 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
 
 #### 4.9.9 Data Import (`/admin/import`)
 - Bulk import employees from Excel
+  - New employees are provisioned via the `create-employee` backend function (server-side admin API), which prevents the admin session from being logged out during bulk creation
+  - Existing employees are updated in-place via direct profile updates
 - Bulk import KPIs from Excel
 - Background processing for large files
 - Progress tracking
