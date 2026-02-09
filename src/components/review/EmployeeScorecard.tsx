@@ -24,7 +24,7 @@ import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
 import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
 import { WorkflowProgressTracker } from '@/components/review/WorkflowProgressTracker';
 import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
-import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
+import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { QueryHistoryDialog } from '@/components/review/QueryHistoryDialog';
@@ -137,7 +137,7 @@ export function EmployeeScorecard({
   
   const [managerScore, setManagerScore] = useState<number | null>(null);
   const [managerRemarks, setManagerRemarks] = useState('');
-  const [managerEvidenceUrl, setManagerEvidenceUrl] = useState<string | null>(null);
+  const [managerEvidenceUrls, setManagerEvidenceUrls] = useState<string[]>([]);
   const [managerAchievedValue, setManagerAchievedValue] = useState<number | string | null>(null);
   const [queryReason, setQueryReason] = useState('');
   const [sendBackReason, setSendBackReason] = useState('');
@@ -273,7 +273,11 @@ export function EmployeeScorecard({
     const existing = submissionMap.get(kpi.id);
     setManagerScore(existing?.manager_score || null);
     setManagerRemarks(existing?.manager_remarks || '');
-    setManagerEvidenceUrl(existing?.manager_evidence_url || null);
+    // Support both new array and legacy single URL
+    const existingUrls = (existing as any)?.manager_evidence_urls;
+    setManagerEvidenceUrls(Array.isArray(existingUrls) && existingUrls.length > 0 
+      ? existingUrls 
+      : existing?.manager_evidence_url ? [existing.manager_evidence_url] : []);
     setManagerAchievedValue((existing as any)?.manager_achieved_value || existing?.achieved_value || null);
     // Reset manager override state
     setManagerAgrees(null);
@@ -293,7 +297,7 @@ export function EmployeeScorecard({
       manager_rating: rating,
       manager_score: managerScore,
       manager_remarks: managerRemarks,
-      manager_evidence_url: managerEvidenceUrl,
+      manager_evidence_url: managerEvidenceUrls.length > 0 ? managerEvidenceUrls[0] : null,
     });
   };
 
@@ -379,7 +383,7 @@ export function EmployeeScorecard({
       manager_rating: rating,
       manager_score: managerScore,
       manager_remarks: managerRemarks,
-      manager_evidence_url: managerEvidenceUrl,
+      manager_evidence_url: managerEvidenceUrls.length > 0 ? managerEvidenceUrls[0] : null,
       manager_achieved_value: typeof managerAchievedValue === 'number' 
         ? managerAchievedValue 
         : managerAchievedValue ? parseFloat(managerAchievedValue) : null,
@@ -714,11 +718,13 @@ export function EmployeeScorecard({
 
                   {/* Evidence Upload */}
                   {user?.id && (
-                    <EvidenceUpload
+                    <MultiFileUpload
                       userId={user.id}
-                      kpiId={selectedKpi.id}
-                      onUploadComplete={setManagerEvidenceUrl}
-                      existingUrl={managerEvidenceUrl}
+                      contextId={selectedKpi.id}
+                      folder="manager-evidence"
+                      existingUrls={managerEvidenceUrls}
+                      onUploadComplete={setManagerEvidenceUrls}
+                      label="Manager Evidence"
                     />
                   )}
                 </>
@@ -739,11 +745,13 @@ export function EmployeeScorecard({
 
                   {/* Evidence Upload */}
                   {user?.id && (
-                    <EvidenceUpload
+                    <MultiFileUpload
                       userId={user.id}
-                      kpiId={selectedKpi.id}
-                      onUploadComplete={setManagerEvidenceUrl}
-                      existingUrl={managerEvidenceUrl}
+                      contextId={selectedKpi.id}
+                      folder="manager-evidence"
+                      existingUrls={managerEvidenceUrls}
+                      onUploadComplete={setManagerEvidenceUrls}
+                      label="Manager Evidence"
                     />
                   )}
                 </div>

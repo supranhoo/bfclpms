@@ -13,15 +13,17 @@ export interface QueryWithDetails {
   raised_to: string;
   reason: string;
   evidence_url: string | null;
+  evidence_urls?: string[] | null;
   resolution_notes: string | null;
   resolution_evidence_url: string | null;
+  resolution_evidence_urls?: string[] | null;
   status: QueryStatusExtended;
   created_at: string;
   resolved_at: string | null;
   updated_at: string;
   raised_by_profile: { id: string; full_name: string | null; email: string; employee_code?: string | null } | null;
   raised_to_profile: { id: string; full_name: string | null; email: string; employee_code?: string | null } | null;
-  kpi: {
+  kpi?: {
     id: string;
     kra_name: string;
     kpi_name: string;

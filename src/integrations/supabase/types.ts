@@ -416,6 +416,7 @@ export type Database = {
           created_by: string
           description: string | null
           evidence_url: string | null
+          evidence_urls: Json | null
           id: string
           is_applied: boolean
           kpi_id: string
@@ -432,6 +433,7 @@ export type Database = {
           created_by: string
           description?: string | null
           evidence_url?: string | null
+          evidence_urls?: Json | null
           id?: string
           is_applied?: boolean
           kpi_id: string
@@ -448,6 +450,7 @@ export type Database = {
           created_by?: string
           description?: string | null
           evidence_url?: string | null
+          evidence_urls?: Json | null
           id?: string
           is_applied?: boolean
           kpi_id?: string
@@ -488,12 +491,14 @@ export type Database = {
           created_at: string
           entity_type: Database["public"]["Enums"]["query_entity_type"]
           evidence_url: string | null
+          evidence_urls: Json | null
           id: string
           kpi_id: string
           raised_by: string
           raised_to: string
           reason: string
           resolution_evidence_url: string | null
+          resolution_evidence_urls: Json | null
           resolution_notes: string | null
           resolved_at: string | null
           status: Database["public"]["Enums"]["query_status"]
@@ -503,12 +508,14 @@ export type Database = {
           created_at?: string
           entity_type?: Database["public"]["Enums"]["query_entity_type"]
           evidence_url?: string | null
+          evidence_urls?: Json | null
           id?: string
           kpi_id: string
           raised_by: string
           raised_to: string
           reason: string
           resolution_evidence_url?: string | null
+          resolution_evidence_urls?: Json | null
           resolution_notes?: string | null
           resolved_at?: string | null
           status?: Database["public"]["Enums"]["query_status"]
@@ -518,12 +525,14 @@ export type Database = {
           created_at?: string
           entity_type?: Database["public"]["Enums"]["query_entity_type"]
           evidence_url?: string | null
+          evidence_urls?: Json | null
           id?: string
           kpi_id?: string
           raised_by?: string
           raised_to?: string
           reason?: string
           resolution_evidence_url?: string | null
+          resolution_evidence_urls?: Json | null
           resolution_notes?: string | null
           resolved_at?: string | null
           status?: Database["public"]["Enums"]["query_status"]
@@ -995,6 +1004,7 @@ export type Database = {
           employee_id: string | null
           entered_by: string | null
           evidence_url: string | null
+          evidence_urls: Json | null
           id: string
           kpi_name: string
           kra_name: string
@@ -1027,6 +1037,7 @@ export type Database = {
           employee_id?: string | null
           entered_by?: string | null
           evidence_url?: string | null
+          evidence_urls?: Json | null
           id?: string
           kpi_name: string
           kra_name: string
@@ -1059,6 +1070,7 @@ export type Database = {
           employee_id?: string | null
           entered_by?: string | null
           evidence_url?: string | null
+          evidence_urls?: Json | null
           id?: string
           kpi_name?: string
           kra_name?: string
@@ -1492,6 +1504,7 @@ export type Database = {
           achieved_value: number | null
           auditor_achieved_value: number | null
           auditor_evidence_url: string | null
+          auditor_evidence_urls: Json | null
           auditor_rating: Database["public"]["Enums"]["rating_level"] | null
           auditor_remarks: string | null
           auditor_score: number | null
@@ -1503,16 +1516,19 @@ export type Database = {
           kpi_status: Database["public"]["Enums"]["kpi_status"]
           management_achieved_value: number | null
           management_evidence_url: string | null
+          management_evidence_urls: Json | null
           management_rating: Database["public"]["Enums"]["rating_level"] | null
           management_remarks: string | null
           management_score: number | null
           manager_achieved_value: number | null
           manager_evidence_url: string | null
+          manager_evidence_urls: Json | null
           manager_rating: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks: string | null
           manager_score: number | null
           performance_review_id: string | null
           self_evidence_url: string | null
+          self_evidence_urls: Json | null
           self_rating: Database["public"]["Enums"]["rating_level"] | null
           self_remarks: string | null
           self_score: number | null
@@ -1523,6 +1539,7 @@ export type Database = {
           achieved_value?: number | null
           auditor_achieved_value?: number | null
           auditor_evidence_url?: string | null
+          auditor_evidence_urls?: Json | null
           auditor_rating?: Database["public"]["Enums"]["rating_level"] | null
           auditor_remarks?: string | null
           auditor_score?: number | null
@@ -1534,16 +1551,19 @@ export type Database = {
           kpi_status?: Database["public"]["Enums"]["kpi_status"]
           management_achieved_value?: number | null
           management_evidence_url?: string | null
+          management_evidence_urls?: Json | null
           management_rating?: Database["public"]["Enums"]["rating_level"] | null
           management_remarks?: string | null
           management_score?: number | null
           manager_achieved_value?: number | null
           manager_evidence_url?: string | null
+          manager_evidence_urls?: Json | null
           manager_rating?: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks?: string | null
           manager_score?: number | null
           performance_review_id?: string | null
           self_evidence_url?: string | null
+          self_evidence_urls?: Json | null
           self_rating?: Database["public"]["Enums"]["rating_level"] | null
           self_remarks?: string | null
           self_score?: number | null
@@ -1554,6 +1574,7 @@ export type Database = {
           achieved_value?: number | null
           auditor_achieved_value?: number | null
           auditor_evidence_url?: string | null
+          auditor_evidence_urls?: Json | null
           auditor_rating?: Database["public"]["Enums"]["rating_level"] | null
           auditor_remarks?: string | null
           auditor_score?: number | null
@@ -1565,16 +1586,19 @@ export type Database = {
           kpi_status?: Database["public"]["Enums"]["kpi_status"]
           management_achieved_value?: number | null
           management_evidence_url?: string | null
+          management_evidence_urls?: Json | null
           management_rating?: Database["public"]["Enums"]["rating_level"] | null
           management_remarks?: string | null
           management_score?: number | null
           manager_achieved_value?: number | null
           manager_evidence_url?: string | null
+          manager_evidence_urls?: Json | null
           manager_rating?: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks?: string | null
           manager_score?: number | null
           performance_review_id?: string | null
           self_evidence_url?: string | null
+          self_evidence_urls?: Json | null
           self_rating?: Database["public"]["Enums"]["rating_level"] | null
           self_remarks?: string | null
           self_score?: number | null

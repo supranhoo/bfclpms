@@ -18,7 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { KpiPageSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
-import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
+import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
@@ -122,7 +122,7 @@ export default function SelfReview() {
   const [calculatedScore, setCalculatedScore] = useState<number | null>(null);
   const [calculatedPercentage, setCalculatedPercentage] = useState<number | null>(null);
   const [selfRemarks, setSelfRemarks] = useState('');
-  const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
+  const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   const [isNa, setIsNa] = useState(false);
 
   const openLogicModal = (kpi: KPI) => {
@@ -267,14 +267,18 @@ export default function SelfReview() {
         setCalculatedPercentage(null);
       }
       setSelfRemarks(existing.self_remarks || '');
-      setEvidenceUrl(existing.self_evidence_url || null);
+      // Support both new array and legacy single URL
+      const existingUrls = (existing as any).self_evidence_urls;
+      setEvidenceUrls(Array.isArray(existingUrls) && existingUrls.length > 0 
+        ? existingUrls 
+        : existing.self_evidence_url ? [existing.self_evidence_url] : []);
       setIsNa(existing.is_na || false);
     } else {
       setAchievedValue('');
       setCalculatedScore(null);
       setCalculatedPercentage(null);
       setSelfRemarks('');
-      setEvidenceUrl(null);
+      setEvidenceUrls([]);
       setIsNa(false);
     }
     setReviewDialogOpen(true);
@@ -364,7 +368,8 @@ export default function SelfReview() {
       self_rating: isNa ? null : (calculatedScore !== null ? getRatingLevel(calculatedScore) : null),
       self_score: isNa ? null : calculatedScore,
       self_remarks: selfRemarks,
-      self_evidence_url: evidenceUrl,
+      self_evidence_url: evidenceUrls.length > 0 ? evidenceUrls[0] : null,
+      self_evidence_urls: evidenceUrls,
       is_na: isNa,
     });
 
@@ -866,11 +871,13 @@ export default function SelfReview() {
 
             {/* Evidence File Upload - Hidden when N/A */}
             {!isNa && user && selectedKpi && (
-              <EvidenceUpload
+              <MultiFileUpload
                 userId={user.id}
-                kpiId={selectedKpi.id}
-                existingUrl={evidenceUrl}
-                onUploadComplete={(url) => setEvidenceUrl(url || null)}
+                contextId={selectedKpi.id}
+                folder="self-evidence"
+                existingUrls={evidenceUrls}
+                onUploadComplete={setEvidenceUrls}
+                label="Evidence Attachments"
               />
             )}
           </div>
