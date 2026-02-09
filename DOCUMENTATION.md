@@ -231,7 +231,8 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 |-------|---------|-------------|
 | `training_needs` | Identified training gaps | `employee_id`, `kpi_id`, `gap_type`, `priority`, `status` |
 | `kpi_queries` | Review questions/clarifications | `kpi_id`, `raised_by`, `raised_to`, `reason`, `evidence_url`, `resolution_notes`, `resolution_evidence_url`, `status` |
-| `kpi_observations` | Reviewer tags that can impact scores | `kpi_id`, `created_by`, `observer_role`, `observation_type`, `score_impact`, `title`, `is_applied` |
+| `kpi_observations` | Reviewer feedback with reply threads | `kpi_id`, `created_by`, `observer_role`, `observation_type`, `title`, `status` (open/acknowledged/resolved), `evidence_urls` |
+| `kpi_observation_replies` | Reply thread on observations | `observation_id`, `reply_by`, `reply_text`, `evidence_urls` |
 | `notifications` | User notifications | `user_id`, `type`, `title`, `message`, `is_read` |
 
 #### System & Audit
@@ -287,8 +288,8 @@ The system includes a full-database backup and restore feature accessible from *
 | **validation** | `na_reason_min_chars` | 50 | 10-200 chars | Minimum characters for N/A reason |
 | **validation** | `require_evidence_default` | false | boolean | Default mandatory evidence for new KPIs |
 | **validation** | `password_min_length` | 6 | 6-16 chars | Minimum password length |
-| **observation** | `max_observation_impact` | 5 | 1-5 points | Maximum score impact per observation |
-| **observation** | `self_observation_auto_apply` | false | boolean | Auto-apply employee self-observations |
+| **observation** | `max_observation_impact` | 5 | 1-5 points | Maximum score impact per observation (legacy, score impact removed) |
+| **observation** | `self_observation_auto_apply` | false | boolean | Auto-apply employee self-observations (legacy) |
 
 #### Storage Buckets
 

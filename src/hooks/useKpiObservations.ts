@@ -5,6 +5,8 @@ import { toast } from '@/hooks/use-toast';
 export type ObservationType = 'positive' | 'concern' | 'neutral';
 export type ObserverRole = 'self' | 'manager' | 'auditor' | 'management' | 'admin';
 
+export type ObservationStatus = 'open' | 'acknowledged' | 'resolved';
+
 export interface KpiObservation {
   id: string;
   kpi_id: string;
@@ -15,6 +17,8 @@ export interface KpiObservation {
   title: string;
   description: string | null;
   evidence_url: string | null;
+  evidence_urls: string[] | null;
+  status: ObservationStatus;
   is_applied: boolean;
   reviewed_by: string | null;
   reviewed_at: string | null;
@@ -212,7 +216,7 @@ export function useDeleteObservation() {
   });
 }
 
-// Toggle is_applied status (for Management/Admin)
+// Toggle is_applied status (for Management/Admin) - kept for backward compatibility
 export function useApplyObservationImpact() {
   const queryClient = useQueryClient();
   
@@ -238,10 +242,6 @@ export function useApplyObservationImpact() {
     onSuccess: ({ kpiId }) => {
       queryClient.invalidateQueries({ queryKey: ['kpi-observations', kpiId] });
       queryClient.invalidateQueries({ queryKey: ['kpi-observations-batch'] });
-      toast({
-        title: 'Impact Updated',
-        description: 'The observation impact has been updated.',
-      });
     },
     onError: (error) => {
       toast({
@@ -251,29 +251,4 @@ export function useApplyObservationImpact() {
       });
     },
   });
-}
-
-// Calculate score with observations
-export function calculateScoreWithObservations(
-  baseScore: number,
-  observations: KpiObservation[]
-): {
-  finalScore: number;
-  adjustmentTotal: number;
-  appliedCount: number;
-  pendingCount: number;
-} {
-  const appliedObservations = observations.filter(o => o.is_applied);
-  const pendingObservations = observations.filter(o => !o.is_applied);
-  const adjustmentTotal = appliedObservations.reduce((sum, o) => sum + o.score_impact, 0);
-  
-  // Clamp final score between 0 and 5
-  const finalScore = Math.max(0, Math.min(5, baseScore + adjustmentTotal));
-  
-  return {
-    finalScore,
-    adjustmentTotal,
-    appliedCount: appliedObservations.length,
-    pendingCount: pendingObservations.length,
-  };
 }

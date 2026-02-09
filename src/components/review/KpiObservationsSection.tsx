@@ -15,9 +15,7 @@ import {
   useCreateObservation,
   useUpdateObservation,
   useDeleteObservation,
-  useApplyObservationImpact,
   CreateObservationInput,
-  calculateScoreWithObservations,
 } from '@/hooks/useKpiObservations';
 import { ObservationCard } from './ObservationCard';
 import { AddObservationDialog } from './AddObservationDialog';
@@ -41,7 +39,6 @@ interface KpiObservationsSectionProps {
   isOwnKpi?: boolean;
 }
 
-// Map viewLevel to observer role
 function getObserverRole(viewLevel: string, isOwnKpi: boolean): ObserverRole {
   if (isOwnKpi && viewLevel === 'employee') return 'self';
   switch (viewLevel) {
@@ -52,25 +49,12 @@ function getObserverRole(viewLevel: string, isOwnKpi: boolean): ObserverRole {
   }
 }
 
-// Check if user can add observations
 function canAddObservation(viewLevel: string, kpiStatus: string, isOwnKpi: boolean): boolean {
-  // Can't add after approved
   if (kpiStatus === 'approved') return false;
-  
-  // Self can always add for their own KPIs
   if (isOwnKpi) return true;
-  
-  // All reviewers can add observations at any pre-approved stage
-  // This allows tagging findings throughout the review month
   return ['manager', 'auditor', 'management'].includes(viewLevel);
 }
 
-// Check if user can apply impacts
-function canApplyImpact(viewLevel: string): boolean {
-  return viewLevel === 'management';
-}
-
-// Check if observations are auto-applied
 function isAutoApply(viewLevel: string): boolean {
   return viewLevel === 'management';
 }
@@ -91,18 +75,16 @@ export function KpiObservationsSection({
   const createMutation = useCreateObservation();
   const updateMutation = useUpdateObservation();
   const deleteMutation = useDeleteObservation();
-  const applyMutation = useApplyObservationImpact();
 
   const isReadOnly = kpiStatus === 'approved';
   const observerRole = getObserverRole(viewLevel, isOwnKpi);
   const showAddButton = canAddObservation(viewLevel, kpiStatus, isOwnKpi);
-  const showApplyToggle = canApplyImpact(viewLevel);
   const autoApply = isAutoApply(viewLevel);
 
-  // Calculate score summary
-  const scoreSummary = baseScore !== null && baseScore !== undefined
-    ? calculateScoreWithObservations(baseScore, observations)
-    : null;
+  // Status counts
+  const openCount = observations.filter(o => ((o as any).status || 'open') === 'open').length;
+  const acknowledgedCount = observations.filter(o => (o as any).status === 'acknowledged').length;
+  const resolvedCount = observations.filter(o => (o as any).status === 'resolved').length;
 
   const handleSubmit = (data: CreateObservationInput | { id: string } & Partial<CreateObservationInput>) => {
     if ('id' in data && data.id) {
@@ -127,10 +109,6 @@ export function KpiObservationsSection({
       deleteMutation.mutate({ id: deleteConfirmId, kpiId });
       setDeleteConfirmId(null);
     }
-  };
-
-  const handleToggleApplied = (id: string, isApplied: boolean) => {
-    applyMutation.mutate({ id, isApplied, kpiId });
   };
 
   if (isLoading) {
@@ -201,9 +179,14 @@ export function KpiObservationsSection({
                   {concernCount} Concern
                 </Badge>
               )}
-              {scoreSummary && scoreSummary.pendingCount > 0 && (
-                <Badge variant="secondary">
-                  {scoreSummary.pendingCount} Pending Approval
+              {openCount > 0 && (
+                <Badge variant="outline" className="border-yellow-300 text-yellow-700 dark:text-yellow-400">
+                  {openCount} Open
+                </Badge>
+              )}
+              {resolvedCount > 0 && (
+                <Badge variant="outline" className="border-emerald-300 text-emerald-700 dark:text-emerald-400">
+                  {resolvedCount} Resolved
                 </Badge>
               )}
             </div>
@@ -221,30 +204,12 @@ export function KpiObservationsSection({
                   key={observation.id}
                   observation={observation}
                   currentUserId={user?.id || ''}
-                  canApply={showApplyToggle}
+                  canApply={false}
                   isReadOnly={isReadOnly}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
-                  onToggleApplied={handleToggleApplied}
                 />
               ))}
-            </div>
-          )}
-
-          {/* Score Impact Summary */}
-          {scoreSummary && scoreSummary.appliedCount > 0 && (
-            <div className="pt-3 border-t">
-              <div className="text-sm text-muted-foreground flex items-center justify-between">
-                <span>Score Impact:</span>
-                <span className="font-medium">
-                  Base: {baseScore?.toFixed(1)} → 
-                  <span className={scoreSummary.adjustmentTotal > 0 ? 'text-emerald-600' : scoreSummary.adjustmentTotal < 0 ? 'text-red-600' : ''}>
-                    {scoreSummary.adjustmentTotal > 0 ? '+' : ''}{scoreSummary.adjustmentTotal}
-                  </span>
-                  {' = '}
-                  <span className="text-foreground">{scoreSummary.finalScore.toFixed(1)}</span>
-                </span>
-              </div>
             </div>
           )}
         </CardContent>
