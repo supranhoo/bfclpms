@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Mail, Send, Save, AlertCircle, Image, Server, Eye, EyeOff, Plug, Lock, Loader2 } from 'lucide-react';
+import { Mail, Send, Save, AlertCircle, Image, Server, Eye, EyeOff, Plug, Lock, Loader2, Cloud } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   useEmailNotificationSettings,
@@ -58,38 +58,44 @@ export function EmailNotificationSettings() {
     smtpUsername: '',
     smtpFromAddress: '',
     smtpFromName: '',
+    graphTenantId: '',
+    graphClientId: '',
+    graphFromAddress: '',
+    graphFromName: '',
   });
   const [testEmail, setTestEmail] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [smtpPassword, setSmtpPassword] = useState('');
+  const [graphClientSecret, setGraphClientSecret] = useState('');
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const { toast } = useToast();
 
-  const handleUpdatePassword = useCallback(async () => {
-    if (!smtpPassword.trim()) return;
+  const handleUpdateSecret = useCallback(async (key: string, value: string, label: string) => {
+    if (!value.trim()) return;
     setIsUpdatingPassword(true);
     try {
       const { data, error } = await supabase.functions.invoke('update-smtp-password', {
-        body: { password: smtpPassword },
+        body: { password: value, setting_key: key },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast({
-        title: 'Password Updated',
-        description: 'SMTP password has been stored securely.',
+        title: `${label} Updated`,
+        description: `${label} has been stored securely.`,
       });
-      setSmtpPassword('');
+      if (key === 'smtp_password') setSmtpPassword('');
+      if (key === 'graph_client_secret') setGraphClientSecret('');
     } catch (err: any) {
       toast({
-        title: 'Failed to Update Password',
+        title: `Failed to Update ${label}`,
         description: err.message || 'An error occurred.',
         variant: 'destructive',
       });
     } finally {
       setIsUpdatingPassword(false);
     }
-  }, [smtpPassword, toast]);
+  }, [toast]);
   
   useEffect(() => {
     if (settings) {
@@ -189,7 +195,7 @@ export function EmailNotificationSettings() {
           <RadioGroup
             value={localSettings.emailProvider}
             onValueChange={(value) => handleChange('emailProvider', value as EmailProvider)}
-            className="grid grid-cols-2 gap-4"
+            className="grid grid-cols-3 gap-4"
           >
             <div className="flex items-center space-x-2 border rounded-lg p-4">
               <RadioGroupItem value="resend" id="provider-resend" />
@@ -206,6 +212,15 @@ export function EmailNotificationSettings() {
                 <div className="font-medium">Custom SMTP</div>
                 <div className="text-sm text-muted-foreground">
                   Use your own mail server
+                </div>
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2 border rounded-lg p-4">
+              <RadioGroupItem value="microsoft_graph" id="provider-graph" />
+              <Label htmlFor="provider-graph" className="flex-1 cursor-pointer">
+                <div className="font-medium">Microsoft 365</div>
+                <div className="text-sm text-muted-foreground">
+                  Use Microsoft Graph API (OAuth2)
                 </div>
               </Label>
             </div>
@@ -336,7 +351,7 @@ export function EmailNotificationSettings() {
                   </div>
                   <Button
                     variant="outline"
-                    onClick={handleUpdatePassword}
+                    onClick={() => handleUpdateSecret('smtp_password', smtpPassword, 'SMTP Password')}
                     disabled={!smtpPassword.trim() || isUpdatingPassword}
                     className="shrink-0"
                   >
@@ -381,6 +396,117 @@ export function EmailNotificationSettings() {
               <AlertDescription>
                 Enter your SMTP server details. The SMTP password is stored securely as a secret and never exposed in the UI.
                 Make sure your mail server allows connections from cloud services.
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
+
+        {/* Microsoft Graph Configuration */}
+        {localSettings.emailProvider === 'microsoft_graph' && (
+          <div className="space-y-4 p-4 rounded-lg border">
+            <h4 className="font-medium flex items-center gap-2">
+              <Cloud className="h-4 w-4" />
+              Microsoft 365 / Graph API Configuration
+            </h4>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="graph-tenant-id">Tenant ID</Label>
+                <Input
+                  id="graph-tenant-id"
+                  value={localSettings.graphTenantId}
+                  onChange={(e) => handleChange('graphTenantId', e.target.value)}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Azure AD Tenant ID from App Registration
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="graph-client-id">Client ID</Label>
+                <Input
+                  id="graph-client-id"
+                  value={localSettings.graphClientId}
+                  onChange={(e) => handleChange('graphClientId', e.target.value)}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Application (client) ID from App Registration
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="graph-client-secret">Client Secret</Label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    id="graph-client-secret"
+                    type={showPassword ? 'text' : 'password'}
+                    value={graphClientSecret}
+                    onChange={(e) => setGraphClientSecret(e.target.value)}
+                    className="pr-10"
+                    placeholder="Enter Azure AD Client Secret"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => handleUpdateSecret('graph_client_secret', graphClientSecret, 'Client Secret')}
+                  disabled={!graphClientSecret.trim() || isUpdatingPassword}
+                  className="shrink-0"
+                >
+                  {isUpdatingPassword ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Lock className="h-4 w-4 mr-2" />
+                  )}
+                  {isUpdatingPassword ? 'Saving...' : 'Update Secret'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Client secret from Azure AD App Registration. Stored securely and never displayed again.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="graph-from-address">From Address</Label>
+                <Input
+                  id="graph-from-address"
+                  type="email"
+                  value={localSettings.graphFromAddress}
+                  onChange={(e) => handleChange('graphFromAddress', e.target.value)}
+                  placeholder="pms@bfclalloys.com"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Must be a valid mailbox in your Microsoft 365 tenant
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="graph-from-name">From Name</Label>
+                <Input
+                  id="graph-from-name"
+                  value={localSettings.graphFromName}
+                  onChange={(e) => handleChange('graphFromName', e.target.value)}
+                  placeholder="PMS Notifications"
+                />
+              </div>
+            </div>
+
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Azure AD Setup Required:</strong> Register an app in Azure Portal → App Registrations.
+                Add <code>Mail.Send</code> application permission under Microsoft Graph, and grant admin consent.
+                The "From Address" must be a valid mailbox (shared or user) in your tenant.
               </AlertDescription>
             </Alert>
           </div>
