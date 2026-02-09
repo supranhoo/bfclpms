@@ -1,0 +1,3 @@
+ALTER TABLE notifications
+  ADD COLUMN snoozed_until TIMESTAMPTZ,
+  ADD COLUMN snooze_count INTEGER NOT NULL DEFAULT 0;

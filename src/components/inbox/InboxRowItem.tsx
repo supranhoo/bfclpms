@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { TableRow, TableCell } from '@/components/ui/table';
 import { InboxItem, formatRelativeTime, getQueryStatusClasses, getQuickAction } from '@/lib/inboxUtils';
 import { cn } from '@/lib/utils';
+import { SnoozePopover } from './SnoozePopover';
 
 interface InboxRowItemProps {
   item: InboxItem;
@@ -12,9 +13,13 @@ interface InboxRowItemProps {
   onToggleExpand?: (itemId: string) => void;
   isExpanded?: boolean;
   currentUserId?: string;
+  onSnooze?: (notificationId: string, until: Date) => void;
+  onUnsnooze?: (notificationId: string) => void;
+  isSnoozing?: boolean;
+  showSnoozedInfo?: boolean;
 }
 
-export function InboxRowItem({ item, onView, onMarkRead, onToggleExpand, isExpanded, currentUserId }: InboxRowItemProps) {
+export function InboxRowItem({ item, onView, onMarkRead, onToggleExpand, isExpanded, currentUserId, onSnooze, onUnsnooze, isSnoozing, showSnoozedInfo }: InboxRowItemProps) {
   const getTypeIcon = () => {
     if (item.type === 'query') {
       switch (item.queryStatus) {
@@ -117,8 +122,28 @@ export function InboxRowItem({ item, onView, onMarkRead, onToggleExpand, isExpan
       </TableCell>
 
       {/* Actions */}
-      <TableCell className="w-24 px-2">
+      <TableCell className="w-32 px-2">
         <div className="flex items-center gap-1 justify-end">
+          {/* Snooze count badge */}
+          {(item.snoozeCount || 0) >= 2 && !showSnoozedInfo && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 text-muted-foreground">
+              Snoozed x{item.snoozeCount}
+            </Badge>
+          )}
+          {/* Un-snooze button for snoozed tab */}
+          {showSnoozedInfo && onUnsnooze && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs px-2"
+              onClick={(e) => {
+                e.stopPropagation();
+                onUnsnooze(item.id);
+              }}
+            >
+              Un-snooze
+            </Button>
+          )}
           {/* Quick Action Button */}
           {quickAction && onToggleExpand && (
             <Button
@@ -137,6 +162,13 @@ export function InboxRowItem({ item, onView, onMarkRead, onToggleExpand, isExpan
                 <ChevronDown className="h-3 w-3 ml-1" />
               )}
             </Button>
+          )}
+          {/* Snooze */}
+          {item.type === 'notification' && onSnooze && !showSnoozedInfo && (
+            <SnoozePopover
+              onSnooze={(until) => onSnooze(item.id, until)}
+              isLoading={isSnoozing}
+            />
           )}
           {/* View Details */}
           <Button

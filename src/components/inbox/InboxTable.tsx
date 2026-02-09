@@ -24,6 +24,10 @@ interface InboxTableProps {
   onInlineRespond?: (itemId: string, notes: string, evidenceUrl?: string) => void;
   onInlineAccept?: (item: InboxItem) => void;
   isInlineSubmitting?: boolean;
+  onSnooze?: (notificationId: string, until: Date) => void;
+  onUnsnooze?: (notificationId: string) => void;
+  isSnoozing?: boolean;
+  showSnoozedInfo?: boolean;
 }
 
 export function InboxTable({
@@ -41,6 +45,10 @@ export function InboxTable({
   onInlineRespond,
   onInlineAccept,
   isInlineSubmitting,
+  onSnooze,
+  onUnsnooze,
+  isSnoozing,
+  showSnoozedInfo,
 }: InboxTableProps) {
   const isMobile = useIsMobile();
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
@@ -110,7 +118,7 @@ export function InboxTable({
               <TableHead className="w-28 hidden md:table-cell">Status</TableHead>
               <TableHead className="w-32 hidden lg:table-cell">From</TableHead>
               <TableHead className="w-28 text-right">Time</TableHead>
-              <TableHead className="w-24"></TableHead>
+              <TableHead className="w-32"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -136,6 +144,10 @@ export function InboxTable({
                       onToggleExpand={currentUserId ? handleToggleExpand : undefined}
                       isExpanded={expandedItemId === item.id}
                       currentUserId={currentUserId}
+                      onSnooze={onSnooze}
+                      onUnsnooze={onUnsnooze}
+                      isSnoozing={isSnoozing}
+                      showSnoozedInfo={showSnoozedInfo}
                     />
                     {/* Inline Quick Action Panel */}
                     {expandedItemId === item.id && currentUserId && (

@@ -19,6 +19,8 @@ export interface InboxItem {
   metadata?: Record<string, any>;
   resolutionNotes?: string | null;
   evidenceUrl?: string | null;
+  snoozedUntil?: string | null;
+  snoozeCount?: number;
 }
 
 export interface GroupedInboxItems {
@@ -195,6 +197,9 @@ export function filterInboxItems(items: InboxItem[], filters: InboxFiltersState)
     // Dropdown: read status
     if (filters.readStatus === 'unread' && item.isRead) return false;
     if (filters.readStatus === 'read' && !item.isRead) return false;
+
+    // Exclude currently-snoozed items from non-snoozed views (defense-in-depth)
+    if (item.snoozedUntil && new Date(item.snoozedUntil) > new Date()) return false;
 
     return true;
   });

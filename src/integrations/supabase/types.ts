@@ -903,6 +903,8 @@ export type Database = {
           message: string
           metadata: Json | null
           related_user_id: string | null
+          snooze_count: number
+          snoozed_until: string | null
           title: string
           type: string
           user_id: string
@@ -915,6 +917,8 @@ export type Database = {
           message: string
           metadata?: Json | null
           related_user_id?: string | null
+          snooze_count?: number
+          snoozed_until?: string | null
           title: string
           type: string
           user_id: string
@@ -927,6 +931,8 @@ export type Database = {
           message?: string
           metadata?: Json | null
           related_user_id?: string | null
+          snooze_count?: number
+          snoozed_until?: string | null
           title?: string
           type?: string
           user_id?: string

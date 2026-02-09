@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { usePaginatedNotifications, useMarkNotificationRead, useMarkAllNotificationsRead, NotificationFilters } from '@/hooks/usePaginatedNotifications';
+import { useSnoozeNotification, useUnsnoozeNotification } from '@/hooks/useSnoozeNotification';
 import { useRespondToQuery, useAcceptQueryResponse, useSubordinateQueries, QueryStatusExtended } from '@/hooks/useQueryWorkflow';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +21,7 @@ import { InboxStatsCards, buildInboxStats } from '@/components/inbox/InboxStatsC
 import { InboxItem, filterInboxItems } from '@/lib/inboxUtils';
 import { InboxInsights } from '@/components/inbox/InboxInsights';
 import { StatsRowSkeleton } from '@/components/ui/LoadingSkeletons';
-import { Bell, MessageSquare, Send, Users, CheckCheck, Paperclip, BarChart3 } from 'lucide-react';
+import { Bell, MessageSquare, Send, Users, CheckCheck, Paperclip, BarChart3, AlarmClock } from 'lucide-react';
 
 interface QueryWithDetails {
   id: string;
@@ -65,7 +66,7 @@ export default function QueryInbox() {
     notificationType: 'all',
   });
 
-  const [activeTab, setActiveTab] = useState<'notifications' | 'received' | 'sent' | 'team' | 'insights'>('notifications');
+  const [activeTab, setActiveTab] = useState<'notifications' | 'received' | 'sent' | 'team' | 'snoozed' | 'insights'>('notifications');
   const [selectedItem, setSelectedItem] = useState<InboxItem | null>(null);
   const [detailSheetOpen, setDetailSheetOpen] = useState(false);
 
@@ -79,6 +80,8 @@ export default function QueryInbox() {
   const respondToQuery = useRespondToQuery();
   const acceptQueryResponse = useAcceptQueryResponse();
   const { data: subordinateQueries = [], isLoading: loadingSubordinateQueries } = useSubordinateQueries();
+  const snoozeNotification = useSnoozeNotification();
+  const unsnoozeNotification = useUnsnoozeNotification();
 
   // Paginated notifications
   const notificationFilters: NotificationFilters = useMemo(() => ({
@@ -95,6 +98,16 @@ export default function QueryInbox() {
     hasMore: hasMoreNotifications,
     loadMore: loadMoreNotifications,
   } = usePaginatedNotifications({ pageSize: 20, filters: notificationFilters });
+
+  // Snoozed notifications
+  const {
+    notifications: snoozedNotifications,
+    isLoading: loadingSnoozed,
+    isFetching: fetchingSnoozed,
+    totalCount: snoozedTotalCount,
+    hasMore: hasMoreSnoozed,
+    loadMore: loadMoreSnoozed,
+  } = usePaginatedNotifications({ pageSize: 20, filters: notificationFilters, showSnoozed: true });
 
   const markNotificationRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
@@ -174,8 +187,28 @@ export default function QueryInbox() {
       notificationType: n.type,
       kpiId: n.kpi_id,
       metadata: n.metadata,
+      snoozedUntil: n.snoozed_until,
+      snoozeCount: n.snooze_count,
     })),
     [notifications]
+  );
+
+  // Convert snoozed notifications to InboxItems
+  const snoozedItems: InboxItem[] = useMemo(() =>
+    snoozedNotifications.map(n => ({
+      id: n.id,
+      type: 'notification' as const,
+      title: n.title,
+      message: n.message,
+      isRead: n.is_read,
+      createdAt: n.created_at,
+      notificationType: n.type,
+      kpiId: n.kpi_id,
+      metadata: n.metadata,
+      snoozedUntil: n.snoozed_until,
+      snoozeCount: n.snooze_count,
+    })),
+    [snoozedNotifications]
   );
 
   // Convert queries to InboxItems
@@ -406,6 +439,15 @@ export default function QueryInbox() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="snoozed" className="flex items-center gap-1.5 flex-shrink-0 text-xs sm:text-sm">
+            <AlarmClock className="h-4 w-4" />
+            Snoozed
+            {snoozedTotalCount > 0 && (
+              <Badge variant="outline" className="ml-0.5 h-4 sm:h-5 min-w-4 sm:min-w-5 px-1 flex items-center justify-center text-[10px] sm:text-xs">
+                {snoozedTotalCount}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="insights" className="flex items-center gap-1.5 flex-shrink-0 text-xs sm:text-sm">
             <BarChart3 className="h-4 w-4" />
             Insights
@@ -432,6 +474,8 @@ export default function QueryInbox() {
             emptyMessage="No notifications yet"
             emptyDescription="You'll receive notifications when there are updates to your KPIs"
             currentUserId={user?.id}
+            onSnooze={(id, until) => snoozeNotification.mutate({ notificationId: id, snoozedUntil: until })}
+            isSnoozing={snoozeNotification.isPending}
           />
         </TabsContent>
 
@@ -496,6 +540,35 @@ export default function QueryInbox() {
             emptyDescription="Queries raised to your direct reports will appear here"
             enableGrouping={true}
             currentUserId={user?.id}
+          />
+        </TabsContent>
+
+        {/* Snoozed Tab */}
+        <TabsContent value="snoozed" className="mt-6 space-y-4">
+          {/* Smart suggestion for repeatedly-snoozed items */}
+          {snoozedItems.some(i => (i.snoozeCount || 0) >= 3) && (
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
+              <AlarmClock className="h-4 w-4 text-amber-600 shrink-0" />
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                Some items have been snoozed 3+ times. Consider marking them as read to clear your inbox.
+              </p>
+            </div>
+          )}
+          <InboxTable
+            items={snoozedItems}
+            isLoading={loadingSnoozed}
+            isFetching={fetchingSnoozed}
+            hasMore={hasMoreSnoozed}
+            onLoadMore={loadMoreSnoozed}
+            onViewItem={handleViewItem}
+            onMarkRead={handleMarkRead}
+            emptyMessage="No snoozed items"
+            emptyDescription="Snooze notifications to defer them for later"
+            enableGrouping={false}
+            currentUserId={user?.id}
+            onUnsnooze={(id) => unsnoozeNotification.mutate(id)}
+            isSnoozing={unsnoozeNotification.isPending}
+            showSnoozedInfo
           />
         </TabsContent>
 
