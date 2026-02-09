@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -23,7 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Database, Download, RotateCcw, HardDrive, Clock, AlertTriangle } from 'lucide-react';
+import { Database, Download, RotateCcw, HardDrive, Clock, AlertTriangle, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   useBackupLogs,
@@ -31,6 +31,7 @@ import {
   useTriggerRestore,
   useAutoBackupSetting,
   useDownloadBackup,
+  useUploadAndRestore,
 } from '@/hooks/useBackups';
 
 function formatBytes(bytes: number | null): string {
@@ -46,9 +47,13 @@ export function BackupRestoreTab() {
   const triggerRestore = useTriggerRestore();
   const downloadBackup = useDownloadBackup();
   const autoBackup = useAutoBackupSetting();
+  const uploadRestore = useUploadAndRestore();
 
   const [restoreId, setRestoreId] = useState<string | null>(null);
   const [confirmRestore, setConfirmRestore] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [confirmUploadRestore, setConfirmUploadRestore] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const handleRestoreClick = (id: string) => {
     setRestoreId(id);
@@ -61,6 +66,22 @@ export function BackupRestoreTab() {
     }
     setConfirmRestore(false);
     setRestoreId(null);
+  };
+
+  const handleUploadFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadFile(file);
+    setConfirmUploadRestore(true);
+    if (uploadInputRef.current) uploadInputRef.current.value = '';
+  };
+
+  const handleUploadRestoreConfirm = () => {
+    if (uploadFile) {
+      uploadRestore.mutate(uploadFile);
+    }
+    setConfirmUploadRestore(false);
+    setUploadFile(null);
   };
 
   if (isLoading || autoBackup.isLoading) {
@@ -104,8 +125,8 @@ export function BackupRestoreTab() {
             />
           </div>
 
-          {/* Manual backup button */}
-          <div className="flex items-center gap-3">
+          {/* Manual backup & upload buttons */}
+          <div className="flex items-center gap-3 flex-wrap">
             <Button
               onClick={() => triggerBackup.mutate()}
               disabled={triggerBackup.isPending}
@@ -113,8 +134,23 @@ export function BackupRestoreTab() {
               <HardDrive className={`h-4 w-4 mr-2 ${triggerBackup.isPending ? 'animate-pulse' : ''}`} />
               {triggerBackup.isPending ? 'Creating Backup...' : 'Backup Now'}
             </Button>
+            <input
+              ref={uploadInputRef}
+              type="file"
+              className="hidden"
+              accept=".json"
+              onChange={handleUploadFileSelect}
+            />
+            <Button
+              variant="outline"
+              onClick={() => uploadInputRef.current?.click()}
+              disabled={uploadRestore.isPending}
+            >
+              <Upload className={`h-4 w-4 mr-2 ${uploadRestore.isPending ? 'animate-pulse' : ''}`} />
+              {uploadRestore.isPending ? 'Restoring...' : 'Upload & Restore'}
+            </Button>
             <span className="text-sm text-muted-foreground">
-              Creates an immediate full database snapshot.
+              Create a snapshot or restore from an external backup file.
             </span>
           </div>
         </CardContent>
@@ -157,7 +193,7 @@ export function BackupRestoreTab() {
                       {format(new Date(backup.created_at), 'dd MMM yyyy, hh:mm a')}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={backup.backup_type === 'scheduled' ? 'secondary' : 'outline'}>
+                      <Badge variant={backup.backup_type === 'scheduled' ? 'secondary' : backup.backup_type === 'uploaded' ? 'default' : 'outline'}>
                         {backup.backup_type}
                       </Badge>
                     </TableCell>
@@ -242,6 +278,39 @@ export function BackupRestoreTab() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Yes, Restore Database
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* Upload & Restore Confirmation Dialog */}
+      <AlertDialog open={confirmUploadRestore} onOpenChange={setConfirmUploadRestore}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Restore from Uploaded File
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                <strong>This will replace ALL current data</strong> with data from the uploaded file
+                {uploadFile ? ` "${uploadFile.name}"` : ''}.
+              </p>
+              <p>
+                This action cannot be undone. All current data will be lost.
+                User authentication data will not be affected.
+              </p>
+              <p className="text-destructive font-medium">
+                Are you absolutely sure you want to proceed?
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleUploadRestoreConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Yes, Upload & Restore
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
