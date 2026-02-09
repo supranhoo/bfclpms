@@ -320,9 +320,17 @@ has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
 ```
 
 **Profiles Table RLS:**
-- Users can view their own profile
-- Managers can view direct reports
-- Admins, Auditors, and Management can view all profiles
+- Users can view their own profile (`authenticated` only)
+- Managers can view direct reports (`authenticated` only)
+- Admins, Auditors, and Management can view all profiles (`authenticated` only)
+
+**Audit/System Log INSERT Policies:**
+- `kra_rollover_logs`: Admin role only (service role bypasses RLS for cron/edge functions)
+- `pip_audit_logs`: Admin role only (service role bypasses RLS for triggers)
+- `notifications`: Users can insert their own (`user_id = auth.uid()`) or admin can insert any
+
+- `app_settings`: Public read (required for login page branding before authentication)
+- `workflow_settings`: Restricted to `authenticated` role (not public/anonymous)
 
 ### RLS Permission Model for Reviewers
 
@@ -472,7 +480,7 @@ The `kpis` table has specific UPDATE policies for workflow progression:
 - Displays cycle duration based on wallpaper count
 
 **RLS Policies:**
-- `SELECT`: Public (allows login page to load branding)
+- `SELECT`: Public (required for login page to load branding before authentication)
 - `UPDATE`: Admin role only
 
 **Database Schema:**
