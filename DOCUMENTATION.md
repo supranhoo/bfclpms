@@ -329,8 +329,9 @@ has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
 - `pip_audit_logs`: Admin role only (service role bypasses RLS for triggers)
 - `notifications`: Users can insert their own (`user_id = auth.uid()`) or admin can insert any
 
+**Public vs Authenticated READ Policies:**
 - `app_settings`: Public read (required for login page branding before authentication)
-- `workflow_settings`: Restricted to `authenticated` role (not public/anonymous)
+- All other reference/config tables (`frequency_config`, `review_periods`, `workflow_config`, `workflow_templates`, `workflow_settings`): Restricted to `authenticated` role only — no unauthenticated access
 
 ### RLS Permission Model for Reviewers
 
