@@ -13,7 +13,14 @@ export type EmailEventType =
   | 'period_locked'
   | 'pip_initiated'
   | 'pip_milestone_reminder'
-  | 'pip_completed';
+  | 'pip_completed'
+  | 'kpi_ready_for_audit'
+  | 'kpi_ready_for_management'
+  | 'query_response_received'
+  | 'admin_status_change'
+  | 'admin_data_entry'
+  | 'admin_data_override'
+  | 'org_kpi_sent_back';
 
 export type EmailProvider = 'resend' | 'smtp' | 'microsoft_graph';
 export type SmtpSecurity = 'tls' | 'starttls' | 'none';

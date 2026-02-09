@@ -1659,32 +1659,67 @@ Each KPI gets a dedicated card-style layout similar to the web UI's ReviewTrailC
 
 **KPI Status Transition Notifications:**
 
-| Status Transition | Recipients | Notification Type |
-|-------------------|-----------|-------------------|
-| `kra_set` → `self_review` | Reporting Manager | `kpi_submitted` - Self Review Submitted (employee submits data, awaiting manager) |
-| `self_review` → `manager_check` | Employee | `kpi_approved` - Manager Reviewed (manager processes and provides score) |
-| `manager_check` → `management_review` | Employee + Management | `kpi_approved` + `kpi_ready_for_management` |
-| `manager_check` → `audit` | Employee + Auditors | `kpi_approved` + `kpi_ready_for_audit` (alternative workflow) |
-| `audit` → `management_review` | Employee + Management | `kpi_approved` + `kpi_ready_for_management` |
-| `management_review` → `approved` | Employee | `kpi_finalized` - KPI Finalized |
-| `audit` → `approved` | Employee | `kpi_finalized` - KPI Finalized (skip management workflow) |
+| Status Transition | Recipients | Notification Type | Email Event Type |
+|-------------------|-----------|-------------------|------------------|
+| `kra_set` → `self_review` | Reporting Manager | `kpi_submitted` | `kpi_submitted` |
+| Any status → `kra_set` (send-back) | Employee | `manager_rejected` | `manager_rejected` |
+| `self_review` → `manager_check` | Employee + Auditors | `kpi_approved` + `kpi_ready_for_audit` | `manager_approved` + `kpi_ready_for_audit` |
+| `manager_check` → `management_review` | Employee + Management | `kpi_approved` + `kpi_ready_for_management` | `manager_approved` + `kpi_ready_for_management` |
+| `manager_check` → `audit` | Employee + Auditors | `kpi_approved` + `kpi_ready_for_audit` | `manager_approved` + `kpi_ready_for_audit` |
+| `audit` → `management_review` | Employee + Management | `kpi_approved` + `kpi_ready_for_management` | `manager_approved` + `kpi_ready_for_management` |
+| `management_review` → `approved` | Employee | `kpi_finalized` | `final_approved` |
+| `audit` → `approved` | Employee | `kpi_finalized` | `final_approved` |
 
-**Workflow Status Meanings:**
-- `kra_set`: KPI assigned but not yet submitted by employee
-- `self_review`: Employee has submitted self-review, awaiting manager processing
-- `manager_check`: Manager has reviewed and scored, ready for next stage
-- `audit`: Under auditor review (if applicable per workflow template)
-- `management_review`: Under management final review
-- `approved`: Workflow complete, KPI finalized
+**KPI Creation Notifications:**
 
-**Other Trigger Events:**
-- Query raised → Notify recipient
-- Query resolved → Notify raiser
-- PIP status changes → Notify employee/HR
+| Event | Recipients | Notification Type | Email Event Type |
+|-------|-----------|-------------------|------------------|
+| KPI created (INSERT) | Employee | `kra_assigned` | `kra_assigned` |
+
+**Review Period Notifications:**
+
+| Event | Recipients | Notification Type | Email Event Type |
+|-------|-----------|-------------------|------------------|
+| Period locked | All employees in period | `period_locked` | `period_locked` |
+
+**Query Notifications:**
+
+| Event | Recipients | Notification Type | Email Event Type |
+|-------|-----------|-------------------|------------------|
+| Query raised | Recipient | `query_raised` | `query_raised` |
+| Query response submitted | Raiser + Manager (FYI) | `query_response_submitted` / `query_response_fyi` | `query_response_received` |
+| Query resolved | Employee + Manager (FYI) | `query_resolved` / `query_resolved_fyi` | `query_resolved` |
+
+**PIP Notifications:**
+
+| Event | Recipients | Notification Type | Email Event Type |
+|-------|-----------|-------------------|------------------|
+| PIP created | Employee | `pip_initiated` | `pip_initiated` |
+| PIP completed | Employee | `pip_completed` | `pip_completed` |
+| PIP milestone reminder | Employee | `pip_milestone_reminder` | `pip_milestone_reminder` |
+
+**Admin Action Notifications:**
+
+| Event | Recipients | Notification Type | Email Event Type |
+|-------|-----------|-------------------|------------------|
+| Admin status change | Employee | `admin_status_change` | `admin_status_change` |
+| Admin data entry | Employee | `admin_data_entry` | `admin_data_entry` |
+| Admin data override | Employee | `admin_data_override` | `admin_data_override` |
+| Org KPI sent back | Data Owner(s) | `org_kpi_sent_back` | `org_kpi_sent_back` |
+
+**Email Notification Type Mapping:**
+The database trigger `send_email_on_notification()` maps internal notification types to email template event types. This allows in-app notification display to use descriptive internal types while emails use the correct template keys. Key mappings:
+- `kpi_approved` → `manager_approved`
+- `kpi_finalized` → `final_approved`
+- `query_response_submitted` / `query_response_fyi` → `query_response_received`
+- `query_resolved_fyi` → `query_resolved`
+- All other types pass through unchanged
 
 **Delivery:**
 - In-app notifications (real-time via Supabase Realtime)
-- Email notifications (via Resend edge function)
+- Email notifications (via configurable provider: Resend, SMTP, or Microsoft 365 Graph API)
+- Email events are individually toggleable in System Settings → Email Notifications
+- 18 event types supported with customizable email templates
 
 ### 4.13 Frequency & Sub-Frequency Logic
 
