@@ -1144,28 +1144,8 @@ export default function ImportData() {
           if (error) throw error;
           successCount++;
         } else if (row.email) {
-          // Create new user only if email is provided
-          // Generate a cryptographically random password for security
-          const randomPassword = crypto.randomUUID() + crypto.randomUUID().slice(0, 8) + 'Aa1!';
-          
-          // Use regular signUp - admin API should only be called from edge functions
-          const { data: signupData, error: signupError } = await supabase.auth.signUp({
-            email: sanitizeText(row.email),
-            password: randomPassword,
-            options: {
-              data: {
-                full_name: sanitizeText(row.fullName),
-              },
-            },
-          });
-          
-          if (signupError) throw signupError;
-          const newUserId = signupData.user?.id || null;
-
-          // Wait a moment for the trigger to create the profile
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // Update the profile with additional details
+          // Create new user via edge function (server-side admin API)
+          // This does NOT switch the admin's session like client-side signUp would
           const departmentId = departments?.find(d => 
             d.name.toLowerCase() === row.department?.toLowerCase()
           )?.id || null;
@@ -1175,18 +1155,21 @@ export default function ImportData() {
             (row.managerName && p.full_name?.toLowerCase() === row.managerName?.toLowerCase())
           )?.id || null;
 
-          const { error: updateError } = await supabase
-            .from('profiles')
-            .update({
+          const { data: fnData, error: fnError } = await supabase.functions.invoke('create-employee', {
+            body: {
               employee_code: String(row.employeeCode),
-              designation: sanitizeText(row.designation) || null,
-              department_id: departmentId,
-              pms_grade: sanitizeText(row.pmsGrade) || null,
-              reporting_manager_id: managerId,
-            })
-            .eq('email', row.email);
+              full_name: sanitizeText(row.fullName),
+              email: sanitizeText(row.email),
+              designation: sanitizeText(row.designation) || undefined,
+              department_id: departmentId || undefined,
+              pms_grade: sanitizeText(row.pmsGrade) || undefined,
+              reporting_manager_id: managerId || undefined,
+            },
+          });
 
-          if (updateError) throw updateError;
+          if (fnError) throw fnError;
+
+          const newUserId = fnData?.profile?.id || null;
 
           // Assign role to new user (use explicit role from Excel or default to 'employee')
           if (newUserId) {
