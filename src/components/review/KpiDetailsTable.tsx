@@ -140,7 +140,7 @@ export function KpiDetailsTable({
 }: KpiDetailsTableProps) {
   // Calculate max visible columns across all KPIs
   const visibleColumns = getMaxVisibleColumns(kpis);
-  const totalColumns = 4 + visibleColumns.length + 2; // Category, KRA/KPI, Target, [scores...], Status, Actions
+  const totalColumns = 5 + visibleColumns.length + 2; // Category, KRA/KPI, Target, Weightage, [scores...], Status, Actions
   
   const canReviewKpi = (kpi: KPI): boolean => {
     const submission = submissionMap.get(kpi.id);
@@ -277,6 +277,7 @@ export function KpiDetailsTable({
           <TableHead>Category</TableHead>
           <TableHead>KRA / KPI</TableHead>
           <TableHead>Target</TableHead>
+          <TableHead>Weightage</TableHead>
           {visibleColumns.map(col => (
             <TableHead key={col.key} className="text-center">{col.label}</TableHead>
           ))}
@@ -359,6 +360,10 @@ export function KpiDetailsTable({
                   )}
                 </TableCell>
                 
+                {/* Weightage */}
+                <TableCell>
+                  <span className="text-sm">{kpi.weightage ?? 0}%</span>
+                </TableCell>
                 {/* Dynamic Score Columns */}
                 {visibleColumns.map(col => {
                   const score = getScoreForColumn(submission, col.key);
