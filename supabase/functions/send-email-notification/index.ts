@@ -267,15 +267,26 @@ const sendViaSmtp = async (
   subject: string,
   html: string
 ): Promise<void> => {
-  console.log(`Connecting to SMTP server: ${host}:${port} with security: ${security}`);
+  // Trim inputs to prevent whitespace issues
+  const trimmedHost = host.trim();
+  const trimmedUsername = username.trim();
+  const trimmedFromAddress = fromAddress.trim();
+  const trimmedFromName = fromName.trim();
+
+  console.log(`Connecting to SMTP server: ${trimmedHost}:${port} with security: ${security}`);
+
+  if (security === 'starttls') {
+    console.warn("STARTTLS is not supported in the edge runtime. Please use TLS (port 465) instead.");
+    throw new Error("STARTTLS is not supported in the server environment. Please switch to TLS (port 465) or None (port 25).");
+  }
   
   const client = new SMTPClient({
     connection: {
-      hostname: host,
+      hostname: trimmedHost,
       port: port,
       tls: security === 'tls',
       auth: {
-        username: username,
+        username: trimmedUsername,
         password: password,
       },
     },
@@ -283,8 +294,8 @@ const sendViaSmtp = async (
 
   try {
     await client.send({
-      from: `${fromName} <${fromAddress}>`,
-      to: toEmail,
+      from: `${trimmedFromName} <${trimmedFromAddress}>`,
+      to: toEmail.trim(),
       subject: subject,
       html: html,
     });
