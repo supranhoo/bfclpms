@@ -12,6 +12,7 @@ interface CreateEmployeeRequest {
   designation?: string;
   department_id?: string;
   pms_grade?: string;
+  level?: string;
   reporting_manager_id?: string;
 }
 
@@ -94,6 +95,7 @@ Deno.serve(async (req) => {
           designation: body.designation || null,
           department_id: body.department_id || null,
           pms_grade: body.pms_grade || null,
+          level: body.level || null,
           reporting_manager_id: body.reporting_manager_id || null,
         })
         .eq('id', existingProfile.id)
@@ -145,6 +147,7 @@ Deno.serve(async (req) => {
             designation: body.designation || null,
             department_id: body.department_id || null,
             pms_grade: body.pms_grade || null,
+            level: body.level || null,
             reporting_manager_id: body.reporting_manager_id || null,
           })
           .eq('id', userId)
@@ -164,6 +167,7 @@ Deno.serve(async (req) => {
             designation: body.designation || null,
             department_id: body.department_id || null,
             pms_grade: body.pms_grade || null,
+            level: body.level || null,
             reporting_manager_id: body.reporting_manager_id || null,
           })
 
@@ -180,6 +184,7 @@ Deno.serve(async (req) => {
               designation: body.designation || null,
               department_id: body.department_id || null,
               pms_grade: body.pms_grade || null,
+              level: body.level || null,
               reporting_manager_id: body.reporting_manager_id || null,
             })
           
@@ -221,6 +226,7 @@ Deno.serve(async (req) => {
           designation: body.designation || null,
           department_id: body.department_id || null,
           pms_grade: body.pms_grade || null,
+          level: body.level || null,
           reporting_manager_id: body.reporting_manager_id || null,
         })
         .eq('id', userId)

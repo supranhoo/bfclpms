@@ -101,6 +101,21 @@ export function usePmsGrades() {
   });
 }
 
+export function useLevels() {
+  return useQuery({
+    queryKey: ['levels'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('levels' as any)
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      return data as any[];
+    },
+  });
+}
+
 export function useKraCategories() {
   return useQuery({
     queryKey: ['kra-categories'],
