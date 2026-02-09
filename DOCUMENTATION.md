@@ -46,7 +46,8 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 ### Key Features
 
 - **Unified Dashboard**: Single entry point for all user roles with integrated view modes. Users with multiple roles see a toggle bar at the top to switch between "My Dashboard", "Team Review", "Audit", and "Management" modes. URL-driven state (`/dashboard?view=team`) enables deep linking. The dashboard includes analytics, period/category filters, and direct KPI review from the table.
-- **View Mode Toggle**: Role-based tab switcher showing available views (self, team, audit, management). Legacy routes (`/team-review`, `/audit`, `/management-review`) automatically redirect to the unified dashboard with appropriate view mode.
+- **Management Dashboard** (`/management-dashboard`): Executive analytics view with hierarchical filters (Division → Business Unit → Department → Manager → Employee), department performance charts, rating distributions, pending reviews table, and period-to-period trend comparisons. Accessible to management and admin roles.
+- **View Mode Toggle**: Role-based tab switcher showing available views (self, team, audit, management). Legacy routes (`/team-review`, `/audit`) automatically redirect to the unified dashboard with appropriate view mode.
 - **Employee Selector Grid**: Unified component for reviewer modes showing filterable employee cards with role-specific stats and badges.
 - **Dark Mode Support**: Full dark/light theme toggle with system preference detection via `next-themes`
 - **Collapsible Sidebar with Mobile Support**: Sidebar auto-collapses on mobile; floating toggle button appears when sidebar is hidden (both mobile and desktop)

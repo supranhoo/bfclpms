@@ -74,7 +74,11 @@ const App = () => (
               
               {/* Legacy routes - redirect to unified dashboard with view mode */}
               <Route path="/team-review" element={<Navigate to="/dashboard?view=team" replace />} />
-              <Route path="/management-dashboard" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/management-dashboard" element={
+                <ProtectedRoute allowedRoles={['management', 'admin']}>
+                  <ManagementDashboard />
+                </ProtectedRoute>
+              } />
               <Route path="/management-review" element={<Navigate to="/dashboard?view=management" replace />} />
               <Route path="/audit" element={<Navigate to="/dashboard?view=audit" replace />} />
               

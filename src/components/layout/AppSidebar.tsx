@@ -56,6 +56,7 @@ const menuItems = {
     { title: 'Team Review', icon: Users, path: '/dashboard?view=team', roles: ['manager', 'admin', 'management'] },
   ],
   management: [
+    { title: 'Management Dashboard', icon: LayoutDashboard, path: '/management-dashboard', roles: ['management', 'admin'] },
     { title: 'Management Review', icon: Briefcase, path: '/dashboard?view=management', roles: ['management', 'admin'] },
   ],
   audit: [
@@ -95,6 +96,8 @@ const getSectionForPath = (pathname: string, search: string = ''): string => {
   if (fullPath.includes('view=team')) return 'manager';
   if (fullPath.includes('view=audit')) return 'audit';
   if (fullPath.includes('view=management')) return 'management';
+  // Check for management dashboard path
+  if (pathname === '/management-dashboard') return 'management';
   // Existing path checks
   if (menuItems.main.some(item => pathname === item.path.split('?')[0])) return 'main';
   if (menuItems.admin.some(item => pathname.startsWith(item.path))) return 'admin';
