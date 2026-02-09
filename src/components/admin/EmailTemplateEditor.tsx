@@ -70,7 +70,7 @@ The review will now proceed to the next stage.`,
     subject: '[PMS] Action Required: KPI Sent Back for Revision',
     bodyTemplate: `Hi {{recipient_name}},
 
-Your manager has sent back your KPI for revision.
+Your KPI has been sent back for revision.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
@@ -78,6 +78,54 @@ KPI: {{kpi_name}}
 Please review the feedback and update your submission.`,
     color: '#f59e0b',
     emoji: '🔄',
+  },
+  {
+    key: 'kpi_ready_for_audit',
+    label: 'Ready for Audit',
+    description: 'Sent to auditors when KPI is ready for audit review',
+    subject: '[PMS] KPI Ready for Audit Review',
+    bodyTemplate: `Hi {{recipient_name}},
+
+A KPI is ready for your audit review.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+
+Please review and provide your assessment.`,
+    color: '#8b5cf6',
+    emoji: '🔍',
+  },
+  {
+    key: 'kpi_ready_for_management',
+    label: 'Ready for Management',
+    description: 'Sent to management when KPI is ready for final review',
+    subject: '[PMS] KPI Ready for Management Review',
+    bodyTemplate: `Hi {{recipient_name}},
+
+A KPI is ready for management review.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+
+Please review and provide final approval.`,
+    color: '#0ea5e9',
+    emoji: '👔',
+  },
+  {
+    key: 'final_approved',
+    label: 'Final Approval',
+    description: 'Sent to employee when KPI receives final sign-off',
+    subject: '[PMS] 🎉 Your KPI Has Been Finalized',
+    bodyTemplate: `Hi {{recipient_name}},
+
+Congratulations! Your KPI has received final approval and is now complete.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+
+Thank you for your contribution!`,
+    color: '#6366f1',
+    emoji: '🎉',
   },
   {
     key: 'query_raised',
@@ -96,9 +144,25 @@ Please respond to this query at your earliest convenience.`,
     emoji: '❓',
   },
   {
+    key: 'query_response_received',
+    label: 'Query Response',
+    description: 'Sent to raiser when employee responds to query',
+    subject: '[PMS] Query Response Received',
+    bodyTemplate: `Hi {{recipient_name}},
+
+A response has been submitted to your query.
+
+KPI: {{kpi_name}}
+Resolution: {{resolution_notes}}
+
+Please review the response and take appropriate action.`,
+    color: '#f59e0b',
+    emoji: '💬',
+  },
+  {
     key: 'query_resolved',
     label: 'Query Resolved',
-    description: 'Sent to raiser when their query is resolved',
+    description: 'Sent to employee when their query is resolved',
     subject: '[PMS] Your Query Has Been Resolved',
     bodyTemplate: `Hi {{recipient_name}},
 
@@ -108,22 +172,6 @@ KPI: {{kpi_name}}
 Resolution: {{resolution_notes}}`,
     color: '#10b981',
     emoji: '✅',
-  },
-  {
-    key: 'final_approved',
-    label: 'Final Approval',
-    description: 'Sent to employee when KPI receives final sign-off',
-    subject: '[PMS] 🎉 Your KPI Has Been Finalized',
-    bodyTemplate: `Hi {{recipient_name}},
-
-Congratulations! Your KPI has received final approval and is now complete.
-
-KRA: {{kra_name}}
-KPI: {{kpi_name}}
-
-Thank you for your contribution!`,
-    color: '#6366f1',
-    emoji: '🎉',
   },
   {
     key: 'kra_assigned',
@@ -154,6 +202,67 @@ The review period {{review_period}} {{review_year}} has been locked.
 No further changes can be made to KPIs in this period unless unlocked by an administrator.`,
     color: '#64748b',
     emoji: '🔒',
+  },
+  {
+    key: 'admin_status_change',
+    label: 'Admin Status Change',
+    description: 'Sent when admin changes KPI status',
+    subject: '[PMS] Admin Status Change on Your KPI',
+    bodyTemplate: `Hi {{recipient_name}},
+
+An administrator has changed the status of your KPI.
+
+KPI: {{kpi_name}}
+
+Please check your dashboard for updated details.`,
+    color: '#64748b',
+    emoji: '⚙️',
+  },
+  {
+    key: 'admin_data_entry',
+    label: 'Admin Data Entry',
+    description: 'Sent when admin enters data for a KPI',
+    subject: '[PMS] Admin Data Entry on Your KPI',
+    bodyTemplate: `Hi {{recipient_name}},
+
+An administrator has entered data for your KPI.
+
+KPI: {{kpi_name}}
+
+Please check your dashboard for updated details.`,
+    color: '#64748b',
+    emoji: '📊',
+  },
+  {
+    key: 'admin_data_override',
+    label: 'Admin Data Override',
+    description: 'Sent when admin overrides KPI data',
+    subject: '[PMS] Admin Data Override on Your KPI',
+    bodyTemplate: `Hi {{recipient_name}},
+
+An administrator has overridden data on your KPI.
+
+KPI: {{kpi_name}}
+
+Please check your dashboard for updated details.`,
+    color: '#64748b',
+    emoji: '🔧',
+  },
+  {
+    key: 'org_kpi_sent_back',
+    label: 'Org KPI Sent Back',
+    description: 'Sent when org KPI data is sent back for revision',
+    subject: '[PMS] Org KPI Data Sent Back for Revision',
+    bodyTemplate: `Hi {{recipient_name}},
+
+The org KPI data you submitted has been sent back for revision.
+
+KPI: {{kpi_name}}
+Reason: {{send_back_reason}}
+
+Please review the feedback and resubmit the data.`,
+    color: '#f59e0b',
+    emoji: '↩️',
   },
   {
     key: 'pip_initiated',
@@ -218,6 +327,7 @@ const PLACEHOLDERS = [
   { key: '{{review_year}}', description: 'Review year' },
   { key: '{{query_reason}}', description: 'Reason for the query (query events only)' },
   { key: '{{resolution_notes}}', description: 'Resolution notes (query resolved only)' },
+  { key: '{{send_back_reason}}', description: 'Reason for sending back (send-back events only)' },
   { key: '{{pip_start_date}}', description: 'PIP start date (PIP events only)' },
   { key: '{{pip_end_date}}', description: 'PIP end date (PIP events only)' },
   { key: '{{pip_reason}}', description: 'Reason for PIP (PIP events only)' },

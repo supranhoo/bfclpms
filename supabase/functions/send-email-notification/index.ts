@@ -168,7 +168,7 @@ The review will now proceed to the next stage.`,
     subject: '[PMS] Action Required: KPI Sent Back for Revision',
     body: `Hi {{recipient_name}},
 
-Your manager has sent back your KPI for revision.
+Your KPI has been sent back for revision.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
@@ -263,6 +263,81 @@ Remarks: {{pip_remarks}}
 
 Thank you for your dedication and hard work during this period. We appreciate your commitment to improvement.`,
   },
+  // New templates for previously unmapped notification types
+  kpi_ready_for_audit: {
+    subject: '[PMS] KPI Ready for Audit Review',
+    body: `Hi {{recipient_name}},
+
+A KPI is ready for your audit review.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+
+Please review and provide your assessment.`,
+  },
+  kpi_ready_for_management: {
+    subject: '[PMS] KPI Ready for Management Review',
+    body: `Hi {{recipient_name}},
+
+A KPI is ready for management review.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+
+Please review and provide final approval.`,
+  },
+  query_response_received: {
+    subject: '[PMS] Query Response Received',
+    body: `Hi {{recipient_name}},
+
+A response has been submitted to your query.
+
+KPI: {{kpi_name}}
+Resolution: {{resolution_notes}}
+
+Please review the response and take appropriate action.`,
+  },
+  admin_status_change: {
+    subject: '[PMS] Admin Status Change on Your KPI',
+    body: `Hi {{recipient_name}},
+
+An administrator has changed the status of your KPI.
+
+KPI: {{kpi_name}}
+
+Please check your dashboard for updated details.`,
+  },
+  admin_data_entry: {
+    subject: '[PMS] Admin Data Entry on Your KPI',
+    body: `Hi {{recipient_name}},
+
+An administrator has entered data for your KPI.
+
+KPI: {{kpi_name}}
+
+Please check your dashboard for updated details.`,
+  },
+  admin_data_override: {
+    subject: '[PMS] Admin Data Override on Your KPI',
+    body: `Hi {{recipient_name}},
+
+An administrator has overridden data on your KPI.
+
+KPI: {{kpi_name}}
+
+Please check your dashboard for updated details.`,
+  },
+  org_kpi_sent_back: {
+    subject: '[PMS] Org KPI Data Sent Back for Revision',
+    body: `Hi {{recipient_name}},
+
+The org KPI data you submitted has been sent back for revision.
+
+KPI: {{kpi_name}}
+Reason: {{send_back_reason}}
+
+Please review the feedback and resubmit the data.`,
+  },
 };
 
 const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string }> = {
@@ -277,6 +352,13 @@ const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string
   pip_initiated: { color: '#ef4444', emoji: '⚠️', title: 'Performance Improvement Plan' },
   pip_milestone_reminder: { color: '#f59e0b', emoji: '📅', title: 'PIP Milestone Reminder' },
   pip_completed: { color: '#10b981', emoji: '🎉', title: 'PIP Completed' },
+  kpi_ready_for_audit: { color: '#8b5cf6', emoji: '🔍', title: 'Ready for Audit' },
+  kpi_ready_for_management: { color: '#0ea5e9', emoji: '👔', title: 'Ready for Management' },
+  query_response_received: { color: '#f59e0b', emoji: '💬', title: 'Query Response Received' },
+  admin_status_change: { color: '#64748b', emoji: '⚙️', title: 'Admin Status Change' },
+  admin_data_entry: { color: '#64748b', emoji: '📊', title: 'Admin Data Entry' },
+  admin_data_override: { color: '#64748b', emoji: '🔧', title: 'Admin Data Override' },
+  org_kpi_sent_back: { color: '#f59e0b', emoji: '↩️', title: 'Org KPI Sent Back' },
 };
 
 // Replace placeholders in template
@@ -580,7 +662,10 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     }
 
     // Handle notification-triggered email
-    const { event_type, recipient_email, recipient_name, kpi_name, kra_name, actor_name, query_reason, resolution_notes, review_period, review_year } = body;
+    const { event_type, recipient_email, recipient_name, kpi_name, kra_name, actor_name, query_reason, resolution_notes, review_period, review_year,
+      pip_start_date, pip_end_date, pip_reason, pip_outcome, pip_remarks,
+      milestone_date, milestone_description, milestone_expected_outcome,
+      send_back_reason } = body;
 
     // Check if email notifications are enabled
     const { data: enabledSetting } = await supabase
@@ -688,6 +773,15 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       review_year,
       query_reason,
       resolution_notes,
+      pip_start_date,
+      pip_end_date,
+      pip_reason,
+      pip_outcome,
+      pip_remarks,
+      milestone_date,
+      milestone_description,
+      milestone_expected_outcome,
+      send_back_reason,
     };
 
     // Replace placeholders in subject and body

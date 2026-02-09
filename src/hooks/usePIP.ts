@@ -230,6 +230,20 @@ export function useCreatePIP() {
         new_value: pipData,
       } as any);
 
+      // Notify the employee about PIP initiation
+      await supabase.from('notifications').insert({
+        user_id: pipData.employee_id,
+        type: 'pip_initiated',
+        title: 'Performance Improvement Plan Initiated',
+        message: 'A Performance Improvement Plan has been created for you.',
+        metadata: {
+          pip_id: pip.id,
+          pip_start_date: pipData.start_date,
+          pip_end_date: pipData.end_date,
+          pip_reason: pipData.reason,
+        },
+      });
+
       return pip;
     },
     onSuccess: () => {
@@ -404,6 +418,27 @@ export function useCompletePIP() {
         performed_by: user.id,
         new_value: { status: 'completed', outcome, completion_remarks: remarks },
       } as any);
+
+      // Notify the employee about PIP completion
+      const { data: pip } = await supabase
+        .from('performance_improvement_plans')
+        .select('employee_id')
+        .eq('id', pipId)
+        .single();
+
+      if (pip) {
+        await supabase.from('notifications').insert({
+          user_id: pip.employee_id,
+          type: 'pip_completed',
+          title: 'Performance Improvement Plan Completed',
+          message: `Your Performance Improvement Plan has been completed. Outcome: ${outcome}`,
+          metadata: {
+            pip_id: pipId,
+            pip_outcome: outcome,
+            pip_remarks: remarks,
+          },
+        });
+      }
 
       return data;
     },
