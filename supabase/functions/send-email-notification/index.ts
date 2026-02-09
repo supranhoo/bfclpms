@@ -7,7 +7,29 @@ const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+// Get SMTP password: env secret first, then fall back to system_settings
+const getSmtpPassword = async (supabase: any): Promise<string | null> => {
+  const envPassword = Deno.env.get("SMTP_PASSWORD");
+  if (envPassword) return envPassword;
+
+  try {
+    const { data } = await supabase
+      .from("system_settings")
+      .select("setting_value")
+      .eq("setting_key", "smtp_password")
+      .single();
+    if (data?.setting_value) {
+      const val = data.setting_value;
+      if (typeof val === "string") return val.replace(/^"|"$/g, "");
+      return String(val);
+    }
+  } catch (e) {
+    console.error("Failed to read smtp_password from system_settings:", e);
+  }
+  return null;
 };
 
 interface TestEmailRequest {
@@ -307,10 +329,10 @@ const handler = async (req: Request): Promise<Response> => {
     // Handle SMTP connection test
     if (body.smtp_test === true) {
       const { smtp_host, smtp_port, smtp_security, smtp_username, smtp_from_address, smtp_from_name, recipient_email } = body as SmtpTestRequest;
-      const smtpPassword = Deno.env.get("SMTP_PASSWORD");
+      const smtpPassword = await getSmtpPassword(supabase);
       
       if (!smtpPassword) {
-        return new Response(JSON.stringify({ success: false, error: "SMTP_PASSWORD secret not configured" }), {
+        return new Response(JSON.stringify({ success: false, error: "SMTP password not configured. Please set it in System Settings → Email." }), {
           status: 400,
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
@@ -401,9 +423,9 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       console.log(`Sending test email via ${provider} to ${recipient_email} from ${senderName} <${senderEmail}>`);
 
       if (provider === 'smtp') {
-        const smtpPassword = Deno.env.get("SMTP_PASSWORD");
+        const smtpPassword = await getSmtpPassword(supabase);
         if (!smtpPassword) {
-          return new Response(JSON.stringify({ success: false, error: "SMTP_PASSWORD secret not configured" }), {
+          return new Response(JSON.stringify({ success: false, error: "SMTP password not configured. Please set it in System Settings → Email." }), {
             status: 400,
             headers: { "Content-Type": "application/json", ...corsHeaders },
           });
@@ -550,10 +572,10 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     console.log(`Sending ${event_type} email via ${provider} to ${recipient_email}`);
 
     if (provider === 'smtp') {
-      const smtpPassword = Deno.env.get("SMTP_PASSWORD");
+      const smtpPassword = await getSmtpPassword(supabase);
       if (!smtpPassword) {
-        console.error("SMTP_PASSWORD secret not configured");
-        return new Response(JSON.stringify({ error: "SMTP_PASSWORD secret not configured" }), {
+        console.error("SMTP password not configured");
+        return new Response(JSON.stringify({ error: "SMTP password not configured. Please set it in System Settings → Email." }), {
           status: 500,
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
