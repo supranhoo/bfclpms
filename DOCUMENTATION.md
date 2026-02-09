@@ -1307,6 +1307,11 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
 - Skip stages for specific groups
 
 #### 4.9.9 Data Import (`/admin/import`)
+- **Organization Structure Import** (first tab)
+  - Bulk import divisions, business units, departments, sub-branches, designations, and PMS grades from Excel
+  - Hierarchy validation: BU requires division, dept requires BU, sub-branch requires dept
+  - Deduplication by name (case-insensitive); codes updated if provided for existing entries
+  - Download template and export current data supported
 - Bulk import employees from Excel
   - New employees are provisioned via the `create-employee` backend function (server-side admin API), which prevents the admin session from being logged out during bulk creation
   - Existing employees are updated in-place via direct profile updates

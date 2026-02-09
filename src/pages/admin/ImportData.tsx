@@ -12,7 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { FileSpreadsheet, AlertCircle, CheckCircle2, Download, Users, Loader2, Trash2 } from 'lucide-react';
+import { FileSpreadsheet, AlertCircle, CheckCircle2, Download, Users, Loader2, Trash2, Building2 } from 'lucide-react';
+import OrgStructureImport from '@/components/admin/OrgStructureImport';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
@@ -1667,9 +1668,17 @@ export default function ImportData() {
 
       <Tabs defaultValue="employees">
         <TabsList>
+          <TabsTrigger value="org-structure">
+            <Building2 className="h-4 w-4 mr-1.5" />
+            Organization Structure
+          </TabsTrigger>
           <TabsTrigger value="employees">Import Employees</TabsTrigger>
           <TabsTrigger value="kpis">Import PMS Data</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="org-structure">
+          <OrgStructureImport />
+        </TabsContent>
 
         <TabsContent value="employees" className="space-y-6">
           <Card>
