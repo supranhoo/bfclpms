@@ -31,6 +31,7 @@ export default function Organization() {
   const [dialogType, setDialogType] = useState<'division' | 'bu' | 'department' | 'sub-branch' | 'designation' | 'pms-grade'>('division');
   const [formName, setFormName] = useState('');
   const [formCode, setFormCode] = useState('');
+  const [formLevel, setFormLevel] = useState('');
   const [formParentId, setFormParentId] = useState('');
 
   // Delete confirmation state
@@ -39,6 +40,7 @@ export default function Organization() {
 
   // Inline code editing state
   const [editingCode, setEditingCode] = useState<{ type: string; id: string; code: string } | null>(null);
+  const [editingLevel, setEditingLevel] = useState<{ type: string; id: string; level: string } | null>(null);
 
   // Calculate employee counts per department
   const employeeCountByDept = useMemo(() => {
@@ -77,9 +79,9 @@ export default function Organization() {
   }, [businessUnits, busWithEmployees]);
 
   const createEntity = useMutation({
-    mutationFn: async ({ type, name, code, parentId }: { type: string; name: string; code: string; parentId?: string }) => {
+    mutationFn: async ({ type, name, code, level, parentId }: { type: string; name: string; code: string; level: string; parentId?: string }) => {
       let table = '';
-      let data: any = { name, code: code || null };
+      let data: any = { name, code: code || null, level: level || null };
 
       switch (type) {
         case 'division':
@@ -209,9 +211,39 @@ export default function Organization() {
     },
   });
 
+  const updateLevel = useMutation({
+    mutationFn: async ({ type, id, level }: { type: string; id: string; level: string }) => {
+      let table = '';
+      switch (type) {
+        case 'division': table = 'divisions'; break;
+        case 'bu': table = 'business_units'; break;
+        case 'department': table = 'departments'; break;
+        case 'sub-branch': table = 'sub_branches'; break;
+        case 'designation': table = 'designations'; break;
+        case 'pms-grade': table = 'pms_grades'; break;
+      }
+      const { error } = await supabase.from(table as any).update({ level: level || null }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['divisions'] });
+      queryClient.invalidateQueries({ queryKey: ['business-units'] });
+      queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ['sub-branches'] });
+      queryClient.invalidateQueries({ queryKey: ['designations'] });
+      queryClient.invalidateQueries({ queryKey: ['pms-grades'] });
+      toast({ title: 'Level updated successfully' });
+      setEditingLevel(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to update level', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const resetForm = () => {
     setFormName('');
     setFormCode('');
+    setFormLevel('');
     setFormParentId('');
   };
 
@@ -226,6 +258,7 @@ export default function Organization() {
       type: dialogType,
       name: formName,
       code: formCode,
+      level: formLevel,
       parentId: formParentId || undefined,
     });
   };
@@ -293,6 +326,46 @@ export default function Organization() {
     );
   };
 
+  const renderLevelCell = (type: string, id: string, currentLevel: string | null) => {
+    if (editingLevel?.type === type && editingLevel?.id === id) {
+      return (
+        <div className="flex items-center gap-1">
+          <Input
+            value={editingLevel.level}
+            onChange={(e) => setEditingLevel({ ...editingLevel, level: e.target.value })}
+            className="h-7 w-24"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                if (editingLevel) updateLevel.mutate({ type: editingLevel.type, id: editingLevel.id, level: editingLevel.level });
+              }
+              if (e.key === 'Escape') setEditingLevel(null);
+            }}
+          />
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { if (editingLevel) updateLevel.mutate({ type: editingLevel.type, id: editingLevel.id, level: editingLevel.level }); }} disabled={updateLevel.isPending}>
+            <Check className="h-3.5 w-3.5 text-green-600" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingLevel(null)}>
+            <X className="h-3.5 w-3.5 text-muted-foreground" />
+          </Button>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center gap-1 group">
+        <span>{currentLevel || '-'}</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={() => setEditingLevel({ type, id, level: currentLevel || '' })}
+        >
+          <Pencil className="h-3 w-3 text-muted-foreground" />
+        </Button>
+      </div>
+    );
+  };
+
   const isLoading = divisionsLoading || busLoading || deptsLoading || subLoading || designationsLoading || pmsGradesLoading;
 
   if (isLoading) {
@@ -340,9 +413,10 @@ export default function Organization() {
             <CardContent>
               <Table>
                 <TableHeader>
-                  <TableRow>
+                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Code</TableHead>
+                    <TableHead>Level</TableHead>
                     <TableHead>Business Units</TableHead>
                     <TableHead>Employees</TableHead>
                     <TableHead className="w-[80px]">Actions</TableHead>
@@ -356,6 +430,7 @@ export default function Organization() {
                       <TableRow key={div.id}>
                         <TableCell className="font-medium">{div.name}</TableCell>
                         <TableCell>{renderCodeCell('division', div.id, div.code)}</TableCell>
+                        <TableCell>{renderLevelCell('division', div.id, (div as any).level)}</TableCell>
                         <TableCell>{buCount}</TableCell>
                         <TableCell>
                           {hasEmployees ? (
@@ -399,9 +474,10 @@ export default function Organization() {
             <CardContent>
               <Table>
                 <TableHeader>
-                  <TableRow>
+                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Code</TableHead>
+                    <TableHead>Level</TableHead>
                     <TableHead>Division</TableHead>
                     <TableHead>Departments</TableHead>
                     <TableHead>Employees</TableHead>
@@ -416,6 +492,7 @@ export default function Organization() {
                       <TableRow key={bu.id}>
                         <TableCell className="font-medium">{bu.name}</TableCell>
                         <TableCell>{renderCodeCell('bu', bu.id, bu.code)}</TableCell>
+                        <TableCell>{renderLevelCell('bu', bu.id, (bu as any).level)}</TableCell>
                         <TableCell>{(bu.divisions as any)?.name || '-'}</TableCell>
                         <TableCell>{deptCount}</TableCell>
                         <TableCell>
@@ -463,6 +540,7 @@ export default function Organization() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Code</TableHead>
+                    <TableHead>Level</TableHead>
                     <TableHead>Business Unit</TableHead>
                     <TableHead>Sub-Branches</TableHead>
                     <TableHead>Employees</TableHead>
@@ -478,6 +556,7 @@ export default function Organization() {
                       <TableRow key={dept.id}>
                         <TableCell className="font-medium">{dept.name}</TableCell>
                         <TableCell>{renderCodeCell('department', dept.id, dept.code)}</TableCell>
+                        <TableCell>{renderLevelCell('department', dept.id, (dept as any).level)}</TableCell>
                         <TableCell>{(dept.business_units as any)?.name || '-'}</TableCell>
                         <TableCell>{sbCount}</TableCell>
                         <TableCell>
@@ -525,6 +604,7 @@ export default function Organization() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Code</TableHead>
+                    <TableHead>Level</TableHead>
                     <TableHead>Department</TableHead>
                     <TableHead className="w-[80px]">Actions</TableHead>
                   </TableRow>
@@ -534,6 +614,7 @@ export default function Organization() {
                     <TableRow key={sb.id}>
                       <TableCell className="font-medium">{sb.name}</TableCell>
                       <TableCell>{renderCodeCell('sub-branch', sb.id, sb.code)}</TableCell>
+                      <TableCell>{renderLevelCell('sub-branch', sb.id, (sb as any).level)}</TableCell>
                       <TableCell>{(sb.departments as any)?.name || '-'}</TableCell>
                       <TableCell>
                         <Button
@@ -570,6 +651,7 @@ export default function Organization() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Code</TableHead>
+                    <TableHead>Level</TableHead>
                     <TableHead className="w-[80px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -578,6 +660,7 @@ export default function Organization() {
                     <TableRow key={d.id}>
                       <TableCell className="font-medium">{d.name}</TableCell>
                       <TableCell>{renderCodeCell('designation', d.id, d.code)}</TableCell>
+                      <TableCell>{renderLevelCell('designation', d.id, (d as any).level)}</TableCell>
                       <TableCell>
                         <Button
                           variant="ghost"
@@ -613,6 +696,7 @@ export default function Organization() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Code</TableHead>
+                    <TableHead>Level</TableHead>
                     <TableHead className="w-[80px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -621,6 +705,7 @@ export default function Organization() {
                     <TableRow key={g.id}>
                       <TableCell className="font-medium">{g.name}</TableCell>
                       <TableCell>{renderCodeCell('pms-grade', g.id, g.code)}</TableCell>
+                      <TableCell>{renderLevelCell('pms-grade', g.id, (g as any).level)}</TableCell>
                       <TableCell>
                         <Button
                           variant="ghost"
@@ -664,6 +749,15 @@ export default function Organization() {
                 value={formCode}
                 onChange={(e) => setFormCode(e.target.value)}
                 placeholder="Enter code (optional)"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Level</Label>
+              <Input
+                value={formLevel}
+                onChange={(e) => setFormLevel(e.target.value)}
+                placeholder="Enter level (optional)"
               />
             </div>
 
