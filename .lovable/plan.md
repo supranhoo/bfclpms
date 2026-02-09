@@ -1,72 +1,73 @@
 
-# Snooze & Reminders for Inbox
+
+# Performance Optimizations
 
 ## Overview
-Add the ability to snooze notifications and queries so they disappear from the main inbox and re-surface at a chosen time. Includes a dedicated "Snoozed" tab, snooze count tracking, and smart suggestions for repeatedly-snoozed items.
+Four targeted changes to improve load time, reduce API calls, and improve error resilience -- all with minimal code modifications.
 
-## What You'll Get
-- A snooze button on each inbox row with preset options (1 hour, 4 hours, Tomorrow, Next Week) plus a custom date/time picker
-- Snoozed items hidden from the main tabs until their snooze time expires, then they reappear automatically
-- A new "Snoozed" tab showing all currently-snoozed items with the option to un-snooze early
-- Smart suggestion banner: items snoozed 3+ times prompt "Mark as resolved?" or "Dismiss permanently?"
-- Snooze count badge visible on items that have been deferred multiple times
+## 1. Code Splitting with React.lazy
 
-## Technical Details
+**Current state:** All 30+ page components are eagerly imported in `App.tsx`, meaning the entire app ships in one bundle even though most users only visit a few pages.
 
-### 1. Database Migration
-Add two columns to the `notifications` table:
+**Change:** Replace all static page imports with `React.lazy()` and wrap routes in a `Suspense` boundary with a spinner fallback.
 
-```sql
-ALTER TABLE notifications
-  ADD COLUMN snoozed_until TIMESTAMPTZ,
-  ADD COLUMN snooze_count INTEGER NOT NULL DEFAULT 0;
+- Convert ~28 page imports to lazy (Auth, Dashboard, QueryInbox, all admin/*, reports/*, etc.)
+- Keep layout components (`DashboardLayout`, `ProtectedRoute`, `DataOwnerRoute`) as eager imports since they're needed on every route
+- Add a single `Suspense` wrapper inside `DashboardLayout` and around standalone routes
+
+**Impact:** Each page becomes its own chunk, loaded only when navigated to. Initial bundle drops significantly.
+
+## 2. QueryClient Default Configuration
+
+**Current state:** `const queryClient = new QueryClient()` -- no defaults. Every query refetches on mount and on window focus, causing redundant API calls.
+
+**Change:**
+```
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,    // 5 minutes
+      gcTime: 10 * 60 * 1000,      // 10 minutes (garbage collection)
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 ```
 
-### 2. New Hook: `src/hooks/useSnoozeNotification.ts`
-- `useSnoozeNotification()` mutation: updates `snoozed_until` and increments `snooze_count` for a given notification ID
-- `useUnsnoozeNotification()` mutation: clears `snoozed_until` (sets to null)
-- Both invalidate the `paginated-notifications` and `unread-notification-count` query keys on success
+**Impact:** Cached data reused for 5 minutes; no refetch on tab switch; fewer redundant network requests.
 
-### 3. Snooze Popover Component: `src/components/inbox/SnoozePopover.tsx`
-- Triggered from a clock/snooze icon button on each `InboxRowItem`
-- Preset options: 1 Hour, 4 Hours, Tomorrow 9 AM, Next Monday 9 AM
-- "Custom" option opens a date-time picker (using the existing calendar component + time input)
-- On selection, calls the snooze mutation and shows a toast confirmation with the snooze-until time
+## 3. Memoization in Heavy Components
 
-### 4. Update `InboxRowItem.tsx`
-- Add the `SnoozePopover` trigger button in the Actions cell (next to the existing quick-action and view buttons)
-- Show a small snooze-count badge (e.g., "Snoozed x3") if `snooze_count >= 2`
+Target the two largest pages: `Dashboard.tsx` (~695 lines) and `QueryInbox.tsx` (~697 lines).
 
-### 5. Update `usePaginatedNotifications.ts`
-- Default query: add filter `.or('snoozed_until.is.null,snoozed_until.lte.${now}')` to exclude currently-snoozed items from the main notifications tab
-- New option `showSnoozed?: boolean`: when true, query only items where `snoozed_until > now` (for the Snoozed tab)
+- Wrap expensive derived data (filtered lists, stats calculations, chart data) with `useMemo` where not already done
+- Wrap event handler callbacks with `useCallback` where they're passed as props to child components
+- Both files already import `useMemo`/`useCallback`, so this is about auditing for missed opportunities (e.g., inline arrow functions passed to child components)
 
-### 6. New "Snoozed" Tab in `QueryInbox.tsx`
-- Add a tab with a clock icon between "Team" and "Insights"
-- Uses `usePaginatedNotifications` with `showSnoozed: true`
-- Each row shows the snooze-until time and an "Un-snooze" button
-- Smart suggestion: if an item has `snooze_count >= 3`, show a banner/badge saying "Snoozed 3 times -- Mark as read?" with a one-click action
+**Note:** This will be a targeted audit -- I'll only add memoization where it provides real benefit (lists, computed stats), not blanket-wrap everything.
 
-### 7. Update `InboxItem` type in `inboxUtils.ts`
-- Add optional fields: `snoozedUntil?: string | null` and `snoozeCount?: number`
-- Pass these through when mapping notifications to `InboxItem` objects in `QueryInbox.tsx`
+## 4. Error Boundaries
 
-### 8. Client-side Filter Update
-- `filterInboxItems()` in `inboxUtils.ts`: items with a future `snoozedUntil` are excluded from non-snoozed views (defense-in-depth alongside the server filter)
+**Current state:** There is already one `ErrorBoundary` wrapping the `Outlet` inside `DashboardLayout`. No boundary around the top-level App or standalone routes (Auth, ModuleHub, ResetPassword).
 
-### 9. Update `DOCUMENTATION.md`
-- Document the snooze feature, new columns, hook, and smart suggestion logic
+**Change:**
+- Add a top-level `ErrorBoundary` wrapping the entire app in `App.tsx` (catches catastrophic errors in providers, router, etc.)
+- The existing per-route boundary in `DashboardLayout` already covers all dashboard routes -- no change needed there
 
-## File Changes Summary
-| File | Action |
+**Impact:** If Auth, ModuleHub, or a provider crashes, users see a recovery screen instead of a white page.
+
+---
+
+## Files Modified
+
+| File | Change |
 |------|--------|
-| Database migration (notifications table) | New columns |
-| `src/hooks/useSnoozeNotification.ts` | New file |
-| `src/components/inbox/SnoozePopover.tsx` | New file |
-| `src/components/inbox/InboxRowItem.tsx` | Add snooze button + count badge |
-| `src/components/inbox/InboxTable.tsx` | Pass snooze handlers through |
-| `src/hooks/usePaginatedNotifications.ts` | Filter snoozed items, add snoozed-only mode |
-| `src/pages/QueryInbox.tsx` | Add Snoozed tab, wire snooze handlers |
-| `src/lib/inboxUtils.ts` | Extend InboxItem type, add client filter |
-| `src/components/inbox/index.ts` | Export new component |
-| `DOCUMENTATION.md` | Document feature |
+| `src/App.tsx` | Lazy imports, Suspense, QueryClient config, top-level ErrorBoundary |
+| `src/components/layout/DashboardLayout.tsx` | Add Suspense inside existing ErrorBoundary |
+| `src/pages/Dashboard.tsx` | Audit and add targeted useMemo/useCallback |
+| `src/pages/QueryInbox.tsx` | Audit and add targeted useMemo/useCallback |
+| `DOCUMENTATION.md` | Document performance optimizations |
+
+No new dependencies required. No database changes.
+
