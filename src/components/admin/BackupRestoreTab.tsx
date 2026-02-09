@@ -6,6 +6,13 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Table,
   TableBody,
   TableCell,
@@ -23,7 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Database, Download, RotateCcw, HardDrive, Clock, AlertTriangle, Upload } from 'lucide-react';
+import { Database, Download, RotateCcw, HardDrive, Clock, AlertTriangle, Upload, CalendarClock } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   useBackupLogs,
@@ -32,6 +39,9 @@ import {
   useAutoBackupSetting,
   useDownloadBackup,
   useUploadAndRestore,
+  useBackupSchedule,
+  useUpdateBackupSchedule,
+  type BackupSchedule,
 } from '@/hooks/useBackups';
 
 function formatBytes(bytes: number | null): string {
@@ -48,12 +58,29 @@ export function BackupRestoreTab() {
   const downloadBackup = useDownloadBackup();
   const autoBackup = useAutoBackupSetting();
   const uploadRestore = useUploadAndRestore();
+  const { data: savedSchedule, isLoading: scheduleLoading } = useBackupSchedule();
+  const updateSchedule = useUpdateBackupSchedule();
 
   const [restoreId, setRestoreId] = useState<string | null>(null);
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [confirmUploadRestore, setConfirmUploadRestore] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+
+  const [frequency, setFrequency] = useState<BackupSchedule['frequency']>('weekly');
+  const [day, setDay] = useState('sunday');
+  const [hour, setHour] = useState(2);
+  const [dayOfMonth, setDayOfMonth] = useState(1);
+  const [scheduleInitialized, setScheduleInitialized] = useState(false);
+
+  // Sync local state from saved schedule once loaded
+  if (savedSchedule && !scheduleInitialized) {
+    setFrequency(savedSchedule.frequency);
+    setDay(savedSchedule.day);
+    setHour(savedSchedule.hour);
+    setDayOfMonth(savedSchedule.dayOfMonth);
+    setScheduleInitialized(true);
+  }
 
   const handleRestoreClick = (id: string) => {
     setRestoreId(id);
@@ -84,7 +111,19 @@ export function BackupRestoreTab() {
     setUploadFile(null);
   };
 
-  if (isLoading || autoBackup.isLoading) {
+  const scheduleSummary = (() => {
+    const h = String(hour).padStart(2, '0') + ':00 UTC';
+    if (frequency === 'daily') return `Every day at ${h}`;
+    if (frequency === 'weekly') return `Every ${day.charAt(0).toUpperCase() + day.slice(1)} at ${h}`;
+    if (frequency === 'monthly') return `${dayOfMonth}${dayOfMonth === 1 ? 'st' : dayOfMonth === 2 ? 'nd' : dayOfMonth === 3 ? 'rd' : 'th'} of every month at ${h}`;
+    return '';
+  })();
+
+  const handleSaveSchedule = () => {
+    updateSchedule.mutate({ frequency, day, hour, dayOfMonth, enabled: autoBackup.enabled });
+  };
+
+  if (isLoading || autoBackup.isLoading || scheduleLoading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-32 w-full" />
@@ -95,26 +134,26 @@ export function BackupRestoreTab() {
 
   return (
     <div className="space-y-6">
-      {/* Controls Card */}
+      {/* Scheduled Backup Card */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5" />
-            Database Backups
+            <CalendarClock className="h-5 w-5" />
+            Scheduled Backup
           </CardTitle>
           <CardDescription>
-            Create full database backups and restore from previous snapshots. Backups include all tables except authentication data.
+            Configure automatic database backups on a recurring schedule.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Auto-backup toggle */}
+        <CardContent className="space-y-5">
+          {/* Enable/disable toggle */}
           <div className="flex items-center justify-between p-4 rounded-lg border">
             <div className="space-y-1">
               <Label htmlFor="auto-backup" className="text-base font-medium">
-                Scheduled Weekly Backup
+                Enable Scheduled Backup
               </Label>
               <p className="text-sm text-muted-foreground">
-                Automatically create a backup every Sunday at 2:00 AM UTC.
+                {autoBackup.enabled ? scheduleSummary : 'Scheduled backups are disabled.'}
               </p>
             </div>
             <Switch
@@ -125,7 +164,93 @@ export function BackupRestoreTab() {
             />
           </div>
 
-          {/* Manual backup & upload buttons */}
+          {/* Schedule config (shown when enabled) */}
+          {autoBackup.enabled && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-lg border bg-muted/30">
+              {/* Frequency */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Frequency</Label>
+                <Select value={frequency} onValueChange={(v) => setFrequency(v as BackupSchedule['frequency'])}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="daily">Daily</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Day of week (weekly only) */}
+              {frequency === 'weekly' && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Day of Week</Label>
+                  <Select value={day} onValueChange={setDay}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map((d) => (
+                        <SelectItem key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Day of month (monthly only) */}
+              {frequency === 'monthly' && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Day of Month</Label>
+                  <Select value={String(dayOfMonth)} onValueChange={(v) => setDayOfMonth(Number(v))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                        <SelectItem key={d} value={String(d)}>{d}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Hour */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Time (UTC)</Label>
+                <Select value={String(hour)} onValueChange={(v) => setHour(Number(v))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 24 }, (_, i) => i).map((h) => (
+                      <SelectItem key={h} value={String(h)}>{String(h).padStart(2, '0')}:00</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Save button */}
+              <div className="flex items-end">
+                <Button
+                  onClick={handleSaveSchedule}
+                  disabled={updateSchedule.isPending}
+                  className="w-full"
+                >
+                  {updateSchedule.isPending ? 'Saving...' : 'Save Schedule'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+        </CardContent>
+      </Card>
+
+      {/* Manual Backup & Restore Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5" />
+            Manual Backup & Restore
+          </CardTitle>
+          <CardDescription>
+            Create on-demand snapshots or restore from an external backup file. Backups include all tables except authentication data.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
           <div className="flex items-center gap-3 flex-wrap">
             <Button
               onClick={() => triggerBackup.mutate()}
@@ -149,9 +274,6 @@ export function BackupRestoreTab() {
               <Upload className={`h-4 w-4 mr-2 ${uploadRestore.isPending ? 'animate-pulse' : ''}`} />
               {uploadRestore.isPending ? 'Restoring...' : 'Upload & Restore'}
             </Button>
-            <span className="text-sm text-muted-foreground">
-              Create a snapshot or restore from an external backup file.
-            </span>
           </div>
         </CardContent>
       </Card>

@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.restore-backup]
 verify_jwt = true
+
+[functions.update-backup-schedule]
+verify_jwt = false

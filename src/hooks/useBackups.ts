@@ -3,6 +3,20 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useUpdateSystemSetting } from './useSystemSettings';
 
+export interface BackupSchedule {
+  frequency: 'daily' | 'weekly' | 'monthly';
+  day: string;
+  hour: number;
+  dayOfMonth: number;
+}
+
+const DEFAULT_SCHEDULE: BackupSchedule = {
+  frequency: 'weekly',
+  day: 'sunday',
+  hour: 2,
+  dayOfMonth: 1,
+};
+
 export function useBackupLogs() {
   return useQuery({
     queryKey: ['backup-logs'],
@@ -102,6 +116,52 @@ export function useAutoBackupSetting() {
     toggle,
     isToggling: updateSetting.isPending,
   };
+}
+
+export function useBackupSchedule() {
+  return useQuery({
+    queryKey: ['system-settings', 'backup_schedule'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('setting_value')
+        .eq('setting_key', 'backup_schedule')
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data?.setting_value) return DEFAULT_SCHEDULE;
+      try {
+        return { ...DEFAULT_SCHEDULE, ...JSON.parse(data.setting_value as string) } as BackupSchedule;
+      } catch {
+        return DEFAULT_SCHEDULE;
+      }
+    },
+  });
+}
+
+export function useUpdateBackupSchedule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (schedule: BackupSchedule & { enabled?: boolean }) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      const response = await supabase.functions.invoke('update-backup-schedule', {
+        body: schedule,
+      });
+
+      if (response.error) throw response.error;
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success('Backup schedule updated');
+      queryClient.invalidateQueries({ queryKey: ['system-settings', 'backup_schedule'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update schedule: ${error.message}`);
+    },
+  });
 }
 
 export function useDownloadBackup() {
