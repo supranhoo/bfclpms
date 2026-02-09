@@ -1,76 +1,68 @@
 
 
-# Fix: Allow Independent / Non-Connected Rows in Org Structure Import
+# Separate Upload Options for Each Entity Type
 
 ## Problem
-The current import requires every row to be fully connected across columns. For example, if you put a Business Unit on a row, you must also fill in the Division column on that same row. This forces you to duplicate parent data across many rows.
-
-You want to enter data like this:
-
-| Division | DivCode | BusinessUnit | BUCode | Department | DeptCode | ... |
-|----------|---------|--------------|--------|------------|----------|-----|
-| Head Office | HO | | | | | |
-| Regional | REG | | | | | |
-| | | Technology | TECH | | | |
-| | | Sales | SALES | | | |
-| | | | | Software Dev | SD | |
-| | | | | QA | QA | |
-
-But the system rejects this because "Business Unit requires a Division" on that row.
+When your file has many Divisions AND many Business Units without same-row connections, the system cannot auto-assign parents because multiple candidates exist. You need the ability to upload each entity type independently, selecting a parent when needed.
 
 ## Solution
 
-### 1. Remove the strict same-row hierarchy validation
+Add a **selector/mode** at the top of the import that lets you choose what you're uploading:
 
-The validation that requires Business Unit rows to also have a Division on the same row will be removed. Instead, the import will:
+- **Full Structure** (current behavior) -- upload everything at once with connected rows
+- **Divisions Only** -- just Division + DivisionCode columns, no parent needed
+- **Business Units Only** -- BU + BUCode columns, plus a dropdown to pick which Division they all belong to
+- **Departments Only** -- Dept + DeptCode columns, plus a dropdown to pick which BU they all belong to
+- **Sub-Branches Only** -- SubBranch + SubBranchCode, plus a dropdown to pick which Department they all belong to
+- **Designations Only** -- no parent needed
+- **PMS Grades Only** -- no parent needed
+- **Levels Only** -- no parent needed
 
-- Collect all Divisions first (from rows that have a Division)
-- For Business Units without a Division on the same row, attempt to match them to an **existing** Division already in the database
-- Same logic for Departments (try to match to an existing Business Unit) and Sub-Branches (try to match to an existing Department)
+### How it works
 
-### 2. Add a smarter parent-resolution strategy
+1. User selects an import mode (e.g., "Business Units Only")
+2. If the selected type needs a parent (BU needs Division), a **dropdown appears** showing all existing parent entities from the database
+3. User picks the parent (e.g., "Head Office" division)
+4. User uploads an Excel file with just the entity names and codes
+5. All items in the file are created under the selected parent
 
-For entities that need a parent (BU needs Division, Dept needs BU, Sub-Branch needs Dept):
-
-- **First priority**: Use the parent specified on the same row (current behavior)
-- **Second priority**: If there's only ONE parent entity in the database, auto-assign to it
-- **Third priority**: If multiple parents exist and none is specified, show a warning (not an error) that these entries will be skipped, and list which ones need a parent
-
-### 3. Change validation from blocking errors to informational warnings
-
-- Rows with standalone Divisions, Designations, PMS Grades, and Levels will always import fine (no parent needed)
-- Business Units, Departments, and Sub-Branches without a parent reference will show a **warning** explaining they need a parent, but won't block the rest of the import
-- Only truly invalid data (empty names, etc.) will be blocking errors
-
-### 4. Update the template and instructions
-
-- Update the template example to show both connected rows and standalone rows
-- Add a note in the card description explaining that columns don't need to be connected across each row
+This means you can:
+- First upload all Divisions
+- Then upload BUs for "Division A" in one file, BUs for "Division B" in another
+- Then upload Departments for each BU separately
+- Or still use the "Full Structure" mode for connected rows
 
 ## Files to Change
 
 ### `src/components/admin/OrgStructureImport.tsx`
-- **Validation logic (lines 190-202)**: Replace strict row-by-row hierarchy checks with a two-pass approach:
-  1. First pass: collect all unique entity names from all rows
-  2. Second pass: for BUs/Depts/Sub-Branches without a same-row parent, check if a matching parent exists in the collected set OR in the database; warn if unresolvable
-- **Import logic (lines 229-237)**: When a BU row has no division on the same row, look up existing divisions in the database to find a match. If only one division exists, auto-assign. If the BU name already exists in the database, treat as update.
-- **Template (lines 58-63)**: Update example data to show standalone entries (some rows with only Division, some with only BU, etc.)
-- **Card description (line 391)**: Add note: "Each column can be filled independently -- rows don't need to be connected across all columns"
+- Add an `importMode` state with options: `'full' | 'divisions' | 'businessUnits' | 'departments' | 'subBranches' | 'designations' | 'pmsGrades' | 'levels'`
+- Add a Select dropdown at the top to choose import mode
+- When mode is `businessUnits`, show a Division selector dropdown (populated from existing DB divisions)
+- When mode is `departments`, show a Business Unit selector dropdown
+- When mode is `subBranches`, show a Department selector dropdown
+- Simplify the template download to only include relevant columns for the selected mode
+- Simplify validation: in single-entity mode, no parent resolution warnings needed since the parent is explicitly selected
+- Simplify the import handler: in single-entity mode, use the selected parent ID directly instead of resolving from row data
 
 ### `DOCUMENTATION.md`
-- Update the Org Structure Import section to reflect the new flexible format
+- Update to describe the new import modes
 
 ## Technical Details
 
-The key change is in how parent resolution works during import:
+### New state variables
+- `importMode`: which entity type to import
+- `selectedParentId`: the chosen parent entity ID (only needed for BU/Dept/Sub-Branch modes)
 
-```
-For each Business Unit without a same-row Division:
-  1. Check if this BU already exists in DB -> skip (just update code)
-  2. Check if exactly ONE division exists (in file + DB) -> auto-assign
-  3. Otherwise -> add to warnings list, skip this BU
-```
+### Template generation per mode
+- "Divisions Only" template: just `name`, `code` columns
+- "Business Units Only" template: just `name`, `code` columns (parent selected via dropdown)
+- Same pattern for Departments, Sub-Branches, etc.
 
-Same pattern for Departments (resolve to BU) and Sub-Branches (resolve to Department).
+### Import logic per mode
+For single-entity modes, the import skips the multi-pass parent resolution entirely and just:
+1. Reads name + code from each row
+2. Checks if entity already exists (by name match)
+3. Creates new or updates code using the `selectedParentId` as the foreign key
 
-Standalone entities (Division, Designation, PMS Grade, Level) always import directly since they have no parent dependency.
+### Parent selector
+Uses existing hooks (`useDivisions`, `useBusinessUnits`, `useDepartments`) to populate the dropdown. The dropdown is only shown when the selected import mode requires a parent.
