@@ -1,36 +1,41 @@
 
 
-# Fix: Clear Incorrectly Imported Departments and Re-import as Business Units
+# Clear All Employee Data (Keep Admin Only)
 
-## What Happened
+## What Will Be Done
 
-Your import file had Business Unit names in the `department` column. The system imported them all as departments under the single existing BU ("HR"). Currently:
-- **1 Business Unit** exists: "HR"
-- **76 departments** exist, but only **1** ("HR-Human Resources") has employees -- the other 75 are incorrectly mapped
+Remove all 97 non-admin users from both the profiles table and the authentication system, keeping only the admin account (Ankit Choudhary).
 
-## Solution
+## Step-by-step
 
-### Step 1: Database Cleanup
+### Step 1: Clean up referencing data
+Delete the 3 remaining `training_needs` rows and clear any `reporting_manager_id` references to prevent foreign key issues.
 
-Run a migration to delete all departments that have **zero employees** and **zero KPI references**. This removes the 75 incorrectly imported entries while keeping "HR-Human Resources" (which has 24 employees).
+### Step 2: Delete non-admin user_roles
+Remove role assignments for all users except the admin.
+
+### Step 3: Delete non-admin profiles
+Remove all 97 profile records (managers + employees).
+
+### Step 4: Delete non-admin auth users
+Use a backend function to remove all 97 users from the authentication system so they no longer exist at all.
+
+## SQL Summary
 
 ```sql
-DELETE FROM departments
-WHERE id NOT IN (
-  SELECT DISTINCT department_id FROM profiles WHERE department_id IS NOT NULL
-);
+-- Clean references
+DELETE FROM training_needs;
+UPDATE profiles SET reporting_manager_id = NULL WHERE reporting_manager_id IS NOT NULL;
+
+-- Remove roles (keep admin)
+DELETE FROM user_roles WHERE user_id != '535d9a14-e4aa-4676-af92-f535373ffc8d';
+
+-- Remove profiles (keep admin)
+DELETE FROM profiles WHERE id != '535d9a14-e4aa-4676-af92-f535373ffc8d';
 ```
 
-### Step 2: Re-import with Correct Column Mapping
+Auth user deletion (97 users) will be done via a temporary backend function using the admin API, since auth users cannot be deleted via SQL.
 
-After cleanup, re-upload your file with the data in the correct column:
-- Put the Business Unit names in the **businessUnit** column (not `department`)
-- The system will create them as proper Business Units under the "Support Function" division
-
-## No code changes needed
-
-The import logic works correctly -- this was a column-mapping issue in the uploaded file. The only action is the database cleanup migration.
-
-## Files changed
-- New migration SQL (to delete orphaned departments)
-
+## Result
+- **1 user remains**: Ankit Choudhary (admin)
+- Database ready for fresh Employee Master upload
