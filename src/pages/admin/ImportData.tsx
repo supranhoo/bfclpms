@@ -528,15 +528,15 @@ export default function ImportData() {
       // Self review
       employeeTargetAchieved: parseNumericValue(getValue(['employeeTargetAchieved', 'employee_target_achieved', 'empAchieved', 'selfAchieved'])),
       employeeRating: getValue(['employeeRating', 'employee_rating', 'empRating', 'selfRating']),
-      employeeRemarks: getValue(['employeeRemarks', 'employee_remarks', 'empRemarks', 'selfRemarks']),
+      employeeRemarks: getValue(['employeeRemarks', 'employee_remarks', 'empRemarks', 'selfRemarks', 'Employee_Remarks', 'Self_Remarks']),
       // Manager review
       managerTargetAchieved: parseNumericValue(getValue(['managerTargetAchieved', 'manager_target_achieved', 'mgrAchieved'])),
       managerRating: getValue(['managerRating', 'manager_rating', 'mgrRating']),
-      managerRemarks: getValue(['managerRemarks', 'manager_remarks', 'mgrRemarks']),
+      managerRemarks: getValue(['managerRemarks', 'manager_remarks', 'mgrRemarks', 'Manager_Remarks']),
       // Audit review
       auditTargetAchieved: parseNumericValue(getValue(['auditTargetAchieved', 'audit_target_achieved', 'auditorAchieved'])),
       auditRating: getValue(['auditRating', 'audit_rating', 'auditorRating']),
-      auditRemarks: getValue(['auditRemarks', 'audit_remarks', 'auditorRemarks']),
+      auditRemarks: getValue(['auditRemarks', 'audit_remarks', 'auditorRemarks', 'Audit_Remarks', 'Auditor_Remarks', 'auditor_remarks', 'AuditorRemarks']),
       sourceOfData: getValue(['sourceOfData', 'source_of_data', 'dataSource', 'source']),
       kpiStatus: getValue(['kpiStatus', 'kpi_status']),
       // Organization structure
@@ -801,13 +801,10 @@ export default function ImportData() {
     // Cache for auto-created employees during this import
     const employeeCache = new Map<string, { id: string }>();
     
-    // Pre-populate cache with existing employees
+    // Pre-populate cache with existing employees (code-only, no name fallback)
     profiles?.forEach(p => {
       if (p.employee_code) {
         employeeCache.set(p.employee_code.toLowerCase(), { id: p.id });
-      }
-      if (p.full_name) {
-        employeeCache.set(p.full_name.toLowerCase(), { id: p.id });
       }
     });
 
@@ -825,21 +822,14 @@ export default function ImportData() {
       }));
       
       try {
-        // Find employee by code or name from cache
+        // Find employee by code only (strict matching, no name fallback)
         let employee = profiles?.find(p => 
-          (p.employee_code && p.employee_code === String(row.newCode)) ||
-          (p.full_name && p.full_name.toLowerCase() === row.fullName?.toLowerCase())
+          p.employee_code && p.employee_code === String(row.newCode)
         );
 
         // If not found in original profiles, check cache (for newly created employees)
         if (!employee && row.newCode) {
           const cached = employeeCache.get(String(row.newCode).toLowerCase());
-          if (cached) {
-            employee = { id: cached.id } as any;
-          }
-        }
-        if (!employee && row.fullName) {
-          const cached = employeeCache.get(row.fullName.toLowerCase());
           if (cached) {
             employee = { id: cached.id } as any;
           }
@@ -1040,7 +1030,7 @@ export default function ImportData() {
 
         if (hasReviewData && newKpi?.id) {
           const achievedValue = row.targetAchieved || row.employeeTargetAchieved || row.auditTargetAchieved || row.managerTargetAchieved;
-          const selfScore = row.employeeRating || row.rating;
+          const selfScore = row.employeeRating ?? row.rating;
           const managerScore = row.managerRating;
           const auditorScore = row.auditRating;
           
@@ -1060,22 +1050,22 @@ export default function ImportData() {
             .insert({
               kpi_id: newKpi.id,
               achieved_value: parsedAchieved,
-              self_score: isNa ? null : (selfScore ? parseFloat(String(selfScore)) : null),
+              self_score: isNa ? null : (selfScore != null ? parseFloat(String(selfScore)) : null),
               self_rating: isNa ? null : mapScoreToRating(selfScore),
-              self_remarks: row.employeeRemarks || null,
-              manager_score: isNa ? null : (managerScore ? parseFloat(String(managerScore)) : null),
+              self_remarks: row.employeeRemarks ?? null,
+              manager_score: isNa ? null : (managerScore != null ? parseFloat(String(managerScore)) : null),
               manager_rating: isNa ? null : mapScoreToRating(managerScore),
-              manager_remarks: row.managerRemarks || null,
-              auditor_score: isNa ? null : (auditorScore ? parseFloat(String(auditorScore)) : null),
+              manager_remarks: row.managerRemarks ?? null,
+              auditor_score: isNa ? null : (auditorScore != null ? parseFloat(String(auditorScore)) : null),
               auditor_rating: isNa ? null : mapScoreToRating(auditorScore),
-              auditor_remarks: row.auditRemarks || null,
+              auditor_remarks: row.auditRemarks ?? null,
               kpi_status: determineKpiStatus(row),
               is_na: isNa,
-              // Use auditor score as final if available, else manager, else self
-              final_score: isNa ? null : (auditorScore ? parseFloat(String(auditorScore)) : 
-                (managerScore ? parseFloat(String(managerScore)) : 
-                (selfScore ? parseFloat(String(selfScore)) : null))),
-              final_rating: isNa ? null : mapScoreToRating(auditorScore || managerScore || selfScore),
+              // Use auditor score as final if available, else manager, else self (nullish coalescing preserves 0)
+              final_score: isNa ? null : (auditorScore != null ? parseFloat(String(auditorScore)) : 
+                (managerScore != null ? parseFloat(String(managerScore)) : 
+                (selfScore != null ? parseFloat(String(selfScore)) : null))),
+              final_rating: isNa ? null : mapScoreToRating(auditorScore ?? managerScore ?? selfScore),
             });
 
           if (submissionError) {

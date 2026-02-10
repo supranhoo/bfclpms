@@ -188,9 +188,9 @@ const validateAndSanitizeRow = (row: unknown, index: number): { data: KpiImportR
       uom: parsed.uom ? truncateText(sanitizeText(parsed.uom), 100) : undefined,
       frequency: parsed.frequency ? truncateText(sanitizeText(parsed.frequency), 100) : undefined,
       criteria: parsed.criteria ? truncateText(sanitizeText(parsed.criteria), 100) : undefined,
-      employeeRemarks: parsed.employeeRemarks ? truncateText(sanitizeText(parsed.employeeRemarks), MAX_REMARKS_LENGTH) : undefined,
-      managerRemarks: parsed.managerRemarks ? truncateText(sanitizeText(parsed.managerRemarks), MAX_REMARKS_LENGTH) : undefined,
-      auditRemarks: parsed.auditRemarks ? truncateText(sanitizeText(parsed.auditRemarks), MAX_REMARKS_LENGTH) : undefined,
+      employeeRemarks: parsed.employeeRemarks != null ? truncateText(sanitizeText(parsed.employeeRemarks), MAX_REMARKS_LENGTH) : undefined,
+      managerRemarks: parsed.managerRemarks != null ? truncateText(sanitizeText(parsed.managerRemarks), MAX_REMARKS_LENGTH) : undefined,
+      auditRemarks: parsed.auditRemarks != null ? truncateText(sanitizeText(parsed.auditRemarks), MAX_REMARKS_LENGTH) : undefined,
       sourceOfData: parsed.sourceOfData ? truncateText(sanitizeText(parsed.sourceOfData), MAX_TEXT_LENGTH) : undefined,
       division: parsed.division ? truncateText(sanitizeText(parsed.division), MAX_TEXT_LENGTH) : undefined,
       businessUnit: parsed.businessUnit ? truncateText(sanitizeText(parsed.businessUnit), MAX_TEXT_LENGTH) : undefined,
@@ -448,10 +448,8 @@ async function processImport(
     
     // Build lookup maps
     const employeeByCode = new Map<string, string>();
-    const employeeByName = new Map<string, string>();
     profiles.forEach((p: any) => {
       if (p.employee_code) employeeByCode.set(p.employee_code.toLowerCase(), p.id);
-      if (p.full_name) employeeByName.set(p.full_name.toLowerCase(), p.id);
     });
     
     const categoryByName = new Map<string, string>();
@@ -479,7 +477,7 @@ async function processImport(
       const code = String(row.newCode || '').toLowerCase();
       const name = (row.fullName || '').toLowerCase();
       
-      if (!employeeByCode.has(code) && !employeeByName.has(name)) {
+      if (!employeeByCode.has(code)) {
         const key = code || name;
         if (key && !missingEmployees.has(key)) {
           missingEmployees.set(key, { 
@@ -622,7 +620,6 @@ async function processImport(
       } else {
         newEmps?.forEach((e: any) => {
           if (e.employee_code) employeeByCode.set(e.employee_code.toLowerCase(), e.id);
-          if (e.full_name) employeeByName.set(e.full_name.toLowerCase(), e.id);
         });
         employeesCreated = newEmps?.length || 0;
       }
@@ -636,8 +633,7 @@ async function processImport(
       if (!row.department) continue;
       
       const code = String(row.newCode || '').toLowerCase();
-      const name = (row.fullName || '').toLowerCase();
-      const employeeId = employeeByCode.get(code) || employeeByName.get(name);
+      const employeeId = employeeByCode.get(code);
       
       if (employeeId) {
         const existingProfile = profiles.find((p: any) => p.id === employeeId);
@@ -669,10 +665,9 @@ async function processImport(
     for (let i = 0; i < importData.length; i++) {
       const row = importData[i];
       
-      // Find employee
+      // Find employee (strict code-only matching)
       const code = String(row.newCode || '').toLowerCase();
-      const name = (row.fullName || '').toLowerCase();
-      const employeeId = employeeByCode.get(code) || employeeByName.get(name);
+      const employeeId = employeeByCode.get(code);
       
       if (!employeeId) {
         errors.push(`Row ${i + 1}: Employee not found: ${row.newCode} - ${row.fullName}`);
@@ -847,17 +842,17 @@ async function processImport(
         submissionRecords.push({
           kpi_id: kpiId,
           achieved_value: parseAchieved(achievedValue),
-          self_rating: mapScoreToRating(row.employeeRating || row.rating),
-          self_score: row.employeeRating || row.rating || null,
-          self_remarks: row.employeeRemarks || null,
+          self_rating: mapScoreToRating(row.employeeRating ?? row.rating),
+          self_score: row.employeeRating ?? row.rating ?? null,
+          self_remarks: row.employeeRemarks ?? null,
           manager_rating: mapScoreToRating(row.managerRating),
-          manager_score: row.managerRating || null,
-          manager_remarks: row.managerRemarks || null,
+          manager_score: row.managerRating ?? null,
+          manager_remarks: row.managerRemarks ?? null,
           auditor_rating: mapScoreToRating(row.auditRating),
-          auditor_score: row.auditRating || null,
-          auditor_remarks: row.auditRemarks || null,
-          final_rating: mapScoreToRating(row.auditRating || row.managerRating || row.employeeRating || row.rating),
-          final_score: row.auditRating || row.managerRating || row.employeeRating || row.rating || null,
+          auditor_score: row.auditRating ?? null,
+          auditor_remarks: row.auditRemarks ?? null,
+          final_rating: mapScoreToRating(row.auditRating ?? row.managerRating ?? row.employeeRating ?? row.rating),
+          final_score: row.auditRating ?? row.managerRating ?? row.employeeRating ?? row.rating ?? null,
           kpi_status: determineKpiStatus(row),
           is_na: false,
         });
