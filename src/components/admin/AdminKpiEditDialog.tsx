@@ -13,6 +13,7 @@ import { UomTypeSelector } from '@/components/admin/UomTypeSelector';
 import { TieredOptionsBuilder } from '@/components/admin/TieredOptionsBuilder';
 import { UomType, QualitativeOption, validateQualitativeOptions } from '@/lib/qualitativeUom';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
+import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
 
 interface AdminKpiEditDialogProps {
   isOpen: boolean;
@@ -51,6 +52,7 @@ const [formData, setFormData] = useState({
     uom: '',
     weightage: '',
     frequency: '',
+    frequency_cycle_start: '',
     criteria: '',
     source_of_data: '',
     review_period: '',
@@ -83,6 +85,7 @@ const [formData, setFormData] = useState({
         uom: kpi.uom || '',
         weightage: kpi.weightage?.toString() || '',
         frequency: kpi.frequency || '',
+        frequency_cycle_start: kpi.frequency_cycle_start || '',
         criteria: kpi.criteria || '',
         source_of_data: kpi.source_of_data || '',
         review_period: kpi.review_period || '',
@@ -135,6 +138,7 @@ const [formData, setFormData] = useState({
       uom: formData.uom || null,
       weightage: formData.weightage ? parseFloat(formData.weightage) : null,
       frequency: formData.frequency || null,
+      frequency_cycle_start: (formData.frequency_cycle_start && formData.frequency_cycle_start !== 'system_default') ? formData.frequency_cycle_start : null,
       criteria: formData.uom_type === 'numeric' ? (formData.criteria || null) : null,
       source_of_data: formData.source_of_data || null,
       review_period: formData.review_period || null,
@@ -290,7 +294,7 @@ const [formData, setFormData] = useState({
                 <Label>Frequency</Label>
                 <Select
                   value={formData.frequency}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, frequency: value }))}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, frequency: value, frequency_cycle_start: '' }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select frequency" />
@@ -302,6 +306,29 @@ const [formData, setFormData] = useState({
                   </SelectContent>
                 </Select>
               </div>
+              {MULTI_MONTH_FREQUENCIES.includes(formData.frequency) && (() => {
+                const cycleOptions = getCycleOptionsForFrequency(formData.frequency);
+                if (!cycleOptions) return null;
+                return (
+                  <div className="space-y-2">
+                    <Label>Cycle Start</Label>
+                    <Select
+                      value={formData.frequency_cycle_start}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, frequency_cycle_start: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="(Use system default)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="system_default">(Use system default)</SelectItem>
+                        {cycleOptions.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -312,7 +339,7 @@ const [formData, setFormData] = useState({
                 <Label>Frequency</Label>
                 <Select
                   value={formData.frequency}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, frequency: value }))}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, frequency: value, frequency_cycle_start: '' }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select frequency" />
@@ -340,6 +367,30 @@ const [formData, setFormData] = useState({
                   </SelectContent>
                 </Select>
               </div>
+              {MULTI_MONTH_FREQUENCIES.includes(formData.frequency) && (() => {
+                const cycleOptions = getCycleOptionsForFrequency(formData.frequency);
+                if (!cycleOptions) return null;
+                return (
+                  <div className="space-y-2 col-span-2">
+                    <Label>Cycle Start</Label>
+                    <Select
+                      value={formData.frequency_cycle_start}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, frequency_cycle_start: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="(Use system default)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="system_default">(Use system default)</SelectItem>
+                        {cycleOptions.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Override the global cycle start for this KPI</p>
+                  </div>
+                );
+              })()}
             </div>
           )}
 

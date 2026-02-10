@@ -16,6 +16,7 @@ import { TieredOptionsBuilder } from './TieredOptionsBuilder';
 import { UomType, QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
 import { Badge } from '@/components/ui/badge';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
+import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
 
 interface AdminKpiCreateDialogProps {
   isOpen: boolean;
@@ -52,6 +53,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
   const [targetValue, setTargetValue] = useState<string>('');
   const [weightage, setWeightage] = useState<string>('');
   const [frequency, setFrequency] = useState('Monthly');
+  const [frequencyCycleStart, setFrequencyCycleStart] = useState('');
   const [dayCountType, setDayCountType] = useState<'working_days' | 'all_days'>('working_days');
   const [sourceOfData, setSourceOfData] = useState('');
   
@@ -101,6 +103,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
     setTargetValue('');
     setWeightage('');
     setFrequency('Monthly');
+    setFrequencyCycleStart('');
     setDayCountType('working_days');
     setSourceOfData('');
     setR5('');
@@ -156,7 +159,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
       qualitative_options: uomType === 'tiered' ? qualitativeOptions : (uomType === 'binary' ? BINARY_OPTIONS : null),
       // Frequency fields - auto-derived by database trigger
       sub_frequency: null,
-      frequency_cycle_start: null,
+      frequency_cycle_start: (frequencyCycleStart && frequencyCycleStart !== 'system_default') ? frequencyCycleStart : null,
       is_frequency_locked: false,
       require_resubmit_reason: requireResubmitReason,
       day_count_type: frequency === 'Daily' ? dayCountType : null,
@@ -306,7 +309,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
                   </div>
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Frequency</Label>
-                    <Select value={frequency} onValueChange={setFrequency}>
+                    <Select value={frequency} onValueChange={(v) => { setFrequency(v); setFrequencyCycleStart(''); }}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -314,11 +317,38 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
                         <SelectItem value="Daily">Daily</SelectItem>
                         <SelectItem value="Weekly">Weekly</SelectItem>
                         <SelectItem value="Monthly">Monthly</SelectItem>
+                        <SelectItem value="Bi-Monthly">Bi-Monthly</SelectItem>
                         <SelectItem value="Quarterly">Quarterly</SelectItem>
+                        <SelectItem value="Half-Yearly">Half-Yearly</SelectItem>
                         <SelectItem value="Yearly">Yearly</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
+                  {MULTI_MONTH_FREQUENCIES.includes(frequency) && (() => {
+                    const cycleOptions = getCycleOptionsForFrequency(frequency);
+                    if (!cycleOptions) return null;
+                    return (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Cycle Start</Label>
+                        <Select value={frequencyCycleStart} onValueChange={setFrequencyCycleStart}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="(Use system default)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="system_default">(Use system default)</SelectItem>
+                            {cycleOptions.map(opt => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Override the global cycle start for this KPI
+                        </p>
+                      </div>
+                    );
+                  })()}
                   {frequency === 'Daily' && (
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">Day Count Type</Label>

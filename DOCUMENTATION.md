@@ -2582,27 +2582,38 @@ The application implements several performance optimizations:
 
 ### Frequency Cycle Configuration
 
-The system allows administrators to configure when multi-month frequency cycles start (Quarterly, Half-Yearly, Yearly) via **System Settings → Cycles** tab.
+The system allows administrators to configure when multi-month frequency cycles start (Bi-Monthly, Quarterly, Half-Yearly, Yearly) via **System Settings → Cycles** tab. Individual KPIs can override the global default via the **Cycle Start** field in the KPI create/edit dialogs or the `frequencyCycleStart` column in the import template.
 
 **Available Cycle Options:**
 
-| Frequency | Standard | Financial (Apr) | Mid-Year (Jul) |
-|-----------|----------|-----------------|----------------|
-| **Quarterly** | Jan-Mar, Apr-Jun, Jul-Sep, Oct-Dec | Apr-Jun, Jul-Sep, Oct-Dec, Jan-Mar | Jul-Sep, Oct-Dec, Jan-Mar, Apr-Jun |
-| **Half-Yearly** | Jan-Jun, Jul-Dec | Apr-Sep, Oct-Mar | Jul-Dec, Jan-Jun |
-| **Yearly** | Jan-Dec | Apr-Mar | Jul-Jun |
+| Frequency | Standard | Financial (Apr) | Mid-Year (Jul) / Offset |
+|-----------|----------|-----------------|------------------------|
+| **Bi-Monthly** | Jan-Feb, Mar-Apr, May-Jun... (`Jan-Feb`) | — | Feb-Mar, Apr-May, Jun-Jul... (`Feb-Mar`) |
+| **Quarterly** | Jan-Mar, Apr-Jun, Jul-Sep, Oct-Dec (`Jan-Mar`) | Apr-Jun, Jul-Sep, Oct-Dec, Jan-Mar (`Apr-Jun`) | Jul-Sep, Oct-Dec, Jan-Mar, Apr-Jun (`Jul-Sep`) |
+| **Half-Yearly** | Jan-Jun, Jul-Dec (`Jan-Jun`) | Apr-Sep, Oct-Mar (`Apr-Sep`) | Jul-Dec, Jan-Jun (`Jul-Dec`) |
+| **Yearly** | Jan-Dec (`Jan-Dec`) | Apr-Mar (`Apr-Mar`) | Jul-Jun (`Jul-Jun`) |
 
 **How it works:**
-- Each frequency has a row in the `frequency_config` table with `locked_months`, `active_month`, and `sub_frequency` columns.
-- When an admin changes the cycle start, the system updates these columns.
-- The `isKpiLockedForPeriod()` and related functions in `frequencyUtils.ts` read from the database config (via `useFrequencyConfig` hook) to determine which months are locked and which is the active review month.
-- The `FrequencyLockedOverlay` component automatically respects the configured cycle, showing lock status based on database-driven rules rather than hardcoded values.
-- Hardcoded fallback values are retained for backward compatibility when no config is available.
+- Each frequency has a row in the `frequency_config` table with `locked_months`, `active_month`, and `sub_frequency` columns (global defaults).
+- Individual KPIs can store a `frequency_cycle_start` value to override the global default.
+- The resolution priority is: **per-KPI override → global config → hardcoded default**.
+- The `isKpiLockedForPeriod()` and related functions in `frequencyUtils.ts` use `resolveEffectiveCycleOption()` from `frequencyCycleOptions.ts` to determine the effective cycle.
+- The `FrequencyLockedOverlay` component automatically respects both global and per-KPI cycle settings.
+
+**Per-KPI cycle start values (stored in `kpis.frequency_cycle_start`):**
+- Bi-Monthly: `Jan-Feb` or `Feb-Mar`
+- Quarterly: `Jan-Mar`, `Apr-Jun`, or `Jul-Sep`
+- Half-Yearly: `Jan-Jun`, `Apr-Sep`, or `Jul-Dec`
+- Yearly: `Jan-Dec`, `Apr-Mar`, or `Jul-Jun`
+- `NULL` = use system default
 
 **Files involved:**
-- `src/components/admin/FrequencyCycleSettings.tsx` — Admin UI with radio groups per frequency
+- `src/lib/frequencyCycleOptions.ts` — Shared cycle option constants and resolution logic
+- `src/components/admin/FrequencyCycleSettings.tsx` — Admin UI with radio groups per frequency (global defaults)
+- `src/components/admin/AdminKpiCreateDialog.tsx` — Per-KPI cycle start dropdown
+- `src/components/admin/AdminKpiEditDialog.tsx` — Per-KPI cycle start dropdown
 - `src/hooks/useFrequencyConfig.ts` — Fetch and update hooks for `frequency_config` table
-- `src/lib/frequencyUtils.ts` — Core logic accepting optional `FrequencyConfig` parameter
+- `src/lib/frequencyUtils.ts` — Core logic using `resolveEffectiveCycleOption()` for priority resolution
 - `src/components/review/FrequencyLockedOverlay.tsx` — Uses config-driven locking
 
 ---

@@ -111,12 +111,12 @@ describe('getCycleLabel', () => {
   });
 
   it('returns quarter label for Quarterly', () => {
-    expect(getCycleLabel('Quarterly', 'February', 2026)).toBe('Q1 (Jan-Mar)');
+    expect(getCycleLabel('Quarterly', 'February', 2026)).toBe('Q1');
   });
 
   it('returns H1/H2 for Half-Yearly', () => {
-    expect(getCycleLabel('Half-Yearly', 'March', 2026)).toBe('H1 (Jan-Jun)');
-    expect(getCycleLabel('Half-Yearly', 'September', 2026)).toBe('H2 (Jul-Dec)');
+    expect(getCycleLabel('Half-Yearly', 'March', 2026)).toBe('H1');
+    expect(getCycleLabel('Half-Yearly', 'September', 2026)).toBe('H2');
   });
 });
 
