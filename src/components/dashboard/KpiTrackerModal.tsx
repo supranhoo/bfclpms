@@ -15,7 +15,15 @@ interface KpiTrackerModalProps {
   submissions: ReviewSubmission[];
 }
 
-const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const fullMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const shortMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function getMonthSortIndex(period: string): number {
+  const first = period.split('-')[0];
+  const idx = fullMonths.indexOf(first);
+  if (idx >= 0) return idx;
+  return shortMonths.indexOf(first);
+}
 
 export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: KpiTrackerModalProps) {
   // Build monthly history from related KPIs (same name across different periods)
@@ -60,9 +68,7 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
     return Array.from(periodMap.values()).sort((a, b) => {
       // Sort by year first, then by month
       if (a.year !== b.year) return a.year - b.year;
-      const [monthA] = a.month.split('-');
-      const [monthB] = b.month.split('-');
-      return monthOrder.indexOf(monthA) - monthOrder.indexOf(monthB);
+      return getMonthSortIndex(a.month) - getMonthSortIndex(b.month);
     });
   }, [kpi, allKpis, submissions]);
 
