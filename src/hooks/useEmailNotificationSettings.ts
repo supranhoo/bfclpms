@@ -20,7 +20,10 @@ export type EmailEventType =
   | 'admin_status_change'
   | 'admin_data_entry'
   | 'admin_data_override'
-  | 'org_kpi_sent_back';
+  | 'org_kpi_sent_back'
+  | 'observation_raised'
+  | 'observation_reply'
+  | 'observation_resolved';
 
 export type EmailProvider = 'resend' | 'smtp' | 'microsoft_graph';
 export type SmtpSecurity = 'tls' | 'starttls' | 'none';
