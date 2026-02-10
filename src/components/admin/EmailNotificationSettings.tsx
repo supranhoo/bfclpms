@@ -43,6 +43,9 @@ const EMAIL_EVENTS: { key: EmailEventType; label: string; description: string }[
   { key: 'pip_initiated', label: 'PIP Started', description: 'Notify employee when placed on Performance Improvement Plan' },
   { key: 'pip_milestone_reminder', label: 'PIP Milestone', description: 'Remind employee of upcoming PIP milestone check-ins' },
   { key: 'pip_completed', label: 'PIP Completed', description: 'Notify employee when PIP is successfully completed' },
+  { key: 'observation_raised', label: 'Observation Raised', description: 'Notify KPI owner when a new observation is raised on their KPI' },
+  { key: 'observation_reply', label: 'Observation Reply', description: 'Notify participants when someone replies to an observation' },
+  { key: 'observation_resolved', label: 'Observation Resolved', description: 'Notify participants when an observation is marked as resolved' },
 ];
 
 export function EmailNotificationSettings() {
