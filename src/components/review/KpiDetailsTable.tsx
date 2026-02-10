@@ -19,14 +19,13 @@ import {
   Building2, Users, User, FileCheck
 } from 'lucide-react';
 
-// Status progression order for determining visible columns
-const STATUS_ORDER: ReviewStatus[] = [
-  'kra_set',
-  'self_review',
-  'manager_check',
-  'audit',
-  'management_review',
-  'approved'
+// Fixed score columns — always visible
+const SCORE_COLUMNS = [
+  { key: 'self_score', label: 'Self' },
+  { key: 'manager_score', label: 'Manager' },
+  { key: 'auditor_score', label: 'Auditor' },
+  { key: 'management_score', label: 'Mgmt' },
+  { key: 'final_score', label: 'Final' },
 ];
 
 export type KpiTableViewType = 'my-kpis' | 'team-review' | 'audit' | 'management';
@@ -44,47 +43,9 @@ interface KpiDetailsTableProps {
   onShowLogic?: (kpi: KPI) => void;
   expandedKpis?: Set<string>;
   onToggleExpand?: (kpiId: string) => void;
-  // For org-level KPIs
   getOrgKpiValue?: (kpi: KPI) => { achieved_value: number | null; data_source: string | null } | null;
-  // For daily aggregated scores
   getDailyAggregatedScore?: (kpi: KPI) => number | null;
-  // For locked KPI detection
   isKpiLocked?: (kpi: KPI) => boolean;
-}
-
-/**
- * Determine which score columns should be visible based on KPI status
- */
-function getVisibleScoreColumns(status: ReviewStatus | string): { key: string; label: string }[] {
-  const statusIndex = STATUS_ORDER.indexOf(status as ReviewStatus);
-  
-  const columns: { key: string; label: string; minStatusIndex: number }[] = [
-    { key: 'self_score', label: 'Self', minStatusIndex: 0 },
-    { key: 'manager_score', label: 'Manager', minStatusIndex: 1 }, // >= self_review
-    { key: 'auditor_score', label: 'Auditor', minStatusIndex: 2 }, // >= manager_check
-    { key: 'management_score', label: 'Mgmt', minStatusIndex: 4 },  // >= management_review
-  ];
-  
-  return columns
-    .filter(col => statusIndex >= col.minStatusIndex)
-    .map(({ key, label }) => ({ key, label }));
-}
-
-/**
- * Get the maximum visible columns across all KPIs in the table
- */
-function getMaxVisibleColumns(kpis: KPI[]): { key: string; label: string }[] {
-  let maxColumns: { key: string; label: string }[] = [];
-  
-  for (const kpi of kpis) {
-    const cols = getVisibleScoreColumns(kpi.status);
-    if (cols.length > maxColumns.length) {
-      maxColumns = cols;
-    }
-  }
-  
-  // Default to at least Self column
-  return maxColumns.length > 0 ? maxColumns : [{ key: 'self_score', label: 'Self' }];
 }
 
 /**
@@ -116,6 +77,8 @@ function getScoreForColumn(
       return submission.auditor_score ?? null;
     case 'management_score':
       return submission.management_score ?? null;
+    case 'final_score':
+      return submission.final_score ?? null;
     default:
       return null;
   }
@@ -138,9 +101,7 @@ export function KpiDetailsTable({
   getDailyAggregatedScore,
   isKpiLocked,
 }: KpiDetailsTableProps) {
-  // Calculate max visible columns across all KPIs
-  const visibleColumns = getMaxVisibleColumns(kpis);
-  const totalColumns = 5 + visibleColumns.length + 2; // Category, KRA/KPI, Target, Weightage, [scores...], Status, Actions
+  const totalColumns = 12; // Category, KRA/KPI, Target, Weightage, 5 scores, Status, Actions
   
   const canReviewKpi = (kpi: KPI): boolean => {
     const submission = submissionMap.get(kpi.id);
@@ -278,7 +239,7 @@ export function KpiDetailsTable({
           <TableHead>KRA / KPI</TableHead>
           <TableHead>Target</TableHead>
           <TableHead>Weightage</TableHead>
-          {visibleColumns.map(col => (
+          {SCORE_COLUMNS.map(col => (
             <TableHead key={col.key} className="text-center">{col.label}</TableHead>
           ))}
           <TableHead>Status</TableHead>
@@ -365,7 +326,7 @@ export function KpiDetailsTable({
                   <span className="text-sm">{kpi.weightage ?? 0}%</span>
                 </TableCell>
                 {/* Dynamic Score Columns */}
-                {visibleColumns.map(col => {
+                {SCORE_COLUMNS.map(col => {
                   const score = getScoreForColumn(submission, col.key);
                   return (
               <TableCell key={col.key} className="text-center">

@@ -2093,13 +2093,10 @@ Role-based route guard component:
 Unified, reusable KPI details table component used across all review views (My KPIs, Team Review, Audit, Management):
 
 **Key Features:**
-- **Dynamic Score Columns**: Score columns (Self, Manager, Auditor, Mgmt) appear progressively based on KPI status
-  - `kra_set`: Self only
-  - `self_review`: Self, Manager
-  - `manager_check` / `audit`: Self, Manager, Auditor
-  - `management_review` / `approved`: All four columns
+- **Fixed Score Columns**: All 5 score columns (Self, Manager, Auditor, Mgmt, Final) are always visible regardless of KPI status. Empty scores display a dash (—) for layout consistency.
 - **Simplified Score Display**: Scores shown as single digit (1-5) without denominator or rating labels
 - **Self Column**: Displays the employee's calculated **score** (1-5) from `review_submissions.self_score`, NOT the raw `achieved_value`
+- **Final Column**: Displays the final approved score from `review_submissions.final_score`
 - **Weightage Column**: Displays each KPI's weightage percentage after the Target column (e.g., "10%"), defaults to 0% if unset
 - **Consistent Columns**: Same structure across all views for cross-stage visibility
 - **View-Type Actions**: Action buttons adapt based on `viewType` prop ('my-kpis', 'team-review', 'audit', 'management')
