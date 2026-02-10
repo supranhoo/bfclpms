@@ -1,52 +1,82 @@
 
 
-# Fix: Admin Profile Overwrite Bug (Root Cause)
+# Detailed Error Report for All Imports
 
-## Problem
+## Overview
+Add a comprehensive, downloadable error report that appears after every import (Employee, KPI foreground, and KPI background). Instead of a truncated list of errors in a tiny scrollable box, the user will see a full results summary with the ability to download a detailed Excel report.
 
-The admin profile (Ankit Choudhary) keeps getting overwritten with imported employee data. Two bugs remain:
+## What Changes
 
-1. **Employee code collision (PRIMARY)**: The function looks up existing profiles by `employee_code` (line 85-89). If the admin's profile already has an employee code matching an imported employee (from a previous bad run), it overwrites the admin's name, department, etc.
+### 1. Import Results Summary Card (new component)
+A reusable `ImportResultsSummary` component that replaces the current simple error alerts. It will show:
 
-2. **Broken listUsers loop (SECONDARY)**: The fallback user lookup (lines 114-125) paginates through ALL auth users, which is slow and unreliable.
+- **Stats row**: Total rows, Successful, Failed, Skipped -- each as a colored stat box
+- **Error table**: Scrollable table showing Row Number, Employee Code, Employee Name, Error Message, and Status (failed/skipped)
+- **Download button**: "Download Error Report" exports the full error details as an Excel file (.xlsx) with all rows and their status (success/failed + error message)
 
-## Fix (3 changes)
+### 2. Track per-row results (not just errors)
+Currently errors are stored as plain strings like `"Failed to import John: ..."`. Change to structured objects:
 
-### 1. Restore Admin Profile (immediate database fix)
-Run SQL to restore the admin's correct data:
-```
-UPDATE profiles 
-SET full_name = 'Ankit Choudhary', 
-    employee_code = NULL,
-    designation = NULL,
-    department_id = NULL,
-    pms_grade = NULL,
-    level = NULL,
-    reporting_manager_id = NULL
-WHERE id = '535d9a14-e4aa-4676-af92-f535373ffc8d';
-```
-
-### 2. Protect admin in edge function
-Add an explicit guard in `create-employee/index.ts`: when the employee_code lookup at line 85-89 finds a profile, check if it's the admin ID. If so, skip the update and create a new user instead.
-
-```
-const ADMIN_ID = '535d9a14-e4aa-4676-af92-f535373ffc8d'
-
-if (existingProfile && existingProfile.id !== ADMIN_ID) {
-  // safe to update
-} else if (existingProfile && existingProfile.id === ADMIN_ID) {
-  // skip -- do NOT overwrite admin, proceed to create new user
+```text
+{
+  row: number,
+  employeeCode: string,
+  employeeName: string,
+  status: 'success' | 'failed' | 'skipped',
+  message: string
 }
 ```
 
-### 3. Replace broken listUsers with direct approach
-Remove the slow pagination loop (lines 114-125). Instead, when `createUser` fails with "already exists", look up the user in the `profiles` table by email. If not found there either, return a clear error. This is faster and avoids the admin-matching bug entirely.
+This applies to:
+- Employee import (`handleEmployeeImport`) -- track each batch result with row details
+- KPI foreground import (`handleImport`) -- track each row result
+- KPI background import -- parse the errors array from the backend and display in the same format
+
+### 3. Employee Import changes
+- Replace `employeeErrors: string[]` with `employeeImportResults: ImportRowResult[]`
+- After import completes, show the `ImportResultsSummary` component with full results
+- Add "Download Error Report" button that generates an Excel file with columns: Row, Employee Code, Name, Status, Error Message
+
+### 4. KPI Import changes (foreground)
+- Replace `errors: string[]` with `kpiImportResults: ImportRowResult[]` for post-import results
+- Keep the existing validation errors as-is (pre-import)
+- Show the same `ImportResultsSummary` after import completes
+
+### 5. KPI Import changes (background)
+- Parse `backgroundProgress.errors` into structured format
+- Show the `ImportResultsSummary` inside the background progress card when complete
+
+### 6. Excel Error Report Download
+When user clicks "Download Error Report":
+- Creates an Excel file with sheet "Import Results"
+- Columns: Row Number, Employee Code, Employee Name, Status, Error Message
+- Only includes failed/skipped rows (with option to include all)
+- Filename: `import-errors-{type}-{date}.xlsx`
 
 ## Files to Change
-1. `supabase/functions/create-employee/index.ts` -- add admin guard + fix user lookup
-2. `DOCUMENTATION.md` -- update with fix details
+1. `src/components/admin/ImportResultsSummary.tsx` -- NEW reusable component
+2. `src/pages/admin/ImportData.tsx` -- update state types, track structured results, use new component
+3. `DOCUMENTATION.md` -- document the error reporting feature
 
-## Expected Result
-- Admin profile is never overwritten regardless of imported data
-- Duplicate email handling is faster and reliable
-- Import continues to work correctly for all other employees
+## Visual Layout
+
+The results card will appear after import completes, replacing the current simple green/red alerts:
+
+```text
++--------------------------------------------------+
+|  Import Results                    [Download XLSX] |
+|                                                    |
+|  [97 Total] [94 Success] [3 Failed] [0 Skipped]  |
+|                                                    |
+|  Failed Rows:                                      |
+|  +------+--------+------------+------------------+ |
+|  | Row  | Code   | Name       | Error            | |
+|  +------+--------+------------+------------------+ |
+|  |  15  | EMP015 | John Doe   | Invalid email    | |
+|  |  42  | EMP042 | Jane Smith | Dept not found   | |
+|  |  88  | EMP088 | Bob Wilson | Duplicate code   | |
+|  +------+--------+------------+------------------+ |
+|                                          [Dismiss] |
++--------------------------------------------------+
+```
+
