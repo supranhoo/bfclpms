@@ -13,6 +13,8 @@
 
 import { format, subDays, getDaysInMonth, getDay, startOfMonth, addDays, isSameDay, isAfter, isBefore } from 'date-fns';
 import type { FrequencyConfig } from '@/hooks/useFrequencyConfig';
+import { resolveEffectiveCycleOption } from '@/lib/frequencyCycleOptions';
+import type { CycleOption } from '@/lib/frequencyCycleOptions';
 
 export type FrequencyType = 'Daily' | 'Weekly' | 'Monthly' | 'Bi-Monthly' | 'Quarterly' | 'Half-Yearly' | 'Yearly';
 
@@ -220,6 +222,12 @@ export function isKpiLockedForPeriod(
   
   const monthNum = getMonthNumber(reviewMonth);
 
+  // Resolve effective cycle option: per-KPI override → global config → hardcoded default
+  const effectiveCycle = resolveEffectiveCycleOption(frequency, frequencyCycleStart, config?.sub_frequency);
+  if (effectiveCycle) {
+    return isMonthLockedByConfig(monthNum, effectiveCycle.lockedMonths);
+  }
+
   // If we have a database config with locked_months, use it
   if (config?.locked_months) {
     return isMonthLockedByConfig(monthNum, config.locked_months as Record<string, number[]>);
@@ -278,22 +286,23 @@ export function getActiveMonthForCycle(
 ): string {
   if (!frequency) return reviewMonth;
 
+  // Resolve effective cycle option: per-KPI override → global config → hardcoded default
+  const effectiveCycle = resolveEffectiveCycleOption(frequency, frequencyCycleStart, config?.sub_frequency);
+  if (effectiveCycle) {
+    const monthNum = getMonthNumber(reviewMonth);
+    // Check if current month is locked in this cycle
+    if (isMonthLockedByConfig(monthNum, effectiveCycle.lockedMonths)) {
+      // Find which cycle group this month belongs to and return its active month
+      return getActiveMonthFromConfig(monthNum, effectiveCycle.lockedMonths);
+    }
+    // Month is not locked — it IS the active month
+    return reviewMonth;
+  }
+
   // If we have a database config with active_month, use it to determine the cycle's active month
   if (config?.active_month && config?.locked_months) {
     const lockedMonths = config.locked_months as Record<string, number[]>;
     const monthNum = getMonthNumber(reviewMonth);
-    // Find which cycle group this month belongs to
-    for (const [, months] of Object.entries(lockedMonths)) {
-      if (months.includes(monthNum)) {
-        // The active month for this cycle group is the one NOT in locked months
-        // It's the month right after the last locked month in the group
-        const allMonths = [...months].sort((a, b) => a - b);
-        // Find active month: it's the next month after the highest locked month in this group
-        // But we need to handle wrapping. Use the config's sub_frequency to find it.
-        break;
-      }
-    }
-    // Simpler approach: find which cycle the month belongs to and return its active month
     return getActiveMonthFromConfig(monthNum, lockedMonths);
   }
   
@@ -375,6 +384,17 @@ export function getCycleMonths(
   
   const monthNum = getMonthNumber(reviewMonth);
 
+  // Resolve effective cycle option: per-KPI override → global config → hardcoded default
+  const effectiveCycle = resolveEffectiveCycleOption(frequency, frequencyCycleStart, config?.sub_frequency);
+  if (effectiveCycle) {
+    for (const [, months] of Object.entries(effectiveCycle.lockedMonths)) {
+      const activeMonth = findActiveMonthForGroup(months);
+      if (months.includes(monthNum) || activeMonth === monthNum) {
+        return [...months, activeMonth].sort((a, b) => a - b).map(getMonthName);
+      }
+    }
+  }
+
   // If we have config, find the cycle group this month belongs to
   if (config?.locked_months) {
     const lockedMonths = config.locked_months as Record<string, number[]>;
@@ -434,15 +454,27 @@ export function getCycleLabel(
   frequency: FrequencyType | string | null,
   reviewMonth: string,
   reviewYear: number,
+  frequencyCycleStart?: string | null,
   config?: FrequencyConfig | null
 ): string {
   if (!frequency) return reviewMonth;
+
+  // Resolve effective cycle option: per-KPI override → global config → hardcoded default
+  const effectiveCycle = resolveEffectiveCycleOption(frequency, frequencyCycleStart, config?.sub_frequency);
+  if (effectiveCycle?.lockedMonths) {
+    const monthNum = getMonthNumber(reviewMonth);
+    for (const [key, months] of Object.entries(effectiveCycle.lockedMonths)) {
+      const activeMonth = findActiveMonthForGroup(months);
+      if (months.includes(monthNum) || activeMonth === monthNum) {
+        return key;
+      }
+    }
+  }
 
   // If config is available, use sub_frequency to build label
   if (config?.sub_frequency && config?.locked_months) {
     const monthNum = getMonthNumber(reviewMonth);
     const lockedMonths = config.locked_months as Record<string, number[]>;
-    // Find the cycle key this month belongs to
     for (const [key, months] of Object.entries(lockedMonths)) {
       const activeMonth = findActiveMonthForGroup(months);
       if (months.includes(monthNum) || activeMonth === monthNum) {

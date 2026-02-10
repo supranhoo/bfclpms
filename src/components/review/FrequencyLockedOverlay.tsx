@@ -28,7 +28,7 @@ export function FrequencyLockedOverlay({
   const { config } = useFrequencyConfig(frequency);
   const isLocked = isKpiLockedForPeriod(frequency, reviewMonth, reviewYear, frequencyCycleStart, config);
   const activeMonth = getActiveMonthForCycle(frequency, reviewMonth, reviewYear, frequencyCycleStart, config);
-  const cycleLabel = getCycleLabel(frequency, reviewMonth, reviewYear, config);
+  const cycleLabel = getCycleLabel(frequency, reviewMonth, reviewYear, frequencyCycleStart, config);
   
   if (!isLocked) {
     return null;

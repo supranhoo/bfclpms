@@ -7,96 +7,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Save, CalendarDays } from 'lucide-react';
 import { useFrequencyConfigs, useUpdateFrequencyConfig } from '@/hooks/useFrequencyConfig';
 import { toast } from 'sonner';
-
-interface CycleOption {
-  value: string;
-  label: string;
-  description: string;
-  subFrequency: string;
-  lockedMonths: Record<string, number[]>;
-  activeMonth: number;
-}
-
-const QUARTERLY_OPTIONS: CycleOption[] = [
-  {
-    value: 'standard',
-    label: 'Standard (Calendar Year)',
-    description: 'Q1: Jan-Mar, Q2: Apr-Jun, Q3: Jul-Sep, Q4: Oct-Dec',
-    subFrequency: 'Jan-Mar,Apr-Jun,Jul-Sep,Oct-Dec',
-    lockedMonths: { Q1: [1, 2], Q2: [4, 5], Q3: [7, 8], Q4: [10, 11] },
-    activeMonth: 3,
-  },
-  {
-    value: 'financial',
-    label: 'Financial Year (Apr Start)',
-    description: 'Q1: Apr-Jun, Q2: Jul-Sep, Q3: Oct-Dec, Q4: Jan-Mar',
-    subFrequency: 'Apr-Jun,Jul-Sep,Oct-Dec,Jan-Mar',
-    lockedMonths: { Q1: [4, 5], Q2: [7, 8], Q3: [10, 11], Q4: [1, 2] },
-    activeMonth: 6,
-  },
-  {
-    value: 'midyear',
-    label: 'Mid-Year (Jul Start)',
-    description: 'Q1: Jul-Sep, Q2: Oct-Dec, Q3: Jan-Mar, Q4: Apr-Jun',
-    subFrequency: 'Jul-Sep,Oct-Dec,Jan-Mar,Apr-Jun',
-    lockedMonths: { Q1: [7, 8], Q2: [10, 11], Q3: [1, 2], Q4: [4, 5] },
-    activeMonth: 9,
-  },
-];
-
-const HALF_YEARLY_OPTIONS: CycleOption[] = [
-  {
-    value: 'standard',
-    label: 'Standard (Calendar Year)',
-    description: 'H1: Jan-Jun, H2: Jul-Dec',
-    subFrequency: 'Jan-Jun,Jul-Dec',
-    lockedMonths: { H1: [1, 2, 3, 4, 5], H2: [7, 8, 9, 10, 11] },
-    activeMonth: 6,
-  },
-  {
-    value: 'financial',
-    label: 'Financial Year (Apr Start)',
-    description: 'H1: Apr-Sep, H2: Oct-Mar',
-    subFrequency: 'Apr-Sep,Oct-Mar',
-    lockedMonths: { H1: [4, 5, 6, 7, 8], H2: [10, 11, 12, 1, 2] },
-    activeMonth: 9,
-  },
-  {
-    value: 'midyear',
-    label: 'Mid-Year (Jul Start)',
-    description: 'H1: Jul-Dec, H2: Jan-Jun',
-    subFrequency: 'Jul-Dec,Jan-Jun',
-    lockedMonths: { H1: [7, 8, 9, 10, 11], H2: [1, 2, 3, 4, 5] },
-    activeMonth: 12,
-  },
-];
-
-const YEARLY_OPTIONS: CycleOption[] = [
-  {
-    value: 'standard',
-    label: 'Calendar Year (Jan-Dec)',
-    description: 'Review in December',
-    subFrequency: 'Jan-Dec',
-    lockedMonths: { 'Jan-Dec': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
-    activeMonth: 12,
-  },
-  {
-    value: 'financial',
-    label: 'Financial Year (Apr-Mar)',
-    description: 'Review in March',
-    subFrequency: 'Apr-Mar',
-    lockedMonths: { 'Apr-Mar': [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2] },
-    activeMonth: 3,
-  },
-  {
-    value: 'midyear',
-    label: 'Mid-Year (Jul-Jun)',
-    description: 'Review in June',
-    subFrequency: 'Jul-Jun',
-    lockedMonths: { 'Jul-Jun': [7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5] },
-    activeMonth: 6,
-  },
-];
+import {
+  CycleOption,
+  BI_MONTHLY_OPTIONS,
+  QUARTERLY_OPTIONS,
+  HALF_YEARLY_OPTIONS,
+  YEARLY_OPTIONS,
+} from '@/lib/frequencyCycleOptions';
 
 function detectCurrentOption(
   options: CycleOption[],
@@ -106,12 +23,11 @@ function detectCurrentOption(
   const match = options.find(
     (o) => o.subFrequency === currentSubFrequency || o.activeMonth === currentActiveMonth
   );
-  return match?.value || 'standard';
+  return match?.value || options[0]?.value || '';
 }
 
 interface FrequencyCycleSectionProps {
   title: string;
-  frequency: string;
   options: CycleOption[];
   currentSubFrequency: string | undefined;
   currentActiveMonth: number | null | undefined;
@@ -202,10 +118,12 @@ export function FrequencyCycleSettings() {
         <Skeleton className="h-64 w-full" />
         <Skeleton className="h-64 w-full" />
         <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-64 w-full" />
       </div>
     );
   }
 
+  const biMonthly = configs?.find((c) => c.frequency === 'Bi-Monthly');
   const quarterly = configs?.find((c) => c.frequency === 'Quarterly');
   const halfYearly = configs?.find((c) => c.frequency === 'Half-Yearly');
   const yearly = configs?.find((c) => c.frequency === 'Yearly');
@@ -233,11 +151,21 @@ export function FrequencyCycleSettings() {
       </div>
       <p className="text-sm text-muted-foreground -mt-4">
         Configure when multi-month frequency cycles start. This affects which months are locked and when reviews are due.
+        Individual KPIs can override these defaults via the Cycle Start field.
       </p>
 
       <FrequencyCycleSection
+        title="Bi-Monthly Cycle Start"
+        options={BI_MONTHLY_OPTIONS}
+        currentSubFrequency={biMonthly?.sub_frequency}
+        currentActiveMonth={biMonthly?.active_month}
+        configId={biMonthly?.id}
+        onSave={handleSave}
+        isSaving={updateConfig.isPending}
+      />
+
+      <FrequencyCycleSection
         title="Quarterly Cycle Start"
-        frequency="Quarterly"
         options={QUARTERLY_OPTIONS}
         currentSubFrequency={quarterly?.sub_frequency}
         currentActiveMonth={quarterly?.active_month}
@@ -248,7 +176,6 @@ export function FrequencyCycleSettings() {
 
       <FrequencyCycleSection
         title="Half-Yearly Cycle Start"
-        frequency="Half-Yearly"
         options={HALF_YEARLY_OPTIONS}
         currentSubFrequency={halfYearly?.sub_frequency}
         currentActiveMonth={halfYearly?.active_month}
@@ -259,7 +186,6 @@ export function FrequencyCycleSettings() {
 
       <FrequencyCycleSection
         title="Yearly Cycle Start"
-        frequency="Yearly"
         options={YEARLY_OPTIONS}
         currentSubFrequency={yearly?.sub_frequency}
         currentActiveMonth={yearly?.active_month}

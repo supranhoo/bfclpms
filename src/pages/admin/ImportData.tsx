@@ -80,7 +80,7 @@ interface KpiImportRow {
   uomType?: string; // 'numeric' | 'binary' | 'tiered'
   qualitativeOptions?: QualitativeOption[] | string; // JSON string or parsed array
   frequency?: string;
-  frequencyCycleStart?: string; // For yearly KPIs: 'Jan-Dec', 'Jul-Jun', 'Apr-Mar'
+  frequencyCycleStart?: string; // Cycle start override: 'Jan-Feb'/'Feb-Mar' (Bi-Monthly), 'Jan-Mar'/'Apr-Jun'/'Jul-Sep' (Quarterly), 'Jan-Jun'/'Apr-Sep'/'Jul-Dec' (Half-Yearly), 'Jan-Dec'/'Apr-Mar'/'Jul-Jun' (Yearly)
   kpiWeightage?: number;
   criteria?: string; // "Higher is Better" or "Lower is Better"
   // Rating thresholds
@@ -1362,7 +1362,7 @@ export default function ImportData() {
         uomType: 'tiered',
         qualitativeOptions: 'auto',
         frequency: 'Quarterly',
-        frequencyCycleStart: '',
+        frequencyCycleStart: 'Apr-Jun',
         kpiWeightage: 15,
         criteria: '',
         target: '',
@@ -2050,7 +2050,15 @@ export default function ImportData() {
                 <p className="font-medium mt-4 mb-2">Special flags:</p>
                 <ul className="list-disc list-inside space-y-1">
                   <li><code>isOrgLevel</code> - Set to 'yes' or 'true' for organization-level KPIs (centrally managed)</li>
-                  <li><code>frequencyCycleStart</code> - For Yearly KPIs: 'Jan-Dec', 'Jul-Jun', or 'Apr-Mar'</li>
+                  <li><code>frequencyCycleStart</code> - Per-KPI cycle start override:
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>Bi-Monthly: <code>Jan-Feb</code> (standard) or <code>Feb-Mar</code> (offset)</li>
+                      <li>Quarterly: <code>Jan-Mar</code>, <code>Apr-Jun</code>, or <code>Jul-Sep</code></li>
+                      <li>Half-Yearly: <code>Jan-Jun</code>, <code>Apr-Sep</code>, or <code>Jul-Dec</code></li>
+                      <li>Yearly: <code>Jan-Dec</code>, <code>Apr-Mar</code>, or <code>Jul-Jun</code></li>
+                    </ul>
+                    Leave empty to use the system default.
+                  </li>
                 </ul>
                 <p className="font-medium mt-4 mb-2">Status columns:</p>
                 <ul className="list-disc list-inside space-y-1">
