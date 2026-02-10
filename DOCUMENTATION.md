@@ -1328,7 +1328,7 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - Existing employees are matched by **employee_code or email only** (name matching removed to prevent silent overwrites of unrelated profiles with common names)
   - Existing employees are updated in-place via direct profile updates
 - Bulk import KPIs from Excel
-- Background processing for large files
+- Background processing for large files (error reports capped at 500 entries per import)
 - Progress tracking
 - **Detailed Error Reporting** (`ImportResultsSummary` component):
   - After every import (Employee, KPI foreground, KPI background), a results summary card replaces the old simple alerts
