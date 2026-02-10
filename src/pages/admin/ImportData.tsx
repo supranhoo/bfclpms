@@ -14,6 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { FileSpreadsheet, AlertCircle, CheckCircle2, Download, Users, Loader2, Trash2, Building2 } from 'lucide-react';
 import OrgStructureImport from '@/components/admin/OrgStructureImport';
+import ImportResultsSummary, { type ImportRowResult } from '@/components/admin/ImportResultsSummary';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
@@ -342,6 +343,8 @@ export default function ImportData() {
   const [isImportingEmployees, setIsImportingEmployees] = useState(false);
   const [employeeImportSuccess, setEmployeeImportSuccess] = useState(0);
   const [employeeImportProgress, setEmployeeImportProgress] = useState({ current: 0, total: 0 });
+  const [employeeImportResults, setEmployeeImportResults] = useState<ImportRowResult[] | null>(null);
+  const [kpiImportResults, setKpiImportResults] = useState<ImportRowResult[] | null>(null);
 
   // Normalize KPI row to handle different column name variations
   const normalizeKpiRow = (rawRow: Record<string, any>): KpiImportRow => {
@@ -766,6 +769,7 @@ export default function ImportData() {
     let categoriesCreated = 0;
     let employeesCreated = 0;
     const importErrors: string[] = [];
+    const rowResults: ImportRowResult[] = [];
 
     // Initialize progress tracking
     setImportProgress({
@@ -855,6 +859,7 @@ export default function ImportData() {
             if (!response.ok) {
               const errorData = await response.json();
               importErrors.push(`Failed to create employee ${row.newCode} - ${row.fullName}: ${errorData.error}`);
+              rowResults.push({ row: i + 2, employeeCode: String(row.newCode || ''), employeeName: row.fullName || '', status: 'failed', message: errorData.error || 'Failed to create employee' });
               continue;
             }
 
@@ -876,12 +881,14 @@ export default function ImportData() {
             }));
           } catch (createError: any) {
             importErrors.push(`Failed to create employee ${row.newCode} - ${row.fullName}: ${createError.message}`);
+            rowResults.push({ row: i + 2, employeeCode: String(row.newCode || ''), employeeName: row.fullName || '', status: 'failed', message: createError.message });
             continue;
           }
         }
         
         if (!employee) {
           importErrors.push(`Employee not found and could not be created: ${row.newCode} - ${row.fullName}`);
+          rowResults.push({ row: i + 2, employeeCode: String(row.newCode || ''), employeeName: row.fullName || '', status: 'failed', message: 'Employee not found and could not be created' });
           continue;
         }
 
@@ -903,6 +910,7 @@ export default function ImportData() {
 
           if (categoryError) {
             importErrors.push(`Failed to create category "${row.category}": ${categoryError.message}`);
+            rowResults.push({ row: i + 2, employeeCode: String(row.newCode || ''), employeeName: row.fullName || '', status: 'failed', message: `Category error: ${categoryError.message}` });
             continue;
           }
 
@@ -917,6 +925,7 @@ export default function ImportData() {
 
         if (!categoryId) {
           importErrors.push(`Category not found or could not be created: ${row.category}`);
+          rowResults.push({ row: i + 2, employeeCode: String(row.newCode || ''), employeeName: row.fullName || '', status: 'failed', message: `Category not found: ${row.category}` });
           continue;
         }
 
@@ -1068,17 +1077,20 @@ export default function ImportData() {
         }
 
         successCount++;
+        rowResults.push({ row: i + 2, employeeCode: String(row.newCode || ''), employeeName: row.fullName || '', status: 'success', message: 'Imported successfully' });
         setImportProgress(prev => ({
           ...prev,
           kpisImported: prev.kpisImported + 1,
         }));
       } catch (error: any) {
         importErrors.push(`Failed to import KPI for ${row.fullName}: ${error.message}`);
+        rowResults.push({ row: i + 2, employeeCode: String(row.newCode || ''), employeeName: row.fullName || '', status: 'failed', message: error.message });
       }
     }
 
     setImportSuccess(successCount);
     setErrors(importErrors);
+    setKpiImportResults(rowResults);
     setIsImporting(false);
 
     // Refresh categories if any were created
@@ -1111,8 +1123,10 @@ export default function ImportData() {
 
     setIsImportingEmployees(true);
     setEmployeeImportProgress({ current: 0, total: employeeData.length });
+    setEmployeeImportResults(null);
     let successCount = 0;
     const importErrors: string[] = [];
+    const rowResults: ImportRowResult[] = [];
     const BATCH_SIZE = 5;
 
     // Process a single employee row
@@ -1206,11 +1220,14 @@ export default function ImportData() {
       );
 
       results.forEach((result, idx) => {
+        const row = batch[idx];
+        const globalIdx = i + idx;
         if (result.status === 'fulfilled') {
           successCount++;
+          rowResults.push({ row: globalIdx + 2, employeeCode: row.employeeCode || '', employeeName: row.fullName || '', status: 'success', message: 'Imported successfully' });
         } else {
-          const row = batch[idx];
           importErrors.push(`Failed to import ${row.fullName || row.employeeCode}: ${result.reason?.message || 'Unknown error'}`);
+          rowResults.push({ row: globalIdx + 2, employeeCode: row.employeeCode || '', employeeName: row.fullName || '', status: 'failed', message: result.reason?.message || 'Unknown error' });
         }
       });
 
@@ -1269,6 +1286,7 @@ export default function ImportData() {
 
     setEmployeeImportSuccess(successCount);
     setEmployeeErrors(importErrors);
+    setEmployeeImportResults(rowResults);
     setIsImportingEmployees(false);
     refetchProfiles();
 
@@ -1752,14 +1770,12 @@ export default function ImportData() {
             </Alert>
           )}
 
-          {employeeImportSuccess > 0 && (
-            <Alert>
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertTitle>Import Complete</AlertTitle>
-              <AlertDescription>
-                Successfully imported {employeeImportSuccess} employees.
-              </AlertDescription>
-            </Alert>
+          {employeeImportResults && employeeImportResults.length > 0 && (
+            <ImportResultsSummary
+              results={employeeImportResults}
+              importType="employee"
+              onDismiss={() => { setEmployeeImportResults(null); setEmployeeImportSuccess(0); }}
+            />
           )}
 
           {employeeData.length > 0 && (
@@ -1960,17 +1976,20 @@ export default function ImportData() {
                         </div>
                       </div>
                       
-                      {backgroundProgress.errors && backgroundProgress.errors.length > 0 && (
+                      {backgroundProgress.errors && backgroundProgress.errors.length > 0 && backgroundProgress.status !== 'running' && (
                         <div className="mt-4">
-                          <p className="text-sm font-medium text-destructive mb-2">Errors ({backgroundProgress.errors.length}):</p>
-                          <div className="max-h-24 overflow-auto bg-destructive/10 p-2 rounded text-xs">
-                            {backgroundProgress.errors.slice(0, 5).map((err, i) => (
-                              <div key={i} className="text-destructive">{err}</div>
-                            ))}
-                            {backgroundProgress.errors.length > 5 && (
-                              <div className="text-muted-foreground">...and {backgroundProgress.errors.length - 5} more</div>
-                            )}
-                          </div>
+                          <ImportResultsSummary
+                            results={backgroundProgress.errors.map((err, i) => {
+                              // Parse "Row X: EmpCode - Name: error" format
+                              const match = err.match(/^Row (\d+):\s*(\S+)\s*-\s*([^:]+):\s*(.+)$/);
+                              if (match) {
+                                return { row: parseInt(match[1]), employeeCode: match[2], employeeName: match[3].trim(), status: 'failed' as const, message: match[4].trim() };
+                              }
+                              return { row: i + 1, employeeCode: '', employeeName: '', status: 'failed' as const, message: err };
+                            })}
+                            importType="kpi-background"
+                            onDismiss={() => { setBackgroundImportId(null); setBackgroundProgress(null); }}
+                          />
                         </div>
                       )}
                       
@@ -2115,14 +2134,12 @@ export default function ImportData() {
             </Card>
           )}
 
-          {importSuccess > 0 && (
-            <Alert>
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertTitle>Import Complete</AlertTitle>
-              <AlertDescription>
-                Successfully imported {importSuccess} KPIs.
-              </AlertDescription>
-            </Alert>
+          {kpiImportResults && kpiImportResults.length > 0 && (
+            <ImportResultsSummary
+              results={kpiImportResults}
+              importType="kpi"
+              onDismiss={() => { setKpiImportResults(null); setImportSuccess(0); }}
+            />
           )}
 
           {importData.length > 0 && (
