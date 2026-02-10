@@ -1131,11 +1131,10 @@ export default function ImportData() {
 
     // Process a single employee row
     const processEmployee = async (row: EmployeeImportRow) => {
-      // Check if employee already exists by email or employee code or full name
+      // Check if employee already exists by employee_code or email only (no name matching to avoid silent overwrites)
       const existingEmployee = profiles?.find(p => 
-        (row.email && p.email.toLowerCase() === row.email.toLowerCase()) ||
         (row.employeeCode && p.employee_code && p.employee_code === String(row.employeeCode)) ||
-        (row.fullName && p.full_name && p.full_name.toLowerCase() === row.fullName.toLowerCase())
+        (row.email && p.email && p.email.toLowerCase() === row.email.toLowerCase())
       );
 
       if (existingEmployee) {
