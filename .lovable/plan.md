@@ -1,59 +1,52 @@
 
 
-# Fix: Slow Employee Import + Admin Profile Overwrite Bug
+# Fix: Admin Profile Overwrite Bug (Root Cause)
 
-## Problems Found
+## Problem
 
-### 1. Slow Import (main complaint)
-Each employee is created via a **sequential** `for...of await` loop, making one HTTP call at a time to the backend function. Each call takes ~3 seconds (auth user creation + profile update). For 100 employees, this means **~5 minutes of waiting**.
+The admin profile (Ankit Choudhary) keeps getting overwritten with imported employee data. Two bugs remain:
 
-### 2. Critical Bug: Admin Profile Being Overwritten
-The network responses show that every `create-employee` call returns the **admin's profile ID** and overwrites the admin's name, employee code, and department with each imported employee's data. This means:
-- No new employees are actually being created as separate users
-- The admin account gets corrupted with the last imported employee's data
+1. **Employee code collision (PRIMARY)**: The function looks up existing profiles by `employee_code` (line 85-89). If the admin's profile already has an employee code matching an imported employee (from a previous bad run), it overwrites the admin's name, department, etc.
 
-The root cause is the `listUsers` filter syntax in the edge function. The filter `email.eq.${email}` does not work as expected with the Supabase Admin API — it likely returns all users (including the admin) instead of filtering properly, causing the function to think the auth user already exists.
+2. **Broken listUsers loop (SECONDARY)**: The fallback user lookup (lines 114-125) paginates through ALL auth users, which is slow and unreliable.
 
-## Solution
+## Fix (3 changes)
 
-### Part A: Fix the `create-employee` Edge Function
-- Replace the broken `listUsers` filter with a direct lookup using `getUserByEmail` or a corrected filter approach
-- This prevents false matches that cause the admin profile overwrite
+### 1. Restore Admin Profile (immediate database fix)
+Run SQL to restore the admin's correct data:
+```
+UPDATE profiles 
+SET full_name = 'Ankit Choudhary', 
+    employee_code = NULL,
+    designation = NULL,
+    department_id = NULL,
+    pms_grade = NULL,
+    level = NULL,
+    reporting_manager_id = NULL
+WHERE id = '535d9a14-e4aa-4676-af92-f535373ffc8d';
+```
 
-### Part B: Add Batch Concurrency to Employee Import
-- Replace the sequential `for...of await` loop with a **batched parallel** approach
-- Process employees in batches of 5 concurrently (not all at once, to avoid rate limits)
-- This reduces import time from ~5 minutes to ~1 minute for 100 employees
-- Add a progress indicator showing "Processing 15/100..."
+### 2. Protect admin in edge function
+Add an explicit guard in `create-employee/index.ts`: when the employee_code lookup at line 85-89 finds a profile, check if it's the admin ID. If so, skip the update and create a new user instead.
 
-### Part C: Add a Bulk Import Edge Function (optional optimization)
-- Create a `bulk-create-employees` edge function that accepts an array of employees
-- Process all employees server-side in a single HTTP call
-- This eliminates per-employee network overhead entirely
+```
+const ADMIN_ID = '535d9a14-e4aa-4676-af92-f535373ffc8d'
 
-## Recommended Approach: Part A + Part B
-
-Part C is the fastest but adds more complexity. Parts A and B together will fix both the bug and reduce import time to ~1 minute, which is acceptable.
-
-## Technical Details
-
-### Edge Function Fix (`supabase/functions/create-employee/index.ts`)
-- Remove the `listUsers` call with the broken filter
-- Use `supabase.auth.admin.getUserById` after looking up by email in a more reliable way, or query `auth.users` table directly via the admin client
-- Alternatively, try creating the user and catch the "already exists" error as the check
-
-### Import Loop Fix (`src/pages/admin/ImportData.tsx`)
-- Replace:
-```text
-for (const row of employeeData) {
-  await supabase.functions.invoke('create-employee', ...);
+if (existingProfile && existingProfile.id !== ADMIN_ID) {
+  // safe to update
+} else if (existingProfile && existingProfile.id === ADMIN_ID) {
+  // skip -- do NOT overwrite admin, proceed to create new user
 }
 ```
-- With a batched approach that processes 5 employees concurrently using `Promise.all` on sliced chunks
-- Add progress state to show import progress in the UI
 
-### Files to Change
-1. `supabase/functions/create-employee/index.ts` — fix auth user lookup logic
-2. `src/pages/admin/ImportData.tsx` — add batch concurrency + progress indicator
-3. `DOCUMENTATION.md` — update with changes
+### 3. Replace broken listUsers with direct approach
+Remove the slow pagination loop (lines 114-125). Instead, when `createUser` fails with "already exists", look up the user in the `profiles` table by email. If not found there either, return a clear error. This is faster and avoids the admin-matching bug entirely.
 
+## Files to Change
+1. `supabase/functions/create-employee/index.ts` -- add admin guard + fix user lookup
+2. `DOCUMENTATION.md` -- update with fix details
+
+## Expected Result
+- Admin profile is never overwritten regardless of imported data
+- Duplicate email handling is faster and reliable
+- Import continues to work correctly for all other employees
