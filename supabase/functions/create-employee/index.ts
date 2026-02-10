@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
 
     if (createError) {
       if (createError.message?.includes('already been registered') || createError.message?.includes('already exists')) {
-        // Look up existing user by email in profiles table (fast, no pagination)
+        // First try profiles table lookup by email
         const { data: existingByEmail } = await supabaseAdmin
           .from('profiles')
           .select('id')
@@ -125,9 +125,27 @@ Deno.serve(async (req) => {
         if (existingByEmail) {
           userId = existingByEmail.id
         } else {
-          return new Response(JSON.stringify({ error: `User with email ${email} exists in auth but no matching profile found. Skipping to avoid data corruption.` }), {
-            status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          })
+          // Profile not found by email — search auth users to get the ID
+          // Use a paginated scan to find the user by email
+          let found = false
+          let page = 1
+          while (!found) {
+            const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 500 })
+            if (listErr || !users || users.length === 0) break
+            const match = users.find(u => u.email === email && u.id !== ADMIN_ID)
+            if (match) {
+              userId = match.id
+              found = true
+            } else if (users.length < 500) {
+              break
+            }
+            page++
+          }
+          if (!found) {
+            return new Response(JSON.stringify({ error: `User with email ${email} exists in auth but could not be resolved. Please check manually.` }), {
+              status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            })
+          }
         }
       } else {
         return new Response(JSON.stringify({ error: `Failed to create user: ${createError.message}` }), {
