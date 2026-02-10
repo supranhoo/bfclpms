@@ -922,6 +922,7 @@ All three review pages share a unified `EmployeeFilters` component with advanced
 #### 4.9.1 User Management (`/admin/users`)
 - View all users with roles
 - Create new users via `create-employee` edge function
+- Edit users: Full Name (editable), Email (read-only), Employee Code, Role, Department, Reporting Manager, Designation, PMS Grade
 - Assign/change roles
 - Reset passwords
 - Bulk actions

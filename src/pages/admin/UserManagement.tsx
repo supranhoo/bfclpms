@@ -55,6 +55,8 @@ export default function UserManagement() {
   const [editDesignation, setEditDesignation] = useState('');
   const [editPmsGrade, setEditPmsGrade] = useState('');
   const [editEmployeeCode, setEditEmployeeCode] = useState('');
+  const [editFullName, setEditFullName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
 
   // Create Dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -139,6 +141,7 @@ export default function UserManagement() {
     mutationFn: async ({
       userId,
       role,
+      fullName,
       reportingManagerId,
       departmentId,
       designation,
@@ -147,6 +150,7 @@ export default function UserManagement() {
     }: {
       userId: string;
       role: AppRole;
+      fullName: string;
       reportingManagerId: string | null;
       departmentId: string | null;
       designation: string;
@@ -156,6 +160,7 @@ export default function UserManagement() {
       const { error: profileError } = await supabase
         .from('profiles')
         .update({
+          full_name: fullName || null,
           reporting_manager_id: reportingManagerId || null,
           department_id: departmentId || null,
           designation,
@@ -356,6 +361,8 @@ export default function UserManagement() {
     setEditDesignation(user.designation || '');
     setEditPmsGrade(user.pms_grade || '');
     setEditEmployeeCode(user.employee_code || '');
+    setEditFullName(user.full_name || '');
+    setEditEmail(user.email || '');
     setEditDialogOpen(true);
   };
 
@@ -364,6 +371,7 @@ export default function UserManagement() {
     updateUser.mutate({
       userId: selectedUser.id,
       role: editRole,
+      fullName: editFullName,
       reportingManagerId: editManagerId === 'none' ? null : editManagerId || null,
       departmentId: editDepartmentId === 'none' ? null : editDepartmentId || null,
       designation: editDesignation,
@@ -742,6 +750,25 @@ export default function UserManagement() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Full Name</Label>
+              <Input
+                value={editFullName}
+                onChange={(e) => setEditFullName(e.target.value)}
+                placeholder="e.g. John Doe"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                value={editEmail}
+                readOnly
+                disabled
+                className="opacity-60"
+              />
+            </div>
+
             <div className="space-y-2">
               <Label>Employee Code</Label>
               <Input
