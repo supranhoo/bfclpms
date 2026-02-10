@@ -25,6 +25,7 @@ export const IMPORT_LIMITS = {
 // Schema for KPI import row validation
 export const KpiImportRowSchema = z.object({
   sNo: z.number().optional(),
+  refCode: z.string().max(200).optional(),
   month: z.string().max(50).optional(),
   reviewStatus: z.string().max(50).optional(),
   newCode: z.string().min(1, "Employee code is required").max(50),

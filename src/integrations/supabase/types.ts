@@ -781,6 +781,7 @@ export type Database = {
           r3: string | null
           r4: string | null
           r5: string | null
+          ref_code: string | null
           require_resubmit_reason: boolean | null
           review_period: string | null
           review_year: number | null
@@ -815,6 +816,7 @@ export type Database = {
           r3?: string | null
           r4?: string | null
           r5?: string | null
+          ref_code?: string | null
           require_resubmit_reason?: boolean | null
           review_period?: string | null
           review_year?: number | null
@@ -849,6 +851,7 @@ export type Database = {
           r3?: string | null
           r4?: string | null
           r5?: string | null
+          ref_code?: string | null
           require_resubmit_reason?: boolean | null
           review_period?: string | null
           review_year?: number | null

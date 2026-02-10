@@ -116,6 +116,8 @@ interface KpiImportRow {
   subBranch?: string;
   // Special flags
   isOrgLevel?: boolean | string;
+  // User reference
+  refCode?: string;
 }
 
 interface EmployeeImportRow {
@@ -545,6 +547,8 @@ export default function ImportData() {
       // Special flags
       isOrgLevel: getValue(['isOrgLevel', 'is_org_level', 'orgLevel', 'org_level']),
       frequencyCycleStart: getValue(['frequencyCycleStart', 'frequency_cycle_start', 'cycleStart', 'cycle_start']),
+      // User reference
+      refCode: getValue(['refCode', 'ref_code', 'Ref_Code', 'referenceCode', 'reference_code']),
     };
   };
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1022,6 +1026,7 @@ export default function ImportData() {
             r0: row.r0 ? String(row.r0) : null,
             frequency: row.frequency || null,
             source_of_data: row.sourceOfData || null,
+            ref_code: row.refCode || null,
           })
           .select('id')
           .single();
@@ -1300,6 +1305,7 @@ export default function ImportData() {
     const template = [
       {
         sNo: 1,
+        refCode: 'REF-001',
         month: 'Dec-25',
         reviewStatus: 'Pending',
         newCode: '100001',
@@ -1348,6 +1354,7 @@ export default function ImportData() {
       },
       {
         sNo: 2,
+        refCode: 'REF-002',
         month: 'Dec-25',
         reviewStatus: 'Pending',
         newCode: '100001',
@@ -1392,6 +1399,7 @@ export default function ImportData() {
       },
       {
         sNo: 3,
+        refCode: 'REF-003',
         month: 'Dec-25',
         reviewStatus: 'Pending',
         newCode: '100001',
@@ -1577,6 +1585,7 @@ export default function ImportData() {
             weightage,
             criteria,
             r5, r4, r3, r2, r1, r0,
+            ref_code,
             review_period,
             review_year,
             source_of_data,
@@ -1620,6 +1629,7 @@ export default function ImportData() {
         const category = kpi.kra_categories as any;
         
         return {
+          refCode: (kpi as any).ref_code || '',
           newCode: profile?.employee_code || '',
           fullName: profile?.full_name || '',
           category: category?.name || '',

@@ -129,6 +129,8 @@ const KpiImportRowSchema = z.object({
   businessUnit: optionalString(MAX_TEXT_LENGTH),
   department: optionalString(MAX_TEXT_LENGTH),
   subBranch: optionalString(MAX_TEXT_LENGTH),
+  // User reference code
+  refCode: optionalString(200),
   // Organization-level KPI flag
   isOrgLevel: z.preprocess((v) => {
     if (v === '' || v === null || v === undefined) return false;
@@ -819,6 +821,7 @@ async function processImport(
         frequency_cycle_start: row.frequencyCycleStart || null,
         source_of_data: row.sourceOfData || null,
         is_org_level: row.isOrgLevel || false,
+        ref_code: row.refCode || null,
       });
       
       // Prepare submission if review data exists
