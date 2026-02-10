@@ -1,62 +1,53 @@
 
 
-# Fix: Import N/A Detection and Data Correction
+# Add "Ref_Code" Column to PMS Scorecard Import/Export
 
-## Problem
+## Overview
 
-Three KPIs for ABHAS LUHARUWALLA (100856) Sep 2025 have `is_na = false` in the database despite having NULL achieved values. This causes the weighted average to use 100.0 as the denominator instead of 93.5, producing a rating of **3.15** instead of the correct **3.36**.
+Add a `ref_code` column to the `kpis` table that serves as a user-defined reference identifier. Users can populate this during import to verify data accuracy, and it will be included when exporting current data.
 
-| KPI | achieved_value | is_na | weightage |
-|-----|---------------|-------|-----------|
-| Ensure minimu vasriance in Stock audit | NULL | false | 2.50 |
-| Evaluates saving through claim | NULL | false | 4.00 |
-| Implement inventory...min max levels | NULL | false | 0.00 |
+## Changes Required
 
-## Root Cause
+### 1. Database Migration
 
-During import, the `targetAchieved` column for these KPIs was either:
-- Empty in the Excel (not the string "NA"), so `parseNumericValue` returned `undefined`
-- Or the "NA" text was in the cell but the column header didn't match any expected alias
-
-Since the N/A detection only checks for literal strings ("na", "n/a", etc.), blank cells get `is_na = false` even though the user intended them as N/A.
-
-## Fix Plan
-
-### 1. Database Data Fix (Migration)
-
-Update the 3 review submissions to set `is_na = true` for KPIs that have NULL achieved values and NULL scores:
+Add a `ref_code` text column to the `kpis` table:
 
 ```sql
-UPDATE review_submissions
-SET is_na = true, final_score = NULL, self_score = NULL
-WHERE kpi_id IN (
-  'e38b5740-cd7d-483b-aaba-4860841a5329',  -- Stock audit
-  'fbd28bb9-8701-45f9-9441-ecbf726dfbb7',  -- Saving through claim
-  'ca47f457-c989-4bf0-8b19-b5ddac981b97'   -- Min max levels
-);
+ALTER TABLE public.kpis ADD COLUMN ref_code text;
 ```
 
-### 2. Import Logic Fix (`src/pages/admin/ImportData.tsx`)
+No constraints needed -- it's a free-form optional text field for the user's reference.
 
-Enhance the N/A detection (around line 1042-1044) to also treat a genuinely empty/null achieved value as N/A when:
-- The `targetAchieved` field from the Excel is explicitly empty or undefined
-- AND there is no score data for that KPI (no self/manager/audit ratings)
+### 2. Frontend Import (`src/pages/admin/ImportData.tsx`)
 
-This prevents future imports from silently storing non-NA submissions with NULL data.
+**a) KpiImportRow interface (~line 69):** Add `refCode?: string;`
 
+**b) normalizeKpiRow function (~line 498-548):** Add mapping:
 ```typescript
-// Enhanced N/A detection
-const achievedStr = String(achievedValue || '').trim().toLowerCase();
-const isNa = achievedStr === 'na' || achievedStr === 'n/a' || 
-             achievedStr === 'not applicable' || achievedStr === '-' ||
-             // Also treat as NA if no achieved value AND no scores exist
-             (!achievedValue && !selfScore && !managerScore && !auditorScore);
+refCode: getValue(['refCode', 'ref_code', 'Ref_Code', 'referenceCode', 'reference_code']),
 ```
 
-### 3. Update `DOCUMENTATION.md`
+**c) Download Template (~line 1299-1437):** Add `refCode` field to template sample rows (placed near `sNo`/`newCode` for visibility).
 
-Document the enhanced N/A detection rule: "During import, KPIs with no achieved value and no review scores are automatically marked as N/A."
+**d) Export Current Data (~line 1617-1652):** Include `ref_code` from the KPI select query and add `refCode: kpi.ref_code || ''` to the export object.
 
-## Result
+**e) KPI select in export query (~line 1566-1587):** Add `ref_code` to the select fields.
 
-After fix, ABHAS LUHARUWALLA Sep 2025: 314.5 / 93.5 = **3.36**
+### 3. Edge Function (`supabase/functions/import-kpis/index.ts`)
+
+Add `refCode` to the validation schema and pass it through to the KPI upsert/insert logic so it gets stored in the database.
+
+### 4. Foreground Import Logic
+
+In the foreground import path (handleImport), pass `ref_code` when creating/upserting KPIs.
+
+### 5. Documentation (`DOCUMENTATION.md`)
+
+Update the PMS template column list to include `Ref_Code` as an optional column for user reference tracking.
+
+## Technical Notes
+
+- The column is purely for user convenience (tracking/verification) -- it does not affect scoring, reviews, or any business logic
+- Column position in template: placed early (after `sNo`) so users see it immediately
+- The column is optional -- blank values are fine
+
