@@ -298,11 +298,10 @@ export function UnifiedScorecard({
       
       if (weight > 0) {
         existing.dynamicWeightage += weight;
-        if (score > 0) {
-          totalWeightedScore += score * weight;
-          totalWeight += weight;
-          existing.totalScore += score * weight;
-        }
+        // Always include non-NA KPIs in both numerator and denominator
+        totalWeightedScore += score * weight;
+        totalWeight += weight;
+        existing.totalScore += score * weight;
         existing.totalWeight += weight;
       }
       

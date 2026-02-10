@@ -557,6 +557,12 @@ login_hero_description text  -- Configurable description text
 - Review status distribution with progress bars
 - KPI details table with status badges and action buttons
 
+**Overall Rating Calculation (Weighted Average):**
+- **Formula:** `overallRating = totalWeightedScore / totalEffectiveWeight`
+- **N/A Exclusion:** KPIs marked as N/A (`is_na = true`) are excluded from **both** numerator (weighted score) AND denominator (total weight)
+- **Zero/NULL Scores:** All non-NA KPIs are included in both numerator and denominator, even if their score is 0 or NULL. This ensures KPIs without scores penalize the rating rather than being silently ignored.
+- **Example:** If an employee has 100 total weightage, 3 N/A KPIs with weightage 6.5, and weighted score sum of 314.5, the rating = 314.5 / 93.5 = 3.36
+
 **Data Flow:**
 ```
 useAuth() → user.id → useMyKpis() / useCumulativeKpis() → Filter by Period/Category → Calculate metrics → Render
