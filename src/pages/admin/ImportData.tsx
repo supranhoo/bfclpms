@@ -1041,7 +1041,9 @@ export default function ImportData() {
           
           // Check if achieved value is N/A
           const achievedStr = String(achievedValue || '').trim().toLowerCase();
-          const isNa = achievedStr === 'na' || achievedStr === 'n/a' || achievedStr === 'not applicable' || achievedStr === '-';
+          const isNa = achievedStr === 'na' || achievedStr === 'n/a' || achievedStr === 'not applicable' || achievedStr === '-' ||
+            // Also treat as NA if no achieved value AND no scores exist
+            (!achievedValue && !selfScore && !managerScore && !auditorScore);
           
           // Parse achieved value (only if not N/A)
           const parsedAchieved = isNa ? null : (achievedValue 

@@ -1337,6 +1337,7 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - **Download Error Report** button exports all failed/skipped rows as an Excel file (`import-errors-{type}-{date}.xlsx`)
   - Per-row results are tracked as structured `ImportRowResult` objects (`{ row, employeeCode, employeeName, status, message }`)
   - Background import errors are parsed from string format into the same structured display
+  - **Automatic N/A Detection:** During import, KPIs with no achieved value (`targetAchieved` empty/null) AND no review scores (self/manager/auditor ratings all absent) are automatically marked as N/A (`is_na = true`). This prevents blank cells from silently counting against an employee's weighted average.
 
 ##### Import Columns Reference (PMS Data)
 
