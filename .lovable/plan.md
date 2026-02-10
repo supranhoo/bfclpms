@@ -1,46 +1,29 @@
 
 
-# Add Full Name and Email to Edit User Dialog
+# Always Show All Score Columns + Final in KPI Details Table
 
 ## Problem
-The "Edit User" dialog only has 6 fields (Employee Code, Role, Department, Reporting Manager, Designation, PMS Grade), while the "Add New User" dialog also includes Full Name and Email. The Edit dialog should have all the same fields.
+Currently, the KPI Details table progressively shows score columns (Self, Manager, Auditor, Mgmt) based on each KPI's status. The user wants all 4 columns **always visible** plus a new **Final** column, matching the reference screenshot.
 
 ## Changes
 
-**File:** `src/pages/admin/UserManagement.tsx`
+**File:** `src/components/review/KpiDetailsTable.tsx`
 
-1. **Add state variables** for `editFullName` and `editEmail`
-2. **Populate them** in `openEditDialog` from the selected user
-3. **Add Full Name and Email input fields** to the Edit dialog (at the top, before Employee Code)
-4. **Include them in the update mutation** so `full_name` and `email` are saved to the `profiles` table
-5. **Update DOCUMENTATION.md** to reflect the change
+1. **Remove progressive column logic** -- delete `getVisibleScoreColumns` and `getMaxVisibleColumns` functions
+2. **Always render all 5 score columns**: Self, Manager, Auditor, Mgmt, Final
+3. **Add `final_score`** to `getScoreForColumn` function
+4. **Update `totalColumns`** count to reflect the fixed 5 score columns (Category + KRA/KPI + Target + Weightage + 5 scores + Status + Actions = 12)
 
-The Full Name field will be editable. The Email field will be shown but read-only (since email is tied to auth and cannot be changed from the profile alone).
-
-## Technical Details
-
-### New state (around line 55)
-```typescript
-const [editFullName, setEditFullName] = useState('');
-const [editEmail, setEditEmail] = useState('');
+### Column definitions (hardcoded, no longer dynamic)
+```
+Self       -> submission.self_score
+Manager    -> submission.manager_score
+Auditor    -> submission.auditor_score
+Mgmt       -> submission.management_score
+Final      -> submission.final_score
 ```
 
-### Populate in openEditDialog (line 350)
-```typescript
-setEditFullName(user.full_name || '');
-setEditEmail(user.email || '');
-```
+All columns always show a dash (--) when no score exists, keeping the layout consistent.
 
-### Update mutation (line 156) -- add full_name
-```typescript
-.update({
-  full_name: fullName,  // NEW
-  reporting_manager_id: ...,
-  ...
-})
-```
-
-### Add fields to dialog UI (before Employee Code, around line 744)
-- Full Name input (editable)
-- Email input (read-only, shown for reference)
+**File:** `DOCUMENTATION.md` -- update the KPI Details table description to note all 5 score columns are always visible plus Final.
 
