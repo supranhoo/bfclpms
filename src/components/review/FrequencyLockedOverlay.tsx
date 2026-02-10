@@ -6,6 +6,7 @@ import {
   getCycleLabel,
   isKpiLockedForPeriod 
 } from '@/lib/frequencyUtils';
+import { useFrequencyConfig } from '@/hooks/useFrequencyConfig';
 
 interface FrequencyLockedOverlayProps {
   frequency: FrequencyType | string | null;
@@ -24,9 +25,10 @@ export function FrequencyLockedOverlay({
   className = '',
   showBadgeOnly = false,
 }: FrequencyLockedOverlayProps) {
-  const isLocked = isKpiLockedForPeriod(frequency, reviewMonth, reviewYear, frequencyCycleStart);
-  const activeMonth = getActiveMonthForCycle(frequency, reviewMonth, reviewYear, frequencyCycleStart);
-  const cycleLabel = getCycleLabel(frequency, reviewMonth, reviewYear);
+  const { config } = useFrequencyConfig(frequency);
+  const isLocked = isKpiLockedForPeriod(frequency, reviewMonth, reviewYear, frequencyCycleStart, config);
+  const activeMonth = getActiveMonthForCycle(frequency, reviewMonth, reviewYear, frequencyCycleStart, config);
+  const cycleLabel = getCycleLabel(frequency, reviewMonth, reviewYear, config);
   
   if (!isLocked) {
     return null;
@@ -77,8 +79,9 @@ export function FrequencyLockBadge({
   reviewYear,
   frequencyCycleStart,
 }: Omit<FrequencyLockedOverlayProps, 'className' | 'showBadgeOnly'>) {
-  const isLocked = isKpiLockedForPeriod(frequency, reviewMonth, reviewYear, frequencyCycleStart);
-  const activeMonth = getActiveMonthForCycle(frequency, reviewMonth, reviewYear, frequencyCycleStart);
+  const { config } = useFrequencyConfig(frequency);
+  const isLocked = isKpiLockedForPeriod(frequency, reviewMonth, reviewYear, frequencyCycleStart, config);
+  const activeMonth = getActiveMonthForCycle(frequency, reviewMonth, reviewYear, frequencyCycleStart, config);
   
   if (!isLocked) {
     return null;

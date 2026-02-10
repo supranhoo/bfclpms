@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-02-09  
-> **Version:** 1.13.0
+> **Last Updated:** 2026-02-10  
+> **Version:** 1.14.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -2577,6 +2577,33 @@ The application implements several performance optimizations:
 - **Progress Indicator**: Real-time progress bar shows "Processing X of Y employees..." during import.
 - **Reliable Auth User Lookup**: The `create-employee` edge function uses a try-create-catch approach instead of the unreliable `listUsers` filter, preventing admin profile corruption during bulk imports.
 - **Admin Profile Protection**: The primary admin account (`535d9a14-...`) is explicitly guarded in the `create-employee` edge function. If an employee_code lookup matches the admin profile, the function skips the update and creates a new user instead. Duplicate-email fallback queries the `profiles` table directly (excluding admin) rather than paginating through `auth.admin.listUsers`.
+
+---
+
+### Frequency Cycle Configuration
+
+The system allows administrators to configure when multi-month frequency cycles start (Quarterly, Half-Yearly, Yearly) via **System Settings → Cycles** tab.
+
+**Available Cycle Options:**
+
+| Frequency | Standard | Financial (Apr) | Mid-Year (Jul) |
+|-----------|----------|-----------------|----------------|
+| **Quarterly** | Jan-Mar, Apr-Jun, Jul-Sep, Oct-Dec | Apr-Jun, Jul-Sep, Oct-Dec, Jan-Mar | Jul-Sep, Oct-Dec, Jan-Mar, Apr-Jun |
+| **Half-Yearly** | Jan-Jun, Jul-Dec | Apr-Sep, Oct-Mar | Jul-Dec, Jan-Jun |
+| **Yearly** | Jan-Dec | Apr-Mar | Jul-Jun |
+
+**How it works:**
+- Each frequency has a row in the `frequency_config` table with `locked_months`, `active_month`, and `sub_frequency` columns.
+- When an admin changes the cycle start, the system updates these columns.
+- The `isKpiLockedForPeriod()` and related functions in `frequencyUtils.ts` read from the database config (via `useFrequencyConfig` hook) to determine which months are locked and which is the active review month.
+- The `FrequencyLockedOverlay` component automatically respects the configured cycle, showing lock status based on database-driven rules rather than hardcoded values.
+- Hardcoded fallback values are retained for backward compatibility when no config is available.
+
+**Files involved:**
+- `src/components/admin/FrequencyCycleSettings.tsx` — Admin UI with radio groups per frequency
+- `src/hooks/useFrequencyConfig.ts` — Fetch and update hooks for `frequency_config` table
+- `src/lib/frequencyUtils.ts` — Core logic accepting optional `FrequencyConfig` parameter
+- `src/components/review/FrequencyLockedOverlay.tsx` — Uses config-driven locking
 
 ---
 
