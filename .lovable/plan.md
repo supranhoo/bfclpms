@@ -1,93 +1,87 @@
 
 
-# Add Frequency Cycle Configuration UI
+# Per-KPI Frequency Cycle Start Configuration
 
 ## Overview
-Add an admin UI under System Settings to allow configuring frequency cycle options for Quarterly, Half-Yearly, and Yearly frequencies. This will let admins choose alternative cycle starts (e.g., Apr-Jun quarters instead of Jan-Mar) and update the locked months accordingly.
+Extend the `frequency_cycle_start` field (already exists on the `kpis` table) to work for **all** multi-month frequencies (Bi-Monthly, Quarterly, Half-Yearly, Yearly), not just Yearly. The global System Settings cycle config becomes the **default**, and each individual KPI can **override** it.
 
-## Current State
-- The `frequency_config` table stores cycle definitions with `locked_months`, `active_month`, and `sub_frequency` per frequency type
-- Currently only **Yearly** supports multiple cycle starts via `frequencyCycleStart` in the import template
-- **Quarterly** is hardcoded to Jan-Mar, Apr-Jun, Jul-Sep, Oct-Dec
-- **Half-Yearly** is hardcoded to Jan-Jun, Jul-Dec
-- **Bi-Monthly** is hardcoded to Jan-Feb, Mar-Apr, etc.
-- There is **no UI** to change these -- only direct database edits
+## Bi-Monthly Cycle Options
+Currently Bi-Monthly is hardcoded to Jan-Feb, Mar-Apr, etc. We add a second option:
 
-## What Will Be Built
+| Option | Cycles |
+|--------|--------|
+| Standard (Jan start) | Jan-Feb, Mar-Apr, May-Jun, Jul-Aug, Sep-Oct, Nov-Dec |
+| Offset (Feb start) | Feb-Mar, Apr-May, Jun-Jul, Aug-Sep, Oct-Nov, Dec-Jan |
 
-### New "Frequency Cycles" tab in System Settings
-A new tab (between "Scoring" and "Controls") showing editable cycle configurations for each multi-month frequency:
+## All Cycle Start Values (stored in `frequency_cycle_start`)
 
-```text
-+--------------------------------------------------+
-| Frequency Cycles                                   |
-+--------------------------------------------------+
-|                                                    |
-| Quarterly Cycle Start                              |
-| (o) Standard: Jan-Mar, Apr-Jun, Jul-Sep, Oct-Dec  |
-| ( ) Financial: Apr-Jun, Jul-Sep, Oct-Dec, Jan-Mar  |
-| ( ) Mid-Year: Jul-Sep, Oct-Dec, Jan-Mar, Apr-Jun   |
-|                                          [Save]    |
-|                                                    |
-| Half-Yearly Cycle Start                            |
-| (o) Standard: Jan-Jun, Jul-Dec                     |
-| ( ) Financial: Apr-Sep, Oct-Mar                    |
-| ( ) Mid-Year: Jul-Dec, Jan-Jun                     |
-|                                          [Save]    |
-|                                                    |
-| Yearly Cycle Start                                 |
-| (o) Calendar Year: Jan-Dec                         |
-| ( ) Financial Year: Apr-Mar                        |
-| ( ) Mid-Year: Jul-Jun                              |
-|                                          [Save]    |
-+--------------------------------------------------+
-```
+| Frequency | Value | Description |
+|-----------|-------|-------------|
+| Bi-Monthly | `Jan-Feb` (default) | Standard: Jan-Feb, Mar-Apr... |
+| Bi-Monthly | `Feb-Mar` | Offset: Feb-Mar, Apr-May... |
+| Quarterly | `Jan-Mar` (default) | Standard calendar quarters |
+| Quarterly | `Apr-Jun` | Financial year quarters |
+| Quarterly | `Jul-Sep` | Mid-year quarters |
+| Half-Yearly | `Jan-Jun` (default) | Standard halves |
+| Half-Yearly | `Apr-Sep` | Financial year halves |
+| Half-Yearly | `Jul-Dec` | Mid-year halves |
+| Yearly | `Jan-Dec` (default) | Calendar year |
+| Yearly | `Apr-Mar` | Financial year |
+| Yearly | `Jul-Jun` | Mid-year |
 
-### Cycle option definitions
+## Changes
 
-**Quarterly** options:
-| Option | Cycles | Locked Months | Active Months |
-|--------|--------|---------------|---------------|
-| Standard (Jan) | Q1: Jan-Mar, Q2: Apr-Jun, Q3: Jul-Sep, Q4: Oct-Dec | [1,2], [4,5], [7,8], [10,11] | 3, 6, 9, 12 |
-| Financial (Apr) | Q1: Apr-Jun, Q2: Jul-Sep, Q3: Oct-Dec, Q4: Jan-Mar | [4,5], [7,8], [10,11], [1,2] | 6, 9, 12, 3 |
-| Mid-Year (Jul) | Q1: Jul-Sep, Q2: Oct-Dec, Q3: Jan-Mar, Q4: Apr-Jun | [7,8], [10,11], [1,2], [4,5] | 9, 12, 3, 6 |
+### 1. Add Bi-Monthly to `FrequencyCycleSettings.tsx` (Global Defaults)
+- Add `BI_MONTHLY_OPTIONS` array with Standard and Offset options
+- Add a new `FrequencyCycleSection` for Bi-Monthly in the settings UI
+- Update `frequency_config` table row for Bi-Monthly when saved
 
-**Half-Yearly** options:
-| Option | Cycles | Locked Months | Active Months |
-|--------|--------|---------------|---------------|
-| Standard (Jan) | H1: Jan-Jun, H2: Jul-Dec | [1,2,3,4,5], [7,8,9,10,11] | 6, 12 |
-| Financial (Apr) | H1: Apr-Sep, H2: Oct-Mar | [4,5,6,7,8], [10,11,12,1,2] | 9, 3 |
-| Mid-Year (Jul) | H1: Jul-Dec, H2: Jan-Jun | [7,8,9,10,11], [1,2,3,4,5] | 12, 6 |
+### 2. Add Cycle Start Selector to KPI Create Dialog (`AdminKpiCreateDialog.tsx`)
+- Add `frequencyCycleStart` state field
+- Show a "Cycle Start" dropdown when frequency is Bi-Monthly, Quarterly, Half-Yearly, or Yearly
+- Options are fetched from a shared constant (same options as the global settings)
+- Default label shows "(Use system default)" as the first/empty option
+- Save the selected value to `frequency_cycle_start` column
 
-**Yearly** options (already partially supported):
-| Option | Cycle | Locked Months | Active Month |
-|--------|-------|---------------|--------------|
-| Jan-Dec | Jan-Dec | [1-11] | 12 |
-| Apr-Mar | Apr-Mar | [4-2 wrapping] | 3 |
-| Jul-Jun | Jul-Jun | [7-5 wrapping] | 6 |
+### 3. Add Cycle Start Selector to KPI Edit Dialog (`AdminKpiEditDialog.tsx`)
+- Add `frequency_cycle_start` to formData
+- Show same cycle start dropdown when frequency is multi-month
+- Pre-populate from existing KPI data
 
-### How saving works
-When an admin selects a new cycle option and clicks Save:
-1. Update the `frequency_config` row for that frequency with new `locked_months`, `active_month`, and `sub_frequency` values
-2. Update the `frequencyUtils.ts` logic to read from the database config instead of hardcoded values
-3. The `useFrequencyConfig` hook already fetches this data -- the locking logic just needs to use it
+### 4. Update `frequencyUtils.ts` Logic
+- Modify `isKpiLockedForPeriod`, `getActiveMonthForCycle`, `getCycleMonths`, `getCycleLabel` to check the per-KPI `frequencyCycleStart` value **first**, then fall back to the database config (global default), then fall back to hardcoded defaults
+- Add Bi-Monthly cycle start logic (currently hardcoded to odd/even months)
+- Create a helper `getCycleOptionsForFrequency()` that returns the available cycle start values for a given frequency -- shared between admin UI and utils
 
-## Technical Details
+### 5. Update Import Template (`ImportData.tsx`)
+- Update the `frequencyCycleStart` documentation to list all supported values for all frequencies (not just Yearly)
+- Update sample rows to show `frequencyCycleStart` usage for Quarterly example (row 2 already has `frequency: 'Quarterly'`)
 
-### Files to Create
-1. **`src/components/admin/FrequencyCycleSettings.tsx`** -- New component with radio groups for each frequency's cycle options. Uses `useFrequencyConfigs()` to read current config and a mutation to update `frequency_config` rows.
+### 6. Update Import Edge Function (`import-kpis/index.ts`)
+- The field `frequency_cycle_start` is already mapped from `frequencyCycleStart` -- no change needed here, it passes through as-is
 
-### Files to Modify
-1. **`src/pages/admin/SystemSettings.tsx`** -- Add a new "Cycles" tab with the `FrequencyCycleSettings` component. Update the TabsList from 7 to 8 columns.
+### 7. Update `FrequencyLockedOverlay.tsx`
+- Already passes `frequencyCycleStart` and `config` to utility functions -- will work automatically once the utils are updated
 
-2. **`src/lib/frequencyUtils.ts`** -- Update `isKpiLockedForPeriod`, `getActiveMonthForCycle`, `getCycleMonths`, and `getCycleLabel` to accept an optional `FrequencyConfig` parameter. When provided, use the database-driven `locked_months` and `active_month` instead of hardcoded switch statements. Keep hardcoded values as fallback defaults.
+### 8. Create Shared Constants File
+- Create `src/lib/frequencyCycleOptions.ts` with all cycle option definitions shared between the settings UI, KPI create/edit dialogs, and utility functions
+- This avoids duplicating the option arrays
 
-3. **`src/hooks/useFrequencyConfig.ts`** -- Add an `useUpdateFrequencyConfig` mutation hook for saving cycle changes.
+### 9. Update `DOCUMENTATION.md`
+- Document per-KPI cycle start override capability
+- Document Bi-Monthly cycle options
+- Update import template field reference
 
-4. **`src/components/review/FrequencyLockedOverlay.tsx`** -- Pass the frequency config from the hook into the utility functions so locking respects the configured cycle.
+## Files to Create
+1. `src/lib/frequencyCycleOptions.ts` -- Shared cycle option constants
 
-5. **`DOCUMENTATION.md`** -- Document the new Frequency Cycle configuration feature.
+## Files to Modify
+1. `src/components/admin/FrequencyCycleSettings.tsx` -- Add Bi-Monthly section, import shared constants
+2. `src/components/admin/AdminKpiCreateDialog.tsx` -- Add cycle start dropdown
+3. `src/components/admin/AdminKpiEditDialog.tsx` -- Add cycle start dropdown
+4. `src/lib/frequencyUtils.ts` -- Support per-KPI cycle start for all frequencies including Bi-Monthly
+5. `src/pages/admin/ImportData.tsx` -- Update docs and sample data
+6. `DOCUMENTATION.md` -- Update documentation
 
-### Database Changes
-No schema changes needed -- the existing `frequency_config` table already has all the required columns (`locked_months`, `active_month`, `sub_frequency`). We just need to update the row values via the existing Supabase client.
-
+## No Database Changes Needed
+The `frequency_cycle_start` column already exists on the `kpis` table and accepts any string value. The `frequency_config` table already has all required columns for Bi-Monthly.
