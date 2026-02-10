@@ -63,6 +63,7 @@ const menuItems = {
     { title: 'Audit Panel', icon: Shield, path: '/dashboard?view=audit', roles: ['auditor', 'admin'] },
   ],
   admin: [
+    { title: 'Admin Dashboard', icon: LayoutDashboard, path: '/admin', roles: ['admin'] },
     { title: 'User Management', icon: Users, path: '/admin/users', roles: ['admin'] },
     { title: 'KRA Library', icon: Library, path: '/admin/templates', roles: ['admin'] },
     { title: 'KRA Bundles', icon: Package, path: '/admin/bundles', roles: ['admin'] },
