@@ -371,9 +371,20 @@ export default function ImportData() {
     // Helper to format R values - handle % and decimal formats
     // Excel stores percentages as decimals (100% = 1, 50% = 0.5)
     // But users might also enter raw numbers like "100" meaning 100%
-    const formatRatingThreshold = (value: any): string | undefined => {
+    const formatRatingThreshold = (value: any, uom?: string): string | undefined => {
       if (value === null || value === undefined || value === '') return undefined;
       const strValue = String(value).trim();
+      
+      const isPercentageUom = uom === '%' || uom?.toLowerCase() === 'percentage';
+      
+      // For non-percentage UOMs (Days, Number, Hours, etc.), store as plain number
+      if (!isPercentageUom) {
+        // Strip any trailing % that shouldn't be there
+        if (strValue.includes('%')) return strValue.replace('%', '').trim();
+        return strValue;
+      }
+      
+      // === Percentage UOM logic below ===
       
       // If it's already a percentage string, keep it as-is
       if (strValue.includes('%')) return strValue;
@@ -382,22 +393,19 @@ export default function ImportData() {
       if (isNaN(numValue)) return strValue;
       
       // If value is between 0 and 1 (exclusive), treat as decimal percentage (Excel format)
-      // e.g., 0.5 → 50%, 0.85 → 85%, 0.9999 → 99.99%
       if (numValue > 0 && numValue <= 1) {
-        // Preserve decimal precision - remove trailing zeros
         const percentValue = numValue * 100;
         const formatted = percentValue % 1 === 0 ? percentValue.toFixed(0) : percentValue.toFixed(2).replace(/\.?0+$/, '');
         return `${formatted}%`;
       }
       
       // If value is > 1 and <= 100, treat as already a percentage value
-      // e.g., 50 → 50%, 99.99 → 99.99%, 85 → 85%
       if (numValue > 1 && numValue <= 100) {
         const formatted = numValue % 1 === 0 ? numValue.toFixed(0) : numValue.toFixed(2).replace(/\.?0+$/, '');
         return `${formatted}%`;
       }
       
-      // For values > 100, keep as-is (could be actual target numbers)
+      // For values > 100, keep as-is
       return strValue;
     };
 
@@ -514,12 +522,12 @@ export default function ImportData() {
       kpiWeightage: getValue(['kpiWeightage', 'kpi_weightage', 'weightage', 'weight']),
       criteria: getValue(['criteria', 'scoringCriteria', 'scoring_criteria']),
       // Rating thresholds - format for display
-      r5: formatRatingThreshold(getValue(['r5', 'R5', 'rating5', 'outstanding'])),
-      r4: formatRatingThreshold(getValue(['r4', 'R4', 'rating4', 'exceeds'])),
-      r3: formatRatingThreshold(getValue(['r3', 'R3', 'rating3', 'meets'])),
-      r2: formatRatingThreshold(getValue(['r2', 'R2', 'rating2', 'below'])),
-      r1: formatRatingThreshold(getValue(['r1', 'R1', 'rating1', 'poor'])),
-      r0: formatRatingThreshold(getValue(['r0', 'R0', 'rating0'])),
+      r5: formatRatingThreshold(getValue(['r5', 'R5', 'rating5', 'outstanding']), getValue(['uom', 'unit', 'unitOfMeasure', 'unit_of_measure'])),
+      r4: formatRatingThreshold(getValue(['r4', 'R4', 'rating4', 'exceeds']), getValue(['uom', 'unit', 'unitOfMeasure', 'unit_of_measure'])),
+      r3: formatRatingThreshold(getValue(['r3', 'R3', 'rating3', 'meets']), getValue(['uom', 'unit', 'unitOfMeasure', 'unit_of_measure'])),
+      r2: formatRatingThreshold(getValue(['r2', 'R2', 'rating2', 'below']), getValue(['uom', 'unit', 'unitOfMeasure', 'unit_of_measure'])),
+      r1: formatRatingThreshold(getValue(['r1', 'R1', 'rating1', 'poor']), getValue(['uom', 'unit', 'unitOfMeasure', 'unit_of_measure'])),
+      r0: formatRatingThreshold(getValue(['r0', 'R0', 'rating0']), getValue(['uom', 'unit', 'unitOfMeasure', 'unit_of_measure'])),
       // Achievement data - key fix: look for "Achieved" column
       targetAchieved: parseNumericValue(getValue(['targetAchieved', 'target_achieved', 'achieved', 'achievedValue', 'achieved_value', 'actualValue', 'actual'])),
       achievedWeight: getValue(['achievedWeight', 'achieved_weight', 'achievedWt']),
