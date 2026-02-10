@@ -1,53 +1,36 @@
 
 
-# Add "Ref_Code" Column to PMS Scorecard Import/Export
+# Remove 50-Error Limit from Background Import
 
-## Overview
+## Problem
 
-Add a `ref_code` column to the `kpis` table that serves as a user-defined reference identifier. Users can populate this during import to verify data accuracy, and it will be included when exporting current data.
+The background KPI import edge function (`supabase/functions/import-kpis/index.ts`) has a hard limit of **50 errors** at line 398:
 
-## Changes Required
-
-### 1. Database Migration
-
-Add a `ref_code` text column to the `kpis` table:
-
-```sql
-ALTER TABLE public.kpis ADD COLUMN ref_code text;
-```
-
-No constraints needed -- it's a free-form optional text field for the user's reference.
-
-### 2. Frontend Import (`src/pages/admin/ImportData.tsx`)
-
-**a) KpiImportRow interface (~line 69):** Add `refCode?: string;`
-
-**b) normalizeKpiRow function (~line 498-548):** Add mapping:
 ```typescript
-refCode: getValue(['refCode', 'ref_code', 'Ref_Code', 'referenceCode', 'reference_code']),
+updateData.errors = JSON.stringify(updates.errors.slice(0, 50)); // Limit to 50 errors
 ```
 
-**c) Download Template (~line 1299-1437):** Add `refCode` field to template sample rows (placed near `sNo`/`newCode` for visibility).
+This means when more than 2 users fail (or a single user like Komal Bansal has 70+ failed KRAs), only the first 50 error entries are stored in the `import_progress` table. The rest are silently discarded, so the report appears incomplete.
 
-**d) Export Current Data (~line 1617-1652):** Include `ref_code` from the KPI select query and add `refCode: kpi.ref_code || ''` to the export object.
+The foreground import has **no such limit** -- it collects all errors. The `ImportResultsSummary` component also has no limit and renders everything it receives. The bottleneck is solely in the edge function's `updateProgress` helper.
 
-**e) KPI select in export query (~line 1566-1587):** Add `ref_code` to the select fields.
+## Fix
 
-### 3. Edge Function (`supabase/functions/import-kpis/index.ts`)
+### 1. Edge Function (`supabase/functions/import-kpis/index.ts`, ~line 398)
 
-Add `refCode` to the validation schema and pass it through to the KPI upsert/insert logic so it gets stored in the database.
+Remove the `.slice(0, 50)` limit. To avoid storing excessively large payloads, raise the cap to **500** errors (sufficient for any reasonable import):
 
-### 4. Foreground Import Logic
+```typescript
+updateData.errors = JSON.stringify(updates.errors.slice(0, 500));
+```
 
-In the foreground import path (handleImport), pass `ref_code` when creating/upserting KPIs.
+### 2. Documentation (`DOCUMENTATION.md`)
 
-### 5. Documentation (`DOCUMENTATION.md`)
+Update the import error reporting section to note the 500-error cap for background imports.
 
-Update the PMS template column list to include `Ref_Code` as an optional column for user reference tracking.
+## Notes
 
-## Technical Notes
-
-- The column is purely for user convenience (tracking/verification) -- it does not affect scoring, reviews, or any business logic
-- Column position in template: placed early (after `sNo`) so users see it immediately
-- The column is optional -- blank values are fine
+- The `errors` column in `import_progress` is of type `Json` (jsonb), so there's no column-level size constraint -- it can hold thousands of entries
+- 500 is a practical safeguard to prevent multi-MB JSON payloads in edge cases (10,000-row files with every row failing)
+- The foreground import path is unaffected (no limit exists there)
 
