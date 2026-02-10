@@ -1,87 +1,52 @@
 
 
-# Per-KPI Frequency Cycle Start Configuration
+# Fix KPI Tracker Sheet Month Sequence
 
-## Overview
-Extend the `frequency_cycle_start` field (already exists on the `kpis` table) to work for **all** multi-month frequencies (Bi-Monthly, Quarterly, Half-Yearly, Yearly), not just Yearly. The global System Settings cycle config becomes the **default**, and each individual KPI can **override** it.
+## Problem
+The Monthly Detail Log in the KPI Tracker Sheet displays months in incorrect order because:
 
-## Bi-Monthly Cycle Options
-Currently Bi-Monthly is hardcoded to Jan-Feb, Mar-Apr, etc. We add a second option:
+1. The `monthOrder` array uses **abbreviated** names: `['Jan', 'Feb', 'Mar', ...]`
+2. The database `review_period` stores **full** names: `'January', 'February', 'March', ...`
+3. The sort logic splits on `-` (for multi-month periods like "Jan-Mar") and tries to match the first part against `monthOrder`
+4. Full month names like "January" don't match "Jan", so `indexOf` returns `-1` for every entry, resulting in an arbitrary/unstable sort
 
-| Option | Cycles |
-|--------|--------|
-| Standard (Jan start) | Jan-Feb, Mar-Apr, May-Jun, Jul-Aug, Sep-Oct, Nov-Dec |
-| Offset (Feb start) | Feb-Mar, Apr-May, Jun-Jul, Aug-Sep, Oct-Nov, Dec-Jan |
+## Fix
 
-## All Cycle Start Values (stored in `frequency_cycle_start`)
+**File:** `src/components/dashboard/KpiTrackerModal.tsx`
 
-| Frequency | Value | Description |
-|-----------|-------|-------------|
-| Bi-Monthly | `Jan-Feb` (default) | Standard: Jan-Feb, Mar-Apr... |
-| Bi-Monthly | `Feb-Mar` | Offset: Feb-Mar, Apr-May... |
-| Quarterly | `Jan-Mar` (default) | Standard calendar quarters |
-| Quarterly | `Apr-Jun` | Financial year quarters |
-| Quarterly | `Jul-Sep` | Mid-year quarters |
-| Half-Yearly | `Jan-Jun` (default) | Standard halves |
-| Half-Yearly | `Apr-Sep` | Financial year halves |
-| Half-Yearly | `Jul-Dec` | Mid-year halves |
-| Yearly | `Jan-Dec` (default) | Calendar year |
-| Yearly | `Apr-Mar` | Financial year |
-| Yearly | `Jul-Jun` | Mid-year |
+Replace the `monthOrder` array and sorting logic to handle both full month names and abbreviated/hyphenated period labels:
 
-## Changes
+- Change `monthOrder` to use full month names: `['January', 'February', ..., 'December']`
+- Add a helper that extracts the sort index from either a full month name ("January") or a hyphenated abbreviation ("Jan-Mar") by checking both arrays
+- Keep the year-first, then month-index sort logic
 
-### 1. Add Bi-Monthly to `FrequencyCycleSettings.tsx` (Global Defaults)
-- Add `BI_MONTHLY_OPTIONS` array with Standard and Offset options
-- Add a new `FrequencyCycleSection` for Bi-Monthly in the settings UI
-- Update `frequency_config` table row for Bi-Monthly when saved
+This is a small, targeted fix -- one file, ~10 lines changed.
 
-### 2. Add Cycle Start Selector to KPI Create Dialog (`AdminKpiCreateDialog.tsx`)
-- Add `frequencyCycleStart` state field
-- Show a "Cycle Start" dropdown when frequency is Bi-Monthly, Quarterly, Half-Yearly, or Yearly
-- Options are fetched from a shared constant (same options as the global settings)
-- Default label shows "(Use system default)" as the first/empty option
-- Save the selected value to `frequency_cycle_start` column
+## Technical Details
 
-### 3. Add Cycle Start Selector to KPI Edit Dialog (`AdminKpiEditDialog.tsx`)
-- Add `frequency_cycle_start` to formData
-- Show same cycle start dropdown when frequency is multi-month
-- Pre-populate from existing KPI data
+### Current (broken)
+```typescript
+const monthOrder = ['Jan', 'Feb', 'Mar', ...];
+// ...
+const [monthA] = a.month.split('-');
+return monthOrder.indexOf(monthA) - monthOrder.indexOf(monthB);
+// "January".split('-') => ["January"] -- indexOf("January") => -1
+```
 
-### 4. Update `frequencyUtils.ts` Logic
-- Modify `isKpiLockedForPeriod`, `getActiveMonthForCycle`, `getCycleMonths`, `getCycleLabel` to check the per-KPI `frequencyCycleStart` value **first**, then fall back to the database config (global default), then fall back to hardcoded defaults
-- Add Bi-Monthly cycle start logic (currently hardcoded to odd/even months)
-- Create a helper `getCycleOptionsForFrequency()` that returns the available cycle start values for a given frequency -- shared between admin UI and utils
+### Fixed
+```typescript
+const fullMonths = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+const shortMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-### 5. Update Import Template (`ImportData.tsx`)
-- Update the `frequencyCycleStart` documentation to list all supported values for all frequencies (not just Yearly)
-- Update sample rows to show `frequencyCycleStart` usage for Quarterly example (row 2 already has `frequency: 'Quarterly'`)
+function getMonthSortIndex(period: string): number {
+  const first = period.split('-')[0];
+  const idx = fullMonths.indexOf(first);
+  if (idx >= 0) return idx;
+  return shortMonths.indexOf(first);
+}
+```
 
-### 6. Update Import Edge Function (`import-kpis/index.ts`)
-- The field `frequency_cycle_start` is already mapped from `frequencyCycleStart` -- no change needed here, it passes through as-is
+This handles full names ("January"), short names ("Jan"), and hyphenated ranges ("Jan-Mar").
 
-### 7. Update `FrequencyLockedOverlay.tsx`
-- Already passes `frequencyCycleStart` and `config` to utility functions -- will work automatically once the utils are updated
-
-### 8. Create Shared Constants File
-- Create `src/lib/frequencyCycleOptions.ts` with all cycle option definitions shared between the settings UI, KPI create/edit dialogs, and utility functions
-- This avoids duplicating the option arrays
-
-### 9. Update `DOCUMENTATION.md`
-- Document per-KPI cycle start override capability
-- Document Bi-Monthly cycle options
-- Update import template field reference
-
-## Files to Create
-1. `src/lib/frequencyCycleOptions.ts` -- Shared cycle option constants
-
-## Files to Modify
-1. `src/components/admin/FrequencyCycleSettings.tsx` -- Add Bi-Monthly section, import shared constants
-2. `src/components/admin/AdminKpiCreateDialog.tsx` -- Add cycle start dropdown
-3. `src/components/admin/AdminKpiEditDialog.tsx` -- Add cycle start dropdown
-4. `src/lib/frequencyUtils.ts` -- Support per-KPI cycle start for all frequencies including Bi-Monthly
-5. `src/pages/admin/ImportData.tsx` -- Update docs and sample data
-6. `DOCUMENTATION.md` -- Update documentation
-
-## No Database Changes Needed
-The `frequency_cycle_start` column already exists on the `kpis` table and accepts any string value. The `frequency_config` table already has all required columns for Bi-Monthly.
