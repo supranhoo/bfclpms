@@ -316,6 +316,54 @@ Thank you for your dedication and hard work during this period. We appreciate yo
     color: '#10b981',
     emoji: '🎉',
   },
+  {
+    key: 'observation_raised',
+    label: 'Observation Raised',
+    description: 'Sent to KPI owner when a new observation is raised',
+    subject: '[PMS] New Observation on {{kpi_name}}',
+    bodyTemplate: `Hi {{recipient_name}},
+
+{{actor_name}} has raised a new observation on your KPI.
+
+KPI: {{kpi_name}}
+Observation: {{observation_title}}
+Type: {{observation_type}}
+
+Please review and respond to the observation.`,
+    color: '#f97316',
+    emoji: '👁️',
+  },
+  {
+    key: 'observation_reply',
+    label: 'Observation Reply',
+    description: 'Sent when someone replies to an observation',
+    subject: '[PMS] New Reply on Observation - {{kpi_name}}',
+    bodyTemplate: `Hi {{recipient_name}},
+
+{{actor_name}} has replied to an observation on {{kpi_name}}.
+
+Observation: {{observation_title}}
+
+Please check the observation thread for the latest update.`,
+    color: '#8b5cf6',
+    emoji: '💬',
+  },
+  {
+    key: 'observation_resolved',
+    label: 'Observation Resolved',
+    description: 'Sent when an observation is marked as resolved',
+    subject: '[PMS] Observation Resolved - {{kpi_name}}',
+    bodyTemplate: `Hi {{recipient_name}},
+
+An observation on your KPI has been resolved.
+
+KPI: {{kpi_name}}
+Observation: {{observation_title}}
+
+The observation has been closed. No further action is required.`,
+    color: '#10b981',
+    emoji: '✅',
+  },
 ];
 
 const PLACEHOLDERS = [
@@ -336,6 +384,8 @@ const PLACEHOLDERS = [
   { key: '{{milestone_date}}', description: 'Milestone date (PIP milestone only)' },
   { key: '{{milestone_description}}', description: 'Milestone description (PIP milestone only)' },
   { key: '{{milestone_expected_outcome}}', description: 'Expected outcome (PIP milestone only)' },
+  { key: '{{observation_title}}', description: 'Observation title (observation events only)' },
+  { key: '{{observation_type}}', description: 'Observation type (observation raised only)' },
 ];
 
 export function EmailTemplateEditor() {
