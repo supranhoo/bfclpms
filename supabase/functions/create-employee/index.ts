@@ -68,7 +68,8 @@ Deno.serve(async (req) => {
       })
     }
 
-    const email = body.email || `${body.employee_code.toLowerCase().replace(/[^a-z0-9]/g, '')}@placeholder.local`
+    const sanitizedCode = body.employee_code.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const email = body.email || `${sanitizedCode || 'user'}@placeholder-pms.com`
 
     const profilePayload = {
       employee_code: body.employee_code,
