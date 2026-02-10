@@ -2570,6 +2570,7 @@ The application implements several performance optimizations:
 - **Batch Concurrency**: Employee imports process 5 records concurrently using `Promise.allSettled`, reducing import time from ~5 minutes to ~1 minute for 100 employees.
 - **Progress Indicator**: Real-time progress bar shows "Processing X of Y employees..." during import.
 - **Reliable Auth User Lookup**: The `create-employee` edge function uses a try-create-catch approach instead of the unreliable `listUsers` filter, preventing admin profile corruption during bulk imports.
+- **Admin Profile Protection**: The primary admin account (`535d9a14-...`) is explicitly guarded in the `create-employee` edge function. If an employee_code lookup matches the admin profile, the function skips the update and creates a new user instead. Duplicate-email fallback queries the `profiles` table directly (excluding admin) rather than paginating through `auth.admin.listUsers`.
 
 ---
 
