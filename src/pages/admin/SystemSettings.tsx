@@ -15,6 +15,7 @@ import { EmailTemplateEditor } from '@/components/admin/EmailTemplateEditor';
 import { GlobalBrandingSettings } from '@/components/admin/GlobalBrandingSettings';
 import { WorkflowSettingsTab } from '@/components/admin/WorkflowSettingsTab';
 import { BackupRestoreTab } from '@/components/admin/BackupRestoreTab';
+import { FrequencyCycleSettings } from '@/components/admin/FrequencyCycleSettings';
 
 const scoreCalculationOptions: { 
   value: ScoreCalculationMode; 
@@ -148,7 +149,7 @@ export default function SystemSettings() {
       </div>
 
       <Tabs defaultValue="branding" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="branding" className="gap-2">
             <Building2 className="h-4 w-4" />
             <span className="hidden sm:inline">Branding</span>
@@ -160,6 +161,10 @@ export default function SystemSettings() {
           <TabsTrigger value="scoring" className="gap-2">
             <Calculator className="h-4 w-4" />
             <span className="hidden sm:inline">Scoring</span>
+          </TabsTrigger>
+          <TabsTrigger value="cycles" className="gap-2">
+            <CalendarDays className="h-4 w-4" />
+            <span className="hidden sm:inline">Cycles</span>
           </TabsTrigger>
           <TabsTrigger value="controls" className="gap-2">
             <SlidersHorizontal className="h-4 w-4" />
@@ -396,6 +401,11 @@ export default function SystemSettings() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Cycles Tab */}
+        <TabsContent value="cycles">
+          <FrequencyCycleSettings />
         </TabsContent>
 
         {/* Controls Tab */}

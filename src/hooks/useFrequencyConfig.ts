@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface FrequencyConfig {
@@ -49,4 +49,33 @@ export function useWeeklyReviewWindows() {
   const { config } = useFrequencyConfig('Weekly');
   
   return config?.review_window_rules || null;
+}
+
+/**
+ * Mutation hook to update a frequency config row
+ */
+export function useUpdateFrequencyConfig() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: {
+      id: string;
+      sub_frequency: string;
+      locked_months: Record<string, number[]>;
+      active_month: number;
+    }) => {
+      const { error } = await supabase
+        .from('frequency_config')
+        .update({
+          sub_frequency: params.sub_frequency,
+          locked_months: params.locked_months,
+          active_month: params.active_month,
+        })
+        .eq('id', params.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['frequency-configs'] });
+    },
+  });
 }

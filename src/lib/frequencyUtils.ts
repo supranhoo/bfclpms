@@ -12,6 +12,7 @@
  */
 
 import { format, subDays, getDaysInMonth, getDay, startOfMonth, addDays, isSameDay, isAfter, isBefore } from 'date-fns';
+import type { FrequencyConfig } from '@/hooks/useFrequencyConfig';
 
 export type FrequencyType = 'Daily' | 'Weekly' | 'Monthly' | 'Bi-Monthly' | 'Quarterly' | 'Half-Yearly' | 'Yearly';
 
@@ -197,17 +198,32 @@ function getWeekDateRange(week: number, month: string, year: number): string {
 }
 
 /**
- * Check if a KPI is locked based on its frequency and the current review period
+ * Check if a month is in any of the locked month arrays from frequency_config
+ */
+function isMonthLockedByConfig(monthNum: number, lockedMonths: Record<string, number[]> | null): boolean {
+  if (!lockedMonths) return false;
+  return Object.values(lockedMonths).some((months) => months.includes(monthNum));
+}
+
+/**
+ * Check if a KPI is locked based on its frequency and the current review period.
+ * When a FrequencyConfig is provided, uses database-driven locked_months instead of hardcoded values.
  */
 export function isKpiLockedForPeriod(
   frequency: FrequencyType | string | null,
   reviewMonth: string,
   reviewYear: number,
-  frequencyCycleStart?: string | null
+  frequencyCycleStart?: string | null,
+  config?: FrequencyConfig | null
 ): boolean {
   if (!frequency) return false;
   
   const monthNum = getMonthNumber(reviewMonth);
+
+  // If we have a database config with locked_months, use it
+  if (config?.locked_months) {
+    return isMonthLockedByConfig(monthNum, config.locked_months as Record<string, number[]>);
+  }
   
   switch (frequency) {
     case 'Daily':
@@ -216,19 +232,15 @@ export function isKpiLockedForPeriod(
       return false;
       
     case 'Bi-Monthly':
-      // Locked in odd months (Jan, Mar, May, Jul, Sep, Nov)
       return monthNum % 2 === 1;
       
     case 'Quarterly':
-      // Locked if not Mar (3), Jun (6), Sep (9), Dec (12)
       return monthNum % 3 !== 0;
       
     case 'Half-Yearly':
-      // Locked if not Jun (6) or Dec (12)
       return monthNum !== 6 && monthNum !== 12;
       
     case 'Yearly':
-      // Handle different yearly cycles
       const cycleStart = frequencyCycleStart || 'Jan-Dec';
       return isYearlyLocked(monthNum, cycleStart);
       
@@ -254,30 +266,48 @@ function isYearlyLocked(monthNum: number, cycleStart: string): boolean {
 }
 
 /**
- * Get the active month for a multi-month frequency cycle
+ * Get the active month for a multi-month frequency cycle.
+ * When a FrequencyConfig is provided, uses the database-driven active_month.
  */
 export function getActiveMonthForCycle(
   frequency: FrequencyType | string | null,
   reviewMonth: string,
   reviewYear: number,
-  frequencyCycleStart?: string | null
+  frequencyCycleStart?: string | null,
+  config?: FrequencyConfig | null
 ): string {
   if (!frequency) return reviewMonth;
+
+  // If we have a database config with active_month, use it to determine the cycle's active month
+  if (config?.active_month && config?.locked_months) {
+    const lockedMonths = config.locked_months as Record<string, number[]>;
+    const monthNum = getMonthNumber(reviewMonth);
+    // Find which cycle group this month belongs to
+    for (const [, months] of Object.entries(lockedMonths)) {
+      if (months.includes(monthNum)) {
+        // The active month for this cycle group is the one NOT in locked months
+        // It's the month right after the last locked month in the group
+        const allMonths = [...months].sort((a, b) => a - b);
+        // Find active month: it's the next month after the highest locked month in this group
+        // But we need to handle wrapping. Use the config's sub_frequency to find it.
+        break;
+      }
+    }
+    // Simpler approach: find which cycle the month belongs to and return its active month
+    return getActiveMonthFromConfig(monthNum, lockedMonths);
+  }
   
   const monthNum = getMonthNumber(reviewMonth);
   
   switch (frequency) {
     case 'Bi-Monthly':
-      // Active month is the even month
       return monthNum % 2 === 0 ? reviewMonth : getMonthName(monthNum + 1);
       
     case 'Quarterly':
-      // Active month is month 3 of quarter
       const quarterEnd = Math.ceil(monthNum / 3) * 3;
       return getMonthName(quarterEnd);
       
     case 'Half-Yearly':
-      // Active month is June or December
       return monthNum <= 6 ? 'June' : 'December';
       
     case 'Yearly':
@@ -295,17 +325,73 @@ export function getActiveMonthForCycle(
 }
 
 /**
- * Get all months in a frequency cycle
+ * Given a month number and locked_months config, find the active month for the cycle it belongs to.
+ */
+function getActiveMonthFromConfig(monthNum: number, lockedMonths: Record<string, number[]>): string {
+  for (const [, months] of Object.entries(lockedMonths)) {
+    if (months.includes(monthNum)) {
+      // All months in this cycle = locked months + active month
+      // Active month is the one immediately after the last locked month
+      const sorted = [...months].sort((a, b) => a - b);
+      const maxLocked = sorted[sorted.length - 1];
+      const activeMonth = maxLocked >= 12 ? 1 : maxLocked + 1;
+      // But check if wrapping: e.g. locked [10,11,12,1,2] → active is 3
+      // Find the contiguous end considering wrapping
+      let active = findActiveMonthForGroup(months);
+      return getMonthName(active);
+    }
+  }
+  // Month is not locked — it IS the active month
+  return getMonthName(monthNum);
+}
+
+/**
+ * For a group of locked months, find the active (review) month.
+ * The active month is the one that follows the locked sequence.
+ */
+function findActiveMonthForGroup(lockedMonths: number[]): number {
+  const set = new Set(lockedMonths);
+  // Start from any locked month and walk forward until we find one not in the set
+  let current = lockedMonths[0];
+  for (let i = 0; i < 12; i++) {
+    if (!set.has(current)) return current;
+    current = current >= 12 ? 1 : current + 1;
+  }
+  return 12; // fallback
+}
+
+/**
+ * Get all months in a frequency cycle.
+ * When a FrequencyConfig is provided, uses the database-driven locked_months.
  */
 export function getCycleMonths(
   frequency: FrequencyType | string | null,
   reviewMonth: string,
   reviewYear: number,
-  frequencyCycleStart?: string | null
+  frequencyCycleStart?: string | null,
+  config?: FrequencyConfig | null
 ): string[] {
   if (!frequency) return [reviewMonth];
   
   const monthNum = getMonthNumber(reviewMonth);
+
+  // If we have config, find the cycle group this month belongs to
+  if (config?.locked_months) {
+    const lockedMonths = config.locked_months as Record<string, number[]>;
+    for (const [, months] of Object.entries(lockedMonths)) {
+      if (months.includes(monthNum)) {
+        const activeMonth = findActiveMonthForGroup(months);
+        return [...months, activeMonth].sort((a, b) => a - b).map(getMonthName);
+      }
+    }
+    // Month is the active month — find which group it belongs to
+    for (const [, months] of Object.entries(lockedMonths)) {
+      const activeMonth = findActiveMonthForGroup(months);
+      if (activeMonth === monthNum) {
+        return [...months, activeMonth].sort((a, b) => a - b).map(getMonthName);
+      }
+    }
+  }
   
   switch (frequency) {
     case 'Daily':
@@ -314,12 +400,10 @@ export function getCycleMonths(
       return [reviewMonth];
       
     case 'Bi-Monthly':
-      // Get the bi-monthly pair
       const biMonthlyStart = monthNum % 2 === 1 ? monthNum : monthNum - 1;
       return [getMonthName(biMonthlyStart), getMonthName(biMonthlyStart + 1)];
       
     case 'Quarterly':
-      // Get the quarter
       const quarterStart = Math.floor((monthNum - 1) / 3) * 3 + 1;
       return [
         getMonthName(quarterStart),
@@ -328,7 +412,6 @@ export function getCycleMonths(
       ];
       
     case 'Half-Yearly':
-      // Get the half year
       if (monthNum <= 6) {
         return ['January', 'February', 'March', 'April', 'May', 'June'];
       } else {
@@ -336,7 +419,6 @@ export function getCycleMonths(
       }
       
     case 'Yearly':
-      // Return all 12 months
       return [...MONTHS];
       
     default:
@@ -345,14 +427,29 @@ export function getCycleMonths(
 }
 
 /**
- * Get the cycle label for display
+ * Get the cycle label for display.
+ * When a FrequencyConfig is provided, derives the label from the sub_frequency.
  */
 export function getCycleLabel(
   frequency: FrequencyType | string | null,
   reviewMonth: string,
-  reviewYear: number
+  reviewYear: number,
+  config?: FrequencyConfig | null
 ): string {
   if (!frequency) return reviewMonth;
+
+  // If config is available, use sub_frequency to build label
+  if (config?.sub_frequency && config?.locked_months) {
+    const monthNum = getMonthNumber(reviewMonth);
+    const lockedMonths = config.locked_months as Record<string, number[]>;
+    // Find the cycle key this month belongs to
+    for (const [key, months] of Object.entries(lockedMonths)) {
+      const activeMonth = findActiveMonthForGroup(months);
+      if (months.includes(monthNum) || activeMonth === monthNum) {
+        return key;
+      }
+    }
+  }
   
   const monthNum = getMonthNumber(reviewMonth);
   
