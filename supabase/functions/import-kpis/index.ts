@@ -698,7 +698,7 @@ async function processImport(
       // Threshold formatting mode:
       // - UOM is % or percentage => percentage thresholds (store as "xx%")
       // - All other UOMs (Days, Number, Hours, etc.) => absolute thresholds (store as plain numbers)
-      const isPercentageUom = uom === '%' || uom?.toLowerCase() === 'percentage';
+      const isPercentageUom = row.uom === '%' || row.uom?.toLowerCase() === 'percentage';
       const thresholdMode: 'absolute' | 'percentage' = isPercentageUom ? 'percentage' : 'absolute';
       const thresholdFactor = thresholdMode === 'percentage' ? getThresholdScaleFactor(row) : 1;
 
@@ -821,13 +821,14 @@ async function processImport(
       });
       
       // Prepare submission if review data exists
-      const hasReviewData = row.targetAchieved || row.employeeTargetAchieved ||
-        row.employeeRating || row.managerRating || row.auditRating ||
-        row.rating || row.managerTargetAchieved || row.auditTargetAchieved;
+      const hasReviewData = row.targetAchieved != null || row.employeeTargetAchieved != null ||
+        row.employeeRating != null || row.managerRating != null || row.auditRating != null ||
+        row.rating != null || row.managerTargetAchieved != null || row.auditTargetAchieved != null ||
+        row.employeeRemarks || row.managerRemarks || row.auditRemarks;
       
       if (hasReviewData) {
-        const achievedValue = row.auditTargetAchieved || row.managerTargetAchieved ||
-          row.employeeTargetAchieved || row.targetAchieved;
+        const achievedValue = row.auditTargetAchieved ?? row.managerTargetAchieved ??
+          row.employeeTargetAchieved ?? row.targetAchieved;
         
         const parseAchieved = (val: any): number | null => {
           if (val === null || val === undefined || val === '') return null;
@@ -843,6 +844,8 @@ async function processImport(
         submissionRecords.push({
           kpi_id: kpiId,
           achieved_value: parseAchieved(achievedValue),
+          manager_achieved_value: parseAchieved(row.managerTargetAchieved),
+          auditor_achieved_value: parseAchieved(row.auditTargetAchieved),
           self_rating: mapScoreToRating(row.employeeRating ?? row.rating),
           self_score: row.employeeRating ?? row.rating ?? null,
           self_remarks: row.employeeRemarks ?? null,

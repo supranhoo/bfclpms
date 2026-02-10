@@ -1032,12 +1032,13 @@ export default function ImportData() {
         if (kpiError) throw kpiError;
 
         // Create review_submission if there's any review data
-        const hasReviewData = row.targetAchieved || row.employeeTargetAchieved || 
-          row.employeeRating || row.managerRating || row.auditRating ||
-          row.rating || row.managerTargetAchieved || row.auditTargetAchieved;
+        const hasReviewData = row.targetAchieved != null || row.employeeTargetAchieved != null || 
+          row.employeeRating != null || row.managerRating != null || row.auditRating != null ||
+          row.rating != null || row.managerTargetAchieved != null || row.auditTargetAchieved != null ||
+          row.employeeRemarks || row.managerRemarks || row.auditRemarks;
 
         if (hasReviewData && newKpi?.id) {
-          const achievedValue = row.targetAchieved || row.employeeTargetAchieved || row.auditTargetAchieved || row.managerTargetAchieved;
+          const achievedValue = row.auditTargetAchieved ?? row.managerTargetAchieved ?? row.employeeTargetAchieved ?? row.targetAchieved;
           const selfScore = row.employeeRating ?? row.rating;
           const managerScore = row.managerRating;
           const auditorScore = row.auditRating;
@@ -1058,6 +1059,8 @@ export default function ImportData() {
             .insert({
               kpi_id: newKpi.id,
               achieved_value: parsedAchieved,
+              manager_achieved_value: row.managerTargetAchieved != null ? parseFloat(String(row.managerTargetAchieved).replace('%', '').replace(/,/g, '')) || null : null,
+              auditor_achieved_value: row.auditTargetAchieved != null ? parseFloat(String(row.auditTargetAchieved).replace('%', '').replace(/,/g, '')) || null : null,
               self_score: isNa ? null : (selfScore != null ? parseFloat(String(selfScore)) : null),
               self_rating: isNa ? null : mapScoreToRating(selfScore),
               self_remarks: row.employeeRemarks ?? null,

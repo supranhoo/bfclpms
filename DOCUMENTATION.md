@@ -1485,6 +1485,12 @@ Full JSON format for maximum control:
 | `auditRemarks` | No | Auditor's remarks |
 | `achievedWeight` | No | Weighted score (calculated) |
 
+**Import Data Preservation Rules:**
+- All per-level achieved values (`employeeTargetAchieved`, `managerTargetAchieved`, `auditTargetAchieved`) are stored in their dedicated `review_submissions` columns (`achieved_value`, `manager_achieved_value`, `auditor_achieved_value`), preserving the full review trail exactly as uploaded.
+- Values of `0` are treated as valid data (not skipped). Only `null`/`undefined`/empty values are treated as missing.
+- Ratings and remarks at every level are preserved regardless of `reviewStatus`.
+- R5-R0 thresholds are stored as plain numbers for non-percentage UOMs (Days, Number, Hours, etc.) and only converted to percentage strings when UOM is explicitly `%`.
+
 **Status & Metadata (5 columns):**
 | Column | Required | Description |
 |--------|----------|-------------|
