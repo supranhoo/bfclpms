@@ -1,52 +1,67 @@
 
 
-# Fix KPI Tracker Sheet Month Sequence
+# Fix Import Function to Honor `reviewStatus` Column
 
 ## Problem
-The Monthly Detail Log in the KPI Tracker Sheet displays months in incorrect order because:
-
-1. The `monthOrder` array uses **abbreviated** names: `['Jan', 'Feb', 'Mar', ...]`
-2. The database `review_period` stores **full** names: `'January', 'February', 'March', ...`
-3. The sort logic splits on `-` (for multi-month periods like "Jan-Mar") and tries to match the first part against `monthOrder`
-4. Full month names like "January" don't match "Jan", so `indexOf` returns `-1` for every entry, resulting in an arbitrary/unstable sort
+The `determineReviewStatus` function in `supabase/functions/import-kpis/index.ts` (line 219-224) ignores the explicit `reviewStatus` column from the import file. It always recalculates the status based on which rating fields are present, causing rows marked "Approved" in the file to end up as `kra_set`, `manager_check`, or `audit`.
 
 ## Fix
 
-**File:** `src/components/dashboard/KpiTrackerModal.tsx`
+**File:** `supabase/functions/import-kpis/index.ts`
 
-Replace the `monthOrder` array and sorting logic to handle both full month names and abbreviated/hyphenated period labels:
+Modify `determineReviewStatus` to check for an explicit `reviewStatus` value first. If the file provides a recognized status, use it directly. Only fall back to the current inference logic when no explicit status is given.
 
-- Change `monthOrder` to use full month names: `['January', 'February', ..., 'December']`
-- Add a helper that extracts the sort index from either a full month name ("January") or a hyphenated abbreviation ("Jan-Mar") by checking both arrays
-- Keep the year-first, then month-index sort logic
+### Status Mapping
+The file may contain human-friendly values like "Approved", "Self Review", etc. These will be mapped:
 
-This is a small, targeted fix -- one file, ~10 lines changed.
+| File Value | Database Status |
+|---|---|
+| approved | `approved` |
+| audit | `audit` |
+| manager_check / manager check / manager review | `manager_check` |
+| self_review / self review / self-review | `self_review` |
+| kra_set / kra set | `kra_set` |
+
+If the value doesn't match any known status, fall back to the existing inference logic.
+
+### Also fix `determineKpiStatus`
+Similarly, when `reviewStatus` is explicitly "approved", the `kpiStatus` should be set to `locked` to stay consistent.
 
 ## Technical Details
 
-### Current (broken)
+### Current (broken -- line 788)
 ```typescript
-const monthOrder = ['Jan', 'Feb', 'Mar', ...];
-// ...
-const [monthA] = a.month.split('-');
-return monthOrder.indexOf(monthA) - monthOrder.indexOf(monthB);
-// "January".split('-') => ["January"] -- indexOf("January") => -1
+status: determineReviewStatus(row),  // ignores row.reviewStatus
 ```
 
 ### Fixed
 ```typescript
-const fullMonths = ['January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'];
-const shortMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-function getMonthSortIndex(period: string): number {
-  const first = period.split('-')[0];
-  const idx = fullMonths.indexOf(first);
-  if (idx >= 0) return idx;
-  return shortMonths.indexOf(first);
-}
+const determineReviewStatus = (row: KpiImportRow): string => {
+  // Honor explicit reviewStatus from file first
+  if (row.reviewStatus) {
+    const normalized = row.reviewStatus.toLowerCase().trim()
+      .replace(/[\s_-]+/g, '_');
+    const statusMap: Record<string, string> = {
+      'approved': 'approved',
+      'audit': 'audit',
+      'manager_check': 'manager_check',
+      'manager_review': 'manager_check',
+      'self_review': 'self_review',
+      'kra_set': 'kra_set',
+    };
+    if (statusMap[normalized]) return statusMap[normalized];
+  }
+  // Fallback: infer from data
+  if (row.auditRating || row.auditTargetAchieved) return 'approved';
+  if (row.managerRating || row.managerTargetAchieved) return 'audit';
+  if (row.employeeRating || row.employeeTargetAchieved || row.targetAchieved) return 'manager_check';
+  return 'kra_set';
+};
 ```
 
-This handles full names ("January"), short names ("Jan"), and hyphenated ranges ("Jan-Mar").
+Same pattern applied to `determineKpiStatus` -- if `reviewStatus` says "approved", return `'locked'`.
+
+## Files Modified
+1. **`supabase/functions/import-kpis/index.ts`** -- update `determineReviewStatus` and `determineKpiStatus` functions
+2. **`DOCUMENTATION.md`** -- document that `reviewStatus` column is honored during import
 
