@@ -1719,19 +1719,28 @@ Each KPI gets a dedicated card-style layout similar to the web UI's ReviewTrailC
 | Admin data override | Employee | `admin_data_override` | `admin_data_override` |
 | Org KPI sent back | Data Owner(s) | `org_kpi_sent_back` | `org_kpi_sent_back` |
 
+**Observation Notifications:**
+
+| Event | Recipients | Notification Type | Email Event Type |
+|-------|-----------|-------------------|------------------|
+| Observation raised | KPI owner (employee) | `observation_raised` | `observation_raised` |
+| Reply posted on observation | Observation creator + KPI owner (excl. replier) | `observation_reply` | `observation_reply` |
+| Observation resolved | KPI owner + observation creator (excl. resolver) | `observation_resolved` | `observation_resolved` |
+
 **Email Notification Type Mapping:**
 The database trigger `send_email_on_notification()` maps internal notification types to email template event types. This allows in-app notification display to use descriptive internal types while emails use the correct template keys. Key mappings:
 - `kpi_approved` → `manager_approved`
 - `kpi_finalized` → `final_approved`
 - `query_response_submitted` / `query_response_fyi` → `query_response_received`
 - `query_resolved_fyi` → `query_resolved`
+- `observation_raised`, `observation_reply`, `observation_resolved` → pass through as-is
 - All other types pass through unchanged
 
 **Delivery:**
 - In-app notifications (real-time via Supabase Realtime)
 - Email notifications (via configurable provider: Resend, SMTP, or Microsoft 365 Graph API)
 - Email events are individually toggleable in System Settings → Email Notifications
-- 18 event types supported with customizable email templates
+- 21 event types supported with customizable email templates
 
 ### 4.13 Frequency & Sub-Frequency Logic
 
