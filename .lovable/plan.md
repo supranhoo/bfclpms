@@ -1,52 +1,70 @@
 
-# Fix: Employee Import Name-Match Bug Causing Silent Errors
 
-## Root Cause
+# Fix: Rating Calculation to Exclude Only N/A KPIs
 
-When importing employee "101730", the import logic at line 1135-1139 checks for existing employees by **email OR employee_code OR fullName**. If the uploaded row's `fullName` matches any existing profile (e.g., a common name like "Avinash Kumar"), the code silently updates that existing profile instead of creating a new one -- showing "success" with no error.
+## Your Logic (Confirmed Correct)
 
-This means:
-- Employee "101730" was never created
-- Some other profile may have had its data silently overwritten
-- No error was displayed because the update succeeded
+- If `is_na === true` (targetAchieved = "NA"): exclude from **both** numerator AND denominator
+- All other KPIs (score = 0, NULL, or any value): include in **both** numerator AND denominator
 
-## Fix
+## Current Bug (3 files)
 
-**File:** `src/pages/admin/ImportData.tsx`
+All three calculation locations include **every** KPI in the denominator regardless of N/A status. They never check `is_na`:
 
-Change the existing employee lookup to **prioritize employee_code** and only fall back to name/email matching when appropriate:
+| File | Lines | Issue |
+|------|-------|-------|
+| `Dashboard.tsx` | 193-205 | No `is_na` check -- all KPIs counted |
+| `SelfReview.tsx` | 193-200 | Same -- no `is_na` check |
+| `UnifiedScorecard.tsx` | 283-310 | Has `is_na` skip but then uses `score > 0` gate on line 301 which excludes 0-score KPIs from numerator AND denominator (inflating rating) |
 
-1. **Match by employee_code first** -- if the row has a code and it matches an existing profile, update that profile
-2. **Match by email second** -- if the row has an email matching an existing profile, update that profile
-3. **Do NOT match by fullName alone** -- name matching is unreliable (common names cause wrong matches). Remove the name-only match from the "existing employee" check
-4. If no match found and row has email, create new user via edge function
-5. If no match found and no email, show error
+### Example: ABHAS LUHARUWALLA (100856) Sep 2025
+- 3 N/A KPIs with weightage 6.5 -- should be excluded (both sides)
+- Remaining effective weight: 93.5
+- Weighted score sum: 314.5
+- **Correct rating**: 314.5 / 93.5 = **3.36**
+- **Current app shows**: ~4.28 (because KPIs with NULL/0 scores are excluded from denominator)
 
-### Code Change (around line 1133-1139)
+## Fix (3 files)
 
-Replace the `existingEmployee` lookup:
+### 1. `src/pages/Dashboard.tsx` (~line 198)
 
 ```typescript
-// BEFORE (buggy -- name match causes wrong updates):
-const existingEmployee = profiles?.find(p =>
-  (row.email && p.email.toLowerCase() === row.email.toLowerCase()) ||
-  (row.employeeCode && p.employee_code && p.employee_code === String(row.employeeCode)) ||
-  (row.fullName && p.full_name && p.full_name.toLowerCase() === row.fullName.toLowerCase())
-);
-
-// AFTER (safe -- match by code or email only):
-const existingEmployee = profiles?.find(p =>
-  (row.employeeCode && p.employee_code && p.employee_code === String(row.employeeCode)) ||
-  (row.email && p.email && p.email.toLowerCase() === row.email.toLowerCase())
-);
+data.forEach(kpi => {
+  const submission = submissionMap.get(kpi.id);
+  if (submission?.is_na) return; // Skip N/A from both sides
+  
+  const score = submission?.final_score || submission?.self_score || 0;
+  const weight = kpi.weightage || 0;
+  totalScore += score * weight;
+  totalWeight += weight;
+  totalMaxScore += weight * 5;
+});
 ```
 
-This removes the `fullName`-only match that causes silent overwrites of unrelated profiles.
+### 2. `src/pages/SelfReview.tsx` (~line 193)
 
-**File:** `DOCUMENTATION.md` -- update import matching logic description.
+Same pattern -- add `if (submission?.is_na) return;` before score calculation.
 
-## Impact
+### 3. `src/components/review/UnifiedScorecard.tsx` (~line 299-306)
 
-- Employees will only be matched by employee_code or email (reliable identifiers)
-- Common names like "Avinash Kumar" will no longer cause silent cross-profile updates
-- Missing employees will now correctly show "Employee not found and no email provided" errors
+Remove the `if (score > 0)` gate. Non-NA KPIs with 0 score must still count in both numerator and denominator:
+
+```typescript
+if (weight > 0) {
+  existing.dynamicWeightage += weight;
+  // Always include non-NA KPIs in both sides
+  totalWeightedScore += score * weight;
+  totalWeight += weight;
+  existing.totalScore += score * weight;
+  existing.totalWeight += weight;
+}
+```
+
+### 4. `DOCUMENTATION.md`
+
+Update scoring logic section to document: "N/A KPIs are excluded from both numerator and denominator. All other KPIs (including those with 0 or NULL scores) are included in both."
+
+## Result
+
+After fix, ABHAS LUHARUWALLA Sep 2025 will show **3.36** instead of 4.28, matching your manual calculation.
+
