@@ -1,60 +1,60 @@
 
 
-# Fix Import Issues: auditRemarks, Employee Code Matching, and Rating Preservation
+# Fix: Stop Converting R5-R0 Thresholds to Percentages for Non-Percentage UOMs
 
-## Issue 1: auditRemarks Being Removed
+## Problem
 
-**Root Cause:** The `auditRemarks` mapping and storage logic exists, but there's a potential header mismatch issue. The `normalizeKpiRow` function maps the column correctly (line 539), but the edge function's sanitization step (line 193) conditionally includes it only when truthy. If the value is whitespace-only or has an unexpected format, it gets silently dropped.
+When importing KPIs with UOM = "Days" (or Number, Hours, etc.), the R5-R0 threshold values are being incorrectly converted to percentage strings. For example, if you upload R5=3, R4=5, R3=7 for a "Days" KPI with target=5, they get stored as "300%", "500%", "700%" instead of "3", "5", "7".
 
-**Fix:** Add defensive handling in the edge function to ensure `auditRemarks` (and `managerRemarks`, `employeeRemarks`) are never silently dropped. Also add broader column name aliases to catch more header variations (e.g., `Audit_Remarks`, `auditor_remarks`, `Auditor Remarks`).
+**Root cause** -- two locations:
 
----
+1. **Edge function** (`supabase/functions/import-kpis/index.ts`, line 701): The threshold mode decision is based solely on whether the target is zero:
+   ```
+   thresholdMode = targetValue === 0 ? 'absolute' : 'percentage'
+   ```
+   Any KPI with a non-zero target gets percentage conversion, regardless of UOM.
 
-## Issue 2: Employee Code Changed (100360 to 101114) -- Name Fallback Bug
+2. **Frontend foreground** (`src/pages/admin/ImportData.tsx`, lines 374-402): The `formatRatingThreshold` function blindly converts any value between 0-100 into a percentage string (e.g., 5 becomes "5%"), with no awareness of the KPI's UOM.
 
-**Root Cause:** Both the foreground import (line 829-832) and the background import edge function (line 482) use a **name-based fallback** when the employee code doesn't match. This means if employee "Komal Bansal" exists with code `101114`, and the Excel file has code `100360` for "Komal Bansal", the system matches by name and silently links the KPI to employee `101114` instead of respecting the uploaded code `100360`.
+## Fix
 
-**Fix:** Remove the name-based fallback from employee matching in both import paths. Match employees **exclusively by `employee_code`**. If the code doesn't match any existing employee, treat it as a missing employee (create new or report error) -- never silently substitute a different employee based on name.
+### 1. Edge function (`supabase/functions/import-kpis/index.ts`)
 
-Changes:
-- **Edge function** (`import-kpis/index.ts`, lines 478-493): Remove `employeeByName` fallback from the missing-employee detection and from the KPI assignment (line 675).
-- **Frontend foreground** (`ImportData.tsx`, lines 829-832): Remove the `full_name` fallback matching. Match only by `employee_code`.
+Change the threshold mode logic to treat **only** percentage UOMs as percentage mode. All other UOMs (Days, Number, Hours, Minutes, Amount, Date, Index, Ratio, Score, Count, Rate) use absolute mode:
 
----
+```typescript
+// Before (broken):
+const thresholdMode = targetValue === 0 ? 'absolute' : 'percentage';
 
-## Issue 3: Imported Ratings Being Changed
-
-**Root Cause:** The import logic does NOT preserve explicitly provided ratings as-is. In the edge function (lines 847-864), when building `review_submissions`, the code computes `final_score` using a cascade:
-
+// After (fixed):
+const isPercentageUom = uom === '%' || uom?.toLowerCase() === 'percentage';
+const thresholdMode = isPercentageUom ? 'percentage' : 'absolute';
 ```
-final_score: row.auditRating || row.managerRating || row.employeeRating || row.rating || null
+
+### 2. Frontend foreground (`src/pages/admin/ImportData.tsx`)
+
+Make `formatRatingThreshold` UOM-aware. Pass the row's UOM into the function; if UOM is not percentage, store the value as a plain number string without any percentage conversion:
+
+```typescript
+const formatRatingThreshold = (value: any, uom?: string): string | undefined => {
+  if (value === null || value === undefined || value === '') return undefined;
+  const strValue = String(value).trim();
+  
+  const isPercentageUom = uom === '%' || uom?.toLowerCase() === 'percentage';
+  
+  // For non-percentage UOMs, store as plain number
+  if (!isPercentageUom) {
+    if (strValue.includes('%')) return strValue.replace('%', '');
+    return strValue;
+  }
+  
+  // Existing percentage conversion logic for % UOM...
+};
 ```
 
-This JavaScript `||` operator treats `0` as falsy, so a legitimate rating of `0` gets skipped. Additionally, the `self_score`, `manager_score`, and `auditor_score` fields may get recalculated instead of using the explicitly provided values.
+Update all calls to `formatRatingThreshold` (lines 517-522) to pass the row's UOM value.
 
-The same issue exists in the foreground import (lines 1063-1078).
+### 3. Documentation (`DOCUMENTATION.md`)
 
-**Fix:** When a rating value is explicitly provided in the uploaded file (not null/undefined), use it as-is without modification. Only calculate/infer ratings when they are genuinely absent. Use explicit null checks (`!== null && !== undefined`) instead of truthy checks (`||`) to preserve zero ratings.
+Note that threshold values are stored as absolute numbers for all non-percentage UOMs and only converted to percentage strings when UOM is explicitly "%".
 
-Changes in both import paths:
-- Use `row.rating ?? null` instead of `row.rating || null`
-- Use `row.auditRating ?? row.managerRating ?? row.employeeRating ?? row.rating ?? null` for `final_score`
-- Apply the same pattern for `self_score`, `manager_score`, `auditor_score`
-
----
-
-## Technical Summary of File Changes
-
-### `supabase/functions/import-kpis/index.ts`
-1. Remove `employeeByName` map and all name-based fallback matching
-2. Fix `||` to `??` for all rating/score fields in submission records
-3. Ensure `auditRemarks` is never silently dropped
-
-### `src/pages/admin/ImportData.tsx`
-1. Remove name-based employee matching fallback (lines 829-832)
-2. Fix `||` to `??` for rating/score preservation in foreground submissions (lines 1063-1078)
-
-### `DOCUMENTATION.md`
-Update import behavior notes:
-- Employee matching is by `employee_code` only (no name fallback)
-- Imported ratings are preserved exactly as provided
