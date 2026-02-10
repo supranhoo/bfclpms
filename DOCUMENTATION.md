@@ -1334,13 +1334,14 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
 
 The PMS import template supports the following columns (41 total):
 
-**Identification (4 columns):**
+**Identification (5 columns):**
 | Column | Required | Description |
 |--------|----------|-------------|
 | `sNo` | No | Serial number |
 | `newCode` | **Yes** | Employee code |
 | `fullName` | **Yes** | Employee full name |
 | `month` | **Yes** | Review period (e.g., "Dec-25") |
+| `reviewStatus` | No | Explicit review status. When provided, overrides the auto-inferred status. Accepted values: `Approved`, `Audit`, `Manager Check` / `Manager Review`, `Self Review`, `KRA Set`. If omitted or unrecognized, the system infers the status from which rating columns are populated. |
 
 **KPI Definition (9 columns):**
 | Column | Required | Description |

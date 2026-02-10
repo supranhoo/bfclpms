@@ -216,7 +216,22 @@ const mapScoreToRating = (score: number | string | null | undefined): RatingLeve
   return 'red';
 };
 
+const REVIEW_STATUS_MAP: Record<string, 'kra_set' | 'self_review' | 'manager_check' | 'audit' | 'approved'> = {
+  'approved': 'approved',
+  'audit': 'audit',
+  'manager_check': 'manager_check',
+  'manager_review': 'manager_check',
+  'self_review': 'self_review',
+  'kra_set': 'kra_set',
+};
+
 const determineReviewStatus = (row: KpiImportRow): 'kra_set' | 'self_review' | 'manager_check' | 'audit' | 'approved' => {
+  // Honor explicit reviewStatus from file first
+  if (row.reviewStatus) {
+    const normalized = String(row.reviewStatus).toLowerCase().trim().replace(/[\s_-]+/g, '_');
+    if (REVIEW_STATUS_MAP[normalized]) return REVIEW_STATUS_MAP[normalized];
+  }
+  // Fallback: infer from data
   if (row.auditRating || row.auditTargetAchieved) return 'approved';
   if (row.managerRating || row.managerTargetAchieved) return 'audit';
   if (row.employeeRating || row.employeeTargetAchieved || row.targetAchieved) return 'manager_check';
@@ -224,6 +239,12 @@ const determineReviewStatus = (row: KpiImportRow): 'kra_set' | 'self_review' | '
 };
 
 const determineKpiStatus = (row: KpiImportRow): 'open' | 'submitted' | 'approved_by_manager' | 'locked' => {
+  // If reviewStatus explicitly says approved, KPI should be locked
+  if (row.reviewStatus) {
+    const normalized = String(row.reviewStatus).toLowerCase().trim().replace(/[\s_-]+/g, '_');
+    if (REVIEW_STATUS_MAP[normalized] === 'approved') return 'locked';
+  }
+  // Fallback: infer from data
   if (row.auditRating || row.auditTargetAchieved) return 'locked';
   if (row.managerRating || row.managerTargetAchieved) return 'approved_by_manager';
   if (row.employeeRating || row.employeeTargetAchieved || row.targetAchieved) return 'submitted';
