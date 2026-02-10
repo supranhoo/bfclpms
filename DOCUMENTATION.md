@@ -1319,6 +1319,7 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - Download template and export current data supported
 - Bulk import employees from Excel
   - New employees are provisioned via the `create-employee` backend function (server-side admin API), which prevents the admin session from being logged out during bulk creation
+  - Existing employees are matched by **employee_code or email only** (name matching removed to prevent silent overwrites of unrelated profiles with common names)
   - Existing employees are updated in-place via direct profile updates
 - Bulk import KPIs from Excel
 - Background processing for large files
