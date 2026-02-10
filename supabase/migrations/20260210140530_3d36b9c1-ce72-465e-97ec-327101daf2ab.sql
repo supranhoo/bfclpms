@@ -1,0 +1,1 @@
+ALTER TABLE public.kpis ADD COLUMN ref_code text;

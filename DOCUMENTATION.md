@@ -1341,12 +1341,13 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
 
 ##### Import Columns Reference (PMS Data)
 
-The PMS import template supports the following columns (41 total):
+The PMS import template supports the following columns (42 total):
 
-**Identification (5 columns):**
+**Identification (6 columns):**
 | Column | Required | Description |
 |--------|----------|-------------|
 | `sNo` | No | Serial number |
+| `refCode` | No | User-defined reference code for data verification. Preserved on export for round-trip tracking. |
 | `newCode` | **Yes** | Employee code |
 | `fullName` | **Yes** | Employee full name |
 | `month` | **Yes** | Review period (e.g., "Dec-25") |
