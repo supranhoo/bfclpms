@@ -341,6 +341,7 @@ export default function ImportData() {
   const [employeeErrors, setEmployeeErrors] = useState<string[]>([]);
   const [isImportingEmployees, setIsImportingEmployees] = useState(false);
   const [employeeImportSuccess, setEmployeeImportSuccess] = useState(0);
+  const [employeeImportProgress, setEmployeeImportProgress] = useState({ current: 0, total: 0 });
 
   // Normalize KPI row to handle different column name variations
   const normalizeKpiRow = (rawRow: Record<string, any>): KpiImportRow => {
@@ -1109,106 +1110,111 @@ export default function ImportData() {
     if (employeeData.length === 0) return;
 
     setIsImportingEmployees(true);
+    setEmployeeImportProgress({ current: 0, total: employeeData.length });
     let successCount = 0;
     const importErrors: string[] = [];
+    const BATCH_SIZE = 5;
 
-    for (const row of employeeData) {
-      try {
-        // Check if employee already exists by email or employee code or full name
-        const existingEmployee = profiles?.find(p => 
-          (row.email && p.email.toLowerCase() === row.email.toLowerCase()) ||
-          (row.employeeCode && p.employee_code && p.employee_code === String(row.employeeCode)) ||
-          (row.fullName && p.full_name && p.full_name.toLowerCase() === row.fullName.toLowerCase())
-        );
+    // Process a single employee row
+    const processEmployee = async (row: EmployeeImportRow) => {
+      // Check if employee already exists by email or employee code or full name
+      const existingEmployee = profiles?.find(p => 
+        (row.email && p.email.toLowerCase() === row.email.toLowerCase()) ||
+        (row.employeeCode && p.employee_code && p.employee_code === String(row.employeeCode)) ||
+        (row.fullName && p.full_name && p.full_name.toLowerCase() === row.fullName.toLowerCase())
+      );
 
-        if (existingEmployee) {
-          // Update existing profile
-          const departmentId = departments?.find(d => 
-            d.name.toLowerCase() === row.department?.toLowerCase()
-          )?.id || null;
+      if (existingEmployee) {
+        // Update existing profile
+        const departmentId = departments?.find(d => 
+          d.name.toLowerCase() === row.department?.toLowerCase()
+        )?.id || null;
 
-          const managerId = profiles?.find(p => 
-            p.employee_code === row.managerEmployeeId ||
-            (row.managerName && p.full_name?.toLowerCase() === row.managerName?.toLowerCase())
-          )?.id || null;
+        const managerId = profiles?.find(p => 
+          p.employee_code === row.managerEmployeeId ||
+          (row.managerName && p.full_name?.toLowerCase() === row.managerName?.toLowerCase())
+        )?.id || null;
 
-          const { error } = await supabase
-            .from('profiles')
-            .update({
-              employee_code: row.employeeCode ? String(row.employeeCode) : existingEmployee.employee_code,
-              full_name: row.fullName || existingEmployee.full_name,
-              designation: row.designation || existingEmployee.designation,
-              department_id: departmentId || existingEmployee.department_id,
-              pms_grade: row.pmsGrade || existingEmployee.pms_grade,
-              level: row.level || (existingEmployee as any).level,
-              reporting_manager_id: managerId || existingEmployee.reporting_manager_id,
-            })
-            .eq('id', existingEmployee.id);
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            employee_code: row.employeeCode ? String(row.employeeCode) : existingEmployee.employee_code,
+            full_name: row.fullName || existingEmployee.full_name,
+            designation: row.designation || existingEmployee.designation,
+            department_id: departmentId || existingEmployee.department_id,
+            pms_grade: row.pmsGrade || existingEmployee.pms_grade,
+            level: row.level || (existingEmployee as any).level,
+            reporting_manager_id: managerId || existingEmployee.reporting_manager_id,
+          })
+          .eq('id', existingEmployee.id);
 
-          if (error) throw error;
-          successCount++;
-        } else if (row.email) {
-          // Create new user via edge function (server-side admin API)
-          // This does NOT switch the admin's session like client-side signUp would
-          const departmentId = departments?.find(d => 
-            d.name.toLowerCase() === row.department?.toLowerCase()
-          )?.id || null;
+        if (error) throw error;
+        return { success: true, userId: existingEmployee.id };
+      } else if (row.email) {
+        // Create new user via edge function
+        const departmentId = departments?.find(d => 
+          d.name.toLowerCase() === row.department?.toLowerCase()
+        )?.id || null;
 
-          const managerId = profiles?.find(p => 
-            p.employee_code === row.managerEmployeeId ||
-            (row.managerName && p.full_name?.toLowerCase() === row.managerName?.toLowerCase())
-          )?.id || null;
+        const managerId = profiles?.find(p => 
+          p.employee_code === row.managerEmployeeId ||
+          (row.managerName && p.full_name?.toLowerCase() === row.managerName?.toLowerCase())
+        )?.id || null;
 
-          const { data: fnData, error: fnError } = await supabase.functions.invoke('create-employee', {
-            body: {
-              employee_code: String(row.employeeCode),
-              full_name: sanitizeText(row.fullName),
-              email: sanitizeText(row.email),
-              designation: sanitizeText(row.designation) || undefined,
-              department_id: departmentId || undefined,
-              pms_grade: sanitizeText(row.pmsGrade) || undefined,
-              level: sanitizeText(row.level) || undefined,
-              reporting_manager_id: managerId || undefined,
-            },
-          });
+        const { data: fnData, error: fnError } = await supabase.functions.invoke('create-employee', {
+          body: {
+            employee_code: String(row.employeeCode),
+            full_name: sanitizeText(row.fullName),
+            email: sanitizeText(row.email),
+            designation: sanitizeText(row.designation) || undefined,
+            department_id: departmentId || undefined,
+            pms_grade: sanitizeText(row.pmsGrade) || undefined,
+            level: sanitizeText(row.level) || undefined,
+            reporting_manager_id: managerId || undefined,
+          },
+        });
 
-          if (fnError) throw fnError;
+        if (fnError) throw fnError;
 
-          const newUserId = fnData?.profile?.id || null;
+        const newUserId = fnData?.profile?.id || null;
 
-          // Assign role to new user (use explicit role from Excel or default to 'employee')
-          if (newUserId) {
-            const assignedRole = normalizeRole(row.role);
-            
-            // Check if role already exists
-            const { data: existingRole } = await supabase
-              .from('user_roles')
-              .select('id')
-              .eq('user_id', newUserId)
-              .maybeSingle();
+        // Assign role to new user
+        if (newUserId) {
+          const assignedRole = normalizeRole(row.role);
+          const { data: existingRole } = await supabase
+            .from('user_roles')
+            .select('id')
+            .eq('user_id', newUserId)
+            .maybeSingle();
 
-            if (!existingRole) {
-              const { error: roleError } = await supabase
-                .from('user_roles')
-                .insert({
-                  user_id: newUserId,
-                  role: assignedRole,
-                });
-
-              if (roleError) {
-                console.error('Failed to assign role:', roleError);
-              }
-            }
+          if (!existingRole) {
+            await supabase.from('user_roles').insert({ user_id: newUserId, role: assignedRole });
           }
+        }
 
+        return { success: true, userId: newUserId };
+      } else {
+        throw new Error(`Employee not found and no email provided to create new user`);
+      }
+    };
+
+    // Process in batches of BATCH_SIZE concurrently
+    for (let i = 0; i < employeeData.length; i += BATCH_SIZE) {
+      const batch = employeeData.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(row => processEmployee(row))
+      );
+
+      results.forEach((result, idx) => {
+        if (result.status === 'fulfilled') {
           successCount++;
         } else {
-          // No email provided and employee not found - skip with warning
-          importErrors.push(`Skipped ${row.fullName || row.employeeCode}: Employee not found and no email provided to create new user`);
+          const row = batch[idx];
+          importErrors.push(`Failed to import ${row.fullName || row.employeeCode}: ${result.reason?.message || 'Unknown error'}`);
         }
-      } catch (error: any) {
-        importErrors.push(`Failed to import ${row.fullName || row.employeeCode}: ${error.message}`);
-      }
+      });
+
+      setEmployeeImportProgress({ current: Math.min(i + BATCH_SIZE, employeeData.length), total: employeeData.length });
     }
 
     // Track users with explicit roles from import (non-employee roles)
@@ -1221,14 +1227,12 @@ export default function ImportData() {
     });
 
     // Second pass: Identify managers from import data and assign 'manager' role
-    // Collect all manager employee IDs/names from the import data
     const managerIdentifiers = new Set<string>();
     employeeData.forEach(row => {
       if (row.managerEmployeeId) managerIdentifiers.add(row.managerEmployeeId.toLowerCase());
       if (row.managerName) managerIdentifiers.add(row.managerName.toLowerCase());
     });
 
-    // Refetch profiles to get latest data including newly created users
     const { data: updatedProfiles } = await supabase
       .from('profiles')
       .select('id, employee_code, full_name, email');
@@ -1240,17 +1244,12 @@ export default function ImportData() {
           (profile.full_name && managerIdentifiers.has(profile.full_name.toLowerCase()));
 
         if (isManager) {
-          // Skip auto-promotion if user has an explicit role from import
           const hasExplicitRole = 
             (profile.employee_code && explicitRoleUsers.has(profile.employee_code.toLowerCase())) ||
             (profile.email && explicitRoleUsers.has(profile.email.toLowerCase()));
 
-          if (hasExplicitRole) {
-            // User has an explicit role - don't auto-promote
-            continue;
-          }
+          if (hasExplicitRole) continue;
 
-          // Check current role
           const { data: existingRole } = await supabase
             .from('user_roles')
             .select('id, role')
@@ -1258,18 +1257,11 @@ export default function ImportData() {
             .maybeSingle();
 
           if (existingRole) {
-            // Update to manager if currently employee
             if (existingRole.role === 'employee') {
-              await supabase
-                .from('user_roles')
-                .update({ role: 'manager' })
-                .eq('id', existingRole.id);
+              await supabase.from('user_roles').update({ role: 'manager' }).eq('id', existingRole.id);
             }
           } else {
-            // Insert manager role
-            await supabase
-              .from('user_roles')
-              .insert({ user_id: profile.id, role: 'manager' });
+            await supabase.from('user_roles').insert({ user_id: profile.id, role: 'manager' });
           }
         }
       }
@@ -1778,9 +1770,19 @@ export default function ImportData() {
                   <CardDescription>{employeeData.length} employees to import</CardDescription>
                 </div>
                 <Button onClick={handleEmployeeImport} disabled={isImportingEmployees || employeeErrors.length > 0}>
-                  {isImportingEmployees ? 'Importing...' : `Import ${employeeData.length} Employees`}
+                  {isImportingEmployees ? (
+                    <><Loader2 className="h-4 w-4 animate-spin mr-2" />Processing {employeeImportProgress.current}/{employeeImportProgress.total}...</>
+                  ) : `Import ${employeeData.length} Employees`}
                 </Button>
               </CardHeader>
+              {isImportingEmployees && (
+                <div className="px-6 pb-4">
+                  <Progress value={(employeeImportProgress.current / employeeImportProgress.total) * 100} className="h-2" />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Processing {employeeImportProgress.current} of {employeeImportProgress.total} employees...
+                  </p>
+                </div>
+              )}
               <CardContent>
                 <div className="overflow-x-auto">
                   <Table>

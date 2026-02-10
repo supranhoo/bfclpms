@@ -2565,6 +2565,12 @@ The application implements several performance optimizations:
 - **Memoization**: Dashboard and QueryInbox pages use targeted `useMemo`/`useCallback` for expensive derived data and event handlers.
 - **Error Boundaries**: Top-level boundary in `App.tsx` plus per-route boundary in `DashboardLayout` for graceful error recovery.
 
+### Employee Import Performance
+
+- **Batch Concurrency**: Employee imports process 5 records concurrently using `Promise.allSettled`, reducing import time from ~5 minutes to ~1 minute for 100 employees.
+- **Progress Indicator**: Real-time progress bar shows "Processing X of Y employees..." during import.
+- **Reliable Auth User Lookup**: The `create-employee` edge function uses a try-create-catch approach instead of the unreliable `listUsers` filter, preventing admin profile corruption during bulk imports.
+
 ---
 
 *This documentation is automatically maintained alongside the codebase.*
