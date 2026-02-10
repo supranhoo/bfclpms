@@ -1,41 +1,59 @@
 
 
-# Clear All Employee Data (Keep Admin Only)
+# Fix: Slow Employee Import + Admin Profile Overwrite Bug
 
-## What Will Be Done
+## Problems Found
 
-Remove all 97 non-admin users from both the profiles table and the authentication system, keeping only the admin account (Ankit Choudhary).
+### 1. Slow Import (main complaint)
+Each employee is created via a **sequential** `for...of await` loop, making one HTTP call at a time to the backend function. Each call takes ~3 seconds (auth user creation + profile update). For 100 employees, this means **~5 minutes of waiting**.
 
-## Step-by-step
+### 2. Critical Bug: Admin Profile Being Overwritten
+The network responses show that every `create-employee` call returns the **admin's profile ID** and overwrites the admin's name, employee code, and department with each imported employee's data. This means:
+- No new employees are actually being created as separate users
+- The admin account gets corrupted with the last imported employee's data
 
-### Step 1: Clean up referencing data
-Delete the 3 remaining `training_needs` rows and clear any `reporting_manager_id` references to prevent foreign key issues.
+The root cause is the `listUsers` filter syntax in the edge function. The filter `email.eq.${email}` does not work as expected with the Supabase Admin API — it likely returns all users (including the admin) instead of filtering properly, causing the function to think the auth user already exists.
 
-### Step 2: Delete non-admin user_roles
-Remove role assignments for all users except the admin.
+## Solution
 
-### Step 3: Delete non-admin profiles
-Remove all 97 profile records (managers + employees).
+### Part A: Fix the `create-employee` Edge Function
+- Replace the broken `listUsers` filter with a direct lookup using `getUserByEmail` or a corrected filter approach
+- This prevents false matches that cause the admin profile overwrite
 
-### Step 4: Delete non-admin auth users
-Use a backend function to remove all 97 users from the authentication system so they no longer exist at all.
+### Part B: Add Batch Concurrency to Employee Import
+- Replace the sequential `for...of await` loop with a **batched parallel** approach
+- Process employees in batches of 5 concurrently (not all at once, to avoid rate limits)
+- This reduces import time from ~5 minutes to ~1 minute for 100 employees
+- Add a progress indicator showing "Processing 15/100..."
 
-## SQL Summary
+### Part C: Add a Bulk Import Edge Function (optional optimization)
+- Create a `bulk-create-employees` edge function that accepts an array of employees
+- Process all employees server-side in a single HTTP call
+- This eliminates per-employee network overhead entirely
 
-```sql
--- Clean references
-DELETE FROM training_needs;
-UPDATE profiles SET reporting_manager_id = NULL WHERE reporting_manager_id IS NOT NULL;
+## Recommended Approach: Part A + Part B
 
--- Remove roles (keep admin)
-DELETE FROM user_roles WHERE user_id != '535d9a14-e4aa-4676-af92-f535373ffc8d';
+Part C is the fastest but adds more complexity. Parts A and B together will fix both the bug and reduce import time to ~1 minute, which is acceptable.
 
--- Remove profiles (keep admin)
-DELETE FROM profiles WHERE id != '535d9a14-e4aa-4676-af92-f535373ffc8d';
+## Technical Details
+
+### Edge Function Fix (`supabase/functions/create-employee/index.ts`)
+- Remove the `listUsers` call with the broken filter
+- Use `supabase.auth.admin.getUserById` after looking up by email in a more reliable way, or query `auth.users` table directly via the admin client
+- Alternatively, try creating the user and catch the "already exists" error as the check
+
+### Import Loop Fix (`src/pages/admin/ImportData.tsx`)
+- Replace:
+```text
+for (const row of employeeData) {
+  await supabase.functions.invoke('create-employee', ...);
+}
 ```
+- With a batched approach that processes 5 employees concurrently using `Promise.all` on sliced chunks
+- Add progress state to show import progress in the UI
 
-Auth user deletion (97 users) will be done via a temporary backend function using the admin API, since auth users cannot be deleted via SQL.
+### Files to Change
+1. `supabase/functions/create-employee/index.ts` — fix auth user lookup logic
+2. `src/pages/admin/ImportData.tsx` — add batch concurrency + progress indicator
+3. `DOCUMENTATION.md` — update with changes
 
-## Result
-- **1 user remains**: Ankit Choudhary (admin)
-- Database ready for fresh Employee Master upload
