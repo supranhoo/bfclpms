@@ -81,6 +81,9 @@ Deno.serve(async (req) => {
       reporting_manager_id: body.reporting_manager_id || null,
     }
 
+    // Admin account protection — never overwrite this profile
+    const ADMIN_ID = '535d9a14-e4aa-4676-af92-f535373ffc8d'
+
     // Step 1: Check if employee already exists by employee_code in profiles
     const { data: existingProfile } = await supabaseAdmin
       .from('profiles')
@@ -88,15 +91,17 @@ Deno.serve(async (req) => {
       .eq('employee_code', body.employee_code)
       .maybeSingle()
 
-    if (existingProfile) {
+    if (existingProfile && existingProfile.id !== ADMIN_ID) {
+      // Safe to update — this is a regular employee
       await supabaseAdmin.from('profiles').update(profilePayload).eq('id', existingProfile.id)
       const { data: profile } = await supabaseAdmin.from('profiles').select('*').eq('id', existingProfile.id).single()
       return new Response(JSON.stringify({ profile, updated: true }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
+    // If existingProfile matches admin, skip — fall through to create a new user
 
-    // Step 2: Try to create the auth user directly. If user already exists, catch the error.
+    // Step 2: Try to create the auth user
     const randomPassword = crypto.randomUUID() + 'Aa1!'
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
@@ -108,28 +113,22 @@ Deno.serve(async (req) => {
     let userId: string
 
     if (createError) {
-      // User already exists in auth — look them up by email
       if (createError.message?.includes('already been registered') || createError.message?.includes('already exists')) {
-        // Find the existing auth user by listing with exact email match
-        const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1, page: 1 })
-        // listUsers filter is unreliable, so search all users by email manually
-        // For large user bases this is slow, but we only hit this path for duplicates
-        let foundUser = null
-        let page = 1
-        while (!foundUser) {
-          const { data: pageData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 100, page })
-          if (!pageData?.users?.length) break
-          foundUser = pageData.users.find(u => u.email?.toLowerCase() === email.toLowerCase())
-          if (pageData.users.length < 100) break
-          page++
-        }
+        // Look up existing user by email in profiles table (fast, no pagination)
+        const { data: existingByEmail } = await supabaseAdmin
+          .from('profiles')
+          .select('id')
+          .eq('email', email)
+          .neq('id', ADMIN_ID)
+          .maybeSingle()
 
-        if (!foundUser) {
-          return new Response(JSON.stringify({ error: `User with email ${email} exists in auth but could not be found` }), {
-            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        if (existingByEmail) {
+          userId = existingByEmail.id
+        } else {
+          return new Response(JSON.stringify({ error: `User with email ${email} exists in auth but no matching profile found. Skipping to avoid data corruption.` }), {
+            status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           })
         }
-        userId = foundUser.id
       } else {
         return new Response(JSON.stringify({ error: `Failed to create user: ${createError.message}` }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
