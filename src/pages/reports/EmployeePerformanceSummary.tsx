@@ -285,18 +285,24 @@ export default function EmployeePerformanceSummary() {
     return priorities[status] || 0;
   }
 
-  // Filter data based on search
+  // Filter and sort data by percentage descending (matching Excel format)
   const filteredData = useMemo(() => {
     if (!performanceData) return [];
     
     const term = searchTerm.toLowerCase();
-    return performanceData.filter(row =>
-      row.fullName.toLowerCase().includes(term) ||
-      row.employeeCode.toLowerCase().includes(term) ||
-      row.department.toLowerCase().includes(term) ||
-      row.designation.toLowerCase().includes(term) ||
-      row.reportingManager.toLowerCase().includes(term)
-    );
+    return performanceData
+      .filter(row =>
+        row.fullName.toLowerCase().includes(term) ||
+        row.employeeCode.toLowerCase().includes(term) ||
+        row.department.toLowerCase().includes(term) ||
+        row.designation.toLowerCase().includes(term) ||
+        row.reportingManager.toLowerCase().includes(term)
+      )
+      .sort((a, b) => {
+        const pctA = a.outOfScore > 0 ? (a.totalScore / a.outOfScore) * 100 : 0;
+        const pctB = b.outOfScore > 0 ? (b.totalScore / b.outOfScore) * 100 : 0;
+        return pctB - pctA;
+      });
   }, [performanceData, searchTerm]);
 
   // Pagination
@@ -431,7 +437,7 @@ export default function EmployeePerformanceSummary() {
       { wch: 30 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
     ];
 
-    XLSX.writeFile(wb, `Employee_Performance_Summary_${selectedYear}.xlsx`);
+    XLSX.writeFile(wb, `Employee_Performance_Summary${selectedPeriod !== 'all' ? `_${selectedPeriod}` : ''}_${selectedYear}.xlsx`);
   };
 
   const summaryStats = useMemo(() => {
@@ -454,7 +460,7 @@ export default function EmployeePerformanceSummary() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Employee Performance Summary"
+        title={`Employee Performance Summary${selectedPeriod !== 'all' ? ` - ${selectedPeriod}` : ''}`}
         description="Comprehensive view of employee scores, ratings, and review status"
         backTo="/reports"
         actions={
