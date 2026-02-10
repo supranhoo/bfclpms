@@ -395,7 +395,7 @@ async function updateProgress(
   try {
     const updateData: any = { ...updates };
     if (updates.errors) {
-      updateData.errors = JSON.stringify(updates.errors.slice(0, 50)); // Limit to 50 errors
+      updateData.errors = JSON.stringify(updates.errors.slice(0, 500)); // Limit to 500 errors
     }
     
     await supabaseAdmin
