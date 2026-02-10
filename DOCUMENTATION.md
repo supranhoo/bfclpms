@@ -1330,6 +1330,7 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
 - Bulk import KPIs from Excel
 - **Employee matching is by `employee_code` only** — no name-based fallback. If the code doesn't match, the employee is auto-created or an error is reported. This prevents silent substitution of a different employee who happens to share the same name.
 - **Imported ratings are preserved exactly as provided.** When a rating value (self/manager/auditor) is present in the uploaded file, it is stored as-is without recalculation. Nullish coalescing (`??`) is used instead of truthy checks (`||`) so that a legitimate rating of `0` is never silently dropped.
+- **Threshold values (R5-R0) are UOM-aware.** For non-percentage UOMs (Days, Number, Hours, Minutes, Amount, Index, Ratio, Score, Count, Rate), thresholds are stored as plain absolute numbers (e.g., `3`, `5`, `7`). Only when UOM is explicitly `%` or `percentage` are thresholds converted to percentage strings (e.g., `85%`, `100%`). This prevents incorrect conversions like storing `3` as `300%` for a "Days" KPI.
 - **Remarks fields** (`employeeRemarks`, `managerRemarks`, `auditRemarks`) are preserved even when they contain whitespace-only or edge-case values. Broader column name aliases (e.g., `Audit_Remarks`, `Auditor_Remarks`, `auditor_remarks`) are recognized.
 - Background processing for large files (error reports capped at 500 entries per import)
 - Progress tracking

@@ -696,9 +696,10 @@ async function processImport(
       }
 
       // Threshold formatting mode:
-      // - target=0 => absolute thresholds (store as plain numbers)
-      // - otherwise => percentage thresholds (store as "xx%")
-      const thresholdMode: 'absolute' | 'percentage' = targetValue === 0 ? 'absolute' : 'percentage';
+      // - UOM is % or percentage => percentage thresholds (store as "xx%")
+      // - All other UOMs (Days, Number, Hours, etc.) => absolute thresholds (store as plain numbers)
+      const isPercentageUom = uom === '%' || uom?.toLowerCase() === 'percentage';
+      const thresholdMode: 'absolute' | 'percentage' = isPercentageUom ? 'percentage' : 'absolute';
       const thresholdFactor = thresholdMode === 'percentage' ? getThresholdScaleFactor(row) : 1;
 
       if (thresholdMode === 'percentage' && thresholdFactor === 10000) {
