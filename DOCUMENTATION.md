@@ -1322,7 +1322,13 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
 - Bulk import KPIs from Excel
 - Background processing for large files
 - Progress tracking
-- Error reporting
+- **Detailed Error Reporting** (`ImportResultsSummary` component):
+  - After every import (Employee, KPI foreground, KPI background), a results summary card replaces the old simple alerts
+  - Shows stats row: Total, Success, Failed, Skipped counts
+  - Displays a scrollable error table with Row Number, Employee Code, Name, Status, and Error Message
+  - **Download Error Report** button exports all failed/skipped rows as an Excel file (`import-errors-{type}-{date}.xlsx`)
+  - Per-row results are tracked as structured `ImportRowResult` objects (`{ row, employeeCode, employeeName, status, message }`)
+  - Background import errors are parsed from string format into the same structured display
 
 ##### Import Columns Reference (PMS Data)
 
