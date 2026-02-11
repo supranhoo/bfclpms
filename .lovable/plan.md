@@ -1,65 +1,58 @@
 
+# Fix Bold KPI Marker Display Issues
 
-# Bold Section Markers in KPI Text (Description, Formula, Scoring Logic, Scoring)
+## Problems Identified
 
-## Feasibility: SAFE -- No adverse impact
+1. **Bold markers break mid-phrase** -- "- Scoring Logic:" wraps between words due to narrow column width, making it look like two separate bold sections ("**- Scoring**" on one line, "**Logic:**" on the next).
 
-### Impact Analysis
+2. **Non-standard data formats not recognized** -- Some KPI data in the database uses variant formatting that the current regex doesn't match:
+   - `Formula - (Project Timeline adherence)` instead of `- Formula:`
+   - `Scoring :- 5 for 0 non-compliance` instead of `- Scoring:`
+   These don't get bolded, creating visual inconsistency.
 
-| Area | Impact | Reason |
-|------|--------|--------|
-| Dashboard Tables | Target change | Uses `normalizeKpiText` for display |
-| Review Sheets/Panels | Target change | Uses `normalizeKpiText` for display |
-| Mobile KPI Cards | Target change | Uses `normalizeKpiText` for display |
-| PDF Exports | No impact | Uses raw strings with jsPDF, never calls `normalizeKpiText` |
-| Excel Exports | No impact | Uses raw string fields |
-| Reports (TNI, Query, Audit Trail) | No impact | Uses raw `kpi_name`/`kra_name` fields |
-| Scoring Logic | No impact | Works with numeric fields only |
-| Database | No impact | No data changes, display-only |
+## Fix
 
-### What Changes
+### 1. `src/components/ui/FormattedText.tsx`
 
-Section markers like `- Description:`, `- Formula:`, `- Scoring Logic:`, `- Scoring:` (and existing markers like Criteria, Measurement, Target, Notes) will render in **bold** wherever KPI text is displayed.
+Add `white-space: nowrap` to `<strong>` elements so bold markers never split across lines:
 
-```text
-Before:
-- Description: Measures accuracy of documentation
-- Formula: (1 - errors/total) * 100
-- Scoring Logic: 5 for 100%, 4 for 98-99%
+```typescript
+// Before
+React.createElement('strong', { key: i }, seg.text)
 
-After:
-**- Description:** Measures accuracy of documentation
-**- Formula:** (1 - errors/total) * 100
-**- Scoring Logic:** 5 for 100%, 4 for 98-99%
+// After
+React.createElement('strong', { key: i, style: { whiteSpace: 'nowrap' } }, seg.text)
 ```
 
-### Technical Approach
+### 2. `src/lib/textFormatting.ts`
 
-Since `normalizeKpiText` returns a plain string (used in 12+ files), we cannot inject HTML/JSX into it without breaking things. Instead:
+Expand both regex patterns to also match non-standard marker variants found in the database:
 
-1. **Add a new function** `renderKpiText()` in `src/lib/textFormatting.ts` that takes normalized text and returns an array of React nodes, with section markers wrapped in `<strong>` tags.
+**Current patterns only match:** `- Description:`, `- Formula:`, `- Scoring Logic:`, `- Scoring:`
 
-2. **Update `FormattedText` component** to use `renderKpiText()` instead of rendering plain text, so it automatically bolds section markers.
+**Updated patterns will also match:**
+- `Formula -` (dash after keyword, no colon)
+- `Scoring :-` (colon-dash variant)
+- `Formula :` (space before colon)
+- `-Description:` (no space after dash)
 
-3. **Update all 10 inline call sites** (KpiDetailsTable, MobileKpiCard, MobileSelfReviewCard, ReviewDetailsCard, ReviewDetailsCardCompact, KpiLogicModal, KpiTrackerModal, KpiHeaderSection, OrgKpiOverview, OrgKpiDataEntry) to use the new rendering approach.
+Updated `normalizeKpiText` pattern:
+```text
+Matches: - Description:, -Description:, - Formula:, Formula -, - Scoring Logic:, 
+         Scoring Logic -, - Scoring:, Scoring :-, - Criteria:, - Measurement:, 
+         - Target:, - Notes:
+```
 
-4. **Keep `normalizeKpiText` unchanged** -- it remains a pure string function for any non-visual use cases (tests, exports, etc.).
+Updated `BOLD_MARKER_PATTERN`:
+Same expanded set for consistent bolding.
 
-### Files to Modify
+### 3. `DOCUMENTATION.md`
 
-| File | Change |
-|------|--------|
-| `src/lib/textFormatting.ts` | Add `renderKpiTextWithBold()` function |
-| `src/components/ui/FormattedText.tsx` | Use the new renderer |
-| `src/components/review/KpiDetailsTable.tsx` | Replace `normalizeKpiText` calls with bold-aware rendering |
-| `src/components/review/MobileKpiCard.tsx` | Same |
-| `src/components/review/MobileSelfReviewCard.tsx` | Same |
-| `src/components/review/ReviewDetailsCard.tsx` | Same |
-| `src/components/review/ReviewDetailsCardCompact.tsx` | Same |
-| `src/components/review/KpiHeaderSection.tsx` | Same |
-| `src/components/dashboard/KpiLogicModal.tsx` | Same |
-| `src/components/dashboard/KpiTrackerModal.tsx` | Same |
-| `src/pages/admin/OrgKpiOverview.tsx` | Same |
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Same |
-| `DOCUMENTATION.md` | Document the bold formatting behavior |
+Update the text formatting section to note the expanded pattern matching and `nowrap` styling.
 
+## Impact
+
+- **No logic impact** -- display-only change
+- **No export impact** -- PDF/Excel use raw strings
+- **No scoring impact** -- scoring uses numeric fields only
+- Applies everywhere `renderBoldKpiText` is used (all dashboard tables, review panels, modals)
