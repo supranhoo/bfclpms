@@ -62,7 +62,7 @@ export function CategoryScoreChart({ data }: CategoryScoreChartProps) {
           data={data}
           layout="vertical"
           margin={{ top: 4, right: 30, left: 0, bottom: 4 }}
-          barCategoryGap="8%"
+          barCategoryGap="2%"
         >
           <CartesianGrid
             horizontal={false}
@@ -91,7 +91,7 @@ export function CategoryScoreChart({ data }: CategoryScoreChartProps) {
               borderRadius: '8px',
             }}
           />
-          <Bar dataKey="percentage" radius={[0, 4, 4, 0]} barSize={16}>
+          <Bar dataKey="percentage" radius={[0, 4, 4, 0]} barSize={12}>
             {data.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
