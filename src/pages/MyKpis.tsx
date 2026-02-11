@@ -218,10 +218,10 @@ export default function MyKpis() {
     ? kpis?.filter(k => k.category_id === selectedCategory)
     : kpis;
 
-  // Sorting with default Weightage (High to Low)
-  const { sortedKpis, sortConfig, setSort } = useKpiSorting(filteredKpis);
+  const submissionMap = useMemo(() => new Map(submissions?.map(s => [s.kpi_id, s])), [submissions]);
 
-  const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
+  // Sorting with default Weightage (High to Low)
+  const { sortedKpis, sortConfig, setSort } = useKpiSorting(filteredKpis, {}, submissionMap);
 
   // Calculate metrics
   const metrics = useMemo(() => {

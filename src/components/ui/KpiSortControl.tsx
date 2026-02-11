@@ -19,6 +19,7 @@ const sortLabels: Record<KpiSortField, string> = {
   category: 'Category',
   weightage: 'Weightage',
   kra: 'KRA Name',
+  final: 'Final',
 };
 
 export function KpiSortControl({ sortConfig, onSortChange, compact = false }: KpiSortControlProps) {
@@ -51,6 +52,8 @@ export function KpiSortControl({ sortConfig, onSortChange, compact = false }: Kp
           <SelectItem value="category-desc">Category (Z→A)</SelectItem>
           <SelectItem value="kra-asc">KRA Name (A→Z)</SelectItem>
           <SelectItem value="kra-desc">KRA Name (Z→A)</SelectItem>
+          <SelectItem value="final-desc">Final Score (High→Low)</SelectItem>
+          <SelectItem value="final-asc">Final Score (Low→High)</SelectItem>
         </SelectContent>
       </Select>
     );
@@ -59,7 +62,7 @@ export function KpiSortControl({ sortConfig, onSortChange, compact = false }: Kp
   return (
     <div className="flex items-center gap-1">
       <span className="text-xs text-muted-foreground mr-1">Sort:</span>
-      {(['weightage', 'category'] as KpiSortField[]).map((field) => (
+      {(['weightage', 'category', 'final'] as KpiSortField[]).map((field) => (
         <Button
           key={field}
           variant={sortConfig.field === field ? 'secondary' : 'ghost'}

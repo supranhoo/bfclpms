@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { KPI } from '@/hooks/useKpis';
 
-export type KpiSortField = 'category' | 'weightage' | 'kra';
+export type KpiSortField = 'category' | 'weightage' | 'kra' | 'final';
 export type SortDirection = 'asc' | 'desc';
 
 export interface KpiSortConfig {
@@ -14,9 +14,10 @@ export interface UseKpiSortingOptions {
   defaultDirection?: SortDirection;
 }
 
-export function useKpiSorting<T extends Pick<KPI, 'kra_categories' | 'weightage' | 'kra_name'>>(
+export function useKpiSorting<T extends Pick<KPI, 'id' | 'kra_categories' | 'weightage' | 'kra_name'>>(
   kpis: T[] | undefined,
-  options: UseKpiSortingOptions = {}
+  options: UseKpiSortingOptions = {},
+  submissionMap?: Map<string, any>
 ) {
   const { defaultField = 'weightage', defaultDirection = 'desc' } = options;
   
@@ -62,11 +63,19 @@ export function useKpiSorting<T extends Pick<KPI, 'kra_categories' | 'weightage'
           return kraA.localeCompare(kraB) * direction;
         }
         
+        case 'final': {
+          const scoreA = submissionMap?.get(a.id)?.final_score ?? -Infinity;
+          const scoreB = submissionMap?.get(b.id)?.final_score ?? -Infinity;
+          const result = scoreA - scoreB;
+          if (result === 0) return (b.weightage || 0) - (a.weightage || 0);
+          return result * direction;
+        }
+        
         default:
           return 0;
       }
     });
-  }, [kpis, sortConfig]);
+  }, [kpis, sortConfig, submissionMap]);
 
   const setSort = (field: KpiSortField) => {
     setSortConfig(prev => ({

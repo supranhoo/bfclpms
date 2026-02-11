@@ -877,10 +877,11 @@ After an employee submits a KPI (status changes from `kra_set` to `self_review` 
 - Transparent tracking of submitted values
 
 **KPI Table Sorting:**
-- All KPI tables include sorting controls for Category and Weightage
+- All KPI tables include sorting controls for Weightage, Category, KRA Name, and Final Score
 - Default sort: Weightage (High to Low) to prioritize most impactful KPIs
-- Secondary sort applies within same values (e.g., alphabetical category within same weightage)
-- Sorting available on: Employee Dashboard, My KPIs, Team Review Scorecard
+- Final Score sorting uses the submission's final_score; KPIs without a final score sink to the bottom
+- Secondary sort applies within same values (e.g., weightage descending within same final score)
+- Sorting available on: Employee Dashboard, My KPIs, Team Review, Audit, and Management Scorecards
 
 **Employee Filters (Team Review, Audit Panel, Management Review):**
 

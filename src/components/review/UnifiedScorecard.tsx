@@ -193,9 +193,6 @@ export function UnifiedScorecard({
     return orgKpiValuesMap.get(key) || null;
   };
 
-  // Sorting with default Weightage (High to Low)
-  const { sortedKpis, sortConfig, setSort } = useKpiSorting(kpis);
-
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const { data: queries } = useKpiQueries(kpiIds);
@@ -246,6 +243,10 @@ export function UnifiedScorecard({
     : reviewerOverride.isLoading;
 
   const submissionMap = useMemo(() => new Map(submissions?.map(s => [s.kpi_id, s])), [submissions]);
+
+  // Sorting with default Weightage (High to Low)
+  const { sortedKpis, sortConfig, setSort } = useKpiSorting(kpis, {}, submissionMap);
+
   const queryMap = useMemo(() => {
     const map = new Map<string, KpiQuery[]>();
     queries?.forEach(q => {

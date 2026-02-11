@@ -286,7 +286,7 @@ export default function Dashboard() {
   }, [categories, periodFilteredKpis]);
 
   // Sorting with default Weightage (High to Low)
-  const { sortedKpis, sortConfig, setSort } = useKpiSorting(fullyFilteredKpis);
+  const { sortedKpis, sortConfig, setSort } = useKpiSorting(fullyFilteredKpis, {}, submissionMap);
 
   // Handle mode change
   const handleModeChange = useCallback((mode: ViewMode) => {

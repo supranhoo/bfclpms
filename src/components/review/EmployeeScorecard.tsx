@@ -118,12 +118,14 @@ export function EmployeeScorecard({
     return orgKpiValuesMap.get(key) || null;
   };
 
-  // Sorting with default Weightage (High to Low)
-  const { sortedKpis, sortConfig, setSort } = useKpiSorting(kpis);
-
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const { data: queries } = useKpiQueries(kpiIds);
+
+  const submissionMap = useMemo(() => new Map(submissions?.map(s => [s.kpi_id, s])), [submissions]);
+
+  // Sorting with default Weightage (High to Low)
+  const { sortedKpis, sortConfig, setSort } = useKpiSorting(kpis, {}, submissionMap);
 
   const [reviewSheetOpen, setReviewSheetOpen] = useState(false);
   const [queryDialogOpen, setQueryDialogOpen] = useState(false);
@@ -155,8 +157,6 @@ export function EmployeeScorecard({
   const raiseQuery = useRaiseQuery();
   const sendBackKpi = useSendBackKpi();
   const { saveOverrides, acceptEmployeeValues, isLoading: isSavingOverrides } = useManagerSubPeriodOverride();
-
-  const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
   const queryMap = new Map<string, typeof queries>();
   queries?.forEach(q => {
     const existing = queryMap.get(q.kpi_id) || [];
