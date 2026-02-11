@@ -93,29 +93,32 @@ Deno.serve(async (req) => {
 
       console.log(`Admin ${user.id} setting new password for: ${email}`);
 
-      // Find user by email
-      const { data: userData, error: userFetchError } = await supabaseAdmin.auth.admin.listUsers();
+      // Find user by email via profiles table (listUsers is paginated and may miss users)
+      const { data: profileData, error: profileError } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('email', email.toLowerCase())
+        .maybeSingle();
       
-      if (userFetchError) {
-        console.error('Error fetching users:', userFetchError);
+      if (profileError) {
+        console.error('Error fetching user profile:', profileError);
         return new Response(
           JSON.stringify({ error: 'Failed to find user' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      const targetUser = userData.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
-      
-      if (!targetUser) {
+      if (!profileData) {
         return new Response(
           JSON.stringify({ error: 'User not found' }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Update the user's password
+      const targetUserId = profileData.id;
+
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        targetUser.id,
+        targetUserId,
         { password: newPassword }
       );
 
