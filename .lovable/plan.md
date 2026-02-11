@@ -1,23 +1,29 @@
 
 
-# Reduce Grey Space Between Category Bars
+# Fix Missing Categories and Adjust Label Width
 
-## Problem
+## Problems Identified
 
-The chart container height is calculated as `categoryCount * 50px`, giving each row 50px of vertical space. With `barSize={12}`, each colored bar only uses 12px, leaving ~38px of grey padding per row.
+1. **Missing categories**: The chart container height is too small (28px per row) causing categories to be clipped/hidden when there are many categories. The `ResponsiveContainer` tries to fit all bars into limited vertical space and some get cut off.
 
-## Change
+2. **Label area too wide**: The Y-axis currently uses 40% of the chart width for category names, leaving only 60% for bars. User wants 30%/70% split instead.
 
-Reduce the per-category height multiplier from `50` to `28` across all files that render `CategoryScoreChart`. This keeps bar height (`barSize=12`) unchanged but compresses the grey padding around each bar from ~38px to ~16px.
+## Changes
 
-### Files to update:
+### File: `src/components/dashboard/CategoryScoreChart.tsx`
 
-**`src/pages/Dashboard.tsx` (line 471)**
-- Change `categoryMetrics.length * 50` to `categoryMetrics.length * 28`
+- Change the Y-axis width multiplier from `0.4` (40%) to `0.3` (30%) on line 29
+- Change the initial `yAxisWidth` state from `280` to `210` on line 23
 
-**`src/components/review/UnifiedScorecard.tsx` (line 752)**
-- Change `scoreData.categoryScores.length * 50` to `scoreData.categoryScores.length * 28`
+### File: `src/pages/Dashboard.tsx`
 
-**`DOCUMENTATION.md`**
-- Update the chart row height note from 50px to 28px per category
+- Increase per-category row height from `28` to `36` on line 471 to prevent clipping when many categories exist
+
+### File: `src/components/review/UnifiedScorecard.tsx`
+
+- Increase per-category row height from `28` to `36` on line 752 to match
+
+### File: `DOCUMENTATION.md`
+
+- Update chart styling notes to reflect 30% label area and 36px per-category row height
 
