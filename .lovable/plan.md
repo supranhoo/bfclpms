@@ -1,17 +1,18 @@
 
 
-# Add 35-Character Limit to KRA Category Name Input
+# Minimize Vertical Spacing in Category Bar Chart
 
 ## Change
 
-In `src/pages/admin/Categories.tsx`, add a `maxLength={35}` attribute to the Name input field inside the Add/Edit KRA Category dialog. Also add a helper text below the input showing the remaining characters.
+In `src/components/dashboard/CategoryScoreChart.tsx`, reduce the vertical spacing between category bars to the minimum possible without overlapping.
 
-### File: `src/pages/admin/Categories.tsx`
+### File: `src/components/dashboard/CategoryScoreChart.tsx`
 
-- Add `maxLength={35}` to the `<Input>` for the Name field
-- Add a small helper text below showing character count (e.g., "12/35 characters")
+- Change `barCategoryGap` from `"15%"` to `"8%"` -- tightest gap before labels overlap
+- Reduce `barSize` from `20` to `16` -- slightly thinner bars free up even more vertical room
+- Reduce chart margins from `{ top: 10, right: 30, left: 0, bottom: 10 }` to `{ top: 4, right: 30, left: 0, bottom: 4 }` -- trim top/bottom padding
 
 ### File: `DOCUMENTATION.md`
 
-- Note the 35-character limit for KRA category names
+- Update the chart styling note to reflect `barCategoryGap=8%` and `barSize=16`.
 
