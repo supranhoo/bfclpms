@@ -20,13 +20,13 @@ interface CustomTickProps {
 
 export function CategoryScoreChart({ data }: CategoryScoreChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [yAxisWidth, setYAxisWidth] = useState(280);
+  const [yAxisWidth, setYAxisWidth] = useState(210);
 
   useEffect(() => {
     if (!containerRef.current) return;
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        setYAxisWidth(Math.round(entry.contentRect.width * 0.4));
+        setYAxisWidth(Math.round(entry.contentRect.width * 0.3));
       }
     });
     observer.observe(containerRef.current);
