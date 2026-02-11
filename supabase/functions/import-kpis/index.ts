@@ -326,8 +326,12 @@ const formatRatingThreshold = (
 
   // Percentage mode: store as "xx%" string
   if (strValue.includes('%')) {
-    const numPart = parseFloat(strValue.replace('%', '').replace(',', '.'));
+    let numPart = parseFloat(strValue.replace('%', '').replace(',', '.'));
     if (!Number.isFinite(numPart)) return strValue;
+    // Excel artifact: values like "1.02%" are really 102% (Excel decimal × 100 wasn't applied)
+    if (numPart > 0 && numPart <= 2 && !Number.isInteger(numPart)) {
+      numPart = numPart * 100;
+    }
     return Number.isInteger(numPart)
       ? `${numPart}%`
       : `${numPart.toFixed(2).replace(/\.?0+$/, '')}%`;
@@ -690,8 +694,9 @@ async function processImport(
       let targetValue = typeof row.target === 'number' ? row.target :
         row.target ? parseFloat(String(row.target).replace('%', '')) : null;
       
-      // Convert decimal to percentage if UOM is % and value looks like a decimal (0-1 range)
-      if (isPercentage && targetValue !== null && targetValue > 0 && targetValue <= 1) {
+      // Convert decimal to percentage if UOM is % and value looks like a decimal (0-2 range)
+      // Excel delivers percentages as decimals: 102% → 1.02, 150% → 1.5, up to 200% → 2.0
+      if (isPercentage && targetValue !== null && targetValue > 0 && targetValue <= 2) {
         targetValue = targetValue * 100;
       }
 
@@ -834,8 +839,9 @@ async function processImport(
           if (val === null || val === undefined || val === '') return null;
           let num = parseFloat(String(val).replace('%', '').trim());
           if (isNaN(num)) return null;
-          // Convert decimal to percentage if UOM is % and value looks like a decimal (0-1 range)
-          if (isPercentage && num > 0 && num <= 1) {
+          // Convert decimal to percentage if UOM is % and value looks like a decimal (0-2 range)
+          // Excel delivers percentages as decimals: 102% → 1.02, up to 200% → 2.0
+          if (isPercentage && num > 0 && num <= 2) {
             num = num * 100;
           }
           return num;
