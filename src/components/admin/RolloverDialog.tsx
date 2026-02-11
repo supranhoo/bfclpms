@@ -343,14 +343,14 @@ export function RolloverDialog({ open, onOpenChange }: RolloverDialogProps) {
                 <Card>
                   <CardContent className="pt-4 text-center">
                     <AlertTriangle className="h-6 w-6 mx-auto text-amber-500 mb-1" />
-                    <p className="text-2xl font-bold">{previewData.conflicts.length}</p>
-                    <p className="text-xs text-muted-foreground">Have existing KPIs</p>
+                    <p className="text-2xl font-bold">{balanceIds.size}</p>
+                    <p className="text-xs text-muted-foreground">Balance rollover</p>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardContent className="pt-4 text-center">
                     <SkipForward className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
-                    <p className="text-2xl font-bold">{previewData.skipped_employees.length}</p>
+                    <p className="text-2xl font-bold">{previewData.skipped_employees.length + previewData.conflicts.length - balanceIds.size}</p>
                     <p className="text-xs text-muted-foreground">Will be skipped</p>
                   </CardContent>
                 </Card>
