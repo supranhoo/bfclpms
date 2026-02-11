@@ -208,19 +208,19 @@ export default function MonthlyScorecardReport() {
         totalWeightage += weight;
 
         if (submission) {
-          if (submission.self_score) {
+          if (submission.self_score != null) {
             weightedSelfScore += (submission.self_score * weight);
           }
-          if (submission.manager_score) {
+          if (submission.manager_score != null) {
             weightedManagerScore += (submission.manager_score * weight);
           }
-          if (submission.auditor_score) {
+          if (submission.auditor_score != null) {
             weightedAuditorScore += (submission.auditor_score * weight);
           }
-          if (submission.management_score) {
+          if (submission.management_score != null) {
             weightedManagementScore += (submission.management_score * weight);
           }
-          if (submission.final_score) {
+          if (submission.final_score != null) {
             weightedFinalScore += (submission.final_score * weight);
             completedKpis++;
           }
