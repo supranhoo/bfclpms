@@ -253,6 +253,39 @@ export function EmployeeSelectorGrid({
     }
   };
 
+  // Smart period detection: auto-switch to a period with KPIs if current period has none
+  const handleEmployeeClick = async (member: EmployeeProfile) => {
+    const empKpis = periodKpis?.filter(k => k.employee_id === member.id) || [];
+    
+    if (empKpis.length > 0) {
+      // Employee has KPIs in the currently selected period
+      onSelectEmployee(member);
+      return;
+    }
+
+    // No KPIs in current period — find the most recent period with KPIs
+    const { data, error } = await supabase
+      .from('kpis')
+      .select('review_period, review_year')
+      .eq('employee_id', member.id)
+      .order('review_year', { ascending: false })
+      .order('review_period', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data?.review_period && data?.review_year) {
+      onPeriodSelectionChange({
+        ...periodSelection,
+        selectedMonth: data.review_period,
+        selectedYear: data.review_year,
+        months: [data.review_period],
+        periodRanges: [{ month: data.review_period, year: data.review_year }],
+      });
+    }
+
+    onSelectEmployee(member);
+  };
+
   const getInitials = (name: string | null) => {
     if (!name) return 'U';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -452,7 +485,7 @@ export function EmployeeSelectorGrid({
                   <Card
                     key={member.id}
                     className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50 group"
-                    onClick={() => onSelectEmployee(member)}
+                    onClick={() => handleEmployeeClick(member)}
                   >
                     <CardContent className="p-4">
                       <div className="flex items-start gap-3">

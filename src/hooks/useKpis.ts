@@ -992,3 +992,40 @@ export function useLockPeriod() {
     },
   });
 }
+
+// Fetch distinct periods that have KPIs for a given employee
+export function useEmployeeKpiPeriods(employeeId: string | undefined) {
+  return useQuery({
+    queryKey: ['employee-kpi-periods', employeeId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kpis')
+        .select('review_period, review_year, status')
+        .eq('employee_id', employeeId as string);
+
+      if (error) throw error;
+
+      // Deduplicate to distinct period/year combos with status counts
+      const periodMap = new Map<string, { review_period: string; review_year: number; statuses: string[] }>();
+      data?.forEach(row => {
+        const key = `${row.review_period}-${row.review_year}`;
+        const existing = periodMap.get(key);
+        if (existing) {
+          if (row.status) existing.statuses.push(row.status);
+        } else {
+          periodMap.set(key, {
+            review_period: row.review_period || '',
+            review_year: row.review_year || 0,
+            statuses: row.status ? [row.status] : [],
+          });
+        }
+      });
+
+      return Array.from(periodMap.values()).sort((a, b) => {
+        if (b.review_year !== a.review_year) return b.review_year - a.review_year;
+        return b.review_period.localeCompare(a.review_period);
+      });
+    },
+    enabled: !!employeeId,
+  });
+}

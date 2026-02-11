@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { useKpisByEmployee, useReviewSubmissions, useApproveKpi, useRaiseQuery, useKpiQueries, useSendBackKpi, RatingLevel, KPI, KpiQuery } from '@/hooks/useKpis';
+import { useKpisByEmployee, useReviewSubmissions, useApproveKpi, useRaiseQuery, useKpiQueries, useSendBackKpi, useEmployeeKpiPeriods, RatingLevel, KPI, KpiQuery } from '@/hooks/useKpis';
 import { useSubPeriodSubmissions, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
@@ -40,7 +40,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
-  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User
+  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays
 } from 'lucide-react';
 import { 
   kpiStatusColors, 
@@ -792,9 +792,13 @@ export function UnifiedScorecard({
                 );
               })}
               {sortedKpis.length === 0 && (
-                <p className="text-center text-muted-foreground py-8 text-sm">
-                  No KPIs found for this period
-                </p>
+                <NoKpisPeriodHint
+                  employeeId={employee.id}
+                  selectedPeriod={selectedPeriod}
+                  selectedYear={selectedYear}
+                  periodSelection={periodSelection}
+                  onPeriodSelectionChange={onPeriodSelectionChange}
+                />
               )}
             </div>
           ) : (
@@ -1295,6 +1299,68 @@ function DailySubmissionSummaryWithOverride({
               </div>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Helper component: shows a hint when no KPIs exist for the selected period
+function NoKpisPeriodHint({
+  employeeId,
+  selectedPeriod,
+  selectedYear,
+  periodSelection,
+  onPeriodSelectionChange,
+}: {
+  employeeId: string;
+  selectedPeriod: string | undefined;
+  selectedYear: number | undefined;
+  periodSelection: PeriodSelection;
+  onPeriodSelectionChange: (selection: PeriodSelection) => void;
+}) {
+  const { data: periods } = useEmployeeKpiPeriods(employeeId);
+
+  const alternatePeriods = periods?.filter(
+    p => !(p.review_period === selectedPeriod && p.review_year === selectedYear)
+  ) || [];
+
+  const switchToPeriod = (period: { review_period: string; review_year: number }) => {
+    onPeriodSelectionChange({
+      ...periodSelection,
+      selectedMonth: period.review_period,
+      selectedYear: period.review_year,
+      months: [period.review_period],
+      periodRanges: [{ month: period.review_period, year: period.review_year }],
+    });
+  };
+
+  return (
+    <div className="text-center py-8 space-y-3">
+      <CalendarDays className="h-10 w-10 mx-auto text-muted-foreground/50" />
+      <p className="text-muted-foreground font-medium">
+        No KPIs found for {selectedPeriod} {selectedYear}
+      </p>
+      {alternatePeriods.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            This employee has KPIs in other periods:
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {alternatePeriods.slice(0, 5).map(p => (
+              <Button
+                key={`${p.review_period}-${p.review_year}`}
+                variant="outline"
+                size="sm"
+                onClick={() => switchToPeriod(p)}
+              >
+                {p.review_period} {p.review_year}
+                <Badge variant="secondary" className="ml-1.5 text-[10px]">
+                  {p.statuses.length} KPIs
+                </Badge>
+              </Button>
+            ))}
+          </div>
         </div>
       )}
     </div>
