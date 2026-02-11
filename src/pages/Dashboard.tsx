@@ -468,7 +468,7 @@ export default function Dashboard() {
             <CardTitle className="text-sm">Performance by Category</CardTitle>
             <CardDescription className="text-xs">Score breakdown across KRA categories</CardDescription>
           </CardHeader>
-          <CardContent style={{ height: Math.max(180, categoryMetrics.length * 28) }}>
+          <CardContent style={{ height: Math.max(180, categoryMetrics.length * 36) }}>
             <CategoryScoreChart data={categoryMetrics} />
           </CardContent>
         </Card>
