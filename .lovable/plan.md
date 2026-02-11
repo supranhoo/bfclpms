@@ -1,63 +1,64 @@
 
-# Rating and Weighted Score Mapping Audit
 
-## Findings
+# Fix Swapped Export Fields and Score Fallback Gaps
 
-### 1. Dashboard Score Fallback Chain is Incomplete (BUG)
+## Problem 1: Export Fields Are Swapped
 
-In `src/pages/Dashboard.tsx` (line 203), the self-view score fallback skips intermediate review levels:
+In the "Export Current Data" feature, `rating` and `kpiWeightageScore` are mapped backwards compared to the PMS Scorecard Import definition:
 
-**Current (wrong):**
-```
-final_score ?? self_score ?? 0
-```
+| Field | Your Import Definition | Current Export (WRONG) |
+|---|---|---|
+| `rating` | Raw score (1-5) from final achievement | `final_score * weightage / 100` (weighted score) |
+| `kpiWeightageScore` | `weightage * rating` (weighted score) | `final_score` (raw score) |
 
-**Should be (per system standard):**
+**Fix**: Swap them so export matches import.
+
+---
+
+## Problem 2: Score Fallback Chain Bugs (8 locations)
+
+Multiple files use `||` (truthy check) instead of `??` (nullish check), which **drops legitimate 0 scores**. Many also skip intermediate review levels (manager, auditor, management).
+
+| File | Line | Current (Broken) | Fix |
+|---|---|---|---|
+| `Dashboard.tsx` | ~261 | `final_score \|\| self_score \|\| 0` | Full `??` chain |
+| `Dashboard.tsx` | ~545 | `final_score \|\| self_score` | Full `??` chain |
+| `SelfReview.tsx` | ~197 | `final_score \|\| self_score \|\| 0` | Full `??` chain |
+| `SelfReview.tsx` | ~233 | `final_score \|\| self_score \|\| 0` | Full `??` chain |
+| `MyKpis.tsx` | ~238 | `final_score \|\| self_score \|\| 0` | Full `??` chain |
+| `PerformanceReport.tsx` | ~51,68 | `final_score \|\| self_score \|\| 0` | Full `??` chain |
+| `MobileKpiCard.tsx` | ~35 | `final_score \|\| self_score` | Full `??` chain |
+| `KpiTrackerModal.tsx` | ~61 | `final_score \|\| self_score \|\| 0` | Full `??` chain |
+| `KpiHistoryCard.tsx` | ~46 | `final_score \|\| manager_score \|\| self_score` | Full `??` chain |
+| `KpiReviewPanel.tsx` | ~86 | `final_score ?? self_score` (missing levels) | Full `??` chain |
+
+**Standard fix for all**: Replace with the system-standard chain:
 ```
 final_score ?? management_score ?? auditor_score ?? manager_score ?? self_score ?? 0
 ```
 
-This means a KPI at `management_review` status (where manager and auditor have scored it) still shows only the self_score on the Dashboard, ignoring the more recent reviewer scores.
+---
 
-### 2. Data Inconsistency in Database
+## Problem 3: Import Uses `kpiWeightageScore` as Weightage Fallback
 
-For "Ensure to process Salary by 3rd" (January 2026):
-- `self_rating = green` but `self_score = 3.00`
-- Green rating should map to score 4 (per ScoreSelector: green = 4)
-- This was likely saved by a prior bug or manual entry. No code fix needed -- just a data note.
+Line 1036 does: `weightage: row.kpiWeightage || row.kpiWeightageScore || 0`
 
-### 3. Weighted Score Display is Correct
+This incorrectly uses `kpiWeightageScore` (a weighted score value) as a fallback for `weightage` (a percentage). This should only use `row.kpiWeightage`.
 
-The `UnifiedScorecard` correctly calculates: `totalWeightedScore = sum(score x weightage)` and displays it as `X / Y` where Y = totalWeight x 5. This is correct and consistent.
+---
 
-## Fix Plan
+## Files to Modify
 
-### File: `src/pages/Dashboard.tsx`
-
-Update the score fallback chain in `singleMonthMetrics` (line 203) to match the system standard:
-
-```typescript
-// Before:
-const score = submission?.final_score ?? submission?.self_score ?? 0;
-
-// After:
-const score = submission?.final_score 
-  ?? submission?.management_score 
-  ?? submission?.auditor_score 
-  ?? submission?.manager_score 
-  ?? submission?.self_score 
-  ?? 0;
-```
-
-This ensures the Dashboard always uses the most authoritative score available, matching the UnifiedScorecard and report calculations.
-
-### File: `DOCUMENTATION.md`
-
-Document the corrected fallback chain.
-
-## File Summary
-
-| File | Action |
+| File | Changes |
 |---|---|
-| `src/pages/Dashboard.tsx` | Fix score fallback chain (line 203) |
-| `DOCUMENTATION.md` | Update docs |
+| `src/pages/admin/ImportData.tsx` | Swap `rating`/`kpiWeightageScore` in export (lines 1720-1723); fix weightage fallback (line 1036) |
+| `src/pages/Dashboard.tsx` | Fix 2 score fallback locations (~261, ~545) |
+| `src/pages/SelfReview.tsx` | Fix 2 score fallback locations (~197, ~233) |
+| `src/pages/MyKpis.tsx` | Fix 1 score fallback location (~238) |
+| `src/pages/reports/PerformanceReport.tsx` | Fix 2 score fallback locations (~51, ~68) |
+| `src/components/dashboard/MobileKpiCard.tsx` | Fix 1 score fallback location (~35) |
+| `src/components/dashboard/KpiTrackerModal.tsx` | Fix 1 score fallback location (~61) |
+| `src/components/review/KpiHistoryCard.tsx` | Fix 1 score fallback location (~46) |
+| `src/components/review/KpiReviewPanel.tsx` | Fix 1 score fallback location (~86) |
+| `DOCUMENTATION.md` | Document corrected export field mapping and standardized fallback chain |
+
