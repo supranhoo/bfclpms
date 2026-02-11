@@ -197,6 +197,10 @@ export function UnifiedScorecard({
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const { data: queries } = useKpiQueries(kpiIds);
 
+  // Fetch ALL-period submissions for tracker modal & review panel history
+  const allKpiIds = useMemo(() => allKpis?.map(k => k.id) || [], [allKpis]);
+  const { data: allSubmissions } = useReviewSubmissions(allKpiIds);
+
   // UI State
   const [reviewSheetOpen, setReviewSheetOpen] = useState(false);
   const [queryDialogOpen, setQueryDialogOpen] = useState(false);
@@ -842,7 +846,7 @@ export function UnifiedScorecard({
                 kpi={selectedKpi}
                 submission={submissionMap.get(selectedKpi.id) || null}
                 allKpis={allKpis || []}
-                allSubmissions={submissions || []}
+                allSubmissions={allSubmissions || []}
                 queries={queryMap.get(selectedKpi.id) || []}
                 viewLevel={viewLevel}
                 currentUserId={user?.id}
@@ -1114,7 +1118,7 @@ export function UnifiedScorecard({
         onClose={() => setTrackerModalOpen(false)}
         kpi={selectedKpi}
         allKpis={allKpis || []}
-        submissions={submissions || []}
+        submissions={allSubmissions || []}
       />
 
       {/* Query History Dialog */}

@@ -126,6 +126,10 @@ export function ManagementScorecard({
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const { data: queries } = useKpiQueries(kpiIds);
 
+  // Fetch ALL-period submissions for tracker modal & review panel history
+  const allKpiIds = useMemo(() => allKpis?.map(k => k.id) || [], [allKpis]);
+  const { data: allSubmissions } = useReviewSubmissions(allKpiIds);
+
   const [reviewSheetOpen, setReviewSheetOpen] = useState(false);
   const [sendBackDialogOpen, setSendBackDialogOpen] = useState(false);
   const [logicModalOpen, setLogicModalOpen] = useState(false);
@@ -704,7 +708,7 @@ export function ManagementScorecard({
                 kpi={selectedKpi}
                 submission={submissionMap.get(selectedKpi.id) || null}
                 allKpis={allKpis || []}
-                allSubmissions={submissions || []}
+                allSubmissions={allSubmissions || []}
                 queries={queryMap.get(selectedKpi.id) || []}
                 viewLevel="management"
                 selectedPeriod={selectedPeriod}
@@ -945,7 +949,7 @@ export function ManagementScorecard({
         onClose={() => setTrackerModalOpen(false)}
         kpi={selectedKpi}
         allKpis={allKpis || []}
-        submissions={submissions || []}
+        submissions={allSubmissions || []}
       />
 
       {/* Query History Dialog */}

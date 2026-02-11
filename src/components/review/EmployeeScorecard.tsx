@@ -122,6 +122,10 @@ export function EmployeeScorecard({
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const { data: queries } = useKpiQueries(kpiIds);
 
+  // Fetch ALL-period submissions for tracker modal & review panel history
+  const allKpiIds = useMemo(() => allKpis?.map(k => k.id) || [], [allKpis]);
+  const { data: allSubmissions } = useReviewSubmissions(allKpiIds);
+
   const submissionMap = useMemo(() => new Map(submissions?.map(s => [s.kpi_id, s])), [submissions]);
 
   // Sorting with default Weightage (High to Low)
@@ -651,7 +655,7 @@ export function EmployeeScorecard({
                 kpi={selectedKpi}
                 submission={submissionMap.get(selectedKpi.id) || null}
                 allKpis={allKpis || []}
-                allSubmissions={submissions || []}
+                allSubmissions={allSubmissions || []}
                 queries={queryMap.get(selectedKpi.id) || []}
                 viewLevel="manager"
                 currentUserId={user?.id}
@@ -912,7 +916,7 @@ export function EmployeeScorecard({
         onClose={() => setTrackerModalOpen(false)}
         kpi={selectedKpi}
         allKpis={allKpis || []}
-        submissions={submissions || []}
+        submissions={allSubmissions || []}
       />
 
       {/* Query History Dialog */}
