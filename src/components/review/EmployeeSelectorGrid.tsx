@@ -301,32 +301,36 @@ export function EmployeeSelectorGrid({
   const statusOptions = STATUS_OPTIONS_BY_LEVEL[viewLevel];
 
   // Render stats cards based on view level
+  const toggleStatusFilter = (filter: string) => {
+    setStatusFilter(prev => prev === filter ? 'all' : filter);
+  };
+
   const renderStatsCards = () => {
     if (viewLevel === 'team') {
       return (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-          <StatCard icon={Users} label={isFullAccess ? 'Total Employees' : 'Team Size'} value={stats.totalEmployees} color="primary" />
+          <StatCard icon={Users} label={isFullAccess ? 'Total Employees' : 'Team Size'} value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
           <StatCard icon={Target} label="Open KPIs" value={stats.stat1} color="purple" subtitle="Not yet submitted" />
-          <StatCard icon={Clock} label="Pending Review" value={stats.stat2} color="yellow" subtitle="Awaiting manager" />
-          <StatCard icon={CheckCircle2} label="Reviewed" value={stats.stat3} color="green" subtitle="KPIs completed" />
+          <StatCard icon={Clock} label="Pending Review" value={stats.stat2} color="yellow" subtitle="Awaiting manager" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
+          <StatCard icon={CheckCircle2} label="Reviewed" value={stats.stat3} color="green" subtitle="KPIs completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} />
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" className="col-span-2 md:col-span-1" />
         </div>
       );
     } else if (viewLevel === 'audit') {
       return (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" />
-          <StatCard icon={Clock} label="Pending Audit" value={stats.stat1} color="amber" subtitle="KPIs awaiting audit" />
-          <StatCard icon={FileCheck} label="In Audit" value={stats.stat2} color="purple" subtitle="Currently reviewing" />
-          <StatCard icon={CheckCircle2} label="Forwarded" value={stats.stat3} color="green" subtitle="Sent for management" />
+          <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
+          <StatCard icon={Clock} label="Pending Audit" value={stats.stat1} color="amber" subtitle="KPIs awaiting audit" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
+          <StatCard icon={FileCheck} label="In Audit" value={stats.stat2} color="purple" subtitle="Currently reviewing" onClick={() => toggleStatusFilter('in_audit')} active={statusFilter === 'in_audit'} />
+          <StatCard icon={CheckCircle2} label="Forwarded" value={stats.stat3} color="green" subtitle="Sent for management" onClick={() => toggleStatusFilter('forwarded')} active={statusFilter === 'forwarded'} />
         </div>
       );
     } else {
       return (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" />
-          <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="emerald" subtitle="KPIs awaiting approval" />
-          <StatCard icon={CheckCircle2} label="Approved" value={stats.stat2} color="green" subtitle="KPIs completed" />
+          <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
+          <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="emerald" subtitle="KPIs awaiting approval" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
+          <StatCard icon={CheckCircle2} label="Approved" value={stats.stat2} color="green" subtitle="KPIs completed" onClick={() => toggleStatusFilter('approved')} active={statusFilter === 'approved'} />
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
         </div>
       );
@@ -545,6 +549,8 @@ interface StatCardProps {
   color: 'primary' | 'purple' | 'yellow' | 'green' | 'blue' | 'amber' | 'emerald';
   subtitle?: string;
   className?: string;
+  onClick?: () => void;
+  active?: boolean;
 }
 
 const colorMap: Record<StatCardProps['color'], { border: string; bg: string; text: string }> = {
@@ -557,11 +563,15 @@ const colorMap: Record<StatCardProps['color'], { border: string; bg: string; tex
   emerald: { border: 'border-l-emerald-500', bg: 'bg-emerald-500/10', text: 'text-emerald-600' },
 };
 
-function StatCard({ icon: Icon, label, value, color, subtitle, className = '' }: StatCardProps) {
+function StatCard({ icon: Icon, label, value, color, subtitle, className = '', onClick, active }: StatCardProps) {
   const colors = colorMap[color];
+  const isClickable = !!onClick;
   
   return (
-    <Card className={`border-l-4 ${colors.border} ${className}`}>
+    <Card
+      className={`border-l-4 ${colors.border} ${className} ${isClickable ? 'cursor-pointer transition-all hover:shadow-md' : ''} ${active ? 'ring-2 ring-primary shadow-md' : ''}`}
+      onClick={onClick}
+    >
       <CardContent className="pt-4 sm:pt-6">
         <div className="flex items-center justify-between">
           <div>
