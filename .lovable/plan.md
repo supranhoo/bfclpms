@@ -1,46 +1,60 @@
 
 
-# Fix: Import Treats Zero Values as N/A
+# Redesign: Premium "Performance by Category" Bar Chart
 
-## Problem
+## Overview
 
-The N/A auto-detection logic in the import function uses JavaScript truthiness checks (`!value`). Since `!0` is `true` in JavaScript, any KPI row where the achieved value or ratings are explicitly **0** gets incorrectly flagged as N/A and all its data is wiped to null.
+Redesign the `CategoryScoreChart` component to achieve a professional, spacious, premium look matching the reference image and specifications.
 
-This is exactly what happened with **REF-882**: the uploaded sheet had `0` in targetAchieved, rating, employeeTargetAchieved, and employeeRating -- all legitimate zero-score data that was discarded.
+## Changes
 
-## Fix
+### File: `src/components/dashboard/CategoryScoreChart.tsx`
 
-### File: `supabase/functions/import-kpis/index.ts` (line 848-849)
+**1. Label Area (40% width allocation)**
+- Replace the fixed `width={280}` on the YAxis with a percentage-based approach. Since Recharts YAxis uses pixel widths, calculate dynamically or set a generous fixed width that approximates 40% (e.g., use a wrapper with measured width, or set ~320px for typical dashboard widths).
+- Split the label rendering into two parts using a custom tick component:
+  - Category name in bold/medium weight, foreground color
+  - Weightage percentage `(21%)` in lighter gray (`text-muted-foreground`) and slightly smaller
 
-Replace the truthiness-based checks with explicit null/undefined/empty-string checks using a helper function:
+**2. Bar Geometry (thinner bars, more spacing)**
+- Add `barSize` prop to `<Bar>` to reduce thickness (e.g., `barSize={20}` down from the default ~30)
+- Increase `barCategoryGap` on `<BarChart>` to add breathing room between categories (e.g., `barCategoryGap="30%"`)
 
-```text
-// Helper to check if a value is truly empty (not just zero)
-const isEmpty = (v: any) => v === null || v === undefined || v === '';
+**3. Grid Lines**
+- Add `<CartesianGrid>` with subtle horizontal lines disabled and vertical dashed lines at 0/25/50/75/100 markers
+- Use a light gray stroke color: `stroke="hsl(var(--border))"` with `strokeDasharray="3 3"`
+- Set XAxis ticks explicitly to `[0, 25, 50, 75, 100]`
 
-const isNa = achievedStr === 'na' || achievedStr === 'n/a' ||
-  achievedStr === 'not applicable' || achievedStr === '-' ||
-  (isEmpty(achievedValue) && isEmpty(row.employeeRating) && isEmpty(row.rating) &&
-   isEmpty(row.managerRating) && isEmpty(row.auditRating));
-```
+**4. Bar Styling**
+- Keep existing rounded corners `radius={[0, 4, 4, 0]}` (already matches the spec)
+- Keep vibrant color palette from `entry.color`
 
-This ensures `0` is treated as valid data, and only truly blank cells trigger the automatic N/A detection.
+**5. Typography**
+- Use the app's default font (Inter, already configured in Tailwind) for all text
+- Custom YAxis tick renderer to style category name vs. weightage differently
+
+**6. Tooltip**
+- Keep existing dark-mode-aware tooltip styling
 
 ### File: `DOCUMENTATION.md`
-
-Document that the N/A auto-detection now correctly distinguishes between "no data" (blank cells) and "zero value" (explicit 0).
-
-### Data Fix
-
-After deploying, re-import the affected data (or manually update REF-882 for employee 100012 to set `is_na = false` and restore the correct zero values).
+- Update any references to the CategoryScoreChart to note the redesigned layout with 40% label area and premium styling.
 
 ## Technical Detail
 
-| Value | `!value` (old/buggy) | `isEmpty(value)` (new/correct) |
-|-------|---------------------|-------------------------------|
-| `null` | true | true |
-| `undefined` | true | true |
-| `''` | true | true |
-| `0` | **true (BUG)** | **false (correct)** |
-| `5` | false | false |
+The key implementation is a **custom YAxis tick component** that renders two `<tspan>` elements: one for the category name (normal weight, foreground color) and one for the weightage (lighter color, slightly de-emphasized). This replaces the current `tickFormatter` string concatenation approach, which cannot style portions of the label differently.
+
+```typescript
+const CustomYAxisTick = ({ x, y, payload, data }) => {
+  const entry = data[payload.index];
+  const weightage = entry?.weightage != null ? ` (${entry.weightage}%)` : '';
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text textAnchor="end" fill="currentColor" fontSize={12} dominantBaseline="middle">
+        <tspan fontWeight={500}>{payload.value}</tspan>
+        <tspan fill="#9ca3af" fontWeight={400}>{weightage}</tspan>
+      </text>
+    </g>
+  );
+};
+```
 
