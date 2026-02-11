@@ -2661,11 +2661,36 @@ The system allows administrators to configure when multi-month frequency cycles 
 **Fixed locations (v1.14.2):**
 - `MonthlyScorecardReport.tsx` — weighted score aggregation now uses `!= null` checks
 - `import-kpis/index.ts` — `determineReviewStatus()` and `determineKpiStatus()` now use `!= null` checks so `auditRating=0` correctly infers status as `approved`/`locked`
+- `ImportData.tsx` — `exportKpiData()` function replaced all `|| ''` with `?? ''` for numeric fields (target, weightage, scores, achieved values)
 
 **Not affected (already correct):**
 - Dashboard scoring (`useCumulativeKpis`, `Dashboard.tsx`) — uses `?? 0`
 - `EmployeePerformanceSummary.tsx` — uses `??`
 - `finalScore || 0` patterns — `0 || 0 = 0`, which is correct
+
+---
+
+### 4.20 Export-Import Column Parity
+
+The `exportKpiData()` function in `ImportData.tsx` now exports **all columns** that the import template expects, enabling full round-trip fidelity (export → edit → re-import). Added columns:
+
+| Column | Source |
+|--------|--------|
+| `sNo` | Row serial number (auto-generated) |
+| `reviewStatus` | `performance_reviews.status` |
+| `division` | `profiles → departments → business_units → divisions` |
+| `businessUnit` | `profiles → departments → business_units` |
+| `department` | `profiles → departments` |
+| `subBranch` | `sub_branches` (matched by department_id) |
+| `frequencyCycleStart` | `kpis.frequency_cycle_start` |
+| `kpiStatus` | `kpis.status` |
+| `isOrgLevel` | `kpis.is_org_level` (exported as "Yes" or blank) |
+| `employeeTargetAchieved` | `review_submissions.achieved_value` |
+| `managerTargetAchieved` | `review_submissions.manager_achieved_value` |
+| `auditTargetAchieved` | `review_submissions.auditor_achieved_value` |
+| `achievedWeight` | Placeholder (calculated field, exported blank) |
+| `rating` | Calculated: `final_score × (weightage / 100)` |
+| `kpiWeightageScore` | `review_submissions.final_score` |
 
 ---
 

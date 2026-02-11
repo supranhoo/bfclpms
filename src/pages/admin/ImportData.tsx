@@ -1583,6 +1583,7 @@ export default function ImportData() {
             uom_type,
             qualitative_options,
             frequency,
+            frequency_cycle_start,
             weightage,
             criteria,
             r5, r4, r3, r2, r1, r0,
@@ -1591,8 +1592,9 @@ export default function ImportData() {
             review_year,
             source_of_data,
             status,
+            is_org_level,
             kra_categories(name),
-            profiles!kpis_employee_id_fkey(employee_code, full_name)
+            profiles!kpis_employee_id_fkey(employee_code, full_name, department_id, departments(name, business_units(name, divisions(name))))
           `)
           .range(offset, offset + batchSize - 1);
         
@@ -1604,14 +1606,14 @@ export default function ImportData() {
         offset += batchSize;
       }
 
-      // Fetch all review submissions
+      // Fetch all review submissions (including per-level achieved values)
       let allSubmissions: any[] = [];
       offset = 0;
       
       while (true) {
         const { data: submissionBatch, error: submissionsError } = await supabase
           .from('review_submissions')
-          .select('kpi_id, achieved_value, self_score, self_remarks, manager_score, manager_remarks, auditor_score, auditor_remarks, final_score')
+          .select('kpi_id, achieved_value, self_score, self_remarks, manager_achieved_value, manager_score, manager_remarks, auditor_achieved_value, auditor_score, auditor_remarks, management_score, management_remarks, final_score')
           .range(offset, offset + batchSize - 1);
         
         if (submissionsError) throw submissionsError;
@@ -1622,44 +1624,92 @@ export default function ImportData() {
         offset += batchSize;
       }
 
-      const submissionMap = new Map(allSubmissions.map(s => [s.kpi_id, s]));
+      // Fetch performance reviews for reviewStatus column
+      let allReviews: any[] = [];
+      offset = 0;
+      
+      while (true) {
+        const { data: reviewBatch, error: reviewsError } = await supabase
+          .from('performance_reviews')
+          .select('employee_id, review_period, review_year, status')
+          .range(offset, offset + batchSize - 1);
+        
+        if (reviewsError) throw reviewsError;
+        if (!reviewBatch || reviewBatch.length === 0) break;
+        
+        allReviews = [...allReviews, ...reviewBatch];
+        if (reviewBatch.length < batchSize) break;
+        offset += batchSize;
+      }
 
-      const exportData = allKpis.map(kpi => {
+      // Fetch sub-branches for employees
+      let allSubBranches: any[] = [];
+      const { data: subBranchData } = await supabase
+        .from('sub_branches')
+        .select('id, name, department_id');
+      if (subBranchData) allSubBranches = subBranchData;
+
+      const submissionMap = new Map(allSubmissions.map(s => [s.kpi_id, s]));
+      const reviewMap = new Map(allReviews.map(r => [`${r.employee_id}_${r.review_period}_${r.review_year}`, r]));
+
+      const exportData = allKpis.map((kpi, index) => {
         const submission = submissionMap.get(kpi.id);
         const profile = kpi.profiles as any;
         const category = kpi.kra_categories as any;
+        const dept = profile?.departments as any;
+        const bu = dept?.business_units as any;
+        const div = bu?.divisions as any;
+        const reviewKey = `${kpi.employee_id}_${kpi.review_period}_${kpi.review_year}`;
+        const review = reviewMap.get(reviewKey);
+        // Find sub-branch by matching department_id
+        const subBranch = allSubBranches.find(sb => sb.department_id === profile?.department_id);
         
         return {
-          refCode: (kpi as any).ref_code || '',
-          newCode: profile?.employee_code || '',
-          fullName: profile?.full_name || '',
-          category: category?.name || '',
-          kra: kpi.kra_name || '',
-          kpi: kpi.kpi_name || '',
-          target: kpi.target_value || '',
-          uom: kpi.uom || '',
-          uomType: kpi.uom_type || 'numeric',
+          sNo: index + 1,
+          refCode: (kpi as any).ref_code ?? '',
+          month: kpi.review_period ?? '',
+          reviewStatus: review?.status ?? '',
+          newCode: profile?.employee_code ?? '',
+          fullName: profile?.full_name ?? '',
+          division: div?.name ?? '',
+          businessUnit: bu?.name ?? '',
+          department: dept?.name ?? '',
+          subBranch: subBranch?.name ?? '',
+          category: category?.name ?? '',
+          kra: kpi.kra_name ?? '',
+          kpi: kpi.kpi_name ?? '',
+          uom: kpi.uom ?? '',
+          uomType: kpi.uom_type ?? 'numeric',
           qualitativeOptions: kpi.qualitative_options ? JSON.stringify(kpi.qualitative_options) : '',
-          frequency: kpi.frequency || '',
-          kpiWeightage: kpi.weightage || '',
-          criteria: kpi.criteria || '',
-          r5: kpi.r5 || '',
-          r4: kpi.r4 || '',
-          r3: kpi.r3 || '',
-          r2: kpi.r2 || '',
-          r1: kpi.r1 || '',
-          r0: kpi.r0 || '',
-          month: kpi.review_period || '',
-          reviewYear: kpi.review_year || '',
-          sourceOfData: kpi.source_of_data || '',
-          targetAchieved: submission?.achieved_value || '',
-          employeeRating: submission?.self_score || '',
-          employeeRemarks: submission?.self_remarks || '',
-          managerRating: submission?.manager_score || '',
-          managerRemarks: submission?.manager_remarks || '',
-          auditRating: submission?.auditor_score || '',
-          auditRemarks: submission?.auditor_remarks || '',
-          finalScore: submission?.final_score || '',
+          frequency: kpi.frequency ?? '',
+          frequencyCycleStart: kpi.frequency_cycle_start ?? '',
+          kpiWeightage: kpi.weightage ?? '',
+          criteria: kpi.criteria ?? '',
+          target: kpi.target_value ?? '',
+          r5: kpi.r5 ?? '',
+          r4: kpi.r4 ?? '',
+          r3: kpi.r3 ?? '',
+          r2: kpi.r2 ?? '',
+          r1: kpi.r1 ?? '',
+          r0: kpi.r0 ?? '',
+          targetAchieved: submission?.achieved_value ?? '',
+          achievedWeight: '',
+          rating: submission?.final_score != null && kpi.weightage != null
+            ? Number((submission.final_score * (kpi.weightage / 100)).toFixed(2))
+            : '',
+          kpiWeightageScore: submission?.final_score ?? '',
+          employeeTargetAchieved: submission?.achieved_value ?? '',
+          employeeRating: submission?.self_score ?? '',
+          employeeRemarks: submission?.self_remarks ?? '',
+          managerTargetAchieved: submission?.manager_achieved_value ?? '',
+          managerRating: submission?.manager_score ?? '',
+          managerRemarks: submission?.manager_remarks ?? '',
+          auditTargetAchieved: submission?.auditor_achieved_value ?? '',
+          auditRating: submission?.auditor_score ?? '',
+          auditRemarks: submission?.auditor_remarks ?? '',
+          sourceOfData: kpi.source_of_data ?? '',
+          kpiStatus: kpi.status ?? '',
+          isOrgLevel: kpi.is_org_level ? 'Yes' : '',
         };
       });
 
