@@ -17,6 +17,7 @@ const Auth = lazy(() => import("./pages/Auth"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ModuleHub = lazy(() => import("./pages/ModuleHub"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const MyKpis = lazy(() => import("./pages/MyKpis"));
 const QueryInbox = lazy(() => import("./pages/QueryInbox"));
 const PMSPolicy = lazy(() => import("./pages/PMSPolicy"));
 const ManagementDashboard = lazy(() => import("./pages/ManagementDashboard"));
@@ -87,8 +88,7 @@ const App = () => (
               <Route path="/" element={<Navigate to="/home" replace />} />
               <Route element={<DashboardLayout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
-                {/* Redirect legacy routes to dashboard */}
-                <Route path="/my-kpis" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/my-kpis" element={<Suspense fallback={<PageFallback />}><MyKpis /></Suspense>} />
                 <Route path="/self-review" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/kra-acceptance" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/queries" element={<QueryInbox />} />
