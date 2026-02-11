@@ -1,48 +1,102 @@
 
 
-# Fix KPI Text Appearing as Columns Instead of Lines
+# Fix: Achieved & Rating Showing Blank in KPI Tracker Modal
 
-## Root Cause
+## Root Cause Analysis
 
-Line 309 in `KpiDetailsTable.tsx` has `flex items-center gap-1` on the `<p>` tag wrapping the KPI name text:
+The issue stems from **JavaScript's falsy value handling** — the well-known zero-value preservation problem.
 
-```html
-<p className="text-sm text-muted-foreground flex items-center gap-1 whitespace-pre-wrap">
-  {renderBoldKpiText(kpi.kpi_name)}
-  <Info ... />
-</p>
+### Bug 1: Display renders 0 as "-"
+
+In the Monthly Detail Log table (line ~149 of KpiTrackerModal.tsx):
+
+```typescript
+// Current code
+<TableCell>{entry.achieved || '-'}</TableCell>
 ```
 
-The `flex` layout treats each text segment returned by `renderBoldKpiText()` as a separate flex item and lays them out **horizontally**. This overrides `whitespace-pre-wrap`, causing Description, Formula, and Scoring Logic to spread across the cell like separate columns instead of stacking as lines.
+When `achieved_value = 0` (e.g., December has `achieved_value: 0.00`), JavaScript treats `0` as falsy, so `0 || '-'` evaluates to `'-'`. Same issue with rating display — `entry.rating > 0` excludes legitimate zero ratings.
+
+### Bug 2: Data construction loses zero values
+
+```typescript
+// Current code
+achieved: sub?.achieved_value || 0,
+```
+
+This is partially correct (0 || 0 still gives 0), but the real problem is distinguishing between "no submission exists" (should show "-") vs "submission exists with value 0" (should show "0").
+
+### Database Evidence
+
+For the KPI "Fulfillment of Vacant Positions" (employee 35bb4caa):
+
+| Month | achieved_value | final_score | Correct Display |
+|-------|---------------|-------------|-----------------|
+| September 2025 | NULL (no submission) | NULL | Should show "-" |
+| October 2025 | 96.00 | 4.00 | Should show 96 / 4.0 |
+| November 2025 | 91.38 | 3.00 | Should show 91.38 / 3.0 |
+| December 2025 | 0.00 | 0.00 | Should show 0 / 0.0 |
 
 ## Fix
 
-Remove `flex` from the `<p>` tag and wrap the Info icon separately so it doesn't interfere with text flow:
+### File: `src/components/dashboard/KpiTrackerModal.tsx`
 
-```html
-<div className="relative">
-  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-    {renderBoldKpiText(kpi.kpi_name)}
-  </p>
-  <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 ... absolute top-0 right-0" />
-</div>
+**1. Change data types to use `null` for missing data:**
+
+```typescript
+// Before
+achieved: sub?.achieved_value || 0,
+rating: sub?.final_score ?? sub?.management_score ?? ... ?? 0,
+
+// After - use null to represent "no data"
+achieved: sub ? (sub.achieved_value ?? null) : null,
+rating: sub ? (sub.final_score ?? sub.management_score ?? sub.auditor_score ?? sub.manager_score ?? sub.self_score ?? null) : null,
 ```
 
-This keeps the Info hover icon visible but lets the KPI text flow naturally with line breaks preserved -- exactly matching the second reference image.
+**2. Fix display logic to preserve zero values:**
 
-## Files Changed
+```typescript
+// Before
+<TableCell>{entry.achieved || '-'}</TableCell>
 
-| File | Change |
-|------|--------|
-| `src/components/review/KpiDetailsTable.tsx` | Remove `flex` from KPI name paragraph, reposition Info icon |
-| `DOCUMENTATION.md` | Minor update noting the layout fix |
+// After - null means no data, 0 is a valid value
+<TableCell>{entry.achieved != null ? entry.achieved : '-'}</TableCell>
+```
 
-## Result
+```typescript
+// Before
+{entry.rating > 0 ? <Badge>...</Badge> : '-'}
 
-The KPI cell will display exactly like the second image: all text in one cell, each section (Description, Formula, Scoring Logic) on its own line with bold markers, flowing naturally top-to-bottom.
+// After
+{entry.rating != null ? <Badge>...</Badge> : '-'}
+```
+
+**3. Fix chart data to use null instead of 0 for missing points** (so the trend line shows gaps instead of drops to zero):
+
+```typescript
+// Before
+achieved: sub?.achieved_value || 0,
+
+// After
+achieved: sub ? (sub.achieved_value ?? null) : null,
+```
+
+**4. Update type definition** to allow null:
+
+```typescript
+// Change type from number to number | null
+achieved: number | null;
+rating: number | null;
+```
+
+### File: `DOCUMENTATION.md`
+
+Update the KPI Tracker section to document the null-safe display handling.
 
 ## Impact
 
-- **Display only** -- no data, scoring, or export changes
-- **All dashboard levels** benefit (My KPIs, Team Review, Audit, Management) since they all use KpiDetailsTable
+- **Display only** — no scoring or database changes
+- **Chart improvement** — missing months show as gaps instead of false "0" dips
+- **Table improvement** — zero values display as "0" / "0.0" instead of "-"
+- Consistent with the project's zero-value-preservation standard
 
