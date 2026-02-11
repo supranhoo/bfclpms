@@ -19,6 +19,11 @@ const MONTHS = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
 ];
 
+const FULL_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
 const STATUS_COLORS: Record<string, string> = {
   approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
   management_review: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
@@ -65,20 +70,9 @@ export default function EmployeePerformanceSummary() {
   const [pageSize, setPageSize] = useState(25);
   const [activeTab, setActiveTab] = useState('summary');
   const [comparisonEmployee, setComparisonEmployee] = useState<string | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState('all');
 
-  // Fetch review periods for the selected year
-  const { data: reviewPeriods } = useQuery({
-    queryKey: ['review-periods', selectedYear],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('review_periods')
-        .select('*')
-        .eq('review_year', parseInt(selectedYear))
-        .order('period_name');
-      if (error) throw error;
-      return data;
-    },
-  });
+  // (review_periods query removed – month filter is now static)
 
   // Fetch all KPIs with batching for large datasets
   const { data: performanceData, isLoading } = useQuery({
@@ -307,19 +301,24 @@ export default function EmployeePerformanceSummary() {
     
     const term = searchTerm.toLowerCase();
     return performanceData
-      .filter(row =>
-        row.fullName.toLowerCase().includes(term) ||
-        row.employeeCode.toLowerCase().includes(term) ||
-        row.department.toLowerCase().includes(term) ||
-        row.designation.toLowerCase().includes(term) ||
-        row.reportingManager.toLowerCase().includes(term)
-      )
+      .filter(row => {
+        // Status filter
+        if (selectedStatus !== 'all' && row.status !== selectedStatus) return false;
+        // Search filter
+        return (
+          row.fullName.toLowerCase().includes(term) ||
+          row.employeeCode.toLowerCase().includes(term) ||
+          row.department.toLowerCase().includes(term) ||
+          row.designation.toLowerCase().includes(term) ||
+          row.reportingManager.toLowerCase().includes(term)
+        );
+      })
       .sort((a, b) => {
         const pctA = a.outOfScore > 0 ? (a.totalScore / a.outOfScore) * 100 : 0;
         const pctB = b.outOfScore > 0 ? (b.totalScore / b.outOfScore) * 100 : 0;
         return pctB - pctA;
       });
-  }, [performanceData, searchTerm]);
+  }, [performanceData, searchTerm, selectedStatus]);
 
   // Pagination
   const totalPages = Math.ceil(filteredData.length / pageSize);
@@ -331,7 +330,7 @@ export default function EmployeePerformanceSummary() {
   // Reset page when filters change
   useMemo(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedYear, selectedPeriod, pageSize]);
+  }, [searchTerm, selectedYear, selectedPeriod, selectedStatus, pageSize]);
 
   // Get unique employees for comparison
   const uniqueEmployees = useMemo(() => {
@@ -522,13 +521,26 @@ export default function EmployeePerformanceSummary() {
                 </Select>
                 <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
                   <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Period" />
+                    <SelectValue placeholder="Month" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Periods</SelectItem>
-                    {reviewPeriods?.map(period => (
-                      <SelectItem key={period.id} value={period.period_name}>
-                        {period.period_name}
+                    <SelectItem value="all">All Months</SelectItem>
+                    {FULL_MONTHS.map(month => (
+                      <SelectItem key={month} value={month}>
+                        {month}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    {Object.entries(STATUS_LABELS).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
                       </SelectItem>
                     ))}
                   </SelectContent>

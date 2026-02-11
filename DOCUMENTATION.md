@@ -1650,6 +1650,10 @@ The Employee Performance Summary report uses the **same weighted scoring logic a
 - **N/A Exclusion**: KPIs marked as N/A are excluded from both numerator and denominator
 - **Zero Preservation**: Uses nullish coalescing (`??`) so scores of 0 are treated as valid data, not missing
 
+**Filters:**
+- **Month Filter**: Static dropdown with 12 calendar months (January–December) plus "All Months". Replaces the previous DB-driven review periods dropdown.
+- **Status Filter**: Dropdown populated from `STATUS_LABELS` (Approved, Management Review, Audit, Manager Check, Self Review, KRA Set) plus "All Status" default. Filters rows by review status.
+
 #### 4.10.1 Monthly Scorecard PDF Export
 
 The Monthly Scorecard Report includes an enhanced "Performance Dashboard" PDF export with preview functionality:
