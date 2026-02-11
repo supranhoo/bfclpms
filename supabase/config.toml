@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.update-smtp-password]
 verify_jwt = false
+
+[functions.password-rollout]
+verify_jwt = false

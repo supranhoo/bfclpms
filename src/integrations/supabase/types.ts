@@ -137,6 +137,13 @@ export type Database = {
             foreignKeyName: "bundle_assignment_logs_assigned_by_fkey"
             columns: ["assigned_by"]
             isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bundle_assignment_logs_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -145,6 +152,13 @@ export type Database = {
             columns: ["bundle_id"]
             isOneToOne: false
             referencedRelation: "template_bundles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bundle_assignment_logs_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
             referencedColumns: ["id"]
           },
           {
@@ -307,6 +321,13 @@ export type Database = {
             foreignKeyName: "employee_working_days_employee_id_fkey"
             columns: ["employee_id"]
             isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_working_days_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -445,7 +466,21 @@ export type Database = {
             foreignKeyName: "kpi_audit_logs_on_behalf_of_fkey"
             columns: ["on_behalf_of"]
             isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_audit_logs_on_behalf_of_fkey"
+            columns: ["on_behalf_of"]
+            isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_audit_logs_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
             referencedColumns: ["id"]
           },
           {
@@ -495,6 +530,13 @@ export type Database = {
             columns: ["observation_id"]
             isOneToOne: false
             referencedRelation: "kpi_observations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_observation_replies_reply_by_fkey"
+            columns: ["reply_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
             referencedColumns: ["id"]
           },
           {
@@ -566,6 +608,13 @@ export type Database = {
             foreignKeyName: "kpi_observations_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_observations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -574,6 +623,13 @@ export type Database = {
             columns: ["kpi_id"]
             isOneToOne: false
             referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_observations_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
             referencedColumns: ["id"]
           },
           {
@@ -649,7 +705,21 @@ export type Database = {
             foreignKeyName: "kpi_queries_raised_by_fkey"
             columns: ["raised_by"]
             isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_queries_raised_by_fkey"
+            columns: ["raised_by"]
+            isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_queries_raised_to_fkey"
+            columns: ["raised_to"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
             referencedColumns: ["id"]
           },
           {
@@ -871,6 +941,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpis_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
             referencedColumns: ["id"]
           },
           {
@@ -1109,6 +1186,13 @@ export type Database = {
             foreignKeyName: "org_kpi_data_owners_assigned_by_fkey"
             columns: ["assigned_by"]
             isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_data_owners_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1117,6 +1201,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_data_owners_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
             referencedColumns: ["id"]
           },
           {
@@ -1247,7 +1338,21 @@ export type Database = {
             foreignKeyName: "org_kpi_values_employee_id_fkey"
             columns: ["employee_id"]
             isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_values_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_values_entered_by_fkey"
+            columns: ["entered_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
             referencedColumns: ["id"]
           },
           {
@@ -1260,6 +1365,84 @@ export type Database = {
           {
             foreignKeyName: "org_kpi_values_sent_back_by_fkey"
             columns: ["sent_back_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_values_sent_back_by_fkey"
+            columns: ["sent_back_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      password_rollout_logs: {
+        Row: {
+          created_at: string
+          email: string | null
+          email_error: string | null
+          email_sent: boolean | null
+          employee_code: string | null
+          error_message: string | null
+          full_name: string | null
+          generated_by: string
+          id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          email_error?: string | null
+          email_sent?: boolean | null
+          employee_code?: string | null
+          error_message?: string | null
+          full_name?: string | null
+          generated_by: string
+          id?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          email_error?: string | null
+          email_sent?: boolean | null
+          employee_code?: string | null
+          error_message?: string | null
+          full_name?: string | null
+          generated_by?: string
+          id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "password_rollout_logs_generated_by_fkey"
+            columns: ["generated_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "password_rollout_logs_generated_by_fkey"
+            columns: ["generated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "password_rollout_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "password_rollout_logs_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1329,6 +1512,13 @@ export type Database = {
             foreignKeyName: "performance_improvement_plans_employee_id_fkey"
             columns: ["employee_id"]
             isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_improvement_plans_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1336,7 +1526,21 @@ export type Database = {
             foreignKeyName: "performance_improvement_plans_hr_reviewer_id_fkey"
             columns: ["hr_reviewer_id"]
             isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_improvement_plans_hr_reviewer_id_fkey"
+            columns: ["hr_reviewer_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_improvement_plans_initiated_by_fkey"
+            columns: ["initiated_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
             referencedColumns: ["id"]
           },
           {
@@ -1393,6 +1597,13 @@ export type Database = {
             foreignKeyName: "performance_reviews_employee_id_fkey"
             columns: ["employee_id"]
             isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_reviews_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1430,6 +1641,13 @@ export type Database = {
           pip_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "pip_audit_logs_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pip_audit_logs_performed_by_fkey"
             columns: ["performed_by"]
@@ -1495,6 +1713,13 @@ export type Database = {
             columns: ["pip_id"]
             isOneToOne: false
             referencedRelation: "performance_improvement_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pip_milestones_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
             referencedColumns: ["id"]
           },
           {
@@ -1588,6 +1813,13 @@ export type Database = {
             foreignKeyName: "profiles_reporting_manager_id_fkey"
             columns: ["reporting_manager_id"]
             isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_reporting_manager_id_fkey"
+            columns: ["reporting_manager_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1631,6 +1863,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "review_periods_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "review_periods_locked_by_fkey"
             columns: ["locked_by"]
@@ -1874,6 +2113,13 @@ export type Database = {
             foreignKeyName: "sub_period_submissions_submitted_by_fkey"
             columns: ["submitted_by"]
             isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sub_period_submissions_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -2050,7 +2296,21 @@ export type Database = {
             foreignKeyName: "training_needs_employee_id_fkey"
             columns: ["employee_id"]
             isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_needs_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_needs_identified_by_fkey"
+            columns: ["identified_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
             referencedColumns: ["id"]
           },
           {
@@ -2116,6 +2376,13 @@ export type Database = {
           workflow_template_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "workflow_config_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "workflow_config_created_by_fkey"
             columns: ["created_by"]
@@ -2206,7 +2473,26 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      eligible_login_users: {
+        Row: {
+          department_id: string | null
+          designation: string | null
+          eligibility_type: string | null
+          email: string | null
+          employee_code: string | null
+          full_name: string | null
+          id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_department_fk"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       aggregate_sub_period_scores: {

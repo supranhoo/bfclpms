@@ -2706,4 +2706,38 @@ The `exportKpiData()` function in `ImportData.tsx` now exports **all columns** t
 
 ---
 
+### 4.21 Password Policy & Credential Rollout
+
+**Purpose:** Allows admins to generate secure passwords in bulk for eligible users and optionally email credentials.
+
+**Eligibility Criteria (computed via `eligible_login_users` SQL view):**
+- **has_kras** — Users with at least one KPI in the `kpis` table
+- **reporting_manager** — Users who are `reporting_manager_id` of employees with KPIs
+- **both** — Users matching both criteria
+
+**Database:**
+| Table/View | Purpose |
+|---|---|
+| `eligible_login_users` (view) | Auto-computes eligible users from `profiles` + `kpis` |
+| `password_rollout_logs` | Audit trail for every password generation event |
+
+**Edge Function:** `password-rollout`
+- Admin-only (role verified server-side)
+- Generates 14-char cryptographically secure passwords (upper, lower, digits, symbols)
+- Updates auth via `supabaseAdmin.auth.admin.updateUserById`
+- Optionally sends credentials via `send-email-notification` (`password_rollout` event type)
+- Logs each result to `password_rollout_logs`
+- **No plaintext password storage**
+
+**Frontend:**
+| File | Purpose |
+|---|---|
+| `src/components/admin/PasswordPolicyTab.tsx` | Main tab UI: filter bar, user selection table, action bar, confirmation dialog, rollout history |
+| `src/hooks/usePasswordRollout.ts` | `useEligibleUsers`, `usePasswordRolloutLogs`, `usePasswordRolloutMutation` hooks |
+| `src/pages/admin/SystemSettings.tsx` | 9th tab ("Passwords") added with KeyRound icon |
+
+**Email Template:** `password_rollout` event type with placeholders: `{{recipient_name}}`, `{{login_email}}`, `{{generated_password}}`, `{{app_name}}`
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
