@@ -1,28 +1,18 @@
 
-# Fix: Alternate Y-Axis Category Labels Missing on All Charts
 
-## Root Cause
+# Hide PMS Policy from Non-Admin Users
 
-Recharts' `YAxis` component has an auto-calculated `interval` property that skips tick labels when it determines there isn't enough vertical space. This causes every other category name to disappear -- the bars render correctly, but their labels are hidden.
+## Changes
 
-## Fix
+### 1. Sidebar (`src/components/layout/AppSidebar.tsx`, line 53)
 
-Add `interval={0}` to force Recharts to render every single Y-axis tick label, regardless of available space. This is safe because the dynamic height already ensures enough room (36px per category).
+Change the `roles` array for the "PMS Policy" menu item from `['employee', 'manager', 'admin', 'auditor', 'management']` to `['admin']` only.
 
-Two locations need the fix:
+### 2. Route Protection (`src/App.tsx`, line 95)
 
-### 1. CategoryScoreChart.tsx (line 78) -- used by Dashboard, SelfReview, EmployeeScorecard, AuditScorecard, ManagementScorecard
+Wrap the `/pms-policy` route with `<ProtectedRoute allowedRoles={['admin']}>` so non-admin users who navigate directly to the URL are redirected to `/dashboard`.
 
-Add `interval={0}` to the `YAxis` component.
+### 3. Documentation (`DOCUMENTATION.md`)
 
-### 2. PerformanceReport.tsx (line ~158) -- has its own inline BarChart
+Add a note that the PMS Policy page is currently restricted to admin users only.
 
-Add `interval={0}` to the `YAxis` component in the "Performance by Category" chart.
-
-### 3. DOCUMENTATION.md
-
-Add a note that all category bar charts use `interval={0}` on the Y-axis to prevent Recharts from auto-hiding labels.
-
-## Result
-
-All category labels will always be visible at every dashboard level (Self, Team, Audit, Management, Reports).
