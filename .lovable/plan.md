@@ -1,46 +1,56 @@
 
 
-# Fix: Employee Self-Review Submission Not Working
+# Fix: Manager Cannot See Dummy's Submitted Review
 
-## Problem
+## Root Cause
 
-The user "Dummy" (employee role) cannot submit self-reviews for January KPIs. The root cause is a broken workflow:
+The system defaults the period selector to **February 2026** (current month), but Dummy's submitted KPI is for **January 2026**. When the manager clicks on Dummy, the `UnifiedScorecard` filters KPIs by the selected period -- showing 0 results for February.
 
-1. The `/my-kpis` route (which has the full submission form in `MyKpis.tsx`) **redirects to `/dashboard`**
-2. The Dashboard page opens a `KpiReviewPanel` when clicking "Review" -- but this component is **read-only** (it only displays KPI details and review journey, with no input fields for achieved value, score, or remarks)
-3. Result: employees see their KPIs and can click "Review", but hit a dead end with no way to submit
-
-The KPIs for "Dummy" exist in the database for January 2026 (5 KPIs, all in `kra_set` status), but there are zero `review_submissions` records because there is no way to create them.
+The architecture (RLS policies, hooks, components) is all correct. This is purely a **period mismatch** problem.
 
 ## Solution
 
-Restore the My KPIs page as the primary self-review submission interface for employees, keeping the Dashboard as a read-only overview.
+Auto-detect the most relevant period when a manager selects an employee, and add a visual hint when no KPIs exist for the current period but do exist for other periods.
 
 ### Changes
 
-**1. Restore `/my-kpis` route in `src/App.tsx`**
-- Remove the redirect `<Navigate to="/dashboard" replace />`
-- Add `MyKpis` as a lazy-loaded page component
-- Route `/my-kpis` to render the `MyKpis` component (available to all authenticated users)
+**1. `src/components/review/EmployeeSelectorGrid.tsx` -- Smart period detection on employee click**
 
-**2. Add "My KPIs" to the sidebar in `src/components/layout/AppSidebar.tsx`**
-- Add a "My KPIs" menu item with the `Target` icon at path `/my-kpis`
-- Available to roles: `employee`, `manager`, `admin`, `auditor`, `management` (everyone can submit their own reviews)
-- Position it right after "Dashboard" in the main section
+When a user clicks an employee card, check if that employee has KPIs in the currently selected period. If not, find the most recent period with pending/reviewable KPIs and auto-switch to it.
 
-**3. Update Dashboard "Review" button behavior in `src/pages/Dashboard.tsx`**
-- For KPIs in `kra_set` status, change the "Review" button to navigate to `/my-kpis` (with the correct period pre-selected) instead of opening the read-only panel
-- Keep the "View" (Eye) button for non-kra_set KPIs to open the read-only panel as it does now
+- In `onSelectEmployee` handler, look up the employee's KPIs from `periodKpis`
+- If the employee has no KPIs in the current period, query for their most recent period with reviewable KPIs
+- Auto-update `periodSelection` to match before navigating to the scorecard
+
+**2. `src/components/review/UnifiedScorecard.tsx` -- "No KPIs" hint with period suggestion**
+
+When the scorecard shows 0 KPIs for the selected period, display a helpful message:
+- "No KPIs found for February 2026"
+- If KPIs exist in other periods, show: "This employee has KPIs in January 2026" with a "Switch to January" button
+
+This requires a lightweight query to check which periods have KPIs for the employee.
+
+**3. `src/hooks/useKpis.ts` -- Add `useEmployeeKpiPeriods` hook**
+
+A new hook that fetches distinct `(review_period, review_year, status)` combinations for a given employee. This is used by the scorecard to suggest alternate periods.
+
+```sql
+SELECT DISTINCT review_period, review_year, status
+FROM kpis
+WHERE employee_id = $1
+ORDER BY review_year DESC, review_period DESC
+```
 
 **4. Update `DOCUMENTATION.md`**
-- Document the restored My KPIs route and its role in the self-review workflow
 
-## Verification
+Document the smart period detection behavior.
 
-After the fix, the employee "Dummy" will:
-1. See "My KPIs" in the sidebar
-2. Navigate to the My KPIs page
-3. See their 5 January 2026 KPIs in `kra_set` status
-4. Click "Review & Submit" to open the submission form with achieved value input, score calculation, remarks, and evidence upload
-5. Submit successfully, transitioning the KPI to `self_review` status
+## File Summary
+
+| File | Action |
+|---|---|
+| `src/hooks/useKpis.ts` | Add `useEmployeeKpiPeriods` hook |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Auto-switch period on employee click |
+| `src/components/review/UnifiedScorecard.tsx` | Add "no KPIs" hint with period suggestion |
+| `DOCUMENTATION.md` | Update docs |
 
