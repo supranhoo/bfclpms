@@ -43,22 +43,21 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
     const periodMap = new Map<string, {
       month: string;
       target: number;
-      achieved: number;
-      rating: number;
+      achieved: number | null;
+      rating: number | null;
       status: string;
       year: number;
     }>();
 
     relatedKpis.forEach(k => {
       const periodKey = `${k.review_period}-${k.review_year}`;
-      // Only keep the first occurrence (or could keep latest by checking timestamps)
       if (!periodMap.has(periodKey)) {
         const sub = submissionMap.get(k.id);
         periodMap.set(periodKey, {
           month: k.review_period || 'N/A',
           target: k.target_value || 0,
-          achieved: sub?.achieved_value || 0,
-          rating: sub?.final_score ?? sub?.management_score ?? sub?.auditor_score ?? sub?.manager_score ?? sub?.self_score ?? 0,
+          achieved: sub ? (sub.achieved_value ?? null) : null,
+          rating: sub ? (sub.final_score ?? sub.management_score ?? sub.auditor_score ?? sub.manager_score ?? sub.self_score ?? null) : null,
           status: k.status || 'open',
           year: k.review_year || new Date().getFullYear(),
         });
@@ -158,9 +157,9 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
                       <TableRow key={idx}>
                         <TableCell className="text-center font-medium">{entry.month}</TableCell>
                         <TableCell className="text-center">{entry.target}</TableCell>
-                        <TableCell className="text-center font-semibold">{entry.achieved || '-'}</TableCell>
+                        <TableCell className="text-center font-semibold">{entry.achieved != null ? entry.achieved : '-'}</TableCell>
                         <TableCell className="text-center">
-                          {entry.rating > 0 ? (
+                          {entry.rating != null ? (
                             <Badge className={getRatingColor(entry.rating)}>
                               {entry.rating.toFixed(1)}
                             </Badge>
