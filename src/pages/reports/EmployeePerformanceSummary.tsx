@@ -51,6 +51,7 @@ interface EmployeePerformance {
   status: string;
   totalScore: number;
   outOfScore: number;
+  totalWeight: number;
   kpiCount: number;
 }
 
@@ -108,7 +109,8 @@ export default function EmployeePerformanceSummary() {
               self_score,
               manager_score,
               auditor_score,
-              management_score
+              management_score,
+              is_na
             )
           `)
           .eq('review_year', year)
@@ -153,6 +155,10 @@ export default function EmployeePerformanceSummary() {
         const profile = profileMap.get(kpi.employee_id);
         if (!profile) return;
 
+        const submission = kpi.review_submissions;
+        // Skip N/A KPIs entirely
+        if (submission?.is_na) return;
+
         const manager = profile.reporting_manager_id 
           ? profileMap.get(profile.reporting_manager_id) 
           : null;
@@ -160,17 +166,19 @@ export default function EmployeePerformanceSummary() {
         const key = `${kpi.employee_id}-${kpi.review_period}`;
         const existing = employeePeriodMap.get(key);
 
-        const submission = kpi.review_submissions;
-        const finalScore = submission?.final_score || 
-                          submission?.management_score || 
-                          submission?.auditor_score || 
-                          submission?.manager_score || 
-                          submission?.self_score || 0;
-        const weightage = kpi.weightage || 100;
+        const score = submission?.final_score ?? 
+                      submission?.management_score ?? 
+                      submission?.auditor_score ?? 
+                      submission?.manager_score ?? 
+                      submission?.self_score ?? 0;
+        const weight = kpi.weightage || 0;
+        const weightedScore = score * weight;
+        const maxScore = weight * 5;
 
         if (existing) {
-          existing.totalScore += finalScore;
-          existing.outOfScore += weightage;
+          existing.totalScore += weightedScore;
+          existing.outOfScore += maxScore;
+          existing.totalWeight += weight;
           existing.kpiCount += 1;
           if (getStatusPriority(kpi.status || 'kra_set') > getStatusPriority(existing.status)) {
             existing.status = kpi.status || 'kra_set';
@@ -186,8 +194,9 @@ export default function EmployeePerformanceSummary() {
             reviewPeriod: kpi.review_period || '-',
             reviewYear: kpi.review_year || year,
             status: kpi.status || 'kra_set',
-            totalScore: finalScore,
-            outOfScore: weightage,
+            totalScore: weightedScore,
+            outOfScore: maxScore,
+            totalWeight: weight,
             kpiCount: 1,
           });
         }
@@ -224,7 +233,8 @@ export default function EmployeePerformanceSummary() {
               self_score,
               manager_score,
               auditor_score,
-              management_score
+              management_score,
+              is_na
             )
           `)
           .eq('review_year', year)
@@ -241,10 +251,14 @@ export default function EmployeePerformanceSummary() {
         }
       }
 
-      // Group by employee and period
-      const employeeTrends = new Map<string, Map<string, { totalScore: number; outOfScore: number }>>();
+      // Group by employee and period (weighted scoring matching Dashboard)
+      const employeeTrends = new Map<string, Map<string, { totalScore: number; outOfScore: number; totalWeight: number }>>();
 
       allKpis.forEach(kpi => {
+        const submission = kpi.review_submissions;
+        // Skip N/A KPIs
+        if (submission?.is_na) return;
+
         if (!employeeTrends.has(kpi.employee_id)) {
           employeeTrends.set(kpi.employee_id, new Map());
         }
@@ -252,19 +266,21 @@ export default function EmployeePerformanceSummary() {
         const periodMap = employeeTrends.get(kpi.employee_id)!;
         const existing = periodMap.get(kpi.review_period);
 
-        const submission = kpi.review_submissions;
-        const finalScore = submission?.final_score || 
-                          submission?.management_score || 
-                          submission?.auditor_score || 
-                          submission?.manager_score || 
-                          submission?.self_score || 0;
-        const weightage = kpi.weightage || 100;
+        const score = submission?.final_score ?? 
+                      submission?.management_score ?? 
+                      submission?.auditor_score ?? 
+                      submission?.manager_score ?? 
+                      submission?.self_score ?? 0;
+        const weight = kpi.weightage || 0;
+        const weightedScore = score * weight;
+        const maxScore = weight * 5;
 
         if (existing) {
-          existing.totalScore += finalScore;
-          existing.outOfScore += weightage;
+          existing.totalScore += weightedScore;
+          existing.outOfScore += maxScore;
+          existing.totalWeight += weight;
         } else {
-          periodMap.set(kpi.review_period, { totalScore: finalScore, outOfScore: weightage });
+          periodMap.set(kpi.review_period, { totalScore: weightedScore, outOfScore: maxScore, totalWeight: weight });
         }
       });
 
@@ -388,10 +404,11 @@ export default function EmployeePerformanceSummary() {
     }
   };
 
-  function calculateRating(totalScore: number, outOfScore: number): number {
-    if (outOfScore === 0) return 0;
-    const percentage = (totalScore / outOfScore) * 100;
-    return Math.round((percentage / 20) * 100) / 100;
+  function calculateRating(totalScore: number, _outOfScore: number, totalWeight?: number): number {
+    const weight = totalWeight ?? _outOfScore;
+    if (weight === 0) return 0;
+    // Dashboard formula: totalScore / totalWeight (weighted average rating out of 5)
+    return Math.round((totalScore / weight) * 100) / 100;
   }
 
   function formatPeriod(period: string, year: number): string {
@@ -411,7 +428,7 @@ export default function EmployeePerformanceSummary() {
       const percentage = row.outOfScore > 0 
         ? ((row.totalScore / row.outOfScore) * 100).toFixed(2) + '%'
         : '0.00%';
-      const rating = calculateRating(row.totalScore, row.outOfScore);
+      const rating = calculateRating(row.totalScore, row.outOfScore, row.totalWeight);
 
       return {
         'Month': formatPeriod(row.reviewPeriod, row.reviewYear),
@@ -599,7 +616,7 @@ export default function EmployeePerformanceSummary() {
                             const percentage = row.outOfScore > 0 
                               ? ((row.totalScore / row.outOfScore) * 100)
                               : 0;
-                            const rating = calculateRating(row.totalScore, row.outOfScore);
+                            const rating = calculateRating(row.totalScore, row.outOfScore, row.totalWeight);
 
                             return (
                               <TableRow key={`${row.employeeId}-${row.reviewPeriod}-${index}`}>
