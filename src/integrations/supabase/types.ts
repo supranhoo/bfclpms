@@ -918,6 +918,7 @@ export type Database = {
       kra_rollover_logs: {
         Row: {
           created_at: string | null
+          details: Json | null
           employees_affected: number
           error_message: string | null
           id: string
@@ -931,6 +932,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          details?: Json | null
           employees_affected?: number
           error_message?: string | null
           id?: string
@@ -944,6 +946,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          details?: Json | null
           employees_affected?: number
           error_message?: string | null
           id?: string

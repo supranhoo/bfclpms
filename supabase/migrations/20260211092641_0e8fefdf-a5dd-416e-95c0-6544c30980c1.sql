@@ -1,0 +1,1 @@
+ALTER TABLE public.kra_rollover_logs ADD COLUMN IF NOT EXISTS details JSONB DEFAULT NULL;
