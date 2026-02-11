@@ -1,46 +1,33 @@
 
-
-# Fix: Incorrect Weighted Score in UnifiedScorecard (Management View)
+# Fix: `getRelevantScore` in UnifiedScorecard Ignores `final_score`
 
 ## Root Cause
 
-Two bugs in `src/components/review/UnifiedScorecard.tsx` cause incorrect scoring:
+The `getRelevantScore` function in `UnifiedScorecard.tsx` cascades through level-specific scores (`management_score`, `auditor_score`, `manager_score`, `self_score`) but **never considers `final_score`**. 
 
-### Bug 1: "Weighted Score X / Y" display ignores N/A exclusion (Lines 734-735)
+For employee 100012 (October 2025), **REF-884** has:
+- `self_score: 10.00` (incorrect/legacy data)
+- `final_score: 4.00` (correct imported score)
+- All other level scores: null
 
-The display formula sums ALL KPIs' weightages including N/A ones:
+The function picks `self_score = 10` (which exceeds the 0-5 scale), inflating the weighted score by 60 points (10x10 vs 4x10).
 
-```text
-// CURRENT (buggy) - sums all kpis including N/A
-scoreData.rating * kpis.reduce((sum, k) => sum + (k.weightage || 0), 0)
-// = 4.18 * 100 = 418.2 / 500
-```
+This is why the scorecard shows **397.5 / 363** with a rating of **5.48/5** -- impossible values.
 
-It should only sum non-N/A KPIs. The `scoreData` already computes the correct rating (4.18) by excluding N/A in the `useMemo`, but the display then multiplies by the wrong denominator.
-
-### Bug 2: `getRelevantScore` uses `||` which treats score 0 as falsy (Lines 259-267)
-
-```text
-// CURRENT (buggy) - || treats 0 as falsy
-return submission.auditor_score || submission.manager_score || submission.self_score || 0;
-```
-
-For REF-2062: `auditor_score = 0` is falsy, so it falls through to `self_score = 5`, inflating the score.
-
-The same `||` bug exists in `Dashboard.tsx` line 202 for the self-view:
-```text
-const score = submission?.final_score || submission?.self_score || 0;
-```
-
-## Fix Plan
+## Fix
 
 ### File: `src/components/review/UnifiedScorecard.tsx`
 
-**A. Fix `getRelevantScore` (lines 259-267)** -- Replace `||` with nullish coalescing (`??`) and explicit zero checks:
+Update `getRelevantScore` to use `final_score` as the **primary** source, falling back to level-specific scores only when `final_score` is null (i.e., during an in-progress review):
 
 ```text
 const getRelevantScore = (submission: any) => {
   if (!submission) return 0;
+  // Prefer final_score (set by import or workflow completion)
+  if (submission.final_score !== null && submission.final_score !== undefined) {
+    return submission.final_score;
+  }
+  // Fallback to level-specific scores for in-progress reviews
   if (viewLevel === 'manager') {
     return submission.manager_score ?? submission.self_score ?? 0;
   } else if (viewLevel === 'auditor') {
@@ -51,44 +38,16 @@ const getRelevantScore = (submission: any) => {
 };
 ```
 
-**B. Fix weighted score display (lines 731-737)** -- Return `totalWeightedScore` and `totalWeight` from `scoreData` and use them in the display instead of re-summing all KPIs:
-
-Update the `scoreData` useMemo return to include `totalWeightedScore` and `totalWeight`:
-```text
-return { overallScore, rating: overallRating, categoryScores, totalWeightedScore, totalWeight };
-```
-
-Update the display to use these values:
-```text
-{scoreData.totalWeightedScore.toFixed(1)}
-<span> / {(scoreData.totalWeight * 5).toFixed(0)}</span>
-```
-
-### File: `src/pages/Dashboard.tsx`
-
-**C. Fix `||` bug on line 202** -- Same nullish coalescing fix:
-
-```text
-const score = submission?.final_score ?? submission?.self_score ?? 0;
-```
+This aligns with `Dashboard.tsx` (line 202) which already uses `final_score ?? self_score`.
 
 ### File: `DOCUMENTATION.md`
 
-**D.** Note the `??` fix for zero-score handling across scoring components.
+Document that `final_score` is the authoritative score source, with level-specific scores used only for in-progress reviews.
 
-## Impact
+## Expected Result for Employee 100012
 
-| Metric | Before (buggy) | After (correct) |
-|--------|----------------|-----------------|
-| Weighted Score | 418.2 / 500 | ~345 / 412.5 |
-| Percentage | 83.6% | ~83.6% (coincidence) |
-| Rating | 4.18 / 5 | ~4.18 / 5 |
-
-Note: The percentage and rating happen to look similar because the N/A KPIs have small weights, but the numerator and denominator are both wrong in the current version. The actual rating will change slightly once the `||` zero-score bug is also fixed (REF-2062 will correctly score 0 instead of 5).
-
-With both fixes:
-- Total weighted score: 320.0 (not 345)
-- Total weight: 82.5 (not 100)
-- Out of: 412.5 (not 500)
-- Rating: 320 / 82.5 = 3.88
-- Percentage: 77.6%
+With the fix, REF-884 will use `final_score = 4.00` instead of `self_score = 10.00`:
+- Weighted score drops by 60 points (from ~397.5 to ~337.5)
+- Denominator stays at 363 (72.5 active weight x 5)
+- Rating: ~4.66/5 instead of 5.48/5
+- Percentage: ~93% instead of 109.7%
