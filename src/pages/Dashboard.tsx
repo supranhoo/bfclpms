@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, KPI } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
@@ -71,6 +71,7 @@ const ratingColors: Record<string, string> = {
 export default function Dashboard() {
   const { profile, role } = useAuth();
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { data: kpis, isLoading: kpisLoading } = useMyKpis();
   const { data: categories, isLoading: categoriesLoading } = useKraCategories();
@@ -586,7 +587,13 @@ export default function Dashboard() {
                               <Button
                                 size="sm"
                                 variant={isKraSet ? "default" : "ghost"}
-                                onClick={() => setSelectedKpiReview(kpi)}
+                                onClick={() => {
+                                  if (isKraSet) {
+                                    navigate(`/my-kpis?month=${kpi.review_period}&year=${kpi.review_year}`);
+                                  } else {
+                                    setSelectedKpiReview(kpi);
+                                  }
+                                }}
                                 className={isKraSet ? "gap-1" : ""}
                               >
                                 {isKraSet ? (
@@ -600,7 +607,7 @@ export default function Dashboard() {
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                              {isKraSet ? 'Submit Review' : 'View Details'}
+                              {isKraSet ? 'Go to My KPIs to submit' : 'View Details'}
                             </TooltipContent>
                           </Tooltip>
                           <Button
