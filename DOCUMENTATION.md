@@ -2695,4 +2695,10 @@ The `exportKpiData()` function in `ImportData.tsx` now exports **all columns** t
 
 ---
 
+### Access Restrictions
+
+- **PMS Policy page** (`/pms-policy`): Currently restricted to **admin** users only. Non-admin users will not see the sidebar link and will be redirected to `/dashboard` if they navigate to the URL directly.
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
