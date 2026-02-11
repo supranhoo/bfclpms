@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { KPI } from '@/hooks/useKpis';
-import { normalizeKpiText } from '@/lib/textFormatting';
+import { renderBoldKpiText } from '@/components/ui/FormattedText';
 
 interface ReviewDetailsCardProps {
   kpi: KPI;
@@ -16,7 +16,7 @@ export function ReviewDetailsCard({ kpi }: ReviewDetailsCardProps) {
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-wide">KRA</p>
-            <p className="font-semibold text-primary whitespace-pre-wrap">{normalizeKpiText(kpi.kra_name)}</p>
+            <p className="font-semibold text-primary whitespace-pre-wrap">{renderBoldKpiText(kpi.kra_name)}</p>
           </div>
           <Badge 
             variant="outline" 
@@ -33,7 +33,7 @@ export function ReviewDetailsCard({ kpi }: ReviewDetailsCardProps) {
         
         <div>
           <p className="text-xs text-muted-foreground uppercase tracking-wide">KPI</p>
-          <p className="text-sm whitespace-pre-wrap">{normalizeKpiText(kpi.kpi_name)}</p>
+          <p className="text-sm whitespace-pre-wrap">{renderBoldKpiText(kpi.kpi_name)}</p>
         </div>
 
         {/* Target, Criteria, Weightage */}

@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { KPI } from '@/hooks/useKpis';
 import { Target, Scale, Percent, TrendingUp } from 'lucide-react';
-import { normalizeKpiText } from '@/lib/textFormatting';
+import { renderBoldKpiText } from '@/components/ui/FormattedText';
 
 interface ReviewDetailsCardCompactProps {
   kpi: KPI;
@@ -27,9 +27,9 @@ export function ReviewDetailsCardCompact({ kpi }: ReviewDetailsCardCompactProps)
               {kpi.kra_categories?.name}
             </Badge>
             <span className="text-xs text-muted-foreground">•</span>
-            <span className="text-sm font-medium whitespace-pre-wrap">{normalizeKpiText(kpi.kra_name)}</span>
+            <span className="text-sm font-medium whitespace-pre-wrap">{renderBoldKpiText(kpi.kra_name)}</span>
           </div>
-          <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{normalizeKpiText(kpi.kpi_name)}</p>
+          <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{renderBoldKpiText(kpi.kpi_name)}</p>
         </div>
       </div>
 

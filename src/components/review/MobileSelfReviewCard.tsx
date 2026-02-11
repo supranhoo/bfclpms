@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { KPI, ReviewSubmission, KpiStatus } from '@/hooks/useKpis';
-import { normalizeKpiText } from '@/lib/textFormatting';
+import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { cn } from '@/lib/utils';
 import { Send, Eye, Clock, Lock, Info } from 'lucide-react';
 
@@ -120,10 +120,10 @@ export function MobileSelfReviewCard({
         className="text-left w-full mb-3 group"
       >
         <p className="font-medium text-sm line-clamp-1 group-hover:text-primary transition-colors">
-          {normalizeKpiText(kpi.kra_name)}
+          {renderBoldKpiText(kpi.kra_name)}
         </p>
         <p className="text-xs text-muted-foreground line-clamp-2 flex items-center gap-1">
-          {normalizeKpiText(kpi.kpi_name)}
+          {renderBoldKpiText(kpi.kpi_name)}
           <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
         </p>
       </button>
