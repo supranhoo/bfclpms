@@ -1,41 +1,28 @@
 
-# Fix: Category Chart Clipping on All Dashboards
+# Fix: Alternate Y-Axis Category Labels Missing on All Charts
 
 ## Root Cause
 
-The "Performance by Category" horizontal bar chart uses 36px per category row. When an employee has 5+ categories, the chart needs more vertical space than the fixed-height containers provide. The bottom categories are clipped by CSS overflow.
+Recharts' `YAxis` component has an auto-calculated `interval` property that skips tick labels when it determines there isn't enough vertical space. This causes every other category name to disappear -- the bars render correctly, but their labels are hidden.
 
-**Already fixed** on Dashboard and UnifiedScorecard (dynamic height).
-**Still broken** on 4 pages that use fixed heights (140-200px).
+## Fix
 
-## Changes
+Add `interval={0}` to force Recharts to render every single Y-axis tick label, regardless of available space. This is safe because the dynamic height already ensures enough room (36px per category).
 
-Apply the same dynamic height pattern used in Dashboard.tsx and UnifiedScorecard.tsx to all 4 remaining pages:
+Two locations need the fix:
 
-### 1. SelfReview.tsx (line 476)
+### 1. CategoryScoreChart.tsx (line 78) -- used by Dashboard, SelfReview, EmployeeScorecard, AuditScorecard, ManagementScorecard
 
-Replace `className="h-[200px]"` with `style={{ height: Math.max(180, categoryMetrics.length * 36) }}`.
+Add `interval={0}` to the `YAxis` component.
 
-### 2. EmployeeScorecard.tsx (line 514)
+### 2. PerformanceReport.tsx (line ~158) -- has its own inline BarChart
 
-Replace `className="h-[140px] sm:h-[180px]"` with `style={{ height: Math.max(180, scoreData.categoryScores.length * 36) }}`.
+Add `interval={0}` to the `YAxis` component in the "Performance by Category" chart.
 
-### 3. AuditScorecard.tsx (line 546)
+### 3. DOCUMENTATION.md
 
-Replace `className="h-[140px] sm:h-[180px]"` with `style={{ height: Math.max(180, scoreData.categoryScores.length * 36) }}`.
-
-### 4. ManagementScorecard.tsx (line 568)
-
-Replace `className="h-[140px] sm:h-[180px]"` with `style={{ height: Math.max(180, scoreData.categoryScores.length * 36) }}`.
-
-### 5. PerformanceReport.tsx (line ~123)
-
-The Performance Report page also has a fixed `h-[300px]` container for its "Performance by Category" bar chart. Apply the same dynamic height: `style={{ height: Math.max(180, categoryPerformance.length * 36) }}`.
-
-### 6. DOCUMENTATION.md
-
-Update the chart design notes to document that all "Performance by Category" containers use dynamic height sizing.
+Add a note that all category bar charts use `interval={0}` on the Y-axis to prevent Recharts from auto-hiding labels.
 
 ## Result
 
-Every dashboard level (Self, Team, Audit, Management, Unified, Reports) will dynamically grow to fit all categories -- no more hidden or clipped labels.
+All category labels will always be visible at every dashboard level (Self, Team, Audit, Management, Reports).
