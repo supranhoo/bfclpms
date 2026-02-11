@@ -163,6 +163,7 @@ export default function PerformanceReport() {
                     dataKey="name" 
                     type="category" 
                     width={160}
+                    interval={0}
                     tickFormatter={(value: string, index: number) => {
                       const cat = categoryPerformance[index];
                       return cat?.weightage ? `${value} (${cat.weightage}%)` : value;

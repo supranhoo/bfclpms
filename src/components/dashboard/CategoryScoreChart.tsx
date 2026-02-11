@@ -79,6 +79,7 @@ export function CategoryScoreChart({ data }: CategoryScoreChartProps) {
             type="category"
             dataKey="name"
             width={yAxisWidth}
+            interval={0}
             tick={(props: CustomTickProps) => <CustomYAxisTick {...props} />}
             tickLine={false}
             tickMargin={8}
