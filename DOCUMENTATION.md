@@ -245,7 +245,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | `system_settings` | App configuration | `setting_key`, `setting_value` (JSONB) |
 | `workflow_settings` | Admin-configurable operational controls | `category`, `setting_key`, `setting_value`, `label`, `description`, `min_value`, `max_value`, `unit` |
 | `kpi_audit_logs` | KPI change tracking | `kpi_id`, `action`, `performed_by`, `old_value`, `new_value` |
-| `kra_rollover_logs` | KRA rollover history | `source_period`, `target_period`, `kpis_copied` |
+| `kra_rollover_logs` | KRA rollover history | `source_period`, `target_period`, `kpis_copied`, `details` (JSONB per-employee breakdown) |
 | `org_kpi_values` | Organization-level KPI scores | `category_id`, `review_period`, `achieved_value` |
 | `import_progress` | Bulk import tracking | `id`, `status`, `total_rows`, `processed_rows` |
 | `employee_working_days` | Per-employee monthly working days configuration | `employee_id`, `month`, `year`, `working_days` |
@@ -1504,7 +1504,10 @@ Full JSON format for maximum control:
 
 #### 4.9.10 System Settings (`/admin/settings`)
 - Score calculation mode
-- KRA auto-rollover settings
+- KRA auto-rollover settings with enhanced multi-step rollover dialog:
+  - **Step 1 – Configuration**: Select source/target period, choose all or specific employees
+  - **Step 2 – Preview & Conflicts**: Dry-run shows employees ready to rollover vs those with existing KPIs; admin checks boxes to rollover balance (missing) KPIs only or skip
+  - **Step 3 – Results & Report**: Summary cards, detailed results table, downloadable Excel report with employee-level breakdown
 - Email notification templates
 - Organization name/branding
 
@@ -2371,7 +2374,7 @@ The system supports two email providers:
 | `update-smtp-password` | POST | Securely store SMTP password or Graph client secret |
 | `create-employee` | POST | Create new employee accounts |
 | `reset-password` | POST | Generate password reset links |
-| `auto-rollover-kpis` | POST | Copy KPIs to new period |
+| `auto-rollover-kpis` | POST | Enhanced KRA rollover with conflict detection, dry-run preview, selective employee rollover, balance-only mode, and per-employee detailed reporting. Supports `source_month/year`, `target_month/year`, `employee_ids`, `dry_run`, `rollover_balance_only`, `skip_employee_ids` parameters. |
 | `import-kpis` | POST | Background KPI import |
 | `generate-pip-letter` | POST | Generate PIP letter HTML |
 

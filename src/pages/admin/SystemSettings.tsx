@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database } from 'lucide-react';
-import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useTriggerRollover, useDailyAggregationMethod, DailyAggregationMethod } from '@/hooks/useSystemSettings';
+import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useDailyAggregationMethod, DailyAggregationMethod } from '@/hooks/useSystemSettings';
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { EmailNotificationSettings } from '@/components/admin/EmailNotificationSettings';
@@ -16,6 +16,7 @@ import { GlobalBrandingSettings } from '@/components/admin/GlobalBrandingSetting
 import { WorkflowSettingsTab } from '@/components/admin/WorkflowSettingsTab';
 import { BackupRestoreTab } from '@/components/admin/BackupRestoreTab';
 import { FrequencyCycleSettings } from '@/components/admin/FrequencyCycleSettings';
+import { RolloverDialog } from '@/components/admin/RolloverDialog';
 
 const scoreCalculationOptions: { 
   value: ScoreCalculationMode; 
@@ -69,12 +70,12 @@ export default function SystemSettings() {
   const { method: dailyMethod, isLoading: dailyMethodLoading } = useDailyAggregationMethod();
   const { data: rolloverLogs, isLoading: logsLoading } = useRolloverLogs();
   const updateSetting = useUpdateSystemSetting();
-  const triggerRollover = useTriggerRollover();
   
   const [selectedMode, setSelectedMode] = useState<ScoreCalculationMode>(mode);
   const [selectedDailyMethod, setSelectedDailyMethod] = useState<DailyAggregationMethod>(dailyMethod);
   const [hasChanges, setHasChanges] = useState(false);
   const [hasDailyChanges, setHasDailyChanges] = useState(false);
+  const [rolloverDialogOpen, setRolloverDialogOpen] = useState(false);
 
   useEffect(() => {
     if (mode) {
@@ -119,8 +120,8 @@ export default function SystemSettings() {
     });
   };
 
-  const handleManualRollover = (force: boolean = false) => {
-    triggerRollover.mutate(force);
+  const handleManualRollover = () => {
+    setRolloverDialogOpen(true);
   };
 
   const lastRollover = rolloverLogs?.[0];
@@ -256,25 +257,19 @@ export default function SystemSettings() {
               <div className="flex items-center gap-3 border-t pt-4">
                 <Button
                   variant="outline"
-                  onClick={() => handleManualRollover(false)}
-                  disabled={triggerRollover.isPending}
+                  onClick={handleManualRollover}
                 >
-                  <RefreshCw className={`h-4 w-4 mr-2 ${triggerRollover.isPending ? 'animate-spin' : ''}`} />
-                  {triggerRollover.isPending ? 'Rolling Over...' : 'Rollover Now'}
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => handleManualRollover(true)}
-                  disabled={triggerRollover.isPending}
-                >
-                  Force Rollover
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Rollover KPIs
                 </Button>
                 <span className="text-sm text-muted-foreground">
-                  Force will copy even if target period already has KPIs.
+                  Configure source/target period, preview conflicts, and rollover selectively.
                 </span>
               </div>
             </CardContent>
           </Card>
+
+          <RolloverDialog open={rolloverDialogOpen} onOpenChange={setRolloverDialogOpen} />
         </TabsContent>
 
         {/* Scoring Tab */}

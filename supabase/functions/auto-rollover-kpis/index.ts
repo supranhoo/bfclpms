@@ -10,21 +10,32 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-interface RolloverResult {
-  success: boolean;
-  skipped?: boolean;
-  reason?: string;
-  kpis_copied?: number;
-  employees_affected?: number;
-  source_period?: string;
+interface EmployeeResult {
+  employee_id: string;
+  employee_name: string;
+  employee_code: string;
+  department: string;
+  kpis_copied: number;
+  status: 'rolled_over' | 'balance_only' | 'skipped';
+  existing_kpi_count: number;
+  existing_kpi_names: string[];
+  source_kpi_count: number;
+}
+
+interface RolloverRequest {
+  triggered_by?: string;
+  force?: boolean;
+  source_month?: string;
   source_year?: number;
-  target_period?: string;
+  target_month?: string;
   target_year?: number;
-  error?: string;
+  employee_ids?: string[];
+  dry_run?: boolean;
+  rollover_balance_only?: boolean;
+  skip_employee_ids?: string[];
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -32,233 +43,316 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Parse request body for manual trigger info
-    let triggeredBy = 'system';
-    let forceRollover = false;
+    let params: RolloverRequest = {};
     try {
-      const body = await req.json();
-      triggeredBy = body.triggered_by || 'system';
-      forceRollover = body.force === true;
+      params = await req.json();
     } catch {
-      // No body or invalid JSON, use defaults
+      // defaults
     }
 
-    console.log(`Auto-rollover triggered by: ${triggeredBy}, force: ${forceRollover}`);
+    const {
+      triggered_by = 'system',
+      force = false,
+      dry_run = false,
+      rollover_balance_only = false,
+      employee_ids,
+      skip_employee_ids = [],
+    } = params;
 
-    // Check if auto-rollover is enabled (skip check if manual trigger with force)
-    if (!forceRollover) {
-      const { data: setting, error: settingError } = await supabase
+    // Calculate source/target periods
+    const currentDate = new Date();
+    const defaultTargetIdx = currentDate.getMonth();
+    const defaultSourceIdx = (defaultTargetIdx + 11) % 12;
+
+    const sourceMonth = params.source_month || MONTHS[defaultSourceIdx];
+    const sourceYear = params.source_year ?? (defaultSourceIdx === 11 ? currentDate.getFullYear() - 1 : currentDate.getFullYear());
+    const targetMonth = params.target_month || MONTHS[defaultTargetIdx];
+    const targetYear = params.target_year ?? currentDate.getFullYear();
+
+    console.log(`Rollover: ${sourceMonth} ${sourceYear} → ${targetMonth} ${targetYear}, dry_run=${dry_run}, balance_only=${rollover_balance_only}`);
+
+    // Check auto-rollover setting (skip if manual/force/dry_run)
+    if (!force && !dry_run && triggered_by === 'system') {
+      const { data: setting } = await supabase
         .from('system_settings')
         .select('setting_value')
         .eq('setting_key', 'auto_kra_rollover')
         .single();
 
-      if (settingError) {
-        console.error('Error fetching setting:', settingError);
-        throw new Error('Failed to fetch auto-rollover setting');
-      }
-
-      // Parse the setting value - it's stored as JSON string
-      let isEnabled = false;
       if (setting?.setting_value) {
-        const value = typeof setting.setting_value === 'string' 
+        const value = typeof setting.setting_value === 'string'
           ? setting.setting_value.replace(/^"|"$/g, '')
           : setting.setting_value;
-        isEnabled = value === 'enabled';
+        if (value !== 'enabled') {
+          return new Response(
+            JSON.stringify({ success: true, skipped: true, reason: 'Auto-rollover is disabled' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
-
-      if (!isEnabled) {
-        console.log('Auto-rollover is disabled, skipping');
-        return new Response(
-          JSON.stringify({ success: true, skipped: true, reason: 'Auto-rollover is disabled' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-    }
-
-    // Calculate source and target periods
-    const currentDate = new Date();
-    const targetMonthIndex = currentDate.getMonth();
-    const targetMonth = MONTHS[targetMonthIndex];
-    const targetYear = currentDate.getFullYear();
-
-    // Previous month calculation
-    const sourceMonthIndex = (targetMonthIndex + 11) % 12;
-    const sourceMonth = MONTHS[sourceMonthIndex];
-    const sourceYear = sourceMonthIndex === 11 ? targetYear - 1 : targetYear;
-
-    console.log(`Source: ${sourceMonth} ${sourceYear}, Target: ${targetMonth} ${targetYear}`);
-
-    // Check if target period already has KPIs (prevent duplicate rollover)
-    const { count: existingCount, error: countError } = await supabase
-      .from('kpis')
-      .select('*', { count: 'exact', head: true })
-      .eq('review_period', targetMonth)
-      .eq('review_year', targetYear);
-
-    if (countError) {
-      console.error('Error checking existing KPIs:', countError);
-      throw new Error('Failed to check existing KPIs');
-    }
-
-    if (existingCount && existingCount > 0 && !forceRollover) {
-      console.log(`Target period already has ${existingCount} KPIs, skipping`);
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          skipped: true, 
-          reason: `Target period ${targetMonth} ${targetYear} already has ${existingCount} KPIs` 
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Create review period record if it doesn't exist
-    const { error: periodError } = await supabase
-      .from('review_periods')
-      .upsert({
-        period_name: targetMonth,
-        review_year: targetYear,
-        is_locked: false,
-      }, {
-        onConflict: 'period_name,review_year',
-        ignoreDuplicates: true
-      });
-
-    if (periodError) {
-      console.log('Note: Could not create review period (may already exist):', periodError.message);
     }
 
     // Fetch source KPIs
-    const { data: sourceKpis, error: fetchError } = await supabase
+    let sourceQuery = supabase
       .from('kpis')
-      .select('*')
+      .select('*, profiles!kpis_employee_id_fkey(full_name, employee_code, department_id, departments:department_id(name))')
       .eq('review_period', sourceMonth)
       .eq('review_year', sourceYear);
 
-    if (fetchError) {
-      console.error('Error fetching source KPIs:', fetchError);
-      throw new Error('Failed to fetch source KPIs');
+    if (employee_ids && employee_ids.length > 0) {
+      sourceQuery = sourceQuery.in('employee_id', employee_ids);
     }
 
-    if (!sourceKpis || sourceKpis.length === 0) {
-      console.log('No KPIs found in source period');
-      
-      // Log the empty rollover
-      await supabase.from('kra_rollover_logs').insert({
-        source_period: sourceMonth,
-        source_year: sourceYear,
-        target_period: targetMonth,
-        target_year: targetYear,
-        kpis_copied: 0,
-        employees_affected: 0,
-        triggered_by: triggeredBy,
-        status: 'completed',
-      });
+    const { data: sourceKpis, error: fetchError } = await sourceQuery;
+    if (fetchError) throw new Error(`Failed to fetch source KPIs: ${fetchError.message}`);
 
+    if (!sourceKpis || sourceKpis.length === 0) {
+      if (!dry_run) {
+        await supabase.from('kra_rollover_logs').insert({
+          source_period: sourceMonth, source_year: sourceYear,
+          target_period: targetMonth, target_year: targetYear,
+          kpis_copied: 0, employees_affected: 0,
+          triggered_by, status: 'completed',
+        });
+      }
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          skipped: true, 
-          reason: `No KPIs found in source period ${sourceMonth} ${sourceYear}` 
+        JSON.stringify({ success: true, skipped: true, reason: `No KPIs found in ${sourceMonth} ${sourceYear}`, rolled_over: [], skipped_employees: [], conflicts: [], total_kpis_copied: 0, total_employees_affected: 0 }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Group source KPIs by employee
+    const employeeKpis: Record<string, typeof sourceKpis> = {};
+    for (const kpi of sourceKpis) {
+      if (!employeeKpis[kpi.employee_id]) employeeKpis[kpi.employee_id] = [];
+      employeeKpis[kpi.employee_id].push(kpi);
+    }
+
+    // Fetch existing target KPIs for all relevant employees
+    const empIds = Object.keys(employeeKpis);
+    const { data: targetKpis } = await supabase
+      .from('kpis')
+      .select('employee_id, kra_name, kpi_name')
+      .eq('review_period', targetMonth)
+      .eq('review_year', targetYear)
+      .in('employee_id', empIds);
+
+    const targetByEmployee: Record<string, Set<string>> = {};
+    if (targetKpis) {
+      for (const tk of targetKpis) {
+        if (!targetByEmployee[tk.employee_id]) targetByEmployee[tk.employee_id] = new Set();
+        targetByEmployee[tk.employee_id].add(`${tk.kra_name}|||${tk.kpi_name}`);
+      }
+    }
+
+    // Process each employee
+    const rolledOver: EmployeeResult[] = [];
+    const skippedEmployees: EmployeeResult[] = [];
+    const conflicts: EmployeeResult[] = [];
+    const kpisToInsert: any[] = [];
+
+    for (const [empId, kpis] of Object.entries(employeeKpis)) {
+      if (skip_employee_ids.includes(empId)) continue;
+
+      const profile = (kpis[0] as any).profiles;
+      const empName = profile?.full_name || 'Unknown';
+      const empCode = profile?.employee_code || '';
+      const deptName = profile?.departments?.name || '';
+
+      const existingKeys = targetByEmployee[empId] || new Set();
+      const existingCount = existingKeys.size;
+      const existingNames = Array.from(existingKeys).map(k => k.split('|||')[1]);
+
+      if (existingCount > 0) {
+        // Has existing KPIs in target
+        if (rollover_balance_only || dry_run) {
+          // Find missing KPIs
+          const missingKpis = kpis.filter(k => !existingKeys.has(`${k.kra_name}|||${k.kpi_name}`));
+          
+          if (dry_run) {
+            // In dry_run, report as conflict so admin can decide
+            conflicts.push({
+              employee_id: empId,
+              employee_name: empName,
+              employee_code: empCode,
+              department: deptName,
+              kpis_copied: missingKpis.length,
+              status: 'balance_only',
+              existing_kpi_count: existingCount,
+              existing_kpi_names: existingNames,
+              source_kpi_count: kpis.length,
+            });
+          } else {
+            // Actually insert the missing KPIs
+            for (const kpi of missingKpis) {
+              kpisToInsert.push(buildNewKpi(kpi, targetMonth, targetYear));
+            }
+            rolledOver.push({
+              employee_id: empId,
+              employee_name: empName,
+              employee_code: empCode,
+              department: deptName,
+              kpis_copied: missingKpis.length,
+              status: 'balance_only',
+              existing_kpi_count: existingCount,
+              existing_kpi_names: existingNames,
+              source_kpi_count: kpis.length,
+            });
+          }
+        } else {
+          // Skip entirely
+          skippedEmployees.push({
+            employee_id: empId,
+            employee_name: empName,
+            employee_code: empCode,
+            department: deptName,
+            kpis_copied: 0,
+            status: 'skipped',
+            existing_kpi_count: existingCount,
+            existing_kpi_names: existingNames,
+            source_kpi_count: kpis.length,
+          });
+        }
+      } else {
+        // No existing KPIs - copy all
+        if (!dry_run) {
+          for (const kpi of kpis) {
+            kpisToInsert.push(buildNewKpi(kpi, targetMonth, targetYear));
+          }
+        }
+        rolledOver.push({
+          employee_id: empId,
+          employee_name: empName,
+          employee_code: empCode,
+          department: deptName,
+          kpis_copied: kpis.length,
+          status: 'rolled_over',
+          existing_kpi_count: 0,
+          existing_kpi_names: [],
+          source_kpi_count: kpis.length,
+        });
+      }
+    }
+
+    if (dry_run) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          dry_run: true,
+          rolled_over: rolledOver,
+          skipped_employees: skippedEmployees,
+          conflicts,
+          total_kpis_copied: rolledOver.reduce((s, r) => s + r.kpis_copied, 0),
+          total_employees_affected: rolledOver.length,
+          source_period: sourceMonth,
+          source_year: sourceYear,
+          target_period: targetMonth,
+          target_year: targetYear,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Found ${sourceKpis.length} KPIs to copy`);
+    // Create review period if needed
+    await supabase.from('review_periods').upsert(
+      { period_name: targetMonth, review_year: targetYear, is_locked: false },
+      { onConflict: 'period_name,review_year', ignoreDuplicates: true }
+    );
 
-    // Prepare new KPIs - copy definition only, reset status and clear values
-    const newKpis = sourceKpis.map(kpi => ({
-      employee_id: kpi.employee_id,
-      category_id: kpi.category_id,
-      kra_name: kpi.kra_name,
-      kpi_name: kpi.kpi_name,
-      target_value: kpi.target_value,
-      uom: kpi.uom,
-      weightage: kpi.weightage,
-      frequency: kpi.frequency,
-      criteria: kpi.criteria,
-      source_of_data: kpi.source_of_data,
-      r5: kpi.r5,
-      r4: kpi.r4,
-      r3: kpi.r3,
-      r2: kpi.r2,
-      r1: kpi.r1,
-      r0: kpi.r0,
-      review_period: targetMonth,
-      review_year: targetYear,
-      status: 'kra_set',
-    }));
+    // Insert KPIs in batches of 500
+    let totalInserted = 0;
+    for (let i = 0; i < kpisToInsert.length; i += 500) {
+      const batch = kpisToInsert.slice(i, i + 500);
+      const { data: inserted, error: insertError } = await supabase
+        .from('kpis')
+        .insert(batch)
+        .select('id');
 
-    // Insert new KPIs
-    const { data: insertedKpis, error: insertError } = await supabase
-      .from('kpis')
-      .insert(newKpis)
-      .select('id, employee_id');
-
-    if (insertError) {
-      console.error('Error inserting KPIs:', insertError);
-      
-      // Log the failed rollover
-      await supabase.from('kra_rollover_logs').insert({
-        source_period: sourceMonth,
-        source_year: sourceYear,
-        target_period: targetMonth,
-        target_year: targetYear,
-        kpis_copied: 0,
-        employees_affected: 0,
-        triggered_by: triggeredBy,
-        status: 'failed',
-        error_message: insertError.message,
-      });
-
-      throw new Error(`Failed to insert KPIs: ${insertError.message}`);
+      if (insertError) {
+        await supabase.from('kra_rollover_logs').insert({
+          source_period: sourceMonth, source_year: sourceYear,
+          target_period: targetMonth, target_year: targetYear,
+          kpis_copied: totalInserted, employees_affected: 0,
+          triggered_by, status: 'failed',
+          error_message: insertError.message,
+        });
+        throw new Error(`Insert failed: ${insertError.message}`);
+      }
+      totalInserted += inserted?.length || 0;
     }
 
-    // Count unique employees affected
-    const uniqueEmployees = new Set(insertedKpis?.map(k => k.employee_id) || []);
-    const kpisCopied = insertedKpis?.length || 0;
-    const employeesAffected = uniqueEmployees.size;
+    const allResults = [...rolledOver, ...skippedEmployees];
 
-    console.log(`Successfully copied ${kpisCopied} KPIs for ${employeesAffected} employees`);
-
-    // Log the successful rollover
+    // Log successful rollover
     await supabase.from('kra_rollover_logs').insert({
       source_period: sourceMonth,
       source_year: sourceYear,
       target_period: targetMonth,
       target_year: targetYear,
-      kpis_copied: kpisCopied,
-      employees_affected: employeesAffected,
-      triggered_by: triggeredBy,
+      kpis_copied: totalInserted,
+      employees_affected: rolledOver.length,
+      triggered_by,
       status: 'completed',
+      details: { rolled_over: rolledOver, skipped: skippedEmployees },
     });
 
-    const result: RolloverResult = {
-      success: true,
-      kpis_copied: kpisCopied,
-      employees_affected: employeesAffected,
-      source_period: sourceMonth,
-      source_year: sourceYear,
-      target_period: targetMonth,
-      target_year: targetYear,
-    };
-
     return new Response(
-      JSON.stringify(result),
+      JSON.stringify({
+        success: true,
+        rolled_over: rolledOver,
+        skipped_employees: skippedEmployees,
+        conflicts: [],
+        total_kpis_copied: totalInserted,
+        total_employees_affected: rolledOver.length,
+        source_period: sourceMonth,
+        source_year: sourceYear,
+        target_period: targetMonth,
+        target_year: targetYear,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Auto-rollover error:', error);
+    console.error('Rollover error:', error);
     return new Response(
       JSON.stringify({ success: false, error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
+
+function buildNewKpi(source: any, targetMonth: string, targetYear: number) {
+  return {
+    employee_id: source.employee_id,
+    category_id: source.category_id,
+    kra_name: source.kra_name,
+    kpi_name: source.kpi_name,
+    target_value: source.target_value,
+    uom: source.uom,
+    uom_type: source.uom_type,
+    weightage: source.weightage,
+    frequency: source.frequency,
+    sub_frequency: source.sub_frequency,
+    criteria: source.criteria,
+    source_of_data: source.source_of_data,
+    r5: source.r5,
+    r4: source.r4,
+    r3: source.r3,
+    r2: source.r2,
+    r1: source.r1,
+    r0: source.r0,
+    threshold_mode: source.threshold_mode,
+    qualitative_options: source.qualitative_options,
+    is_org_level: source.is_org_level,
+    org_level_scope: source.org_level_scope,
+    ref_code: source.ref_code,
+    day_count_type: source.day_count_type,
+    frequency_cycle_start: source.frequency_cycle_start,
+    require_resubmit_reason: source.require_resubmit_reason,
+    review_period: targetMonth,
+    review_year: targetYear,
+    status: 'kra_set',
+  };
+}
