@@ -2245,13 +2245,16 @@ interface KpiReviewPanelProps {
   kpi={selectedKpi}
   submission={submissionMap.get(selectedKpi.id)}
   allKpis={allKpis}
-  allSubmissions={submissions}
+  allSubmissions={allSubmissions}   // MUST be all-period submissions, not filtered to current period
   viewLevel="manager"
   selectedPeriod={selectedPeriod}
   selectedYear={selectedYear}
   onOpenFullHistory={() => setTrackerModalOpen(true)}
 />
 ```
+
+**Important — Data Scoping:**
+The `allSubmissions` prop and the `submissions` passed to `KpiTrackerModal` must contain submissions for **all periods** (not just the currently selected period). Scorecard components fetch KPIs for all periods via `useKpisByEmployee`, then filter to the current period for display. A separate `allKpiIds` array (derived from the unfiltered `allKpis`) is used to fetch all-period submissions via a second `useReviewSubmissions(allKpiIds)` call. The current-period `submissions` remain unchanged for scoring and workflow logic.
 
 #### `EmployeeScorecard`
 Comprehensive employee performance view with:
