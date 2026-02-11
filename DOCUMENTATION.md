@@ -1638,7 +1638,17 @@ Full JSON format for maximum control:
 | KRA Issuance | `/reports/kra-issuance` | KRA assignment tracking |
 | TNI Report | `/reports/tni` | Training needs analysis |
 | Issues Report | `/reports/issues` | System issues dashboard |
-| Employee Summary | `/reports/employee-summary` | Individual performance |
+| Employee Summary | `/reports/performance-summary` | Individual performance ranked by weighted score |
+
+#### 4.10.0 Employee Performance Summary Scoring
+
+The Employee Performance Summary report uses the **same weighted scoring logic as the Dashboard**:
+
+- **Weighted Score**: `totalScore += score × weight` (not raw score addition)
+- **Max Possible Score**: `outOfScore += weight × 5`
+- **Overall Rating**: `totalScore / totalWeight` (weighted average out of 5)
+- **N/A Exclusion**: KPIs marked as N/A are excluded from both numerator and denominator
+- **Zero Preservation**: Uses nullish coalescing (`??`) so scores of 0 are treated as valid data, not missing
 
 #### 4.10.1 Monthly Scorecard PDF Export
 
