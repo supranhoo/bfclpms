@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
       const { data: profileData, error: profileError } = await supabaseAdmin
         .from('profiles')
         .select('id')
-        .eq('email', email.toLowerCase())
+        .ilike('email', email.trim())
         .maybeSingle();
       
       if (profileError) {
