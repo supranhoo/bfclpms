@@ -16,7 +16,7 @@ interface FormattedTextProps {
 export function renderBoldKpiText(text: string | null | undefined): React.ReactNode[] {
   return splitKpiTextSegments(text).map((seg, i) =>
     seg.bold
-      ? React.createElement('strong', { key: i }, seg.text)
+      ? React.createElement('strong', { key: i, style: { whiteSpace: 'nowrap' } }, seg.text)
       : React.createElement(React.Fragment, { key: i }, seg.text)
   );
 }

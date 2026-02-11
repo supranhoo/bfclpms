@@ -17,10 +17,9 @@ export function normalizeKpiText(text: string | null | undefined): string {
   if (!text) return '';
   
   // Regex pattern: Match section markers NOT preceded by a newline
-  // Uses negative lookbehind (?<!\n) to ensure we don't double-insert
-  // Matches: " - Description:", "- Formula:", etc.
-  // Does NOT match: "\n- Description:" (already has newline)
-  const sectionMarkerPattern = /(?<!\n)(\s*)(-\s*(?:Description|Formula|Scoring Logic|Criteria|Measurement|Target|Notes?)s?:)/gi;
+  // Standard: "- Description:", "-Description:", "- Formula:" etc.
+  // Non-standard: "Formula -", "Scoring :-" (only when NOT inside parentheses)
+  const sectionMarkerPattern = /(?<!\n)(\s*)(-\s*(?:Description|Formula|Scoring Logic|Scoring|Criteria|Measurement|Target|Notes?)s?\s*:|(?<!\()(?:Description|Formula|Scoring Logic|Scoring|Criteria|Measurement|Target|Notes?)s?\s*(?::-|:\s*-|\s+-\s*))/gi;
   
   return text.replace(sectionMarkerPattern, '\n$2');
 }
@@ -32,9 +31,10 @@ export const preWrapClass = 'whitespace-pre-wrap';
 
 /**
  * Section marker pattern used for bold rendering.
- * Matches markers like "- Description:", "- Formula:", "- Scoring Logic:", "- Scoring:" etc.
+ * Matches standard markers like "- Description:", "- Formula:", "- Scoring Logic:", "- Scoring:"
+ * Also matches non-standard variants: "Formula -", "Scoring :-", "Formula :", "-Description:" etc.
  */
-export const BOLD_MARKER_PATTERN = /(-\s*(?:Description|Formula|Scoring Logic|Scoring|Criteria|Measurement|Target|Notes?)s?:)/gi;
+export const BOLD_MARKER_PATTERN = /(-\s*(?:Description|Formula|Scoring Logic|Scoring|Criteria|Measurement|Target|Notes?)s?\s*:|(?<!\()(?:Description|Formula|Scoring Logic|Scoring|Criteria|Measurement|Target|Notes?)s?\s*(?::-|:\s*-|\s+-\s*))/gi;
 
 /**
  * Split normalized KPI text into segments, marking which ones are bold section markers.

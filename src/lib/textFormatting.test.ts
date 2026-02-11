@@ -95,6 +95,25 @@ describe('normalizeKpiText', () => {
       
       expect(result).toBe('Accuracy of New Employee Documentation:\n- Description: Measures the completeness and accuracy of all required onboarding documents.\n- Formula: (1 - (Number of files with errors / Total files)) * 100.\n- Scoring Logic: (Scoring: 5 for 100% accuracy, 4 for 98-99.9%, 3 for 95-97.9%)');
     });
+
+    it('handles non-standard "Formula -" variant', () => {
+      const input = 'KPI Title Formula - (some formula details)';
+      const result = normalizeKpiText(input);
+      expect(result).toContain('\nFormula -');
+    });
+
+    it('handles non-standard "Scoring :-" variant', () => {
+      const input = 'KPI Title Scoring :- 5 for 100%';
+      const result = normalizeKpiText(input);
+      expect(result).toContain('\nScoring :-');
+    });
+
+    it('does not match "Scoring:" inside parentheses', () => {
+      const input = '- Scoring Logic: (Scoring: 5 for 100%)';
+      const result = normalizeKpiText(input);
+      // Should not insert newline before "(Scoring:"
+      expect(result).not.toContain('\nScoring: 5');
+    });
   });
 });
 
