@@ -251,7 +251,9 @@ export default function Categories() {
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
                 placeholder="e.g. Financial Performance"
+                maxLength={35}
               />
+              <p className="text-xs text-muted-foreground text-right">{formName.length}/35</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
