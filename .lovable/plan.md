@@ -1,60 +1,63 @@
 
-# Clickable Stat Tiles for Pending KPI Filtering
+# Rating and Weighted Score Mapping Audit
 
-## What Changes
+## Findings
 
-Make the stat cards (Pending Review, Pending Audit, etc.) on the Team Review, Audit, and Management dashboards clickable. Clicking a tile filters the employee list to show only employees with KPIs at that specific status.
+### 1. Dashboard Score Fallback Chain is Incomplete (BUG)
 
-## How It Works
+In `src/pages/Dashboard.tsx` (line 203), the self-view score fallback skips intermediate review levels:
 
-- Clicking "Pending Review" (Team) filters to employees with `self_review` KPIs
-- Clicking "Pending Audit" (Audit) filters to employees with `manager_check` KPIs  
-- Clicking "Pending Review" (Management) filters to employees with `management_review` KPIs
-- Clicking the same tile again clears the filter (toggle behavior)
-- Active tile gets a highlighted ring/border to indicate the active filter
-- "Total Employees" tile resets to show all (clears filter)
-
-## Technical Details
-
-### File: `src/components/review/EmployeeSelectorGrid.tsx`
-
-**1. Update `StatCard` component** to accept an optional `onClick` handler and `active` boolean:
-
-```typescript
-interface StatCardProps {
-  // ...existing props
-  onClick?: () => void;
-  active?: boolean;
-}
+**Current (wrong):**
+```
+final_score ?? self_score ?? 0
 ```
 
-Add cursor-pointer styling, hover effect, and active ring when clickable.
+**Should be (per system standard):**
+```
+final_score ?? management_score ?? auditor_score ?? manager_score ?? self_score ?? 0
+```
 
-**2. Update `renderStatsCards()`** to pass `onClick` handlers that set `statusFilter`:
+This means a KPI at `management_review` status (where manager and auditor have scored it) still shows only the self_score on the Dashboard, ignoring the more recent reviewer scores.
 
-| View Level | Tile | Sets `statusFilter` to |
-|---|---|---|
-| Team | Open KPIs | (no action or reset) |
-| Team | Pending Review | `pending` |
-| Team | Reviewed | `reviewed` |
-| Audit | Pending Audit | `pending` |
-| Audit | In Audit | `in_audit` |
-| Audit | Forwarded | `forwarded` |
-| Management | Pending Review | `pending` |
-| Management | Approved | `approved` |
+### 2. Data Inconsistency in Database
 
-Each tile toggles: clicking the active filter clears it back to `all`.
+For "Ensure to process Salary by 3rd" (January 2026):
+- `self_rating = green` but `self_score = 3.00`
+- Green rating should map to score 4 (per ScoreSelector: green = 4)
+- This was likely saved by a prior bug or manual entry. No code fix needed -- just a data note.
 
-**3. Update `StatCard` UI** to show visual feedback:
-- `cursor-pointer` and `hover:shadow-md` when clickable
-- `ring-2 ring-primary` border when active
+### 3. Weighted Score Display is Correct
+
+The `UnifiedScorecard` correctly calculates: `totalWeightedScore = sum(score x weightage)` and displays it as `X / Y` where Y = totalWeight x 5. This is correct and consistent.
+
+## Fix Plan
+
+### File: `src/pages/Dashboard.tsx`
+
+Update the score fallback chain in `singleMonthMetrics` (line 203) to match the system standard:
+
+```typescript
+// Before:
+const score = submission?.final_score ?? submission?.self_score ?? 0;
+
+// After:
+const score = submission?.final_score 
+  ?? submission?.management_score 
+  ?? submission?.auditor_score 
+  ?? submission?.manager_score 
+  ?? submission?.self_score 
+  ?? 0;
+```
+
+This ensures the Dashboard always uses the most authoritative score available, matching the UnifiedScorecard and report calculations.
 
 ### File: `DOCUMENTATION.md`
-- Document the clickable stat tile behavior
+
+Document the corrected fallback chain.
 
 ## File Summary
 
 | File | Action |
 |---|---|
-| `src/components/review/EmployeeSelectorGrid.tsx` | Add onClick + active state to StatCard, wire up filter handlers |
+| `src/pages/Dashboard.tsx` | Fix score fallback chain (line 203) |
 | `DOCUMENTATION.md` | Update docs |
