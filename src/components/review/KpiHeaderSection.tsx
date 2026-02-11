@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { KPI } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
-import { normalizeKpiText } from '@/lib/textFormatting';
+import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { Clock } from 'lucide-react';
 
 interface KpiHeaderSectionProps {
@@ -58,10 +58,10 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
 
       {/* KRA & KPI Names - Full text, no truncation */}
       <h3 className="font-semibold text-sm sm:text-lg text-primary leading-tight whitespace-pre-wrap">
-        {normalizeKpiText(kpi.kra_name)}
+        {renderBoldKpiText(kpi.kra_name)}
       </h3>
       <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed whitespace-pre-wrap">
-        {normalizeKpiText(kpi.kpi_name)}
+        {renderBoldKpiText(kpi.kpi_name)}
       </p>
     </div>
   );

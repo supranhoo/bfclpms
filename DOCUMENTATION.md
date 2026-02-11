@@ -2286,6 +2286,13 @@ formatTime('2025-12-12T10:30')     // "10:30 AM"
 ```
 Constants available: `DATE_FORMAT`, `DATE_TIME_FORMAT`, `TIME_FORMAT`
 
+#### `textFormatting.ts` - KPI Text Display
+
+- `normalizeKpiText(text)` — Inserts newlines before section markers (Description, Formula, Scoring Logic, etc.) for clean display. Pure string function used by exports and non-visual contexts.
+- `splitKpiTextSegments(text)` — Splits normalized text into `{ text, bold }` segments, marking section markers for bold rendering.
+- `renderBoldKpiText(text)` (in `FormattedText.tsx`) — Returns React nodes with section markers wrapped in `<strong>` tags. Used in all KPI display components (KpiDetailsTable, MobileKpiCard, MobileSelfReviewCard, ReviewDetailsCard, ReviewDetailsCardCompact, KpiHeaderSection, KpiLogicModal, KpiTrackerModal, OrgKpiOverview).
+- `FormattedText` component — Renders text with `whitespace-pre-wrap` and optional bold markers (default: enabled).
+
 ---
 
 ## 7. Third-Party Integrations

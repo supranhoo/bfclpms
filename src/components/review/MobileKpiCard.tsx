@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { KPI, ReviewSubmission } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
-import { normalizeKpiText } from '@/lib/textFormatting';
+import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { cn } from '@/lib/utils';
 import { 
   Lock, Info, Building2, Users, User, CheckCircle2, Eye, Calendar, 
@@ -225,10 +225,10 @@ export function MobileKpiCard({
         className="text-left w-full mb-2 group"
       >
         <p className="font-medium text-xs line-clamp-1 group-hover:text-primary transition-colors">
-          {normalizeKpiText(kpi.kra_name)}
+          {renderBoldKpiText(kpi.kra_name)}
         </p>
         <p className="text-[10px] text-muted-foreground line-clamp-2 flex items-center gap-1">
-          {normalizeKpiText(kpi.kpi_name)}
+          {renderBoldKpiText(kpi.kpi_name)}
           <Info className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
         </p>
       </button>

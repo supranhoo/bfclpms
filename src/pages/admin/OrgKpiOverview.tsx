@@ -8,7 +8,7 @@ import { useOrgLevelKpis } from '@/hooks/useOrgLevelKpis';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { Loader2, Building2, Database, TrendingUp, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { normalizeKpiText } from '@/lib/textFormatting';
+import { renderBoldKpiText } from '@/components/ui/FormattedText';
 
 export default function OrgKpiOverview() {
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
@@ -164,8 +164,8 @@ export default function OrgKpiOverview() {
 
                       return (
                         <TableRow key={kpi.id}>
-                          <TableCell className="font-medium whitespace-pre-wrap">{normalizeKpiText(kpi.kra_name)}</TableCell>
-                          <TableCell className="whitespace-pre-wrap">{normalizeKpiText(kpi.kpi_name)}</TableCell>
+                          <TableCell className="font-medium whitespace-pre-wrap">{renderBoldKpiText(kpi.kra_name)}</TableCell>
+                          <TableCell className="whitespace-pre-wrap">{renderBoldKpiText(kpi.kpi_name)}</TableCell>
                           <TableCell>
                             {kpi.target_value !== null ? (
                               <span className="font-mono">{kpi.target_value}</span>
