@@ -258,6 +258,11 @@ export function UnifiedScorecard({
   // Get the relevant score based on view level (cascade down the chain)
   const getRelevantScore = (submission: any) => {
     if (!submission) return 0;
+    // Prefer final_score (set by import or workflow completion)
+    if (submission.final_score !== null && submission.final_score !== undefined) {
+      return submission.final_score;
+    }
+    // Fallback to level-specific scores for in-progress reviews
     if (viewLevel === 'manager') {
       return submission.manager_score ?? submission.self_score ?? 0;
     } else if (viewLevel === 'auditor') {

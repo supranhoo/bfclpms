@@ -1649,6 +1649,7 @@ The Employee Performance Summary report uses the **same weighted scoring logic a
 - **Overall Rating**: `totalScore / totalWeight` (weighted average out of 5)
 - **N/A Exclusion**: KPIs marked as N/A are excluded from both numerator and denominator
 - **Zero Preservation**: Uses nullish coalescing (`??`) so scores of 0 are treated as valid data, not missing
+- **Score Priority**: `final_score` is the authoritative source (set by import or workflow completion). Level-specific scores (`management_score`, `auditor_score`, `manager_score`, `self_score`) are only used as fallbacks for in-progress reviews where `final_score` is null.
 
 **Filters:**
 - **Month Filter**: Static dropdown with 12 calendar months (January–December) plus "All Months". Replaces the previous DB-driven review periods dropdown.
