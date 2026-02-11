@@ -2652,4 +2652,21 @@ The system allows administrators to configure when multi-month frequency cycles 
 
 ---
 
+### 4.19 Zero-Score Truthy Bug Fix
+
+**Problem:** JavaScript treats `0` as falsy. Code using `if (value)` instead of `if (value != null)` on score/rating fields silently drops legitimate zero scores.
+
+**Rule:** Always use `!= null` (or `?? 0` / nullish coalescing) when checking score, rating, or achieved-value fields. Never use truthy checks (`if (value)`, `value || default`) on numeric fields that can legitimately be `0`.
+
+**Fixed locations (v1.14.2):**
+- `MonthlyScorecardReport.tsx` — weighted score aggregation now uses `!= null` checks
+- `import-kpis/index.ts` — `determineReviewStatus()` and `determineKpiStatus()` now use `!= null` checks so `auditRating=0` correctly infers status as `approved`/`locked`
+
+**Not affected (already correct):**
+- Dashboard scoring (`useCumulativeKpis`, `Dashboard.tsx`) — uses `?? 0`
+- `EmployeePerformanceSummary.tsx` — uses `??`
+- `finalScore || 0` patterns — `0 || 0 = 0`, which is correct
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*

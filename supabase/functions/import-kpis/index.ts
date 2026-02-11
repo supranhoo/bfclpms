@@ -234,9 +234,9 @@ const determineReviewStatus = (row: KpiImportRow): 'kra_set' | 'self_review' | '
     if (REVIEW_STATUS_MAP[normalized]) return REVIEW_STATUS_MAP[normalized];
   }
   // Fallback: infer from data
-  if (row.auditRating || row.auditTargetAchieved) return 'approved';
-  if (row.managerRating || row.managerTargetAchieved) return 'audit';
-  if (row.employeeRating || row.employeeTargetAchieved || row.targetAchieved) return 'manager_check';
+  if (row.auditRating != null || row.auditTargetAchieved != null) return 'approved';
+  if (row.managerRating != null || row.managerTargetAchieved != null) return 'audit';
+  if (row.employeeRating != null || row.employeeTargetAchieved != null || row.targetAchieved != null) return 'manager_check';
   return 'kra_set';
 };
 
@@ -247,9 +247,9 @@ const determineKpiStatus = (row: KpiImportRow): 'open' | 'submitted' | 'approved
     if (REVIEW_STATUS_MAP[normalized] === 'approved') return 'locked';
   }
   // Fallback: infer from data
-  if (row.auditRating || row.auditTargetAchieved) return 'locked';
-  if (row.managerRating || row.managerTargetAchieved) return 'approved_by_manager';
-  if (row.employeeRating || row.employeeTargetAchieved || row.targetAchieved) return 'submitted';
+  if (row.auditRating != null || row.auditTargetAchieved != null) return 'locked';
+  if (row.managerRating != null || row.managerTargetAchieved != null) return 'approved_by_manager';
+  if (row.employeeRating != null || row.employeeTargetAchieved != null || row.targetAchieved != null) return 'submitted';
   return 'open';
 };
 
