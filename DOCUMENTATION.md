@@ -2376,7 +2376,7 @@ The system supports two email providers:
 | `update-smtp-password` | POST | Securely store SMTP password or Graph client secret |
 | `create-employee` | POST | Create new employee accounts |
 | `reset-password` | POST | Generate password reset links |
-| `auto-rollover-kpis` | POST | Enhanced KRA rollover with conflict detection, dry-run preview, selective employee rollover, balance-only mode, and per-employee detailed reporting. Supports `source_month/year`, `target_month/year`, `employee_ids`, `dry_run`, `rollover_balance_only`, `skip_employee_ids` parameters. |
+| `auto-rollover-kpis` | POST | Enhanced KRA rollover with conflict detection, dry-run preview, selective employee rollover, balance-only mode, and per-employee detailed reporting. Supports `source_month/year`, `target_month/year`, `employee_ids`, `dry_run`, `rollover_balance_only`, `skip_employee_ids` parameters. The Step 2 Preview dialog uses a fixed-height layout (`h-[85vh]`) with an always-visible scrollbar so all conflict employees are accessible. Action buttons (Back/Proceed, Close/Download) are pinned outside the scroll area for constant visibility. |
 | `import-kpis` | POST | Background KPI import |
 | `generate-pip-letter` | POST | Generate PIP letter HTML |
 

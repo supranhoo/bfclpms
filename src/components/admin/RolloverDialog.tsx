@@ -12,6 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { RefreshCw, Search, Download, AlertTriangle, CheckCircle2, SkipForward, Users, FileSpreadsheet } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -216,7 +217,10 @@ export function RolloverDialog({ open, onOpenChange }: RolloverDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+      <DialogContent className={cn(
+        "max-w-3xl flex flex-col overflow-hidden",
+        step !== 'config' ? "h-[85vh] max-h-[85vh]" : "max-h-[85vh]"
+      )}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <RefreshCw className="h-5 w-5" />
@@ -234,7 +238,7 @@ export function RolloverDialog({ open, onOpenChange }: RolloverDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 pr-4">
+        <ScrollArea className="flex-1 min-h-0 pr-4" type="always">
           {/* Step 1: Configuration */}
           {step === 'config' && (
             <div className="space-y-6 py-2">
@@ -419,21 +423,6 @@ export function RolloverDialog({ open, onOpenChange }: RolloverDialogProps) {
                   </Table>
                 </div>
               )}
-
-              <div className="flex gap-3 pt-2">
-                <Button variant="outline" onClick={() => setStep('config')}>Back</Button>
-                <Button
-                  onClick={() => executeMutation.mutate()}
-                  disabled={executeMutation.isPending}
-                  className="flex-1"
-                >
-                  {executeMutation.isPending ? (
-                    <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Rolling Over...</>
-                  ) : (
-                    <><RefreshCw className="h-4 w-4 mr-2" />Proceed with Rollover</>
-                  )}
-                </Button>
-              </div>
             </div>
           )}
 
@@ -497,17 +486,39 @@ export function RolloverDialog({ open, onOpenChange }: RolloverDialogProps) {
                   ))}
                 </TableBody>
               </Table>
-
-              <div className="flex gap-3 pt-2">
-                <Button variant="outline" onClick={handleClose}>Close</Button>
-                <Button onClick={handleDownloadReport} className="flex-1 gap-2">
-                  <Download className="h-4 w-4" />
-                  Download Report (Excel)
-                </Button>
-              </div>
             </div>
           )}
         </ScrollArea>
+
+        {/* Fixed footer buttons for Preview step */}
+        {step === 'preview' && previewData && (
+          <div className="flex gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={() => setStep('config')}>Back</Button>
+            <Button
+              onClick={() => executeMutation.mutate()}
+              disabled={executeMutation.isPending}
+              className="flex-1"
+            >
+              {executeMutation.isPending ? (
+                <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Rolling Over...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-2" />Proceed with Rollover</>
+              )}
+            </Button>
+          </div>
+        )}
+
+        {/* Fixed footer buttons for Results step */}
+        {step === 'results' && results && (
+          <div className="flex gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={handleClose}>Close</Button>
+            <Button onClick={handleDownloadReport} className="flex-1 gap-2">
+              <Download className="h-4 w-4" />
+              Download Report (Excel)
+            </Button>
+          </div>
+        )}
+
       </DialogContent>
     </Dialog>
   );
