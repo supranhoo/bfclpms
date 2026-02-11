@@ -306,10 +306,12 @@ export function KpiDetailsTable({
                       <p className="font-medium text-primary group-hover:underline whitespace-pre-wrap">{renderBoldKpiText(kpi.kra_name)}</p>
                       {isDailyKpi && <DailyBadge />}
                     </div>
-                    <p className="text-sm text-muted-foreground flex items-center gap-1 whitespace-pre-wrap">
-                      {renderBoldKpiText(kpi.kpi_name)}
-                      <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                    </p>
+                    <div className="relative">
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                        {renderBoldKpiText(kpi.kpi_name)}
+                      </p>
+                      <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity absolute top-0 right-0" />
+                    </div>
                   </button>
                 </TableCell>
                 
