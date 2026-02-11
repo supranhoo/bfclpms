@@ -1,102 +1,71 @@
 
+# Fix: KPI Tracker Modal Missing Achieved & Rating Data
 
-# Fix: Achieved & Rating Showing Blank in KPI Tracker Modal
+## Root Cause
 
-## Root Cause Analysis
+The problem is **NOT** about zero-value handling. The real issue is a **data scope mismatch**:
 
-The issue stems from **JavaScript's falsy value handling** — the well-known zero-value preservation problem.
+In `UnifiedScorecard.tsx` (where the modal is opened from in team/audit/management view):
 
-### Bug 1: Display renders 0 as "-"
-
-In the Monthly Detail Log table (line ~149 of KpiTrackerModal.tsx):
-
-```typescript
-// Current code
-<TableCell>{entry.achieved || '-'}</TableCell>
+```
+Line 151:  allKpis = useKpisByEmployee(employee.id)     --> ALL periods (Sep, Oct, Nov, Dec, Jan, Feb)
+Line 158:  kpis = allKpis filtered to selectedPeriod      --> CURRENT period only (e.g., December)
+Line 196:  kpiIds = kpis.map(k => k.id)                   --> Only December KPI IDs
+Line 197:  submissions = useReviewSubmissions(kpiIds)      --> Only December submissions
 ```
 
-When `achieved_value = 0` (e.g., December has `achieved_value: 0.00`), JavaScript treats `0` as falsy, so `0 || '-'` evaluates to `'-'`. Same issue with rating display — `entry.rating > 0` excludes legitimate zero ratings.
+Then the modal receives:
+- `allKpis` = all 6 months of KPIs (correct)
+- `submissions` = only December's submission (wrong -- missing Oct, Nov, Sep, etc.)
 
-### Bug 2: Data construction loses zero values
+So when the modal builds the monthly history, it finds all 6 related KPIs but can only match submissions for the current period. The other 5 months show "-" because their submissions were never fetched.
 
-```typescript
-// Current code
-achieved: sub?.achieved_value || 0,
-```
-
-This is partially correct (0 || 0 still gives 0), but the real problem is distinguishing between "no submission exists" (should show "-") vs "submission exists with value 0" (should show "0").
-
-### Database Evidence
-
-For the KPI "Fulfillment of Vacant Positions" (employee 35bb4caa):
-
-| Month | achieved_value | final_score | Correct Display |
-|-------|---------------|-------------|-----------------|
-| September 2025 | NULL (no submission) | NULL | Should show "-" |
-| October 2025 | 96.00 | 4.00 | Should show 96 / 4.0 |
-| November 2025 | 91.38 | 3.00 | Should show 91.38 / 3.0 |
-| December 2025 | 0.00 | 0.00 | Should show 0 / 0.0 |
+The same bug exists in `Dashboard.tsx` -- but there `useMyKpis()` happens to return all periods and `kpiIds` includes all of them, so it works for the self-view. The bug is specific to the team/reviewer views via `UnifiedScorecard`.
 
 ## Fix
 
-### File: `src/components/dashboard/KpiTrackerModal.tsx`
+### `src/components/review/UnifiedScorecard.tsx`
 
-**1. Change data types to use `null` for missing data:**
-
-```typescript
-// Before
-achieved: sub?.achieved_value || 0,
-rating: sub?.final_score ?? sub?.management_score ?? ... ?? 0,
-
-// After - use null to represent "no data"
-achieved: sub ? (sub.achieved_value ?? null) : null,
-rating: sub ? (sub.final_score ?? sub.management_score ?? sub.auditor_score ?? sub.manager_score ?? sub.self_score ?? null) : null,
-```
-
-**2. Fix display logic to preserve zero values:**
+Compute a separate `allKpiIds` list from the unfiltered `allKpis` array, fetch submissions for ALL of them, and pass those to the tracker modal:
 
 ```typescript
-// Before
-<TableCell>{entry.achieved || '-'}</TableCell>
+// Existing (current period only)
+const kpiIds = kpis?.map(k => k.id) || [];
+const { data: submissions } = useReviewSubmissions(kpiIds);
 
-// After - null means no data, 0 is a valid value
-<TableCell>{entry.achieved != null ? entry.achieved : '-'}</TableCell>
+// New: all-period IDs for the tracker modal
+const allKpiIds = useMemo(() => allKpis?.map(k => k.id) || [], [allKpis]);
+const { data: allSubmissions } = useReviewSubmissions(allKpiIds);
 ```
+
+Then pass `allSubmissions` to the KpiTrackerModal instead of `submissions`:
 
 ```typescript
-// Before
-{entry.rating > 0 ? <Badge>...</Badge> : '-'}
-
-// After
-{entry.rating != null ? <Badge>...</Badge> : '-'}
+<KpiTrackerModal
+  ...
+  allKpis={allKpis || []}
+  submissions={allSubmissions || []}   // was: submissions || []
+/>
 ```
 
-**3. Fix chart data to use null instead of 0 for missing points** (so the trend line shows gaps instead of drops to zero):
+The same fix applies to the `KpiReviewPanel` which also receives `allSubmissions` for the KPI Journey section -- it should use the full dataset too.
 
-```typescript
-// Before
-achieved: sub?.achieved_value || 0,
+### Other Scorecard Components
 
-// After
-achieved: sub ? (sub.achieved_value ?? null) : null,
-```
+The same pattern exists in:
+- `EmployeeScorecard.tsx`
+- `AuditScorecard.tsx`
+- `ManagementScorecard.tsx`
 
-**4. Update type definition** to allow null:
+Each one filters KPIs to current period for display but passes the filtered submissions to the tracker. All need the same fix.
 
-```typescript
-// Change type from number to number | null
-achieved: number | null;
-rating: number | null;
-```
+### `DOCUMENTATION.md`
 
-### File: `DOCUMENTATION.md`
-
-Update the KPI Tracker section to document the null-safe display handling.
+Update to document that tracker modals require all-period submissions, not just current-period submissions.
 
 ## Impact
 
-- **Display only** — no scoring or database changes
-- **Chart improvement** — missing months show as gaps instead of false "0" dips
-- **Table improvement** — zero values display as "0" / "0.0" instead of "-"
-- Consistent with the project's zero-value-preservation standard
-
+- **No scoring impact** -- the current-period `submissions` used for score calculations remains unchanged
+- **No workflow impact** -- approve/send-back actions use the current-period data
+- **Display fix only** -- the tracker modal and KPI Journey now see the complete historical data
+- **Minor network cost** -- one additional query for all-period submissions (only runs when tracker modal data is needed)
