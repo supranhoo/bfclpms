@@ -1,105 +1,41 @@
 
-# Password Policy / Credential Rollout Feature
 
-## Overview
-Add a new "Password Policy" tab to System Settings that lets admins identify eligible users (those with KRAs or who manage employees with KRAs), generate secure passwords in bulk, and email credentials -- all with full audit logging.
+# Fix: Password Rollout Emails Not Sent
 
-## Database Changes
+## Root Cause
 
-### 1. New table: `password_rollout_logs`
-Tracks every password generation event for audit purposes.
+The edge function logs show: **"Event type password_rollout is not enabled"**
 
-| Column | Type | Notes |
-|---|---|---|
-| id | uuid (PK) | auto-generated |
-| user_id | uuid | FK to profiles.id |
-| employee_code | text | snapshot for audit |
-| full_name | text | snapshot for audit |
-| email | text | snapshot for audit |
-| generated_by | uuid | admin who triggered it |
-| email_sent | boolean | whether credential email was dispatched |
-| email_error | text | null if successful |
-| status | text | 'success' / 'failed' |
-| error_message | text | null if successful |
-| created_at | timestamptz | default now() |
+The `send-email-notification` function checks if the event type is in the admin's enabled events list before sending. The `password_rollout` event was added as a template in the edge function but was **never registered in the frontend**, so admins cannot enable it.
 
-RLS: admin-only SELECT/INSERT (using `has_role` function).
+Two pieces are missing:
 
-### 2. New SQL view: `eligible_login_users`
-Computes eligibility automatically so the frontend just queries a view.
+1. The `EmailEventType` union type doesn't include `'password_rollout'`
+2. The `EMAIL_EVENTS` toggle list in the Email Notification Settings UI doesn't include it
 
-```text
-eligible_login_users = 
-  (profiles that have at least one KPI in kpis table)
-  UNION
-  (profiles that are reporting_manager_id of someone who has KPIs)
+## Changes
+
+### 1. `src/hooks/useEmailNotificationSettings.ts` (line ~21)
+
+Add `'password_rollout'` to the `EmailEventType` union:
+
+```
+| 'observation_resolved'
+| 'password_rollout';   // <-- add this
 ```
 
-Returns: id, full_name, email, employee_code, designation, department_id, eligibility_type ('has_kras' | 'reporting_manager' | 'both').
+### 2. `src/components/admin/EmailNotificationSettings.tsx` (line ~48, after observation_resolved)
 
-## Backend (Edge Function)
+Add the event to the `EMAIL_EVENTS` array so it appears as a toggle in the UI:
 
-### New function: `password-rollout`
-- Accepts: `{ user_ids: string[], send_email: boolean }`
-- Admin-only (verified via user_roles)
-- For each user:
-  1. Generate a 12+ character password (uppercase, lowercase, digits, symbols) using `crypto.getRandomValues`
-  2. Call `supabaseAdmin.auth.admin.updateUserById(userId, { password })` 
-  3. If `send_email` is true, invoke the existing `send-email-notification` function internally (or send directly via the configured email provider)
-  4. Log result to `password_rollout_logs`
-- Returns summary: `{ total, succeeded, failed, details[] }`
-- Passwords are NEVER stored -- only sent via email and used for the auth update
+```
+{ key: 'password_rollout', label: 'Password Rollout', description: 'Send login credentials when admin generates passwords for users' },
+```
 
-## Frontend
+### 3. `DOCUMENTATION.md`
 
-### New tab in System Settings: "Password Policy"
-Added as a 9th tab with a Key/Lock icon.
+Update the email events list to include `password_rollout` as the 22nd supported event type.
 
-**Layout:**
-1. **Eligibility Filter Bar**
-   - Department dropdown filter
-   - Eligibility type filter (Has KRAs / Reporting Manager / Both)
-   - Search by name/employee code
-   
-2. **User Selection Table**
-   - Checkbox column (select all / individual)
-   - Columns: Employee Code, Name, Email, Department, Eligibility Type
-   - Pagination
-   
-3. **Action Bar** (sticky bottom or top)
-   - "Generate & Send Passwords" button (primary)
-   - "Generate Only" button (secondary -- generates but doesn't email)
-   - Selected count badge
-   
-4. **Confirmation Dialog**
-   - Shows count of selected users
-   - Toggle: "Send credentials via email"
-   - Warning about overwriting existing passwords
-   - Proceed / Cancel buttons
+## After Deploying
 
-5. **Rollout History Card**
-   - Table showing recent password_rollout_logs
-   - Columns: Date, Admin, Users Count, Status, Email Sent
-
-### Files to create/modify:
-- `src/pages/admin/SystemSettings.tsx` -- add 9th tab
-- `src/components/admin/PasswordPolicyTab.tsx` -- new component (main tab content)
-- `src/hooks/usePasswordRollout.ts` -- new hook (eligible users query, rollout mutation, logs query)
-- `supabase/functions/password-rollout/index.ts` -- new edge function
-- `DOCUMENTATION.md` -- update with feature docs
-
-## Security Considerations
-- Passwords generated server-side only (edge function), never on client
-- No plaintext password storage anywhere in the database
-- Admin role verified server-side before any operation
-- RLS on `password_rollout_logs` restricts to admin role
-- Email delivery uses existing TLS-secured email infrastructure
-- Audit trail captures who generated passwords and when
-
-## Email Template
-A new email event type `password_rollout` will be added to the email template system. The email will contain:
-- Employee name
-- Login email
-- Generated password
-- Link to the application login page
-- Instruction to change password on first login
+Once these changes are live, go to **System Settings -> Email Notifications** and toggle on the new **"Password Rollout"** event. Then retry the password rollout -- emails will be sent.
