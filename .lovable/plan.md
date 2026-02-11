@@ -1,58 +1,48 @@
 
-# Fix Bold KPI Marker Display Issues
 
-## Problems Identified
+# Fix KPI Text Appearing as Columns Instead of Lines
 
-1. **Bold markers break mid-phrase** -- "- Scoring Logic:" wraps between words due to narrow column width, making it look like two separate bold sections ("**- Scoring**" on one line, "**Logic:**" on the next).
+## Root Cause
 
-2. **Non-standard data formats not recognized** -- Some KPI data in the database uses variant formatting that the current regex doesn't match:
-   - `Formula - (Project Timeline adherence)` instead of `- Formula:`
-   - `Scoring :- 5 for 0 non-compliance` instead of `- Scoring:`
-   These don't get bolded, creating visual inconsistency.
+Line 309 in `KpiDetailsTable.tsx` has `flex items-center gap-1` on the `<p>` tag wrapping the KPI name text:
+
+```html
+<p className="text-sm text-muted-foreground flex items-center gap-1 whitespace-pre-wrap">
+  {renderBoldKpiText(kpi.kpi_name)}
+  <Info ... />
+</p>
+```
+
+The `flex` layout treats each text segment returned by `renderBoldKpiText()` as a separate flex item and lays them out **horizontally**. This overrides `whitespace-pre-wrap`, causing Description, Formula, and Scoring Logic to spread across the cell like separate columns instead of stacking as lines.
 
 ## Fix
 
-### 1. `src/components/ui/FormattedText.tsx`
+Remove `flex` from the `<p>` tag and wrap the Info icon separately so it doesn't interfere with text flow:
 
-Add `white-space: nowrap` to `<strong>` elements so bold markers never split across lines:
-
-```typescript
-// Before
-React.createElement('strong', { key: i }, seg.text)
-
-// After
-React.createElement('strong', { key: i, style: { whiteSpace: 'nowrap' } }, seg.text)
+```html
+<div className="relative">
+  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+    {renderBoldKpiText(kpi.kpi_name)}
+  </p>
+  <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 ... absolute top-0 right-0" />
+</div>
 ```
 
-### 2. `src/lib/textFormatting.ts`
+This keeps the Info hover icon visible but lets the KPI text flow naturally with line breaks preserved -- exactly matching the second reference image.
 
-Expand both regex patterns to also match non-standard marker variants found in the database:
+## Files Changed
 
-**Current patterns only match:** `- Description:`, `- Formula:`, `- Scoring Logic:`, `- Scoring:`
+| File | Change |
+|------|--------|
+| `src/components/review/KpiDetailsTable.tsx` | Remove `flex` from KPI name paragraph, reposition Info icon |
+| `DOCUMENTATION.md` | Minor update noting the layout fix |
 
-**Updated patterns will also match:**
-- `Formula -` (dash after keyword, no colon)
-- `Scoring :-` (colon-dash variant)
-- `Formula :` (space before colon)
-- `-Description:` (no space after dash)
+## Result
 
-Updated `normalizeKpiText` pattern:
-```text
-Matches: - Description:, -Description:, - Formula:, Formula -, - Scoring Logic:, 
-         Scoring Logic -, - Scoring:, Scoring :-, - Criteria:, - Measurement:, 
-         - Target:, - Notes:
-```
-
-Updated `BOLD_MARKER_PATTERN`:
-Same expanded set for consistent bolding.
-
-### 3. `DOCUMENTATION.md`
-
-Update the text formatting section to note the expanded pattern matching and `nowrap` styling.
+The KPI cell will display exactly like the second image: all text in one cell, each section (Description, Formula, Scoring Logic) on its own line with bold markers, flowing naturally top-to-bottom.
 
 ## Impact
 
-- **No logic impact** -- display-only change
-- **No export impact** -- PDF/Excel use raw strings
-- **No scoring impact** -- scoring uses numeric fields only
-- Applies everywhere `renderBoldKpiText` is used (all dashboard tables, review panels, modals)
+- **Display only** -- no data, scoring, or export changes
+- **All dashboard levels** benefit (My KPIs, Team Review, Audit, Management) since they all use KpiDetailsTable
+
