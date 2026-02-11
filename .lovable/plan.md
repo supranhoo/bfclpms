@@ -1,74 +1,94 @@
 
 
-# Fix: Edge Function Import Not Setting `is_na` for NA Values
+# Fix: Incorrect Weighted Score in UnifiedScorecard (Management View)
 
 ## Root Cause
 
-There are **two import paths** in the system, and they handle "NA" differently:
+Two bugs in `src/components/review/UnifiedScorecard.tsx` cause incorrect scoring:
 
-- **Client-side import** (`ImportData.tsx`) -- correctly detects when `targetAchieved` is "NA", "N/A", "not applicable", or "-" and sets `is_na: true` in the database.
-- **Background import** (edge function `import-kpis/index.ts`) -- **always hardcodes `is_na: false`** (line 861). It never checks for NA text. The `parseAchieved` helper converts "NA" to `null` (since `parseFloat("NA")` = `NaN`), so the achieved value becomes null, but `is_na` stays `false`.
+### Bug 1: "Weighted Score X / Y" display ignores N/A exclusion (Lines 734-735)
 
-**Result:** KPIs imported via the background worker with "NA" in `targetAchieved` end up with `is_na: false` and `achieved_value: null`. The Dashboard then treats them as regular KPIs with a 0 score (included in weighted calculations) instead of excluding them.
+The display formula sums ALL KPIs' weightages including N/A ones:
 
-### Database Verification
+```text
+// CURRENT (buggy) - sums all kpis including N/A
+scoreData.rating * kpis.reduce((sum, k) => sum + (k.weightage || 0), 0)
+// = 4.18 * 100 = 418.2 / 500
+```
 
-| ref_code  | achieved_value | is_na | final_score |
-|-----------|---------------|-------|-------------|
-| REF-2060  | 100.00        | false | 5.00        |
-| REF-2066  | 0.00          | false | 0.00        |
-| REF-2073  | 0.00          | false | 0.00        |
-| REF-2075  | null          | false | 0.00        |
+It should only sum non-N/A KPIs. The `scoreData` already computes the correct rating (4.18) by excluding N/A in the `useMemo`, but the display then multiplies by the wrong denominator.
 
-REF-2075 is the clearest NA case (null achieved value, but `is_na` is `false`). REF-2066 and REF-2073 have `achieved_value: 0` which could indicate they were parsed as numbers rather than kept as NA -- worth verifying in your original Excel file.
+### Bug 2: `getRelevantScore` uses `||` which treats score 0 as falsy (Lines 259-267)
+
+```text
+// CURRENT (buggy) - || treats 0 as falsy
+return submission.auditor_score || submission.manager_score || submission.self_score || 0;
+```
+
+For REF-2062: `auditor_score = 0` is falsy, so it falls through to `self_score = 5`, inflating the score.
+
+The same `||` bug exists in `Dashboard.tsx` line 202 for the self-view:
+```text
+const score = submission?.final_score || submission?.self_score || 0;
+```
 
 ## Fix Plan
 
-### 1. Add NA Detection to Edge Function (`supabase/functions/import-kpis/index.ts`)
+### File: `src/components/review/UnifiedScorecard.tsx`
 
-Port the same NA detection logic from the client-side import into the edge function, right before building the submission record (around line 830):
+**A. Fix `getRelevantScore` (lines 259-267)** -- Replace `||` with nullish coalescing (`??`) and explicit zero checks:
 
 ```text
-// Check if achieved value is N/A
-const achievedStr = String(achievedValue ?? '').trim().toLowerCase();
-const isNa = achievedStr === 'na' || achievedStr === 'n/a' || 
-  achievedStr === 'not applicable' || achievedStr === '-' ||
-  (!achievedValue && !row.employeeRating && !row.rating && 
-   !row.managerRating && !row.auditRating);
+const getRelevantScore = (submission: any) => {
+  if (!submission) return 0;
+  if (viewLevel === 'manager') {
+    return submission.manager_score ?? submission.self_score ?? 0;
+  } else if (viewLevel === 'auditor') {
+    return submission.auditor_score ?? submission.manager_score ?? submission.self_score ?? 0;
+  } else {
+    return submission.management_score ?? submission.auditor_score ?? submission.manager_score ?? submission.self_score ?? 0;
+  }
+};
 ```
 
-Then update the submission record to use `isNa` instead of hardcoded `false`:
-- `is_na: isNa`
-- When `isNa` is true: null out all scores, ratings, and achieved values
+**B. Fix weighted score display (lines 731-737)** -- Return `totalWeightedScore` and `totalWeight` from `scoreData` and use them in the display instead of re-summing all KPIs:
 
-### 2. Fix Existing Data (One-Time SQL Patch)
-
-Run a data fix to correct the already-imported records where `achieved_value` is null but `is_na` is false:
-
-```sql
-UPDATE review_submissions
-SET is_na = true, 
-    final_score = null, 
-    final_rating = null
-WHERE achieved_value IS NULL 
-  AND is_na = false
-  AND self_score IS NULL 
-  AND manager_score IS NULL 
-  AND auditor_score IS NULL;
+Update the `scoreData` useMemo return to include `totalWeightedScore` and `totalWeight`:
+```text
+return { overallScore, rating: overallRating, categoryScores, totalWeightedScore, totalWeight };
 ```
 
-### 3. Update `DOCUMENTATION.md`
+Update the display to use these values:
+```text
+{scoreData.totalWeightedScore.toFixed(1)}
+<span> / {(scoreData.totalWeight * 5).toFixed(0)}</span>
+```
 
-Note that both import paths now use identical NA detection logic.
+### File: `src/pages/Dashboard.tsx`
 
-## Files Changed
+**C. Fix `||` bug on line 202** -- Same nullish coalescing fix:
 
-| File | Change |
-|------|--------|
-| `supabase/functions/import-kpis/index.ts` | Add NA detection logic, use dynamic `isNa` flag, null out scores when NA |
-| `DOCUMENTATION.md` | Document the fix |
+```text
+const score = submission?.final_score ?? submission?.self_score ?? 0;
+```
 
-## Important Note
+### File: `DOCUMENTATION.md`
 
-For REF-2066 and REF-2073, the database shows `achieved_value: 0.00` -- meaning the import parsed their values as numeric 0, not as "NA" text. Please verify what was actually in your Excel file for those rows. If they truly had "NA" text, the `parseNumericValue` function may have converted them incorrectly upstream.
+**D.** Note the `??` fix for zero-score handling across scoring components.
 
+## Impact
+
+| Metric | Before (buggy) | After (correct) |
+|--------|----------------|-----------------|
+| Weighted Score | 418.2 / 500 | ~345 / 412.5 |
+| Percentage | 83.6% | ~83.6% (coincidence) |
+| Rating | 4.18 / 5 | ~4.18 / 5 |
+
+Note: The percentage and rating happen to look similar because the N/A KPIs have small weights, but the numerator and denominator are both wrong in the current version. The actual rating will change slightly once the `||` zero-score bug is also fixed (REF-2062 will correctly score 0 instead of 5).
+
+With both fixes:
+- Total weighted score: 320.0 (not 345)
+- Total weight: 82.5 (not 100)
+- Out of: 412.5 (not 500)
+- Rating: 320 / 82.5 = 3.88
+- Percentage: 77.6%
