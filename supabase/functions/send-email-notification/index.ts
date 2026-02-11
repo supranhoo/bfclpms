@@ -338,6 +338,19 @@ Reason: {{send_back_reason}}
 
 Please review the feedback and resubmit the data.`,
   },
+  password_rollout: {
+    subject: '[PMS] Your Login Credentials',
+    body: `Hi {{recipient_name}},
+
+Your login credentials for the {{app_name}} have been created.
+
+Email: {{login_email}}
+Password: {{generated_password}}
+
+Please log in and change your password immediately after your first sign-in.
+
+If you did not expect this email, please contact your administrator.`,
+  },
 };
 
 const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string }> = {
@@ -359,6 +372,7 @@ const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string
   admin_data_entry: { color: '#64748b', emoji: '📊', title: 'Admin Data Entry' },
   admin_data_override: { color: '#64748b', emoji: '🔧', title: 'Admin Data Override' },
   org_kpi_sent_back: { color: '#f59e0b', emoji: '↩️', title: 'Org KPI Sent Back' },
+  password_rollout: { color: '#6366f1', emoji: '🔑', title: 'Login Credentials' },
 };
 
 // Replace placeholders in template
@@ -665,7 +679,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     const { event_type, recipient_email, recipient_name, kpi_name, kra_name, actor_name, query_reason, resolution_notes, review_period, review_year,
       pip_start_date, pip_end_date, pip_reason, pip_outcome, pip_remarks,
       milestone_date, milestone_description, milestone_expected_outcome,
-      send_back_reason } = body;
+      send_back_reason, generated_password, login_email, employee_code, app_name } = body;
 
     // Check if email notifications are enabled
     const { data: enabledSetting } = await supabase
@@ -782,6 +796,10 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       milestone_description,
       milestone_expected_outcome,
       send_back_reason,
+      generated_password,
+      login_email,
+      employee_code,
+      app_name,
     };
 
     // Replace placeholders in subject and body
