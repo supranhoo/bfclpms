@@ -1341,7 +1341,7 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - **Download Error Report** button exports all failed/skipped rows as an Excel file (`import-errors-{type}-{date}.xlsx`)
   - Per-row results are tracked as structured `ImportRowResult` objects (`{ row, employeeCode, employeeName, status, message }`)
   - Background import errors are parsed from string format into the same structured display
-  - **Automatic N/A Detection:** Both client-side and background (edge function `import-kpis`) import paths use identical NA detection logic. KPIs where `targetAchieved` is "NA", "N/A", "not applicable", or "-" — or where no achieved value AND no review scores exist — are automatically marked as N/A (`is_na = true`) with all scores/ratings nulled out. This prevents blank or NA cells from silently counting against an employee's weighted average.
+  - **Automatic N/A Detection:** Both client-side and background (edge function `import-kpis`) import paths use identical NA detection logic. KPIs where `targetAchieved` is "NA", "N/A", "not applicable", or "-" — or where all score-related fields (achievedValue, employeeRating, rating, managerRating, auditRating) are truly empty (null/undefined/blank) — are automatically marked as N/A (`is_na = true`) with all scores/ratings nulled out. **Important:** Explicit zero values (`0`) are treated as valid data, not as empty. Only truly blank cells trigger automatic N/A detection. This prevents blank or NA cells from silently counting against an employee's weighted average while preserving legitimate zero-score data.
 
 ##### Import Columns Reference (PMS Data)
 

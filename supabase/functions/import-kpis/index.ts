@@ -841,12 +841,15 @@ async function processImport(
           return num;
         };
 
+        // Helper to check if a value is truly empty (not just zero)
+        const isEmpty = (v: any) => v === null || v === undefined || v === '';
+
         // Detect NA values - matches client-side logic in ImportData.tsx
         const achievedStr = String(achievedValue ?? '').trim().toLowerCase();
         const isNa = achievedStr === 'na' || achievedStr === 'n/a' ||
           achievedStr === 'not applicable' || achievedStr === '-' ||
-          (!achievedValue && !row.employeeRating && !row.rating &&
-           !row.managerRating && !row.auditRating);
+          (isEmpty(achievedValue) && isEmpty(row.employeeRating) && isEmpty(row.rating) &&
+           isEmpty(row.managerRating) && isEmpty(row.auditRating));
         
         submissionRecords.push({
           kpi_id: kpiId,
