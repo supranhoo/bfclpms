@@ -1790,6 +1790,8 @@ The database trigger `send_email_on_notification()` maps internal notification t
 - Email notifications (via configurable provider: Resend, SMTP, or Microsoft 365 Graph API)
 - Email events are individually toggleable in System Settings → Email Notifications
 - 22 event types supported with customizable email templates (including observation raised, reply, resolved, and password rollout)
+- **Email Header Logo**: The App Logo configured in Global Branding (`app_settings.logo_url`) is automatically displayed in the **top-right corner** of all email headers. Falls back to the email-specific company logo if the branding logo is not set.
+- **Auto-Linkified URLs**: All URLs (http/https) in email template bodies are automatically converted to **clickable blue hyperlinks** when the email is rendered. This applies to all existing and future templates — no manual HTML is needed.
 
 ### 4.13 Frequency & Sub-Frequency Logic
 

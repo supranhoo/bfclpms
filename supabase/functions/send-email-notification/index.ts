@@ -398,16 +398,21 @@ const buildEmailHtml = (
 ): string => {
   const style = EVENT_STYLES[eventType] || { color: '#6366f1', emoji: '📬', title: 'Notification' };
   const logoHtml = customization.logoUrl 
-    ? `<img src="${customization.logoUrl}" alt="Company Logo" style="max-height: 50px; margin-bottom: 15px;" />`
+    ? `<td style="text-align:right;vertical-align:middle;width:60px;"><img src="${customization.logoUrl}" alt="Company Logo" style="max-height:50px;max-width:60px;" /></td>`
     : '';
   const customFooterHtml = customization.footerText 
     ? `<p style="margin-top: 10px;">${customization.footerText}</p>`
     : '';
 
-  // Convert newlines in body to HTML
+  // Convert newlines in body to HTML, auto-linkify URLs
   const htmlBody = body.split('\n').map(line => {
     if (line.trim() === '') return '<br/>';
-    return `<p>${line}</p>`;
+    // Auto-convert URLs to clickable hyperlinks
+    const linked = line.replace(
+      /(https?:\/\/[^\s<]+)/g,
+      '<a href="$1" style="color:#2563eb;text-decoration:underline;">$1</a>'
+    );
+    return `<p>${linked}</p>`;
   }).join('');
 
   return `
@@ -416,7 +421,7 @@ const buildEmailHtml = (
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, ${style.color}, ${style.color}dd); color: white; padding: 30px; border-radius: 8px 8px 0 0; text-align: center; }
+        .header { background: linear-gradient(135deg, ${style.color}, ${style.color}dd); color: white; padding: 30px; border-radius: 8px 8px 0 0; }
         .content { background: #f8fafc; padding: 30px; border: 1px solid #e2e8f0; }
         .content p { margin: 0 0 10px 0; }
         .footer { background: #f1f5f9; padding: 20px; text-align: center; font-size: 12px; color: #64748b; border-radius: 0 0 8px 8px; }
@@ -425,8 +430,10 @@ const buildEmailHtml = (
     <body>
       <div class="container">
         <div class="header">
-          ${logoHtml}
-          <h1>${style.emoji} ${style.title}</h1>
+          <table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+            <td style="text-align:left;vertical-align:middle;"><h1 style="margin:0;font-size:22px;">${style.emoji} ${style.title}</h1></td>
+            ${logoHtml}
+          </tr></table>
         </div>
         <div class="content">
           ${htmlBody}
@@ -536,6 +543,17 @@ const handler = async (req: Request): Promise<Response> => {
         });
       }
 
+      // Fetch branding logo for SMTP test email
+      let smtpTestLogoUrl = '';
+      try {
+        const { data: appSettings } = await supabase
+          .from("app_settings")
+          .select("logo_url")
+          .eq("id", "00000000-0000-0000-0000-000000000001")
+          .maybeSingle();
+        if (appSettings?.logo_url) smtpTestLogoUrl = appSettings.logo_url;
+      } catch (e) { /* ignore */ }
+
       const testHtml = buildEmailHtml('kpi_submitted', `This is a test email from the Performance Management System.
 
 If you received this email, your SMTP configuration is working correctly!
@@ -543,7 +561,7 @@ If you received this email, your SMTP configuration is working correctly!
 SMTP Host: ${smtp_host}
 SMTP Port: ${smtp_port}
 Security: ${smtp_security}
-From Address: ${smtp_from_address}`, { logoUrl: '', footerText: '' });
+From Address: ${smtp_from_address}`, { logoUrl: smtpTestLogoUrl, footerText: '' });
 
       try {
         await sendViaSmtp(
@@ -597,8 +615,23 @@ From Address: ${smtp_from_address}`, { logoUrl: '', footerText: '' });
       };
 
       const provider = parseValue(settingsMap.email_provider) || 'resend';
-      const logoUrl = parseValue(settingsMap.email_company_logo_url);
+      const emailLogoUrl = parseValue(settingsMap.email_company_logo_url);
       const footerText = parseValue(settingsMap.email_custom_footer);
+
+      // Prefer Global Branding app logo, fall back to email-specific logo
+      let logoUrl = emailLogoUrl;
+      try {
+        const { data: appSettings } = await supabase
+          .from("app_settings")
+          .select("logo_url")
+          .eq("id", "00000000-0000-0000-0000-000000000001")
+          .maybeSingle();
+        if (appSettings?.logo_url) {
+          logoUrl = appSettings.logo_url;
+        }
+      } catch (e) {
+        console.error("Failed to fetch app_settings logo:", e);
+      }
 
       let senderName: string;
       let senderEmail: string;
@@ -746,8 +779,23 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     };
 
     const provider = parseValue(settingsMap.email_provider) || 'resend';
-    const logoUrl = parseValue(settingsMap.email_company_logo_url);
+    const emailLogoUrl = parseValue(settingsMap.email_company_logo_url);
     const footerText = parseValue(settingsMap.email_custom_footer);
+
+    // Prefer Global Branding app logo, fall back to email-specific logo
+    let logoUrl = emailLogoUrl;
+    try {
+      const { data: appSettings } = await supabase
+        .from("app_settings")
+        .select("logo_url")
+        .eq("id", "00000000-0000-0000-0000-000000000001")
+        .maybeSingle();
+      if (appSettings?.logo_url) {
+        logoUrl = appSettings.logo_url;
+      }
+    } catch (e) {
+      console.error("Failed to fetch app_settings logo:", e);
+    }
 
     let senderName: string;
     let senderEmail: string;
