@@ -754,12 +754,35 @@ export default function ImportData() {
 
         const result = data as any;
 
+        // Surface any pre-import validation errors as skipped rows
+        if (result.skippedRows > 0 && result.validationErrors?.length > 0) {
+          const skippedResults: ImportRowResult[] = result.validationErrors.map((errMsg: string) => {
+            // Parse "Row N: field - message" format
+            const rowMatch = errMsg.match(/^Row\s+(\d+):/);
+            const rowNum = rowMatch ? parseInt(rowMatch[1], 10) + 1 : 0; // +1 for Excel header offset
+            return {
+              row: rowNum,
+              employeeCode: '-',
+              employeeName: '-',
+              status: 'skipped' as const,
+              message: errMsg,
+            };
+          });
+          setKpiImportResults(skippedResults);
+          toast({
+            title: 'Import Started',
+            description: `Processing ${result.totalRows} KPIs in background. ${result.skippedRows} row(s) skipped due to validation errors.`,
+            variant: result.skippedRows > 0 ? 'destructive' : 'default',
+          });
+        } else {
+          toast({
+            title: 'Import Started',
+            description: `Processing ${importData.length} KPIs in background. Progress will show below.`,
+          });
+        }
+
         // Set the import ID to start tracking progress
         setBackgroundImportId(result.importId);
-        toast({
-          title: 'Import Started',
-          description: `Processing ${importData.length} KPIs in background. Progress will show below.`,
-        });
 
         // Clear the import data preview
         setImportData([]);

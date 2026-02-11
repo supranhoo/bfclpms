@@ -1035,13 +1035,8 @@ Deno.serve(async (req) => {
       } else if (error) {
         validationErrors.push(error);
         // Log first few errors for debugging
-        if (validationErrors.length <= 5) {
+        if (validationErrors.length <= 10) {
           console.log(`Validation error: ${error}`);
-        }
-        // Stop after 50 validation errors to avoid overwhelming response
-        if (validationErrors.length >= 50) {
-          validationErrors.push(`... and ${rawImportData.length - i - 1} more rows not validated`);
-          break;
         }
       }
     }
@@ -1052,7 +1047,7 @@ Deno.serve(async (req) => {
     if (validatedData.length === 0) {
       return new Response(JSON.stringify({ 
         error: 'All rows failed validation. Check column names match expected format.',
-        validationErrors: validationErrors.slice(0, 20),
+        validationErrors: validationErrors.slice(0, 500),
         totalErrors: validationErrors.length,
         totalRows: rawImportData.length,
         expectedColumns: ['newCode', 'fullName', 'category', 'kra', 'kpi']
@@ -1062,24 +1057,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // If more than 10% of rows failed validation, reject the import
-    const failureRate = validationErrors.length / rawImportData.length;
-    if (failureRate > 0.1 && validationErrors.length > 5) {
-      return new Response(JSON.stringify({ 
-        error: 'Too many validation errors in import data',
-        validationErrors: validationErrors.slice(0, 20),
-        totalErrors: validationErrors.length,
-        totalRows: rawImportData.length
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     const importData = validatedData;
 
     const importId = `import-${Date.now()}`;
-    console.log(`[${importId}] Received ${importData.length} rows for OPTIMIZED background import`);
+    console.log(`[${importId}] Received ${importData.length} rows for OPTIMIZED background import (${validationErrors.length} rows skipped)`);
 
     // Start background processing with userId for tracking
     EdgeRuntime.waitUntil(processImport(supabaseAdmin, importData, importId, user.id));
@@ -1090,6 +1071,9 @@ Deno.serve(async (req) => {
         message: `Import started. Processing ${importData.length} rows with batch optimization.`,
         importId,
         totalRows: importData.length,
+        skippedRows: validationErrors.length,
+        totalErrors: validationErrors.length,
+        validationErrors: validationErrors.slice(0, 500),
       }),
       {
         status: 202,
