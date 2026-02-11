@@ -92,7 +92,11 @@ const App = () => (
                 <Route path="/self-review" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/kra-acceptance" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/queries" element={<QueryInbox />} />
-                <Route path="/pms-policy" element={<PMSPolicy />} />
+                <Route path="/pms-policy" element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <PMSPolicy />
+                  </ProtectedRoute>
+                } />
                 
                 {/* Legacy routes - redirect to unified dashboard with view mode */}
                 <Route path="/team-review" element={<Navigate to="/dashboard?view=team" replace />} />
