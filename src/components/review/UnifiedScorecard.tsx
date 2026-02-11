@@ -259,17 +259,17 @@ export function UnifiedScorecard({
   const getRelevantScore = (submission: any) => {
     if (!submission) return 0;
     if (viewLevel === 'manager') {
-      return submission.manager_score || submission.self_score || 0;
+      return submission.manager_score ?? submission.self_score ?? 0;
     } else if (viewLevel === 'auditor') {
-      return submission.auditor_score || submission.manager_score || submission.self_score || 0;
+      return submission.auditor_score ?? submission.manager_score ?? submission.self_score ?? 0;
     } else {
-      return submission.management_score || submission.auditor_score || submission.manager_score || submission.self_score || 0;
+      return submission.management_score ?? submission.auditor_score ?? submission.manager_score ?? submission.self_score ?? 0;
     }
   };
 
   // Calculate scores
   const scoreData = useMemo(() => {
-    if (!kpis || !submissions) return { overallScore: 0, rating: 0, categoryScores: [] };
+    if (!kpis || !submissions) return { overallScore: 0, rating: 0, categoryScores: [], totalWeightedScore: 0, totalWeight: 0 };
     
     let totalWeightedScore = 0;
     let totalWeight = 0;
@@ -318,7 +318,7 @@ export function UnifiedScorecard({
       weightage: data.dynamicWeightage,
     }));
     
-    return { overallScore, rating: overallRating, categoryScores };
+    return { overallScore, rating: overallRating, categoryScores, totalWeightedScore, totalWeight };
   }, [kpis, submissions, submissionMap, viewLevel]);
 
   // Submit review mutation
@@ -731,8 +731,8 @@ export function UnifiedScorecard({
             <div className="text-center mt-2 pt-2 border-t border-border w-full">
               <p className="text-xs text-muted-foreground">Weighted Score</p>
               <p className="text-lg font-bold text-foreground">
-                {(scoreData.rating * (kpis?.reduce((sum, k) => sum + (k.weightage || 0), 0) || 0)).toFixed(1)} 
-                <span className="text-muted-foreground font-normal"> / {((kpis?.reduce((sum, k) => sum + (k.weightage || 0), 0) || 0) * 5).toFixed(0)}</span>
+                {scoreData.totalWeightedScore.toFixed(1)} 
+                <span className="text-muted-foreground font-normal"> / {(scoreData.totalWeight * 5).toFixed(0)}</span>
               </p>
             </div>
           </CardContent>

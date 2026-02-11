@@ -199,7 +199,7 @@ export default function Dashboard() {
       const submission = submissionMap.get(kpi.id);
       if (submission?.is_na) return; // Skip N/A from both numerator and denominator
       
-      const score = submission?.final_score || submission?.self_score || 0;
+      const score = submission?.final_score ?? submission?.self_score ?? 0;
       const weight = kpi.weightage || 0;
       totalScore += score * weight;
       totalWeight += weight;
