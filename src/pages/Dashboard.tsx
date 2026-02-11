@@ -258,7 +258,7 @@ export default function Dashboard() {
 
       catKpis.forEach(kpi => {
         const submission = submissionMap.get(kpi.id);
-        const score = submission?.final_score || submission?.self_score || 0;
+        const score = submission?.final_score ?? submission?.management_score ?? submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? 0;
         const weight = kpi.weightage || 0;
         achieved += score * weight;
         max += weight * 5;
@@ -541,8 +541,8 @@ export default function Dashboard() {
               <TableBody>
                 {sortedKpis.map(kpi => {
                   const submission = submissionMap.get(kpi.id);
-                  const rating = submission?.final_rating || submission?.self_rating;
-                  const score = submission?.final_score || submission?.self_score;
+                  const rating = submission?.final_rating ?? submission?.management_rating ?? submission?.auditor_rating ?? submission?.manager_rating ?? submission?.self_rating ?? null;
+                  const score = submission?.final_score ?? submission?.management_score ?? submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? null;
                   const isKraSet = kpi.status === 'kra_set';
                   
                   return (

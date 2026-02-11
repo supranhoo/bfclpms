@@ -58,7 +58,7 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
           month: k.review_period || 'N/A',
           target: k.target_value || 0,
           achieved: sub?.achieved_value || 0,
-          rating: sub?.final_score || sub?.self_score || 0,
+          rating: sub?.final_score ?? sub?.management_score ?? sub?.auditor_score ?? sub?.manager_score ?? sub?.self_score ?? 0,
           status: k.status || 'open',
           year: k.review_year || new Date().getFullYear(),
         });
