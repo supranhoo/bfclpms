@@ -1,69 +1,64 @@
 
 
-# Fix Excel Percentage Import Bug (Values > 100%)
+# Fix Zero-Score Truthy Bug Across Reports and Import
 
-## Root Cause
+## Problem
 
-When Excel formats a cell as "percentage", the XLSX library delivers values as **decimals** (e.g., 102% arrives as `1.02`, 150% arrives as `1.5`). The import code correctly handles decimals in the 0-1 range (0% to 100%) by multiplying by 100, but **fails for values above 100%** because the check uses `<= 1`.
+JavaScript treats `0` as falsy. Several places in the codebase use truthy checks (`if (value)`) instead of null-safe checks (`if (value != null)`) on score fields. When a score is explicitly `0`, these checks fail and the value is silently dropped.
 
-This bug affects **three places** in the import function, causing:
-- **target_value**: 102% stored as 1.02 instead of 102
-- **R4/R5 thresholds**: 102% stored as "1.02%" instead of "102%"  
-- **achieved_value**: Same issue for submitted achieved values > 100%
+This affects:
+1. **Monthly Scorecard Report** -- weighted score calculations skip score=0, making it appear as if no data exists in exports
+2. **Import status inference** -- when `auditRating=0` is imported without an explicit `reviewStatus` column, the status fallback logic fails to detect audit data, potentially assigning a wrong status
 
-**98 KPI records** are currently affected in the database.
+The database **does** store the correct values (confirmed: `auditor_score=0.00`, `kpi_status=locked`). The bug is in the report/export calculations that read and aggregate these values.
 
-## Fix Plan (2 parts)
+## Changes
 
-### Part 1: Fix the Import Code
+### 1. `src/pages/reports/MonthlyScorecardReport.tsx` (lines 211-225)
 
-**File: `supabase/functions/import-kpis/index.ts`**
-
-Three changes:
-
-1. **Target value conversion (line 694)**: Change `targetValue <= 1` to `targetValue <= 2` so values up to 200% (arriving as 2.0) are correctly multiplied by 100.
-
-2. **`formatRatingThreshold` -- %-sign branch (lines 328-334)**: When the string already includes "%" but the numeric part is suspiciously small (e.g., "1.02%"), detect this as an Excel artifact and multiply by 100. Add a check: if `numPart > 0 && numPart <= 2`, treat it as a decimal and convert (`1.02%` becomes `102%`).
-
-3. **`parseAchieved` function (line 838)**: Change `num <= 1` to `num <= 2` so achieved values like 1.02 (representing 102%) are correctly converted.
-
-### Part 2: Fix Existing Data in Database
-
-Provide a SQL migration to correct all 98 affected records:
-
-- **target_value**: Multiply by 100 where `uom = '%' AND target_value > 1 AND target_value <= 2`
-- **R4 and R5 thresholds**: Parse the numeric part from strings like "1.02%", multiply by 100, and store as "102%"
-- No R1/R2/R3 records are affected (they are all <= 100%)
-
-### Part 3: Update Documentation
-
-**File: `DOCUMENTATION.md`** -- Add a note about the Excel percentage handling and the `<= 2` heuristic for values up to 200%.
-
----
-
-## Technical Details
-
-### Why `<= 2` and not a higher threshold?
-
-The decimal 2.0 represents 200% in Excel format. Percentages above 200% are extremely rare in KPI systems. Using `<= 2` provides safe coverage without false positives (a KPI with a genuine target of 1.5 in non-percentage UOM would not be affected since the check only applies when `uom = '%'`).
-
-### SQL Correction Query
+Replace truthy checks with null-safe checks so score=0 is included in weighted calculations:
 
 ```text
--- Fix target_value
-UPDATE kpis SET target_value = target_value * 100 
-WHERE uom = '%' AND target_value > 1 AND target_value <= 2;
+// BEFORE (buggy):
+if (submission.self_score) { ... }
+if (submission.manager_score) { ... }
+if (submission.auditor_score) { ... }
+if (submission.management_score) { ... }
+if (submission.final_score) { ... completedKpis++; }
 
--- Fix R4 thresholds like "1.02%"
-UPDATE kpis SET r4 = CONCAT(ROUND(CAST(REPLACE(r4, '%', '') AS NUMERIC) * 100, 2), '%')
-WHERE uom = '%' AND r4 LIKE '1.%' AND CAST(REPLACE(r4, '%', '') AS NUMERIC) <= 2;
-
--- Fix R5 thresholds like "1.5%"  
-UPDATE kpis SET r5 = CONCAT(ROUND(CAST(REPLACE(r5, '%', '') AS NUMERIC) * 100, 2), '%')
-WHERE uom = '%' AND r5 LIKE '1.%' AND CAST(REPLACE(r5, '%', '') AS NUMERIC) <= 2;
+// AFTER (fixed):
+if (submission.self_score != null) { ... }
+if (submission.manager_score != null) { ... }
+if (submission.auditor_score != null) { ... }
+if (submission.management_score != null) { ... }
+if (submission.final_score != null) { ... completedKpis++; }
 ```
 
-### Affected Ref Codes (from user's list)
+### 2. `supabase/functions/import-kpis/index.ts` (lines 237-252)
 
-The r4/r5 columns for all the REF codes the user listed (REF-2856, REF-2839, REF-2736, REF-2302, etc.) will be corrected from values like "1.02%" to "102%", and target_value from 1.02 to 102.
+Replace truthy checks in `determineReviewStatus` and `determineKpiStatus` so `rating=0` is recognized:
+
+```text
+// BEFORE (buggy):
+if (row.auditRating || row.auditTargetAchieved) return 'approved';
+if (row.managerRating || row.managerTargetAchieved) return 'audit';
+
+// AFTER (fixed):
+if (row.auditRating != null || row.auditTargetAchieved != null) return 'approved';
+if (row.managerRating != null || row.managerTargetAchieved != null) return 'audit';
+// (same pattern for all lines in both functions)
+```
+
+Note: The `isEmpty` helper (line 851) and `??` operators used elsewhere in the import function already handle zero correctly -- only these two status-inference functions have the bug.
+
+### 3. `DOCUMENTATION.md`
+
+Add a note documenting the zero-score truthy bug fix and the rule to always use `!= null` checks for score/rating fields.
+
+## What Does NOT Need Fixing
+
+- **`EmployeePerformanceSummary.tsx`**: Already uses `??` (nullish coalescing) -- correct.
+- **`finalScore || 0` patterns** in `pdfExport.ts` and `MonthlyScorecardReport.tsx` line 287: `0 || 0` evaluates to `0`, which is the correct result. These are safe.
+- **Dashboard scoring** in `useCumulativeKpis` and `Dashboard.tsx`: Uses `?? 0` pattern -- correct.
+- **Database values**: Already stored correctly (`auditor_score=0.00`, `final_score=0.00`, `kpi_status=locked`). No data migration needed.
 
