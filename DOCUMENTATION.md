@@ -939,7 +939,7 @@ All three review pages share a unified `EmployeeFilters` component with advanced
 - Hierarchical relationship setup
 
 #### 4.9.3 KRA Categories (`/admin/categories`)
-- Create/edit KRA categories
+- Create/edit KRA categories (name limited to 35 characters)
 - Set weightages (must sum to 100%)
 - Configure org-level categories
 - Set category colors
