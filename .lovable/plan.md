@@ -1,63 +1,41 @@
 
+# Fix: Category Chart Clipping on All Dashboards
 
-# Surface ALL Validation Errors -- No Silent Drops
+## Root Cause
 
-## Problem
+The "Performance by Category" horizontal bar chart uses 36px per category row. When an employee has 5+ categories, the chart needs more vertical space than the fixed-height containers provide. The bottom categories are clipped by CSS overflow.
 
-The current import logic has two issues that cause errors to be silently swallowed:
-
-1. **10% threshold gate (lines 1065-1077)**: If fewer than 10% of rows fail validation AND the count is 5 or fewer, the errors are silently discarded. The 202 response only contains `totalRows` for the valid rows -- zero mention of skipped rows.
-
-2. **50-error cap (lines 1042-1045)**: Validation stops after 50 errors, leaving remaining rows unvalidated entirely.
-
-**New rule: Every validation error must be reported to the user at upload time, regardless of quantity.**
+**Already fixed** on Dashboard and UnifiedScorecard (dynamic height).
+**Still broken** on 4 pages that use fixed heights (140-200px).
 
 ## Changes
 
-### 1. Edge Function (`supabase/functions/import-kpis/index.ts`)
+Apply the same dynamic height pattern used in Dashboard.tsx and UnifiedScorecard.tsx to all 4 remaining pages:
 
-**Remove the 50-error early exit** (lines 1041-1045):
-- Remove the `if (validationErrors.length >= 50) { break; }` block
-- Let all rows validate so we get the complete error list
-- Cap only the *response payload* (not the validation loop) to 500 errors to avoid oversized responses
+### 1. SelfReview.tsx (line 476)
 
-**Remove the 10% silent-pass gate** (lines 1065-1077):
-- Delete the `failureRate > 0.1` block entirely
-- Instead, always proceed with valid rows AND always include skipped-row info in the response
+Replace `className="h-[200px]"` with `style={{ height: Math.max(180, categoryMetrics.length * 36) }}`.
 
-**Update the 202 success response** (lines 1087-1098):
-- Add `skippedRows`, `validationErrors` (capped at 500), and `totalErrors` fields so the frontend always knows what was dropped
+### 2. EmployeeScorecard.tsx (line 514)
 
-```text
-{
-  success: true,
-  message: "Import started. Processing 2948 rows...",
-  importId: "import-...",
-  totalRows: 2948,
-  skippedRows: 1,
-  totalErrors: 1,
-  validationErrors: ["Row 722: managerRating must be <= 10"]
-}
-```
+Replace `className="h-[140px] sm:h-[180px]"` with `style={{ height: Math.max(180, scoreData.categoryScores.length * 36) }}`.
 
-**Keep the "all rows failed" rejection** (lines 1051-1063):
-- If `validatedData.length === 0`, still return 400 -- nothing to import.
+### 3. AuditScorecard.tsx (line 546)
 
-### 2. Frontend (`src/pages/admin/ImportData.tsx`)
+Replace `className="h-[140px] sm:h-[180px]"` with `style={{ height: Math.max(180, scoreData.categoryScores.length * 36) }}`.
 
-**After receiving 202 response** (around line 755):
-- Check `result.skippedRows > 0`
-- If true, build `ImportRowResult[]` entries with status `'skipped'` from `result.validationErrors`
-- Immediately display `ImportResultsSummary` so the user sees the skipped rows right away (alongside the background progress tracker)
-- Update the toast to: "Import started -- 1 row skipped due to validation errors"
+### 4. ManagementScorecard.tsx (line 568)
 
-### 3. Documentation (`DOCUMENTATION.md`)
+Replace `className="h-[140px] sm:h-[180px]"` with `style={{ height: Math.max(180, scoreData.categoryScores.length * 36) }}`.
 
-- Add note in Section 4.21: "All pre-import validation errors are surfaced in the UI as skipped rows, regardless of how many or few fail. No error is silently dropped."
+### 5. PerformanceReport.tsx (line ~123)
 
-## What Stays the Same
+The Performance Report page also has a fixed `h-[300px]` container for its "Performance by Category" bar chart. Apply the same dynamic height: `style={{ height: Math.max(180, categoryPerformance.length * 36) }}`.
 
-- Background processing errors (DB insert failures during batch processing) continue to be tracked via the `import_progress` table -- unchanged
-- Foreground import error reporting -- unchanged (already shows all errors)
-- The `validateAndSanitizeRow` function itself -- unchanged
+### 6. DOCUMENTATION.md
 
+Update the chart design notes to document that all "Performance by Category" containers use dynamic height sizing.
+
+## Result
+
+Every dashboard level (Self, Team, Audit, Management, Unified, Reports) will dynamically grow to fit all categories -- no more hidden or clipped labels.
