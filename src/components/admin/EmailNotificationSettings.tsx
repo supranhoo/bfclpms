@@ -46,6 +46,7 @@ const EMAIL_EVENTS: { key: EmailEventType; label: string; description: string }[
   { key: 'observation_raised', label: 'Observation Raised', description: 'Notify KPI owner when a new observation is raised on their KPI' },
   { key: 'observation_reply', label: 'Observation Reply', description: 'Notify participants when someone replies to an observation' },
   { key: 'observation_resolved', label: 'Observation Resolved', description: 'Notify participants when an observation is marked as resolved' },
+  { key: 'password_rollout', label: 'Password Rollout', description: 'Send login credentials when admin generates passwords for users' },
 ];
 
 export function EmailNotificationSettings() {

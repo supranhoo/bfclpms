@@ -1789,7 +1789,7 @@ The database trigger `send_email_on_notification()` maps internal notification t
 - In-app notifications (real-time via Supabase Realtime)
 - Email notifications (via configurable provider: Resend, SMTP, or Microsoft 365 Graph API)
 - Email events are individually toggleable in System Settings → Email Notifications
-- 21 event types supported with customizable email templates (including observation raised, reply, and resolved)
+- 22 event types supported with customizable email templates (including observation raised, reply, resolved, and password rollout)
 
 ### 4.13 Frequency & Sub-Frequency Logic
 

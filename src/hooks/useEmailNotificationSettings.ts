@@ -23,7 +23,8 @@ export type EmailEventType =
   | 'org_kpi_sent_back'
   | 'observation_raised'
   | 'observation_reply'
-  | 'observation_resolved';
+  | 'observation_resolved'
+  | 'password_rollout';
 
 export type EmailProvider = 'resend' | 'smtp' | 'microsoft_graph';
 export type SmtpSecurity = 'tls' | 'starttls' | 'none';
