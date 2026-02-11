@@ -840,25 +840,32 @@ async function processImport(
           }
           return num;
         };
+
+        // Detect NA values - matches client-side logic in ImportData.tsx
+        const achievedStr = String(achievedValue ?? '').trim().toLowerCase();
+        const isNa = achievedStr === 'na' || achievedStr === 'n/a' ||
+          achievedStr === 'not applicable' || achievedStr === '-' ||
+          (!achievedValue && !row.employeeRating && !row.rating &&
+           !row.managerRating && !row.auditRating);
         
         submissionRecords.push({
           kpi_id: kpiId,
-          achieved_value: parseAchieved(achievedValue),
-          manager_achieved_value: parseAchieved(row.managerTargetAchieved),
-          auditor_achieved_value: parseAchieved(row.auditTargetAchieved),
-          self_rating: mapScoreToRating(row.employeeRating ?? row.rating),
-          self_score: row.employeeRating ?? row.rating ?? null,
+          achieved_value: isNa ? null : parseAchieved(achievedValue),
+          manager_achieved_value: isNa ? null : parseAchieved(row.managerTargetAchieved),
+          auditor_achieved_value: isNa ? null : parseAchieved(row.auditTargetAchieved),
+          self_rating: isNa ? null : mapScoreToRating(row.employeeRating ?? row.rating),
+          self_score: isNa ? null : (row.employeeRating ?? row.rating ?? null),
           self_remarks: row.employeeRemarks ?? null,
-          manager_rating: mapScoreToRating(row.managerRating),
-          manager_score: row.managerRating ?? null,
+          manager_rating: isNa ? null : mapScoreToRating(row.managerRating),
+          manager_score: isNa ? null : (row.managerRating ?? null),
           manager_remarks: row.managerRemarks ?? null,
-          auditor_rating: mapScoreToRating(row.auditRating),
-          auditor_score: row.auditRating ?? null,
+          auditor_rating: isNa ? null : mapScoreToRating(row.auditRating),
+          auditor_score: isNa ? null : (row.auditRating ?? null),
           auditor_remarks: row.auditRemarks ?? null,
-          final_rating: mapScoreToRating(row.auditRating ?? row.managerRating ?? row.employeeRating ?? row.rating),
-          final_score: row.auditRating ?? row.managerRating ?? row.employeeRating ?? row.rating ?? null,
+          final_rating: isNa ? null : mapScoreToRating(row.auditRating ?? row.managerRating ?? row.employeeRating ?? row.rating),
+          final_score: isNa ? null : (row.auditRating ?? row.managerRating ?? row.employeeRating ?? row.rating ?? null),
           kpi_status: determineKpiStatus(row),
-          is_na: false,
+          is_na: isNa,
         });
       }
     }
