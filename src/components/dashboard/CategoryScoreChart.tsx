@@ -62,7 +62,7 @@ export function CategoryScoreChart({ data }: CategoryScoreChartProps) {
           data={data}
           layout="vertical"
           margin={{ top: 10, right: 30, left: 0, bottom: 10 }}
-          barCategoryGap="30%"
+          barCategoryGap="15%"
         >
           <CartesianGrid
             horizontal={false}
