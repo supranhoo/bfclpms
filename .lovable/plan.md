@@ -1,89 +1,63 @@
 
 
-# Export Current Data -- Fix Zero-Bug and Add Missing Columns
+# Surface ALL Validation Errors -- No Silent Drops
 
-## Problems Found
+## Problem
 
-### Problem 1: Zero Values Silently Dropped (Critical)
-The export function uses `|| ''` on all score/achieved fields. Since JavaScript treats `0` as falsy, any KPI with a score of `0` exports as blank. This is the **same truthy bug** we just fixed in the report and import -- but it was never fixed in the export.
+The current import logic has two issues that cause errors to be silently swallowed:
 
-Affected lines (1639-1662):
-- `targetAchieved: submission?.achieved_value || ''` -- drops `0`
-- `employeeRating: submission?.self_score || ''` -- drops `0`
-- `managerRating: submission?.manager_score || ''` -- drops `0`
-- `auditRating: submission?.auditor_score || ''` -- drops `0`
-- `finalScore: submission?.final_score || ''` -- drops `0`
-- Also: `kpi.target_value || ''`, `kpi.weightage || ''` -- drops `0`
+1. **10% threshold gate (lines 1065-1077)**: If fewer than 10% of rows fail validation AND the count is 5 or fewer, the errors are silently discarded. The 202 response only contains `totalRows` for the valid rows -- zero mention of skipped rows.
 
-**Fix:** Replace all `|| ''` with `?? ''` for numeric fields.
+2. **50-error cap (lines 1042-1045)**: Validation stops after 50 errors, leaving remaining rows unvalidated entirely.
 
-### Problem 2: Missing Columns (11 columns)
-The export does not include several columns that the import template expects. If a user exports data, edits it, and re-imports, these columns are lost.
-
-Missing columns:
-1. `sNo` -- Row serial number
-2. `reviewStatus` -- Derived from `performance_reviews.status`
-3. `division` -- From employee's department hierarchy
-4. `businessUnit` -- From employee's department hierarchy
-5. `department` -- From employee's department
-6. `subBranch` -- From employee's sub-branch
-7. `frequencyCycleStart` -- From `kpis.frequency_cycle_start`
-8. `kpiStatus` -- From `kpis.status`
-9. `isOrgLevel` -- From `kpis.is_org_level`
-10. `employeeTargetAchieved` -- From `review_submissions.achieved_value` (self-review achieved)
-11. `managerTargetAchieved` -- From `review_submissions.manager_achieved_value`
-12. `auditTargetAchieved` -- From `review_submissions.auditor_achieved_value`
-13. `achievedWeight` -- Calculated field (not stored, can be left blank)
-
-## Pros and Cons
-
-### Pros
-- **Round-trip fidelity**: Export then re-import produces identical data -- no silent data loss
-- **Audit trail**: Users can verify all stored values including `0` scores before re-importing
-- **Debugging**: Makes it easy to spot import issues by comparing exported vs uploaded data
-- **Backup**: Serves as a complete data backup in the same format as import
-
-### Cons
-- **Slightly wider file**: 11 more columns, but these are all lightweight text/number fields
-- **Query complexity**: Export needs to join `profiles -> departments -> business_units -> divisions` (already done in employee export, just needs replication here)
-- **Performance review join**: Need an additional query to fetch `performance_reviews.status` for the `reviewStatus` column -- adds one more paginated fetch
+**New rule: Every validation error must be reported to the user at upload time, regardless of quantity.**
 
 ## Changes
 
-### File: `src/pages/admin/ImportData.tsx` -- `exportKpiData` function (lines 1563-1684)
+### 1. Edge Function (`supabase/functions/import-kpis/index.ts`)
 
-1. **Fix zero-bug**: Replace `|| ''` with `?? ''` for all numeric fields (`target_value`, `weightage`, `achieved_value`, `self_score`, `manager_score`, `auditor_score`, `final_score`, `manager_achieved_value`, `auditor_achieved_value`)
+**Remove the 50-error early exit** (lines 1041-1045):
+- Remove the `if (validationErrors.length >= 50) { break; }` block
+- Let all rows validate so we get the complete error list
+- Cap only the *response payload* (not the validation loop) to 500 errors to avoid oversized responses
 
-2. **Add missing select columns**: Update the KPI query to also fetch:
-   - `frequency_cycle_start`
-   - `is_org_level`
-   - `status` (already fetched)
-   - Employee profile with department hierarchy (department -> business_unit -> division)
+**Remove the 10% silent-pass gate** (lines 1065-1077):
+- Delete the `failureRate > 0.1` block entirely
+- Instead, always proceed with valid rows AND always include skipped-row info in the response
 
-3. **Add review_submissions columns**: Update the submission query to also fetch:
-   - `manager_achieved_value`
-   - `auditor_achieved_value`
-   - `management_score`
-   - `management_remarks`
-
-4. **Add performance_reviews query**: New paginated fetch to get `performance_reviews` with `employee_id`, `review_period`, and `status` to map the `reviewStatus` column
-
-5. **Rebuild export row**: The export object will include all template columns in the same order as the template:
+**Update the 202 success response** (lines 1087-1098):
+- Add `skippedRows`, `validationErrors` (capped at 500), and `totalErrors` fields so the frontend always knows what was dropped
 
 ```text
-sNo, refCode, month, reviewStatus, newCode, fullName,
-division, businessUnit, department, subBranch,
-category, kra, kpi, uom, uomType, qualitativeOptions,
-frequency, frequencyCycleStart, kpiWeightage, criteria, target,
-r5, r4, r3, r2, r1, r0,
-targetAchieved, achievedWeight, rating, kpiWeightageScore,
-employeeTargetAchieved, employeeRating, employeeRemarks,
-managerTargetAchieved, managerRating, managerRemarks,
-auditTargetAchieved, auditRating, auditRemarks,
-sourceOfData, kpiStatus, isOrgLevel
+{
+  success: true,
+  message: "Import started. Processing 2948 rows...",
+  importId: "import-...",
+  totalRows: 2948,
+  skippedRows: 1,
+  totalErrors: 1,
+  validationErrors: ["Row 722: managerRating must be <= 10"]
+}
 ```
 
-### File: `DOCUMENTATION.md`
-- Update section 4.19 to note the export function was also affected by the zero-truthy bug
-- Add note about export-import column parity
+**Keep the "all rows failed" rejection** (lines 1051-1063):
+- If `validatedData.length === 0`, still return 400 -- nothing to import.
+
+### 2. Frontend (`src/pages/admin/ImportData.tsx`)
+
+**After receiving 202 response** (around line 755):
+- Check `result.skippedRows > 0`
+- If true, build `ImportRowResult[]` entries with status `'skipped'` from `result.validationErrors`
+- Immediately display `ImportResultsSummary` so the user sees the skipped rows right away (alongside the background progress tracker)
+- Update the toast to: "Import started -- 1 row skipped due to validation errors"
+
+### 3. Documentation (`DOCUMENTATION.md`)
+
+- Add note in Section 4.21: "All pre-import validation errors are surfaced in the UI as skipped rows, regardless of how many or few fail. No error is silently dropped."
+
+## What Stays the Same
+
+- Background processing errors (DB insert failures during batch processing) continue to be tracked via the `import_progress` table -- unchanged
+- Foreground import error reporting -- unchanged (already shows all errors)
+- The `validateAndSanitizeRow` function itself -- unchanged
 
