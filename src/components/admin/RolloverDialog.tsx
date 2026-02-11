@@ -234,7 +234,7 @@ export function RolloverDialog({ open, onOpenChange }: RolloverDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
+        <ScrollArea className="flex-1 min-h-0 pr-4">
           {/* Step 1: Configuration */}
           {step === 'config' && (
             <div className="space-y-6 py-2">
