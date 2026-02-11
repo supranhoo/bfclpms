@@ -1,56 +1,60 @@
 
+# Clickable Stat Tiles for Pending KPI Filtering
 
-# Fix: Manager Cannot See Dummy's Submitted Review
+## What Changes
 
-## Root Cause
+Make the stat cards (Pending Review, Pending Audit, etc.) on the Team Review, Audit, and Management dashboards clickable. Clicking a tile filters the employee list to show only employees with KPIs at that specific status.
 
-The system defaults the period selector to **February 2026** (current month), but Dummy's submitted KPI is for **January 2026**. When the manager clicks on Dummy, the `UnifiedScorecard` filters KPIs by the selected period -- showing 0 results for February.
+## How It Works
 
-The architecture (RLS policies, hooks, components) is all correct. This is purely a **period mismatch** problem.
+- Clicking "Pending Review" (Team) filters to employees with `self_review` KPIs
+- Clicking "Pending Audit" (Audit) filters to employees with `manager_check` KPIs  
+- Clicking "Pending Review" (Management) filters to employees with `management_review` KPIs
+- Clicking the same tile again clears the filter (toggle behavior)
+- Active tile gets a highlighted ring/border to indicate the active filter
+- "Total Employees" tile resets to show all (clears filter)
 
-## Solution
+## Technical Details
 
-Auto-detect the most relevant period when a manager selects an employee, and add a visual hint when no KPIs exist for the current period but do exist for other periods.
+### File: `src/components/review/EmployeeSelectorGrid.tsx`
 
-### Changes
+**1. Update `StatCard` component** to accept an optional `onClick` handler and `active` boolean:
 
-**1. `src/components/review/EmployeeSelectorGrid.tsx` -- Smart period detection on employee click**
-
-When a user clicks an employee card, check if that employee has KPIs in the currently selected period. If not, find the most recent period with pending/reviewable KPIs and auto-switch to it.
-
-- In `onSelectEmployee` handler, look up the employee's KPIs from `periodKpis`
-- If the employee has no KPIs in the current period, query for their most recent period with reviewable KPIs
-- Auto-update `periodSelection` to match before navigating to the scorecard
-
-**2. `src/components/review/UnifiedScorecard.tsx` -- "No KPIs" hint with period suggestion**
-
-When the scorecard shows 0 KPIs for the selected period, display a helpful message:
-- "No KPIs found for February 2026"
-- If KPIs exist in other periods, show: "This employee has KPIs in January 2026" with a "Switch to January" button
-
-This requires a lightweight query to check which periods have KPIs for the employee.
-
-**3. `src/hooks/useKpis.ts` -- Add `useEmployeeKpiPeriods` hook**
-
-A new hook that fetches distinct `(review_period, review_year, status)` combinations for a given employee. This is used by the scorecard to suggest alternate periods.
-
-```sql
-SELECT DISTINCT review_period, review_year, status
-FROM kpis
-WHERE employee_id = $1
-ORDER BY review_year DESC, review_period DESC
+```typescript
+interface StatCardProps {
+  // ...existing props
+  onClick?: () => void;
+  active?: boolean;
+}
 ```
 
-**4. Update `DOCUMENTATION.md`**
+Add cursor-pointer styling, hover effect, and active ring when clickable.
 
-Document the smart period detection behavior.
+**2. Update `renderStatsCards()`** to pass `onClick` handlers that set `statusFilter`:
+
+| View Level | Tile | Sets `statusFilter` to |
+|---|---|---|
+| Team | Open KPIs | (no action or reset) |
+| Team | Pending Review | `pending` |
+| Team | Reviewed | `reviewed` |
+| Audit | Pending Audit | `pending` |
+| Audit | In Audit | `in_audit` |
+| Audit | Forwarded | `forwarded` |
+| Management | Pending Review | `pending` |
+| Management | Approved | `approved` |
+
+Each tile toggles: clicking the active filter clears it back to `all`.
+
+**3. Update `StatCard` UI** to show visual feedback:
+- `cursor-pointer` and `hover:shadow-md` when clickable
+- `ring-2 ring-primary` border when active
+
+### File: `DOCUMENTATION.md`
+- Document the clickable stat tile behavior
 
 ## File Summary
 
 | File | Action |
 |---|---|
-| `src/hooks/useKpis.ts` | Add `useEmployeeKpiPeriods` hook |
-| `src/components/review/EmployeeSelectorGrid.tsx` | Auto-switch period on employee click |
-| `src/components/review/UnifiedScorecard.tsx` | Add "no KPIs" hint with period suggestion |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Add onClick + active state to StatCard, wire up filter handlers |
 | `DOCUMENTATION.md` | Update docs |
-
