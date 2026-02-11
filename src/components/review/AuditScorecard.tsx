@@ -543,7 +543,7 @@ export function AuditScorecard({
             <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Category Scores</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[140px] sm:h-[180px]">
+            <div style={{ height: Math.max(180, scoreData.categoryScores.length * 36) }}>
               <CategoryScoreChart data={scoreData.categoryScores} />
             </div>
           </CardContent>

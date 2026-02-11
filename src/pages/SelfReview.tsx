@@ -473,7 +473,7 @@ export default function SelfReview() {
                 <CardTitle>Performance by Category</CardTitle>
                 <CardDescription>Score breakdown across KRA categories</CardDescription>
               </CardHeader>
-              <CardContent className="h-[200px]">
+              <CardContent style={{ height: Math.max(180, categoryMetrics.length * 36) }}>
                 <CategoryScoreChart data={categoryMetrics} />
               </CardContent>
             </Card>
