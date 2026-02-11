@@ -154,7 +154,7 @@ export default function PerformanceReport() {
         <Card>
           <CardHeader><CardTitle>Performance by Category</CardTitle></CardHeader>
           <CardContent>
-            <div className="h-[300px]">
+            <div style={{ height: Math.max(180, categoryPerformance.length * 36) }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={categoryPerformance} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" />

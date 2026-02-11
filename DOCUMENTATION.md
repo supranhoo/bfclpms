@@ -571,7 +571,7 @@ useAuth() → user.id → useMyKpis() / useCumulativeKpis() → Filter by Period
 **Key Components:**
 - `ProfileCard.tsx`: Compact employee info display
 - `OverallScoreChart.tsx`: Small radial chart (innerRadius: 35, outerRadius: 50)
-- `CategoryScoreChart.tsx`: Premium horizontal bar chart with dynamic 30% label area, custom dual-tone tick (bold name + de-emphasized weightage), thinner bars (`barSize={12}`), 2% category gap, 36px per-category row height, and subtle vertical grid lines at 0/25/50/75/100%
+- `CategoryScoreChart.tsx`: Premium horizontal bar chart with dynamic 30% label area, custom dual-tone tick (bold name + de-emphasized weightage), thinner bars (`barSize={12}`), 2% category gap, 36px per-category row height, and subtle vertical grid lines at 0/25/50/75/100%. **All containers** across every dashboard level (Self, Team, Audit, Management, Unified, Reports) use dynamic height sizing (`Math.max(180, count * 36)`) to prevent category label clipping.
 - `KeyStatCard.tsx`: Stat cards with icons
 - `ReviewPeriodSelectorEnhanced.tsx`: Mode toggle + Month/Year dropdowns with cumulative support
 - `CumulativeSummaryCard.tsx`: Period summary with trend indicator
