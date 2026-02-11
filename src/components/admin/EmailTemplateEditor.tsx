@@ -364,6 +364,24 @@ The observation has been closed. No further action is required.`,
     color: '#10b981',
     emoji: '✅',
   },
+  {
+    key: 'password_rollout',
+    label: 'Password Rollout',
+    description: 'Sent to users when admin generates login credentials',
+    subject: '[PMS] Your Login Credentials',
+    bodyTemplate: `Hi {{recipient_name}},
+
+Your login credentials for the Performance Management System have been created.
+
+Email: {{login_email}}
+Password: {{generated_password}}
+
+Please log in and change your password as soon as possible.
+
+Login URL: {{login_url}}`,
+    color: '#6366f1',
+    emoji: '🔑',
+  },
 ];
 
 const PLACEHOLDERS = [
@@ -386,6 +404,9 @@ const PLACEHOLDERS = [
   { key: '{{milestone_expected_outcome}}', description: 'Expected outcome (PIP milestone only)' },
   { key: '{{observation_title}}', description: 'Observation title (observation events only)' },
   { key: '{{observation_type}}', description: 'Observation type (observation raised only)' },
+  { key: '{{generated_password}}', description: 'Generated password (password rollout only)' },
+  { key: '{{login_email}}', description: 'User login email (password rollout only)' },
+  { key: '{{login_url}}', description: 'Application login URL (password rollout only)' },
 ];
 
 export function EmailTemplateEditor() {
