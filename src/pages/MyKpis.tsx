@@ -235,7 +235,7 @@ export default function MyKpis() {
     
     kpis?.forEach(kpi => {
       const submission = submissionMap.get(kpi.id);
-      const score = submission?.final_score || submission?.self_score || 0;
+      const score = submission?.final_score ?? submission?.management_score ?? submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? 0;
       const weight = kpi.weightage || 0;
       totalWeightedScore += score * weight;
       totalWeight += weight;

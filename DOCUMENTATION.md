@@ -2695,8 +2695,8 @@ The `exportKpiData()` function in `ImportData.tsx` now exports **all columns** t
 | `managerTargetAchieved` | `review_submissions.manager_achieved_value` |
 | `auditTargetAchieved` | `review_submissions.auditor_achieved_value` |
 | `achievedWeight` | Placeholder (calculated field, exported blank) |
-| `rating` | Calculated: `final_score × (weightage / 100)` |
-| `kpiWeightageScore` | `review_submissions.final_score` |
+| `rating` | Raw achievement score (1-5): `final_score ?? management_score ?? auditor_score ?? manager_score ?? self_score` |
+| `kpiWeightageScore` | Calculated: `rating × (weightage / 100)` |
 
 ---
 

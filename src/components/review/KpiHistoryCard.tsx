@@ -43,7 +43,7 @@ export function KpiHistoryCard({
           year: k.review_year,
           target: k.target_value || 0,
           achieved: sub?.achieved_value || 0,
-          score: sub?.final_score || sub?.manager_score || sub?.self_score || 0,
+          score: sub?.final_score ?? sub?.management_score ?? sub?.auditor_score ?? sub?.manager_score ?? sub?.self_score ?? 0,
           status: k.status || 'kra_set',
         };
       })

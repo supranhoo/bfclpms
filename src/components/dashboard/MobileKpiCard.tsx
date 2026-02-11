@@ -31,8 +31,8 @@ export function MobileKpiCard({
   onViewTracker,
   onReview,
 }: MobileKpiCardProps) {
-  const rating = submission?.final_rating || submission?.self_rating;
-  const score = submission?.final_score || submission?.self_score;
+  const rating = submission?.final_rating ?? submission?.self_rating ?? null;
+  const score = submission?.final_score ?? submission?.self_score ?? null;
 
   return (
     <Card className="p-4">

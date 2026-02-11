@@ -83,7 +83,7 @@ export function KpiReviewPanel({
             kpiId={kpi.id}
             kpiStatus={kpi.status || 'kra_set'}
             viewLevel={viewLevel}
-            baseScore={submission?.final_score ?? submission?.self_score ?? null}
+            baseScore={submission?.final_score ?? submission?.management_score ?? submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? null}
             isOwnKpi={isOwnKpi}
           />
         </div>

@@ -194,7 +194,7 @@ export default function SelfReview() {
       const submission = submissionMap.get(kpi.id);
       if (submission?.is_na) return; // Skip N/A from both numerator and denominator
       
-      const score = submission?.final_score || submission?.self_score || 0;
+      const score = submission?.final_score ?? submission?.management_score ?? submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? 0;
       const weight = kpi.weightage || 0;
       totalScore += score * weight;
       totalWeight += weight;
@@ -230,7 +230,7 @@ export default function SelfReview() {
 
       catKpis.forEach(kpi => {
         const submission = submissionMap.get(kpi.id);
-        const score = submission?.final_score || submission?.self_score || 0;
+        const score = submission?.final_score ?? submission?.management_score ?? submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? 0;
         const weight = kpi.weightage || 0;
         achieved += score * weight;
         max += weight * 5;
