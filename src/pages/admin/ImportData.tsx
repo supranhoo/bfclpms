@@ -50,17 +50,17 @@ const mapScoreToRating = (score: number | string | null | undefined): RatingLeve
 
 // Determine KPI status based on review data
 const determineKpiStatus = (row: KpiImportRow): 'open' | 'submitted' | 'approved_by_manager' | 'locked' => {
-  if (row.auditRating || row.auditTargetAchieved) return 'locked';
-  if (row.managerRating || row.managerTargetAchieved) return 'approved_by_manager';
-  if (row.employeeRating || row.employeeTargetAchieved || row.targetAchieved) return 'submitted';
+  if (row.auditRating != null || row.auditTargetAchieved != null) return 'locked';
+  if (row.managerRating != null || row.managerTargetAchieved != null) return 'approved_by_manager';
+  if (row.employeeRating != null || row.employeeTargetAchieved != null || row.targetAchieved != null) return 'submitted';
   return 'open';
 };
 
 // Determine review status based on review data
 const determineReviewStatus = (row: KpiImportRow): 'kra_set' | 'self_review' | 'manager_check' | 'audit' | 'approved' => {
-  if (row.auditRating || row.auditTargetAchieved) return 'approved';
-  if (row.managerRating || row.managerTargetAchieved) return 'audit';
-  if (row.employeeRating || row.employeeTargetAchieved || row.targetAchieved) return 'manager_check';
+  if (row.auditRating != null || row.auditTargetAchieved != null) return 'approved';
+  if (row.managerRating != null || row.managerTargetAchieved != null) return 'audit';
+  if (row.employeeRating != null || row.employeeTargetAchieved != null || row.targetAchieved != null) return 'manager_check';
   return 'kra_set';
 };
 
@@ -1067,7 +1067,7 @@ export default function ImportData() {
           const auditorScore = row.auditRating;
           
           // Check if achieved value is N/A
-          const achievedStr = String(achievedValue || '').trim().toLowerCase();
+          const achievedStr = String(achievedValue ?? '').trim().toLowerCase();
           const isNa = achievedStr === 'na' || achievedStr === 'n/a' || achievedStr === 'not applicable' || achievedStr === '-' ||
             // Also treat as NA if no achieved value AND no scores exist
             (!achievedValue && !selfScore && !managerScore && !auditorScore);
@@ -1082,8 +1082,8 @@ export default function ImportData() {
             .insert({
               kpi_id: newKpi.id,
               achieved_value: parsedAchieved,
-              manager_achieved_value: row.managerTargetAchieved != null ? parseFloat(String(row.managerTargetAchieved).replace('%', '').replace(/,/g, '')) || null : null,
-              auditor_achieved_value: row.auditTargetAchieved != null ? parseFloat(String(row.auditTargetAchieved).replace('%', '').replace(/,/g, '')) || null : null,
+              manager_achieved_value: row.managerTargetAchieved != null ? ((() => { const n = parseFloat(String(row.managerTargetAchieved).replace('%', '').replace(/,/g, '')); return isNaN(n) ? null : n; })()) : null,
+              auditor_achieved_value: row.auditTargetAchieved != null ? ((() => { const n = parseFloat(String(row.auditTargetAchieved).replace('%', '').replace(/,/g, '')); return isNaN(n) ? null : n; })()) : null,
               self_score: isNa ? null : (selfScore != null ? parseFloat(String(selfScore)) : null),
               self_rating: isNa ? null : mapScoreToRating(selfScore),
               self_remarks: row.employeeRemarks ?? null,

@@ -492,15 +492,15 @@ export function UnifiedScorecard({
     } else if (viewLevel === 'auditor') {
       prevScore = existing?.auditor_score || existing?.manager_score || null;
     } else {
-      prevScore = existing?.management_score || existing?.auditor_score || null;
+      prevScore = existing?.management_score ?? existing?.auditor_score ?? null;
     }
     
     setReviewerScore(prevScore);
     setReviewerRemarks((existing as any)?.[`${config.scoreFieldPrefix}_remarks`] || '');
     setReviewerEvidenceUrl((existing as any)?.[`${config.scoreFieldPrefix}_evidence_url`] || null);
     setReviewerAchievedValue(
-      (existing as any)?.[`${config.scoreFieldPrefix}_achieved_value`] || 
-      existing?.achieved_value || 
+      (existing as any)?.[`${config.scoreFieldPrefix}_achieved_value`] ?? 
+      existing?.achieved_value ?? 
       null
     );
     

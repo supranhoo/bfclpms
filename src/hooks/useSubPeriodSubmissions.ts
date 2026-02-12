@@ -195,7 +195,7 @@ export function calculateAggregatedScore(submissions: SubPeriodSubmission[]): nu
   
   if (validSubmissions.length === 0) return null;
   
-  const sum = validSubmissions.reduce((acc, s) => acc + (s.achieved_value || 0), 0);
+  const sum = validSubmissions.reduce((acc, s) => acc + (s.achieved_value ?? 0), 0);
   return sum / validSubmissions.length;
 }
 

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-02-11  
-> **Version:** 1.14.1
+> **Last Updated:** 2026-02-12  
+> **Version:** 1.14.2
 > **Maintainer:** Lovable AI
 
 ---
@@ -2756,6 +2756,32 @@ The `exportKpiData()` function in `ImportData.tsx` now exports **all columns** t
 | `src/pages/admin/SystemSettings.tsx` | 9th tab ("Passwords") added with KeyRound icon |
 
 **Email Template:** `password_rollout` event type with placeholders: `{{recipient_name}}`, `{{login_email}}`, `{{generated_password}}`, `{{app_name}}`
+
+---
+
+## 9. Coding Standards
+
+### Zero-Value Preservation
+
+All numeric fields (scores, ratings, achieved values, weightages) **must** use null-safe checks to preserve `0` as a valid value. JavaScript treats `0` as falsy, so the logical OR operator (`||`) silently discards legitimate zeros.
+
+| Pattern | Use Case | Example |
+|---------|----------|---------|
+| `value ?? defaultValue` | Score fallback chains | `submission?.final_score ?? submission?.manager_score ?? 0` |
+| `value != null ? value : '-'` | Display formatting | `achieved_value != null ? achieved_value : '-'` |
+| `safeParseFloat(value)` | Parsing user/import input | `safeParseFloat(achievedValue)` (from `@/lib/utils`) |
+
+**Banned patterns for numeric fields:**
+- ❌ `value || '-'` — displays "-" when value is 0
+- ❌ `value || 0` — masks null vs 0 distinction
+- ❌ `parseFloat(v) || null` — converts 0 to null
+- ❌ `value?.toString() || ''` — converts 0 to empty string
+
+The `safeParseFloat` utility in `src/lib/utils.ts` correctly returns `null` for empty/invalid input and preserves `0` as a number.
+
+### Auth-Guarded Query Pattern
+
+All React Query hooks fetching RLS-protected data **must** include an `enabled: !!user` guard to prevent race conditions after login. The `useModules()` hook is the canonical example. Additionally, the `AuthContext` invalidates the `['modules']` query cache on login to clear any stale empty results.
 
 ---
 

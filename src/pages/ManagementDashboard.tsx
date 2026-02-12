@@ -219,9 +219,9 @@ export default function ManagementDashboard() {
         let totalWeightage = 0;
         kpiList.forEach(kpi => {
           const submission = kpi.review_submissions;
-          const score = submission?.final_score || submission?.management_score || 
-                       submission?.auditor_score || submission?.manager_score || 
-                       submission?.self_score || 0;
+          const score = submission?.final_score ?? submission?.management_score ?? 
+                       submission?.auditor_score ?? submission?.manager_score ?? 
+                       submission?.self_score ?? 0;
           totalScore += score;
           totalWeightage += kpi.weightage || 100;
         });
@@ -272,7 +272,7 @@ export default function ManagementDashboard() {
       managementPendingKpis.forEach(kpi => {
         const existing = employeePendingMap.get(kpi.employee_id);
         const submission = kpi.review_submissions;
-        const score = submission?.auditor_score || submission?.manager_score || submission?.self_score || 0;
+        const score = submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? 0;
         const weightage = kpi.weightage || 100;
 
         if (existing) {
@@ -334,9 +334,9 @@ export default function ManagementDashboard() {
         stats.totalKpis += 1;
 
         const submission = kpi.review_submissions;
-        const score = submission?.final_score || submission?.management_score || 
-                     submission?.auditor_score || submission?.manager_score || 
-                     submission?.self_score || 0;
+        const score = submission?.final_score ?? submission?.management_score ?? 
+                     submission?.auditor_score ?? submission?.manager_score ?? 
+                     submission?.self_score ?? 0;
         stats.totalScore += score;
         stats.totalWeightage += kpi.weightage || 100;
 

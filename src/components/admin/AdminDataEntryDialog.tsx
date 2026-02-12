@@ -99,27 +99,27 @@ export function AdminDataEntryDialog({
     // Get values based on role level
     switch (roleLevel) {
       case 'self':
-        setAchievedValue(existingSubmission.achieved_value?.toString() || '');
+        setAchievedValue(existingSubmission.achieved_value != null ? existingSubmission.achieved_value.toString() : '');
         setRating(existingSubmission.self_rating || '');
-        setScore(existingSubmission.self_score?.toString() || '');
+        setScore(existingSubmission.self_score != null ? existingSubmission.self_score.toString() : '');
         setRemarks(existingSubmission.self_remarks || '');
         break;
       case 'manager':
-        setAchievedValue(existingSubmission.manager_achieved_value?.toString() || '');
+        setAchievedValue(existingSubmission.manager_achieved_value != null ? existingSubmission.manager_achieved_value.toString() : '');
         setRating(existingSubmission.manager_rating || '');
-        setScore(existingSubmission.manager_score?.toString() || '');
+        setScore(existingSubmission.manager_score != null ? existingSubmission.manager_score.toString() : '');
         setRemarks(existingSubmission.manager_remarks || '');
         break;
       case 'auditor':
-        setAchievedValue(existingSubmission.auditor_achieved_value?.toString() || '');
+        setAchievedValue(existingSubmission.auditor_achieved_value != null ? existingSubmission.auditor_achieved_value.toString() : '');
         setRating(existingSubmission.auditor_rating || '');
-        setScore(existingSubmission.auditor_score?.toString() || '');
+        setScore(existingSubmission.auditor_score != null ? existingSubmission.auditor_score.toString() : '');
         setRemarks(existingSubmission.auditor_remarks || '');
         break;
       case 'management':
-        setAchievedValue(existingSubmission.management_achieved_value?.toString() || '');
+        setAchievedValue(existingSubmission.management_achieved_value != null ? existingSubmission.management_achieved_value.toString() : '');
         setRating(existingSubmission.management_rating || '');
-        setScore(existingSubmission.management_score?.toString() || '');
+        setScore(existingSubmission.management_score != null ? existingSubmission.management_score.toString() : '');
         setRemarks(existingSubmission.management_remarks || '');
         break;
     }

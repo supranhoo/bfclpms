@@ -184,7 +184,7 @@ export function EmployeeScorecard({
       const submission = submissionMap.get(kpi.id);
       if (submission?.is_na) return; // Skip NA KPIs
       
-      const score = submission?.manager_score || submission?.self_score || 0;
+      const score = submission?.manager_score ?? submission?.self_score ?? 0;
       const weight = kpi.weightage || 0;
       const categoryName = kpi.kra_categories?.name || 'Other';
       const categoryColor = kpi.kra_categories?.color || null;
@@ -359,7 +359,7 @@ export function EmployeeScorecard({
           original_value: null,
         }));
         
-        const originalScore = submission?.self_score || null;
+        const originalScore = submission?.self_score ?? null;
         
         await saveOverrides.mutateAsync({
           kpi_id: selectedKpi.id,
@@ -975,7 +975,7 @@ function DailySubmissionSummaryWithOverride({
   
   const isDailyBinary = kpi.frequency === 'Daily' && kpi.uom_type === 'binary';
   const existingSubmission = submissionMap.get(kpi.id);
-  const employeeSelfScore = existingSubmission?.self_score || null;
+  const employeeSelfScore = existingSubmission?.self_score ?? null;
   
   // Calculate score when manager agrees = true (use employee's score)
   // or when manager disagrees (recalculate from overrides)
