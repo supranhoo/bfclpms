@@ -2619,6 +2619,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_data_owner_for_employee: {
+        Args: { p_employee_id: string; p_owner_id: string }
+        Returns: boolean
+      }
       is_month_locked_for_frequency: {
         Args: { p_frequency: string; p_month: string; p_year: number }
         Returns: boolean
