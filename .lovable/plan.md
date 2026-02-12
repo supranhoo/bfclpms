@@ -1,46 +1,73 @@
 
 
-# Fix: KPI Tracker Still Shows No Data on "My KPIs" Page
+# Fix: Show Restore Warnings in UI + Fix Delete Order
 
-## Root Cause Analysis (RCA)
+## What Happened (The 6 Warnings)
 
-Our previous fix correctly updated the `KpiTrackerModal` component (line 1252) to use `allSubmissions`. However, there is a **second bug on line 867** that was missed:
+| # | Table | Warning |
+|---|---|---|
+| 1 | `email_templates` | Table doesn't exist in the database |
+| 2 | `email_notification_settings` | Table doesn't exist in the database |
+| 3 | `divisions` | Can't delete -- `departments` still has rows referenced by `profiles` |
+| 4 | `business_units` | Same FK cascade issue |
+| 5 | `departments` | FK constraint `profiles_department_fk` on `profiles` table |
+| 6 | `profiles` | FK constraint `password_rollout_logs_generated_by_fkey` -- `password_rollout_logs` not cleared first |
 
-```
-allSubmissions={submissions || []}   // BUG: "submissions" is period-filtered!
-```
+## Root Causes
 
-This passes the **period-filtered** `submissions` (only current month) to the `KpiReviewPanel` component. Inside `KpiReviewPanel`, the `KpiHistoryCard` uses this data for its inline sparkline chart and mini-table -- both show empty because only 1 month of data is available.
+1. **Missing table in delete order**: `password_rollout_logs` is not listed in `DELETE_ORDER`, so it still has rows referencing `profiles` when the restore tries to clear `profiles`. This cascades up -- `departments`, `business_units`, and `divisions` can't be cleared either.
+2. **Non-existent tables**: `email_templates` and `email_notification_settings` are listed in the backup/restore arrays but don't exist in the database schema.
+3. **No warning details in UI**: The `onSuccess` handler only shows a toast with a count ("6 warnings") but never reveals what went wrong.
 
-Additionally, the `KpiTrackerModal` fix (line 1252) IS correct in the preview code, but the changes may not have been **published** to the live app yet. If user Jaspal is accessing the published URL (`bfclpms.lovable.app`), they would still see the old behavior.
+## Corrective Actions
 
-| Component | Line | Current Value | Should Be |
-|---|---|---|---|
-| KpiTrackerModal | 1252 | `allSubmissions` | Correct (already fixed) |
-| KpiReviewPanel | 867 | `submissions` (period-filtered) | `allSubmissions` (all periods) |
+### Fix 1: Update Edge Function Delete/Insert Order
 
-## Corrective Action (CAPA)
+**File: `supabase/functions/restore-backup/index.ts`**
 
-### File: `src/pages/MyKpis.tsx`
+- Remove `email_templates` and `email_notification_settings` from both `DELETE_ORDER` and `INSERT_ORDER` (tables don't exist)
+- Add `password_rollout_logs` to `DELETE_ORDER` before `profiles` (leaf table that references profiles)
+- Add `password_rollout_logs` to `INSERT_ORDER` after `profiles` and `user_roles`
 
-**Single-line fix on line 867**: Change `allSubmissions={submissions || []}` to `allSubmissions={allSubmissions || []}`.
+### Fix 2: Show Warning Details in UI After Restore
 
-This ensures the KpiHistoryCard (inline sparkline + compact history table inside the review sheet) receives the full dataset across all periods, matching the behavior on the Dashboard.
+**File: `src/components/admin/BackupRestoreTab.tsx`**
 
-### File: `DOCUMENTATION.md`
+- Add state to store the last restore result (warnings array)
+- After a restore completes with warnings, display an expandable alert/card below the restore button showing each warning message
+- Use an `AlertTriangle` icon with amber styling and a collapsible list of errors
 
-Update the dual-submission pattern note to mention that both the KpiTrackerModal AND KpiReviewPanel require the unfiltered `allSubmissions` dataset.
+**File: `src/hooks/useBackups.ts`**
 
-### Post-Fix: Publish
+- Update `useTriggerRestore` and `useUploadAndRestore` to return the full result (including `errors` array) so the UI component can access it
+- Instead of only showing a toast, pass the result data back to the calling component
 
-After this fix, the changes need to be **published** so users on the live app see the updated behavior.
+### Fix 3: Update create-backup Edge Function
 
-## Impact
+**File: `supabase/functions/create-backup/index.ts`**
 
-| Aspect | Detail |
+- Remove `email_templates` and `email_notification_settings` from the backup table list
+- Add `password_rollout_logs` to the backup table list
+
+### Fix 4: Update Documentation
+
+**File: `DOCUMENTATION.md`**
+
+- Document the restore warning display behavior
+- Update the backed-up table list
+
+## Files Changed
+
+| File | Change |
 |---|---|
-| Files changed | 2 (MyKpis.tsx, DOCUMENTATION.md) |
-| Lines changed | 1 code line, 1 doc line |
-| Database changes | None |
-| Risk | Minimal -- single variable name change |
+| `supabase/functions/restore-backup/index.ts` | Fix DELETE_ORDER and INSERT_ORDER arrays |
+| `supabase/functions/create-backup/index.ts` | Fix table list (remove non-existent, add missing) |
+| `src/hooks/useBackups.ts` | Return restore result data to component |
+| `src/components/admin/BackupRestoreTab.tsx` | Show warning details in a visible alert after restore |
+| `DOCUMENTATION.md` | Update backup/restore documentation |
+
+## Expected Result
+
+- Restore will complete with **0 warnings** (all FK dependencies resolved in correct order)
+- If any warnings do occur, the admin will see a detailed list on-screen -- not just a count in a toast
 
