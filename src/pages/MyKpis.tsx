@@ -146,6 +146,10 @@ export default function MyKpis() {
 
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
+
+  // Fetch ALL submissions across all periods for KPI Tracker Modal history
+  const allKpiIds = useMemo(() => allKpis?.map(k => k.id) || [], [allKpis]);
+  const { data: allSubmissions } = useReviewSubmissions(allKpiIds);
   const submitReview = useSubmitSelfReview();
   
   // Sub-period submissions for Daily/Weekly KPIs
@@ -1245,7 +1249,7 @@ export default function MyKpis() {
         onClose={() => setTrackerModalOpen(false)}
         kpi={selectedKpi}
         allKpis={allKpis || []}
-        submissions={submissions || []}
+        submissions={allSubmissions || []}
       />
 
       {/* Resubmission Confirmation Dialog for Daily/Weekly KPIs */}
