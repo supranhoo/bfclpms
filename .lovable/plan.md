@@ -1,71 +1,91 @@
 
-# Fix: KPI Tracker Modal Missing Achieved & Rating Data
+
+# Fix: "Performance Management" Module Not Showing After Login
 
 ## Root Cause
 
-The problem is **NOT** about zero-value handling. The real issue is a **data scope mismatch**:
+**Race condition between authentication and data fetching.**
 
-In `UnifiedScorecard.tsx` (where the modal is opened from in team/audit/management view):
-
-```
-Line 151:  allKpis = useKpisByEmployee(employee.id)     --> ALL periods (Sep, Oct, Nov, Dec, Jan, Feb)
-Line 158:  kpis = allKpis filtered to selectedPeriod      --> CURRENT period only (e.g., December)
-Line 196:  kpiIds = kpis.map(k => k.id)                   --> Only December KPI IDs
-Line 197:  submissions = useReviewSubmissions(kpiIds)      --> Only December submissions
-```
-
-Then the modal receives:
-- `allKpis` = all 6 months of KPIs (correct)
-- `submissions` = only December's submission (wrong -- missing Oct, Nov, Sep, etc.)
-
-So when the modal builds the monthly history, it finds all 6 related KPIs but can only match submissions for the current period. The other 5 months show "-" because their submissions were never fetched.
-
-The same bug exists in `Dashboard.tsx` -- but there `useMyKpis()` happens to return all periods and `kpiIds` includes all of them, so it works for the self-view. The bug is specific to the team/reviewer views via `UnifiedScorecard`.
+After login, the app redirects to the Module Hub before the authentication token is fully propagated to the HTTP client. The modules query fires with no valid token, RLS blocks it (returns empty), and React Query caches that empty result for 5 minutes. A page refresh works because the token is already established.
 
 ## Fix
 
-### `src/components/review/UnifiedScorecard.tsx`
+### 1. Guard `useModules()` with auth state
 
-Compute a separate `allKpiIds` list from the unfiltered `allKpis` array, fetch submissions for ALL of them, and pass those to the tracker modal:
+**File: `src/hooks/useModules.ts`**
 
-```typescript
-// Existing (current period only)
-const kpiIds = kpis?.map(k => k.id) || [];
-const { data: submissions } = useReviewSubmissions(kpiIds);
-
-// New: all-period IDs for the tracker modal
-const allKpiIds = useMemo(() => allKpis?.map(k => k.id) || [], [allKpis]);
-const { data: allSubmissions } = useReviewSubmissions(allKpiIds);
-```
-
-Then pass `allSubmissions` to the KpiTrackerModal instead of `submissions`:
+Add an `enabled` flag so the query only runs when authentication is confirmed:
 
 ```typescript
-<KpiTrackerModal
-  ...
-  allKpis={allKpis || []}
-  submissions={allSubmissions || []}   // was: submissions || []
-/>
+import { useAuth } from '@/contexts/AuthContext';
+
+export function useModules() {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['modules'],
+    queryFn: async (): Promise<Module[]> => {
+      // ... existing code ...
+    },
+    enabled: !!user, // Only fetch when authenticated
+    staleTime: 1000 * 60 * 5,
+  });
+}
 ```
 
-The same fix applies to the `KpiReviewPanel` which also receives `allSubmissions` for the KPI Journey section -- it should use the full dataset too.
+### 2. Guard `useAppSettings()` the same way (preventive)
 
-### Other Scorecard Components
+**File: `src/hooks/useAppSettings.ts`**
 
-The same pattern exists in:
-- `EmployeeScorecard.tsx`
-- `AuditScorecard.tsx`
-- `ManagementScorecard.tsx`
+The `app_settings` table likely has similar RLS. Guard it too, but since it's used on the login page (before auth), make it conditional:
 
-Each one filters KPIs to current period for display but passes the filtered submissions to the tracker. All need the same fix.
+```typescript
+export function useAppSettings(requireAuth = false) {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['app-settings'],
+    queryFn: async (): Promise<AppSettings | null> => { ... },
+    enabled: requireAuth ? !!user : true,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+```
 
-### `DOCUMENTATION.md`
+### 3. Invalidate module cache on login
 
-Update to document that tracker modals require all-period submissions, not just current-period submissions.
+**File: `src/contexts/AuthContext.tsx`**
 
-## Impact
+After successful auth state change (login event), invalidate the modules query so any stale empty cache is cleared:
 
-- **No scoring impact** -- the current-period `submissions` used for score calculations remains unchanged
-- **No workflow impact** -- approve/send-back actions use the current-period data
-- **Display fix only** -- the tracker modal and KPI Journey now see the complete historical data
-- **Minor network cost** -- one additional query for all-period submissions (only runs when tracker modal data is needed)
+```typescript
+import { useQueryClient } from '@tanstack/react-query';
+
+// Inside AuthProvider:
+const queryClient = useQueryClient();
+
+// In onAuthStateChange callback, when session appears:
+if (session?.user) {
+  queryClient.invalidateQueries({ queryKey: ['modules'] });
+  // ... existing fetchProfile/fetchRole calls
+}
+```
+
+### 4. Update DOCUMENTATION.md
+
+Add a note in the Module Hub section about the auth-guarded query pattern.
+
+## Technical Details
+
+| Item | Detail |
+|------|--------|
+| Files changed | 3 (`useModules.ts`, `AuthContext.tsx`, `DOCUMENTATION.md`) |
+| Risk | None -- display-only change, no data or scoring impact |
+| Breaking changes | None |
+
+## Why This Works
+
+- The `enabled: !!user` flag prevents the query from firing before the token is ready
+- The cache invalidation ensures that if an empty result was somehow cached, it gets cleared on login
+- Together, these two changes eliminate both the race condition and its cached side effects
+
