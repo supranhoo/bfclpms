@@ -1,66 +1,54 @@
 
 
-# Feature: KRA/KPI Name Dropdowns in "Assign New KRA" Dialog
+# Fix: KPI Edit Not Updating + KRA Dropdown Empty
 
-## Overview
+## Issue 1: KPI Edit from "KPI Details" Not Updating
 
-Replace the free-text "KRA Name" and "KPI Name" fields in `AdminKpiCreateDialog` with searchable cascading dropdown selectors powered by the existing KPI Templates library.
+**Root Cause**: In `KpiLogicModal.tsx`, after saving edits, the modal calls `setIsEditing(false)` and shows the `kpi` prop -- but this prop comes from the parent's `useState` (`selectedKpiLogic`), which still holds the **old** KPI object. Query invalidation refreshes the list data, but the parent state variable is never updated with the new values.
 
-## Implementation
+**Fix**: After a successful save, close the modal entirely so the user sees refreshed data when they reopen it. Alternatively, update the displayed values from `editData` after save succeeds. The simplest and most reliable fix is to call `onClose()` after save.
 
-### File 1: `src/components/admin/AdminKpiCreateDialog.tsx`
+### File: `src/components/dashboard/KpiLogicModal.tsx`
+- In `onSuccess` callback (line 74-78): add `onClose()` after `setIsEditing(false)` so the modal closes with a success toast, and reopening it will show fresh data from the re-fetched query.
 
-**New imports:**
-- `useKpiTemplates` from `@/hooks/useKpiTemplates`
-- `Popover`, `PopoverContent`, `PopoverTrigger` from UI
-- `Command`, `CommandEmpty`, `CommandGroup`, `CommandInput`, `CommandItem`, `CommandList` from UI
-- `Check`, `ChevronsUpDown` from `lucide-react`
-- `cn` from `@/lib/utils`
+---
 
-**New state:**
-- `kraOpen` / `kpiOpen` -- popover open flags
-- `isCustomKra` / `isCustomKpi` -- toggles to switch to free-text input mode
+## Issue 2: KRA Dropdown Shows "No KRA names found"
 
-**New derived data (useMemo):**
-- `filteredKraNames` -- unique KRA names from active templates filtered by `categoryId`
-- `filteredKpiTemplates` -- templates filtered by `categoryId` + `kraName`
+**Root Cause**: The `kpi_templates` table is **completely empty** (0 rows). The dropdown filter queries only from `kpi_templates`, so every category returns zero results.
 
-**New function: `applyTemplate(kpiName)`**
-When a KPI is selected from the dropdown, auto-fills: `uomType`, `uom`, `criteria`, `targetValue`, `weightage`, `frequency`, `sourceOfData`, `r5`-`r0`, `qualitativeOptions`, `thresholdMode`, `requireResubmitReason`.
+**Fix**: Add a fallback data source. When no templates exist for the selected category, derive unique KRA and KPI names from the **existing `kpis` table** (already fetched via `useAllKpis` or a new lightweight query). This ensures admins always see previously used KRA/KPI names even without a populated template library.
 
-**New effects:**
-- Reset KRA/KPI when category changes
-- Reset KPI when KRA changes
+### File: `src/components/admin/AdminKpiCreateDialog.tsx`
+- Add a new hook call: `useAllKpis()` to get existing KPI data
+- Update `filteredKraNames` memo: if templates return no results for the selected category, fall back to unique KRA names from existing KPIs with the same `category_id`
+- Update `filteredKpiTemplates` memo: similarly fall back to existing KPIs matching category + KRA name
+- When selecting a KPI from the fallback (existing KPIs, not templates), auto-fill available fields (target, UOM, thresholds, etc.) from that existing KPI
 
-**UI changes (lines 233-251):**
-Replace `<Input>` for KRA Name with a searchable `Popover` + `Command` combobox showing filtered KRA names and a "Custom" option. Replace `<Textarea>` for KPI Name with the same combobox pattern, showing template KPIs with target info. When in custom mode, show the original text input with a "Back" button to return to dropdown mode.
+### File: `DOCUMENTATION.md`
+- Document the fallback behavior
 
-**No changes to `handleSubmit`** -- the same form values flow to `createKpi.mutateAsync()`.
+---
 
-### File 2: `DOCUMENTATION.md`
-
-Add a note in the Admin KPI management section about the cascading dropdown behavior and auto-fill from templates.
-
-## Cascading Flow
-
-```text
-Category selected
-  --> KRA dropdown shows unique KRA names from templates for that category
-    --> KRA selected
-      --> KPI dropdown shows KPIs matching category + KRA
-        --> KPI selected
-          --> All fields auto-fill from template
-```
-
-At every level, a "Custom" option allows manual text entry.
-
-## Impact
+## Summary
 
 | Aspect | Detail |
 |--------|--------|
-| Files changed | 2 |
+| Files changed | 3 |
 | Database changes | None |
-| Existing KPIs affected | No |
-| Workflow changes | None |
-| Risk | Low -- additive UI, custom fallback preserved |
+| Risk | Low -- closing modal on save is standard UX; fallback to existing KPIs is additive |
+
+## Technical Detail
+
+For the KRA dropdown fallback, the cascading logic becomes:
+
+```text
+Category selected
+  --> Check kpi_templates for KRA names
+  --> If none found, use unique KRA names from existing kpis table
+    --> KRA selected
+      --> Check kpi_templates for KPI names
+      --> If none found, use existing kpis with same category + KRA
+        --> KPI selected --> auto-fill from template or existing KPI
+```
 
