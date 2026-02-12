@@ -1,66 +1,57 @@
 
 
-# Fix: Data Owners Can't See Org KPIs in Data Entry
+# Fix: Unique Constraint on org_kpi_values Blocks Department-Scoped Saves
 
 ## Problem
 
-Jaspal has been assigned as a Data Owner for the "Total Recordable Injury (LTI)" KPI, but he can't see any KPIs on the Data Entry page. This is because:
+The `org_kpi_values` table has this unique constraint:
+```
+UNIQUE (category_id, kra_name, kpi_name, review_period, review_year)
+```
 
-- The Data Entry page queries the `kpis` table (with `is_org_level = true`) to build its list
-- Jaspal has the **manager** role, so the RLS policy only lets him see KPIs for his direct reports
-- There is **no RLS policy** allowing data owners to see all org-level KPIs they're assigned to
-
-## Root Cause
-
-The `org_kpi_data_owners` table correctly has Jaspal assigned, and `org_kpi_values` is readable. But the `kpis` table blocks him from seeing KPIs belonging to employees outside his reporting chain.
+This means only **one value** can exist per KPI per period. But department-scoped Org KPIs need **one row per department** (e.g., "LTI" for TPD-E, TPD-Mech, TPD-Process). Saving the second department row fails with `duplicate key value violates unique constraint`.
 
 ## Fix
 
-### Database Change: Add RLS Policy on `kpis` Table
+### Database Migration
 
-Add a new SELECT policy that allows data owners to see org-level KPIs they are assigned to:
+1. **Drop** the existing unique constraint
+2. **Create** a new unique index that includes `department_id` and `employee_id`, using `COALESCE` so that NULL values still participate correctly in uniqueness checks
 
 ```sql
-CREATE POLICY "Data owners can view assigned org-level KPIs"
-  ON public.kpis
-  FOR SELECT
-  TO authenticated
-  USING (
-    is_org_level = true
-    AND EXISTS (
-      SELECT 1
-      FROM org_kpi_data_owners
-      WHERE org_kpi_data_owners.category_id = kpis.category_id
-        AND org_kpi_data_owners.kra_name = kpis.kra_name
-        AND org_kpi_data_owners.kpi_name = kpis.kpi_name
-        AND org_kpi_data_owners.owner_id = auth.uid()
-    )
+ALTER TABLE org_kpi_values
+  DROP CONSTRAINT org_kpi_values_category_id_kra_name_kpi_name_review_period__key;
+
+CREATE UNIQUE INDEX org_kpi_values_scoped_unique
+  ON org_kpi_values (
+    category_id, kra_name, kpi_name, review_period, review_year,
+    COALESCE(department_id, '00000000-0000-0000-0000-000000000000'),
+    COALESCE(employee_id, '00000000-0000-0000-0000-000000000000')
   );
 ```
 
-This policy:
-- Only applies to org-level KPIs (`is_org_level = true`)
-- Only grants access if the user is listed as a data owner for that specific KPI
-- Does NOT grant write access (data owners edit via `org_kpi_values`, not `kpis` directly)
+This allows:
+- One org-wide row (both NULLs) per KPI per period
+- One row per department per KPI per period
+- One row per employee per KPI per period
+- No duplicates within the same scope
 
-### No Code Changes Needed
+### Code Change
 
-The existing frontend logic already handles the ownership filtering correctly:
-- `useOrgKpiOwnershipMap` builds the map from `org_kpi_data_owners`
-- `OrgKpiDataEntry` filters by `ownership.canEdit === true` for non-admins
-- The only missing piece was the RLS policy preventing the data from loading
+The `useBulkUpsertOrgKpiValues` hook in `useOrgKpiValues.ts` already handles scoped upserts correctly (it checks for existing records including `department_id` and `employee_id`). No code changes needed — the database constraint is the only blocker.
+
+### Documentation
+
+Update `DOCUMENTATION.md` to note the scoped unique index.
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| Database (migration) | Add SELECT policy for data owners on `kpis` table |
-| `DOCUMENTATION.md` | Document the new RLS policy |
+| Database (migration) | Replace simple unique constraint with scoped unique index |
+| `DOCUMENTATION.md` | Document scoped uniqueness |
 
-## Expected Result
+## Result
 
-After this fix, Jaspal will:
-1. Be able to access `/admin/org-kpi-data`
-2. See only the KPIs he's assigned as data owner for (not all org KPIs)
-3. Be able to enter/update achieved values for those KPIs
+After this fix, saving department-scoped values (like LTI for TPD-E, TPD-Mech, TPD-Process) will work without errors. Each department gets its own row in `org_kpi_values`.
 
