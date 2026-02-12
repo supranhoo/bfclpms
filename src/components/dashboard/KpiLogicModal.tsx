@@ -76,6 +76,7 @@ export function KpiLogicModal({ isOpen, onClose, kpi }: KpiLogicModalProps) {
       queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
       toast({ title: 'KPI updated successfully' });
       setIsEditing(false);
+      onClose();
     },
     onError: (error: Error) => {
       toast({ title: 'Failed to update KPI', description: error.message, variant: 'destructive' });

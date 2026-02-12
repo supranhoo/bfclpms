@@ -961,11 +961,11 @@ All three review pages share a unified `EmployeeFilters` component with advanced
 
 #### 4.9.4a Cascading KRA/KPI Dropdowns in "Assign New KRA"
 
-The **AdminKpiCreateDialog** uses searchable cascading dropdowns for KRA and KPI names, powered by the KPI Templates library (`kpi_templates` table via `useKpiTemplates` hook):
+The **AdminKpiCreateDialog** uses searchable cascading dropdowns for KRA and KPI names, powered by the KPI Templates library (`kpi_templates` table via `useKpiTemplates` hook) with a **fallback to existing KPIs** (via `useAllKpis` hook):
 
-1. **Category selected** → KRA Name dropdown shows unique KRA names from active templates matching that category.
-2. **KRA selected** → KPI Name dropdown shows KPI templates matching both the category and KRA.
-3. **KPI selected** → All form fields auto-fill from the template: UOM type, UOM, criteria, target value, weightage, frequency, source of data, rating thresholds (R5-R0), qualitative options, threshold mode, and resubmit reason setting.
+1. **Category selected** → KRA Name dropdown shows unique KRA names from active templates matching that category. **If no templates exist**, it falls back to unique KRA names from the existing `kpis` table for that category.
+2. **KRA selected** → KPI Name dropdown shows KPI templates matching both the category and KRA. **If no templates exist**, it falls back to existing KPIs with matching category and KRA, de-duplicated by KPI name.
+3. **KPI selected** → All form fields auto-fill from the template (or existing KPI): UOM type, UOM, criteria, target value, weightage, frequency, source of data, rating thresholds (R5-R0), qualitative options, threshold mode, and resubmit reason setting.
 4. **Custom entry** → A "+ Enter custom" option in each dropdown switches to a free-text input with a back button to return to dropdown mode.
 
 **Reset behavior:** Changing the category resets both KRA and KPI. Changing the KRA resets the KPI. This ensures cascading consistency.

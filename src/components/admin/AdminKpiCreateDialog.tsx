@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
 import { useKpiTemplates } from '@/hooks/useKpiTemplates';
+import { useAllKpis } from '@/hooks/useKpis';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Check, ChevronsUpDown, ArrowLeft } from 'lucide-react';
@@ -35,6 +36,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
   const { data: settingsData } = useSystemSettings();
   const createKpi = useCreateKpi();
   const { data: templates } = useKpiTemplates();
+  const { data: allKpis } = useAllKpis();
 
   // Combobox state
   const [kraOpen, setKraOpen] = useState(false);
@@ -105,21 +107,61 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
     }
   }, [settings]);
 
-  // Derived template data
+  // Derived template data with fallback to existing KPIs
   const filteredKraNames = useMemo(() => {
-    if (!templates || !categoryId) return [];
-    const names = templates
+    if (!categoryId) return [];
+    // Try templates first
+    const templateNames = (templates || [])
       .filter(t => t.is_active && t.category_id === categoryId)
       .map(t => t.kra_name);
-    return [...new Set(names)].sort();
-  }, [templates, categoryId]);
+    if (templateNames.length > 0) return [...new Set(templateNames)].sort();
+    // Fallback to existing KPIs
+    const kpiNames = (allKpis || [])
+      .filter(k => k.category_id === categoryId)
+      .map(k => k.kra_name);
+    return [...new Set(kpiNames)].sort();
+  }, [templates, allKpis, categoryId]);
 
   const filteredKpiTemplates = useMemo(() => {
-    if (!templates || !categoryId || !kraName) return [];
-    return templates.filter(
+    if (!categoryId || !kraName) return [];
+    // Try templates first
+    const fromTemplates = (templates || []).filter(
       t => t.is_active && t.category_id === categoryId && t.kra_name === kraName
     );
-  }, [templates, categoryId, kraName]);
+    if (fromTemplates.length > 0) return fromTemplates;
+    // Fallback to existing KPIs (shape them like templates for the combobox)
+    return (allKpis || [])
+      .filter(k => k.category_id === categoryId && k.kra_name === kraName)
+      .reduce((acc, k) => {
+        if (!acc.some(item => item.kpi_name === k.kpi_name)) {
+          acc.push({
+            id: k.id,
+            kpi_name: k.kpi_name,
+            kra_name: k.kra_name,
+            category_id: k.category_id,
+            uom: k.uom,
+            uom_type: k.uom_type,
+            criteria: k.criteria,
+            target_value: k.target_value,
+            weightage: k.weightage,
+            frequency: k.frequency,
+            source_of_data: k.source_of_data,
+            r5: k.r5, r4: k.r4, r3: k.r3, r2: k.r2, r1: k.r1, r0: k.r0,
+            qualitative_options: k.qualitative_options,
+            threshold_mode: k.threshold_mode,
+            require_resubmit_reason: k.require_resubmit_reason,
+            is_active: true,
+            title: k.kpi_name,
+            description: null,
+            applicable_roles: [],
+            created_at: k.created_at,
+            updated_at: k.updated_at,
+            created_by: null,
+          });
+        }
+        return acc;
+      }, [] as any[]);
+  }, [templates, allKpis, categoryId, kraName]);
 
   // Reset KRA/KPI when category changes
   useEffect(() => {
