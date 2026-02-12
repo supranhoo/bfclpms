@@ -1,54 +1,128 @@
 
 
-# Fix: KPI Edit Not Updating + KRA Dropdown Empty
+# Feature: Centralized File Upload Size Control via System Settings
 
-## Issue 1: KPI Edit from "KPI Details" Not Updating
+## What Changes
 
-**Root Cause**: In `KpiLogicModal.tsx`, after saving edits, the modal calls `setIsEditing(false)` and shows the `kpi` prop -- but this prop comes from the parent's `useState` (`selectedKpiLogic`), which still holds the **old** KPI object. Query invalidation refreshes the list data, but the parent state variable is never updated with the new values.
+1. Add a new system setting `max_upload_size_mb` to the database (default: 5 MB).
+2. Create a shared constants/hook that all upload components read from.
+3. Replace all hardcoded `MAX_FILE_SIZE` values with the centralized setting.
+4. Add a UI control in the System Settings admin page to adjust the limit.
+5. Fix the branding upload (currently has zero size validation).
 
-**Fix**: After a successful save, close the modal entirely so the user sees refreshed data when they reopen it. Alternatively, update the displayed values from `editData` after save succeeds. The simplest and most reliable fix is to call `onClose()` after save.
+## Current State
 
-### File: `src/components/dashboard/KpiLogicModal.tsx`
-- In `onSuccess` callback (line 74-78): add `onClose()` after `setIsEditing(false)` so the modal closes with a success toast, and reopening it will show fresh data from the re-fetched query.
+| Component | Current Limit | Hardcoded? |
+|---|---|---|
+| MultiFileUpload.tsx | 10 MB | Yes |
+| EvidenceUpload.tsx | 10 MB | Yes |
+| OrgKpiFileUpload.tsx | 5 MB | Yes |
+| importValidation.ts | 10 MB | Yes |
+| useAppSettings.ts (branding) | None | Missing |
 
----
+## Proposed Architecture
 
-## Issue 2: KRA Dropdown Shows "No KRA names found"
-
-**Root Cause**: The `kpi_templates` table is **completely empty** (0 rows). The dropdown filter queries only from `kpi_templates`, so every category returns zero results.
-
-**Fix**: Add a fallback data source. When no templates exist for the selected category, derive unique KRA and KPI names from the **existing `kpis` table** (already fetched via `useAllKpis` or a new lightweight query). This ensures admins always see previously used KRA/KPI names even without a populated template library.
-
-### File: `src/components/admin/AdminKpiCreateDialog.tsx`
-- Add a new hook call: `useAllKpis()` to get existing KPI data
-- Update `filteredKraNames` memo: if templates return no results for the selected category, fall back to unique KRA names from existing KPIs with the same `category_id`
-- Update `filteredKpiTemplates` memo: similarly fall back to existing KPIs matching category + KRA name
-- When selecting a KPI from the fallback (existing KPIs, not templates), auto-fill available fields (target, UOM, thresholds, etc.) from that existing KPI
-
-### File: `DOCUMENTATION.md`
-- Document the fallback behavior
-
----
-
-## Summary
-
-| Aspect | Detail |
-|--------|--------|
-| Files changed | 3 |
-| Database changes | None |
-| Risk | Low -- closing modal on save is standard UX; fallback to existing KPIs is additive |
-
-## Technical Detail
-
-For the KRA dropdown fallback, the cascading logic becomes:
+All upload components will read from a single source:
 
 ```text
-Category selected
-  --> Check kpi_templates for KRA names
-  --> If none found, use unique KRA names from existing kpis table
-    --> KRA selected
-      --> Check kpi_templates for KPI names
-      --> If none found, use existing kpis with same category + KRA
-        --> KPI selected --> auto-fill from template or existing KPI
+system_settings table
+  key: "max_upload_size_mb"
+  value: 5   (admin-configurable)
+       |
+       v
+useSystemSetting('max_upload_size_mb')
+       |
+       v
+All upload components use this value
 ```
+
+## Technical Plan
+
+### Step 1: Database Migration
+
+Insert a new row into `system_settings`:
+
+```sql
+INSERT INTO system_settings (setting_key, setting_value, description)
+VALUES ('max_upload_size_mb', '5', 'Maximum file upload size in MB for evidence and attachments');
+```
+
+No new tables or columns needed.
+
+### Step 2: Create a shared hook — `src/hooks/useUploadLimits.ts`
+
+A small hook that reads the setting and returns the max size in bytes:
+
+- Calls `useSystemSetting('max_upload_size_mb')`
+- Parses the value (default 5 MB if missing)
+- Returns `{ maxFileSizeMb: number, maxFileSizeBytes: number, isLoading: boolean }`
+
+### Step 3: Update upload components (4 files)
+
+**`src/components/ui/MultiFileUpload.tsx`**
+- Remove hardcoded `MAX_FILE_SIZE = 10 * 1024 * 1024`
+- Accept `maxFileSizeMb` as a prop (from the hook in the parent) or call the hook directly
+- Update validation message to show the dynamic limit
+- Update help text from "max 10MB" to dynamic value
+
+**`src/components/ui/EvidenceUpload.tsx`**
+- Same changes: remove hardcoded `MAX_FILE_SIZE`, use the shared hook
+- Update validation and help text
+
+**`src/components/admin/OrgKpiFileUpload.tsx`**
+- Remove hardcoded `5 * 1024 * 1024` check
+- Use shared hook for consistent limit
+
+**`src/hooks/useAppSettings.ts` (branding upload)**
+- Add file size validation in `useUploadBrandingAsset` using the same limit
+- This fixes the current gap where branding uploads have no size check
+
+### Step 4: Update import validation
+
+**`src/lib/importValidation.ts`**
+- Keep `IMPORT_LIMITS.MAX_FILE_SIZE_MB` as a separate constant (import files have different needs than evidence uploads)
+- Optionally add a second setting `max_import_size_mb` if admin wants to control import sizes too, but this can be a future enhancement
+
+### Step 5: Add UI control in System Settings
+
+**`src/pages/admin/SystemSettings.tsx`**
+- Add a new field in the settings form: "Max Upload Size (MB)"
+- Number input with min=1, max=50 range
+- Uses the existing `useUpdateSystemSetting` mutation to save
+- Shown alongside the other system settings (score calculation mode, daily aggregation, etc.)
+
+### Step 6: Update Documentation
+
+**`DOCUMENTATION.md`**
+- Document the new system setting
+- Note the centralized upload limit behavior
+
+## Files Changed
+
+| File | Change |
+|---|---|
+| Database migration | Insert `max_upload_size_mb` setting |
+| `src/hooks/useUploadLimits.ts` | New file -- shared hook |
+| `src/components/ui/MultiFileUpload.tsx` | Use dynamic limit |
+| `src/components/ui/EvidenceUpload.tsx` | Use dynamic limit |
+| `src/components/admin/OrgKpiFileUpload.tsx` | Use dynamic limit |
+| `src/hooks/useAppSettings.ts` | Add size validation to branding upload |
+| `src/pages/admin/SystemSettings.tsx` | Add upload size control UI |
+| `DOCUMENTATION.md` | Update docs |
+
+## Pros
+
+- **Single source of truth**: Change the limit once, applies everywhere
+- **Admin control**: No code deployment needed to adjust limits
+- **Fixes branding gap**: Branding uploads currently have zero size validation
+- **Backward compatible**: Default of 5 MB is reasonable; existing files are unaffected
+
+## Cons
+
+- **Requires one DB insert**: Minimal migration
+- **Setting applies globally**: All upload types share the same limit (except imports). If different limits per context are needed, that would require a more complex settings structure -- but this is likely overkill for now
+
+## Risk
+
+Low. This is purely a validation change on the frontend. No existing files are affected. The default value (5 MB) is more conservative than the current 10 MB, reducing storage costs.
 
