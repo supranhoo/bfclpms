@@ -1590,7 +1590,10 @@ Full JSON format for maximum control:
 **Mapping Tab (Feature 2: Org KPI Mapping Dashboard):**
 - Three sub-views: **By KPI**, **By Employee**, **By Department**
 - **By KPI**: Each org KPI with all mapped employees, their department, designation, and status
-- **By Employee**: Each employee with all their org KPIs listed
+  - **Scope dropdown**: Change scope (Organization / Department / Employee) directly on each KPI card
+  - **Add Employee button**: Opens dialog to assign new employees (searchable, filterable by department, multi-select)
+  - **Remove button**: Trash icon per employee row to unlink from Org KPI (preserves data, clears `is_org_level` flag)
+- **By Employee**: Each employee with all their org KPIs listed; hover over a KPI badge to reveal a remove button
 - **By Department**: Department-wise grouping showing employee count, unique KPIs, and total records
 - Summary cards: Unique Org KPIs, Employees Mapped, Total Records
 - Search across KPI names and employee names
