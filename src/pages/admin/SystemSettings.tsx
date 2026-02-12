@@ -6,9 +6,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database, KeyRound } from 'lucide-react';
-import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useDailyAggregationMethod, DailyAggregationMethod } from '@/hooks/useSystemSettings';
+import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database, KeyRound, Upload } from 'lucide-react';
+import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useDailyAggregationMethod, DailyAggregationMethod, useSystemSetting } from '@/hooks/useSystemSettings';
 import { useState, useEffect } from 'react';
+import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { EmailNotificationSettings } from '@/components/admin/EmailNotificationSettings';
 import { EmailTemplateEditor } from '@/components/admin/EmailTemplateEditor';
@@ -70,6 +71,7 @@ export default function SystemSettings() {
   const { enabled: rolloverEnabled, isLoading: rolloverLoading } = useAutoRolloverSetting();
   const { method: dailyMethod, isLoading: dailyMethodLoading } = useDailyAggregationMethod();
   const { data: rolloverLogs, isLoading: logsLoading } = useRolloverLogs();
+  const { data: uploadLimitSetting, isLoading: uploadLimitLoading } = useSystemSetting('max_upload_size_mb');
   const updateSetting = useUpdateSystemSetting();
   
   const [selectedMode, setSelectedMode] = useState<ScoreCalculationMode>(mode);
@@ -77,6 +79,8 @@ export default function SystemSettings() {
   const [hasChanges, setHasChanges] = useState(false);
   const [hasDailyChanges, setHasDailyChanges] = useState(false);
   const [rolloverDialogOpen, setRolloverDialogOpen] = useState(false);
+  const [uploadLimitMb, setUploadLimitMb] = useState(5);
+  const [hasUploadLimitChanges, setHasUploadLimitChanges] = useState(false);
 
   useEffect(() => {
     if (mode) {
@@ -89,6 +93,14 @@ export default function SystemSettings() {
       setSelectedDailyMethod(dailyMethod);
     }
   }, [dailyMethod]);
+
+  useEffect(() => {
+    if (uploadLimitSetting?.setting_value) {
+      const val = uploadLimitSetting.setting_value;
+      const parsed = typeof val === 'number' ? val : parseFloat(String(val).replace(/^"|"$/g, ''));
+      if (!isNaN(parsed) && parsed > 0) setUploadLimitMb(parsed);
+    }
+  }, [uploadLimitSetting]);
 
   const handleModeChange = (value: ScoreCalculationMode) => {
     setSelectedMode(value);
@@ -123,6 +135,21 @@ export default function SystemSettings() {
 
   const handleManualRollover = () => {
     setRolloverDialogOpen(true);
+  };
+
+  const handleUploadLimitChange = (value: string) => {
+    const num = parseFloat(value);
+    if (!isNaN(num)) {
+      setUploadLimitMb(Math.max(1, Math.min(50, num)));
+      setHasUploadLimitChanges(true);
+    }
+  };
+
+  const handleSaveUploadLimit = () => {
+    updateSetting.mutate(
+      { key: 'max_upload_size_mb', value: String(uploadLimitMb) },
+      { onSuccess: () => setHasUploadLimitChanges(false) }
+    );
   };
 
   const lastRollover = rolloverLogs?.[0];
@@ -275,6 +302,53 @@ export default function SystemSettings() {
           </Card>
 
           <RolloverDialog open={rolloverDialogOpen} onOpenChange={setRolloverDialogOpen} />
+
+          {/* Max Upload Size */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                File Upload Limit
+              </CardTitle>
+              <CardDescription>
+                Set the maximum allowed file size for evidence uploads, attachments, and branding assets across the system.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-4 p-4 rounded-lg border">
+                <div className="flex-1 space-y-1">
+                  <Label htmlFor="upload-limit" className="text-base font-medium">
+                    Max Upload Size (MB)
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Applies to all evidence, attachment, and branding uploads. Range: 1–50 MB.
+                  </p>
+                </div>
+                <Input
+                  id="upload-limit"
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={uploadLimitMb}
+                  onChange={(e) => handleUploadLimitChange(e.target.value)}
+                  className="w-24"
+                />
+              </div>
+              <div className="mt-4 flex items-center justify-between border-t pt-4">
+                <p className="text-sm text-muted-foreground">
+                  Current limit: <span className="font-medium text-foreground">{uploadLimitMb} MB</span>
+                </p>
+                <Button
+                  onClick={handleSaveUploadLimit}
+                  disabled={!hasUploadLimitChanges || updateSetting.isPending}
+                  className="gap-2"
+                >
+                  <Save className="h-4 w-4" />
+                  {updateSetting.isPending ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Scoring Tab */}
