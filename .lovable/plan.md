@@ -1,83 +1,58 @@
 
 
-# Fix: Circular RLS Dependency Breaking All Data for Jaspal
+# Fix: Password Rollout Times Out for Large Batches
 
 ## Root Cause Analysis (RCA)
 
-The profiles RLS policy we added in the last migration creates a **circular dependency**:
-
-```text
-profiles policy "Data owners can view org kpi employee profiles"
-  --> queries kpis table (subject to kpis RLS)
-    --> kpis policy "Managers can view their reports' KPIs"
-      --> queries profiles table (subject to profiles RLS)
-        --> back to step 1... infinite loop
+The edge function log shows:
+```
+Http: connection closed before message completed
 ```
 
-PostgreSQL detects this recursion and silently returns **zero rows** for all queries touching either table. This is why:
-- Profile shows "User" (profile query returns null)
-- No data appears anywhere (KPI queries also fail)
+The function processes **63 users sequentially** in a single request:
+1. For each user: generate password, call `auth.admin.updateUserById()`, then call the `send-email-notification` function
+2. Each iteration involves 2-3 network round-trips (auth update + email HTTP call + audit log insert)
+3. With 63 users, this easily exceeds the edge function timeout (typically ~60 seconds)
+4. The connection drops mid-processing, the client gets "Failed to fetch", and partial results may have been applied without the caller knowing which succeeded
 
 ## Corrective Action (CAPA)
 
-Replace the direct table reference in the `profiles` policy with a **SECURITY DEFINER function** that bypasses RLS when checking the `kpis` table, breaking the circular chain.
+### Strategy: Process in Batches with Parallel Execution
 
-### Step 1: Create a SECURITY DEFINER helper function
+Instead of sequential processing, use `Promise.all` with a concurrency-limited batch approach:
 
-```sql
-CREATE OR REPLACE FUNCTION public.is_data_owner_for_employee(p_employee_id uuid, p_owner_id uuid)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM kpis k
-    JOIN org_kpi_data_owners o
-      ON o.category_id = k.category_id
-      AND o.kra_name = k.kra_name
-      AND o.kpi_name = k.kpi_name
-    WHERE k.employee_id = p_employee_id
-      AND k.is_org_level = true
-      AND o.owner_id = p_owner_id
+1. **Split users into chunks of 5** (safe concurrency for auth admin calls)
+2. **Process each chunk in parallel** using `Promise.allSettled`
+3. **Log results as they complete** rather than at the end
+
+### Code Changes
+
+**File: `supabase/functions/password-rollout/index.ts`**
+
+Replace the sequential `for...of` loop with batched parallel processing:
+
+```typescript
+// Process in batches of 5
+const BATCH_SIZE = 5;
+for (let i = 0; i < profiles.length; i += BATCH_SIZE) {
+  const batch = profiles.slice(i, i + BATCH_SIZE);
+  const batchResults = await Promise.allSettled(
+    batch.map(profile => processOneUser(profile, ...))
   );
-$$;
+  // collect results from each settled promise
+}
 ```
 
-`SECURITY DEFINER` means this function runs as the DB owner, bypassing RLS on `kpis` -- which breaks the circular chain.
+This reduces total execution time from ~63 sequential calls to ~13 batched rounds, well within the timeout limit.
 
-### Step 2: Replace the problematic profiles policy
-
-```sql
-DROP POLICY "Data owners can view org kpi employee profiles" ON profiles;
-
-CREATE POLICY "Data owners can view org kpi employee profiles"
-  ON profiles FOR SELECT TO authenticated
-  USING (
-    public.is_data_owner_for_employee(profiles.id, auth.uid())
-  );
-```
-
-Now the `profiles` policy calls a function instead of directly querying `kpis`, so PostgreSQL does not detect a circular RLS dependency.
-
-### Step 3: Update documentation
-
-Update `DOCUMENTATION.md` to note the SECURITY DEFINER function pattern used to avoid circular RLS.
-
-## Files Changed
+### Files Changed
 
 | File | Change |
 |------|--------|
-| Database (migration) | Create `is_data_owner_for_employee` function; drop and recreate profiles policy |
-| `DOCUMENTATION.md` | Document the SECURITY DEFINER pattern |
+| `supabase/functions/password-rollout/index.ts` | Refactor sequential loop to batched parallel processing (chunks of 5) |
+| `DOCUMENTATION.md` | Document the batched processing pattern |
 
 ## Expected Result
 
-After this fix:
-- Jaspal's profile loads correctly (name, designation visible)
-- Dashboard, KPIs, and all other pages return data normally
-- Impact Analysis continues to show all affected employees
-- No circular RLS dependency exists
+After this fix, password rollout for 63+ users completes within the timeout window. Each batch of 5 users processes in parallel, reducing total time by roughly 5x.
 
