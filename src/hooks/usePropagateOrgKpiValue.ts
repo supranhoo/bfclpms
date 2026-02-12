@@ -4,6 +4,20 @@ import { useToast } from '@/hooks/use-toast';
 import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { scoreToRating } from '@/components/review/ScoreSelector';
 
+export interface PropagationDetail {
+  employeeName: string;
+  employeeCode: string | null;
+  departmentName: string | null;
+  oldScore: number | null;
+  newScore: number | null;
+  change: number | null;
+}
+
+export interface PropagationResultWithDetails {
+  propagatedCount: number;
+  details: PropagationDetail[];
+}
+
 interface PropagateParams {
   categoryId: string;
   kraName: string;
@@ -24,8 +38,8 @@ export function usePropagateOrgKpiValue() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  return useMutation({
-    mutationFn: async (params: PropagateParams) => {
+  return useMutation<PropagationResultWithDetails, Error, PropagateParams>({
+    mutationFn: async (params: PropagateParams): Promise<PropagationResultWithDetails> => {
       const {
         categoryId,
         kraName,
@@ -54,7 +68,7 @@ export function usePropagateOrgKpiValue() {
           threshold_mode,
           is_org_level,
           org_level_scope,
-          profiles!kpis_employee_id_fkey(department_id)
+          profiles!kpis_employee_id_fkey(id, full_name, employee_code, department_id, departments(name))
         `)
         .eq('category_id', categoryId)
         .eq('kra_name', kraName)
@@ -67,7 +81,7 @@ export function usePropagateOrgKpiValue() {
       if (kpisError) throw kpisError;
 
       if (!kpis || kpis.length === 0) {
-        return { propagatedCount: 0 };
+        return { propagatedCount: 0, details: [] };
       }
 
       // 2. Filter KPIs based on scope
@@ -79,18 +93,16 @@ export function usePropagateOrgKpiValue() {
       }
 
       if (targetKpis.length === 0) {
-        return { propagatedCount: 0 };
+        return { propagatedCount: 0, details: [] };
       }
 
       // 3. Calculate scores and upsert review_submissions
+      const details: PropagationDetail[] = [];
       const upsertPromises = targetKpis.map(async (kpi) => {
+        const profile = kpi.profiles as any;
         const thresholds: RatingThresholds = {
-          r5: kpi.r5,
-          r4: kpi.r4,
-          r3: kpi.r3,
-          r2: kpi.r2,
-          r1: kpi.r1,
-          r0: kpi.r0,
+          r5: kpi.r5, r4: kpi.r4, r3: kpi.r3,
+          r2: kpi.r2, r1: kpi.r1, r0: kpi.r0,
         };
 
         const ratingResult = calculateRating(
@@ -110,12 +122,13 @@ export function usePropagateOrgKpiValue() {
         // Check if submission exists
         const { data: existingSubmission } = await supabase
           .from('review_submissions')
-          .select('id')
+          .select('id, self_score')
           .eq('kpi_id', kpi.id)
           .maybeSingle();
 
+        const oldScore = existingSubmission?.self_score ?? null;
+
         if (existingSubmission) {
-          // Update existing submission
           const { error } = await supabase
             .from('review_submissions')
             .update({
@@ -125,10 +138,8 @@ export function usePropagateOrgKpiValue() {
               updated_at: new Date().toISOString(),
             })
             .eq('id', existingSubmission.id);
-
           if (error) throw error;
         } else {
-          // Insert new submission
           const { error } = await supabase
             .from('review_submissions')
             .insert({
@@ -137,7 +148,6 @@ export function usePropagateOrgKpiValue() {
               self_score: ratingResult.rating,
               self_rating: ratingLevel,
             });
-
           if (error) throw error;
         }
 
@@ -152,12 +162,21 @@ export function usePropagateOrgKpiValue() {
           console.warn('Failed to update KPI status:', statusError);
         }
 
+        details.push({
+          employeeName: profile?.full_name || 'Unknown',
+          employeeCode: profile?.employee_code || null,
+          departmentName: profile?.departments?.name || null,
+          oldScore,
+          newScore: ratingResult.rating,
+          change: oldScore !== null ? ratingResult.rating - oldScore : null,
+        });
+
         return kpi.id;
       });
 
       await Promise.all(upsertPromises);
 
-      return { propagatedCount: targetKpis.length };
+      return { propagatedCount: targetKpis.length, details };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
@@ -186,41 +205,22 @@ export function useBulkPropagateOrgKpiValues() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  return useMutation({
-    mutationFn: async (values: PropagateParams[]) => {
+  return useMutation<PropagationResultWithDetails, Error, PropagateParams[]>({
+    mutationFn: async (values: PropagateParams[]): Promise<PropagationResultWithDetails> => {
       let totalPropagated = 0;
+      const allDetails: PropagationDetail[] = [];
 
       for (const params of values) {
-        const {
-          categoryId,
-          kraName,
-          kpiName,
-          reviewPeriod,
-          reviewYear,
-          achievedValue,
-          scope,
-          departmentId,
-          employeeId,
-        } = params;
-
-        // Skip if no achieved value
+        const { categoryId, kraName, kpiName, reviewPeriod, reviewYear, achievedValue, scope, departmentId, employeeId } = params;
         if (achievedValue === null) continue;
 
-        // Find matching KPIs
-        let kpisQuery = supabase
+        const { data: kpis } = await supabase
           .from('kpis')
           .select(`
-            id,
-            employee_id,
-            target_value,
-            weightage,
-            r5, r4, r3, r2, r1, r0,
-            criteria,
-            uom,
-            uom_type,
-            qualitative_options,
-            threshold_mode,
-            profiles!kpis_employee_id_fkey(department_id)
+            id, employee_id, target_value, weightage,
+            r5, r4, r3, r2, r1, r0, criteria, uom, uom_type,
+            qualitative_options, threshold_mode,
+            profiles!kpis_employee_id_fkey(id, full_name, employee_code, department_id, departments(name))
           `)
           .eq('category_id', categoryId)
           .eq('kra_name', kraName)
@@ -229,10 +229,8 @@ export function useBulkPropagateOrgKpiValues() {
           .eq('review_year', reviewYear)
           .eq('is_org_level', true);
 
-        const { data: kpis } = await kpisQuery;
         if (!kpis || kpis.length === 0) continue;
 
-        // Filter by scope
         let targetKpis = kpis;
         if (scope === 'department' && departmentId) {
           targetKpis = kpis.filter(k => (k.profiles as any)?.department_id === departmentId);
@@ -240,70 +238,56 @@ export function useBulkPropagateOrgKpiValues() {
           targetKpis = kpis.filter(k => k.employee_id === employeeId);
         }
 
-        // Process each KPI
         for (const kpi of targetKpis) {
+          const profile = kpi.profiles as any;
           const thresholds: RatingThresholds = {
-            r5: kpi.r5,
-            r4: kpi.r4,
-            r3: kpi.r3,
-            r2: kpi.r2,
-            r1: kpi.r1,
-            r0: kpi.r0,
+            r5: kpi.r5, r4: kpi.r4, r3: kpi.r3,
+            r2: kpi.r2, r1: kpi.r1, r0: kpi.r0,
           };
 
           const ratingResult = calculateRating(
-            achievedValue,
-            kpi.target_value,
-            thresholds,
-            kpi.criteria || 'Higher is Better',
-            kpi.weightage || 0,
-            (kpi.uom_type as any) || 'numeric',
-            kpi.qualitative_options as any,
-            kpi.uom,
-            (kpi as any).threshold_mode || 'absolute'
+            achievedValue, kpi.target_value, thresholds,
+            kpi.criteria || 'Higher is Better', kpi.weightage || 0,
+            (kpi.uom_type as any) || 'numeric', kpi.qualitative_options as any,
+            kpi.uom, (kpi as any).threshold_mode || 'absolute'
           );
 
           const ratingLevel = scoreToRating(ratingResult.rating);
 
-          // Upsert submission
           const { data: existing } = await supabase
             .from('review_submissions')
-            .select('id')
+            .select('id, self_score')
             .eq('kpi_id', kpi.id)
             .maybeSingle();
 
+          const oldScore = existing?.self_score ?? null;
+
           if (existing) {
-            await supabase
-              .from('review_submissions')
-              .update({
-                achieved_value: achievedValue,
-                self_score: ratingResult.rating,
-                self_rating: ratingLevel,
-              })
-              .eq('id', existing.id);
+            await supabase.from('review_submissions').update({
+              achieved_value: achievedValue, self_score: ratingResult.rating, self_rating: ratingLevel,
+            }).eq('id', existing.id);
           } else {
-            await supabase
-              .from('review_submissions')
-              .insert({
-                kpi_id: kpi.id,
-                achieved_value: achievedValue,
-                self_score: ratingResult.rating,
-                self_rating: ratingLevel,
-              });
+            await supabase.from('review_submissions').insert({
+              kpi_id: kpi.id, achieved_value: achievedValue, self_score: ratingResult.rating, self_rating: ratingLevel,
+            });
           }
 
-          // Update KPI status
-          await supabase
-            .from('kpis')
-            .update({ status: 'self_review' })
-            .eq('id', kpi.id)
-            .eq('status', 'kra_set');
+          await supabase.from('kpis').update({ status: 'self_review' }).eq('id', kpi.id).eq('status', 'kra_set');
+
+          allDetails.push({
+            employeeName: profile?.full_name || 'Unknown',
+            employeeCode: profile?.employee_code || null,
+            departmentName: profile?.departments?.name || null,
+            oldScore,
+            newScore: ratingResult.rating,
+            change: oldScore !== null ? ratingResult.rating - oldScore : null,
+          });
 
           totalPropagated++;
         }
       }
 
-      return { propagatedCount: totalPropagated };
+      return { propagatedCount: totalPropagated, details: allDetails };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });

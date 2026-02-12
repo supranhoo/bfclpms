@@ -1219,6 +1219,92 @@ export type Database = {
           },
         ]
       }
+      org_kpi_value_history: {
+        Row: {
+          category_id: string
+          change_type: string
+          changed_by: string | null
+          created_at: string
+          id: string
+          kpi_name: string
+          kra_name: string
+          metadata: Json | null
+          new_achieved_value: number | null
+          new_status: string | null
+          old_achieved_value: number | null
+          old_status: string | null
+          org_kpi_value_id: string
+          propagated_count: number | null
+          review_period: string
+          review_year: number
+        }
+        Insert: {
+          category_id: string
+          change_type?: string
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          kpi_name: string
+          kra_name: string
+          metadata?: Json | null
+          new_achieved_value?: number | null
+          new_status?: string | null
+          old_achieved_value?: number | null
+          old_status?: string | null
+          org_kpi_value_id: string
+          propagated_count?: number | null
+          review_period: string
+          review_year: number
+        }
+        Update: {
+          category_id?: string
+          change_type?: string
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          kpi_name?: string
+          kra_name?: string
+          metadata?: Json | null
+          new_achieved_value?: number | null
+          new_status?: string | null
+          old_achieved_value?: number | null
+          old_status?: string | null
+          org_kpi_value_id?: string
+          propagated_count?: number | null
+          review_period?: string
+          review_year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_kpi_value_history_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_value_history_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_value_history_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_value_history_org_kpi_value_id_fkey"
+            columns: ["org_kpi_value_id"]
+            isOneToOne: false
+            referencedRelation: "org_kpi_values"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_kpi_values: {
         Row: {
           achieved_value: number | null

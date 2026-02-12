@@ -18,7 +18,8 @@ import { TableSkeleton } from '@/components/ui/LoadingSkeletons';
 import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
 import { OrgKpiOwnerDialog } from '@/components/admin/OrgKpiOwnerDialog';
 import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
-import { Building2, Save, AlertTriangle, Filter, Users, User, Search, X, UserPlus } from 'lucide-react';
+import { Building2, Save, AlertTriangle, Filter, Users, User, Search, X, UserPlus, BarChart3 } from 'lucide-react';
+import { OrgKpiImpactSheet } from '@/components/admin/OrgKpiImpactSheet';
 
 interface EditableKpi {
   category_id: string;
@@ -61,6 +62,10 @@ export default function OrgKpiDataEntry() {
   // Owner dialog state
   const [ownerDialogOpen, setOwnerDialogOpen] = useState(false);
   const [selectedKpiForOwner, setSelectedKpiForOwner] = useState<{ categoryId: string; kraName: string; kpiName: string } | null>(null);
+
+  // Impact sheet state
+  const [impactOpen, setImpactOpen] = useState(false);
+  const [impactTarget, setImpactTarget] = useState<{ categoryId: string; kraName: string; kpiName: string; achievedValue: number | null } | null>(null);
 
   // Fetch org-level KPIs (where is_org_level = true at KPI level)
   const { data: orgLevelKpis, isLoading: kpisLoading } = useOrgLevelKpis(selectedPeriod, selectedYear);
@@ -335,6 +340,11 @@ export default function OrgKpiDataEntry() {
   const openOwnerDialog = (categoryId: string, kraName: string, kpiName: string) => {
     setSelectedKpiForOwner({ categoryId, kraName, kpiName });
     setOwnerDialogOpen(true);
+  };
+
+  const openImpact = (categoryId: string, kraName: string, kpiName: string, achievedValue: number | null) => {
+    setImpactTarget({ categoryId, kraName, kpiName, achievedValue });
+    setImpactOpen(true);
   };
 
   const handleSaveAll = async () => {
@@ -643,6 +653,7 @@ export default function OrgKpiDataEntry() {
                       <TableHead className="font-semibold text-center w-32">Achieved Value</TableHead>
                       <TableHead className="font-semibold w-48">Remark</TableHead>
                       <TableHead className="font-semibold w-28">Supporting File</TableHead>
+                      <TableHead className="font-semibold w-16 text-center">Impact</TableHead>
                       {isAdmin && (
                         <TableHead className="font-semibold w-24 text-center">Actions</TableHead>
                       )}
@@ -721,6 +732,17 @@ export default function OrgKpiDataEntry() {
                               onUploadComplete={(url) => handleValueChange(kpi.category_id, kpi.kra_name, kpi.kpi_name, 'evidence_url', url, kpi, departmentId, employeeId)}
                             />
                           </TableCell>
+                          <TableCell className="text-center">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => openImpact(kpi.category_id, kpi.kra_name, kpi.kpi_name, display.achieved_value)}
+                              title="View Impact Analysis"
+                            >
+                              <BarChart3 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
                           {isAdmin && (() => {
                             const ownerKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
                             const ownership = ownershipMap.get(ownerKey);
@@ -765,6 +787,20 @@ export default function OrgKpiDataEntry() {
           categoryId={selectedKpiForOwner.categoryId}
           kraName={selectedKpiForOwner.kraName}
           kpiName={selectedKpiForOwner.kpiName}
+        />
+      )}
+
+      {/* Impact Analysis Sheet */}
+      {impactTarget && (
+        <OrgKpiImpactSheet
+          open={impactOpen}
+          onOpenChange={setImpactOpen}
+          categoryId={impactTarget.categoryId}
+          kraName={impactTarget.kraName}
+          kpiName={impactTarget.kpiName}
+          reviewPeriod={selectedPeriod}
+          reviewYear={selectedYear}
+          currentAchievedValue={impactTarget.achievedValue}
         />
       )}
     </div>
