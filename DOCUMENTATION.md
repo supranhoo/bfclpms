@@ -1636,7 +1636,8 @@ Full JSON format for maximum control:
 - Data owners can enter/update values for their assigned KPIs
 - Multiple owners can be assigned per KPI (primary + backup)
 - Assignment is tracked in `org_kpi_data_owners` table
-- **RLS Policy**: A dedicated SELECT policy on the `kpis` table (`"Data owners can view assigned org-level KPIs"`) allows data owners to see org-level KPIs they are assigned to, even if those KPIs belong to employees outside their reporting chain. This policy checks `is_org_level = true` and verifies ownership via the `org_kpi_data_owners` table.
+- **RLS Policy (kpis)**: A dedicated SELECT policy on the `kpis` table (`"Data owners can view assigned org-level KPIs"`) allows data owners to see org-level KPIs they are assigned to, even if those KPIs belong to employees outside their reporting chain. This policy checks `is_org_level = true` and verifies ownership via the `org_kpi_data_owners` table.
+- **RLS Policy (profiles)**: A SELECT policy on the `profiles` table (`"Data owners can view org kpi employee profiles"`) allows data owners to see profile information (name, department, designation) for employees who have org-level KPIs the data owner manages. This enables the Impact Analysis feature to display all affected employees, not just the data owner's direct reports.
 
 **Page Access Control:**
 - **Admins**: Full access to all org-level KPIs plus owner assignment (Actions column visible)
