@@ -88,7 +88,7 @@ export function WeeklySubmissionTable({
       return {
         weekNum,
         label: week.label,
-        achieved_value: submission?.achieved_value?.toString() || '',
+        achieved_value: submission?.achieved_value != null ? submission.achieved_value.toString() : '',
         remarks: submission?.remarks || '',
         isSubmitted: !!submission,
         isResubmitted: submission?.is_resubmitted || false,

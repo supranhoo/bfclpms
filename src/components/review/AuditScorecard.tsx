@@ -171,7 +171,7 @@ export function AuditScorecard({
       const submission = submissionMap.get(kpi.id);
       if (submission?.is_na) return; // Skip NA KPIs
       
-      const score = submission?.auditor_score || submission?.manager_score || submission?.self_score || 0;
+      const score = submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? 0;
       const weight = kpi.weightage || 0;
       const categoryName = kpi.kra_categories?.name || 'Other';
       const categoryColor = kpi.kra_categories?.color || null;
@@ -343,7 +343,7 @@ export function AuditScorecard({
     setAuditorEvidenceUrls(Array.isArray(existingUrls) && existingUrls.length > 0 
       ? existingUrls 
       : existing?.auditor_evidence_url ? [existing.auditor_evidence_url] : []);
-    setAuditorAchievedValue((existing as any)?.auditor_achieved_value || (existing as any)?.manager_achieved_value || existing?.achieved_value || null);
+    setAuditorAchievedValue((existing as any)?.auditor_achieved_value ?? (existing as any)?.manager_achieved_value ?? existing?.achieved_value ?? null);
     // Reset override state
     setAuditorAgrees(null);
     setDailyOverrides(new Map());

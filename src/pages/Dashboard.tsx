@@ -568,7 +568,7 @@ export default function Dashboard() {
                       </TableCell>
                       <TableCell className="text-center font-medium">{kpi.weightage}%</TableCell>
                       <TableCell className="text-center font-semibold">
-                        {submission?.achieved_value || '-'}
+                        {submission?.achieved_value != null ? submission.achieved_value : '-'}
                       </TableCell>
                       <TableCell className="text-center">
                         {rating ? (

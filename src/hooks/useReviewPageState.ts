@@ -139,7 +139,7 @@ export function useReviewPageState(options: UseReviewPageStateOptions) {
     setRating(initialRating || '');
     setRemarks((existing?.[remarksField] as string) || '');
     setEvidenceUrl((existing?.[evidenceField] as string) || null);
-    setAchievedValue((existing?.[achievedField] as number) || existing?.achieved_value || null);
+    setAchievedValue((existing?.[achievedField] as number) ?? existing?.achieved_value ?? null);
     setReviewDialogOpen(true);
   };
 

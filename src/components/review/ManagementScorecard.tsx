@@ -181,7 +181,7 @@ export function ManagementScorecard({
       const submission = submissionMap.get(kpi.id);
       if (submission?.is_na) return; // Skip NA KPIs
       
-      const score = submission?.management_score || submission?.auditor_score || submission?.manager_score || submission?.self_score || 0;
+      const score = submission?.management_score ?? submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? 0;
       const weight = kpi.weightage || 0;
       const categoryName = kpi.kra_categories?.name || 'Other';
       const categoryColor = kpi.kra_categories?.color || null;
@@ -365,7 +365,7 @@ export function ManagementScorecard({
     setManagementEvidenceUrls(Array.isArray(existingUrls) && existingUrls.length > 0 
       ? existingUrls 
       : existing?.management_evidence_url ? [existing.management_evidence_url] : []);
-    setManagementAchievedValue((existing as any)?.management_achieved_value || (existing as any)?.auditor_achieved_value || existing?.achieved_value || null);
+    setManagementAchievedValue((existing as any)?.management_achieved_value ?? (existing as any)?.auditor_achieved_value ?? existing?.achieved_value ?? null);
     // Reset override state
     setManagementAgrees(null);
     setDailyOverrides(new Map());

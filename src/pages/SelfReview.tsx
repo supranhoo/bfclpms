@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { safeParseFloat } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useKpisByPeriod, useReviewSubmissions, useSubmitSelfReview, RatingLevel, KPI, KpiStatus } from '@/hooks/useKpis';
@@ -258,14 +259,14 @@ export default function SelfReview() {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
     if (existing) {
-      setAchievedValue(existing.achieved_value?.toString() || '');
+      setAchievedValue(existing.achieved_value != null ? existing.achieved_value.toString() : '');
       // Re-calculate score from achieved value
       if (existing.achieved_value !== null && existing.achieved_value !== undefined) {
         const result = calculateScoreFromAchieved(existing.achieved_value, kpi);
         setCalculatedScore(result.rating);
         setCalculatedPercentage(result.percentage);
       } else {
-        setCalculatedScore(existing.self_score || null);
+        setCalculatedScore(existing.self_score ?? null);
         setCalculatedPercentage(null);
       }
       setSelfRemarks(existing.self_remarks || '');
@@ -366,7 +367,7 @@ export default function SelfReview() {
 
     await submitReview.mutateAsync({
       kpi_id: selectedKpi.id,
-      achieved_value: isNa ? null : (parseFloat(achievedValue) || 0),
+      achieved_value: isNa ? null : (safeParseFloat(achievedValue) ?? 0),
       self_rating: isNa ? null : (calculatedScore !== null ? getRatingLevel(calculatedScore) : null),
       self_score: isNa ? null : calculatedScore,
       self_remarks: selfRemarks,

@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { safeParseFloat } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { KpiDetailsTable } from '@/components/review/KpiDetailsTable';
 import { MobileKpiCard } from '@/components/review/MobileKpiCard';
@@ -510,7 +511,7 @@ export default function MyKpis() {
       kpi_id: selectedKpi.id,
       sub_period_type: selectedKpi.frequency === 'Daily' ? 'daily' : 'weekly',
       sub_period_value: selectedSubPeriod,
-      achieved_value: isNa ? null : (isQualitativeKpi(selectedKpi) ? calculatedScore : (parseFloat(achievedValue) || null)),
+      achieved_value: isNa ? null : (isQualitativeKpi(selectedKpi) ? calculatedScore : safeParseFloat(achievedValue)),
       remarks: selfRemarks || null,
       evidence_url: selfEvidenceUrls.length > 0 ? selfEvidenceUrls[0] : null,
       review_month: selectedPeriod,
@@ -577,7 +578,7 @@ export default function MyKpis() {
 
     await submitReview.mutateAsync({
       kpi_id: selectedKpi.id,
-      achieved_value: isNa ? null : (isQualitativeKpi(selectedKpi) ? calculatedScore : (parseFloat(achievedValue) || 0)),
+      achieved_value: isNa ? null : (isQualitativeKpi(selectedKpi) ? calculatedScore : (safeParseFloat(achievedValue) ?? 0)),
       self_rating: selfRating,
       self_score: isNa ? null : calculatedScore,
       self_remarks: selfRemarks,
