@@ -1,5 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -30,7 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Database, Download, RotateCcw, HardDrive, Clock, AlertTriangle, Upload, CalendarClock } from 'lucide-react';
+import { Database, Download, RotateCcw, HardDrive, Clock, AlertTriangle, Upload, CalendarClock, X } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   useBackupLogs,
@@ -65,6 +66,7 @@ export function BackupRestoreTab() {
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [confirmUploadRestore, setConfirmUploadRestore] = useState(false);
+  const [restoreWarnings, setRestoreWarnings] = useState<string[]>([]);
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const [frequency, setFrequency] = useState<BackupSchedule['frequency']>('weekly');
@@ -94,6 +96,19 @@ export function BackupRestoreTab() {
     setConfirmRestore(false);
     setRestoreId(null);
   };
+
+  // Track restore results for warnings display
+  useEffect(() => {
+    if (triggerRestore.data?.errors?.length) {
+      setRestoreWarnings(triggerRestore.data.errors);
+    }
+  }, [triggerRestore.data]);
+
+  useEffect(() => {
+    if (uploadRestore.data?.errors?.length) {
+      setRestoreWarnings(uploadRestore.data.errors);
+    }
+  }, [uploadRestore.data]);
 
   const handleUploadFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -275,6 +290,26 @@ export function BackupRestoreTab() {
               {uploadRestore.isPending ? 'Restoring...' : 'Upload & Restore'}
             </Button>
           </div>
+
+          {/* Restore Warnings Alert */}
+          {restoreWarnings.length > 0 && (
+            <Alert variant="destructive" className="mt-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle className="flex items-center justify-between">
+                <span>Restore completed with {restoreWarnings.length} warning{restoreWarnings.length !== 1 ? 's' : ''}</span>
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setRestoreWarnings([])}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </AlertTitle>
+              <AlertDescription>
+                <ul className="mt-2 space-y-1 text-xs list-disc pl-4">
+                  {restoreWarnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
         </CardContent>
       </Card>
 

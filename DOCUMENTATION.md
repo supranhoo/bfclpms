@@ -274,7 +274,7 @@ The system includes a full-database backup and restore feature accessible from *
 | Weekly | Day of week + Hour | `0 2 * * 0` (Sunday) |
 | Monthly | Day of month (1-28) + Hour | `0 2 15 * *` (15th) |
 
-**Storage**: `database-backups` private bucket (admin-only). **Edge Functions**: `create-backup`, `restore-backup`, `update-backup-schedule`. **Excluded**: `auth.users` (managed by auth system).
+**Storage**: `database-backups` private bucket (admin-only). **Edge Functions**: `create-backup`, `restore-backup`, `update-backup-schedule`. **Excluded**: `auth.users` (managed by auth system). **Restore Warnings**: If the restore completes with warnings (e.g. FK constraint issues), the full list of warning messages is displayed in the toast notification for 15 seconds so admins can diagnose issues. The `password_rollout_logs` table is included in the backup/restore dependency chain to prevent FK constraint failures when clearing `profiles`.
 
 #### Workflow Settings Categories
 

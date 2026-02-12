@@ -17,8 +17,6 @@ const TABLES_TO_BACKUP = [
   'workflow_templates',
   'frequency_config',
   'review_periods',
-  'email_notification_settings',
-  'email_templates',
   // Tables depending on divisions
   'business_units',
   // Tables depending on business_units
@@ -29,6 +27,7 @@ const TABLES_TO_BACKUP = [
   'profiles',
   // Tables depending on profiles
   'user_roles',
+  'password_rollout_logs',
   'employee_working_days',
   'org_kpi_data_owners',
   'kpi_templates',
