@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
 
 type AppRole = 'admin' | 'manager' | 'employee' | 'auditor' | 'management';
 
@@ -37,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const fetchProfile = async (userId: string) => {
     const { data: profileData } = await supabase
@@ -69,6 +71,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
         
         if (session?.user) {
+          // Invalidate module cache to clear any stale empty results from pre-auth queries
+          queryClient.invalidateQueries({ queryKey: ['modules'] });
           setTimeout(() => {
             fetchProfile(session.user.id);
             fetchRole(session.user.id);
