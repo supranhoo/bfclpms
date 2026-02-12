@@ -1,73 +1,163 @@
 
 
-# Fix: Show Restore Warnings in UI + Fix Delete Order
+# Brainstorm: Making Org KPIs More Robust, Controllable, and Transparent
 
-## What Happened (The 6 Warnings)
+## Current State Summary
 
-| # | Table | Warning |
-|---|---|---|
-| 1 | `email_templates` | Table doesn't exist in the database |
-| 2 | `email_notification_settings` | Table doesn't exist in the database |
-| 3 | `divisions` | Can't delete -- `departments` still has rows referenced by `profiles` |
-| 4 | `business_units` | Same FK cascade issue |
-| 5 | `departments` | FK constraint `profiles_department_fk` on `profiles` table |
-| 6 | `profiles` | FK constraint `password_rollout_logs_generated_by_fkey` -- `password_rollout_logs` not cleared first |
+Today, the Org KPI system has:
+- **42 unique Org KPIs** mapped across **483 employee KPI records** (all "organization" scope -- no department/employee scoping used yet)
+- **0 data owners** assigned (the owner assignment feature exists but isn't being used)
+- **0 org_kpi_values** saved (the pending/approved workflow has status columns but no values have been entered through the Data Entry panel)
+- A propagation system that pushes achieved values to employee review_submissions
+- A basic Overview page that shows KPIs grouped by category with pending/achieved status
 
-## Root Causes
+---
 
-1. **Missing table in delete order**: `password_rollout_logs` is not listed in `DELETE_ORDER`, so it still has rows referencing `profiles` when the restore tries to clear `profiles`. This cascades up -- `departments`, `business_units`, and `divisions` can't be cleared either.
-2. **Non-existent tables**: `email_templates` and `email_notification_settings` are listed in the backup/restore arrays but don't exist in the database schema.
-3. **No warning details in UI**: The `onSuccess` handler only shows a toast with a count ("6 warnings") but never reveals what went wrong.
+## Problem Areas Identified
 
-## Corrective Actions
-
-### Fix 1: Update Edge Function Delete/Insert Order
-
-**File: `supabase/functions/restore-backup/index.ts`**
-
-- Remove `email_templates` and `email_notification_settings` from both `DELETE_ORDER` and `INSERT_ORDER` (tables don't exist)
-- Add `password_rollout_logs` to `DELETE_ORDER` before `profiles` (leaf table that references profiles)
-- Add `password_rollout_logs` to `INSERT_ORDER` after `profiles` and `user_roles`
-
-### Fix 2: Show Warning Details in UI After Restore
-
-**File: `src/components/admin/BackupRestoreTab.tsx`**
-
-- Add state to store the last restore result (warnings array)
-- After a restore completes with warnings, display an expandable alert/card below the restore button showing each warning message
-- Use an `AlertTriangle` icon with amber styling and a collapsible list of errors
-
-**File: `src/hooks/useBackups.ts`**
-
-- Update `useTriggerRestore` and `useUploadAndRestore` to return the full result (including `errors` array) so the UI component can access it
-- Instead of only showing a toast, pass the result data back to the calling component
-
-### Fix 3: Update create-backup Edge Function
-
-**File: `supabase/functions/create-backup/index.ts`**
-
-- Remove `email_templates` and `email_notification_settings` from the backup table list
-- Add `password_rollout_logs` to the backup table list
-
-### Fix 4: Update Documentation
-
-**File: `DOCUMENTATION.md`**
-
-- Document the restore warning display behavior
-- Update the backed-up table list
-
-## Files Changed
-
-| File | Change |
+| Area | Gap |
 |---|---|
-| `supabase/functions/restore-backup/index.ts` | Fix DELETE_ORDER and INSERT_ORDER arrays |
-| `supabase/functions/create-backup/index.ts` | Fix table list (remove non-existent, add missing) |
-| `src/hooks/useBackups.ts` | Return restore result data to component |
-| `src/components/admin/BackupRestoreTab.tsx` | Show warning details in a visible alert after restore |
-| `DOCUMENTATION.md` | Update backup/restore documentation |
+| **Mapping Visibility** | Admin can't see which employees are linked to a specific Org KPI -- the Overview page shows KPI definitions but not who is impacted |
+| **Impact Analysis** | Before entering/changing a value, admin has no way to preview "this will affect 47 employees' scores" |
+| **Approval Workflow** | The `status` column exists in `org_kpi_values` but is never used -- values go straight to propagation without review |
+| **Data Owner Utilization** | Owner assignment UI exists but nobody is assigned; no accountability tracking |
+| **Audit Trail** | No history of who changed what Org KPI value and when |
+| **Propagation Feedback** | After propagation, no summary of what changed (scores before vs after) |
 
-## Expected Result
+---
 
-- Restore will complete with **0 warnings** (all FK dependencies resolved in correct order)
-- If any warnings do occur, the admin will see a detailed list on-screen -- not just a count in a toast
+## Proposed Enhancements (5 Features)
+
+### Feature 1: Impact Analysis Panel -- "Who Gets Affected?"
+
+Add an expandable "Impact Preview" to each Org KPI row in both Overview and Data Entry pages.
+
+**What it shows:**
+- Total employee count affected
+- Breakdown by department
+- List of affected employees (name, code, department, current score)
+- When entering a new achieved value: simulated new score vs current score
+
+**How it works:**
+- Query `kpis` table where `is_org_level = true` matching the category/KRA/KPI
+- Join with `profiles` for employee details and `review_submissions` for current scores
+- Display in a collapsible section or a slide-out sheet
+
+**Admin benefit:** Before saving any value, admin sees exactly who will be impacted and by how much.
+
+---
+
+### Feature 2: Org KPI Mapping Dashboard -- "Who Has What?"
+
+A new dedicated view (or tab on the Overview page) showing the **reverse mapping**:
+
+| View Mode | Shows |
+|---|---|
+| By KPI | Each Org KPI with a list of all employees it's assigned to, their departments, and current status |
+| By Employee | Each employee with all their Org KPIs listed |
+| By Department | Department-wise grouping of Org KPI coverage |
+
+**Key metrics displayed:**
+- Coverage percentage (e.g., "42/50 employees have this KPI assigned")
+- Missing assignments (employees who should have it but don't)
+- Duplicate detection
+
+**Admin benefit:** Full visibility into the mapping landscape without having to check individual employee records.
+
+---
+
+### Feature 3: Value Entry Approval Workflow
+
+Activate the existing `status` column on `org_kpi_values` with a proper workflow:
+
+```text
+Draft --> Submitted --> Approved --> Propagated
+                  \--> Sent Back (with reason)
+```
+
+**Flow:**
+1. Data Owner or Admin enters value -- status = "draft"
+2. Data Owner clicks "Submit for Approval" -- status = "submitted"
+3. Admin reviews and either Approves (triggers propagation) or Sends Back (with reason)
+4. Propagation only happens on "Approved" status
+
+**Admin benefit:** Values don't immediately affect employee scores. Admin retains final control before any score impact.
+
+---
+
+### Feature 4: Propagation Summary Report
+
+After propagation completes, show a detailed summary:
+
+- Total employees affected
+- Score changes breakdown:
+  - Employees whose score **increased**
+  - Employees whose score **decreased**
+  - Employees whose score **stayed the same**
+- Table with: Employee Name, Department, Old Score, New Score, Change (+/-)
+- Option to download as Excel
+
+**Admin benefit:** Full post-action transparency. If something looks wrong, admin can identify affected employees immediately.
+
+---
+
+### Feature 5: Org KPI Change History / Audit Log
+
+Track every change to `org_kpi_values`:
+
+- Who changed the value
+- Previous value vs new value
+- When it was changed
+- Whether it was propagated and to how many employees
+
+Display as a timeline in the Overview page or as a dedicated "History" tab.
+
+**Admin benefit:** Complete accountability trail for organizational data, essential for compliance and management reporting.
+
+---
+
+## Recommended Implementation Priority
+
+| Priority | Feature | Effort | Impact |
+|---|---|---|---|
+| 1 | Impact Analysis Panel | Medium | High -- immediate admin visibility |
+| 2 | Org KPI Mapping Dashboard | Medium | High -- solves "who has what" completely |
+| 3 | Propagation Summary Report | Low | Medium -- post-action transparency |
+| 4 | Value Entry Approval Workflow | High | High -- governance control |
+| 5 | Change History / Audit Log | Medium | Medium -- compliance |
+
+---
+
+## Technical Notes
+
+### Database Changes Required
+- New table `org_kpi_value_history` for audit trail (Feature 5)
+- Trigger on `org_kpi_values` to log changes automatically
+- Activate `status` column workflow with proper enum values (Feature 3)
+
+### No Database Changes Required
+- Features 1, 2, and 3 can leverage existing `kpis`, `profiles`, `review_submissions`, and `org_kpi_values` tables
+- Impact analysis is a read-only query joining these tables
+
+### Key Queries for Impact Analysis
+```sql
+-- Count employees affected by an Org KPI
+SELECT COUNT(DISTINCT k.employee_id), p.department_id, d.name
+FROM kpis k
+JOIN profiles p ON k.employee_id = p.id
+JOIN departments d ON p.department_id = d.id
+WHERE k.is_org_level = true
+  AND k.category_id = ?
+  AND k.kra_name = ?
+  AND k.kpi_name = ?
+  AND k.review_period = ?
+  AND k.review_year = ?
+GROUP BY p.department_id, d.name
+```
+
+---
+
+## Next Step
+
+Please let me know which features you'd like to prioritize, and I'll create a detailed implementation plan for those specific items. You can pick one, a few, or all five.
 
