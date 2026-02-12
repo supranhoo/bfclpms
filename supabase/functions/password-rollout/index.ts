@@ -1,11 +1,12 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+const BATCH_SIZE = 5;
 
 function generateSecurePassword(length = 14): string {
   const upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -17,7 +18,6 @@ function generateSecurePassword(length = 14): string {
   const arr = new Uint8Array(length);
   crypto.getRandomValues(arr);
 
-  // Ensure at least one of each category
   const password = [
     upper[arr[0] % upper.length],
     lower[arr[1] % lower.length],
@@ -29,7 +29,6 @@ function generateSecurePassword(length = 14): string {
     password.push(all[arr[i] % all.length]);
   }
 
-  // Shuffle
   for (let i = password.length - 1; i > 0; i--) {
     const j = arr[i] % (i + 1);
     [password[i], password[j]] = [password[j], password[i]];
@@ -38,7 +37,117 @@ function generateSecurePassword(length = 14): string {
   return password.join("");
 }
 
-serve(async (req: Request) => {
+interface ProfileRecord {
+  id: string;
+  full_name: string | null;
+  email: string;
+  employee_code: string | null;
+}
+
+interface UserResult {
+  user_id: string;
+  email: string;
+  status: string;
+  error_message?: string;
+  email_sent: boolean;
+  email_error?: string;
+}
+
+async function processOneUser(
+  profile: ProfileRecord,
+  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  sendEmail: boolean,
+  generatedBy: string,
+  appName: string,
+): Promise<UserResult> {
+  let status = "success";
+  let errorMessage: string | undefined;
+  let emailSent = false;
+  let emailError: string | undefined;
+
+  try {
+    const password = generateSecurePassword(14);
+
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+      profile.id,
+      { password }
+    );
+
+    if (updateError) {
+      throw new Error(`Auth update failed: ${updateError.message}`);
+    }
+
+    if (sendEmail && profile.email) {
+      try {
+        const emailBody = {
+          event_type: "password_rollout",
+          recipient_email: profile.email,
+          recipient_name: profile.full_name || "User",
+          generated_password: password,
+          login_email: profile.email,
+          employee_code: profile.employee_code || "",
+          app_name: appName,
+        };
+
+        const emailResponse = await fetch(
+          `${supabaseUrl}/functions/v1/send-email-notification`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${serviceRoleKey}`,
+            },
+            body: JSON.stringify(emailBody),
+          }
+        );
+
+        if (!emailResponse.ok) {
+          const errText = await emailResponse.text();
+          throw new Error(`Email dispatch failed: ${errText}`);
+        }
+
+        emailSent = true;
+      } catch (e: any) {
+        emailError = e.message;
+        console.error(`Email failed for ${profile.email}:`, e.message);
+      }
+    }
+  } catch (e: any) {
+    status = "failed";
+    errorMessage = e.message;
+    console.error(`Password rollout failed for ${profile.id}:`, e.message);
+  }
+
+  // Log to audit table
+  try {
+    await supabaseAdmin.from("password_rollout_logs").insert({
+      user_id: profile.id,
+      employee_code: profile.employee_code,
+      full_name: profile.full_name,
+      email: profile.email,
+      generated_by: generatedBy,
+      email_sent: emailSent,
+      email_error: emailError || null,
+      status,
+      error_message: errorMessage || null,
+    });
+  } catch (logErr: any) {
+    console.error(`Audit log failed for ${profile.id}:`, logErr.message);
+  }
+
+  return {
+    user_id: profile.id,
+    email: profile.email,
+    status,
+    error_message: errorMessage,
+    email_sent: emailSent,
+    email_error: emailError,
+  };
+}
+
+Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -68,7 +177,6 @@ serve(async (req: Request) => {
       });
     }
 
-    // Check admin role
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: roleData } = await supabaseAdmin
@@ -94,7 +202,6 @@ serve(async (req: Request) => {
       });
     }
 
-    // Fetch user profiles
     const { data: profiles } = await supabaseAdmin
       .from("profiles")
       .select("id, full_name, email, employee_code")
@@ -107,7 +214,6 @@ serve(async (req: Request) => {
       });
     }
 
-    // Get app settings for email branding
     const { data: appSettings } = await supabaseAdmin
       .from("app_settings")
       .select("app_name")
@@ -116,97 +222,33 @@ serve(async (req: Request) => {
 
     const appName = appSettings?.app_name || "Performance Management System";
 
-    const results: Array<{
-      user_id: string;
-      email: string;
-      status: string;
-      error_message?: string;
-      email_sent: boolean;
-      email_error?: string;
-    }> = [];
+    // Process in batches of 5 for parallel execution
+    const results: UserResult[] = [];
 
-    for (const profile of profiles) {
-      let status = "success";
-      let errorMessage: string | undefined;
-      let emailSent = false;
-      let emailError: string | undefined;
+    for (let i = 0; i < profiles.length; i += BATCH_SIZE) {
+      const batch = profiles.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.allSettled(
+        batch.map((profile) =>
+          processOneUser(
+            profile as ProfileRecord,
+            supabaseAdmin,
+            supabaseUrl,
+            serviceRoleKey,
+            !!send_email,
+            user.id,
+            appName,
+          )
+        )
+      );
 
-      try {
-        const password = generateSecurePassword(14);
-
-        // Update auth password
-        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-          profile.id,
-          { password }
-        );
-
-        if (updateError) {
-          throw new Error(`Auth update failed: ${updateError.message}`);
+      for (const result of batchResults) {
+        if (result.status === "fulfilled") {
+          results.push(result.value);
+        } else {
+          // Should not happen since processOneUser catches internally, but handle gracefully
+          console.error("Unexpected batch rejection:", result.reason);
         }
-
-        // Send email if requested
-        if (send_email && profile.email) {
-          try {
-            const emailBody = {
-              event_type: "password_rollout",
-              recipient_email: profile.email,
-              recipient_name: profile.full_name || "User",
-              generated_password: password,
-              login_email: profile.email,
-              employee_code: profile.employee_code || "",
-              app_name: appName,
-            };
-
-            const emailResponse = await fetch(
-              `${supabaseUrl}/functions/v1/send-email-notification`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${serviceRoleKey}`,
-                },
-                body: JSON.stringify(emailBody),
-              }
-            );
-
-            if (!emailResponse.ok) {
-              const errText = await emailResponse.text();
-              throw new Error(`Email dispatch failed: ${errText}`);
-            }
-
-            emailSent = true;
-          } catch (e: any) {
-            emailError = e.message;
-            console.error(`Email failed for ${profile.email}:`, e.message);
-          }
-        }
-      } catch (e: any) {
-        status = "failed";
-        errorMessage = e.message;
-        console.error(`Password rollout failed for ${profile.id}:`, e.message);
       }
-
-      // Log to audit table
-      await supabaseAdmin.from("password_rollout_logs").insert({
-        user_id: profile.id,
-        employee_code: profile.employee_code,
-        full_name: profile.full_name,
-        email: profile.email,
-        generated_by: user.id,
-        email_sent: emailSent,
-        email_error: emailError || null,
-        status,
-        error_message: errorMessage || null,
-      });
-
-      results.push({
-        user_id: profile.id,
-        email: profile.email,
-        status,
-        error_message: errorMessage,
-        email_sent: emailSent,
-        email_error: emailError,
-      });
     }
 
     const summary = {

@@ -2808,7 +2808,8 @@ The `exportKpiData()` function in `ImportData.tsx` now exports **all columns** t
 - Generates 14-char cryptographically secure passwords (upper, lower, digits, symbols)
 - Updates auth via `supabaseAdmin.auth.admin.updateUserById`
 - Optionally sends credentials via `send-email-notification` (`password_rollout` event type)
-- Logs each result to `password_rollout_logs`
+- **Batched parallel processing:** Users are processed in chunks of 5 using `Promise.allSettled` to avoid edge function timeouts on large batches (60+ users). Each user's password generation, auth update, email dispatch, and audit log insert are encapsulated in a `processOneUser` helper.
+- Logs each result to `password_rollout_logs` immediately per user (not deferred to end)
 - **No plaintext password storage**
 
 **Frontend:**
