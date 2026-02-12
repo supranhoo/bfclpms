@@ -425,6 +425,11 @@ The `kpis` table has specific UPDATE policies for workflow progression:
 - "Back to Hub" button in sidebar header allows returning to module selection
 - Root path `/` redirects to `/home`
 
+**Auth-Guarded Query Pattern:**
+- `useModules()` uses `enabled: !!user` to prevent the query from firing before the auth token is ready, avoiding RLS-blocked empty results being cached.
+- `AuthContext` invalidates the `['modules']` query cache on login to clear any stale empty results.
+- This pattern should be applied to any new hooks fetching RLS-protected data that run immediately after login.
+
 ---
 
 ### 4.1 Authentication & Authorization

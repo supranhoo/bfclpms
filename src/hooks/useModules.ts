@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface Module {
   id: string;
@@ -15,6 +16,8 @@ export interface Module {
 }
 
 export function useModules() {
+  const { user } = useAuth();
+
   return useQuery({
     queryKey: ['modules'],
     queryFn: async (): Promise<Module[]> => {
@@ -31,6 +34,7 @@ export function useModules() {
 
       return (data || []) as Module[];
     },
+    enabled: !!user, // Only fetch when authenticated to avoid RLS empty-result caching
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
 }
