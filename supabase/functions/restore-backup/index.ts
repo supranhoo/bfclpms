@@ -237,19 +237,21 @@ Deno.serve(async (req) => {
     }
 
     // Log the restore action in audit
-    await supabase.from('kpi_audit_logs').insert({
-      kpi_id: '00000000-0000-0000-0000-000000000000',
-      action: 'database_restore',
-      performed_by: user.id,
-      metadata: {
-        backup_id,
-        backup_date: backupLog.created_at,
-        tables_restored: tablesRestored,
-        errors: errors.length > 0 ? errors : null,
-      },
-    }).catch(() => {
+    try {
+      await supabase.from('kpi_audit_logs').insert({
+        kpi_id: '00000000-0000-0000-0000-000000000000',
+        action: 'database_restore',
+        performed_by: user.id,
+        metadata: {
+          backup_id,
+          backup_date: backupLog.created_at,
+          tables_restored: tablesRestored,
+          errors: errors.length > 0 ? errors : null,
+        },
+      })
+    } catch {
       // Don't fail the restore if audit log fails
-    })
+    }
 
     return new Response(
       JSON.stringify({
