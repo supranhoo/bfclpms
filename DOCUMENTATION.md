@@ -248,7 +248,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | `workflow_settings` | Admin-configurable operational controls | `category`, `setting_key`, `setting_value`, `label`, `description`, `min_value`, `max_value`, `unit` |
 | `kpi_audit_logs` | KPI change tracking | `kpi_id`, `action`, `performed_by`, `old_value`, `new_value` |
 | `kra_rollover_logs` | KRA rollover history | `source_period`, `target_period`, `kpis_copied`, `details` (JSONB per-employee breakdown) |
-| `org_kpi_values` | Organization-level KPI scores | `category_id`, `review_period`, `achieved_value` |
+| `org_kpi_values` | Organization-level KPI scores | `category_id`, `review_period`, `achieved_value`, `department_id`, `employee_id`. Scoped unique index (`org_kpi_values_scoped_unique`) on `(category_id, kra_name, kpi_name, review_period, review_year, COALESCE(department_id), COALESCE(employee_id))` allows one row per department/employee per KPI per period. |
 | `org_kpi_value_history` | Org KPI value audit trail | `org_kpi_value_id`, `old_achieved_value`, `new_achieved_value`, `changed_by`, `change_type` |
 | `import_progress` | Bulk import tracking | `id`, `status`, `total_rows`, `processed_rows` |
 | `employee_working_days` | Per-employee monthly working days configuration | `employee_id`, `month`, `year`, `working_days` |
