@@ -74,7 +74,10 @@ export function useTriggerRestore() {
     },
     onSuccess: (data) => {
       if (data.errors && data.errors.length > 0) {
-        toast.warning(`Restore completed with ${data.errors.length} warnings. ${data.tables_restored} tables restored.`);
+        toast.warning(`Restore completed with ${data.errors.length} warnings. ${data.tables_restored} tables restored.`, {
+          description: data.errors.join(' | '),
+          duration: 15000,
+        });
       } else {
         toast.success(`Restore completed: ${data.tables_restored} tables restored successfully`);
       }
@@ -197,7 +200,7 @@ export function useUploadAndRestore() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (file: File): Promise<{ phase: UploadRestorePhase; tables_restored?: number }> => {
+    mutationFn: async (file: File): Promise<{ phase: UploadRestorePhase; tables_restored?: number; errors?: string[] }> => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
@@ -252,10 +255,17 @@ export function useUploadAndRestore() {
       });
 
       if (response.error) throw response.error;
-      return { phase: 'done' as UploadRestorePhase, tables_restored: response.data?.tables_restored };
+      return { phase: 'done' as UploadRestorePhase, tables_restored: response.data?.tables_restored, errors: response.data?.errors ?? [] };
     },
     onSuccess: (data) => {
-      toast.success(`Restore from uploaded file completed: ${data.tables_restored ?? 0} tables restored`);
+      if (data.errors && data.errors.length > 0) {
+        toast.warning(`Restore completed with ${data.errors.length} warnings. ${data.tables_restored ?? 0} tables restored.`, {
+          description: data.errors.join(' | '),
+          duration: 15000,
+        });
+      } else {
+        toast.success(`Restore from uploaded file completed: ${data.tables_restored ?? 0} tables restored`);
+      }
       queryClient.invalidateQueries();
     },
     onError: (error: Error) => {
