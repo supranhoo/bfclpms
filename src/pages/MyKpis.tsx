@@ -864,7 +864,7 @@ export default function MyKpis() {
                       kpi={selectedKpi}
                       submission={submissionMap.get(selectedKpi.id) || null}
                       allKpis={allKpis || []}
-                      allSubmissions={submissions || []}
+                      allSubmissions={allSubmissions || []}
                       viewLevel="employee"
                       currentUserId={profile?.id}
                       selectedPeriod={selectedPeriod}
