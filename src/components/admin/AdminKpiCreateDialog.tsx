@@ -17,6 +17,11 @@ import { UomType, QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom
 import { Badge } from '@/components/ui/badge';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
+import { useKpiTemplates } from '@/hooks/useKpiTemplates';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Check, ChevronsUpDown, ArrowLeft } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface AdminKpiCreateDialogProps {
   isOpen: boolean;
@@ -29,6 +34,13 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
   const { data: profiles } = useProfiles();
   const { data: settingsData } = useSystemSettings();
   const createKpi = useCreateKpi();
+  const { data: templates } = useKpiTemplates();
+
+  // Combobox state
+  const [kraOpen, setKraOpen] = useState(false);
+  const [kpiOpen, setKpiOpen] = useState(false);
+  const [isCustomKra, setIsCustomKra] = useState(false);
+  const [isCustomKpi, setIsCustomKpi] = useState(false);
 
   // Parse settings data
   const settings = useMemo(() => {
@@ -93,6 +105,57 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
     }
   }, [settings]);
 
+  // Derived template data
+  const filteredKraNames = useMemo(() => {
+    if (!templates || !categoryId) return [];
+    const names = templates
+      .filter(t => t.is_active && t.category_id === categoryId)
+      .map(t => t.kra_name);
+    return [...new Set(names)].sort();
+  }, [templates, categoryId]);
+
+  const filteredKpiTemplates = useMemo(() => {
+    if (!templates || !categoryId || !kraName) return [];
+    return templates.filter(
+      t => t.is_active && t.category_id === categoryId && t.kra_name === kraName
+    );
+  }, [templates, categoryId, kraName]);
+
+  // Reset KRA/KPI when category changes
+  useEffect(() => {
+    setKraName('');
+    setKpiName('');
+    setIsCustomKra(false);
+    setIsCustomKpi(false);
+  }, [categoryId]);
+
+  // Reset KPI when KRA changes
+  useEffect(() => {
+    setKpiName('');
+    setIsCustomKpi(false);
+  }, [kraName]);
+
+  const applyTemplate = (kpiNameValue: string) => {
+    const tpl = filteredKpiTemplates.find(t => t.kpi_name === kpiNameValue);
+    if (!tpl) return;
+    if (tpl.uom_type) setUomType(tpl.uom_type as UomType);
+    if (tpl.uom) setUom(tpl.uom);
+    if (tpl.criteria) setCriteria(tpl.criteria);
+    if (tpl.target_value != null) setTargetValue(String(tpl.target_value));
+    if (tpl.weightage != null) setWeightage(String(tpl.weightage));
+    if (tpl.frequency) setFrequency(tpl.frequency);
+    if (tpl.source_of_data) setSourceOfData(tpl.source_of_data);
+    if (tpl.r5) setR5(tpl.r5);
+    if (tpl.r4) setR4(tpl.r4);
+    if (tpl.r3) setR3(tpl.r3);
+    if (tpl.r2) setR2(tpl.r2);
+    if (tpl.r1) setR1(tpl.r1);
+    if (tpl.r0) setR0(tpl.r0);
+    if (tpl.qualitative_options) setQualitativeOptions(tpl.qualitative_options as QualitativeOption[]);
+    if (tpl.threshold_mode) setThresholdMode(tpl.threshold_mode as 'absolute' | 'ratio');
+    if (tpl.require_resubmit_reason != null) setRequireResubmitReason(tpl.require_resubmit_reason);
+  };
+
   const resetForm = () => {
     setEmployeeId(defaultEmployeeId || '');
     setCategoryId('');
@@ -121,6 +184,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
     setReviewYear(settings.current_review_year);
     setRequireResubmitReason(true);
     setThresholdMode('absolute');
+    setIsCustomKra(false);
+    setIsCustomKpi(false);
   };
 
   const handleClose = () => {
@@ -231,22 +296,156 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
 
             {/* KRA & KPI Names */}
             <div className="grid grid-cols-1 gap-4">
+              {/* KRA Name - Combobox or Custom Input */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium">KRA Name *</Label>
-                <Input
-                  value={kraName}
-                  onChange={(e) => setKraName(e.target.value)}
-                  placeholder="e.g., Revenue Growth"
-                />
+                {isCustomKra ? (
+                  <div className="flex gap-2">
+                    <Input
+                      value={kraName}
+                      onChange={(e) => setKraName(e.target.value)}
+                      placeholder="Enter custom KRA name"
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => { setIsCustomKra(false); setKraName(''); }}
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Popover open={kraOpen} onOpenChange={setKraOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={kraOpen}
+                        className="w-full justify-between font-normal"
+                        disabled={!categoryId}
+                      >
+                        {kraName || (categoryId ? "Select KRA name..." : "Select a category first")}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search KRA names..." />
+                        <CommandList>
+                          <CommandEmpty>No KRA names found.</CommandEmpty>
+                          <CommandGroup>
+                            {filteredKraNames.map((name) => (
+                              <CommandItem
+                                key={name}
+                                value={name}
+                                onSelect={() => {
+                                  setKraName(name);
+                                  setKraOpen(false);
+                                }}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", kraName === name ? "opacity-100" : "opacity-0")} />
+                                {name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                          <CommandGroup>
+                            <CommandItem
+                              onSelect={() => {
+                                setIsCustomKra(true);
+                                setKraName('');
+                                setKraOpen(false);
+                              }}
+                            >
+                              <span className="text-muted-foreground">+ Enter custom KRA name</span>
+                            </CommandItem>
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                )}
               </div>
+
+              {/* KPI Name - Combobox or Custom Input */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium">KPI Name *</Label>
-                <Textarea
-                  value={kpiName}
-                  onChange={(e) => setKpiName(e.target.value)}
-                  placeholder="e.g., Increase monthly recurring revenue by 15%"
-                  rows={2}
-                />
+                {isCustomKpi ? (
+                  <div className="flex gap-2">
+                    <Textarea
+                      value={kpiName}
+                      onChange={(e) => setKpiName(e.target.value)}
+                      placeholder="Enter custom KPI name"
+                      rows={2}
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="self-start"
+                      onClick={() => { setIsCustomKpi(false); setKpiName(''); }}
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Popover open={kpiOpen} onOpenChange={setKpiOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={kpiOpen}
+                        className="w-full justify-between font-normal h-auto min-h-10 whitespace-normal text-left"
+                        disabled={!kraName || isCustomKra}
+                      >
+                        {kpiName || (kraName ? "Select KPI name..." : "Select a KRA first")}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search KPI names..." />
+                        <CommandList>
+                          <CommandEmpty>No KPI templates found.</CommandEmpty>
+                          <CommandGroup>
+                            {filteredKpiTemplates.map((tpl) => (
+                              <CommandItem
+                                key={tpl.id}
+                                value={tpl.kpi_name}
+                                onSelect={() => {
+                                  setKpiName(tpl.kpi_name);
+                                  applyTemplate(tpl.kpi_name);
+                                  setKpiOpen(false);
+                                }}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4 shrink-0", kpiName === tpl.kpi_name ? "opacity-100" : "opacity-0")} />
+                                <div className="flex flex-col">
+                                  <span>{tpl.kpi_name}</span>
+                                  {tpl.target_value != null && (
+                                    <span className="text-xs text-muted-foreground">Target: {tpl.target_value} {tpl.uom || ''}</span>
+                                  )}
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                          <CommandGroup>
+                            <CommandItem
+                              onSelect={() => {
+                                setIsCustomKpi(true);
+                                setKpiName('');
+                                setKpiOpen(false);
+                              }}
+                            >
+                              <span className="text-muted-foreground">+ Enter custom KPI name</span>
+                            </CommandItem>
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                )}
               </div>
             </div>
 
