@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useUploadLimits } from '@/hooks/useUploadLimits';
 
 // Singleton ID for app_settings (only one row exists)
 const APP_SETTINGS_ID = '00000000-0000-0000-0000-000000000001';
@@ -90,9 +91,15 @@ export function useUpdateAppSettings() {
 
 export function useUploadBrandingAsset() {
   const { toast } = useToast();
+  const { maxFileSizeMb, maxFileSizeBytes } = useUploadLimits();
 
   return useMutation({
     mutationFn: async ({ file, path }: { file: File; path: string }): Promise<string> => {
+      // Validate file size
+      if (file.size > maxFileSizeBytes) {
+        throw new Error(`File too large. Maximum size is ${maxFileSizeMb}MB.`);
+      }
+
       // Upload to branding-assets bucket
       const { error: uploadError } = await supabase.storage
         .from('branding-assets')

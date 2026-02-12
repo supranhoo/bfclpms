@@ -6,6 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, X, FileText, Image, FileSpreadsheet, Loader2, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useUploadLimits } from '@/hooks/useUploadLimits';
 
 interface MultiFileUploadProps {
   userId: string;
@@ -34,7 +35,6 @@ const ACCEPTED_TYPES = {
 };
 
 const ACCEPTED_EXTENSIONS = '.jpg,.jpeg,.png,.pdf,.xls,.xlsx';
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 export function MultiFileUpload({
   userId,
@@ -50,6 +50,7 @@ export function MultiFileUpload({
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { maxFileSizeMb, maxFileSizeBytes } = useUploadLimits();
 
   const currentCount = existingUrls.length;
   const canUploadMore = currentCount < maxFiles && !disabled;
@@ -86,10 +87,10 @@ export function MultiFileUpload({
     }
 
     // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > maxFileSizeBytes) {
       toast({
         title: 'File too large',
-        description: `"${file.name}" exceeds the 10MB limit.`,
+        description: `"${file.name}" exceeds the ${maxFileSizeMb}MB limit.`,
         variant: 'destructive',
       });
       return null;
@@ -297,7 +298,7 @@ export function MultiFileUpload({
 
       {/* Help Text */}
       <p className="text-xs text-muted-foreground">
-        Supported: JPEG, PNG, PDF, Excel (max 10MB each)
+        Supported: JPEG, PNG, PDF, Excel (max {maxFileSizeMb}MB each)
       </p>
     </div>
   );

@@ -1531,6 +1531,7 @@ Full JSON format for maximum control:
   - **Step 3 – Results & Report**: Summary cards, detailed results table, downloadable Excel report with employee-level breakdown
 - Email notification templates
 - Organization name/branding
+- **File Upload Limit**: Centralized `max_upload_size_mb` setting (default: 5 MB) controls the maximum file size for all evidence uploads, attachments, and branding assets. Configurable under **General** tab with a range of 1–50 MB. All upload components (`MultiFileUpload`, `EvidenceUpload`, `OrgKpiFileUpload`, branding asset upload) read this value dynamically via the `useUploadLimits` hook. Import file validation (`importValidation.ts`) uses a separate hardcoded limit.
 
 #### 4.9.11 PIP Management (`/admin/pip-management`)
 - View all PIPs

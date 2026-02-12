@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, FileText, X, Loader2, ExternalLink } from 'lucide-react';
+import { useUploadLimits } from '@/hooks/useUploadLimits';
 
 interface OrgKpiFileUploadProps {
   existingUrl: string | null;
@@ -14,16 +15,16 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { maxFileSizeMb, maxFileSizeBytes } = useUploadLimits();
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > maxFileSizeBytes) {
       toast({
         title: 'File too large',
-        description: 'Maximum file size is 5MB',
+        description: `Maximum file size is ${maxFileSizeMb}MB`,
         variant: 'destructive',
       });
       return;

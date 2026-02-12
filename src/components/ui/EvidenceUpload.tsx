@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, X, FileText, Image, FileSpreadsheet, Loader2 } from 'lucide-react';
+import { useUploadLimits } from '@/hooks/useUploadLimits';
 
 interface EvidenceUploadProps {
   userId: string;
@@ -22,7 +23,6 @@ const ACCEPTED_TYPES = {
 };
 
 const ACCEPTED_EXTENSIONS = '.jpg,.jpeg,.png,.pdf,.xls,.xlsx';
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }: EvidenceUploadProps) {
   const [uploading, setUploading] = useState(false);
@@ -30,6 +30,7 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
   const [fileName, setFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { maxFileSizeMb, maxFileSizeBytes } = useUploadLimits();
 
   const getFileIcon = (url: string) => {
     if (url.includes('.pdf')) return FileText;
@@ -52,10 +53,10 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
     }
 
     // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > maxFileSizeBytes) {
       toast({
         title: 'File too large',
-        description: 'Maximum file size is 10MB.',
+        description: `Maximum file size is ${maxFileSizeMb}MB.`,
         variant: 'destructive',
       });
       return;
@@ -112,7 +113,7 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
     <div className="space-y-2">
       <Label>Evidence Attachment (Optional)</Label>
       <p className="text-xs text-muted-foreground mb-2">
-        Supported: JPEG, PNG, PDF, Excel (max 10MB)
+        Supported: JPEG, PNG, PDF, Excel (max {maxFileSizeMb}MB)
       </p>
       
       <input
