@@ -1,3 +1,4 @@
+// Edge function: create-employee (verify_jwt=false, auth validated in code)
 import { createClient } from "npm:@supabase/supabase-js@2"
 
 const corsHeaders = {
@@ -29,22 +30,29 @@ Deno.serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    // Verify the caller is authenticated and is an admin
+    // Verify the caller is authenticated
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
+    if (!authHeader?.startsWith('Bearer ')) {
+      console.error('No auth header found')
       return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+    console.log('Auth header present, validating user...')
+    const anonClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      global: { headers: { Authorization: authHeader } },
+    })
+    const { data: { user }, error: authError } = await anonClient.auth.getUser()
     
     if (authError || !user) {
+      console.error('Auth validation failed:', authError?.message)
       return new Response(JSON.stringify({ error: 'Invalid token' }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
+
+    console.log('User validated:', user.id)
 
     // Check if user is admin
     const { data: roles } = await supabaseAdmin
