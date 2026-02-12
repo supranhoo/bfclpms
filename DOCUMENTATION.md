@@ -959,6 +959,19 @@ All three review pages share a unified `EmployeeFilters` component with advanced
 - Set applicable roles
 - **Frequency Configuration:** 7 frequency types with sub-frequency support
 
+#### 4.9.4a Cascading KRA/KPI Dropdowns in "Assign New KRA"
+
+The **AdminKpiCreateDialog** uses searchable cascading dropdowns for KRA and KPI names, powered by the KPI Templates library (`kpi_templates` table via `useKpiTemplates` hook):
+
+1. **Category selected** → KRA Name dropdown shows unique KRA names from active templates matching that category.
+2. **KRA selected** → KPI Name dropdown shows KPI templates matching both the category and KRA.
+3. **KPI selected** → All form fields auto-fill from the template: UOM type, UOM, criteria, target value, weightage, frequency, source of data, rating thresholds (R5-R0), qualitative options, threshold mode, and resubmit reason setting.
+4. **Custom entry** → A "+ Enter custom" option in each dropdown switches to a free-text input with a back button to return to dropdown mode.
+
+**Reset behavior:** Changing the category resets both KRA and KPI. Changing the KRA resets the KPI. This ensures cascading consistency.
+
+**No impact on existing KPIs** — the same `handleSubmit` logic and `createKpi.mutateAsync()` call are used regardless of selection method.
+
 #### 4.9.5 Unit of Measure (UOM) Options
 
 Standard UOM options available in dropdown selectors across all KPI forms:
