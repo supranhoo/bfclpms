@@ -1,57 +1,59 @@
 
 
-# Fix: Unique Constraint on org_kpi_values Blocks Department-Scoped Saves
+# Fix: Impact Analysis Shows 0 Employees for Data Owners
 
-## Problem
+## Root Cause Analysis (RCA)
 
-The `org_kpi_values` table has this unique constraint:
-```
-UNIQUE (category_id, kra_name, kpi_name, review_period, review_year)
-```
+Jaspal is assigned as a Data Owner for the LTI KPI. He has the **manager** role with only 2 direct reports. When he opens Impact Analysis:
 
-This means only **one value** can exist per KPI per period. But department-scoped Org KPIs need **one row per department** (e.g., "LTI" for TPD-E, TPD-Mech, TPD-Process). Saving the second department row fails with `duplicate key value violates unique constraint`.
+1. The `useOrgKpiImpact` hook queries the `kpis` table for all 122 employee records with `is_org_level = true` matching "Total Recordable Injury (LTI)"
+2. The KPIs are visible thanks to the data owner RLS policy we added earlier
+3. **However**, the query joins `profiles` to get employee names/departments
+4. The `profiles` table RLS for managers only returns their direct reports (2 employees)
+5. For the other 120 employees, the profile join returns `null`
+6. The code skips records where `profile` is null: `if (!profile) continue;`
+7. Result: **0 affected employees shown**
 
-## Fix
+## Corrective Action (CAPA)
 
-### Database Migration
+### Database Change: Add RLS Policy on `profiles` Table
 
-1. **Drop** the existing unique constraint
-2. **Create** a new unique index that includes `department_id` and `employee_id`, using `COALESCE` so that NULL values still participate correctly in uniqueness checks
+Add a new SELECT policy allowing data owners to see profiles of employees who have org-level KPIs they manage:
 
 ```sql
-ALTER TABLE org_kpi_values
-  DROP CONSTRAINT org_kpi_values_category_id_kra_name_kpi_name_review_period__key;
-
-CREATE UNIQUE INDEX org_kpi_values_scoped_unique
-  ON org_kpi_values (
-    category_id, kra_name, kpi_name, review_period, review_year,
-    COALESCE(department_id, '00000000-0000-0000-0000-000000000000'),
-    COALESCE(employee_id, '00000000-0000-0000-0000-000000000000')
+CREATE POLICY "Data owners can view org kpi employee profiles"
+  ON profiles FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM kpis k
+      JOIN org_kpi_data_owners o
+        ON o.category_id = k.category_id
+        AND o.kra_name = k.kra_name
+        AND o.kpi_name = k.kpi_name
+      WHERE k.employee_id = profiles.id
+        AND k.is_org_level = true
+        AND o.owner_id = auth.uid()
+    )
   );
 ```
 
-This allows:
-- One org-wide row (both NULLs) per KPI per period
-- One row per department per KPI per period
-- One row per employee per KPI per period
-- No duplicates within the same scope
+This policy:
+- Only grants visibility to profiles of employees who have org-level KPIs the current user owns
+- Does not grant UPDATE or DELETE access
+- Is scoped narrowly -- a data owner for "LTI" only sees employees assigned to LTI, not all employees
 
-### Code Change
+### No Frontend Code Changes Needed
 
-The `useBulkUpsertOrgKpiValues` hook in `useOrgKpiValues.ts` already handles scoped upserts correctly (it checks for existing records including `department_id` and `employee_id`). No code changes needed — the database constraint is the only blocker.
-
-### Documentation
-
-Update `DOCUMENTATION.md` to note the scoped unique index.
+The `useOrgKpiImpact` hook logic is correct. The profiles join will automatically return data once the RLS policy allows access.
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| Database (migration) | Replace simple unique constraint with scoped unique index |
-| `DOCUMENTATION.md` | Document scoped uniqueness |
+| Database (migration) | Add SELECT policy for data owners on `profiles` table |
+| `DOCUMENTATION.md` | Document the new RLS policy |
 
-## Result
+## Expected Result
 
-After this fix, saving department-scoped values (like LTI for TPD-E, TPD-Mech, TPD-Process) will work without errors. Each department gets its own row in `org_kpi_values`.
+After this fix, when Jaspal opens Impact Analysis for LTI, he will see all 122 affected employees with their names, departments, and simulated score changes.
 
