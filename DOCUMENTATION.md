@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-12  
-> **Version:** 1.14.2
+> **Version:** 1.15.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -249,6 +249,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | `kpi_audit_logs` | KPI change tracking | `kpi_id`, `action`, `performed_by`, `old_value`, `new_value` |
 | `kra_rollover_logs` | KRA rollover history | `source_period`, `target_period`, `kpis_copied`, `details` (JSONB per-employee breakdown) |
 | `org_kpi_values` | Organization-level KPI scores | `category_id`, `review_period`, `achieved_value` |
+| `org_kpi_value_history` | Org KPI value audit trail | `org_kpi_value_id`, `old_achieved_value`, `new_achieved_value`, `changed_by`, `change_type` |
 | `import_progress` | Bulk import tracking | `id`, `status`, `total_rows`, `processed_rows` |
 | `employee_working_days` | Per-employee monthly working days configuration | `employee_id`, `month`, `year`, `working_days` |
 | `backup_logs` | Database backup history | `id`, `backup_type`, `status`, `file_path`, `file_size_bytes`, `tables_count`, `total_rows` |
@@ -1567,6 +1568,7 @@ Full JSON format for maximum control:
 | Designation | Employee's job title |
 | Achieved Value | Numeric input for value entry |
 | Remark | Text input for additional notes |
+| Impact | Button to open Impact Analysis sheet (shows affected employees) |
 | Supporting File | File upload for evidence |
 
 **File Upload:**
@@ -1576,9 +1578,51 @@ Full JSON format for maximum control:
 - URL saved to `evidence_url` column in `org_kpi_values`
 
 #### 4.9.13 Org KPI Overview (`/admin/org-kpi-overview`)
-- Dashboard showing all organization-level KPIs
+- Dashboard showing all organization-level KPIs with three tabs: **Overview**, **Mapping**, and **Change History**
 - Displays current achieved values and data sources
 - Filter by review period and category
+
+**Overview Tab:**
+- KPIs grouped by category with target/achieved values, weight, data source, and remarks
+- Each row has an **Impact** button (Users icon) to open the Impact Analysis Sheet
+- Shows simulated score changes before values are saved
+
+**Mapping Tab (Feature 2: Org KPI Mapping Dashboard):**
+- Three sub-views: **By KPI**, **By Employee**, **By Department**
+- **By KPI**: Each org KPI with all mapped employees, their department, designation, and status
+- **By Employee**: Each employee with all their org KPIs listed
+- **By Department**: Department-wise grouping showing employee count, unique KPIs, and total records
+- Summary cards: Unique Org KPIs, Employees Mapped, Total Records
+- Search across KPI names and employee names
+
+**Change History Tab (Feature 5: Audit Log):**
+- Timeline of all changes to org KPI values
+- Shows: who changed, old → new value, status changes, propagation count
+- Data stored in `org_kpi_value_history` table
+- Admin-only visibility (RLS policy)
+
+**Impact Analysis Sheet (Feature 1):**
+- Slide-out panel showing affected employees for a specific Org KPI
+- Summary: total employees affected, department breakdown
+- Simulate score changes by entering a value before saving
+- Score change indicators: improved, declined, unchanged
+- Employee table: name, code, department, weight, current score, simulated score, change
+
+**Propagation Summary Report (Feature 3):**
+- Shown after values are propagated to employee KPIs
+- Summary cards: improved, declined, unchanged, new entries
+- Details table: employee name, department, old score → new score, change
+
+**Database: `org_kpi_value_history`:**
+| Column | Description |
+|--------|-------------|
+| `org_kpi_value_id` | FK to `org_kpi_values` |
+| `old_achieved_value` / `new_achieved_value` | Before/after values |
+| `old_status` / `new_status` | Status transitions |
+| `changed_by` | User who made the change |
+| `change_type` | 'create', 'update', 'status_change', 'propagation' |
+| `propagated_count` | Number of employees affected |
+| `metadata` | Additional context (JSONB) |
 
 #### 4.9.14 Org KPI Data Owners & Access Control
 
