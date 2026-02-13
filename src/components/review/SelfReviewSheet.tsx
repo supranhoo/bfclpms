@@ -1,0 +1,937 @@
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { safeParseFloat } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { useSubmitSelfReview, RatingLevel, KPI, OrgLevelScope, ReviewSubmission } from '@/hooks/useKpis';
+import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
+import { useDailyAggregationMethod } from '@/hooks/useSystemSettings';
+import { calculateDailyAggregatedScore } from '@/lib/dailyAggregation';
+import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
+import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
+import { QualitativeOption, calculateQualitativeRating, scoreToRatingLevel } from '@/lib/qualitativeUom';
+import {
+  FrequencyType,
+  requiresSubPeriodSelection,
+} from '@/lib/frequencyUtils';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { KpiReviewPanel } from './KpiReviewPanel';
+import { QueryHistoryDialog } from './QueryHistoryDialog';
+import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
+import { RatingScaleDisplay } from './RatingScaleDisplay';
+import { SubPeriodSelector } from './SubPeriodSelector';
+import { FrequencyLockedOverlay, FrequencyLockBadge } from './FrequencyLockedOverlay';
+import { QualitativeValueInput } from './QualitativeValueInput';
+import { DateCalendarInput } from './DateCalendarInput';
+import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
+import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
+import { Target, TrendingUp, CheckCircle2, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
+import { format } from 'date-fns';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+
+const statusColors: Record<string, string> = {
+  kra_set: 'bg-muted text-muted-foreground',
+  self_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  manager_check: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+  audit: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+};
+
+const statusLabels: Record<string, string> = {
+  kra_set: 'Pending',
+  self_review: 'Submitted',
+  manager_check: 'Manager Review',
+  audit: 'Audit',
+  approved: 'Approved',
+};
+
+const scoreDisplay: Record<number, { label: string; color: string; level: RatingLevel }> = {
+  5: { label: 'Outstanding', color: '#3B82F6', level: 'blue' },
+  4: { label: 'Exceeds Expectations', color: '#10B981', level: 'green' },
+  3: { label: 'Meets Expectations', color: '#F59E0B', level: 'yellow' },
+  2: { label: 'Below Expectations', color: '#EF4444', level: 'red' },
+  1: { label: 'Needs Improvement', color: '#DC2626', level: 'red' },
+  0: { label: 'Not Achieved', color: '#991B1B', level: 'red' },
+};
+
+interface SelfReviewSheetProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  kpi: KPI | null;
+  allKpis: KPI[];
+  submissionMap: Map<string, ReviewSubmission>;
+  allSubmissions: ReviewSubmission[];
+  subPeriodSubmissions: SubPeriodSubmission[];
+  subPeriodLoading: boolean;
+  orgKpiValuesMap: Map<string, { achieved_value: number | null; data_source: string | null }>;
+  selectedPeriod: string;
+  selectedYear: number;
+  /** If true, auto-open query history panel */
+  autoOpenQueryHistory?: boolean;
+}
+
+export function SelfReviewSheet({
+  open,
+  onOpenChange,
+  kpi: selectedKpi,
+  allKpis,
+  submissionMap,
+  allSubmissions,
+  subPeriodSubmissions,
+  subPeriodLoading,
+  orgKpiValuesMap,
+  selectedPeriod,
+  selectedYear,
+  autoOpenQueryHistory = false,
+}: SelfReviewSheetProps) {
+  const { profile } = useAuth();
+  const { method: dailyAggregationMethod } = useDailyAggregationMethod();
+  const submitReview = useSubmitSelfReview();
+  const submitSubPeriod = useSubmitSubPeriod();
+
+  // Form state
+  const [achievedValue, setAchievedValue] = useState('');
+  const [calculatedScore, setCalculatedScore] = useState<number | null>(null);
+  const [calculatedPercentage, setCalculatedPercentage] = useState<number | null>(null);
+  const [calculatedRatingLevel, setCalculatedRatingLevel] = useState<RatingLevel | null>(null);
+  const [selfRemarks, setSelfRemarks] = useState('');
+  const [selfEvidenceUrls, setSelfEvidenceUrls] = useState<string[]>([]);
+  const [isNa, setIsNa] = useState(false);
+  const [selectedSubPeriod, setSelectedSubPeriod] = useState<string | null>(null);
+
+  // Confirmation dialogs
+  const [showResubmitConfirm, setShowResubmitConfirm] = useState(false);
+  const [resubmitReason, setResubmitReason] = useState('');
+  const [pendingResubmitReason, setPendingResubmitReason] = useState('');
+  const [showMonthlySubmitConfirm, setShowMonthlySubmitConfirm] = useState(false);
+  const [isSubmittingMonthly, setIsSubmittingMonthly] = useState(false);
+
+  // Sub-panels
+  const [queryHistoryOpen, setQueryHistoryOpen] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [trackerModalOpen, setTrackerModalOpen] = useState(false);
+
+  // Auto-open query history if requested
+  useEffect(() => {
+    if (autoOpenQueryHistory && selectedKpi && open) {
+      setQueryHistoryOpen(true);
+    }
+  }, [autoOpenQueryHistory, selectedKpi, open]);
+
+  const isQualitativeKpi = (kpi: KPI | null): boolean => {
+    return kpi?.uom_type === 'binary' || kpi?.uom_type === 'tiered';
+  };
+
+  // Sub-period submissions for selected KPI
+  const selectedKpiSubPeriods = useMemo(() => {
+    return selectedKpi ? subPeriodSubmissions?.filter(s => s.kpi_id === selectedKpi.id) || [] : [];
+  }, [selectedKpi, subPeriodSubmissions]);
+
+  const aggregatedSubPeriodScore = useMemo(() => {
+    if (selectedKpiSubPeriods.length === 0) return null;
+    const values = selectedKpiSubPeriods
+      .filter(s => s.achieved_value !== null)
+      .map(s => s.achieved_value as number);
+    const isBinaryKpi = selectedKpi?.uom_type === 'binary';
+    const result = calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear, isBinaryKpi);
+    return result.score;
+  }, [selectedKpiSubPeriods, dailyAggregationMethod, selectedPeriod, selectedYear, selectedKpi]);
+
+  // Score calculation
+  const calculateScoreFromAchieved = useCallback((achieved: number, kpi: KPI) => {
+    const thresholds: RatingThresholds = {
+      r5: kpi.r5, r4: kpi.r4, r3: kpi.r3, r2: kpi.r2, r1: kpi.r1, r0: kpi.r0
+    };
+    const uomType = kpi.uom_type || 'numeric';
+    const isQualitative = uomType === 'binary' || uomType === 'tiered';
+
+    if (isQualitative && (kpi.frequency === 'Daily' || kpi.frequency === 'Weekly')) {
+      const rating = Math.min(5, Math.max(0, Math.round(achieved)));
+      const ratingLevel = rating >= 4 ? 'blue' : rating >= 3 ? 'green' : rating >= 2 ? 'yellow' : 'red';
+      return {
+        rating,
+        ratingLevel: ratingLevel as 'blue' | 'green' | 'yellow' | 'red',
+        weightedScore: (kpi.weightage || 0) * rating,
+        percentage: (rating / 5) * 100,
+        achievedWeight: rating / 5,
+      };
+    }
+
+    return calculateRating(
+      achieved, kpi.target_value, thresholds,
+      kpi.criteria || 'Higher is Better', kpi.weightage || 0,
+      uomType, kpi.qualitative_options as QualitativeOption[] | null,
+      kpi.uom, kpi.threshold_mode || 'absolute'
+    );
+  }, []);
+
+  // Initialize form when KPI changes
+  useEffect(() => {
+    if (!selectedKpi || !open) return;
+
+    const existing = submissionMap.get(selectedKpi.id);
+    setSelectedSubPeriod(null);
+    setResubmitReason('');
+    setPendingResubmitReason('');
+
+    const needsSubPeriod = requiresSubPeriodSelection(selectedKpi.frequency as FrequencyType);
+
+    if (!needsSubPeriod) {
+      // Get org value
+      const scope = selectedKpi.org_level_scope || 'organization';
+      let orgKey: string;
+      if (scope === 'organization') {
+        orgKey = `${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}||null||null`;
+      } else if (scope === 'department') {
+        const deptId = profile?.department_id || 'null';
+        orgKey = `${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}||${deptId}||null`;
+      } else {
+        const empId = profile?.id || 'null';
+        orgKey = `${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}||null||${empId}`;
+      }
+      const orgValue = selectedKpi.is_org_level ? orgKpiValuesMap.get(orgKey) || null : null;
+      const prefilledValue = orgValue?.achieved_value ?? existing?.achieved_value;
+
+      if (prefilledValue !== null && prefilledValue !== undefined) {
+        if (isQualitativeKpi(selectedKpi)) {
+          const options = selectedKpi.uom_type === 'binary'
+            ? [{ label: 'Yes', rating: 5 }, { label: 'No', rating: 0 }]
+            : (selectedKpi.qualitative_options as QualitativeOption[] | null) || [];
+          const matchedOption = options.find(o =>
+            o.label === prefilledValue.toString() || o.rating === prefilledValue
+          );
+          if (matchedOption) {
+            setAchievedValue(matchedOption.label);
+            setCalculatedScore(matchedOption.rating);
+            setCalculatedRatingLevel(scoreToRatingLevel(matchedOption.rating) as RatingLevel);
+            setCalculatedPercentage(null);
+          } else {
+            setAchievedValue(''); setCalculatedScore(null); setCalculatedRatingLevel(null); setCalculatedPercentage(null);
+          }
+        } else {
+          setAchievedValue(prefilledValue.toString());
+          const result = calculateScoreFromAchieved(prefilledValue, selectedKpi);
+          setCalculatedScore(result.rating);
+          setCalculatedPercentage(result.percentage);
+          setCalculatedRatingLevel(null);
+        }
+      } else {
+        setAchievedValue(''); setCalculatedScore(null); setCalculatedPercentage(null); setCalculatedRatingLevel(null);
+      }
+    } else {
+      setAchievedValue(''); setCalculatedScore(null); setCalculatedPercentage(null); setCalculatedRatingLevel(null);
+    }
+
+    setSelfRemarks(existing?.self_remarks || '');
+    const existingUrls = (existing as any)?.self_evidence_urls;
+    setSelfEvidenceUrls(Array.isArray(existingUrls) && existingUrls.length > 0
+      ? existingUrls
+      : existing?.self_evidence_url ? [existing.self_evidence_url] : []);
+    setIsNa(existing?.is_na || false);
+  }, [selectedKpi, open, submissionMap, orgKpiValuesMap, profile, calculateScoreFromAchieved]);
+
+  const handleAchievedChange = (value: string) => {
+    setAchievedValue(value);
+    if (selectedKpi && value) {
+      const result = calculateScoreFromAchieved(parseFloat(value), selectedKpi);
+      setCalculatedScore(result.rating);
+      setCalculatedPercentage(result.percentage);
+      setCalculatedRatingLevel(null);
+    } else {
+      setCalculatedScore(null); setCalculatedPercentage(null); setCalculatedRatingLevel(null);
+    }
+  };
+
+  const handleQualitativeChange = (value: string, rating: number, ratingLevel: RatingLevel) => {
+    setAchievedValue(value);
+    setCalculatedScore(rating);
+    setCalculatedRatingLevel(ratingLevel);
+    setCalculatedPercentage(null);
+  };
+
+  const handleSubPeriodChange = (value: string) => {
+    setSelectedSubPeriod(value);
+    setResubmitReason('');
+    if (selectedKpi) {
+      const existingSubPeriod = subPeriodSubmissions?.find(
+        s => s.kpi_id === selectedKpi.id && s.sub_period_value === value
+      );
+      if (existingSubPeriod?.achieved_value !== null && existingSubPeriod?.achieved_value !== undefined) {
+        setAchievedValue(existingSubPeriod.achieved_value.toString());
+        const result = calculateScoreFromAchieved(existingSubPeriod.achieved_value, selectedKpi);
+        setCalculatedScore(result.rating); setCalculatedPercentage(result.percentage);
+        setSelfRemarks(existingSubPeriod.remarks || '');
+      } else {
+        setAchievedValue(''); setCalculatedScore(null); setCalculatedPercentage(null); setSelfRemarks('');
+      }
+    }
+  };
+
+  const getCurrentSubPeriodSubmission = (): SubPeriodSubmission | undefined => {
+    if (!selectedKpi || !selectedSubPeriod) return undefined;
+    return subPeriodSubmissions?.find(
+      s => s.kpi_id === selectedKpi.id && s.sub_period_value === selectedSubPeriod
+    );
+  };
+
+  const getRatingLevel = (score: number): RatingLevel => {
+    if (score >= 4) return 'blue';
+    if (score >= 3) return 'green';
+    if (score >= 2) return 'yellow';
+    return 'red';
+  };
+
+  const handleSubmitMonthlyReview = async () => {
+    if (!selectedKpi) return;
+    const values = selectedKpiSubPeriods
+      .filter(s => s.achieved_value !== null)
+      .map(s => s.achieved_value as number);
+    const isBinaryKpi = selectedKpi?.uom_type === 'binary';
+    const aggregationResult = calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear, isBinaryKpi);
+    const aggregatedScore = aggregationResult.score;
+    if (aggregatedScore === null) return;
+
+    setIsSubmittingMonthly(true);
+    try {
+      const result = calculateScoreFromAchieved(aggregatedScore, selectedKpi);
+      const selfRating = getRatingLevel(result.rating);
+      const methodLabel = dailyAggregationMethod === 'missed_days_penalty'
+        ? `Missed Days Penalty (${aggregationResult.missedDays} missed)`
+        : 'Average';
+      const defaultRemarks = `${methodLabel}: Aggregated from ${selectedKpiSubPeriods.length} ${selectedKpi.frequency?.toLowerCase()} entries`;
+
+      await submitReview.mutateAsync({
+        kpi_id: selectedKpi.id,
+        achieved_value: aggregatedScore,
+        self_rating: selfRating,
+        self_score: result.rating,
+        self_remarks: selfRemarks || defaultRemarks,
+        self_evidence_url: selfEvidenceUrls.length > 0 ? selfEvidenceUrls[0] : null,
+        is_na: false,
+      });
+
+      setShowMonthlySubmitConfirm(false);
+      onOpenChange(false);
+    } finally {
+      setIsSubmittingMonthly(false);
+    }
+  };
+
+  const handleConfirmResubmit = () => {
+    if (pendingResubmitReason.trim()) {
+      setResubmitReason(pendingResubmitReason.trim());
+      setShowResubmitConfirm(false);
+      setPendingResubmitReason('');
+      performSubPeriodSubmit(pendingResubmitReason.trim(), true);
+    }
+  };
+
+  const performSubPeriodSubmit = async (updateReason: string | null, isResubmission: boolean) => {
+    if (!selectedKpi || !selectedSubPeriod) return;
+    await submitSubPeriod.mutateAsync({
+      kpi_id: selectedKpi.id,
+      sub_period_type: selectedKpi.frequency === 'Daily' ? 'daily' : 'weekly',
+      sub_period_value: selectedSubPeriod,
+      achieved_value: isNa ? null : (isQualitativeKpi(selectedKpi) ? calculatedScore : safeParseFloat(achievedValue)),
+      remarks: selfRemarks || null,
+      evidence_url: selfEvidenceUrls.length > 0 ? selfEvidenceUrls[0] : null,
+      review_month: selectedPeriod,
+      review_year: selectedYear,
+      update_reason: updateReason,
+      is_resubmission: isResubmission,
+    });
+    setSelectedSubPeriod(null); setAchievedValue(''); setCalculatedScore(null); setSelfRemarks(''); setResubmitReason('');
+  };
+
+  const handleSubmitReview = async () => {
+    if (!selectedKpi) return;
+    const needsSubPeriod = requiresSubPeriodSelection(selectedKpi.frequency as FrequencyType);
+
+    if (needsSubPeriod && selectedSubPeriod) {
+      const existingSubmission = getCurrentSubPeriodSubmission();
+      const isExistingSubmission = !!existingSubmission;
+      const isAlreadyResubmitted = existingSubmission?.is_resubmitted || false;
+      const requiresReason = selectedKpi.require_resubmit_reason !== false;
+      if (isAlreadyResubmitted) return;
+      if (isExistingSubmission && requiresReason) { setShowResubmitConfirm(true); return; }
+      await performSubPeriodSubmit(null, isExistingSubmission);
+      return;
+    }
+
+    if (!isNa && !achievedValue) return;
+
+    const selfRating = isNa
+      ? null
+      : isQualitativeKpi(selectedKpi)
+        ? calculatedRatingLevel
+        : (calculatedScore !== null ? getRatingLevel(calculatedScore) : null);
+
+    await submitReview.mutateAsync({
+      kpi_id: selectedKpi.id,
+      achieved_value: isNa ? null : (isQualitativeKpi(selectedKpi) ? calculatedScore : (safeParseFloat(achievedValue) ?? 0)),
+      self_rating: selfRating,
+      self_score: isNa ? null : calculatedScore,
+      self_remarks: selfRemarks,
+      self_evidence_url: selfEvidenceUrls.length > 0 ? selfEvidenceUrls[0] : null,
+      is_na: isNa,
+    });
+    onOpenChange(false);
+  };
+
+  if (!selectedKpi) return null;
+
+  // Compute state
+  const isSelectedKpiOrgLevel = selectedKpi?.is_org_level || false;
+  const orgKey = (() => {
+    const scope = selectedKpi.org_level_scope || 'organization';
+    if (scope === 'organization') return `${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}||null||null`;
+    if (scope === 'department') {
+      const deptId = profile?.department_id || 'null';
+      return `${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}||${deptId}||null`;
+    }
+    const empId = profile?.id || 'null';
+    return `${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}||null||${empId}`;
+  })();
+  const selectedKpiOrgValue = isSelectedKpiOrgLevel ? orgKpiValuesMap.get(orgKey) || null : null;
+  const hasOrgData = isSelectedKpiOrgLevel && selectedKpiOrgValue?.achieved_value != null;
+  const isKraSet = selectedKpi?.status === 'kra_set';
+  const needsSubPeriodForKpi = selectedKpi ? requiresSubPeriodSelection(selectedKpi.frequency as FrequencyType) : false;
+  const isReadOnly = !isKraSet;
+
+  return (
+    <>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent className="flex flex-col h-full w-full sm:w-[85vw] sm:max-w-[1200px] overflow-y-auto p-4 sm:p-6">
+          {/* Header */}
+          <SheetHeader className="pb-2 sm:pb-3 border-b flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <SheetTitle className="text-base sm:text-lg">
+                  {isReadOnly ? 'View KPI Details' : 'Submit Self Review'}
+                </SheetTitle>
+                {isReadOnly && (
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 flex items-center gap-1 text-xs">
+                    <Eye className="h-3 w-3" />
+                    Read Only
+                  </Badge>
+                )}
+              </div>
+              <Badge className={`${statusColors[selectedKpi?.status || 'kra_set']} text-xs`}>
+                {statusLabels[selectedKpi?.status || 'kra_set']}
+              </Badge>
+            </div>
+          </SheetHeader>
+
+          {/* Main Content */}
+          <div className="flex-1 overflow-y-auto py-3 sm:py-4 space-y-4 sm:space-y-6">
+            {/* KPI Review Panel */}
+            <KpiReviewPanel
+              kpi={selectedKpi}
+              submission={submissionMap.get(selectedKpi.id) || null}
+              allKpis={allKpis}
+              allSubmissions={allSubmissions}
+              viewLevel="employee"
+              currentUserId={profile?.id}
+              selectedPeriod={selectedPeriod}
+              selectedYear={selectedYear}
+              onOpenQueryHistory={() => setQueryHistoryOpen(true)}
+              onOpenFullHistory={() => setTrackerModalOpen(true)}
+              onOpenTimeline={() => setTimelineOpen(true)}
+            />
+
+            {/* Rating Scale */}
+            {selectedKpi && (
+              <RatingScaleDisplay
+                kpi={selectedKpi}
+              />
+            )}
+
+            {/* Daily Submission Summary */}
+            {selectedKpi?.frequency === 'Daily' && selectedKpiSubPeriods.length > 0 && (
+              <DailySubmissionSummary
+                kpiId={selectedKpi.id}
+                reviewMonth={selectedPeriod}
+                reviewYear={selectedYear}
+                submissions={selectedKpiSubPeriods}
+                uom={selectedKpi.uom}
+                uomType={selectedKpi.uom_type}
+                qualitativeOptions={selectedKpi.qualitative_options as QualitativeOption[] | null}
+                kpiStatus={selectedKpi.status}
+              />
+            )}
+
+            {/* Self Assessment Form - Only in edit mode */}
+            {!isReadOnly && selectedKpi && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <FileCheck className="h-4 w-4" />
+                    Your Assessment
+                  </CardTitle>
+                  <CardDescription>
+                    Enter your achieved value and provide justification
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Sub-Period Selection for Daily/Weekly KPIs */}
+                  {needsSubPeriodForKpi && (
+                    <div className="p-3 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Calendar className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                          <span className="font-medium text-purple-800 dark:text-purple-200">
+                            {selectedKpi.frequency} KPI
+                          </span>
+                          <span className="text-purple-600 dark:text-purple-400">
+                            - Submit data for each {selectedKpi.frequency === 'Daily' ? 'day' : 'week'}
+                          </span>
+                        </div>
+                        {selectedKpiSubPeriods.length > 0 && (
+                          <Badge variant="secondary" className="text-xs">
+                            {selectedKpiSubPeriods.length} entries | Avg: {aggregatedSubPeriodScore?.toFixed(1) ?? '—'}
+                          </Badge>
+                        )}
+                      </div>
+                      <SubPeriodSelector
+                        frequency={selectedKpi.frequency as FrequencyType}
+                        reviewMonth={selectedPeriod}
+                        reviewYear={selectedYear}
+                        selectedSubPeriod={selectedSubPeriod}
+                        onSubPeriodChange={handleSubPeriodChange}
+                        submissions={selectedKpiSubPeriods}
+                      />
+                    </div>
+                  )}
+
+                  {/* N/A Toggle */}
+                  <div className="flex items-center space-x-2 p-2 border rounded-lg bg-muted/30">
+                    <Checkbox
+                      id="is_na"
+                      checked={isNa}
+                      onCheckedChange={(checked) => {
+                        setIsNa(checked as boolean);
+                        if (checked) {
+                          setAchievedValue(''); setCalculatedScore(null); setCalculatedPercentage(null);
+                        }
+                      }}
+                      disabled={hasOrgData}
+                    />
+                    <Label htmlFor="is_na" className="cursor-pointer text-sm">
+                      Mark as N/A (Not Applicable)
+                      {hasOrgData && <span className="text-muted-foreground ml-1">(disabled for org data)</span>}
+                    </Label>
+                  </div>
+
+                  {/* Input Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {!isNa && (
+                      <div className="space-y-2">
+                        {selectedKpi?.uom === 'Date' ? (
+                          <DateCalendarInput
+                            value={achievedValue ? parseInt(achievedValue) : null}
+                            onChange={(day) => handleAchievedChange(day?.toString() || '')}
+                            reviewMonth={selectedPeriod}
+                            reviewYear={selectedYear}
+                            disabled={hasOrgData}
+                            label="Completion Date *"
+                          />
+                        ) : isQualitativeKpi(selectedKpi) ? (
+                          <QualitativeValueInput
+                            uomType={selectedKpi?.uom_type as 'binary' | 'tiered'}
+                            qualitativeOptions={selectedKpi?.qualitative_options as QualitativeOption[] | null}
+                            value={achievedValue || null}
+                            onChange={handleQualitativeChange}
+                            disabled={hasOrgData}
+                            label="Achieved Value *"
+                          />
+                        ) : (
+                          <>
+                            <Label htmlFor="achieved" className="text-sm flex items-center gap-2">
+                              Achieved Value *
+                              {hasOrgData && (
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Lock className="h-3 w-3 text-muted-foreground" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    Verified organization data{selectedKpiOrgValue?.data_source && ` from ${selectedKpiOrgValue.data_source}`}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                            </Label>
+                            <Input
+                              id="achieved"
+                              type="number"
+                              value={achievedValue}
+                              onChange={(e) => handleAchievedChange(e.target.value)}
+                              placeholder="Enter value"
+                              className={hasOrgData ? 'bg-muted cursor-not-allowed' : ''}
+                              readOnly={hasOrgData}
+                              disabled={hasOrgData}
+                            />
+                            {hasOrgData && (
+                              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Building2 className="h-3 w-3" />
+                                Verified data - cannot be modified
+                              </p>
+                            )}
+                            {!hasOrgData && achievedValue && selectedKpi?.target_value && (
+                              <p className="text-xs text-muted-foreground">
+                                {((parseFloat(achievedValue) / selectedKpi.target_value) * 100).toFixed(1)}% of target
+                              </p>
+                            )}
+                          </>
+                        )}
+
+                        {/* Calculated Rating Display */}
+                        {!isNa && calculatedScore !== null && !isQualitativeKpi(selectedKpi) && (
+                          <div className="p-3 border rounded-lg bg-muted/50">
+                            <Label className="text-xs text-muted-foreground">Calculated Rating</Label>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge
+                                style={{ backgroundColor: scoreDisplay[calculatedScore]?.color || '#991B1B' }}
+                                className="text-white px-2 py-0.5"
+                              >
+                                {calculatedScore}
+                              </Badge>
+                              <span className="text-sm font-medium">{scoreDisplay[calculatedScore]?.label || 'Not Achieved'}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Remarks */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Label htmlFor="remarks" className="text-sm">
+                          {isNa ? 'Reason for N/A *' : 'Justification'}
+                        </Label>
+                        {isNa && (
+                          <span className={`text-xs ${selfRemarks.trim().length < 50 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                            {selfRemarks.trim().length}/50 min
+                          </span>
+                        )}
+                      </div>
+                      <Textarea
+                        id="remarks"
+                        value={selfRemarks}
+                        onChange={(e) => setSelfRemarks(e.target.value)}
+                        placeholder={isNa ? 'Explain why this KPI is not applicable (minimum 50 characters)...' : 'Describe your achievements...'}
+                        className={`resize-none min-h-[80px] ${isNa && selfRemarks.trim().length < 50 && selfRemarks.length > 0 ? 'border-destructive' : ''}`}
+                      />
+                      {isNa && selfRemarks.trim().length < 50 && selfRemarks.length > 0 && (
+                        <p className="text-xs text-destructive">
+                          {50 - selfRemarks.trim().length} more characters needed
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Evidence Upload */}
+                  {profile?.id && selectedKpi && (
+                    <MultiFileUpload
+                      userId={profile.id}
+                      contextId={selectedKpi.id}
+                      folder="self-evidence"
+                      existingUrls={selfEvidenceUrls}
+                      onUploadComplete={setSelfEvidenceUrls}
+                      label="Evidence Attachments"
+                    />
+                  )}
+
+                  {isNa && (
+                    <div className="p-3 border rounded-lg bg-muted/50">
+                      <p className="text-xs text-muted-foreground">
+                        This KPI will be excluded from overall score calculations.
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Read-Only View of Submitted Data */}
+            {isReadOnly && selectedKpi && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Eye className="h-4 w-4" />
+                    Submitted Data
+                  </CardTitle>
+                  <CardDescription>
+                    Your submission is currently at "{statusLabels[selectedKpi?.status || 'self_review']}" stage
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {selfRemarks && (
+                    <div>
+                      <Label className="text-sm mb-2 block">Justification</Label>
+                      <div className="p-3 bg-muted/50 rounded-lg text-sm">{selfRemarks}</div>
+                    </div>
+                  )}
+                  {selfEvidenceUrls.length > 0 && (
+                    <div>
+                      <Label className="text-sm mb-2 block">Evidence</Label>
+                      {selfEvidenceUrls.map((url, idx) => (
+                        <a key={idx} href={url} target="_blank" rel="noopener noreferrer"
+                          className="text-sm text-primary underline hover:no-underline block">
+                          View Evidence {selfEvidenceUrls.length > 1 ? idx + 1 : ''}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Footer */}
+          <SheetFooter className="pt-3 border-t flex-shrink-0">
+            <div className="flex items-center gap-2 w-full justify-between">
+              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+                {isReadOnly ? 'Close' : (needsSubPeriodForKpi ? 'Done' : 'Cancel')}
+              </Button>
+
+              {!isReadOnly && (
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const currentSubPeriodSubmission = needsSubPeriodForKpi && selectedSubPeriod && selectedKpi
+                      ? subPeriodSubmissions?.find(s => s.kpi_id === selectedKpi.id && s.sub_period_value === selectedSubPeriod)
+                      : null;
+                    const isSubPeriodFinal = currentSubPeriodSubmission?.is_resubmitted || false;
+
+                    if (isSubPeriodFinal) {
+                      return (
+                        <Badge className="gap-1 bg-green-600 hover:bg-green-600 h-9 px-4">
+                          <Lock className="h-3 w-3" />
+                          Final - No Further Edits
+                        </Badge>
+                      );
+                    }
+
+                    return (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={handleSubmitReview}
+                        disabled={
+                          (needsSubPeriodForKpi && (!selectedSubPeriod || (!isNa && !achievedValue))) ||
+                          (!needsSubPeriodForKpi && !isNa && !achievedValue) ||
+                          (isNa && selfRemarks.trim().length < 50) ||
+                          submitReview.isPending || submitSubPeriod.isPending
+                        }
+                      >
+                        {(submitReview.isPending || submitSubPeriod.isPending)
+                          ? 'Saving...'
+                          : needsSubPeriodForKpi
+                            ? (currentSubPeriodSubmission ? 'Update Entry' : 'Save Entry')
+                            : 'Submit'}
+                      </Button>
+                    );
+                  })()}
+
+                  {/* Submit Month Button */}
+                  {needsSubPeriodForKpi && (
+                    <>
+                      {subPeriodLoading ? (
+                        <Button size="sm" variant="outline" disabled className="gap-1 opacity-50">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Loading...
+                        </Button>
+                      ) : selectedKpiSubPeriods.length === 0 ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>
+                              <Button size="sm" variant="outline" disabled className="gap-1 opacity-50">
+                                <Send className="h-3 w-3" />
+                                Submit Month
+                              </Button>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Enter at least one {selectedKpi?.frequency?.toLowerCase()} value first
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : selectedKpi?.status !== 'kra_set' ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>
+                              <Button size="sm" variant="outline" disabled className="gap-1 opacity-50">
+                                <Send className="h-3 w-3" />
+                                Month Submitted
+                              </Button>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            This KPI has already been submitted for the month
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => setShowMonthlySubmitConfirm(true)}
+                          className="gap-1"
+                          disabled={isSubmittingMonthly}
+                        >
+                          <Send className="h-3 w-3" />
+                          Submit Month
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* Timeline Modal */}
+      <KpiTimeline
+        isOpen={timelineOpen}
+        onClose={() => setTimelineOpen(false)}
+        kpi={selectedKpi}
+      />
+
+      {/* KPI Tracker Modal */}
+      <KpiTrackerModal
+        isOpen={trackerModalOpen}
+        onClose={() => setTrackerModalOpen(false)}
+        kpi={selectedKpi}
+        allKpis={allKpis}
+        submissions={allSubmissions}
+      />
+
+      {/* Resubmission Confirmation Dialog */}
+      <AlertDialog open={showResubmitConfirm} onOpenChange={(open) => !open && (() => { setShowResubmitConfirm(false); setPendingResubmitReason(''); })()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Re-submit Data?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-200">
+                  <p className="font-medium">
+                    You can update this record only once. It will be considered final and no further update will be allowed.
+                  </p>
+                </div>
+                {selectedSubPeriod && <p>Current submission for <strong>{selectedSubPeriod}</strong>:</p>}
+                {(() => {
+                  const existingSub = getCurrentSubPeriodSubmission();
+                  if (!existingSub) return null;
+                  return (
+                    <div className="p-3 bg-muted rounded-lg text-sm">
+                      <p><strong>Current Value:</strong> {existingSub.achieved_value ?? '-'}</p>
+                      {existingSub.submitted_at && (
+                        <p><strong>Submitted On:</strong> {format(new Date(existingSub.submitted_at), 'dd MMM yyyy, hh:mm a')}</p>
+                      )}
+                      {existingSub.remarks && <p><strong>Remarks:</strong> {existingSub.remarks}</p>}
+                    </div>
+                  );
+                })()}
+                <div className="space-y-2 pt-2">
+                  <Label htmlFor="resubmit-reason" className="text-foreground">
+                    Reason for Update <span className="text-destructive">*</span>
+                  </Label>
+                  <Textarea
+                    id="resubmit-reason"
+                    value={pendingResubmitReason}
+                    onChange={(e) => setPendingResubmitReason(e.target.value)}
+                    placeholder="Enter reason for modifying this submission..."
+                    className="min-h-[80px]"
+                  />
+                  <p className="text-xs text-muted-foreground">This reason will be logged for audit purposes.</p>
+                </div>
+                <p className="text-sm font-medium text-foreground">Are you sure you want to re-submit?</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setShowResubmitConfirm(false); setPendingResubmitReason(''); }}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmResubmit} disabled={!pendingResubmitReason.trim()}>
+              Confirm & Re-submit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Monthly Submission Confirmation */}
+      <AlertDialog open={showMonthlySubmitConfirm} onOpenChange={setShowMonthlySubmitConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-primary" />
+              Submit Monthly Review
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>Submit this {selectedKpi?.frequency} KPI for manager review?</p>
+                <div className="p-3 bg-muted rounded-lg space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total Entries:</span>
+                    <strong className="text-foreground">{selectedKpiSubPeriods.length}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Average Score:</span>
+                    <strong className="text-foreground">{aggregatedSubPeriodScore?.toFixed(2) ?? '—'}</strong>
+                  </div>
+                  {aggregatedSubPeriodScore !== null && selectedKpi && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Rating:</span>
+                      <Badge
+                        style={{ backgroundColor: scoreDisplay[Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore, selectedKpi).rating)]?.color || '#991B1B' }}
+                        className="text-white"
+                      >
+                        {scoreDisplay[Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore, selectedKpi).rating)]?.label || 'Not Achieved'}
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Once submitted, the KPI will move to your manager's review queue.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmittingMonthly}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleSubmitMonthlyReview}
+              disabled={isSubmittingMonthly || selectedKpiSubPeriods.length === 0}
+            >
+              {isSubmittingMonthly ? 'Submitting...' : 'Confirm & Submit'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Query History Dialog */}
+      {selectedKpi && (
+        <QueryHistoryDialog
+          kpiId={selectedKpi.id}
+          kpiName={selectedKpi.kpi_name}
+          open={queryHistoryOpen}
+          onOpenChange={setQueryHistoryOpen}
+        />
+      )}
+    </>
+  );
+}
