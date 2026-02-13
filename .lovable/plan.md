@@ -1,25 +1,36 @@
 
 
-# Fix: Missing Scrollbar in Review Timeline
+# Fix: Scrolling Not Working in Review Timeline
 
 ## Root Cause
 
-The `ScrollArea` uses `flex-1 min-h-0` to fill available space, but the Radix `ScrollAreaPrimitive.Viewport` inside it needs the parent to have a resolved pixel height for the scrollbar to activate. In the current flex layout, the height resolves correctly for containment but the ScrollArea component's internal viewport doesn't trigger its scrollbar because `flex-1` alone doesn't always give Radix a concrete height to compare against.
+The Radix `ScrollArea` component's internal `Viewport` doesn't reliably resolve `h-full` through nested flex containers. Despite the correct flex chain (`flex-1 min-h-0` wrapper with `h-full` ScrollArea), the Radix viewport calculates its height from content rather than the container, preventing scroll activation.
 
 ## Fix
 
-### File: `src/components/dashboard/KpiTimeline.tsx` (line 247)
+### File: `src/components/dashboard/KpiTimeline.tsx`
 
-Wrap the `ScrollArea` in a container div that has `flex-1 min-h-0 overflow-hidden`, and give the `ScrollArea` an explicit `h-full` so the Radix viewport gets a resolved height:
+Replace the Radix `ScrollArea` with a native scrollable `div` using `overflow-y-auto`. This is reliable across all browsers and doesn't depend on Radix's internal height calculations.
 
+**Current (lines 247-317):**
+```tsx
+<div className="flex-1 min-h-0 overflow-hidden">
+  <ScrollArea className="h-full pr-4">
+    {/* timeline content */}
+  </ScrollArea>
+</div>
 ```
-Current:  <ScrollArea className="flex-1 min-h-0 pr-4">
-Fixed:    wrapped in <div className="flex-1 min-h-0 overflow-hidden">
-            <ScrollArea className="h-full pr-4">
+
+**Fixed:**
+```tsx
+<div className="flex-1 min-h-0 overflow-y-auto pr-4">
+  {/* timeline content directly */}
+</div>
 ```
 
-This ensures the outer div resolves to a concrete pixel height via flex, and `h-full` on ScrollArea gives Radix the height it needs to show the scrollbar.
+This collapses two elements into one: a single div that both fills available flex space and scrolls natively. The `ScrollArea` import can also be removed from the file.
 
 ### File: `DOCUMENTATION.md`
-Update to note the ScrollArea wrapper pattern for flex layouts.
+
+Update the Review Timeline entry to note it uses native overflow scrolling instead of Radix ScrollArea.
 
