@@ -38,13 +38,15 @@ export function KpiHistoryCard({
     return relatedKpis
       .map(k => {
         const sub = submissionMap.get(k.id);
+        const isNa = sub?.is_na === true;
         return {
           month: k.review_period || 'N/A',
           year: k.review_year,
           target: k.target_value ?? 0,
-          achieved: sub?.achieved_value ?? 0,
-          score: sub?.final_score ?? sub?.management_score ?? sub?.auditor_score ?? sub?.manager_score ?? sub?.self_score ?? 0,
+          achieved: isNa ? 0 : (sub?.achieved_value ?? 0),
+          score: isNa ? 0 : (sub?.final_score ?? sub?.management_score ?? sub?.auditor_score ?? sub?.manager_score ?? sub?.self_score ?? 0),
           status: k.status || 'kra_set',
+          isNa,
         };
       })
       .sort((a, b) => {
@@ -75,8 +77,8 @@ export function KpiHistoryCard({
   const trendColor =
     trend === 'up' ? 'text-green-500' : trend === 'down' ? 'text-red-500' : 'text-muted-foreground';
 
-  // Prepare chart data (reversed for chronological order)
-  const chartData = [...monthlyData].reverse();
+  // Prepare chart data (reversed for chronological order, exclude N/A)
+  const chartData = [...monthlyData].reverse().filter(d => !d.isNa);
 
   return (
     <Card className="border-dashed">
@@ -121,10 +123,14 @@ export function KpiHistoryCard({
                 {entry.month?.slice(0, 3)}-{String(entry.year).slice(-2)}
               </span>
               <span className="text-muted-foreground text-[10px] sm:text-xs">
-                {entry.achieved}/{entry.target}
+                {entry.isNa ? (
+                  <span className="text-amber-600 dark:text-amber-400 font-medium">N/A</span>
+                ) : (
+                  <>{entry.achieved}/{entry.target}</>
+                )}
               </span>
               <Badge variant="outline" className="text-[10px] sm:text-xs px-1 sm:px-1.5">
-                {entry.score || '-'}
+                {entry.isNa ? 'N/A' : (entry.score || '-')}
               </Badge>
               <span className="text-muted-foreground uppercase text-[10px] w-10 sm:w-16 text-right truncate hidden sm:inline">
                 {(entry.status || '').replace(/_/g, ' ')}
