@@ -41,25 +41,48 @@
      return idx >= 0 ? idx : 0;
    }, [reviewMonth]);
    
-   // Build Date object from stored day value
-   const currentDate = useMemo(() => {
-     if (!value || value < 1 || value > 31) return undefined;
-     return new Date(reviewYear, monthIndex, value);
-   }, [value, reviewYear, monthIndex]);
+  // Previous month index and year (for allowing pre-month completion)
+  const prevMonthIndex = monthIndex === 0 ? 11 : monthIndex - 1;
+  const prevMonthYear = monthIndex === 0 ? reviewYear - 1 : reviewYear;
+  
+  // Build Date object from stored day value
+  // value === 0 means "completed before the review month"
+  const currentDate = useMemo(() => {
+    if (value === null || value === undefined) return undefined;
+    if (value === 0) {
+      // Show last day of previous month for display
+      const lastDayPrev = getDaysInMonth(new Date(prevMonthYear, prevMonthIndex));
+      return new Date(prevMonthYear, prevMonthIndex, lastDayPrev);
+    }
+    if (value < 1 || value > 31) return undefined;
+    return new Date(reviewYear, monthIndex, value);
+  }, [value, reviewYear, monthIndex, prevMonthYear, prevMonthIndex]);
+  
+  // Expand calendar range to include previous month
+  const rangeStart = useMemo(() => new Date(prevMonthYear, prevMonthIndex, 1), [prevMonthYear, prevMonthIndex]);
+  const monthEnd = useMemo(() => {
+    const daysInMonth = getDaysInMonth(new Date(reviewYear, monthIndex));
+    return new Date(reviewYear, monthIndex, daysInMonth);
+  }, [reviewYear, monthIndex]);
    
-   // Restrict calendar to review month only
-   const monthStart = useMemo(() => new Date(reviewYear, monthIndex, 1), [reviewYear, monthIndex]);
-   const monthEnd = useMemo(() => {
-     const daysInMonth = getDaysInMonth(new Date(reviewYear, monthIndex));
-     return new Date(reviewYear, monthIndex, daysInMonth);
-   }, [reviewYear, monthIndex]);
-   
-   const handleSelect = (date: Date | undefined) => {
-     if (date) {
-       onChange(date.getDate());
-     }
-     setOpen(false);
-   };
+  const handleSelect = (date: Date | undefined) => {
+    if (date) {
+      // If selected date is in the previous month, store 0
+      if (date.getMonth() === prevMonthIndex && date.getFullYear() === prevMonthYear) {
+        onChange(0);
+      } else {
+        onChange(date.getDate());
+      }
+    }
+    setOpen(false);
+  };
+  
+  // Display text for the button
+  const displayText = useMemo(() => {
+    if (value === 0) return `Before 1st ${reviewMonth}`;
+    if (currentDate) return format(currentDate, 'dd MMM yyyy');
+    return null;
+  }, [value, currentDate, reviewMonth]);
  
    return (
      <div className="space-y-2">
@@ -74,28 +97,26 @@
              )}
              disabled={disabled}
            >
-             <CalendarIcon className="mr-2 h-4 w-4" />
-             {currentDate 
-               ? format(currentDate, 'dd MMM yyyy')
-               : 'Pick a date'}
+            <CalendarIcon className="mr-2 h-4 w-4" />
+              {displayText || 'Pick a date'}
            </Button>
          </PopoverTrigger>
          <PopoverContent className="w-auto p-0" align="start">
-           <Calendar
-             mode="single"
-             selected={currentDate}
-             onSelect={handleSelect}
-             defaultMonth={monthStart}
-             fromDate={monthStart}
-             toDate={monthEnd}
+            <Calendar
+              mode="single"
+              selected={currentDate}
+              onSelect={handleSelect}
+              defaultMonth={new Date(reviewYear, monthIndex, 1)}
+              fromDate={rangeStart}
+              toDate={monthEnd}
              className="pointer-events-auto"
              initialFocus
            />
          </PopoverContent>
        </Popover>
-       <p className="text-xs text-muted-foreground">
-         Select a date within {reviewMonth} {reviewYear}
-       </p>
+        <p className="text-xs text-muted-foreground">
+          Select a date within {reviewMonth} {reviewYear} or previous month (for early completion)
+        </p>
      </div>
    );
  }

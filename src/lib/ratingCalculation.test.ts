@@ -436,6 +436,37 @@ describe("calculateRating", () => {
       expect(result.weightedScore).toBe(60); // 20 * 3
     });
   });
+
+  describe("Date UOM", () => {
+    const dateThresholds: RatingThresholds = {
+      r5: "1",
+      r4: "2",
+      r3: "3",
+      r2: "4",
+      r1: "5",
+    };
+
+    it("returns rating 5 for value 0 (completed before review month)", () => {
+      const result = calculateRating(0, null, dateThresholds, "Lower is Better", 10, "numeric", null, "Date");
+      expect(result.rating).toBe(5);
+      expect(result.ratingLevel).toBe("blue");
+    });
+
+    it("returns rating 5 for day 1", () => {
+      const result = calculateRating(1, null, dateThresholds, "Lower is Better", 10, "numeric", null, "Date");
+      expect(result.rating).toBe(5);
+    });
+
+    it("returns rating 0 for day 6+", () => {
+      const result = calculateRating(6, null, dateThresholds, "Lower is Better", 10, "numeric", null, "Date");
+      expect(result.rating).toBe(0);
+    });
+
+    it("returns rating 0 for null value", () => {
+      const result = calculateRating(null, null, dateThresholds, "Lower is Better", 10, "numeric", null, "Date");
+      expect(result.rating).toBe(0);
+    });
+  });
 });
 
 describe("calculateOverallScore", () => {
@@ -594,8 +625,9 @@ describe("calculateRating with Date UOM", () => {
     expect(result.weightedScore).toBe(100); // 20 * 5
   });
 
-  it("returns zero for invalid day values", () => {
-    expect(calculateRating(0, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date").rating).toBe(0);
+  it("returns zero for invalid day values (but 0 is valid for pre-month)", () => {
+    // 0 is now valid — means "completed before review month"
+    expect(calculateRating(0, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date").rating).toBe(5);
     expect(calculateRating(32, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date").rating).toBe(0);
     expect(calculateRating(-1, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date").rating).toBe(0);
   });

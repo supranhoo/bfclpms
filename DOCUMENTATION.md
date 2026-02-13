@@ -1004,12 +1004,15 @@ When UOM is set to `Date`, the system provides specialized handling for date-bas
 - Compliance filing dates
 
 **Input Method:**
-- Calendar date picker restricted to the review month
+- Calendar date picker spanning the **previous month and review month**
 - Selects a day of month (1-31) as the achieved value
+- If a date from the previous month is selected, the value is stored as **0** (meaning "completed before the review month started")
+- Displays "Before 1st {Month}" when value is 0
 - Available at all review levels (Self, Manager, Auditor, Management)
 
 **Rating Calculation:**
 - Uses "Lower is Better" logic: earlier date = higher rating
+- Value 0 (pre-month completion) naturally scores highest (e.g., 0 ≤ R5 threshold)
 - R5-R0 thresholds are treated as day-of-month values (not percentages)
 - Target value is ignored; thresholds determine rating directly
 
