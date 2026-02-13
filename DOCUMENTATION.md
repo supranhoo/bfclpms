@@ -253,6 +253,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | `import_progress` | Bulk import tracking | `id`, `status`, `total_rows`, `processed_rows` |
 | `employee_working_days` | Per-employee monthly working days configuration | `employee_id`, `month`, `year`, `working_days` |
 | `backup_logs` | Database backup history | `id`, `backup_type`, `status`, `file_path`, `file_size_bytes`, `tables_count`, `total_rows` |
+| `email_logs` | Email send audit trail | `id`, `event_type`, `recipient_email`, `recipient_name`, `subject`, `status` (sent/failed/skipped), `error_message`, `provider`, `metadata` (JSONB) |
 
 #### Backup & Restore
 
@@ -2879,6 +2880,24 @@ The `safeParseFloat` utility in `src/lib/utils.ts` correctly returns `null` for 
 ### Auth-Guarded Query Pattern
 
 All React Query hooks fetching RLS-protected data **must** include an `enabled: !!user` guard to prevent race conditions after login. The `useModules()` hook is the canonical example. Additionally, the `AuthContext` invalidates the `['modules']` query cache on login to clear any stale empty results.
+
+---
+
+### Email Logs
+
+The system logs every email sent by the `send-email-notification` edge function into the `email_logs` table. This provides admins with full visibility into what emails were sent, to whom, when, and with what outcome.
+
+**Log Statuses:**
+- `sent` — Email delivered successfully
+- `failed` — Email send attempt failed (error captured in `error_message`)
+- `skipped` — Email not sent because notifications were disabled or the event type was toggled off
+
+**Admin UI:** Available at `/admin/email-logs` (sidebar → Administration → Email Logs). Features:
+- Stats cards: Total, Sent, Failed, Skipped, Today's count
+- Filters: Search by recipient/subject, filter by event type and status
+- Expandable rows: Click any row to see full metadata (review period, KRA count, error details, etc.)
+
+**RLS:** Admin-only SELECT. The edge function inserts via service role key (bypasses RLS). Logging is fire-and-forget — a failed log insert never blocks email delivery.
 
 ---
 

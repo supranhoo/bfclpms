@@ -288,6 +288,45 @@ export type Database = {
         }
         Relationships: []
       }
+      email_logs: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          event_type: string
+          id: string
+          metadata: Json | null
+          provider: string | null
+          recipient_email: string
+          recipient_name: string | null
+          status: string
+          subject: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          provider?: string | null
+          recipient_email: string
+          recipient_name?: string | null
+          status?: string
+          subject?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          provider?: string | null
+          recipient_email?: string
+          recipient_name?: string | null
+          status?: string
+          subject?: string | null
+        }
+        Relationships: []
+      }
       employee_working_days: {
         Row: {
           created_at: string | null

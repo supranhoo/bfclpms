@@ -43,6 +43,7 @@ import {
   UserX,
   Eye,
   ArrowLeft,
+  Mail,
 } from 'lucide-react';
 import { CollapsibleSidebarGroup } from './CollapsibleSidebarGroup';
 
@@ -79,6 +80,7 @@ const menuItems = {
     { title: 'Import Data', icon: Upload, path: '/admin/import', roles: ['admin'] },
     { title: 'System Settings', icon: Settings, path: '/admin/settings', roles: ['admin'] },
     { title: 'Audit Logs', icon: History, path: '/audit-logs', roles: ['admin'] },
+    { title: 'Email Logs', icon: Mail, path: '/admin/email-logs', roles: ['admin'] },
   ],
   dataEntry: [
     { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', roles: ['employee', 'manager', 'auditor', 'management'] },
