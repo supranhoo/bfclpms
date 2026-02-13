@@ -204,15 +204,15 @@ export function EmployeeSelectorGrid({
             employeeIds.add(kpi.employee_id);
           }
         } else if (viewLevel === 'skip_level') {
-          if (statusFilter === 'pending' && kpi.status === 'skip_level_check') {
+          if (statusFilter === 'pending' && kpi.status === 'manager_check') {
             employeeIds.add(kpi.employee_id);
-          } else if (statusFilter === 'reviewed' && ['hr_pms_review', 'audit', 'management_review', 'approved'].includes(kpi.status || '')) {
+          } else if (statusFilter === 'reviewed' && ['skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'].includes(kpi.status || '')) {
             employeeIds.add(kpi.employee_id);
           }
         } else if (viewLevel === 'hr_pms') {
-          if (statusFilter === 'pending' && kpi.status === 'hr_pms_review') {
+          if (statusFilter === 'pending' && kpi.status === 'skip_level_check') {
             employeeIds.add(kpi.employee_id);
-          } else if (statusFilter === 'reviewed' && ['audit', 'management_review', 'approved'].includes(kpi.status || '')) {
+          } else if (statusFilter === 'reviewed' && ['hr_pms_review', 'audit', 'management_review', 'approved'].includes(kpi.status || '')) {
             employeeIds.add(kpi.employee_id);
           }
         } else if (viewLevel === 'management') {
@@ -250,16 +250,16 @@ export function EmployeeSelectorGrid({
     } else if (viewLevel === 'skip_level') {
       return {
         totalEmployees: baseMembers.length,
-        stat1: relevantKpis.filter(k => k.status === 'skip_level_check').length,
-        stat2: relevantKpis.filter(k => ['hr_pms_review', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
+        stat1: relevantKpis.filter(k => k.status === 'manager_check').length,
+        stat2: relevantKpis.filter(k => ['skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
         stat3: relevantKpis.length,
         totalKpis: relevantKpis.length,
       };
     } else if (viewLevel === 'hr_pms') {
       return {
         totalEmployees: baseMembers.length,
-        stat1: relevantKpis.filter(k => k.status === 'hr_pms_review').length,
-        stat2: relevantKpis.filter(k => ['audit', 'management_review', 'approved'].includes(k.status || '')).length,
+        stat1: relevantKpis.filter(k => k.status === 'skip_level_check').length,
+        stat2: relevantKpis.filter(k => ['hr_pms_review', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
         stat3: relevantKpis.length,
         totalKpis: relevantKpis.length,
       };
@@ -296,15 +296,15 @@ export function EmployeeSelectorGrid({
       };
     } else if (viewLevel === 'skip_level') {
       return {
-        badge1: empKpis.filter(k => k.status === 'skip_level_check').length,
-        badge2: empKpis.filter(k => ['hr_pms_review', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
+        badge1: empKpis.filter(k => k.status === 'manager_check').length,
+        badge2: empKpis.filter(k => ['skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
         badge3: 0,
         total: empKpis.length,
       };
     } else if (viewLevel === 'hr_pms') {
       return {
-        badge1: empKpis.filter(k => k.status === 'hr_pms_review').length,
-        badge2: empKpis.filter(k => ['audit', 'management_review', 'approved'].includes(k.status || '')).length,
+        badge1: empKpis.filter(k => k.status === 'skip_level_check').length,
+        badge2: empKpis.filter(k => ['hr_pms_review', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
         badge3: 0,
         total: empKpis.length,
       };
