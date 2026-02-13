@@ -61,6 +61,7 @@ const actionConfig: Record<string, { icon: React.ElementType; color: string; lab
   'MANAGEMENT_REVIEWED': { icon: Briefcase, color: 'bg-emerald-500', label: 'Management Reviewed' },
   'MANAGEMENT_APPROVED': { icon: CheckCircle, color: 'bg-emerald-600', label: 'Management Approved' },
   'MANAGEMENT_SENT_BACK_TO_AUDITOR': { icon: Undo2, color: 'bg-orange-500', label: 'Sent Back to Auditor' },
+  'MANAGER_SENT_BACK_TO_EMPLOYEE': { icon: Undo2, color: 'bg-orange-500', label: 'Sent Back to Employee' },
   'MANAGEMENT_SENT_BACK_TO_MANAGER': { icon: Undo2, color: 'bg-orange-500', label: 'Sent Back to Manager' },
   'MANAGEMENT_SENT_BACK_TO_EMPLOYEE': { icon: Undo2, color: 'bg-orange-500', label: 'Sent Back to Employee' },
   'KPI_CREATED': { icon: FileText, color: 'bg-sky-500', label: 'KPI Created' },
@@ -190,20 +191,20 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh]">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
             Review Timeline
           </DialogTitle>
-          <DialogDescription className="line-clamp-2">
-            {kpi.kra_name} — <span className="font-medium">{kpi.kpi_name?.split('\n')[0]?.slice(0, 80)}{(kpi.kpi_name?.length ?? 0) > 80 ? '…' : ''}</span>
+          <DialogDescription className="line-clamp-1">
+            {kpi.kra_name}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-2">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           {/* Workflow Progress */}
-          <div className="mb-6 p-4 bg-muted/50 rounded-lg">
+          <div className="shrink-0 mb-4 p-4 bg-muted/50 rounded-lg">
             <p className="text-xs font-medium text-muted-foreground mb-3">Workflow Progress</p>
             <div className="flex items-center gap-0">
               {workflowStages.map((stage, index) => {
@@ -238,12 +239,12 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 mb-4">
+          <div className="shrink-0 flex items-center gap-2 mb-4">
             <Badge variant="outline">{kpi.kra_name}</Badge>
             <Badge variant="secondary">{kpi.review_period} {kpi.review_year}</Badge>
           </div>
 
-          <ScrollArea className="h-[500px] pr-4">
+          <ScrollArea className="flex-1 min-h-0 pr-4">
             {isLoading ? (
               <div className="flex items-center justify-center py-12 text-muted-foreground">
                 Loading timeline...
@@ -316,7 +317,7 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
           </ScrollArea>
         </div>
 
-        <div className="flex justify-end pt-2 border-t">
+        <div className="shrink-0 flex justify-end pt-2 border-t">
           <Button variant="outline" onClick={onClose}>Close</Button>
         </div>
       </DialogContent>
