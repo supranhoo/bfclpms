@@ -3,10 +3,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ReviewStageCard, StageStatus } from './ReviewStageCard';
 import { KPI, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
-import { User, Briefcase, Shield, MessageSquare, History } from 'lucide-react';
+import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck } from 'lucide-react';
 import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 
-type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management';
+type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms';
+type JourneyStage = 'self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
 
 interface KpiJourneySectionProps {
   kpi: KPI;
@@ -19,47 +20,32 @@ interface KpiJourneySectionProps {
 
 // Determine the status of each review stage based on KPI status and view level
 function getStageStatus(
-  stage: 'self' | 'manager' | 'auditor' | 'management',
+  stage: JourneyStage,
   kpiStatus: string,
   viewLevel: ViewLevel,
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): StageStatus {
   const statusOrder = workflowStages;
-  const stageToStatus: Record<string, string[]> = {
-    self: ['self_review', 'manager_check', 'audit', 'management_review', 'approved'],
-    manager: ['manager_check', 'audit', 'management_review', 'approved'],
-    auditor: ['audit', 'management_review', 'approved'],
-    management: ['management_review', 'approved'],
+  const stageToStatus: Record<string, string> = {
+    self: 'self_review',
+    manager: 'manager_check',
+    skip_level: 'skip_level_check',
+    hr_pms: 'hr_pms_review',
+    auditor: 'audit',
+    management: 'management_review',
   };
 
-  const currentIndex = statusOrder.indexOf(kpiStatus);
-  const stageStatuses = stageToStatus[stage];
-  const stageStartStatus = stageStatuses[0];
+  const stageStartStatus = stageToStatus[stage];
   const stageStartIndex = statusOrder.indexOf(stageStartStatus);
+  const currentIndex = statusOrder.indexOf(kpiStatus);
 
   // Check if stage is completed
-  if (statusOrder.indexOf(kpiStatus) > stageStartIndex) {
+  if (currentIndex > stageStartIndex) {
     return 'completed';
   }
 
   // Check if this is the current stage
-  const isCurrentStage =
-    (stage === 'self' && kpiStatus === 'self_review') ||
-    (stage === 'manager' && kpiStatus === 'manager_check') ||
-    (stage === 'auditor' && kpiStatus === 'audit') ||
-    (stage === 'management' && kpiStatus === 'management_review');
-
-  // For the view level, mark their stage as current if it's their turn
-  if (
-    (viewLevel === 'employee' && stage === 'self' && ['kra_set', 'self_review'].includes(kpiStatus)) ||
-    (viewLevel === 'manager' && stage === 'manager' && ['self_review', 'manager_check'].includes(kpiStatus)) ||
-    (viewLevel === 'auditor' && stage === 'auditor' && ['manager_check', 'audit'].includes(kpiStatus)) ||
-    (viewLevel === 'management' && stage === 'management' && ['audit', 'management_review'].includes(kpiStatus))
-  ) {
-    return 'current';
-  }
-
-  if (isCurrentStage) {
+  if (kpiStatus === stageStartStatus) {
     return 'current';
   }
 
@@ -70,7 +56,7 @@ function getStageStatus(
 function getVisibleStagesForLevel(
   _viewLevel: ViewLevel,
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
-): ('self' | 'manager' | 'auditor' | 'management')[] {
+): JourneyStage[] {
   return getVisibleJourneyStages(workflowStages);
 }
 
@@ -90,10 +76,19 @@ export function KpiJourneySection({
   const openQueries = queries.filter(q => q.status === 'open').length;
   const resolvedQueries = queries.filter(q => q.status === 'resolved').length;
 
-  const stageData = {
+  const stageData: Record<JourneyStage, {
+    icon: typeof User;
+    iconColor: 'blue' | 'amber' | 'purple' | 'emerald' | 'teal' | 'rose';
+    title: string;
+    score: number | null;
+    rating: any;
+    remarks: string | null;
+    evidenceUrl: string | null;
+    achievedValue: number | null;
+  }> = {
     self: {
       icon: User,
-      iconColor: 'blue' as const,
+      iconColor: 'blue',
       title: 'Self',
       score: submission?.self_score ?? null,
       rating: submission?.self_rating ?? null,
@@ -103,38 +98,58 @@ export function KpiJourneySection({
     },
     manager: {
       icon: Briefcase,
-      iconColor: 'amber' as const,
+      iconColor: 'amber',
       title: 'Manager',
       score: submission?.manager_score ?? null,
       rating: submission?.manager_rating ?? null,
       remarks: submission?.manager_remarks ?? null,
       evidenceUrl: submission?.manager_evidence_url ?? null,
-      // Only show explicitly saved values - no fallback to avoid showing incorrect data
       achievedValue: submission?.manager_achieved_value ?? null,
+    },
+    skip_level: {
+      icon: UserCheck,
+      iconColor: 'teal',
+      title: 'Skip-Level',
+      score: (submission as any)?.skip_level_score ?? null,
+      rating: (submission as any)?.skip_level_rating ?? null,
+      remarks: (submission as any)?.skip_level_remarks ?? null,
+      evidenceUrl: (submission as any)?.skip_level_evidence_url ?? null,
+      achievedValue: (submission as any)?.skip_level_achieved_value ?? null,
+    },
+    hr_pms: {
+      icon: ClipboardCheck,
+      iconColor: 'rose',
+      title: 'HR PMS',
+      score: (submission as any)?.hr_pms_score ?? null,
+      rating: (submission as any)?.hr_pms_rating ?? null,
+      remarks: (submission as any)?.hr_pms_remarks ?? null,
+      evidenceUrl: (submission as any)?.hr_pms_evidence_url ?? null,
+      achievedValue: (submission as any)?.hr_pms_achieved_value ?? null,
     },
     auditor: {
       icon: Shield,
-      iconColor: 'purple' as const,
+      iconColor: 'purple',
       title: 'Auditor',
       score: submission?.auditor_score ?? null,
       rating: submission?.auditor_rating ?? null,
       remarks: submission?.auditor_remarks ?? null,
       evidenceUrl: submission?.auditor_evidence_url ?? null,
-      // Only show explicitly saved values - no fallback to avoid showing incorrect data
       achievedValue: submission?.auditor_achieved_value ?? null,
     },
     management: {
       icon: Briefcase,
-      iconColor: 'emerald' as const,
+      iconColor: 'emerald',
       title: 'Management',
       score: submission?.management_score ?? null,
       rating: submission?.management_rating ?? null,
       remarks: submission?.management_remarks ?? null,
       evidenceUrl: submission?.management_evidence_url ?? null,
-      // Only show explicitly saved values - no fallback to avoid showing incorrect data
       achievedValue: submission?.management_achieved_value ?? null,
     },
   };
+
+  const stageCount = visibleStages.length;
+  const gridCols = stageCount <= 4 ? 'grid-cols-2 lg:grid-cols-4' : stageCount <= 6 ? 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-6' : 'grid-cols-2 lg:grid-cols-4';
 
   return (
     <Card>
@@ -145,8 +160,8 @@ export function KpiJourneySection({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Review Stages Grid - 2x2 on mobile, 1x4 on desktop */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-3">
+        {/* Review Stages Grid */}
+        <div className={`grid ${gridCols} gap-2 lg:gap-3`}>
           {visibleStages.map(stage => {
             const data = stageData[stage];
             const status = getStageStatus(stage, kpiStatus, viewLevel, effectiveStages);

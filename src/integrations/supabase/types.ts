@@ -2015,6 +2015,12 @@ export type Database = {
           auditor_score: number | null
           final_rating: Database["public"]["Enums"]["rating_level"] | null
           final_score: number | null
+          hr_pms_achieved_value: number | null
+          hr_pms_evidence_url: string | null
+          hr_pms_evidence_urls: Json | null
+          hr_pms_rating: Database["public"]["Enums"]["rating_level"] | null
+          hr_pms_remarks: string | null
+          hr_pms_score: number | null
           id: string
           is_na: boolean
           kpi_id: string
@@ -2037,6 +2043,12 @@ export type Database = {
           self_rating: Database["public"]["Enums"]["rating_level"] | null
           self_remarks: string | null
           self_score: number | null
+          skip_level_achieved_value: number | null
+          skip_level_evidence_url: string | null
+          skip_level_evidence_urls: Json | null
+          skip_level_rating: Database["public"]["Enums"]["rating_level"] | null
+          skip_level_remarks: string | null
+          skip_level_score: number | null
           submitted_at: string
           updated_at: string
         }
@@ -2050,6 +2062,12 @@ export type Database = {
           auditor_score?: number | null
           final_rating?: Database["public"]["Enums"]["rating_level"] | null
           final_score?: number | null
+          hr_pms_achieved_value?: number | null
+          hr_pms_evidence_url?: string | null
+          hr_pms_evidence_urls?: Json | null
+          hr_pms_rating?: Database["public"]["Enums"]["rating_level"] | null
+          hr_pms_remarks?: string | null
+          hr_pms_score?: number | null
           id?: string
           is_na?: boolean
           kpi_id: string
@@ -2072,6 +2090,12 @@ export type Database = {
           self_rating?: Database["public"]["Enums"]["rating_level"] | null
           self_remarks?: string | null
           self_score?: number | null
+          skip_level_achieved_value?: number | null
+          skip_level_evidence_url?: string | null
+          skip_level_evidence_urls?: Json | null
+          skip_level_rating?: Database["public"]["Enums"]["rating_level"] | null
+          skip_level_remarks?: string | null
+          skip_level_score?: number | null
           submitted_at?: string
           updated_at?: string
         }
@@ -2085,6 +2109,12 @@ export type Database = {
           auditor_score?: number | null
           final_rating?: Database["public"]["Enums"]["rating_level"] | null
           final_score?: number | null
+          hr_pms_achieved_value?: number | null
+          hr_pms_evidence_url?: string | null
+          hr_pms_evidence_urls?: Json | null
+          hr_pms_rating?: Database["public"]["Enums"]["rating_level"] | null
+          hr_pms_remarks?: string | null
+          hr_pms_score?: number | null
           id?: string
           is_na?: boolean
           kpi_id?: string
@@ -2107,6 +2137,12 @@ export type Database = {
           self_rating?: Database["public"]["Enums"]["rating_level"] | null
           self_remarks?: string | null
           self_score?: number | null
+          skip_level_achieved_value?: number | null
+          skip_level_evidence_url?: string | null
+          skip_level_evidence_urls?: Json | null
+          skip_level_rating?: Database["public"]["Enums"]["rating_level"] | null
+          skip_level_remarks?: string | null
+          skip_level_score?: number | null
           submitted_at?: string
           updated_at?: string
         }
@@ -2169,6 +2205,7 @@ export type Database = {
           auditor_achieved_value: number | null
           created_at: string | null
           evidence_url: string | null
+          hr_pms_achieved_value: number | null
           id: string
           is_resubmitted: boolean | null
           kpi_id: string
@@ -2177,6 +2214,7 @@ export type Database = {
           remarks: string | null
           review_month: string
           review_year: number
+          skip_level_achieved_value: number | null
           sub_period_type: string
           sub_period_value: string
           submitted_at: string | null
@@ -2190,6 +2228,7 @@ export type Database = {
           auditor_achieved_value?: number | null
           created_at?: string | null
           evidence_url?: string | null
+          hr_pms_achieved_value?: number | null
           id?: string
           is_resubmitted?: boolean | null
           kpi_id: string
@@ -2198,6 +2237,7 @@ export type Database = {
           remarks?: string | null
           review_month: string
           review_year: number
+          skip_level_achieved_value?: number | null
           sub_period_type: string
           sub_period_value: string
           submitted_at?: string | null
@@ -2211,6 +2251,7 @@ export type Database = {
           auditor_achieved_value?: number | null
           created_at?: string | null
           evidence_url?: string | null
+          hr_pms_achieved_value?: number | null
           id?: string
           is_resubmitted?: boolean | null
           kpi_id?: string
@@ -2219,6 +2260,7 @@ export type Database = {
           remarks?: string | null
           review_month?: string
           review_year?: number
+          skip_level_achieved_value?: number | null
           sub_period_type?: string
           sub_period_value?: string
           submitted_at?: string | null
@@ -2647,6 +2689,10 @@ export type Database = {
           template_name: string
         }[]
       }
+      get_skip_level_manager: {
+        Args: { employee_uuid: string }
+        Returns: string
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
@@ -2672,7 +2718,13 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "manager" | "employee" | "auditor" | "management"
+      app_role:
+        | "admin"
+        | "manager"
+        | "employee"
+        | "auditor"
+        | "management"
+        | "hr_pms"
       kpi_status: "open" | "submitted" | "approved_by_manager" | "locked"
       observation_type: "positive" | "concern" | "neutral"
       pip_milestone_status: "pending" | "met" | "partially_met" | "not_met"
@@ -2694,6 +2746,8 @@ export type Database = {
         | "audit"
         | "approved"
         | "management_review"
+        | "skip_level_check"
+        | "hr_pms_review"
       tni_gap_type: "skill" | "knowledge" | "behavior"
       tni_priority: "high" | "medium" | "low"
       tni_status:
@@ -2828,7 +2882,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "manager", "employee", "auditor", "management"],
+      app_role: [
+        "admin",
+        "manager",
+        "employee",
+        "auditor",
+        "management",
+        "hr_pms",
+      ],
       kpi_status: ["open", "submitted", "approved_by_manager", "locked"],
       observation_type: ["positive", "concern", "neutral"],
       pip_milestone_status: ["pending", "met", "partially_met", "not_met"],
@@ -2851,6 +2912,8 @@ export const Constants = {
         "audit",
         "approved",
         "management_review",
+        "skip_level_check",
+        "hr_pms_review",
       ],
       tni_gap_type: ["skill", "knowledge", "behavior"],
       tni_priority: ["high", "medium", "low"],

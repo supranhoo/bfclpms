@@ -17,7 +17,7 @@ import { KPI, KpiQuery } from '@/hooks/useKpis';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { LucideIcon } from 'lucide-react';
 
-type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'audit' | 'management_review' | 'approved';
+type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review' | 'approved';
 
 interface WorkflowProgressTrackerProps {
   kpis: KPI[];
@@ -40,54 +40,56 @@ interface StageConfig {
 
 const stageConfig: StageConfig[] = [
   { 
-    key: 'kra_set', 
-    label: 'KRA SET', 
-    shortLabel: 'KRA',
+    key: 'kra_set', label: 'KRA SET', shortLabel: 'KRA',
     icon: ClipboardCheck, 
     bgClass: 'border-gray-300 dark:border-gray-600',
     iconBgClass: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400',
     progressColor: 'bg-gray-400 dark:bg-gray-500'
   },
   { 
-    key: 'self_review', 
-    label: 'SELF REVIEW', 
-    shortLabel: 'Self',
+    key: 'self_review', label: 'SELF REVIEW', shortLabel: 'Self',
     icon: User, 
     bgClass: 'border-blue-300 dark:border-blue-700',
     iconBgClass: 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400',
     progressColor: 'bg-blue-500 dark:bg-blue-400'
   },
   { 
-    key: 'manager_check', 
-    label: 'MANAGER CHECK', 
-    shortLabel: 'Mgr',
+    key: 'manager_check', label: 'MANAGER CHECK', shortLabel: 'Mgr',
     icon: Search, 
     bgClass: 'border-orange-300 dark:border-orange-700',
     iconBgClass: 'bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-400',
     progressColor: 'bg-orange-500 dark:bg-orange-400'
   },
   { 
-    key: 'audit', 
-    label: 'AUDIT', 
-    shortLabel: 'Audit',
+    key: 'skip_level_check', label: 'SKIP-LEVEL', shortLabel: 'Skip',
+    icon: User, 
+    bgClass: 'border-teal-300 dark:border-teal-700',
+    iconBgClass: 'bg-teal-100 dark:bg-teal-900 text-teal-600 dark:text-teal-400',
+    progressColor: 'bg-teal-500 dark:bg-teal-400'
+  },
+  { 
+    key: 'hr_pms_review', label: 'HR PMS', shortLabel: 'HR',
+    icon: ClipboardCheck, 
+    bgClass: 'border-rose-300 dark:border-rose-700',
+    iconBgClass: 'bg-rose-100 dark:bg-rose-900 text-rose-600 dark:text-rose-400',
+    progressColor: 'bg-rose-500 dark:bg-rose-400'
+  },
+  { 
+    key: 'audit', label: 'AUDIT', shortLabel: 'Audit',
     icon: Shield, 
     bgClass: 'border-purple-300 dark:border-purple-700',
     iconBgClass: 'bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-400',
     progressColor: 'bg-purple-500 dark:bg-purple-400'
   },
   { 
-    key: 'management_review', 
-    label: 'MANAGEMENT', 
-    shortLabel: 'Mgmt',
+    key: 'management_review', label: 'MANAGEMENT', shortLabel: 'Mgmt',
     icon: Briefcase, 
     bgClass: 'border-emerald-300 dark:border-emerald-700',
     iconBgClass: 'bg-emerald-100 dark:bg-emerald-900 text-emerald-600 dark:text-emerald-400',
     progressColor: 'bg-emerald-500 dark:bg-emerald-400'
   },
   { 
-    key: 'approved', 
-    label: 'APPROVED', 
-    shortLabel: 'Done',
+    key: 'approved', label: 'APPROVED', shortLabel: 'Done',
     icon: CheckCircle, 
     bgClass: 'border-green-300 dark:border-green-700',
     iconBgClass: 'bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-400',
@@ -117,6 +119,8 @@ export function WorkflowProgressTracker({
       kra_set: 0,
       self_review: 0,
       manager_check: 0,
+      skip_level_check: 0,
+      hr_pms_review: 0,
       audit: 0,
       management_review: 0,
       approved: 0,

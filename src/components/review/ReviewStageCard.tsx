@@ -9,7 +9,7 @@ export type StageStatus = 'completed' | 'current' | 'pending';
 
 interface ReviewStageCardProps {
   icon: LucideIcon;
-  iconColor: 'blue' | 'amber' | 'purple' | 'emerald';
+  iconColor: 'blue' | 'amber' | 'purple' | 'emerald' | 'teal' | 'rose';
   title: string;
   score: number | null;
   rating: RatingLevel | null;
@@ -25,6 +25,8 @@ const iconColorClasses = {
   amber: 'bg-amber-500/10 text-amber-500',
   purple: 'bg-purple-500/10 text-purple-500',
   emerald: 'bg-emerald-500/10 text-emerald-500',
+  teal: 'bg-teal-500/10 text-teal-500',
+  rose: 'bg-rose-500/10 text-rose-500',
 };
 
 const borderColorClasses = {
@@ -32,6 +34,8 @@ const borderColorClasses = {
   amber: 'border-amber-200 dark:border-amber-800',
   purple: 'border-purple-200 dark:border-purple-800',
   emerald: 'border-emerald-200 dark:border-emerald-800',
+  teal: 'border-teal-200 dark:border-teal-800',
+  rose: 'border-rose-200 dark:border-rose-800',
 };
 
 function getRatingLabel(rating: RatingLevel | null | undefined): string {
