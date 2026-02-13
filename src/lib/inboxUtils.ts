@@ -85,6 +85,22 @@ export function getNotificationTypeLabel(type: string): string {
     query_raised: 'Query Raised',
     query_resolved: 'Query Resolved',
     query_responded: 'Query Responded',
+    admin_status_step_back: 'Status Rolled Back',
+    admin_status_change: 'Status Changed',
+    admin_data_entry: 'Data Updated by Admin',
+    manager_rejected: 'Sent Back by Manager',
+    kra_assigned: 'KRA Assigned',
+    kra_batch_assigned: 'KRAs Assigned',
+    observation_raised: 'Observation Raised',
+    observation_reply: 'Observation Reply',
+    observation_resolved: 'Observation Resolved',
+    period_locked: 'Period Locked',
+    pip_initiated: 'PIP Initiated',
+    pip_completed: 'PIP Completed',
+    pip_milestone_reminder: 'PIP Milestone Reminder',
+    password_rollout: 'Password Reset',
+    query_response_submitted: 'Query Response',
+    query_resolved_fyi: 'Query Resolved',
   };
   return labels[type] || type;
 }
@@ -175,6 +191,7 @@ export function getNotificationNavigationPath(item: InboxItem): string | null {
       return `/dashboard?view=management${kpiParam ? `&kpi=${item.kpiId}` : ''}`;
 
     // KRA assignment
+    case 'kra_assigned':
     case 'kra_batch_assigned':
       return '/my-kpis';
 
@@ -189,6 +206,7 @@ export function getNotificationNavigationPath(item: InboxItem): string | null {
     // Observations
     case 'observation_raised':
     case 'observation_reply':
+    case 'observation_resolved':
       return item.kpiId ? `/my-kpis?kpi=${item.kpiId}` : '/my-kpis';
 
     // Period events
