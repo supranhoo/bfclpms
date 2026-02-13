@@ -351,6 +351,18 @@ Please log in and change your password immediately after your first sign-in.
 
 If you did not expect this email, please contact your administrator.`,
   },
+  kra_batch_assigned: {
+    subject: '[PMS] {{kra_count}} KRA(s) Assigned - {{review_period}} {{review_year}}',
+    body: `Hi {{recipient_name}},
+
+{{kra_count}} KRA(s) have been assigned to {{employee_name}} for {{review_period}} {{review_year}}.
+
+{{kra_table}}
+
+Total Weightage: {{total_weightage}}
+
+Please log in to review the assignments.`,
+  },
 };
 
 const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string }> = {
@@ -373,6 +385,35 @@ const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string
   admin_data_override: { color: '#64748b', emoji: '🔧', title: 'Admin Data Override' },
   org_kpi_sent_back: { color: '#f59e0b', emoji: '↩️', title: 'Org KPI Sent Back' },
   password_rollout: { color: '#6366f1', emoji: '🔑', title: 'Login Credentials' },
+  kra_batch_assigned: { color: '#3b82f6', emoji: '📋', title: 'New KRA Assignment' },
+};
+
+// Build KRA table HTML for batch assignment emails
+const buildKraTableHtml = (kraList: Array<{ kra_name: string; kpi_name: string; target_value: string; weightage: string; uom: string }>): string => {
+  if (!kraList || kraList.length === 0) return '';
+  const rows = kraList.map((kra, i) => `
+    <tr style="border-bottom:1px solid #e2e8f0;">
+      <td style="padding:8px 12px;text-align:center;font-size:13px;">${i + 1}</td>
+      <td style="padding:8px 12px;font-size:13px;">${kra.kra_name}</td>
+      <td style="padding:8px 12px;font-size:13px;">${kra.kpi_name}</td>
+      <td style="padding:8px 12px;text-align:center;font-size:13px;">${kra.target_value}</td>
+      <td style="padding:8px 12px;text-align:center;font-size:13px;">${kra.weightage}</td>
+      <td style="padding:8px 12px;text-align:center;font-size:13px;">${kra.uom}</td>
+    </tr>`).join('');
+
+  return `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;border:1px solid #e2e8f0;border-radius:6px;margin:16px 0;">
+    <thead>
+      <tr style="background:#f1f5f9;">
+        <th style="padding:10px 12px;text-align:center;font-size:12px;font-weight:600;color:#475569;border-bottom:2px solid #e2e8f0;">#</th>
+        <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:#475569;border-bottom:2px solid #e2e8f0;">KRA</th>
+        <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:#475569;border-bottom:2px solid #e2e8f0;">KPI</th>
+        <th style="padding:10px 12px;text-align:center;font-size:12px;font-weight:600;color:#475569;border-bottom:2px solid #e2e8f0;">Target</th>
+        <th style="padding:10px 12px;text-align:center;font-size:12px;font-weight:600;color:#475569;border-bottom:2px solid #e2e8f0;">Wt%</th>
+        <th style="padding:10px 12px;text-align:center;font-size:12px;font-weight:600;color:#475569;border-bottom:2px solid #e2e8f0;">UOM</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 };
 
 // Replace placeholders in template
@@ -712,7 +753,8 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     const { event_type, recipient_email, recipient_name, kpi_name, kra_name, actor_name, query_reason, resolution_notes, review_period, review_year,
       pip_start_date, pip_end_date, pip_reason, pip_outcome, pip_remarks,
       milestone_date, milestone_description, milestone_expected_outcome,
-      send_back_reason, generated_password, login_email, employee_code, app_name } = body;
+      send_back_reason, generated_password, login_email, employee_code, app_name,
+      kra_list, kra_count, employee_name, total_weightage } = body;
 
     // Check if email notifications are enabled
     const { data: enabledSetting } = await supabase
@@ -848,7 +890,15 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       login_email,
       employee_code,
       app_name,
+      kra_count,
+      employee_name,
+      total_weightage,
     };
+
+    // For kra_batch_assigned, inject the KRA table HTML into the placeholder
+    if (event_type === 'kra_batch_assigned' && Array.isArray(kra_list)) {
+      placeholderData.kra_table = buildKraTableHtml(kra_list);
+    }
 
     // Replace placeholders in subject and body
     const subject = replacePlaceholders(template.subject, placeholderData);

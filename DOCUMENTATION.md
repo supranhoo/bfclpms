@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-02-12  
-> **Version:** 1.15.0
+> **Last Updated:** 2026-02-13  
+> **Version:** 1.16.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -2833,6 +2833,26 @@ The `exportKpiData()` function in `ImportData.tsx` now exports **all columns** t
 | `src/pages/admin/SystemSettings.tsx` | 9th tab ("Passwords") added with KeyRound icon |
 
 **Email Template:** `password_rollout` event type with placeholders: `{{recipient_name}}`, `{{login_email}}`, `{{generated_password}}`, `{{app_name}}`
+
+### 8.11 Batch KRA Assignment Notifications
+
+When KRAs are assigned to employees (via Copy KRAs, Bulk Template Assign, Bundle Assign, or Smart Assignment), the system sends **one consolidated notification** per recipient rather than individual alerts per KRA. Both the employee and their reporting manager receive:
+
+- **1 in-app notification** summarizing all assigned KRAs with total weightage
+- **1 email** with a professional HTML table listing all KRAs (KRA, KPI, Target, Weightage, UOM)
+
+**Event Type:** `kra_batch_assigned`
+
+**Email Placeholders:** `{{recipient_name}}`, `{{employee_name}}`, `{{kra_count}}`, `{{kra_table}}` (auto-generated HTML table), `{{total_weightage}}`, `{{review_period}}`, `{{review_year}}`
+
+**Files:**
+| File | Purpose |
+|---|---|
+| `src/lib/kraNotifications.ts` | Shared utility: fetches profiles, inserts notifications, triggers emails |
+| `src/components/admin/CopyKrasDialog.tsx` | Triggers notifications after copy success |
+| `src/components/admin/BulkTemplateAssignDialog.tsx` | Triggers notifications after bulk assign |
+| `src/components/admin/BundleAssignDialog.tsx` | Triggers notifications after bundle assign |
+| `src/components/admin/SmartAssignmentDialog.tsx` | Triggers notifications after smart assign (both bundle and template modes) |
 
 ---
 

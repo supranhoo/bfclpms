@@ -47,6 +47,7 @@ const EMAIL_EVENTS: { key: EmailEventType; label: string; description: string }[
   { key: 'observation_reply', label: 'Observation Reply', description: 'Notify participants when someone replies to an observation' },
   { key: 'observation_resolved', label: 'Observation Resolved', description: 'Notify participants when an observation is marked as resolved' },
   { key: 'password_rollout', label: 'Password Rollout', description: 'Send login credentials when admin generates passwords for users' },
+  { key: 'kra_batch_assigned', label: 'Batch KRA Assignment', description: 'Notify employee & manager when KRAs are assigned in bulk' },
 ];
 
 export function EmailNotificationSettings() {

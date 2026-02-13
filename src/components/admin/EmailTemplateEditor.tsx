@@ -382,6 +382,23 @@ Login URL: {{login_url}}`,
     color: '#6366f1',
     emoji: '🔑',
   },
+  {
+    key: 'kra_batch_assigned',
+    label: 'Batch KRA Assignment',
+    description: 'Sent to employee & manager when multiple KRAs are assigned at once',
+    subject: '[PMS] {{kra_count}} KRA(s) Assigned - {{review_period}} {{review_year}}',
+    bodyTemplate: `Hi {{recipient_name}},
+
+{{kra_count}} KRA(s) have been assigned to {{employee_name}} for {{review_period}} {{review_year}}.
+
+{{kra_table}}
+
+Total Weightage: {{total_weightage}}
+
+Please log in to review the assignments.`,
+    color: '#3b82f6',
+    emoji: '📋',
+  },
 ];
 
 const PLACEHOLDERS = [
@@ -407,6 +424,10 @@ const PLACEHOLDERS = [
   { key: '{{generated_password}}', description: 'Generated password (password rollout only)' },
   { key: '{{login_email}}', description: 'User login email (password rollout only)' },
   { key: '{{login_url}}', description: 'Application login URL (password rollout only)' },
+  { key: '{{kra_count}}', description: 'Number of KRAs assigned (batch assignment only)' },
+  { key: '{{kra_table}}', description: 'Auto-generated HTML table of assigned KRAs (batch assignment only, not editable)' },
+  { key: '{{employee_name}}', description: 'Name of employee receiving KRAs (batch assignment only)' },
+  { key: '{{total_weightage}}', description: 'Total weightage of assigned KRAs (batch assignment only)' },
 ];
 
 export function EmailTemplateEditor() {

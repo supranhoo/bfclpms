@@ -24,7 +24,8 @@ export type EmailEventType =
   | 'observation_raised'
   | 'observation_reply'
   | 'observation_resolved'
-  | 'password_rollout';
+  | 'password_rollout'
+  | 'kra_batch_assigned';
 
 export type EmailProvider = 'resend' | 'smtp' | 'microsoft_graph';
 export type SmtpSecurity = 'tls' | 'starttls' | 'none';
