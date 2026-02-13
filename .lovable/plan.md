@@ -1,105 +1,82 @@
 
-# RCA and CAPA: Workflow Configuration Not Being Applied
+# Fix: Workflow Engine Props Not Passed to Child Components
 
 ## Root Cause Analysis (RCA)
 
-The **workflow configuration system is entirely disconnected from actual status transitions**. While the admin UI allows assigning workflow templates (e.g., "Full 5-Stage Review" which skips Manager Check for Jaspal), every status transition in the application is **hardcoded** to the full 6-stage pipeline.
+The previous CAPA correctly built the workflow engine and wired it into `UnifiedScorecard.tsx` for computing `reviewableStatuses`, `forwardStatus`, and `sendBackTargets`. However, **two critical prop-passing gaps** prevent the fix from actually working:
 
-### Evidence
+### Gap 1: `KpiDetailsTable` missing `workflowStages` prop (PRIMARY BUG)
 
-- **Jaspal's config**: Assigned template "Full 5-Stage Review" (`skip_manager`) with stages: `kra_set -> self_review -> audit -> management_review -> approved` (no `manager_check`)
-- **Actual behavior**: When Jaspal's KPIs move from `self_review`, they go to `manager_check` -- a stage that shouldn't exist in her workflow
-- **The helper functions `getNextWorkflowStatus()` and `useEmployeeWorkflowStages()` are defined but NEVER imported or called** anywhere in the transition logic
+In `UnifiedScorecard.tsx` line 805, `KpiDetailsTable` is rendered **without** the `workflowStages` prop:
 
-### Where Hardcoding Exists (7 Affected Areas)
+```tsx
+<KpiDetailsTable
+  kpis={sortedKpis}
+  submissionMap={submissionMap}
+  viewType={viewType}
+  // ... other props
+  // workflowStages={effectiveStages}  <-- MISSING!
+/>
+```
 
-| Location | Problem |
-|---|---|
-| `UnifiedScorecard.tsx` (VIEW_LEVEL_CONFIG) | Manager always forwards to `manager_check`, Auditor always expects `manager_check` as input |
-| `EmployeeScorecard.tsx` (approve handler) | Hardcodes `status: 'manager_check'` on manager approval |
-| `useKpis.ts` (submit/approve mutations) | Hardcodes `self_review` and `manager_check` transitions |
-| `WorkflowProgressTracker.tsx` | Always renders all 6 stages regardless of employee's template |
-| `KpiJourneySection.tsx` | Always shows all 4 reviewer stages (Self/Manager/Auditor/Management) |
-| `EmployeeSelectorGrid.tsx` | Hardcodes status filters (`self_review`, `manager_check`, etc.) |
-| `KpiDetailsTable.tsx` | Hardcodes which statuses are editable per view level |
+Because `workflowStages` is undefined, `KpiDetailsTable` defaults to `DEFAULT_WORKFLOW_STAGES` (full 6-stage pipeline). The `canReviewKpi` function then sees `manager_check` in the stages and requires `kpiStatus === 'manager_check'` for audit -- so Jaspal's `self_review` KPIs show "View" instead of "Review".
+
+### Gap 2: `WorkflowProgressTracker` missing `workflowStages` prop
+
+In `UnifiedScorecard.tsx` line 759:
+```tsx
+<WorkflowProgressTracker kpis={kpis || []} queries={queries || []} />
+```
+No `workflowStages` prop, so the tracker always shows all 6 stages including Manager Check, even for Jaspal who has a skip-manager workflow.
+
+### Gap 3: Legacy pages completely untouched
+
+`AuditPanel.tsx` and `AuditScorecard.tsx` (legacy standalone pages) were never updated with the workflow engine. They hardcode `manager_check` for pending counts, stats, and status transitions. While the sidebar now routes to `/dashboard?view=audit` (which uses the unified path), these legacy pages still exist and could be accessed via direct URL.
 
 ---
 
-## Corrective and Preventive Action (CAPA)
+## CAPA (Corrective Actions)
 
-### Phase 1: Core Workflow Engine (Critical)
+### 1. Pass `workflowStages` to `KpiDetailsTable` in `UnifiedScorecard.tsx`
 
-**1.1 Create a workflow resolution utility** (`src/lib/workflowEngine.ts`)
-- A pure function `resolveNextStatus(currentStatus, employeeWorkflowStages)` that returns the correct next status by looking up the employee's assigned stages
-- A function `resolveSendBackTargets(currentStatus, employeeWorkflowStages)` that returns only valid send-back options based on which stages exist in the workflow
-- A function `getVisibleStages(employeeWorkflowStages)` that returns only the stages to display in UI
+Add the `workflowStages={effectiveStages}` prop at line ~805. This is the single-line fix that resolves the primary bug -- the "Review" button will now appear for Jaspal's `self_review` KPIs in audit view.
 
-**1.2 Update UnifiedScorecard.tsx**
-- Fetch the employee's workflow stages using `useEmployeeWorkflowStages(employee.id)`
-- Replace hardcoded `forwardStatus` with dynamic resolution: call `resolveNextStatus(currentStatus, stages)` before each transition
-- Dynamically compute `pendingStatus` and `reviewableStatuses` from the workflow stages
-- Filter `sendBackTargets` to only show stages that exist in the employee's workflow
+### 2. Pass `workflowStages` to `WorkflowProgressTracker` in `UnifiedScorecard.tsx`
 
-**1.3 Update EmployeeScorecard.tsx**
-- Same pattern: fetch workflow stages, replace hardcoded `'manager_check'` with `resolveNextStatus('self_review', stages)`
+Add `workflowStages={effectiveStages}` at line ~759 so the progress tracker only shows stages relevant to the employee's workflow.
 
-**1.4 Update useKpis.ts (submit mutations)**
-- The `useSubmitSelfReview` mutation hardcodes `status: 'self_review'` -- this is correct (self_review is always the post-submission status)
-- The manager approval mutation hardcodes `'manager_check'` -- this needs to use the workflow engine
-- Add an optional `workflowStages` parameter to the manager approval mutation, or resolve it inside the mutation
+### 3. Update legacy `AuditScorecard.tsx`
 
-### Phase 2: UI Display (Important)
+Wire in the workflow engine:
+- Import and call `useEmployeeWorkflowStages(employee.id)`
+- Update `pendingAuditCount` (line 203) to include `self_review` for skip-manager workflows
+- Update the `submitAuditReview` mutation to use `resolveForwardStatus` instead of hardcoded `management_review`
+- Update `sendBack` mutation to use `resolveSendBackStatus`
+- Pass `workflowStages` to `WorkflowProgressTracker` and `KpiDetailsTable`
 
-**2.1 Update WorkflowProgressTracker.tsx**
-- Accept an optional `workflowStages` prop
-- When provided, filter `stageConfig` to only show stages present in the workflow
-- On the Dashboard (self view), use the logged-in employee's workflow
-- On reviewer views, use the selected employee's workflow
+### 4. Update legacy `AuditPanel.tsx`
 
-**2.2 Update KpiJourneySection.tsx**
-- Accept a `workflowStages` prop
-- Filter `getVisibleStages()` to only return stages that exist in the employee's workflow
-- Update `getStageStatus()` to work correctly with variable-length pipelines
+- Update `pendingAudit` stat (line 89) to include `self_review` KPIs
+- Update status filter (line 67) to include `self_review` in pending
+- Update `getEmployeeKpiStats` (line 132) to include `self_review` in pending count
 
-**2.3 Update EmployeeSelectorGrid.tsx**
-- The stat cards (Pending Review, Pending Audit, etc.) should account for workflows where certain stages don't exist
-- KPIs for employees on `skip_manager` workflow should not appear in "Pending Audit" as `manager_check` -- they should appear as `self_review` going directly to audit
+### 5. Update `DOCUMENTATION.md`
 
-### Phase 3: Edge Cases and Validation
-
-**3.1 Send-back logic**
-- When an auditor sends back a KPI, the send-back targets should only include stages that exist in the employee's workflow
-- For `skip_manager` workflow: Auditor should only see "Send back to Employee" (no Manager option)
-
-**3.2 Self-review submission**
-- After employee submits self-review, the status should advance to the **next stage in their workflow**, not always `self_review`
-- For `skip_manager`: after self-review submission, status should indicate readiness for Audit (the KPI stays at `self_review` status which is correct -- the auditor's `pendingStatus` needs to include `self_review` when manager_check is skipped)
-
-**3.3 RLS policy alignment**
-- Verify that the database RLS policies allow auditors to update KPIs at `self_review` status (not just `manager_check`) when the workflow skips manager
-
-### Phase 4: Documentation
-
-**4.1 Update DOCUMENTATION.md**
-- Document the workflow engine utility and how dynamic workflow resolution works
-- Document which hooks to use when transitioning KPI statuses
+Document the prop-passing requirements and the complete list of files that must pass `workflowStages`.
 
 ---
 
 ## Technical Details
 
-### Files to Create
-- `src/lib/workflowEngine.ts` -- Pure utility functions for workflow resolution
+### Files to modify:
+- `src/components/review/UnifiedScorecard.tsx` -- Add `workflowStages` prop to `KpiDetailsTable` and `WorkflowProgressTracker`
+- `src/components/review/AuditScorecard.tsx` -- Wire in workflow engine for dynamic transitions
+- `src/pages/AuditPanel.tsx` -- Include `self_review` in audit pending counts/filters
+- `DOCUMENTATION.md` -- Update workflow integration docs
 
-### Files to Modify
-- `src/components/review/UnifiedScorecard.tsx` -- Dynamic status transitions based on employee workflow
-- `src/components/review/EmployeeScorecard.tsx` -- Dynamic status transitions
-- `src/hooks/useKpis.ts` -- Workflow-aware mutations
-- `src/components/review/WorkflowProgressTracker.tsx` -- Filter displayed stages
-- `src/components/review/KpiJourneySection.tsx` -- Filter displayed stages
-- `src/components/review/EmployeeSelectorGrid.tsx` -- Workflow-aware stat filtering
-- `src/components/review/KpiDetailsTable.tsx` -- Workflow-aware editability
-- `DOCUMENTATION.md` -- Updated docs
-
-### Key Design Decision
-The workflow stages array from the database becomes the **single source of truth** for all transition logic. Every component that transitions or displays statuses must consult the employee's workflow stages rather than relying on a hardcoded 6-stage pipeline.
+### Verification
+After the fix, Jaspal's KPIs (status: `self_review`, workflow: `skip_manager`) should:
+1. Appear as "pending" in the audit employee list
+2. Show "Review" button (not "View") in the KPI table
+3. Display only 5 stages in the workflow tracker (no Manager Check)
+4. Forward correctly to `management_review` on approval
