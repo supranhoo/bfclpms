@@ -1332,6 +1332,8 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - Opens `AdminStatusStepBackDialog` showing current status, target (previous) status, KPI name, and employee name
   - **Mandatory reason field** required for audit compliance
   - On submit: updates `kpis.status`, inserts `ADMIN_STATUS_STEP_BACK` entry in `kpi_audit_logs`, and notifies the affected employee
+  - **Submission sync:** When stepping back to `kra_set`, the hook also resets `review_submissions.kpi_status` to `open` so the employee can resubmit. For other target stages, `kpi_status` remains `submitted`.
+  - **Safety-net trigger (`trg_sync_submission_on_kra_set`):** A database trigger on `kpis` automatically resets `review_submissions.kpi_status` to `open` whenever `kpis.status` transitions to `kra_set`, preventing any code path from causing a desync.
   - Status step-back mapping: `approved` → `management_review` → `audit` → `manager_check` → `self_review` → `kra_set`
 - Audit logging for all changes
 - **Copy KRAs (`CopyKrasDialog`):** Replicate KRAs from one employee to another without re-drafting.
