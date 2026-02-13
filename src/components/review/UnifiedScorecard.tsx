@@ -682,7 +682,11 @@ export function UnifiedScorecard({
   };
 
   // Determine view type for KpiDetailsTable
-  const viewType = viewLevel === 'manager' ? 'team-review' : viewLevel === 'auditor' ? 'audit' : 'management';
+  const viewType = viewLevel === 'manager' ? 'team-review'
+               : viewLevel === 'auditor' ? 'audit'
+               : viewLevel === 'skip_level' ? 'skip-level-review'
+               : viewLevel === 'hr_pms' ? 'hr-pms-review'
+               : 'management';
 
   // Check if KPI is reviewable at current level
   const isReviewable = (kpi: KPI) => config.reviewableStatuses.includes(kpi.status || '');

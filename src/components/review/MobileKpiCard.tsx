@@ -16,7 +16,7 @@ import {
   Undo2, ChevronDown, ChevronUp 
 } from 'lucide-react';
 
-export type MobileKpiViewType = 'my-kpis' | 'dashboard' | 'team-review' | 'audit' | 'management';
+export type MobileKpiViewType = 'my-kpis' | 'dashboard' | 'team-review' | 'audit' | 'management' | 'skip-level-review' | 'hr-pms-review';
 
 interface MobileKpiCardProps {
   kpi: KPI;
