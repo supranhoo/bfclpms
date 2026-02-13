@@ -2619,6 +2619,7 @@ The application uses responsive design patterns to ensure a good user experience
 | **Audit Panel** | Same pattern as Team Review |
 | **Management Review** | Same pattern as Team Review |
 | **Query Inbox** | Tabs scrollable, table becomes `MobileInboxList` cards |
+| **Review Timeline** | Dialog uses `p-4` padding, workflow stages show icons only (labels hidden), timeline cards stack timestamp below content, KRA badge truncated to 150px. ScrollArea wrapped in `flex-1 min-h-0 overflow-hidden` div with `h-full` to ensure Radix scrollbar activates in flex layouts. |
 
 ### Scorecard Components (Employee, Audit, Management)
 
