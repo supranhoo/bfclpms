@@ -282,7 +282,7 @@ The system includes a full-database backup and restore feature accessible from *
 
 | Category | Setting Key | Default | Range | Description |
 |----------|-------------|---------|-------|-------------|
-| **submission** | `daily_submission_window_days` | 2 | 1-7 days | Days employees can backfill daily entries |
+| **submission** | `daily_submission_window_days` | 2 | 1-60 days | Number of past days (including today) employees can submit daily KPI entries. The SubPeriodSelector shows all dates in the review month; only dates within this window are enabled for selection. |
 | **submission** | `resubmission_grace_hours` | 0 | 0-72 hours | Grace period for penalty-free resubmission |
 | **submission** | `working_days_per_month` | 22 | 18-26 days | Standard working days for missed days penalty |
 | **sla** | `query_sla_warning_days` | 5 | 1-14 days | Days before query is flagged as high priority |

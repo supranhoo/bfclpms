@@ -103,38 +103,41 @@ export function getSubFrequency(frequency: FrequencyType): string {
 }
 
 /**
- * Get available sub-periods for Daily frequency
- * Returns today and yesterday as options
+ * Get available sub-periods for Daily frequency.
+ * Returns all dates in the review month; dates within the submission window are enabled.
+ * @param windowDays Number of past days (from today) that are open for submission (default 2 = today + yesterday)
  */
-export function getDailySubPeriods(currentDate: Date, reviewMonth: string, reviewYear: number): SubPeriodOption[] {
+export function getDailySubPeriods(currentDate: Date, reviewMonth: string, reviewYear: number, windowDays: number = 2): SubPeriodOption[] {
   const today = currentDate;
-  const yesterday = subDays(today, 1);
+  const monthIndex = getMonthNumber(reviewMonth) - 1;
+  const daysInMonth = getDaysInMonth(new Date(reviewYear, monthIndex));
   
-  const todayMonth = format(today, 'MMMM');
-  const todayYear = today.getFullYear();
-  const yesterdayMonth = format(yesterday, 'MMMM');
-  const yesterdayYear = yesterday.getFullYear();
+  // Calculate the earliest date that falls within the submission window
+  const windowStart = subDays(today, windowDays - 1); // windowDays=2 means today + yesterday
   
   const options: SubPeriodOption[] = [];
   
-  // Only show dates that belong to the review month/year
-  if (todayMonth === reviewMonth && todayYear === reviewYear) {
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(reviewYear, monthIndex, day);
+    
+    // Don't show future dates
+    if (isAfter(date, today)) break;
+    
+    const isWithinWindow = !isBefore(date, windowStart);
+    const isToday = isSameDay(date, today);
+    
+    let label = format(date, 'd MMM');
+    if (isToday) label += ' (Today)';
+    
     options.push({
-      value: format(today, 'yyyy-MM-dd'),
-      label: format(today, 'd MMM') + ' (Today)',
-      isEnabled: true,
+      value: format(date, 'yyyy-MM-dd'),
+      label,
+      isEnabled: isWithinWindow,
     });
   }
   
-  if (yesterdayMonth === reviewMonth && yesterdayYear === reviewYear) {
-    options.push({
-      value: format(yesterday, 'yyyy-MM-dd'),
-      label: format(yesterday, 'd MMM') + ' (Yesterday)',
-      isEnabled: true,
-    });
-  }
-  
-  return options;
+  // Show most recent dates first for convenience
+  return options.reverse();
 }
 
 /**

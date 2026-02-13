@@ -9,6 +9,7 @@ import {
   SubPeriodOption 
 } from '@/lib/frequencyUtils';
 import { SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
+import { useDailySubmissionWindow } from '@/hooks/useWorkflowSettings';
 
 interface SubPeriodSelectorProps {
   frequency: FrequencyType | string | null;
@@ -32,6 +33,7 @@ export function SubPeriodSelector({
   submissions = [],
 }: SubPeriodSelectorProps) {
   const currentDate = new Date();
+  const windowDays = useDailySubmissionWindow();
   
   // Create a set of submitted sub-period values for quick lookup
   const submittedValues = useMemo(() => {
@@ -44,7 +46,7 @@ export function SubPeriodSelector({
     let options: SubPeriodOption[];
     switch (frequency) {
       case 'Daily':
-        options = getDailySubPeriods(currentDate, reviewMonth, reviewYear);
+        options = getDailySubPeriods(currentDate, reviewMonth, reviewYear, windowDays);
         break;
       case 'Weekly':
         options = getWeeklySubPeriods(currentDate, reviewMonth, reviewYear);
@@ -58,7 +60,7 @@ export function SubPeriodSelector({
       ...opt,
       isSubmitted: submittedValues.has(opt.value),
     }));
-  }, [frequency, reviewMonth, reviewYear, currentDate.toDateString(), submittedValues]);
+  }, [frequency, reviewMonth, reviewYear, currentDate.toDateString(), submittedValues, windowDays]);
 
   if (frequency !== 'Daily' && frequency !== 'Weekly') {
     return null;
