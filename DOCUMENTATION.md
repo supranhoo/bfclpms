@@ -2951,6 +2951,23 @@ The system logs every email sent by the `send-email-notification` edge function 
 
 The workflow engine provides pure utility functions that resolve status transitions dynamically based on an employee's assigned workflow template. This replaces all hardcoded 6-stage pipeline logic.
 
+**Status Convention:** Each status name means "this stage is complete, KPI is waiting for the next reviewer":
+
+| Status | Meaning |
+|---|---|
+| `self_review` | Employee submitted → waiting for **manager** |
+| `manager_check` | Manager checked → waiting for **skip-level** (or auditor in 6-stage) |
+| `skip_level_check` | Skip-level checked → waiting for **HR PMS** |
+| `hr_pms_review` | HR PMS reviewed → waiting for **auditor** |
+| `audit` | Auditor reviewed → waiting for **management** |
+| `management_review` | Management reviewed → waiting for **final approval** |
+
+**Critical Pattern:** Each reviewer sees KPIs at the **preceding** stage's status and forwards to their **own** stage:
+- Manager sees `self_review` → forwards to `manager_check`
+- Skip-level sees `manager_check` → forwards to `skip_level_check`
+- HR PMS sees `skip_level_check` → forwards to `hr_pms_review`
+- Auditor sees `hr_pms_review` (or `manager_check` in 6-stage) → forwards to next stage after `audit`
+
 **Key Functions:**
 
 | Function | Purpose |
@@ -2959,11 +2976,11 @@ The workflow engine provides pure utility functions that resolve status transiti
 | `resolvePreviousStatus(current, stages)` | Returns the previous status (for send-back) |
 | `resolveSendBackTargets(viewLevel, stages)` | Returns valid send-back options filtered by workflow |
 | `resolveSendBackStatus(target, viewLevel, stages)` | Returns the correct status to set when sending back |
-| `resolvePendingStatuses(viewLevel, stages)` | Returns statuses a reviewer should see as "pending" |
-| `resolveForwardStatus(viewLevel, stages)` | Returns the status to set after approval |
-| `resolveReviewableStatuses(viewLevel, stages)` | Returns which statuses a reviewer can act on |
+| `resolvePendingStatuses(viewLevel, stages)` | Returns statuses a reviewer should see as "pending" — dynamically resolved from preceding stage |
+| `resolveForwardStatus(viewLevel, stages)` | Returns the status to set after approval — the reviewer's own stage name |
+| `resolveReviewableStatuses(viewLevel, stages)` | Returns which statuses a reviewer can act on — same as pending statuses |
 | `getVisibleJourneyStages(stages)` | Returns journey stage keys for UI display |
-| `canReviewKpi(status, viewType, stages)` | Determines if a KPI is reviewable |
+| `canReviewKpi(status, viewType, stages)` | Determines if a KPI is reviewable — uses dynamic preceding-stage resolution |
 | `hasStage(stage, stages)` | Checks if a stage exists in the workflow |
 
 **Workflow Configuration:**
@@ -2979,6 +2996,13 @@ The workflow engine provides pure utility functions that resolve status transiti
 - WorkflowProgressTracker shows 5 cards instead of 6
 - KpiJourneySection shows 3 review stages (Self, Auditor, Management)
 
+**Example — 8-Stage Workflow:**
+- Stages: `['kra_set', 'self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved']`
+- Manager approves → status becomes `manager_check` → skip-level sees it as pending
+- Skip-level approves → status becomes `skip_level_check` → HR PMS sees it as pending
+- HR PMS approves → status becomes `hr_pms_review` → auditor sees it as pending
+- Auditor's send-back targets include HR PMS, Skip-Level, Manager, and Employee
+
 **Components Using Workflow Engine (MUST pass `workflowStages` prop):**
 - `UnifiedScorecard.tsx` — Dynamic forward/send-back status resolution; passes `workflowStages={effectiveStages}` to `KpiDetailsTable`, `WorkflowProgressTracker`
 - `AuditScorecard.tsx` — Legacy audit page; uses `useEmployeeWorkflowStages` for dynamic transitions, pending counts, send-back targets; passes `workflowStages` to `KpiDetailsTable`, `WorkflowProgressTracker`
@@ -2988,7 +3012,7 @@ The workflow engine provides pure utility functions that resolve status transiti
 - `WorkflowProgressTracker.tsx` — Accepts optional `workflowStages` prop to filter displayed stages
 - `KpiJourneySection.tsx` — Accepts optional `workflowStages` prop to filter journey cards
 - `KpiDetailsTable.tsx` — Accepts optional `workflowStages` prop for workflow-aware reviewability (`canReviewKpi`)
-- `EmployeeSelectorGrid.tsx` — Audit view includes `self_review` in pending count for skip-manager employees
+- `EmployeeSelectorGrid.tsx` — Uses dynamic preceding-stage resolution for pending counts per view level
 
 **⚠️ Critical:** Every component rendering `KpiDetailsTable`, `WorkflowProgressTracker`, or `KpiReviewPanel` MUST pass the `workflowStages` prop. Omitting it causes fallback to the default 6-stage pipeline, which breaks skip-manager workflows.
 

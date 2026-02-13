@@ -129,16 +129,19 @@ export function resolvePendingStatuses(
   switch (viewLevel) {
     case 'manager':
       return ['self_review'];
-    case 'skip_level':
-      return ['skip_level_check'];
-    case 'hr_pms':
-      return ['hr_pms_review'];
-    case 'auditor':
-      // If manager_check is skipped, auditor picks up from self_review
-      if (!workflowStages.includes('manager_check')) {
-        return ['self_review', 'audit'];
-      }
-      return ['manager_check', 'audit'];
+    case 'skip_level': {
+      const idx = workflowStages.indexOf('skip_level_check');
+      return idx > 0 ? [workflowStages[idx - 1]] : ['manager_check'];
+    }
+    case 'hr_pms': {
+      const idx = workflowStages.indexOf('hr_pms_review');
+      return idx > 0 ? [workflowStages[idx - 1]] : ['skip_level_check'];
+    }
+    case 'auditor': {
+      const idx = workflowStages.indexOf('audit');
+      const preceding = idx > 0 ? workflowStages[idx - 1] : 'manager_check';
+      return [preceding, 'audit'];
+    }
     case 'management':
       return ['management_review'];
     default:
@@ -157,9 +160,9 @@ export function resolveForwardStatus(
     case 'manager':
       return 'manager_check';
     case 'skip_level':
-      return resolveNextStatus('skip_level_check', workflowStages) || 'hr_pms_review';
+      return 'skip_level_check';
     case 'hr_pms':
-      return resolveNextStatus('hr_pms_review', workflowStages) || 'audit';
+      return 'hr_pms_review';
     case 'auditor':
       return resolveNextStatus('audit', workflowStages) || 'management_review';
     case 'management':
@@ -179,15 +182,19 @@ export function resolveReviewableStatuses(
   switch (viewLevel) {
     case 'manager':
       return ['self_review'];
-    case 'skip_level':
-      return ['skip_level_check'];
-    case 'hr_pms':
-      return ['hr_pms_review'];
-    case 'auditor':
-      if (!workflowStages.includes('manager_check')) {
-        return ['self_review', 'audit'];
-      }
-      return ['manager_check', 'audit'];
+    case 'skip_level': {
+      const idx = workflowStages.indexOf('skip_level_check');
+      return idx > 0 ? [workflowStages[idx - 1]] : ['manager_check'];
+    }
+    case 'hr_pms': {
+      const idx = workflowStages.indexOf('hr_pms_review');
+      return idx > 0 ? [workflowStages[idx - 1]] : ['skip_level_check'];
+    }
+    case 'auditor': {
+      const idx = workflowStages.indexOf('audit');
+      const preceding = idx > 0 ? workflowStages[idx - 1] : 'manager_check';
+      return [preceding, 'audit'];
+    }
     case 'management':
       return ['management_review'];
     default:
@@ -254,15 +261,21 @@ export function canReviewKpi(
       return kpiStatus === 'kra_set';
     case 'team-review':
       return kpiStatus === 'self_review';
-    case 'skip-level-review':
-      return kpiStatus === 'skip_level_check';
-    case 'hr-pms-review':
-      return kpiStatus === 'hr_pms_review';
-    case 'audit':
-      if (!workflowStages.includes('manager_check')) {
-        return kpiStatus === 'self_review' || kpiStatus === 'audit';
-      }
-      return kpiStatus === 'manager_check' || kpiStatus === 'audit';
+    case 'skip-level-review': {
+      const idx = workflowStages.indexOf('skip_level_check');
+      const preceding = idx > 0 ? workflowStages[idx - 1] : 'manager_check';
+      return kpiStatus === preceding;
+    }
+    case 'hr-pms-review': {
+      const idx = workflowStages.indexOf('hr_pms_review');
+      const preceding = idx > 0 ? workflowStages[idx - 1] : 'skip_level_check';
+      return kpiStatus === preceding;
+    }
+    case 'audit': {
+      const idx = workflowStages.indexOf('audit');
+      const preceding = idx > 0 ? workflowStages[idx - 1] : 'manager_check';
+      return kpiStatus === preceding || kpiStatus === 'audit';
+    }
     case 'management':
       return kpiStatus === 'management_review';
     default:
