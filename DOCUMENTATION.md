@@ -1325,7 +1325,14 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - **Audit Logs Page:** Includes dedicated "On Behalf Of" column showing employee name and role level
   - **Audit Trail Report:** Exports include "On Behalf Of", "On Behalf Role", and "Admin Reason" columns
   - **Admin Actions Stats Card:** New stat card showing count of admin/on-behalf actions for the period
-  - Admin action types include: `ADMIN_DATA_ENTRY_SELF`, `ADMIN_DATA_ENTRY_MANAGER`, `ADMIN_DATA_ENTRY_AUDITOR`, `ADMIN_DATA_ENTRY_MANAGEMENT`, `ADMIN_DAILY_ENTRY_OVERRIDE`, `ADMIN_STATUS_OVERRIDE`, `ADMIN_OVERRIDE`
+  - Admin action types include: `ADMIN_DATA_ENTRY_SELF`, `ADMIN_DATA_ENTRY_MANAGER`, `ADMIN_DATA_ENTRY_AUDITOR`, `ADMIN_DATA_ENTRY_MANAGEMENT`, `ADMIN_DAILY_ENTRY_OVERRIDE`, `ADMIN_STATUS_OVERRIDE`, `ADMIN_OVERRIDE`, `ADMIN_STATUS_STEP_BACK`
+- **Admin KPI Status Step-Back:**
+  - Admins can move any KPI's workflow status **one step backward** via the "Step Back" button (undo icon) on expanded KPI rows in the All KPIs page
+  - The button is only visible when the KPI is not at `kra_set` (the first stage)
+  - Opens `AdminStatusStepBackDialog` showing current status, target (previous) status, KPI name, and employee name
+  - **Mandatory reason field** required for audit compliance
+  - On submit: updates `kpis.status`, inserts `ADMIN_STATUS_STEP_BACK` entry in `kpi_audit_logs`, and notifies the affected employee
+  - Status step-back mapping: `approved` → `management_review` → `audit` → `manager_check` → `self_review` → `kra_set`
 - Audit logging for all changes
 - **Copy KRAs (`CopyKrasDialog`):** Replicate KRAs from one employee to another without re-drafting.
   - **Step 1 – Source:** Select source employee, review period, and year. KRAs auto-load.
@@ -1849,6 +1856,7 @@ Each KPI gets a dedicated card-style layout similar to the web UI's ReviewTrailC
 | Admin status change | Employee | `admin_status_change` | `admin_status_change` |
 | Admin data entry | Employee | `admin_data_entry` | `admin_data_entry` |
 | Admin data override | Employee | `admin_data_override` | `admin_data_override` |
+| Admin status step-back | Employee | `admin_status_step_back` | `admin_status_step_back` |
 | Org KPI sent back | Data Owner(s) | `org_kpi_sent_back` | `org_kpi_sent_back` |
 
 **Observation Notifications:**

@@ -329,6 +329,117 @@ export function useAdminSubmitSubPeriod() {
   });
 }
 
+// ========== Status Step-Back ==========
+
+const STATUS_ORDER: Array<Database['public']['Enums']['review_status']> = [
+  'kra_set',
+  'self_review',
+  'manager_check',
+  'audit',
+  'management_review',
+  'approved',
+];
+
+export function getPreviousStatus(
+  current: Database['public']['Enums']['review_status']
+): Database['public']['Enums']['review_status'] | null {
+  const idx = STATUS_ORDER.indexOf(current);
+  return idx > 0 ? STATUS_ORDER[idx - 1] : null;
+}
+
+interface AdminStepBackParams {
+  kpi_id: string;
+  employee_id: string;
+  current_status: Database['public']['Enums']['review_status'];
+  target_status: Database['public']['Enums']['review_status'];
+  reason: string;
+  kpi_name: string;
+}
+
+/**
+ * Hook for admin to move a KPI's workflow status one step backward.
+ * Creates audit trail and notifies the employee.
+ */
+export function useAdminStatusStepBack() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      kpi_id,
+      employee_id,
+      current_status,
+      target_status,
+      reason,
+      kpi_name,
+    }: AdminStepBackParams) => {
+      if (!user?.id) throw new Error('User not authenticated');
+
+      // 1. Update KPI status
+      const { data, error } = await supabase
+        .from('kpis')
+        .update({ status: target_status, updated_at: new Date().toISOString() })
+        .eq('id', kpi_id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // 2. Insert audit log
+      const { error: auditError } = await supabase.from('kpi_audit_logs').insert({
+        kpi_id,
+        action: 'ADMIN_STATUS_STEP_BACK',
+        performed_by: user.id,
+        on_behalf_of: employee_id,
+        on_behalf_role: 'admin',
+        old_value: { status: current_status } as any,
+        new_value: { status: target_status } as any,
+        metadata: {
+          reason,
+          source: 'admin_status_step_back',
+          from_status: current_status,
+          to_status: target_status,
+        },
+      });
+
+      if (auditError) console.error('Failed to create audit log:', auditError);
+
+      // 3. Notify employee
+      const { error: notifyError } = await supabase.from('notifications').insert({
+        user_id: employee_id,
+        type: 'admin_status_step_back',
+        title: 'KPI Status Moved Back by Admin',
+        message: `Admin moved your KPI "${kpi_name}" from ${current_status} back to ${target_status}. Reason: ${reason}`,
+        kpi_id,
+        related_user_id: user.id,
+        metadata: { reason, from_status: current_status, to_status: target_status },
+      });
+
+      if (notifyError) console.error('Failed to create notification:', notifyError);
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      toast({
+        title: 'Status stepped back',
+        description: 'Audit log created and employee notified.',
+      });
+    },
+    onError: (error) => {
+      console.error('Admin status step-back failed:', error);
+      toast({
+        title: 'Failed to step back status',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
 /**
  * Hook to fetch existing review submission for a KPI
  */
