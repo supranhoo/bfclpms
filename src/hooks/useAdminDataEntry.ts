@@ -386,7 +386,19 @@ export function useAdminStatusStepBack() {
 
       if (error) throw error;
 
-      // 2. Insert audit log
+      // 2. If stepping back to kra_set, reset submission so employee can resubmit
+      if (target_status === 'kra_set') {
+        const { error: subError } = await supabase
+          .from('review_submissions')
+          .update({ kpi_status: 'open', updated_at: new Date().toISOString() })
+          .eq('kpi_id', kpi_id);
+
+        if (subError) {
+          console.error('Failed to reset review_submissions.kpi_status:', subError);
+        }
+      }
+
+      // 3. Insert audit log
       const { error: auditError } = await supabase.from('kpi_audit_logs').insert({
         kpi_id,
         action: 'ADMIN_STATUS_STEP_BACK',
