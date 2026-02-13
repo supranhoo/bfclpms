@@ -39,6 +39,7 @@ const KRALibrary = lazy(() => import("./pages/admin/KRALibrary"));
 const TemplateBundles = lazy(() => import("./pages/admin/TemplateBundles"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const PIPManagement = lazy(() => import("./pages/admin/PIPManagement"));
+const EmailLogs = lazy(() => import("./pages/admin/EmailLogs"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -241,6 +242,11 @@ const App = () => (
                 <Route path="/admin/pip" element={
                   <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>
                     <PIPManagement />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/email-logs" element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <EmailLogs />
                   </ProtectedRoute>
                 } />
               </Route>

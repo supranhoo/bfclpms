@@ -572,6 +572,33 @@ const handler = async (req: Request): Promise<Response> => {
     const body = await req.json();
     console.log("Received request:", JSON.stringify(body));
 
+    // Helper: fire-and-forget email log insert
+    const logEmail = async (logData: {
+      event_type: string;
+      recipient_email: string;
+      recipient_name?: string;
+      subject?: string;
+      status: string;
+      error_message?: string;
+      provider?: string;
+      metadata?: Record<string, any>;
+    }) => {
+      try {
+        await supabase.from("email_logs").insert({
+          event_type: logData.event_type,
+          recipient_email: logData.recipient_email,
+          recipient_name: logData.recipient_name || null,
+          subject: logData.subject || null,
+          status: logData.status,
+          error_message: logData.error_message || null,
+          provider: logData.provider || null,
+          metadata: logData.metadata || null,
+        });
+      } catch (logErr) {
+        console.warn("Failed to insert email log:", logErr);
+      }
+    };
+
     // Handle SMTP connection test
     if (body.smtp_test === true) {
       const { smtp_host, smtp_port, smtp_security, smtp_username, smtp_from_address, smtp_from_name, recipient_email } = body as SmtpTestRequest;
@@ -766,6 +793,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     const isEnabled = enabledSetting?.setting_value?.replace?.(/^"|"$/g, "") === "enabled";
     if (!isEnabled) {
       console.log("Email notifications are disabled");
+      await logEmail({ event_type, recipient_email, recipient_name, status: 'skipped', metadata: { reason: 'Email notifications disabled' } });
       return new Response(JSON.stringify({ skipped: true, reason: "Email notifications disabled" }), {
         status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -793,6 +821,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
 
     if (!enabledEvents.includes(event_type)) {
       console.log(`Event type ${event_type} is not enabled`);
+      await logEmail({ event_type, recipient_email, recipient_name, status: 'skipped', metadata: { reason: `Event type ${event_type} not enabled` } });
       return new Response(JSON.stringify({ skipped: true, reason: `Event type ${event_type} not enabled` }), {
         status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -907,55 +936,74 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
 
     console.log(`Sending ${event_type} email via ${provider} to ${recipient_email}`);
 
-    if (provider === 'smtp') {
-      const smtpPassword = await getSmtpPassword(supabase);
-      if (!smtpPassword) {
-        console.error("SMTP password not configured");
-        return new Response(JSON.stringify({ error: "SMTP password not configured. Please set it in System Settings → Email." }), {
-          status: 500,
+    const logMeta: Record<string, any> = { review_period, review_year, employee_name };
+    if (kra_count) logMeta.kra_count = kra_count;
+
+    try {
+      if (provider === 'smtp') {
+        const smtpPassword = await getSmtpPassword(supabase);
+        if (!smtpPassword) {
+          console.error("SMTP password not configured");
+          await logEmail({ event_type, recipient_email, recipient_name, subject, status: 'failed', error_message: 'SMTP password not configured', provider, metadata: logMeta });
+          return new Response(JSON.stringify({ error: "SMTP password not configured. Please set it in System Settings → Email." }), {
+            status: 500,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        await sendViaSmtp(
+          parseValue(settingsMap.smtp_host),
+          parseInt(parseValue(settingsMap.smtp_port)) || 587,
+          (parseValue(settingsMap.smtp_security) || 'tls') as 'tls' | 'starttls' | 'none',
+          parseValue(settingsMap.smtp_username),
+          smtpPassword,
+          senderEmail,
+          senderName,
+          recipient_email,
+          subject,
+          html
+        );
+
+        await logEmail({ event_type, recipient_email, recipient_name, subject, status: 'sent', provider: 'smtp', metadata: logMeta });
+        return new Response(JSON.stringify({ success: true, message: "Email sent via SMTP" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      } else if (provider === 'microsoft_graph') {
+        await sendViaMicrosoftGraph(
+          supabase,
+          parseValue(settingsMap.graph_tenant_id),
+          parseValue(settingsMap.graph_client_id),
+          senderEmail,
+          senderName,
+          recipient_email,
+          subject,
+          html
+        );
+
+        await logEmail({ event_type, recipient_email, recipient_name, subject, status: 'sent', provider: 'microsoft_graph', metadata: logMeta });
+        return new Response(JSON.stringify({ success: true, message: "Email sent via Microsoft Graph" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      } else {
+        const emailResponse = await sendViaResend(senderEmail, senderName, recipient_email, subject, html);
+        await logEmail({ event_type, recipient_email, recipient_name, subject, status: 'sent', provider: 'resend', metadata: logMeta });
+        return new Response(JSON.stringify({ success: true, data: emailResponse }), {
+          status: 200,
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
       }
-
-      await sendViaSmtp(
-        parseValue(settingsMap.smtp_host),
-        parseInt(parseValue(settingsMap.smtp_port)) || 587,
-        (parseValue(settingsMap.smtp_security) || 'tls') as 'tls' | 'starttls' | 'none',
-        parseValue(settingsMap.smtp_username),
-        smtpPassword,
-        senderEmail,
-        senderName,
-        recipient_email,
-        subject,
-        html
+    } catch (sendError: any) {
+      console.error("Email send failed:", sendError);
+      await logEmail({ event_type, recipient_email, recipient_name, subject, status: 'failed', error_message: sendError.message, provider, metadata: logMeta });
+      return new Response(
+        JSON.stringify({ error: sendError.message }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        }
       );
-
-      return new Response(JSON.stringify({ success: true, message: "Email sent via SMTP" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
-    } else if (provider === 'microsoft_graph') {
-      await sendViaMicrosoftGraph(
-        supabase,
-        parseValue(settingsMap.graph_tenant_id),
-        parseValue(settingsMap.graph_client_id),
-        senderEmail,
-        senderName,
-        recipient_email,
-        subject,
-        html
-      );
-
-      return new Response(JSON.stringify({ success: true, message: "Email sent via Microsoft Graph" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
-    } else {
-      const emailResponse = await sendViaResend(senderEmail, senderName, recipient_email, subject, html);
-      return new Response(JSON.stringify({ success: true, data: emailResponse }), {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
     }
   } catch (error: any) {
     console.error("Error in send-email-notification function:", error);
