@@ -166,7 +166,9 @@ export function EmployeeSelectorGrid({
             employeeIds.add(kpi.employee_id);
           }
         } else if (viewLevel === 'audit') {
-          if (statusFilter === 'pending' && kpi.status === 'manager_check') {
+          // For audit: pending includes both manager_check AND self_review
+          // (employees with skip_manager workflow go directly from self_review to audit)
+          if (statusFilter === 'pending' && (kpi.status === 'manager_check' || kpi.status === 'self_review')) {
             employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'in_audit' && kpi.status === 'audit') {
             employeeIds.add(kpi.employee_id);
@@ -208,7 +210,7 @@ export function EmployeeSelectorGrid({
     } else if (viewLevel === 'audit') {
       return {
         totalEmployees: baseMembers.length,
-        stat1: relevantKpis.filter(k => k.status === 'manager_check').length, // Pending Audit
+        stat1: relevantKpis.filter(k => k.status === 'manager_check' || k.status === 'self_review').length, // Pending Audit (includes skip_manager workflows)
         stat2: relevantKpis.filter(k => k.status === 'audit').length, // In Audit
         stat3: relevantKpis.filter(k => ['management_review', 'approved'].includes(k.status || '')).length, // Forwarded
         totalKpis: relevantKpis.length,
@@ -238,7 +240,7 @@ export function EmployeeSelectorGrid({
       };
     } else if (viewLevel === 'audit') {
       return {
-        badge1: empKpis.filter(k => k.status === 'manager_check').length, // pending
+        badge1: empKpis.filter(k => k.status === 'manager_check' || k.status === 'self_review').length, // pending (includes skip_manager)
         badge2: empKpis.filter(k => k.status === 'audit').length, // in audit
         badge3: empKpis.filter(k => ['management_review', 'approved'].includes(k.status || '')).length, // forwarded
         total: empKpis.length,

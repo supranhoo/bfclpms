@@ -652,6 +652,7 @@ export function useApproveKpi() {
       manager_remarks,
       manager_evidence_url,
       manager_achieved_value,
+      forwardStatus,
     }: {
       kpi_id: string;
       manager_rating: RatingLevel;
@@ -659,6 +660,7 @@ export function useApproveKpi() {
       manager_remarks: string;
       manager_evidence_url?: string | null;
       manager_achieved_value?: number | null;
+      forwardStatus?: string;
     }) => {
       // Update submission with manager rating and set kpi_status to approved_by_manager
       const { data: updateData, error: submissionError } = await supabase
@@ -681,10 +683,11 @@ export function useApproveKpi() {
         throw new Error('Unable to approve KPI. You may not have permission to review this employee, or the KPI is not at the correct stage.');
       }
 
-      // Update KPI status to manager_check (manager has processed this KPI)
+      // Update KPI status - use provided forwardStatus or default to manager_check
+      const targetStatus = forwardStatus || 'manager_check';
       const { data: kpiUpdateData, error: kpiError } = await supabase
         .from('kpis')
-        .update({ status: 'manager_check' as const })
+        .update({ status: targetStatus as any })
         .eq('id', kpi_id)
         .select();
 

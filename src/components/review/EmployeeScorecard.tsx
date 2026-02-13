@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from 'react';
+import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
+import { resolveForwardStatus, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -78,6 +80,11 @@ export function EmployeeScorecard({
   const { data: allKpis, isLoading } = useKpisByEmployee(employee.id);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  
+  // Fetch workflow stages for this employee
+  const { data: workflowStages } = useEmployeeWorkflowStages(employee.id);
+  const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
+  const managerForwardStatus = resolveForwardStatus('manager', effectiveStages);
   
   // Filter KPIs by period and year
   const kpis = useMemo(() => allKpis?.filter(k => {
@@ -256,7 +263,7 @@ export function EmployeeScorecard({
 
       const { error: kpiError } = await supabase
         .from('kpis')
-        .update({ status: 'manager_check' as const })
+        .update({ status: managerForwardStatus as any })
         .eq('id', kpi_id);
 
       if (kpiError) throw kpiError;
@@ -329,7 +336,7 @@ export function EmployeeScorecard({
       // Advance status without score
       const { error: kpiError } = await supabase
         .from('kpis')
-        .update({ status: 'manager_check' as const })
+        .update({ status: managerForwardStatus as any })
         .eq('id', selectedKpi.id);
       
       if (kpiError) {
@@ -391,6 +398,7 @@ export function EmployeeScorecard({
       manager_achieved_value: typeof managerAchievedValue === 'number' 
         ? managerAchievedValue 
         : managerAchievedValue ? parseFloat(managerAchievedValue) : null,
+      forwardStatus: managerForwardStatus,
     }, {
       onSuccess: () => setReviewSheetOpen(false),
     });

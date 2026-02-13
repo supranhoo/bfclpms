@@ -25,6 +25,7 @@ interface WorkflowProgressTrackerProps {
   activeFilter?: string | null;
   onFilterChange?: (stage: string | null) => void;
   compact?: boolean;
+  workflowStages?: string[];
 }
 
 interface StageConfig {
@@ -99,9 +100,16 @@ export function WorkflowProgressTracker({
   queries = [], 
   activeFilter,
   onFilterChange,
-  compact = false 
+  compact = false,
+  workflowStages
 }: WorkflowProgressTrackerProps) {
   const isMobile = useIsMobile();
+  
+  // Filter stage config based on workflow stages if provided
+  const effectiveStageConfig = useMemo(() => {
+    if (!workflowStages) return stageConfig;
+    return stageConfig.filter(stage => workflowStages.includes(stage.key));
+  }, [workflowStages]);
   
   // Calculate counts per status
   const statusCounts = useMemo(() => {
@@ -160,9 +168,9 @@ export function WorkflowProgressTracker({
           "grid gap-2",
           isMobile || compact 
             ? "grid-cols-3" 
-            : "grid-cols-6"
+            : effectiveStageConfig.length <= 4 ? "grid-cols-4" : effectiveStageConfig.length === 5 ? "grid-cols-5" : "grid-cols-6"
         )}>
-          {stageConfig.map((stage, index) => {
+          {effectiveStageConfig.map((stage, index) => {
             const count = statusCounts[stage.key];
             const hasQuery = (queriesByStage[stage.key] || 0) > 0;
             const queryCount = queriesByStage[stage.key] || 0;

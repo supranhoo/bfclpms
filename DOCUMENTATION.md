@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-13  
-> **Version:** 1.16.0
+> **Version:** 1.17.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -2936,6 +2936,51 @@ The system logs every email sent by the `send-email-notification` edge function 
 - Expandable rows: Click any row to see full metadata (review period, KRA count, error details, etc.)
 
 **RLS:** Admin-only SELECT. The edge function inserts via service role key (bypasses RLS). Logging is fire-and-forget — a failed log insert never blocks email delivery.
+
+---
+
+### 4.22 Dynamic Workflow Engine
+
+**File:** `src/lib/workflowEngine.ts`
+
+The workflow engine provides pure utility functions that resolve status transitions dynamically based on an employee's assigned workflow template. This replaces all hardcoded 6-stage pipeline logic.
+
+**Key Functions:**
+
+| Function | Purpose |
+|---|---|
+| `resolveNextStatus(current, stages)` | Returns the next status in the employee's workflow |
+| `resolvePreviousStatus(current, stages)` | Returns the previous status (for send-back) |
+| `resolveSendBackTargets(viewLevel, stages)` | Returns valid send-back options filtered by workflow |
+| `resolveSendBackStatus(target, viewLevel, stages)` | Returns the correct status to set when sending back |
+| `resolvePendingStatuses(viewLevel, stages)` | Returns statuses a reviewer should see as "pending" |
+| `resolveForwardStatus(viewLevel, stages)` | Returns the status to set after approval |
+| `resolveReviewableStatuses(viewLevel, stages)` | Returns which statuses a reviewer can act on |
+| `getVisibleJourneyStages(stages)` | Returns journey stage keys for UI display |
+| `canReviewKpi(status, viewType, stages)` | Determines if a KPI is reviewable |
+| `hasStage(stage, stages)` | Checks if a stage exists in the workflow |
+
+**Workflow Configuration:**
+- Templates stored in `workflow_templates` table (e.g., "Full 6-Stage Review", "Full 5-Stage Review")
+- Employee assignments stored in `workflow_config` table (by employee, department, or PMS grade)
+- Resolved via `useEmployeeWorkflowStages(employeeId)` hook which calls `get_employee_workflow` RPC
+- Default fallback: full 6-stage pipeline `['kra_set', 'self_review', 'manager_check', 'audit', 'management_review', 'approved']`
+
+**Example — Skip Manager Workflow:**
+- Stages: `['kra_set', 'self_review', 'audit', 'management_review', 'approved']`
+- After self-review submission, auditor sees KPI as pending (status `self_review`)
+- Auditor's send-back targets exclude "Manager" option
+- WorkflowProgressTracker shows 5 cards instead of 6
+- KpiJourneySection shows 3 review stages (Self, Auditor, Management)
+
+**Components Using Workflow Engine:**
+- `UnifiedScorecard.tsx` — Dynamic forward/send-back status resolution
+- `EmployeeScorecard.tsx` — Dynamic manager approval target status
+- `useKpis.ts` (`useApproveKpi`) — Accepts optional `forwardStatus` parameter
+- `WorkflowProgressTracker.tsx` — Accepts optional `workflowStages` prop to filter displayed stages
+- `KpiJourneySection.tsx` — Accepts optional `workflowStages` prop to filter journey cards
+- `KpiDetailsTable.tsx` — Accepts optional `workflowStages` prop for workflow-aware reviewability
+- `EmployeeSelectorGrid.tsx` — Audit view includes `self_review` in pending count for skip-manager employees
 
 ---
 

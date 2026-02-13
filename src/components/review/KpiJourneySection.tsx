@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { ReviewStageCard, StageStatus } from './ReviewStageCard';
 import { KPI, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
 import { User, Briefcase, Shield, MessageSquare, History } from 'lucide-react';
+import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 
 type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management';
 
@@ -13,15 +14,17 @@ interface KpiJourneySectionProps {
   queries?: KpiQuery[];
   viewLevel: ViewLevel;
   onOpenQueryHistory?: () => void;
+  workflowStages?: string[];
 }
 
 // Determine the status of each review stage based on KPI status and view level
 function getStageStatus(
   stage: 'self' | 'manager' | 'auditor' | 'management',
   kpiStatus: string,
-  viewLevel: ViewLevel
+  viewLevel: ViewLevel,
+  workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): StageStatus {
-  const statusOrder = ['kra_set', 'self_review', 'manager_check', 'audit', 'management_review', 'approved'];
+  const statusOrder = workflowStages;
   const stageToStatus: Record<string, string[]> = {
     self: ['self_review', 'manager_check', 'audit', 'management_review', 'approved'],
     manager: ['manager_check', 'audit', 'management_review', 'approved'],
@@ -63,9 +66,12 @@ function getStageStatus(
   return 'pending';
 }
 
-// All levels see all stages for complete transparency
-function getVisibleStages(_viewLevel: ViewLevel): ('self' | 'manager' | 'auditor' | 'management')[] {
-  return ['self', 'manager', 'auditor', 'management'];
+// Get visible stages based on workflow
+function getVisibleStagesForLevel(
+  _viewLevel: ViewLevel,
+  workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
+): ('self' | 'manager' | 'auditor' | 'management')[] {
+  return getVisibleJourneyStages(workflowStages);
 }
 
 export function KpiJourneySection({
@@ -74,9 +80,11 @@ export function KpiJourneySection({
   queries = [],
   viewLevel,
   onOpenQueryHistory,
+  workflowStages,
 }: KpiJourneySectionProps) {
+  const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const kpiStatus = kpi.status || 'kra_set';
-  const visibleStages = getVisibleStages(viewLevel);
+  const visibleStages = getVisibleStagesForLevel(viewLevel, effectiveStages);
   const isNA = submission?.is_na || false;
 
   const openQueries = queries.filter(q => q.status === 'open').length;
@@ -141,7 +149,7 @@ export function KpiJourneySection({
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-3">
           {visibleStages.map(stage => {
             const data = stageData[stage];
-            const status = getStageStatus(stage, kpiStatus, viewLevel);
+            const status = getStageStatus(stage, kpiStatus, viewLevel, effectiveStages);
             return (
               <ReviewStageCard
                 key={stage}
