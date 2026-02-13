@@ -1326,6 +1326,7 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - **Audit Trail Report:** Exports include "On Behalf Of", "On Behalf Role", and "Admin Reason" columns
   - **Admin Actions Stats Card:** New stat card showing count of admin/on-behalf actions for the period
   - Admin action types include: `ADMIN_DATA_ENTRY_SELF`, `ADMIN_DATA_ENTRY_MANAGER`, `ADMIN_DATA_ENTRY_AUDITOR`, `ADMIN_DATA_ENTRY_MANAGEMENT`, `ADMIN_DAILY_ENTRY_OVERRIDE`, `ADMIN_STATUS_OVERRIDE`, `ADMIN_OVERRIDE`, `ADMIN_STATUS_STEP_BACK`
+  - Workflow forwarding actions: `MANAGER_FORWARDED`, `AUDITOR_FORWARDED` — logged when a reviewer forwards a KPI to the next stage
 - **Admin KPI Status Step-Back:**
   - Admins can move any KPI's workflow status **one step backward** via the "Step Back" button (undo icon) on expanded KPI rows in the All KPIs page
   - The button is only visible when the KPI is not at `kra_set` (the first stage)

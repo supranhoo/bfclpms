@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { statusLabels } from '@/lib/reviewConstants';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
@@ -79,6 +80,9 @@ const actionConfig: Record<string, { icon: React.ElementType; color: string; lab
   'ADMIN_STATUS_OVERRIDE': { icon: UserCog, color: 'bg-rose-600', label: 'Admin Status Override' },
   'ADMIN_OVERRIDE': { icon: UserCog, color: 'bg-rose-500', label: 'Admin Override' },
   'MANAGER_DAILY_OVERRIDE': { icon: User, color: 'bg-purple-500', label: 'Manager Daily Override' },
+  'ADMIN_STATUS_STEP_BACK': { icon: UserCog, color: 'bg-rose-600', label: 'Admin Status Step Back' },
+  'AUDITOR_FORWARDED': { icon: CheckCircle, color: 'bg-indigo-500', label: 'Auditor Forwarded' },
+  'MANAGER_FORWARDED': { icon: CheckCircle, color: 'bg-green-500', label: 'Manager Forwarded' },
 };
 
 export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
@@ -154,7 +158,10 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
       if (log.new_value.reason) details.push(`Reason: ${log.new_value.reason}`);
       if (log.new_value.resolution_notes) details.push(`Resolution: ${log.new_value.resolution_notes}`);
       if (log.new_value.target) details.push(`Sent to: ${log.new_value.target}`);
-      if (log.new_value.status) details.push(`New Status: ${log.new_value.status}`);
+      if (log.new_value.status) {
+        const label = statusLabels[String(log.new_value.status)] || String(log.new_value.status).replace(/_/g, ' ');
+        details.push(`New Status: ${label}`);
+      }
       // N/A confirmation details
       if (log.new_value.na_remarks) details.push(`N/A Remarks: ${log.new_value.na_remarks}`);
       // Reviewer remarks
@@ -189,8 +196,8 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
             <Clock className="h-5 w-5" />
             Review Timeline
           </DialogTitle>
-          <DialogDescription>
-            Complete history for <span className="font-medium">{kpi.kpi_name}</span>
+          <DialogDescription className="line-clamp-2">
+            {kpi.kra_name} — <span className="font-medium">{kpi.kpi_name?.split('\n')[0]?.slice(0, 80)}{(kpi.kpi_name?.length ?? 0) > 80 ? '…' : ''}</span>
           </DialogDescription>
         </DialogHeader>
 
@@ -198,16 +205,15 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
           {/* Workflow Progress */}
           <div className="mb-6 p-4 bg-muted/50 rounded-lg">
             <p className="text-xs font-medium text-muted-foreground mb-3">Workflow Progress</p>
-            <div className="flex items-center justify-between gap-1">
+            <div className="flex items-center gap-0">
               {workflowStages.map((stage, index) => {
                 const StageIcon = stage.icon;
                 const isCompleted = index < currentStageIndex;
                 const isCurrent = index === currentStageIndex;
-                const isPending = index > currentStageIndex;
                 
                 return (
-                  <div key={stage.key} className="flex items-center flex-1">
-                    <div className="flex flex-col items-center flex-1">
+                  <div key={stage.key} className="contents">
+                    <div className="flex flex-col items-center" style={{ minWidth: 48 }}>
                       <div
                         className={`w-8 h-8 rounded-full flex items-center justify-center ${
                           isCompleted
@@ -224,7 +230,7 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
                       </span>
                     </div>
                     {index < workflowStages.length - 1 && (
-                      <div className={`h-0.5 flex-1 mx-1 ${isCompleted ? 'bg-green-500' : 'bg-muted'}`} />
+                      <div className={`h-0.5 flex-1 ${isCompleted ? 'bg-green-500' : 'bg-muted'}`} />
                     )}
                   </div>
                 );
@@ -251,7 +257,7 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
             ) : (
               <div className="relative">
                 {/* Timeline line */}
-                <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
+                <div className="absolute left-[18px] top-0 bottom-0 w-0.5 bg-border" />
                 
                 <div className="space-y-6">
                 {auditLogs.map((log, index) => {
@@ -262,9 +268,9 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
                     const details = formatDetails(log);
                     
                     return (
-                      <div key={log.id} className="relative pl-10">
+                      <div key={log.id} className="relative pl-11">
                         {/* Timeline dot */}
-                        <div className={`absolute left-2 w-5 h-5 rounded-full ${config.color} flex items-center justify-center ring-4 ring-background`}>
+                        <div className={`absolute left-[9px] w-5 h-5 rounded-full ${config.color} flex items-center justify-center ring-4 ring-background`}>
                           <IconComponent className="h-3 w-3 text-white" />
                         </div>
                         
