@@ -259,3 +259,39 @@ export function useTeamMembers(managerId: string | undefined) {
     enabled: !!managerId,
   });
 }
+
+/**
+ * Fetch skip-level subordinates: employees whose reporting manager reports to the given user.
+ * i.e. SELECT p.* FROM profiles p JOIN profiles rm ON p.reporting_manager_id = rm.id WHERE rm.reporting_manager_id = :userId
+ */
+export function useSkipLevelTeamMembers(userId: string | undefined) {
+  return useQuery({
+    queryKey: ['skip-level-team-members', userId],
+    queryFn: async () => {
+      // Step 1: Get direct reports of the current user
+      const { data: directReports, error: drError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('reporting_manager_id', userId!);
+
+      if (drError) throw drError;
+      if (!directReports || directReports.length === 0) return [];
+
+      const directReportIds = directReports.map(d => d.id);
+
+      // Step 2: Get employees who report to the direct reports
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(`
+          *,
+          departments (id, name, code)
+        `)
+        .in('reporting_manager_id', directReportIds)
+        .order('full_name');
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!userId,
+  });
+}
