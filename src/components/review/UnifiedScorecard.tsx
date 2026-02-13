@@ -756,7 +756,7 @@ export function UnifiedScorecard({
       </div>
 
       {/* 3. Status Progress - Full Width Workflow Tracker (not compact) */}
-      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} />
+      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} workflowStages={effectiveStages} />
 
 
       {/* 4. KPI Table */}
@@ -815,6 +815,7 @@ export function UnifiedScorecard({
               onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
               expandedKpis={expandedDailyKpis}
               onToggleExpand={toggleDailyExpand}
+              workflowStages={effectiveStages}
             />
           )}
         </CardContent>

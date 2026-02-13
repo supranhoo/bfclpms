@@ -44,6 +44,14 @@ import {
 } from '@/lib/reviewConstants';
 import { MobileKpiCard } from '@/components/review/MobileKpiCard';
 import { NaConfirmationCard } from '@/components/review/NaConfirmationCard';
+import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
+import { 
+  DEFAULT_WORKFLOW_STAGES, 
+  resolveForwardStatus, 
+  resolveSendBackStatus, 
+  resolveSendBackTargets,
+  resolvePendingStatuses 
+} from '@/lib/workflowEngine';
 
 interface AuditScorecardProps {
   employee: {
@@ -77,6 +85,10 @@ export function AuditScorecard({
   const { data: allKpis, isLoading } = useKpisByEmployee(employee.id);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  
+  // Fetch the employee's workflow stages dynamically
+  const { data: workflowStages } = useEmployeeWorkflowStages(employee.id);
+  const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   
   // Filter KPIs by period and year
   const kpis = useMemo(() => allKpis?.filter(k => {
@@ -199,8 +211,9 @@ export function AuditScorecard({
     return { overallScore, rating: overallRating, categoryScores };
   }, [kpis, submissions, submissionMap]);
 
-  // Stats for audit review
-  const pendingAuditCount = kpis?.filter(k => k.status === 'manager_check').length || 0;
+  // Stats for audit review - use workflow-aware pending statuses
+  const auditPendingStatuses = resolvePendingStatuses('auditor', effectiveStages);
+  const pendingAuditCount = kpis?.filter(k => auditPendingStatuses.includes(k.status || '')).length || 0;
   const inAuditCount = kpis?.filter(k => k.status === 'audit').length || 0;
   const forwardedCount = kpis?.filter(k => ['management_review', 'approved'].includes(k.status || '')).length || 0;
   const totalKpis = kpis?.length || 0;
@@ -242,7 +255,7 @@ export function AuditScorecard({
         throw new Error('Unable to submit audit review. You may not have permission, or the KPI is not at the correct stage.');
       }
 
-      const newStatus = approve ? 'management_review' : 'audit';
+      const newStatus = approve ? resolveForwardStatus('auditor', effectiveStages) : 'audit';
       const { data: kpiUpdateData, error: kpiError } = await supabase
         .from('kpis')
         .update({ status: newStatus as any })
@@ -289,14 +302,11 @@ export function AuditScorecard({
       target: string;
       reason: string;
     }) => {
-      const statusMap: Record<string, string> = {
-        manager: 'self_review',
-        employee: 'kra_set',
-      };
+      const newStatus = resolveSendBackStatus(target, 'auditor', effectiveStages);
 
       const { error: kpiError } = await supabase
         .from('kpis')
-        .update({ status: statusMap[target] as any })
+        .update({ status: newStatus as any })
         .eq('id', kpi_id);
 
       if (kpiError) throw kpiError;
@@ -375,8 +385,8 @@ export function AuditScorecard({
         });
       }
       
-      // Advance status
-      const newStatus = approve ? 'management_review' : 'audit';
+      // Advance status using workflow engine
+      const newStatus = approve ? resolveForwardStatus('auditor', effectiveStages) : 'audit';
       const { error: kpiError } = await supabase
         .from('kpis')
         .update({ status: newStatus as any })
@@ -525,7 +535,7 @@ export function AuditScorecard({
       </div>
 
       {/* Workflow Progress Tracker */}
-      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} compact />
+      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} compact workflowStages={effectiveStages} />
 
       {/* Score Overview */}
       <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-3">
@@ -652,6 +662,7 @@ export function AuditScorecard({
               onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
               expandedKpis={expandedDailyKpis}
               onToggleExpand={toggleDailyExpand}
+              workflowStages={effectiveStages}
             />
           )}
         </CardContent>
