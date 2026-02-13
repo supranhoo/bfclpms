@@ -272,7 +272,7 @@ export function KpiDetailsTable({
                       className="w-3 h-3 rounded-full shrink-0"
                       style={{ backgroundColor: kpi.kra_categories?.color || '#6B7280' }}
                     />
-                    <span className="text-sm truncate max-w-[100px]">
+                    <span className="text-sm break-words">
                       {kpi.kra_categories?.name || 'Uncategorized'}
                     </span>
                     {kpi.is_org_level && (
