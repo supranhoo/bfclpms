@@ -1,75 +1,52 @@
 
 
-# Feature: Copy KRAs from Employee A to Employee B
+# Feature: Admin Delete Assigned KRA
 
-## Overview
+## Problem
+There is currently no way for an admin to remove/delete an assigned KRA from the All KPIs page. No delete button exists in the UI, and no DELETE RLS policy exists on the `kpis` table.
 
-Add a "Copy KRAs" action on the All KPIs page that lets an admin select a source employee, pick which KRAs to copy, and assign them to one or more target employees -- all within a single dialog. No new database tables, edge functions, or RLS policies are needed since it reuses the existing `kpis` INSERT path that Smart Assignment and Bulk Assign already use.
+## Solution
 
-## User Experience
+Add a delete button to each KPI row in the expanded employee view, with a confirmation dialog to prevent accidental deletions.
 
-1. Admin navigates to **All KPIs** page and clicks a new **"Copy KRAs"** button in the header toolbar (next to existing "Assign New KRA" and "Smart Assign" buttons).
-2. A dialog opens with three steps:
+### Database Change
 
-```text
-+------------------------------------------------------+
-|  Copy KRAs                                           |
-|------------------------------------------------------|
-|  Step 1: Source                                      |
-|  [Search Employee A ▾]  [Period ▾]  [Year ▾]        |
-|                                                      |
-|  Step 2: Select KRAs (auto-loaded)                   |
-|  [x] Sales > Monthly Revenue Target  (Wt: 15%)      |
-|  [x] Operations > Defect Rate        (Wt: 10%)      |
-|  [ ] HR > Attrition Control          (Wt: 5%)       |
-|  [Select All / Deselect All]                         |
-|                                                      |
-|  Step 3: Target Employee(s)                          |
-|  [Search Employee B ▾]  (multi-select)               |
-|  Target Period: [February ▾]  Year: [2026 ▾]        |
-|                                                      |
-|  [!] 2 duplicate KRAs will be skipped for Emp B      |
-|                                                      |
-|              [Cancel]  [Copy X KRAs]                 |
-+------------------------------------------------------+
+Add a DELETE RLS policy on the `kpis` table so admins can remove records:
+
+```sql
+CREATE POLICY "Admins can delete KPIs"
+  ON public.kpis
+  FOR DELETE
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.role = 'admin'
+    )
+  );
 ```
 
-3. On confirm, the selected KRAs are inserted as new `kpis` rows for each target employee with `status: 'kra_set'`, copying all fields (target, weightage, UOM, thresholds, frequency, etc.) -- identical to the `buildNewKpi` pattern already used by rollover.
-4. A toast confirms "Copied 5 KRAs to 2 employees".
+### Code Changes
 
-## Why This Approach
+| File | Change |
+|------|--------|
+| `src/hooks/useKpis.ts` | Add a new `useAdminDeleteKpi` mutation hook that calls `supabase.from('kpis').delete().eq('id', kpiId)` and invalidates the `['all-kpis']` query cache |
+| `src/pages/admin/AllKpis.tsx` | Add a Trash2 icon button next to the Edit button on each expanded KPI row; wire it to open a confirmation AlertDialog; on confirm, call the delete mutation |
+| `DOCUMENTATION.md` | Document the delete KRA capability |
 
-| Consideration | Decision |
-|---|---|
-| **Infrastructure** | Zero new tables, functions, or migrations. Reuses the existing `kpis` table INSERT with the same fields rollover and Smart Assign use. |
-| **RLS Policies** | No changes. Admin role already has full INSERT/SELECT on `kpis`. |
-| **Duplicate safety** | Before inserting, the dialog fetches target employee's existing KPIs for that period and flags duplicates (same `kra_name + kpi_name` composite key), skipping them automatically with a visible warning. |
-| **Flexibility** | Admin can copy to multiple employees at once, change the target period/year, and cherry-pick individual KRAs. |
+### User Experience
 
-## Technical Details
+1. Admin expands an employee row on the All KPIs page
+2. Each KPI row now shows a red trash icon button alongside the existing Edit button
+3. Clicking the trash icon opens a confirmation dialog: "Are you sure you want to delete this KRA? This action cannot be undone."
+4. The dialog shows the KRA name and KPI name for clarity
+5. On confirm, the KRA is permanently deleted and a success toast appears
+6. The table refreshes automatically
 
-### New File: `src/components/admin/CopyKrasDialog.tsx`
+### Safety Guardrails
 
-- Props: `isOpen`, `onClose`
-- Uses existing hooks: `useProfiles()`, `useAllKpis()`, `useSystemSettings()`, `useKraCategories()`
-- Source employee selector: searchable combobox filtered by period/year
-- KRA checklist: loaded from `kpis` table filtered by `employee_id + review_period + review_year`
-- Target employee(s): multi-select combobox (excludes source employee)
-- Duplicate detection: fetches target employees' KPIs for the target period and compares `kra_name|||kpi_name` keys (same pattern as rollover)
-- Insert mutation: `supabase.from('kpis').insert(kpisToInsert)` with invalidation of `['all-kpis']` query key
-
-### Modified File: `src/pages/admin/AllKpis.tsx`
-
-- Add `CopyKrasDialog` import and state toggle
-- Add a "Copy KRAs" button with `Copy` icon in the header action bar
-
-### Modified File: `DOCUMENTATION.md`
-
-- Document the Copy KRAs feature under the Admin section
-
-## Fields Copied (mirrors rollover `buildNewKpi`)
-
-`category_id`, `kra_name`, `kpi_name`, `target_value`, `uom`, `uom_type`, `weightage`, `frequency`, `sub_frequency`, `criteria`, `source_of_data`, `r5-r0`, `threshold_mode`, `qualitative_options`, `is_org_level`, `org_level_scope`, `ref_code`, `day_count_type`, `frequency_cycle_start`, `require_resubmit_reason`
-
-New values: `employee_id` = target, `review_period` / `review_year` = target period, `status` = `'kra_set'`
-
+- Confirmation dialog prevents accidental deletions
+- Only admins can delete (enforced by RLS policy)
+- The dialog displays the specific KRA/KPI name so the admin can verify before confirming
+- Related data (review submissions, daily submissions, queries) should be considered -- if foreign keys with CASCADE exist, dependent data will also be removed. If not, the delete will fail gracefully with an error toast.
