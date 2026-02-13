@@ -386,16 +386,68 @@ export function useAdminStatusStepBack() {
 
       if (error) throw error;
 
-      // 2. If stepping back to kra_set, reset submission so employee can resubmit
-      if (target_status === 'kra_set') {
-        const { error: subError } = await supabase
-          .from('review_submissions')
-          .update({ kpi_status: 'open', updated_at: new Date().toISOString() })
-          .eq('kpi_id', kpi_id);
+      // 2. Clear downstream review data based on target_status
+      const clearFields: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
-        if (subError) {
-          console.error('Failed to reset review_submissions.kpi_status:', subError);
-        }
+      // When stepping back to kra_set, also reset kpi_status so employee can resubmit
+      if (target_status === 'kra_set') {
+        clearFields.kpi_status = 'open';
+        // Clear self-review fields
+        clearFields.self_rating = null;
+        clearFields.self_score = null;
+        clearFields.self_remarks = null;
+        clearFields.self_evidence_url = null;
+        clearFields.achieved_value = null;
+      }
+
+      // Clear manager fields when stepping back to kra_set or self_review
+      if (target_status === 'kra_set' || target_status === 'self_review') {
+        clearFields.manager_rating = null;
+        clearFields.manager_score = null;
+        clearFields.manager_remarks = null;
+        clearFields.manager_evidence_url = null;
+        clearFields.manager_achieved_value = null;
+      }
+
+      // Clear auditor fields when stepping back to kra_set, self_review, or manager_check
+      if (target_status === 'kra_set' || target_status === 'self_review' || target_status === 'manager_check') {
+        clearFields.auditor_rating = null;
+        clearFields.auditor_score = null;
+        clearFields.auditor_remarks = null;
+        clearFields.auditor_evidence_url = null;
+        clearFields.auditor_achieved_value = null;
+      }
+
+      // Clear management fields when stepping back to any stage before management_review
+      if (target_status !== 'management_review' && target_status !== 'approved') {
+        clearFields.management_rating = null;
+        clearFields.management_score = null;
+        clearFields.management_remarks = null;
+        clearFields.management_evidence_url = null;
+        clearFields.management_achieved_value = null;
+      }
+
+      const { error: subError } = await supabase
+        .from('review_submissions')
+        .update(clearFields)
+        .eq('kpi_id', kpi_id);
+
+      if (subError) {
+        console.error('Failed to clear downstream review data:', subError);
+      }
+
+      // 2b. Create a kpi_queries entry so the reason is visible in the Review Journey
+      const { error: queryError } = await supabase.from('kpi_queries').insert({
+        kpi_id,
+        raised_by: user.id,
+        raised_to: employee_id,
+        reason: `[ADMIN SENT BACK] ${reason}`,
+        entity_type: 'kpi' as const,
+        status: 'open' as const,
+      });
+
+      if (queryError) {
+        console.error('Failed to create kpi_queries entry:', queryError);
       }
 
       // 3. Insert audit log

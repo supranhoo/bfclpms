@@ -1331,8 +1331,13 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - The button is only visible when the KPI is not at `kra_set` (the first stage)
   - Opens `AdminStatusStepBackDialog` showing current status, target (previous) status, KPI name, and employee name
   - **Mandatory reason field** required for audit compliance
-  - On submit: updates `kpis.status`, inserts `ADMIN_STATUS_STEP_BACK` entry in `kpi_audit_logs`, and notifies the affected employee
-  - **Submission sync:** When stepping back to `kra_set`, the hook also resets `review_submissions.kpi_status` to `open` so the employee can resubmit. For other target stages, `kpi_status` remains `submitted`.
+  - On submit: updates `kpis.status`, clears downstream review data, inserts `ADMIN_STATUS_STEP_BACK` entry in `kpi_audit_logs`, creates a `kpi_queries` entry with `[ADMIN SENT BACK]` prefix, and notifies the affected employee
+  - **Downstream data clearing:** When stepping back, all review submission fields for stages **after** the target status are cleared to prevent stale data:
+    - To `kra_set`: Clears self, manager, auditor, and management fields; resets `kpi_status` to `open`
+    - To `self_review`: Clears manager, auditor, and management fields
+    - To `manager_check`: Clears auditor and management fields
+    - To `audit`: Clears management fields
+  - **Visible send-back reason:** A `kpi_queries` row with `[ADMIN SENT BACK] <reason>` is created, making the reason visible in the employee's Review Journey and query trail (matching `useSendBackKpi` behavior)
   - **Safety-net trigger (`trg_sync_submission_on_kra_set`):** A database trigger on `kpis` automatically resets `review_submissions.kpi_status` to `open` whenever `kpis.status` transitions to `kra_set`, preventing any code path from causing a desync.
   - Status step-back mapping: `approved` → `management_review` → `audit` → `manager_check` → `self_review` → `kra_set`
 - Audit logging for all changes
