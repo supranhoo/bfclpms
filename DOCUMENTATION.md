@@ -2029,7 +2029,7 @@ src/
 │   │   ├── KeyStatCard.tsx
 │   │   ├── OverallScoreChart.tsx
 │   │   ├── CategoryScoreChart.tsx
-│   │   ├── KpiTimeline.tsx
+│   │   ├── KpiTimeline.tsx          # Review audit timeline dialog — uses native `overflow-y-auto` scrolling (not Radix ScrollArea) for reliable flex-layout compatibility
 │   │   ├── KpiTrackerModal.tsx
 │   │   └── KpiLogicModal.tsx
 │   │
