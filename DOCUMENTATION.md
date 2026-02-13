@@ -1903,9 +1903,7 @@ Clicking a notification row in the Inbox navigates directly to the relevant page
 | `kpi_ready_for_audit` | `/dashboard?view=audit&kpi={kpiId}` |
 | `kpi_ready_for_management` | `/dashboard?view=management&kpi={kpiId}` |
 | `kra_batch_assigned` / `period_locked` | `/my-kpis` |
-| `query_raised` | `/queries?tab=received` |
-| `query_resolved` / `query_responded` / `query_response_submitted` | `/queries?tab=sent` |
-| `query_resolved_fyi` | `/queries?tab=team` |
+| `query_raised` / `query_resolved` / `query_responded` / `query_response_submitted` / `query_resolved_fyi` | `/my-kpis?kpi={kpiId}&panel=queryHistory` (deep-links to KPI detail sheet with Query History dialog auto-opened) |
 | `observation_raised` / `observation_reply` | `/my-kpis?kpi={kpiId}` |
 | `pip_initiated` / `pip_completed` / `pip_milestone_reminder` | `/admin/pip` |
 | `password_rollout` | `/` (home) |

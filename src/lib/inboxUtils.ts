@@ -178,16 +178,13 @@ export function getNotificationNavigationPath(item: InboxItem): string | null {
     case 'kra_batch_assigned':
       return '/my-kpis';
 
-    // Query notifications (these are notifications about queries, not query items)
+    // Query notifications → deep-link to KPI details with Query History dialog
     case 'query_raised':
-      return '/queries?tab=received';
     case 'query_resolved':
-      return '/queries?tab=sent';
     case 'query_responded':
     case 'query_response_submitted':
-      return '/queries?tab=sent';
     case 'query_resolved_fyi':
-      return '/queries?tab=team';
+      return item.kpiId ? `/my-kpis?kpi=${item.kpiId}&panel=queryHistory` : '/my-kpis';
 
     // Observations
     case 'observation_raised':

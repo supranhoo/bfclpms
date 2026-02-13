@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { safeParseFloat } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { KpiDetailsTable } from '@/components/review/KpiDetailsTable';
@@ -36,6 +37,7 @@ import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/R
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
 import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
+import { QueryHistoryDialog } from '@/components/review/QueryHistoryDialog';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
 import { RatingScaleDisplay } from '@/components/review/RatingScaleDisplay';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
@@ -85,6 +87,7 @@ const scoreDisplay: Record<number, { label: string; color: string; level: Rating
 export default function MyKpis() {
   const isMobile = useIsMobile();
   const { profile } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
   const [selectedYear, setSelectedYear] = useState(defaultYear);
@@ -158,10 +161,32 @@ export default function MyKpis() {
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [queryHistoryOpen, setQueryHistoryOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [trackerModalOpen, setTrackerModalOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   const [expandedKpis, setExpandedKpis] = useState<Set<string>>(new Set());
+
+  // Deep-link: auto-open KPI sheet and optionally Query History from URL params
+  useEffect(() => {
+    const kpiParam = searchParams.get('kpi');
+    const panelParam = searchParams.get('panel');
+    if (!kpiParam || !kpis || kpis.length === 0) return;
+
+    const targetKpi = kpis.find(k => k.id === kpiParam);
+    if (!targetKpi) return;
+
+    // Open the KPI detail sheet
+    openReviewDialog(targetKpi);
+
+    // If panel=queryHistory, open the Query History dialog
+    if (panelParam === 'queryHistory') {
+      setQueryHistoryOpen(true);
+    }
+
+    // Clean up URL params to prevent re-triggering
+    setSearchParams({}, { replace: true });
+  }, [kpis, searchParams]);
   
   // Toggle expand for daily KPI rows
   const toggleExpand = useCallback((kpiId: string) => {
@@ -869,6 +894,7 @@ export default function MyKpis() {
                       currentUserId={profile?.id}
                       selectedPeriod={selectedPeriod}
                       selectedYear={selectedYear}
+                      onOpenQueryHistory={() => setQueryHistoryOpen(true)}
                       onOpenFullHistory={() => setTrackerModalOpen(true)}
                       onOpenTimeline={() => setTimelineOpen(true)}
                     />
@@ -1369,6 +1395,16 @@ export default function MyKpis() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Query History Dialog */}
+      {selectedKpi && (
+        <QueryHistoryDialog
+          kpiId={selectedKpi.id}
+          kpiName={selectedKpi.kpi_name}
+          open={queryHistoryOpen}
+          onOpenChange={setQueryHistoryOpen}
+        />
+      )}
     </div>
   );
 }
