@@ -51,6 +51,15 @@ import {
 } from '@/lib/reviewConstants';
 import { MobileKpiCard } from '@/components/review/MobileKpiCard';
 import { NaConfirmationCard } from '@/components/review/NaConfirmationCard';
+import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
+import { 
+  resolveForwardStatus, 
+  resolvePendingStatuses, 
+  resolveReviewableStatuses, 
+  resolveSendBackTargets, 
+  resolveSendBackStatus,
+  DEFAULT_WORKFLOW_STAGES 
+} from '@/lib/workflowEngine';
 
 // View level type - determines behavior and data access
 export type ScorecardViewLevel = 'manager' | 'auditor' | 'management';
@@ -77,59 +86,36 @@ interface UnifiedScorecardProps {
   autoOpenKpiId?: string | null;
 }
 
-// Configuration per view level
-const VIEW_LEVEL_CONFIG: Record<ScorecardViewLevel, {
+// Static configuration per view level (non-workflow-dependent parts)
+const VIEW_LEVEL_STATIC: Record<ScorecardViewLevel, {
   title: string;
   description: string;
-  pendingStatus: string;
-  reviewableStatuses: string[];
   scoreFieldPrefix: string;
   previousScoreField: 'self_score' | 'manager_score' | 'auditor_score';
-  forwardStatus: string;
-  sendBackTargets: Array<{ value: string; label: string }>;
   actionLabel: string;
   roleIcon: React.ElementType;
 }> = {
   manager: {
     title: 'Manager Review',
     description: 'Review and provide your assessment for this KPI',
-    pendingStatus: 'self_review',
-    reviewableStatuses: ['self_review'],
     scoreFieldPrefix: 'manager',
     previousScoreField: 'self_score',
-    forwardStatus: 'manager_check',
-    sendBackTargets: [{ value: 'employee', label: 'Employee' }],
     actionLabel: 'Approve',
     roleIcon: User,
   },
   auditor: {
     title: 'Audit Review',
     description: 'Verify and audit this KPI performance',
-    pendingStatus: 'manager_check',
-    reviewableStatuses: ['manager_check', 'audit'],
     scoreFieldPrefix: 'auditor',
     previousScoreField: 'manager_score',
-    forwardStatus: 'management_review',
-    sendBackTargets: [
-      { value: 'manager', label: 'Manager' },
-      { value: 'employee', label: 'Employee' },
-    ],
     actionLabel: 'Forward to Management',
     roleIcon: Shield,
   },
   management: {
     title: 'Management Review',
     description: 'Final review and approval of this KPI',
-    pendingStatus: 'management_review',
-    reviewableStatuses: ['management_review'],
     scoreFieldPrefix: 'management',
     previousScoreField: 'auditor_score',
-    forwardStatus: 'approved',
-    sendBackTargets: [
-      { value: 'auditor', label: 'Auditor' },
-      { value: 'manager', label: 'Manager' },
-      { value: 'employee', label: 'Employee' },
-    ],
     actionLabel: 'Final Approve',
     roleIcon: Briefcase,
   },
@@ -152,7 +138,20 @@ export function UnifiedScorecard({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   
-  const config = VIEW_LEVEL_CONFIG[viewLevel];
+  const staticConfig = VIEW_LEVEL_STATIC[viewLevel];
+  
+  // Fetch the employee's workflow stages dynamically
+  const { data: workflowStages } = useEmployeeWorkflowStages(employee.id);
+  const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
+  
+  // Build dynamic config from workflow stages
+  const config = useMemo(() => ({
+    ...staticConfig,
+    pendingStatus: resolvePendingStatuses(viewLevel, effectiveStages)[0] || 'self_review',
+    reviewableStatuses: resolveReviewableStatuses(viewLevel, effectiveStages),
+    forwardStatus: resolveForwardStatus(viewLevel, effectiveStages),
+    sendBackTargets: resolveSendBackTargets(viewLevel, effectiveStages),
+  }), [viewLevel, effectiveStages, staticConfig]);
   
   // Filter KPIs by period and year
   const kpis = useMemo(() => allKpis?.filter(k => {
@@ -431,15 +430,11 @@ export function UnifiedScorecard({
       target: string;
       reason: string;
     }) => {
-      const statusMap: Record<string, string> = {
-        auditor: 'audit',
-        manager: viewLevel === 'auditor' ? 'self_review' : 'manager_check',
-        employee: 'kra_set',
-      };
+      const newStatus = resolveSendBackStatus(target, viewLevel, effectiveStages);
 
       const { error: kpiError } = await supabase
         .from('kpis')
-        .update({ status: statusMap[target] as any })
+        .update({ status: newStatus as any })
         .eq('id', kpi_id);
 
       if (kpiError) throw kpiError;
@@ -1173,7 +1168,7 @@ function DailySubmissionSummaryWithOverride({
   reviewerScore: number | null;
   onReviewerScoreChange: (score: number | null) => void;
   submissionMap: Map<string, any>;
-  config: typeof VIEW_LEVEL_CONFIG[ScorecardViewLevel];
+  config: { scoreFieldPrefix: string; previousScoreField: string };
 }) {
   const { data: submissions } = useSubPeriodSubmissions(
     kpi.frequency === 'Daily' ? kpi.id : undefined, 

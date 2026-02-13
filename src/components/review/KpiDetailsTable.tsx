@@ -14,6 +14,7 @@ import { InlineDailySubmissionRow } from '@/components/review/InlineDailySubmiss
 import { DailyBadge } from '@/components/review/DailyKpiExpandButton';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
+import { canReviewKpi as workflowCanReview, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { 
   Info, Lock, CheckCircle2, Calendar, ChevronDown, ChevronUp, Undo2, Eye, 
   Building2, Users, User, FileCheck
@@ -46,6 +47,7 @@ interface KpiDetailsTableProps {
   getOrgKpiValue?: (kpi: KPI) => { achieved_value: number | null; data_source: string | null } | null;
   getDailyAggregatedScore?: (kpi: KPI) => number | null;
   isKpiLocked?: (kpi: KPI) => boolean;
+  workflowStages?: string[];
 }
 
 /**
@@ -100,26 +102,17 @@ export function KpiDetailsTable({
   getOrgKpiValue,
   getDailyAggregatedScore,
   isKpiLocked,
+  workflowStages,
 }: KpiDetailsTableProps) {
+  const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const totalColumns = 12; // Category, KRA/KPI, Target, Weightage, 5 scores, Status, Actions
   
-  const canReviewKpi = (kpi: KPI): boolean => {
+  const canReviewKpiCheck = (kpi: KPI): boolean => {
     const submission = submissionMap.get(kpi.id);
     const isNaKpi = submission?.is_na || false;
     if (isNaKpi) return false;
     
-    switch (viewType) {
-      case 'my-kpis':
-        return kpi.status === 'kra_set';
-      case 'team-review':
-        return kpi.status === 'self_review';
-      case 'audit':
-        return kpi.status === 'manager_check' || kpi.status === 'audit';
-      case 'management':
-        return kpi.status === 'management_review';
-      default:
-        return false;
-    }
+    return workflowCanReview(kpi.status || 'kra_set', viewType, effectiveStages);
   };
 
   const getActionButton = (kpi: KPI): React.ReactNode => {
@@ -146,7 +139,7 @@ export function KpiDetailsTable({
     
     return (
       <div className="flex items-center gap-1">
-        {canReviewKpi(kpi) ? (
+        {canReviewKpiCheck(kpi) ? (
           <>
             <Button size="sm" onClick={() => onReview?.(kpi)}>
               {viewType === 'audit' && kpi.status === 'audit' ? 'Continue' : 'Review'}
