@@ -1,79 +1,98 @@
 
-# Fix: Sync `review_submissions.kpi_status` on Status Changes
 
-## Root Cause
+# RCA and CAPA: Admin Step-Back Does Not Properly Reset Review Data
 
-Two code paths update `kpis.status` without also updating `review_submissions.kpi_status`, causing a data mismatch:
+## Root Cause Analysis (RCA)
 
-1. **`useAdminStatusStepBack`** -- Steps back `kpis.status` but leaves `review_submissions.kpi_status` as `submitted`. When stepping back to `kra_set`, the submission should be reset to `open` so the employee can resubmit.
+The Admin Step Back feature (`useAdminStatusStepBack`) has **three deficiencies** compared to the normal reviewer send-back flows:
 
-2. **No systemic guard** -- There's no database-level trigger ensuring `review_submissions.kpi_status` stays in sync with `kpis.status`. All synchronization relies on application code doing both updates.
+### Issue 1: Stale Review Data Not Cleared
+When the admin stepped this KPI from `management_review` all the way back to `kra_set`, the intermediate review data was **never cleared**. The `review_submissions` table still shows:
+- `manager_rating: yellow`, `manager_score: 3.00` (from the previous cycle)
+- `self_rating: blue`, `self_score: 5.00`
 
-## Fix Strategy
+The normal Manager send-back (`useSendBackKpi`) explicitly clears `manager_rating`, `manager_score`, and `manager_remarks` when sending back. The Admin Step Back does neither -- it only updates `kpis.status` and (after the recent fix) resets `kpi_status` to `open` when going to `kra_set`.
 
-### 1. Fix `useAdminStatusStepBack` in `src/hooks/useAdminDataEntry.ts`
+**Result:** The Review Journey UI shows stale "N/A" ratings and old data that looks confusing -- the admin's action appears to have done nothing.
 
-When the admin steps a KPI back to `kra_set`, also reset `review_submissions.kpi_status` to `open` (matching the behavior of `useSendBackKpi`). For step-backs to other stages (e.g., `self_review`, `manager_check`), keep `kpi_status` as `submitted` since the employee's submission data should remain intact.
+### Issue 2: No Visible Send-Back Reason
+The admin's reason ("PMS Testing") is stored only in `kpi_audit_logs.metadata`. It is NOT:
+- Saved as a `kpi_queries` entry (which is what `useSendBackKpi` does with `[SENT BACK] reason`)
+- Shown in the Review Journey cards
+- Visible to the employee in their KPI review panel
 
-### 2. Fix the 9 stuck KPIs via a one-time data patch
+The employee only gets a generic notification but has no way to see the reason in their review workflow.
 
-Run a SQL update to fix the 9 currently stuck KPIs by setting their `kpis.status` to `self_review` (since they have valid submissions with `kpi_status = submitted`). This is a data fix, not a schema change.
+### Issue 3: No Downstream Data Cleanup
+When stepping back multiple stages (e.g., `management_review` to `kra_set`), the hook should clear all downstream review data (auditor and management ratings/remarks) to prevent stale data from persisting into the next cycle.
 
-### 3. Add a database trigger as a safety net
+## CAPA (Corrective and Preventive Action)
 
-Create a trigger `sync_kpi_status_on_step_back` on the `kpis` table that automatically resets `review_submissions.kpi_status` to `open` whenever `kpis.status` transitions **back** to `kra_set`. This prevents any future code path from causing the same desync.
+### Fix 1: Clear downstream review data on step-back
+In `useAdminStatusStepBack`, after updating `kpis.status`, clear the review submission fields for the stages being bypassed:
+
+- Step back to `kra_set`: Clear self, manager, auditor, and management fields; reset `kpi_status` to `open`
+- Step back to `self_review`: Clear manager, auditor, and management fields
+- Step back to `manager_check`: Clear auditor and management fields
+- Step back to `audit`: Clear management fields
+
+### Fix 2: Create a `kpi_queries` entry with the send-back reason
+Match the behavior of `useSendBackKpi` by inserting a `kpi_queries` row with `[ADMIN SENT BACK] reason`. This makes the reason visible in the employee's KPI view and in the query trail.
+
+### Fix 3: Fix the 1 currently stuck KPI's stale data
+Run a one-time SQL to clear stale manager data for KPI `547c5765` since it's at `self_review` with leftover manager ratings from the previous cycle.
 
 ## Files to Modify
 
 | Action | File |
 |--------|------|
-| Edit | `src/hooks/useAdminDataEntry.ts` -- reset `review_submissions.kpi_status` to `open` when stepping back to `kra_set` |
-| Migration | Add trigger to sync `review_submissions.kpi_status` when `kpis.status` goes to `kra_set` |
-| Migration | One-time fix for the 9 stuck KPIs |
-| Edit | `DOCUMENTATION.md` -- document the sync behavior |
+| Edit | `src/hooks/useAdminDataEntry.ts` -- add downstream data clearing and `kpi_queries` insertion |
+| Migration | One-time fix to clear stale review data for the affected KPI |
+| Edit | `DOCUMENTATION.md` -- document the cleanup behavior |
 
 ## Technical Details
 
-### `useAdminStatusStepBack` change (in `src/hooks/useAdminDataEntry.ts`)
+### `useAdminStatusStepBack` changes
 
-After updating `kpis.status` (existing line 380-387), add a conditional block:
+After the `kpis.status` update and the existing `kra_set` submission reset, add a new block:
 
 ```text
-if target_status === 'kra_set':
-  update review_submissions
-    set kpi_status = 'open'
-    where kpi_id = kpi_id
-```
+// Determine which fields to clear based on target_status
+const clearFields = {};
 
-### Database trigger (new migration)
+if target_status is 'kra_set' or 'self_review':
+  clearFields += { manager_rating: null, manager_score: null, manager_remarks: null, manager_evidence_url: null, manager_achieved_value: null }
 
-```sql
-CREATE OR REPLACE FUNCTION sync_submission_on_kra_set()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.status = 'kra_set' AND OLD.status != 'kra_set' THEN
-    UPDATE review_submissions
-    SET kpi_status = 'open'
-    WHERE kpi_id = NEW.id;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+if target_status is 'kra_set' or 'self_review' or 'manager_check':
+  clearFields += { auditor_rating: null, auditor_score: null, auditor_remarks: null, auditor_evidence_url: null, auditor_achieved_value: null }
 
-CREATE TRIGGER trg_sync_submission_on_kra_set
-AFTER UPDATE OF status ON kpis
-FOR EACH ROW
-EXECUTE FUNCTION sync_submission_on_kra_set();
+if target_status is 'kra_set' or 'self_review' or 'manager_check' or 'audit':
+  clearFields += { management_rating: null, management_score: null, management_remarks: null, management_evidence_url: null, management_achieved_value: null }
+
+// Update review_submissions with clearFields
+supabase.from('review_submissions').update(clearFields).eq('kpi_id', kpi_id)
+
+// Create a kpi_queries entry so the reason is visible
+supabase.from('kpi_queries').insert({
+  kpi_id,
+  raised_by: user.id,
+  raised_to: employee_id,
+  reason: `[ADMIN SENT BACK] ${reason}`,
+  entity_type: 'kpi',
+  status: 'open',
+})
 ```
 
 ### One-time data fix (migration)
 
 ```sql
-UPDATE kpis
-SET status = 'self_review'
-WHERE id IN (
-  SELECT k.id FROM kpis k
-  JOIN review_submissions rs ON rs.kpi_id = k.id
-  WHERE k.status = 'kra_set' AND rs.kpi_status = 'submitted'
-);
+UPDATE review_submissions
+SET manager_rating = NULL, manager_score = NULL, manager_remarks = NULL,
+    auditor_rating = NULL, auditor_score = NULL, auditor_remarks = NULL,
+    management_rating = NULL, management_score = NULL, management_remarks = NULL
+WHERE kpi_id IN (
+  SELECT id FROM kpis WHERE status IN ('kra_set', 'self_review')
+)
+AND (manager_rating IS NOT NULL OR auditor_rating IS NOT NULL OR management_rating IS NOT NULL);
 ```
+
