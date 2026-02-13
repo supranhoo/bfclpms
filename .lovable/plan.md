@@ -1,58 +1,75 @@
 
 
-# Fix: Password Rollout Times Out for Large Batches
+# Feature: Copy KRAs from Employee A to Employee B
 
-## Root Cause Analysis (RCA)
+## Overview
 
-The edge function log shows:
-```
-Http: connection closed before message completed
-```
+Add a "Copy KRAs" action on the All KPIs page that lets an admin select a source employee, pick which KRAs to copy, and assign them to one or more target employees -- all within a single dialog. No new database tables, edge functions, or RLS policies are needed since it reuses the existing `kpis` INSERT path that Smart Assignment and Bulk Assign already use.
 
-The function processes **63 users sequentially** in a single request:
-1. For each user: generate password, call `auth.admin.updateUserById()`, then call the `send-email-notification` function
-2. Each iteration involves 2-3 network round-trips (auth update + email HTTP call + audit log insert)
-3. With 63 users, this easily exceeds the edge function timeout (typically ~60 seconds)
-4. The connection drops mid-processing, the client gets "Failed to fetch", and partial results may have been applied without the caller knowing which succeeded
+## User Experience
 
-## Corrective Action (CAPA)
+1. Admin navigates to **All KPIs** page and clicks a new **"Copy KRAs"** button in the header toolbar (next to existing "Assign New KRA" and "Smart Assign" buttons).
+2. A dialog opens with three steps:
 
-### Strategy: Process in Batches with Parallel Execution
-
-Instead of sequential processing, use `Promise.all` with a concurrency-limited batch approach:
-
-1. **Split users into chunks of 5** (safe concurrency for auth admin calls)
-2. **Process each chunk in parallel** using `Promise.allSettled`
-3. **Log results as they complete** rather than at the end
-
-### Code Changes
-
-**File: `supabase/functions/password-rollout/index.ts`**
-
-Replace the sequential `for...of` loop with batched parallel processing:
-
-```typescript
-// Process in batches of 5
-const BATCH_SIZE = 5;
-for (let i = 0; i < profiles.length; i += BATCH_SIZE) {
-  const batch = profiles.slice(i, i + BATCH_SIZE);
-  const batchResults = await Promise.allSettled(
-    batch.map(profile => processOneUser(profile, ...))
-  );
-  // collect results from each settled promise
-}
+```text
++------------------------------------------------------+
+|  Copy KRAs                                           |
+|------------------------------------------------------|
+|  Step 1: Source                                      |
+|  [Search Employee A ▾]  [Period ▾]  [Year ▾]        |
+|                                                      |
+|  Step 2: Select KRAs (auto-loaded)                   |
+|  [x] Sales > Monthly Revenue Target  (Wt: 15%)      |
+|  [x] Operations > Defect Rate        (Wt: 10%)      |
+|  [ ] HR > Attrition Control          (Wt: 5%)       |
+|  [Select All / Deselect All]                         |
+|                                                      |
+|  Step 3: Target Employee(s)                          |
+|  [Search Employee B ▾]  (multi-select)               |
+|  Target Period: [February ▾]  Year: [2026 ▾]        |
+|                                                      |
+|  [!] 2 duplicate KRAs will be skipped for Emp B      |
+|                                                      |
+|              [Cancel]  [Copy X KRAs]                 |
++------------------------------------------------------+
 ```
 
-This reduces total execution time from ~63 sequential calls to ~13 batched rounds, well within the timeout limit.
+3. On confirm, the selected KRAs are inserted as new `kpis` rows for each target employee with `status: 'kra_set'`, copying all fields (target, weightage, UOM, thresholds, frequency, etc.) -- identical to the `buildNewKpi` pattern already used by rollover.
+4. A toast confirms "Copied 5 KRAs to 2 employees".
 
-### Files Changed
+## Why This Approach
 
-| File | Change |
-|------|--------|
-| `supabase/functions/password-rollout/index.ts` | Refactor sequential loop to batched parallel processing (chunks of 5) |
-| `DOCUMENTATION.md` | Document the batched processing pattern |
+| Consideration | Decision |
+|---|---|
+| **Infrastructure** | Zero new tables, functions, or migrations. Reuses the existing `kpis` table INSERT with the same fields rollover and Smart Assign use. |
+| **RLS Policies** | No changes. Admin role already has full INSERT/SELECT on `kpis`. |
+| **Duplicate safety** | Before inserting, the dialog fetches target employee's existing KPIs for that period and flags duplicates (same `kra_name + kpi_name` composite key), skipping them automatically with a visible warning. |
+| **Flexibility** | Admin can copy to multiple employees at once, change the target period/year, and cherry-pick individual KRAs. |
 
-## Expected Result
+## Technical Details
 
-After this fix, password rollout for 63+ users completes within the timeout window. Each batch of 5 users processes in parallel, reducing total time by roughly 5x.
+### New File: `src/components/admin/CopyKrasDialog.tsx`
+
+- Props: `isOpen`, `onClose`
+- Uses existing hooks: `useProfiles()`, `useAllKpis()`, `useSystemSettings()`, `useKraCategories()`
+- Source employee selector: searchable combobox filtered by period/year
+- KRA checklist: loaded from `kpis` table filtered by `employee_id + review_period + review_year`
+- Target employee(s): multi-select combobox (excludes source employee)
+- Duplicate detection: fetches target employees' KPIs for the target period and compares `kra_name|||kpi_name` keys (same pattern as rollover)
+- Insert mutation: `supabase.from('kpis').insert(kpisToInsert)` with invalidation of `['all-kpis']` query key
+
+### Modified File: `src/pages/admin/AllKpis.tsx`
+
+- Add `CopyKrasDialog` import and state toggle
+- Add a "Copy KRAs" button with `Copy` icon in the header action bar
+
+### Modified File: `DOCUMENTATION.md`
+
+- Document the Copy KRAs feature under the Admin section
+
+## Fields Copied (mirrors rollover `buildNewKpi`)
+
+`category_id`, `kra_name`, `kpi_name`, `target_value`, `uom`, `uom_type`, `weightage`, `frequency`, `sub_frequency`, `criteria`, `source_of_data`, `r5-r0`, `threshold_mode`, `qualitative_options`, `is_org_level`, `org_level_scope`, `ref_code`, `day_count_type`, `frequency_cycle_start`, `require_resubmit_reason`
+
+New values: `employee_id` = target, `review_period` / `review_year` = target period, `status` = `'kra_set'`
 
