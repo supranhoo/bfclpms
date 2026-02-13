@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTeamMembers, useProfiles } from '@/hooks/useOrganization';
+import { useTeamMembers, useProfiles, useSkipLevelTeamMembers } from '@/hooks/useOrganization';
 import { useKpisByPeriod, KPI } from '@/hooks/useKpis';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -104,6 +104,9 @@ export function EmployeeSelectorGrid({
   const { user, role } = useAuth();
   const { data: teamMembers, isLoading: teamLoading } = useTeamMembers(user?.id);
   const { data: allProfiles, isLoading: profilesLoading } = useProfiles();
+  const { data: skipLevelMembers, isLoading: skipLevelLoading } = useSkipLevelTeamMembers(
+    viewLevel === 'skip_level' ? user?.id : undefined
+  );
   const { departments, designations, grades, managers } = useEmployeeFilterOptions();
   const [searchParams] = useSearchParams();
   const autoOpenKpiId = searchParams.get('kpi');
@@ -122,9 +125,12 @@ export function EmployeeSelectorGrid({
   const { data: periodKpis } = useKpisByPeriod(selectedPeriod, selectedYear);
 
   // Determine which employees to show based on view level and role
-  const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management';
-  const isLoading = isFullAccess ? profilesLoading : teamLoading;
-  const baseMembers = isFullAccess ? allProfiles : teamMembers;
+  const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
+  const isLoading = viewLevel === 'skip_level' ? skipLevelLoading : (isFullAccess ? profilesLoading : teamLoading);
+  const baseMembers = viewLevel === 'skip_level' ? skipLevelMembers
+    : viewLevel === 'hr_pms' ? allProfiles
+    : isFullAccess ? allProfiles
+    : teamMembers;
 
   // Auto-open KPI from URL
   useEffect(() => {
@@ -197,6 +203,18 @@ export function EmployeeSelectorGrid({
           } else if (statusFilter === 'forwarded' && ['management_review', 'approved'].includes(kpi.status || '')) {
             employeeIds.add(kpi.employee_id);
           }
+        } else if (viewLevel === 'skip_level') {
+          if (statusFilter === 'pending' && kpi.status === 'skip_level_check') {
+            employeeIds.add(kpi.employee_id);
+          } else if (statusFilter === 'reviewed' && ['hr_pms_review', 'audit', 'management_review', 'approved'].includes(kpi.status || '')) {
+            employeeIds.add(kpi.employee_id);
+          }
+        } else if (viewLevel === 'hr_pms') {
+          if (statusFilter === 'pending' && kpi.status === 'hr_pms_review') {
+            employeeIds.add(kpi.employee_id);
+          } else if (statusFilter === 'reviewed' && ['audit', 'management_review', 'approved'].includes(kpi.status || '')) {
+            employeeIds.add(kpi.employee_id);
+          }
         } else if (viewLevel === 'management') {
           if (statusFilter === 'pending' && kpi.status === 'management_review') {
             employeeIds.add(kpi.employee_id);
@@ -224,25 +242,41 @@ export function EmployeeSelectorGrid({
     if (viewLevel === 'team') {
       return {
         totalEmployees: baseMembers.length,
-        stat1: relevantKpis.filter(k => k.status === 'kra_set').length, // Open KPIs
-        stat2: relevantKpis.filter(k => k.status === 'self_review').length, // Pending Review
-        stat3: relevantKpis.filter(k => ['manager_check', 'audit', 'management_review', 'approved'].includes(k.status || '')).length, // Reviewed
+        stat1: relevantKpis.filter(k => k.status === 'kra_set').length,
+        stat2: relevantKpis.filter(k => k.status === 'self_review').length,
+        stat3: relevantKpis.filter(k => ['manager_check', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
+        totalKpis: relevantKpis.length,
+      };
+    } else if (viewLevel === 'skip_level') {
+      return {
+        totalEmployees: baseMembers.length,
+        stat1: relevantKpis.filter(k => k.status === 'skip_level_check').length,
+        stat2: relevantKpis.filter(k => ['hr_pms_review', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
+        stat3: relevantKpis.length,
+        totalKpis: relevantKpis.length,
+      };
+    } else if (viewLevel === 'hr_pms') {
+      return {
+        totalEmployees: baseMembers.length,
+        stat1: relevantKpis.filter(k => k.status === 'hr_pms_review').length,
+        stat2: relevantKpis.filter(k => ['audit', 'management_review', 'approved'].includes(k.status || '')).length,
+        stat3: relevantKpis.length,
         totalKpis: relevantKpis.length,
       };
     } else if (viewLevel === 'audit') {
       return {
         totalEmployees: baseMembers.length,
-        stat1: relevantKpis.filter(k => k.status === 'manager_check' || k.status === 'self_review').length, // Pending Audit (includes skip_manager workflows)
-        stat2: relevantKpis.filter(k => k.status === 'audit').length, // In Audit
-        stat3: relevantKpis.filter(k => ['management_review', 'approved'].includes(k.status || '')).length, // Forwarded
+        stat1: relevantKpis.filter(k => k.status === 'manager_check' || k.status === 'self_review').length,
+        stat2: relevantKpis.filter(k => k.status === 'audit').length,
+        stat3: relevantKpis.filter(k => ['management_review', 'approved'].includes(k.status || '')).length,
         totalKpis: relevantKpis.length,
       };
     } else {
       return {
         totalEmployees: baseMembers.length,
-        stat1: relevantKpis.filter(k => k.status === 'management_review').length, // Pending Review
-        stat2: relevantKpis.filter(k => k.status === 'approved').length, // Approved
-        stat3: relevantKpis.length, // Total KPIs
+        stat1: relevantKpis.filter(k => k.status === 'management_review').length,
+        stat2: relevantKpis.filter(k => k.status === 'approved').length,
+        stat3: relevantKpis.length,
         totalKpis: relevantKpis.length,
       };
     }
@@ -255,22 +289,36 @@ export function EmployeeSelectorGrid({
 
     if (viewLevel === 'team') {
       return {
-        badge1: empKpis.filter(k => k.status === 'self_review').length, // pending
-        badge2: empKpis.filter(k => ['manager_check', 'audit', 'management_review', 'approved'].includes(k.status || '')).length, // reviewed
+        badge1: empKpis.filter(k => k.status === 'self_review').length,
+        badge2: empKpis.filter(k => ['manager_check', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
+        badge3: 0,
+        total: empKpis.length,
+      };
+    } else if (viewLevel === 'skip_level') {
+      return {
+        badge1: empKpis.filter(k => k.status === 'skip_level_check').length,
+        badge2: empKpis.filter(k => ['hr_pms_review', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
+        badge3: 0,
+        total: empKpis.length,
+      };
+    } else if (viewLevel === 'hr_pms') {
+      return {
+        badge1: empKpis.filter(k => k.status === 'hr_pms_review').length,
+        badge2: empKpis.filter(k => ['audit', 'management_review', 'approved'].includes(k.status || '')).length,
         badge3: 0,
         total: empKpis.length,
       };
     } else if (viewLevel === 'audit') {
       return {
-        badge1: empKpis.filter(k => k.status === 'manager_check' || k.status === 'self_review').length, // pending (includes skip_manager)
-        badge2: empKpis.filter(k => k.status === 'audit').length, // in audit
-        badge3: empKpis.filter(k => ['management_review', 'approved'].includes(k.status || '')).length, // forwarded
+        badge1: empKpis.filter(k => k.status === 'manager_check' || k.status === 'self_review').length,
+        badge2: empKpis.filter(k => k.status === 'audit').length,
+        badge3: empKpis.filter(k => ['management_review', 'approved'].includes(k.status || '')).length,
         total: empKpis.length,
       };
     } else {
       return {
-        badge1: empKpis.filter(k => k.status === 'management_review').length, // pending
-        badge2: empKpis.filter(k => k.status === 'approved').length, // approved
+        badge1: empKpis.filter(k => k.status === 'management_review').length,
+        badge2: empKpis.filter(k => k.status === 'approved').length,
         badge3: 0,
         total: empKpis.length,
       };
@@ -340,6 +388,24 @@ export function EmployeeSelectorGrid({
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" className="col-span-2 md:col-span-1" />
         </div>
       );
+    } else if (viewLevel === 'skip_level') {
+      return (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
+          <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="amber" subtitle="Awaiting skip-level check" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
+          <StatCard icon={CheckCircle2} label="Reviewed" value={stats.stat2} color="green" subtitle="Skip-level completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} />
+          <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
+        </div>
+      );
+    } else if (viewLevel === 'hr_pms') {
+      return (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
+          <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="amber" subtitle="Awaiting HR PMS review" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
+          <StatCard icon={CheckCircle2} label="Reviewed" value={stats.stat2} color="green" subtitle="HR PMS completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} />
+          <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
+        </div>
+      );
     } else if (viewLevel === 'audit') {
       return (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -378,6 +444,36 @@ export function EmployeeSelectorGrid({
         <>
           {kpiStats.badge1 > 0 && (
             <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800">
+              {kpiStats.badge1} pending
+            </Badge>
+          )}
+          {kpiStats.badge2 > 0 && (
+            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+              {kpiStats.badge2} reviewed
+            </Badge>
+          )}
+        </>
+      );
+    } else if (viewLevel === 'skip_level') {
+      return (
+        <>
+          {kpiStats.badge1 > 0 && (
+            <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200 text-xs dark:bg-teal-900/20 dark:text-teal-400 dark:border-teal-800">
+              {kpiStats.badge1} pending
+            </Badge>
+          )}
+          {kpiStats.badge2 > 0 && (
+            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+              {kpiStats.badge2} reviewed
+            </Badge>
+          )}
+        </>
+      );
+    } else if (viewLevel === 'hr_pms') {
+      return (
+        <>
+          {kpiStats.badge1 > 0 && (
+            <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200 text-xs dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800">
               {kpiStats.badge1} pending
             </Badge>
           )}

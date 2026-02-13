@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, KPI } from '@/hooks/useKpis';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
-import { useKraCategories } from '@/hooks/useOrganization';
+import { useKraCategories, useSkipLevelTeamMembers } from '@/hooks/useOrganization';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -166,14 +166,20 @@ export default function Dashboard() {
     [submissions]
   );
 
+  // Detect skip-level subordinates (employees whose RM reports to current user)
+  const { data: skipLevelMembers } = useSkipLevelTeamMembers(profile?.id);
+  const hasSkipLevelSubordinates = (skipLevelMembers?.length || 0) > 0;
+
   // Calculate available modes based on role
   const availableModes = useMemo(() => {
     const modes: ViewMode[] = ['self'];
     if (['manager', 'admin', 'management'].includes(role || '')) modes.push('team');
+    if (hasSkipLevelSubordinates) modes.push('skip_level');
+    if (role === 'hr_pms' || role === 'admin') modes.push('hr_pms');
     if (['auditor', 'admin'].includes(role || '')) modes.push('audit');
     if (['management', 'admin'].includes(role || '')) modes.push('management');
     return modes;
-  }, [role]);
+  }, [role, hasSkipLevelSubordinates]);
 
   // Initialize from URL query param
   useEffect(() => {
@@ -342,7 +348,8 @@ export default function Dashboard() {
   // Render reviewer views (team, audit, management)
   if (viewMode !== 'self') {
     if (selectedEmployee) {
-      const viewLevelForScorecard = viewMode === 'team' ? 'manager' : viewMode === 'audit' ? 'auditor' : viewMode;
+      const viewLevelMap: Record<string, string> = { team: 'manager', audit: 'auditor', skip_level: 'skip_level', hr_pms: 'hr_pms', management: 'management' };
+      const viewLevelForScorecard = viewLevelMap[viewMode] || viewMode;
       return (
         <div className="space-y-4">
           {availableModes.length > 1 && (
@@ -353,7 +360,7 @@ export default function Dashboard() {
             />
           )}
           <UnifiedScorecard
-            viewLevel={viewLevelForScorecard as 'manager' | 'auditor' | 'management'}
+            viewLevel={viewLevelForScorecard as 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms'}
             employee={selectedEmployee}
             periodSelection={periodSelection}
             onPeriodSelectionChange={setPeriodSelection}
