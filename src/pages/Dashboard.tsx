@@ -9,6 +9,7 @@ import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useCumulativeKpis } from '@/hooks/useCumulativeKpis';
+import { useSubPeriodSubmissionsByKpis } from '@/hooks/useSubPeriodSubmissions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,11 +26,10 @@ import { CumulativeSummaryCard } from '@/components/dashboard/CumulativeSummaryC
 import { TrendArrow } from '@/components/dashboard/KpiTrendIndicator';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { ReviewPeriodSelectorEnhanced, useDefaultPeriodSelection, type PeriodSelection } from '@/components/ui/ReviewPeriodSelectorEnhanced';
-import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
+import { SelfReviewSheet } from '@/components/review/SelfReviewSheet';
 import { ViewModeToggle, ViewMode } from '@/components/review/ViewModeToggle';
 import { EmployeeSelectorGrid } from '@/components/review/EmployeeSelectorGrid';
 import { UnifiedScorecard } from '@/components/review/UnifiedScorecard';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Target, TrendingUp, CheckCircle2, Clock, BarChart3, Info, Building2, ClipboardEdit, Eye } from 'lucide-react';
@@ -74,7 +74,7 @@ export default function Dashboard() {
   const { profile, role } = useAuth();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: kpis, isLoading: kpisLoading } = useMyKpis();
   const { data: categories, isLoading: categoriesLoading } = useKraCategories();
   const { data: selfWorkflowStagesData } = useEmployeeWorkflowStages(profile?.id || '');
@@ -85,6 +85,7 @@ export default function Dashboard() {
   const [selectedKpiTracker, setSelectedKpiTracker] = useState<KPI | null>(null);
   const [selectedKpiLogic, setSelectedKpiLogic] = useState<KPI | null>(null);
   const [selectedKpiReview, setSelectedKpiReview] = useState<KPI | null>(null);
+  const [autoOpenQueryHistory, setAutoOpenQueryHistory] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   
@@ -108,23 +109,6 @@ export default function Dashboard() {
     periodRanges: periodSelection.periodRanges,
     enabled: isCumulativeMode && viewMode === 'self' && !!profile?.id,
   });
-
-  // Calculate available modes based on role
-  const availableModes = useMemo(() => {
-    const modes: ViewMode[] = ['self'];
-    if (['manager', 'admin', 'management'].includes(role || '')) modes.push('team');
-    if (['auditor', 'admin'].includes(role || '')) modes.push('audit');
-    if (['management', 'admin'].includes(role || '')) modes.push('management');
-    return modes;
-  }, [role]);
-
-  // Initialize from URL query param
-  useEffect(() => {
-    const viewFromUrl = searchParams.get('view') as ViewMode | null;
-    if (viewFromUrl && availableModes.includes(viewFromUrl)) {
-      setViewMode(viewFromUrl);
-    }
-  }, [searchParams, availableModes]);
 
   // Fetch org KPI values for this period
   const { data: orgKpiValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
@@ -158,6 +142,23 @@ export default function Dashboard() {
     return orgKpiValuesMap.get(key) || null;
   }, [orgKpiValuesMap, profile?.department_id, profile?.id]);
 
+  // Period-filtered KPIs
+  const periodFilteredKpis = useMemo(() => {
+    return kpis?.filter(k => 
+      k.review_period === selectedPeriod && k.review_year === selectedYear
+    ) || [];
+  }, [kpis, selectedPeriod, selectedYear]);
+
+  // Sub-period submissions for Daily/Weekly KPIs
+  const periodFilteredKpiIds = useMemo(() => periodFilteredKpis.map(k => k.id), [periodFilteredKpis]);
+  const { data: subPeriodSubmissions, isLoading: subPeriodLoading } = useSubPeriodSubmissionsByKpis(
+    periodFilteredKpiIds, selectedPeriod, selectedYear
+  );
+
+  // Fetch ALL submissions across all periods for history
+  const allKpiIds = useMemo(() => kpis?.map(k => k.id) || [], [kpis]);
+  const { data: allSubmissions } = useReviewSubmissions(allKpiIds);
+
   const isLoading = kpisLoading || categoriesLoading;
 
   const submissionMap = useMemo(() => 
@@ -165,12 +166,45 @@ export default function Dashboard() {
     [submissions]
   );
 
-  // Step 1: Filter by period first (global filter)
-  const periodFilteredKpis = useMemo(() => {
-    return kpis?.filter(k => 
-      k.review_period === selectedPeriod && k.review_year === selectedYear
-    ) || [];
-  }, [kpis, selectedPeriod, selectedYear]);
+  // Calculate available modes based on role
+  const availableModes = useMemo(() => {
+    const modes: ViewMode[] = ['self'];
+    if (['manager', 'admin', 'management'].includes(role || '')) modes.push('team');
+    if (['auditor', 'admin'].includes(role || '')) modes.push('audit');
+    if (['management', 'admin'].includes(role || '')) modes.push('management');
+    return modes;
+  }, [role]);
+
+  // Initialize from URL query param
+  useEffect(() => {
+    const viewFromUrl = searchParams.get('view') as ViewMode | null;
+    if (viewFromUrl && availableModes.includes(viewFromUrl)) {
+      setViewMode(viewFromUrl);
+    }
+  }, [searchParams, availableModes]);
+
+  // Deep-link: auto-open KPI sheet from URL params (?kpi=...)
+  useEffect(() => {
+    const kpiParam = searchParams.get('kpi');
+    const panelParam = searchParams.get('panel');
+    if (!kpiParam || !periodFilteredKpis || periodFilteredKpis.length === 0) return;
+
+    const targetKpi = periodFilteredKpis.find(k => k.id === kpiParam);
+    if (!targetKpi) return;
+
+    setSelectedKpiReview(targetKpi);
+    if (panelParam === 'queryHistory') {
+      setAutoOpenQueryHistory(true);
+    }
+
+    // Clean up URL params to prevent re-triggering
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('kpi');
+      next.delete('panel');
+      return next;
+    }, { replace: true });
+  }, [periodFilteredKpis, searchParams]);
 
   // Step 2: Apply category and status filters on top of period filter
   const fullyFilteredKpis = useMemo(() => {
@@ -181,7 +215,6 @@ export default function Dashboard() {
       filtered = filtered.filter(k => k.category_id === cat?.id);
     }
     
-    // Apply status filter from workflow tracker
     if (statusFilter) {
       filtered = filtered.filter(k => k.status === statusFilter);
     }
@@ -189,7 +222,7 @@ export default function Dashboard() {
     return filtered;
   }, [periodFilteredKpis, activeCategory, categories, statusFilter]);
 
-  // Calculate metrics from FILTERED KPIs (global filtering applied) - for single month mode
+  // Calculate metrics from FILTERED KPIs - for single month mode
   const singleMonthMetrics = useMemo(() => {
     const data = fullyFilteredKpis;
     const totalKpis = data.length;
@@ -202,7 +235,7 @@ export default function Dashboard() {
 
     data.forEach(kpi => {
       const submission = submissionMap.get(kpi.id);
-      if (submission?.is_na) return; // Skip N/A from both numerator and denominator
+      if (submission?.is_na) return;
       
       const score = submission?.final_score 
         ?? submission?.management_score 
@@ -213,7 +246,7 @@ export default function Dashboard() {
       const weight = kpi.weightage || 0;
       totalScore += score * weight;
       totalWeight += weight;
-      totalMaxScore += weight * 5; // Max rating is 5
+      totalMaxScore += weight * 5;
     });
 
     const overallRating = totalWeight > 0 ? totalScore / totalWeight : 0;
@@ -222,11 +255,9 @@ export default function Dashboard() {
     return { totalKpis, completedKpis, pendingKpis, totalScore, totalMaxScore, overallRating, overallPercentage };
   }, [fullyFilteredKpis, submissionMap]);
 
-  // Calculate cumulative metrics - for YTD/QTD/Custom modes
+  // Calculate cumulative metrics
   const cumulativeMetrics = useMemo(() => {
-    if (!isCumulativeMode || cumulativeData.aggregatedKpis.length === 0) {
-      return null;
-    }
+    if (!isCumulativeMode || cumulativeData.aggregatedKpis.length === 0) return null;
     
     const overall = calculateOverallCumulativeScore(cumulativeData.aggregatedKpis);
     const completedKpis = cumulativeData.aggregatedKpis.filter(k => k.totalSubmissions > 0).length;
@@ -243,14 +274,13 @@ export default function Dashboard() {
     };
   }, [isCumulativeMode, cumulativeData.aggregatedKpis]);
 
-  // Use appropriate metrics based on mode
   const metrics = isCumulativeMode && cumulativeMetrics ? {
     ...cumulativeMetrics,
-    totalScore: (cumulativeMetrics.overallRating || 0) * 100, // Approximate for display
-    totalMaxScore: 500, // Approximate
+    totalScore: (cumulativeMetrics.overallRating || 0) * 100,
+    totalMaxScore: 500,
   } : singleMonthMetrics;
 
-  // Category metrics from FILTERED KPIs
+  // Category metrics
   const categoryMetrics = useMemo(() => {
     if (!categories) return [];
     const data = fullyFilteredKpis;
@@ -268,7 +298,6 @@ export default function Dashboard() {
         max += weight * 5;
       });
 
-      // Calculate category weightage from sum of KPI weightages
       const categoryWeightage = catKpis.reduce((sum, kpi) => sum + (kpi.weightage || 0), 0);
 
       return {
@@ -281,7 +310,7 @@ export default function Dashboard() {
     }).filter(c => c.count > 0).sort((a, b) => b.percentage - a.percentage);
   }, [categories, fullyFilteredKpis, submissionMap]);
 
-  // Available categories for filter dropdown (based on period-filtered KPIs)
+  // Available categories for filter dropdown
   const availableCategories = useMemo(() => {
     if (!categories) return [];
     return categories.filter(cat => 
@@ -289,7 +318,7 @@ export default function Dashboard() {
     );
   }, [categories, periodFilteredKpis]);
 
-  // Sorting with default Weightage (High to Low)
+  // Sorting
   const { sortedKpis, sortConfig, setSort } = useKpiSorting(fullyFilteredKpis, {}, submissionMap);
 
   // Handle mode change
@@ -312,12 +341,10 @@ export default function Dashboard() {
 
   // Render reviewer views (team, audit, management)
   if (viewMode !== 'self') {
-    // If an employee is selected, show their scorecard
     if (selectedEmployee) {
       const viewLevelForScorecard = viewMode === 'team' ? 'manager' : viewMode === 'audit' ? 'auditor' : viewMode;
       return (
         <div className="space-y-4">
-          {/* View Mode Toggle at top */}
           {availableModes.length > 1 && (
             <ViewModeToggle
               currentMode={viewMode}
@@ -340,10 +367,8 @@ export default function Dashboard() {
       );
     }
 
-    // Show employee selection grid
     return (
       <div className="space-y-4">
-        {/* View Mode Toggle at top */}
         {availableModes.length > 1 && (
           <ViewModeToggle
             currentMode={viewMode}
@@ -361,7 +386,7 @@ export default function Dashboard() {
     );
   }
 
-  // Self dashboard view (existing UI)
+  // Self dashboard view
   return (
     <div className="space-y-6">
       {/* View Mode Toggle for users with multiple modes */}
@@ -373,9 +398,8 @@ export default function Dashboard() {
         />
       )}
 
-      {/* 1. Profile + Filters Row - Compact Layout */}
+      {/* 1. Profile + Filters Row */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        {/* Profile Card - Left */}
         <ProfileCard
           profile={{
             full_name: profile?.full_name,
@@ -387,7 +411,6 @@ export default function Dashboard() {
           compact
         />
 
-        {/* Filters - Compact Horizontal Row */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 flex-shrink-0">
           <ReviewPeriodSelectorEnhanced
             value={periodSelection}
@@ -425,7 +448,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Cumulative Summary Card - Only shown in cumulative mode */}
+      {/* Cumulative Summary Card */}
       {isCumulativeMode && cumulativeMetrics && (
         <CumulativeSummaryCard
           periodSelection={periodSelection}
@@ -437,9 +460,8 @@ export default function Dashboard() {
         />
       )}
 
-      {/* 2. Performance Charts Row - 1:5 ratio on desktop, stacked on mobile */}
+      {/* 2. Performance Charts Row */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-6">
-        {/* Overall Score Chart - Small (1/6) */}
         <Card className="md:col-span-1">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">
@@ -454,7 +476,6 @@ export default function Dashboard() {
                 rating={metrics.overallRating}
               />
             </div>
-            {/* Weighted Score below donut */}
             <div className="text-center mt-2 pt-2 border-t border-border w-full">
               <p className="text-xs text-muted-foreground">
                 {isCumulativeMode ? 'Avg Score' : 'Weighted Score'}
@@ -472,7 +493,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Category Breakdown - Wide (5/6) */}
         <Card className="md:col-span-5">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Performance by Category</CardTitle>
@@ -484,7 +504,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* 5. Status Progress - Compact Tracker */}
+      {/* 5. Status Progress */}
       <WorkflowProgressTracker 
         kpis={periodFilteredKpis}
         activeFilter={statusFilter}
@@ -492,7 +512,7 @@ export default function Dashboard() {
         workflowStages={selfWorkflowStages}
       />
 
-      {/* 6. KPI Details - Table on desktop, Cards on mobile */}
+      {/* 6. KPI Details */}
       <Card>
         <CardHeader className="pb-2 sm:pb-4">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
@@ -507,7 +527,6 @@ export default function Dashboard() {
         </CardHeader>
         <CardContent>
           {isMobile ? (
-            // Mobile: Stacked KPI Cards
             <div className="space-y-3">
               {sortedKpis.map(kpi => (
                 <MobileKpiCard
@@ -519,7 +538,10 @@ export default function Dashboard() {
                   ratingColors={ratingColors}
                   onViewLogic={setSelectedKpiLogic}
                   onViewTracker={setSelectedKpiTracker}
-                  onReview={setSelectedKpiReview}
+                  onReview={(kpi) => {
+                    setAutoOpenQueryHistory(false);
+                    setSelectedKpiReview(kpi);
+                  }}
                 />
               ))}
               {sortedKpis.length === 0 && (
@@ -529,7 +551,6 @@ export default function Dashboard() {
               )}
             </div>
           ) : (
-            // Desktop: Full Table
             <Table>
               <TableHeader>
                 <TableRow>
@@ -548,7 +569,6 @@ export default function Dashboard() {
                   const submission = submissionMap.get(kpi.id);
                   const rating = submission?.final_rating ?? submission?.management_rating ?? submission?.auditor_rating ?? submission?.manager_rating ?? submission?.self_rating ?? null;
                   const score = submission?.final_score ?? submission?.management_score ?? submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? null;
-                  const isKraSet = kpi.status === 'kra_set';
                   
                   return (
                     <TableRow key={kpi.id}>
@@ -596,17 +616,14 @@ export default function Dashboard() {
                             <TooltipTrigger asChild>
                               <Button
                                 size="sm"
-                                variant={isKraSet ? "default" : "ghost"}
+                                variant={kpi.status === 'kra_set' ? "default" : "ghost"}
                                 onClick={() => {
-                                  if (isKraSet) {
-                                    navigate(`/my-kpis?month=${kpi.review_period}&year=${kpi.review_year}`);
-                                  } else {
-                                    setSelectedKpiReview(kpi);
-                                  }
+                                  setAutoOpenQueryHistory(false);
+                                  setSelectedKpiReview(kpi);
                                 }}
-                                className={isKraSet ? "gap-1" : ""}
+                                className={kpi.status === 'kra_set' ? "gap-1" : ""}
                               >
-                                {isKraSet ? (
+                                {kpi.status === 'kra_set' ? (
                                   <>
                                     <ClipboardEdit className="h-4 w-4" />
                                     Review
@@ -617,7 +634,7 @@ export default function Dashboard() {
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                              {isKraSet ? 'Go to My KPIs to submit' : 'View Details'}
+                              {kpi.status === 'kra_set' ? 'Submit self review' : 'View Details'}
                             </TooltipContent>
                           </Tooltip>
                           <Button
@@ -654,46 +671,26 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* KPI Review Sheet */}
-      <Sheet open={!!selectedKpiReview} onOpenChange={(open) => !open && setSelectedKpiReview(null)}>
-        <SheetContent className="w-full sm:w-[85vw] sm:max-w-[1200px] overflow-y-auto p-4 sm:p-6">
-          <SheetHeader className="pb-3 border-b">
-            <div className="flex items-center justify-between">
-              <SheetTitle className="text-base sm:text-lg">
-                {selectedKpiReview?.status === 'kra_set' ? 'Review KPI' : 'KPI Details'}
-              </SheetTitle>
-              {selectedKpiReview && (
-                <Badge className={statusColors[selectedKpiReview.status]}>
-                  {statusLabels[selectedKpiReview.status]}
-                </Badge>
-              )}
-            </div>
-          </SheetHeader>
-          
-          {selectedKpiReview && (
-            <div className="py-4">
-              <KpiReviewPanel
-                kpi={selectedKpiReview}
-                submission={submissionMap.get(selectedKpiReview.id) || null}
-                allKpis={kpis || []}
-                allSubmissions={submissions || []}
-                viewLevel="employee"
-                currentUserId={profile?.id}
-                selectedPeriod={selectedPeriod}
-                selectedYear={selectedYear}
-                onOpenFullHistory={() => {
-                  setSelectedKpiReview(null);
-                  setSelectedKpiTracker(selectedKpiReview);
-                }}
-                onOpenTimeline={() => {
-                  setSelectedKpiReview(null);
-                  setSelectedKpiLogic(selectedKpiReview);
-                }}
-              />
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+      {/* Self Review Sheet - Opens for both submit and view */}
+      <SelfReviewSheet
+        open={!!selectedKpiReview}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedKpiReview(null);
+            setAutoOpenQueryHistory(false);
+          }
+        }}
+        kpi={selectedKpiReview}
+        allKpis={kpis || []}
+        submissionMap={submissionMap}
+        allSubmissions={allSubmissions || []}
+        subPeriodSubmissions={subPeriodSubmissions || []}
+        subPeriodLoading={subPeriodLoading}
+        orgKpiValuesMap={orgKpiValuesMap}
+        selectedPeriod={selectedPeriod}
+        selectedYear={selectedYear}
+        autoOpenQueryHistory={autoOpenQueryHistory}
+      />
 
       {/* Modals */}
       <KpiTrackerModal

@@ -49,8 +49,7 @@ import { CollapsibleSidebarGroup } from './CollapsibleSidebarGroup';
 
 const menuItems = {
   main: [
-    { title: 'Dashboard', icon: Home, path: '/dashboard', roles: ['admin', 'manager', 'employee', 'auditor', 'management'] },
-    { title: 'My KPIs', icon: Target, path: '/my-kpis', roles: ['admin', 'manager', 'employee', 'auditor', 'management'] },
+    { title: 'My Dashboard', icon: Home, path: '/dashboard', roles: ['admin', 'manager', 'employee', 'auditor', 'management'] },
     { title: 'Inbox', icon: MessageSquare, path: '/queries', roles: ['employee', 'manager', 'admin', 'auditor', 'management'], showBadge: true },
     { title: 'PMS Policy', icon: FileText, path: '/pms-policy', roles: ['admin'] },
   ],

@@ -89,7 +89,7 @@ const App = () => (
               <Route path="/" element={<Navigate to="/home" replace />} />
               <Route element={<DashboardLayout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/my-kpis" element={<Suspense fallback={<PageFallback />}><MyKpis /></Suspense>} />
+                <Route path="/my-kpis" element={<Suspense fallback={<PageFallback />}><MyKpis /></Suspense>} /> {/* Redirects to /dashboard */}
                 <Route path="/self-review" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/kra-acceptance" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/queries" element={<QueryInbox />} />

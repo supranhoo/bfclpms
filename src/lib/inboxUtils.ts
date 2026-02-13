@@ -184,7 +184,7 @@ export function getNotificationNavigationPath(item: InboxItem): string | null {
     case 'admin_status_step_back':
     case 'admin_status_change':
     case 'admin_data_entry':
-      return item.kpiId ? `/my-kpis?kpi=${item.kpiId}` : '/my-kpis';
+      return item.kpiId ? `/dashboard?kpi=${item.kpiId}` : '/dashboard';
     case 'kpi_ready_for_audit':
       return `/dashboard?view=audit${kpiParam ? `&kpi=${item.kpiId}` : ''}`;
     case 'kpi_ready_for_management':
@@ -193,7 +193,7 @@ export function getNotificationNavigationPath(item: InboxItem): string | null {
     // KRA assignment
     case 'kra_assigned':
     case 'kra_batch_assigned':
-      return '/my-kpis';
+      return '/dashboard';
 
     // Query notifications → deep-link to KPI details with Query History dialog
     case 'query_raised':
@@ -201,17 +201,17 @@ export function getNotificationNavigationPath(item: InboxItem): string | null {
     case 'query_responded':
     case 'query_response_submitted':
     case 'query_resolved_fyi':
-      return item.kpiId ? `/my-kpis?kpi=${item.kpiId}&panel=queryHistory` : '/my-kpis';
+      return item.kpiId ? `/dashboard?kpi=${item.kpiId}&panel=queryHistory` : '/dashboard';
 
     // Observations
     case 'observation_raised':
     case 'observation_reply':
     case 'observation_resolved':
-      return item.kpiId ? `/my-kpis?kpi=${item.kpiId}` : '/my-kpis';
+      return item.kpiId ? `/dashboard?kpi=${item.kpiId}` : '/dashboard';
 
     // Period events
     case 'period_locked':
-      return '/my-kpis';
+      return '/dashboard';
 
     // PIP
     case 'pip_initiated':
