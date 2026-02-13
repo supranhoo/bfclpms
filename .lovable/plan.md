@@ -1,48 +1,59 @@
 
 
-# Fix: Show "N/A" for Not-Applicable KPIs in Tracker and History Views
+# Fix: Date UOM — Allow Previous-Month Completion for "By X Day" KPIs
 
-## Problem
+## Root Cause
 
-When a KPI is marked as "Not Applicable" for a given month (e.g., November, December), the KPI Tracker Modal and History Card show "-" in the Achieved column instead of "N/A". The `is_na` flag exists on submissions but is never checked in these display components.
+Two bugs prevent correct scoring when an employee completes a Date-type KPI before the review month begins:
 
-## Affected Components
+1. **DateCalendarInput** only allows selecting dates within the review month. A manager cannot select "Dec 31" for a January KPI.
+2. **calculateDateRating** rejects any value less than 1, so even a stored value of "0" (meaning "before the 1st") would get Rating 0.
 
-| Component | File | Current Display | Fix |
-|---|---|---|---|
-| KPI Tracker Modal (table) | `src/components/dashboard/KpiTrackerModal.tsx` | Shows "-" for N/A months | Show "N/A" badge |
-| KPI Tracker Modal (chart) | Same file | Plots null as gap | Exclude N/A months from trend line |
-| KPI History Card (inline) | `src/components/review/KpiHistoryCard.tsx` | Shows "0/100" for N/A months | Show "N/A" instead |
+## Fix — 3 Changes
 
-The `KpiDetailsTable` already handles this correctly (line 328-329 shows N/A badge).
+### 1. Expand DateCalendarInput to include the previous month
 
-## Changes
+Update `src/components/review/DateCalendarInput.tsx`:
+- Change `fromDate` from the 1st of the review month to the 1st of the **previous** month
+- When a date from the previous month is selected, store the value as **0** (meaning "completed before the review month started")
+- Update the helper text to indicate previous month dates are allowed
+- Display "Before 1st {reviewMonth}" when value is 0
 
-### 1. `src/components/dashboard/KpiTrackerModal.tsx`
+### 2. Fix calculateDateRating to handle value 0
 
-**Data layer** (lines 43-65): Add `isNa: boolean` to the monthly data structure. When building each entry, read `sub.is_na` from the submission.
+Update `src/lib/ratingCalculation.ts`:
+- Change the guard from `achieved < 1` to `achieved < 0` to allow value 0
+- Value 0 naturally scores correctly: `0 <= R5(1)` = true = Rating 5 (best possible)
 
-**Chart**: For N/A months, set `achieved` and `target` to `null` so the trend line skips them cleanly (Recharts handles null gaps by default).
+### 3. Fix AchievedValueScoreInput to handle value 0
 
-**Table** (line 160): Instead of showing "-" when achieved is null, check `isNa` first. If true, show an amber "N/A" badge. Same for the Rating column.
+Update `src/components/review/AchievedValueScoreInput.tsx`:
+- Ensure the display logic shows "Before 1st" for day value 0 instead of treating it as empty
 
-### 2. `src/components/review/KpiHistoryCard.tsx`
+### 4. Update Documentation and Tests
 
-**Data layer** (lines 38-48): Add `isNa: boolean` to each entry, read from `sub?.is_na`.
+- Update `DOCUMENTATION.md` to document previous-month date selection
+- Add test case in rating calculation tests for value 0
 
-**Display** (lines 123-124): Where it currently shows `{entry.achieved}/{entry.target}`, check `isNa` first. If true, show "N/A" text instead of the numeric ratio.
+## Expected Behavior After Fix
 
-**Score badge** (line 127): Show "N/A" instead of "-" for N/A months.
-
-**Sparkline**: Exclude N/A entries from the chart data so the trend line only reflects actual performance.
-
-### 3. `DOCUMENTATION.md`
-
-Document that N/A months are visually distinguished in tracker and history views.
+| Scenario | Stored Value | Rating |
+|---|---|---|
+| Completed on Dec 31 (before Jan review) | 0 | 5 (best) |
+| Completed on Jan 1 | 1 | 5 |
+| Completed on Jan 2 | 2 | 4 |
+| Completed on Jan 5 | 5 | 1 |
+| Completed on Jan 6+ | 6+ | 0 |
 
 ## Files to Modify
 
-- `src/components/dashboard/KpiTrackerModal.tsx`
-- `src/components/review/KpiHistoryCard.tsx`
-- `DOCUMENTATION.md`
+- `src/components/review/DateCalendarInput.tsx` — Expand date range to previous month, store 0 for pre-month dates
+- `src/lib/ratingCalculation.ts` — Allow value 0 in calculateDateRating guard
+- `src/components/review/AchievedValueScoreInput.tsx` — Handle display of value 0
+- `src/lib/ratingCalculation.test.ts` — Add test for value 0
+- `DOCUMENTATION.md` — Document the change
+
+## Immediate Data Fix
+
+The manager's current entry of "31" for January needs to be corrected to "0" once the fix is deployed, which will give the correct Rating 5.
 
