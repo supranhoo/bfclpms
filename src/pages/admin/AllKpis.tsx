@@ -15,8 +15,10 @@ import { BulkTemplateAssignDialog } from '@/components/admin/BulkTemplateAssignD
 import { ScoringSimulatorPopover } from '@/components/admin/ScoringSimulatorPopover';
 import { AdminDataEntryDialog } from '@/components/admin/AdminDataEntryDialog';
 import { AdminDailyEntryDialog } from '@/components/admin/AdminDailyEntryDialog';
+import { AdminStatusStepBackDialog } from '@/components/admin/AdminStatusStepBackDialog';
 import { CopyKrasDialog } from '@/components/admin/CopyKrasDialog';
-import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy, Trash2 } from 'lucide-react';
+import { getPreviousStatus } from '@/hooks/useAdminDataEntry';
+import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy, Trash2, Undo2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -78,6 +80,8 @@ export default function AllKpis() {
   const [dailyEntryKpi, setDailyEntryKpi] = useState<KPI | null>(null);
   const [dailyEntryEmployee, setDailyEntryEmployee] = useState<{ id: string; name: string; code?: string } | null>(null);
   const [deletingKpi, setDeletingKpi] = useState<KPI | null>(null);
+  const [stepBackKpi, setStepBackKpi] = useState<KPI | null>(null);
+  const [stepBackEmployee, setStepBackEmployee] = useState<{ id: string; name: string } | null>(null);
 
   const deleteKpiMutation = useAdminDeleteKpi();
 
@@ -691,6 +695,29 @@ export default function AllKpis() {
                                           </Tooltip>
                                         )}
                                         
+                                        {/* Step Back Button */}
+                                        {getPreviousStatus(kpi.status || 'kra_set') && (
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button 
+                                                variant="outline" 
+                                                size="sm"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setStepBackKpi(kpi);
+                                                  setStepBackEmployee({
+                                                    id: employee?.id || '',
+                                                    name: employee?.full_name || 'Unknown',
+                                                  });
+                                                }}
+                                              >
+                                                <Undo2 className="h-4 w-4" />
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Step Back Status</TooltipContent>
+                                          </Tooltip>
+                                        )}
+
                                         <Button 
                                           variant="ghost" 
                                           size="sm"
@@ -788,6 +815,23 @@ export default function AllKpis() {
         isOpen={isCopyKrasOpen}
         onClose={() => setIsCopyKrasOpen(false)}
       />
+
+      {/* Admin Status Step Back Dialog */}
+      {stepBackKpi && stepBackEmployee && (
+        <AdminStatusStepBackDialog
+          isOpen={!!stepBackKpi}
+          onClose={() => {
+            setStepBackKpi(null);
+            setStepBackEmployee(null);
+          }}
+          kpiId={stepBackKpi.id}
+          kpiName={stepBackKpi.kpi_name}
+          kraName={stepBackKpi.kra_name}
+          employeeId={stepBackEmployee.id}
+          employeeName={stepBackEmployee.name}
+          currentStatus={stepBackKpi.status || 'kra_set'}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deletingKpi} onOpenChange={(open) => !open && setDeletingKpi(null)}>
