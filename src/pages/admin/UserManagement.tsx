@@ -567,6 +567,7 @@ export default function UserManagement() {
             <SelectItem value="manager">Manager</SelectItem>
             <SelectItem value="employee">Employee</SelectItem>
             <SelectItem value="auditor">Auditor</SelectItem>
+            <SelectItem value="hr_pms">HR PMS</SelectItem>
             <SelectItem value="management">Management</SelectItem>
           </SelectContent>
         </Select>
@@ -788,6 +789,7 @@ export default function UserManagement() {
                   <SelectItem value="employee">Employee</SelectItem>
                   <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="auditor">Auditor</SelectItem>
+                  <SelectItem value="hr_pms">HR PMS</SelectItem>
                   <SelectItem value="management">Management</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
@@ -899,6 +901,7 @@ export default function UserManagement() {
                   <SelectItem value="employee">Employee</SelectItem>
                   <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="auditor">Auditor</SelectItem>
+                  <SelectItem value="hr_pms">HR PMS</SelectItem>
                   <SelectItem value="management">Management</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
@@ -980,6 +983,7 @@ export default function UserManagement() {
                   <SelectItem value="employee">Employee</SelectItem>
                   <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="auditor">Auditor</SelectItem>
+                  <SelectItem value="hr_pms">HR PMS</SelectItem>
                   <SelectItem value="management">Management</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>

@@ -40,6 +40,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | **Employee** | Views assigned KPIs, submits self-reviews, tracks personal performance |
 | **Manager** | Reviews team members' KPIs, approves/queries submissions |
 | **Auditor** | Validates manager assessments, ensures compliance |
+| **HR PMS** | Conducts HR PMS Review stage in the workflow, assignable via User Management |
 | **Management** | Final approval authority, organizational oversight |
 | **Admin** | System configuration, user management, data imports |
 
