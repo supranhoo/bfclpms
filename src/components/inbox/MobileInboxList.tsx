@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InlineQuickAction } from './InlineQuickAction';
-import { InboxItem, GroupedInboxItems, groupByDate, getQuickAction } from '@/lib/inboxUtils';
+import { InboxItem, GroupedInboxItems, groupByDate, getQuickAction, getNotificationNavigationPath } from '@/lib/inboxUtils';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { Bell, MessageSquare, Inbox, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
@@ -20,6 +20,7 @@ interface MobileInboxListProps {
   hasMore?: boolean;
   onLoadMore?: () => void;
   onViewItem: (item: InboxItem) => void;
+  onNavigate?: (path: string) => void;
   emptyMessage?: string;
   emptyDescription?: string;
   enableGrouping?: boolean;
@@ -36,6 +37,7 @@ export function MobileInboxList({
   hasMore,
   onLoadMore,
   onViewItem,
+  onNavigate,
   emptyMessage = 'No items',
   emptyDescription = 'Nothing to show here',
   enableGrouping = true,
@@ -126,7 +128,16 @@ export function MobileInboxList({
                       "p-3 cursor-pointer active:scale-[0.98]",
                       "hover:bg-muted/50"
                     )}
-                    onClick={() => onViewItem(item)}
+                    onClick={() => {
+                      if (item.type === 'notification' && onNavigate) {
+                        const path = getNotificationNavigationPath(item);
+                        if (path) {
+                          onNavigate(path);
+                          return;
+                        }
+                      }
+                      onViewItem(item);
+                    }}
                   >
                     <div className="flex items-start gap-3">
                       {/* Type Icon */}
