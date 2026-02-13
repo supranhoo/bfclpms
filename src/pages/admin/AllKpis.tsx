@@ -15,7 +15,8 @@ import { BulkTemplateAssignDialog } from '@/components/admin/BulkTemplateAssignD
 import { ScoringSimulatorPopover } from '@/components/admin/ScoringSimulatorPopover';
 import { AdminDataEntryDialog } from '@/components/admin/AdminDataEntryDialog';
 import { AdminDailyEntryDialog } from '@/components/admin/AdminDailyEntryDialog';
-import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays } from 'lucide-react';
+import { CopyKrasDialog } from '@/components/admin/CopyKrasDialog';
+import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -58,6 +59,7 @@ export default function AllKpis() {
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false);
+  const [isCopyKrasOpen, setIsCopyKrasOpen] = useState(false);
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
   
   // Admin data entry dialog states
@@ -314,6 +316,10 @@ export default function AllKpis() {
           <Button variant="outline" onClick={handleExportExcel}>
             <Download className="h-4 w-4 mr-2" />
             Export Excel
+          </Button>
+          <Button variant="outline" onClick={() => setIsCopyKrasOpen(true)}>
+            <Copy className="h-4 w-4 mr-2" />
+            Copy KRAs
           </Button>
           <Button variant="outline" onClick={() => setIsBulkAssignOpen(true)}>
             <Library className="h-4 w-4 mr-2" />
@@ -747,6 +753,11 @@ export default function AllKpis() {
         employeeId={dailyEntryEmployee?.id || ''}
         employeeName={dailyEntryEmployee?.name || ''}
         employeeCode={dailyEntryEmployee?.code}
+      />
+
+      <CopyKrasDialog
+        isOpen={isCopyKrasOpen}
+        onClose={() => setIsCopyKrasOpen(false)}
       />
     </div>
   );

@@ -1326,6 +1326,13 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - **Admin Actions Stats Card:** New stat card showing count of admin/on-behalf actions for the period
   - Admin action types include: `ADMIN_DATA_ENTRY_SELF`, `ADMIN_DATA_ENTRY_MANAGER`, `ADMIN_DATA_ENTRY_AUDITOR`, `ADMIN_DATA_ENTRY_MANAGEMENT`, `ADMIN_DAILY_ENTRY_OVERRIDE`, `ADMIN_STATUS_OVERRIDE`, `ADMIN_OVERRIDE`
 - Audit logging for all changes
+- **Copy KRAs (`CopyKrasDialog`):** Replicate KRAs from one employee to another without re-drafting.
+  - **Step 1 – Source:** Select source employee, review period, and year. KRAs auto-load.
+  - **Step 2 – Select KRAs:** Cherry-pick individual KRAs with Select All / Deselect All toggle. Shows category, KPI name, and weightage.
+  - **Step 3 – Target:** Multi-select target employees (excludes source), set target period/year.
+  - **Duplicate Detection:** Automatically detects and skips KRAs already assigned to target employees for the target period (using `kra_name + kpi_name` composite key). Displays per-employee duplicate count and a summary warning.
+  - **Fields Copied:** `category_id`, `kra_name`, `kpi_name`, `target_value`, `uom`, `uom_type`, `weightage`, `frequency`, `sub_frequency`, `criteria`, `source_of_data`, `r0-r5`, `threshold_mode`, `qualitative_options`, `is_org_level`, `org_level_scope`, `ref_code`, `day_count_type`, `frequency_cycle_start`, `require_resubmit_reason`. New KPIs are created with `status: 'kra_set'`.
+  - **No new infrastructure:** Reuses existing `kpis` table INSERT path and admin RLS policies.
 
 #### 4.9.7 Review Periods (`/admin/review-periods`)
 - Create review periods (monthly/quarterly)
