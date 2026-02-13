@@ -244,7 +244,8 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
             <Badge variant="secondary">{kpi.review_period} {kpi.review_year}</Badge>
           </div>
 
-          <ScrollArea className="flex-1 min-h-0 pr-4">
+          <div className="flex-1 min-h-0 overflow-hidden">
+          <ScrollArea className="h-full pr-4">
             {isLoading ? (
               <div className="flex items-center justify-center py-12 text-muted-foreground">
                 Loading timeline...
@@ -313,6 +314,7 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
               </div>
             )}
           </ScrollArea>
+          </div>
         </div>
 
         <div className="shrink-0 flex justify-end pt-2 border-t">
