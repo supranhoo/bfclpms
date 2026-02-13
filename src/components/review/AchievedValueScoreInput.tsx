@@ -111,7 +111,7 @@ export function AchievedValueScoreInput({
   if (isDateUom && reviewMonth && reviewYear) {
     const dayValue = typeof achievedValue === 'number' 
       ? achievedValue 
-      : (typeof achievedValue === 'string' && achievedValue ? parseInt(achievedValue) : null);
+      : (typeof achievedValue === 'string' && achievedValue !== '' ? parseInt(achievedValue) : null);
     
     const handleDateChange = (day: number | null) => {
       onAchievedValueChange(day);
@@ -150,7 +150,9 @@ export function AchievedValueScoreInput({
               </div>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Submitted on day {dayValue} of the month
+              {dayValue === 0 
+                ? `Completed before 1st ${reviewMonth}` 
+                : `Submitted on day ${dayValue} of the month`}
             </p>
           </div>
         )}

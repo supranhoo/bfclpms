@@ -333,7 +333,7 @@ function calculateDateRating(
     ? achievedValue 
     : parseFloat(String(achievedValue));
     
-  if (isNaN(achieved) || achieved < 1 || achieved > 31) {
+  if (isNaN(achieved) || achieved < 0 || achieved > 31) {
     return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0, achievedWeight: 0 };
   }
 
