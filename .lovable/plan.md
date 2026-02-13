@@ -1,48 +1,25 @@
 
-# Fix: Review Timeline Mobile UI Issues
 
-## Issues Identified
+# Fix: Missing Scrollbar in Review Timeline
 
-### 1. Workflow Progress Bar Overflow
-The 6 workflow stages each have `minWidth: 48px` (288px total) plus connector lines. On a 390px mobile screen with 80px of combined padding (dialog p-6 + inner p-4), only ~310px remains. Stage labels like "Self Review" and "Management" get cramped and the connector lines compress to nearly zero width.
+## Root Cause
 
-### 2. Timeline Card Layout Too Wide
-Each timeline entry uses `flex items-start justify-between gap-4` with the timestamp forced to `whitespace-nowrap` on the right side. On mobile, this leaves very little room for the action label and details text, causing text to wrap awkwardly.
+The `ScrollArea` uses `flex-1 min-h-0` to fill available space, but the Radix `ScrollAreaPrimitive.Viewport` inside it needs the parent to have a resolved pixel height for the scrollbar to activate. In the current flex layout, the height resolves correctly for containment but the ScrollArea component's internal viewport doesn't trigger its scrollbar because `flex-1` alone doesn't always give Radix a concrete height to compare against.
 
-### 3. Dialog Padding Too Large
-The dialog uses `p-6` (24px each side) which is excessive on small screens, wasting 48px of horizontal space.
+## Fix
 
-### 4. Badge Row Overflow
-The KRA name badge and period badge sit in a horizontal row that can overflow if the KRA name is long.
+### File: `src/components/dashboard/KpiTimeline.tsx` (line 247)
 
-## Fix Plan
+Wrap the `ScrollArea` in a container div that has `flex-1 min-h-0 overflow-hidden`, and give the `ScrollArea` an explicit `h-full` so the Radix viewport gets a resolved height:
 
-### File: `src/components/dashboard/KpiTimeline.tsx`
+```
+Current:  <ScrollArea className="flex-1 min-h-0 pr-4">
+Fixed:    wrapped in <div className="flex-1 min-h-0 overflow-hidden">
+            <ScrollArea className="h-full pr-4">
+```
 
-**Fix 1 -- Reduce mobile padding**
-Change `DialogContent` className to use `p-4 sm:p-6` so mobile gets tighter padding.
-
-**Fix 2 -- Responsive workflow progress**
-- Hide the text labels on mobile, show only icons (add `hidden sm:block` to the label span)
-- Reduce `minWidth` to 32px on mobile via a responsive approach
-- This prevents the 6 labels from fighting for space
-
-**Fix 3 -- Stack timestamp below content on mobile**
-Change the timeline card layout from side-by-side to stacked on mobile:
-- Use `flex-col sm:flex-row sm:items-start sm:justify-between` on the card inner div
-- Move timestamp to bottom-left with `text-left sm:text-right` and remove `whitespace-nowrap` on mobile
-
-**Fix 4 -- Truncate badges**
-Add `max-w-[150px] truncate` to the KRA name badge so it doesn't push the period badge off-screen. Wrap in `flex-wrap` for safety.
+This ensures the outer div resolves to a concrete pixel height via flex, and `h-full` on ScrollArea gives Radix the height it needs to show the scrollbar.
 
 ### File: `DOCUMENTATION.md`
-Update the mobile optimization section to document the Review Timeline mobile fixes.
+Update to note the ScrollArea wrapper pattern for flex layouts.
 
-## Summary
-
-| Fix | Issue | Approach |
-|-----|-------|----------|
-| 1 | Dialog padding too large | `p-4 sm:p-6` |
-| 2 | Workflow stages overflow | Hide labels on mobile, icon-only |
-| 3 | Timeline cards cramped | Stack timestamp below on mobile |
-| 4 | Badge overflow | Truncate + flex-wrap |
