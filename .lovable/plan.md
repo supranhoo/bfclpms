@@ -1,66 +1,54 @@
 
+# Fix: Review Timeline Dialog Overflow and Floating Content
 
-# Fix: Review Timeline UI Issues
+## Root Cause
 
-## Root Cause Analysis
+The dialog content overflows its boundary because of a **layout structure problem**:
 
-After inspecting the Review Timeline dialog, I identified **5 UI issues**:
+1. `DialogContent` has `max-h-[85vh]` but the inner wrapper `div.py-2` has **no overflow control**
+2. `ScrollArea` uses a **fixed `h-[500px]`** which, combined with the header (~80px), workflow progress (~120px), badges (~40px), and footer (~50px), totals ~790px -- exceeding 85vh on most screens
+3. Without `overflow-hidden` on the dialog content, the excess content visually "breaks through" the dialog border and floats below it
 
-### Issue 1: Dialog Description Overflows with Raw KPI Text
-The `DialogDescription` renders `kpi.kpi_name` which contains the full KPI description, formula, and scoring logic. This creates a wall of text in the dialog header. It should show just the KRA name and a truncated KPI title.
-
-### Issue 2: Missing Action Configurations
-The `actionConfig` map is missing entries for 3 action types that exist in the database:
-- `ADMIN_STATUS_STEP_BACK` -- shows as "ADMIN STATUS STEP BACK" with a plain gray dot
-- `AUDITOR_FORWARDED` -- not styled
-- `MANAGER_FORWARDED` -- not styled
-
-These fall through to the default handler which uses a plain gray icon and uppercased text.
-
-### Issue 3: Raw Status Values in Details
-The timeline details show raw database values like "New Status: self_review" and "New Status: kra_set" instead of human-readable labels like "Self Review" and "KRA Set".
-
-### Issue 4: Workflow Progress Connector Line Layout
-The connector lines between workflow stages use a nested `flex-1` layout where both the stage container and the connector compete for space. The last stage also gets wrapped in a `flex-1` container unnecessarily, causing uneven spacing.
-
-### Issue 5: Timeline Dot Misalignment
-The timeline vertical line is at `left-4` (16px center) while the timeline dot is at `left-2` with `w-5` (center at 18px), causing a 2px offset between the line and dot centers.
+Additionally:
+- `MANAGER_SENT_BACK_TO_EMPLOYEE` action is missing from `actionConfig`, causing its card to render with an invisible `bg-muted-foreground` dot (CSS variable, not a valid Tailwind bg color)
+- The description still shows too much text because `kpi.kpi_name` often has no newlines, so `.split('\n')[0]` returns everything
 
 ## Fix Plan
 
 ### File: `src/components/dashboard/KpiTimeline.tsx`
 
-**Fix 1 -- Truncate Dialog Description (line 192-194)**
-Replace the raw `kpi.kpi_name` dump with just the KRA name as context. Truncate long names with `line-clamp-2`.
+**Fix 1 -- Restructure dialog layout for proper overflow containment**
 
-**Fix 2 -- Add missing action configs (after line 81)**
-Add entries for:
+Change the dialog content to use a flex column layout:
+
+```text
+DialogContent (max-h-[85vh], flex flex-col, overflow-hidden)
+  DialogHeader (shrink-0)
+  div (flex-1, min-h-0, flex flex-col, overflow-hidden)
+    Workflow Progress (shrink-0)
+    Badges (shrink-0)
+    ScrollArea (flex-1, min-h-0)  <-- replaces fixed h-[500px]
+  Footer (shrink-0)
 ```
-ADMIN_STATUS_STEP_BACK: { icon: UserCog, color: 'bg-rose-600', label: 'Admin Status Step Back' }
-AUDITOR_FORWARDED: { icon: CheckCircle, color: 'bg-indigo-500', label: 'Auditor Forwarded' }
-MANAGER_FORWARDED: { icon: CheckCircle, color: 'bg-green-500', label: 'Manager Forwarded' }
-```
 
-**Fix 3 -- Format raw status values (in formatDetails function, ~line 157)**
-Add a status label map and format "New Status: xxx" values to human-readable labels.
+This ensures the ScrollArea dynamically fills available space and the dialog never overflows.
 
-**Fix 4 -- Fix workflow progress layout (lines 201-232)**
-Restructure the flex layout so connector lines sit between stage items rather than being nested inside the same flex container. Use a flat approach where stages and connectors alternate.
+**Fix 2 -- Add missing action config**
 
-**Fix 5 -- Fix timeline dot alignment (lines 254, 267)**
-Adjust the timeline line position to `left-[18px]` and the dot to `left-[9px]` (centering the 20px dot at 19px, matching the line at 18.5px). Or use consistent centering with the `pl-10` content offset.
+Add `MANAGER_SENT_BACK_TO_EMPLOYEE` to `actionConfig` with proper icon and color.
+
+**Fix 3 -- Simplify description**
+
+Show only the KRA name in the description. Remove the raw `kpi_name` dump entirely since it contains formulas and scoring logic.
 
 ### File: `DOCUMENTATION.md`
-Update to reflect the new action config entries.
 
-## Summary of Changes
+Update to reflect the layout fix and new action config entry.
 
-| Fix | Issue | File | Lines |
-|-----|-------|------|-------|
-| 1 | Description overflow | KpiTimeline.tsx | 192-194 |
-| 2 | Missing action configs | KpiTimeline.tsx | 81 (add after) |
-| 3 | Raw status values | KpiTimeline.tsx | ~157 |
-| 4 | Workflow progress layout | KpiTimeline.tsx | 201-232 |
-| 5 | Timeline dot alignment | KpiTimeline.tsx | 254, 267 |
-| 6 | Documentation sync | DOCUMENTATION.md | Relevant section |
+## Summary
 
+| Fix | Issue | Change |
+|-----|-------|--------|
+| 1 | Content overflows dialog | Flex column layout with dynamic ScrollArea height |
+| 2 | Missing MANAGER_SENT_BACK_TO_EMPLOYEE | Add to actionConfig map |
+| 3 | Description shows raw formula text | Show only KRA name |
