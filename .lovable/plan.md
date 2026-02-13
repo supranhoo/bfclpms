@@ -1,82 +1,55 @@
 
-# Fix: Workflow Engine Props Not Passed to Child Components
+# Propagate Workflow Engine to ALL Remaining Components
 
-## Root Cause Analysis (RCA)
+## Problem
+The workflow engine was only wired into `UnifiedScorecard` and `AuditScorecard`. Five other components still use hardcoded 6-stage pipelines, meaning employees with custom workflows (like skip-manager) see incorrect stages and buttons across Team Review, Management Review, Dashboard, and KPI detail panels.
 
-The previous CAPA correctly built the workflow engine and wired it into `UnifiedScorecard.tsx` for computing `reviewableStatuses`, `forwardStatus`, and `sendBackTargets`. However, **two critical prop-passing gaps** prevent the fix from actually working:
+## Gaps Found
 
-### Gap 1: `KpiDetailsTable` missing `workflowStages` prop (PRIMARY BUG)
+| Component | WorkflowProgressTracker | KpiDetailsTable | KpiJourneySection |
+|---|---|---|---|
+| UnifiedScorecard | DONE | DONE | MISSING (via KpiReviewPanel) |
+| AuditScorecard | DONE | DONE | MISSING (via KpiReviewPanel) |
+| EmployeeScorecard (Team Review) | MISSING | MISSING | MISSING (via KpiReviewPanel) |
+| ManagementScorecard | MISSING | MISSING | MISSING (via KpiReviewPanel) |
+| Dashboard (self view) | MISSING | N/A | N/A |
+| KpiTimeline modal | Hardcoded 6 stages | N/A | N/A |
 
-In `UnifiedScorecard.tsx` line 805, `KpiDetailsTable` is rendered **without** the `workflowStages` prop:
+## Changes
 
-```tsx
-<KpiDetailsTable
-  kpis={sortedKpis}
-  submissionMap={submissionMap}
-  viewType={viewType}
-  // ... other props
-  // workflowStages={effectiveStages}  <-- MISSING!
-/>
-```
+### 1. EmployeeScorecard.tsx (Team Review)
+- Already imports `useEmployeeWorkflowStages` and computes `effectiveStages` -- but never passes it down
+- Add `workflowStages={effectiveStages}` to `WorkflowProgressTracker` (line 504)
+- Add `workflowStages={effectiveStages}` to `KpiDetailsTable` (line 627)
 
-Because `workflowStages` is undefined, `KpiDetailsTable` defaults to `DEFAULT_WORKFLOW_STAGES` (full 6-stage pipeline). The `canReviewKpi` function then sees `manager_check` in the stages and requires `kpiStatus === 'manager_check'` for audit -- so Jaspal's `self_review` KPIs show "View" instead of "Review".
+### 2. ManagementScorecard.tsx
+- Import `useEmployeeWorkflowStages` and compute `effectiveStages`
+- Add `workflowStages={effectiveStages}` to `WorkflowProgressTracker` (line 550)
+- Add `workflowStages={effectiveStages}` to `KpiDetailsTable` (line 671)
+- Update hardcoded send-back and forward status logic to use workflow engine
 
-### Gap 2: `WorkflowProgressTracker` missing `workflowStages` prop
+### 3. KpiReviewPanel.tsx -> KpiJourneySection
+- Add optional `workflowStages` prop to `KpiReviewPanel`
+- Pass it through to `KpiJourneySection`
+- Update all callers (UnifiedScorecard, AuditScorecard, EmployeeScorecard, ManagementScorecard) to pass `workflowStages` when rendering `KpiReviewPanel`
 
-In `UnifiedScorecard.tsx` line 759:
-```tsx
-<WorkflowProgressTracker kpis={kpis || []} queries={queries || []} />
-```
-No `workflowStages` prop, so the tracker always shows all 6 stages including Manager Check, even for Jaspal who has a skip-manager workflow.
+### 4. Dashboard.tsx (self view)
+- Import `useEmployeeWorkflowStages` with the logged-in user's ID
+- Pass `workflowStages` to `WorkflowProgressTracker`
 
-### Gap 3: Legacy pages completely untouched
+### 5. KpiTimeline.tsx
+- Accept optional `workflowStages` prop
+- Filter the hardcoded 6-stage array to only show stages present in the employee's workflow
 
-`AuditPanel.tsx` and `AuditScorecard.tsx` (legacy standalone pages) were never updated with the workflow engine. They hardcode `manager_check` for pending counts, stats, and status transitions. While the sidebar now routes to `/dashboard?view=audit` (which uses the unified path), these legacy pages still exist and could be accessed via direct URL.
-
----
-
-## CAPA (Corrective Actions)
-
-### 1. Pass `workflowStages` to `KpiDetailsTable` in `UnifiedScorecard.tsx`
-
-Add the `workflowStages={effectiveStages}` prop at line ~805. This is the single-line fix that resolves the primary bug -- the "Review" button will now appear for Jaspal's `self_review` KPIs in audit view.
-
-### 2. Pass `workflowStages` to `WorkflowProgressTracker` in `UnifiedScorecard.tsx`
-
-Add `workflowStages={effectiveStages}` at line ~759 so the progress tracker only shows stages relevant to the employee's workflow.
-
-### 3. Update legacy `AuditScorecard.tsx`
-
-Wire in the workflow engine:
-- Import and call `useEmployeeWorkflowStages(employee.id)`
-- Update `pendingAuditCount` (line 203) to include `self_review` for skip-manager workflows
-- Update the `submitAuditReview` mutation to use `resolveForwardStatus` instead of hardcoded `management_review`
-- Update `sendBack` mutation to use `resolveSendBackStatus`
-- Pass `workflowStages` to `WorkflowProgressTracker` and `KpiDetailsTable`
-
-### 4. Update legacy `AuditPanel.tsx`
-
-- Update `pendingAudit` stat (line 89) to include `self_review` KPIs
-- Update status filter (line 67) to include `self_review` in pending
-- Update `getEmployeeKpiStats` (line 132) to include `self_review` in pending count
-
-### 5. Update `DOCUMENTATION.md`
-
-Document the prop-passing requirements and the complete list of files that must pass `workflowStages`.
-
----
+### 6. DOCUMENTATION.md
+- Update the workflow integration checklist with all components that must receive `workflowStages`
 
 ## Technical Details
 
 ### Files to modify:
-- `src/components/review/UnifiedScorecard.tsx` -- Add `workflowStages` prop to `KpiDetailsTable` and `WorkflowProgressTracker`
-- `src/components/review/AuditScorecard.tsx` -- Wire in workflow engine for dynamic transitions
-- `src/pages/AuditPanel.tsx` -- Include `self_review` in audit pending counts/filters
-- `DOCUMENTATION.md` -- Update workflow integration docs
-
-### Verification
-After the fix, Jaspal's KPIs (status: `self_review`, workflow: `skip_manager`) should:
-1. Appear as "pending" in the audit employee list
-2. Show "Review" button (not "View") in the KPI table
-3. Display only 5 stages in the workflow tracker (no Manager Check)
-4. Forward correctly to `management_review` on approval
+- `src/components/review/EmployeeScorecard.tsx` -- Pass `workflowStages` to WorkflowProgressTracker and KpiDetailsTable
+- `src/components/review/ManagementScorecard.tsx` -- Import workflow engine, pass `workflowStages` to tracker and table, dynamic transitions
+- `src/components/review/KpiReviewPanel.tsx` -- Accept and forward `workflowStages` prop to KpiJourneySection
+- `src/pages/Dashboard.tsx` -- Pass logged-in user's workflow stages to tracker
+- `src/components/dashboard/KpiTimeline.tsx` -- Accept `workflowStages` prop, filter displayed stages
+- `DOCUMENTATION.md` -- Update integration checklist
