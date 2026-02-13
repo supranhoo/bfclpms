@@ -191,7 +191,7 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden p-4 sm:p-6">
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
@@ -214,9 +214,9 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
                 
                 return (
                   <div key={stage.key} className="contents">
-                    <div className="flex flex-col items-center" style={{ minWidth: 48 }}>
+                    <div className="flex flex-col items-center min-w-[32px] sm:min-w-[48px]">
                       <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center ${
                           isCompleted
                             ? 'bg-green-500 text-white'
                             : isCurrent
@@ -224,9 +224,9 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
                             : 'bg-muted text-muted-foreground'
                         }`}
                       >
-                        <StageIcon className="h-4 w-4" />
+                        <StageIcon className="h-3 w-3 sm:h-4 sm:w-4" />
                       </div>
-                      <span className={`text-xs mt-1 text-center ${isCurrent ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
+                      <span className={`hidden sm:block text-xs mt-1 text-center ${isCurrent ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
                         {stage.label}
                       </span>
                     </div>
@@ -239,8 +239,8 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
             </div>
           </div>
 
-          <div className="shrink-0 flex items-center gap-2 mb-4">
-            <Badge variant="outline">{kpi.kra_name}</Badge>
+          <div className="shrink-0 flex flex-wrap items-center gap-2 mb-4">
+            <Badge variant="outline" className="max-w-[150px] truncate">{kpi.kra_name}</Badge>
             <Badge variant="secondary">{kpi.review_period} {kpi.review_year}</Badge>
           </div>
 
@@ -276,7 +276,7 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
                         </div>
                         
                         <div className="bg-card border rounded-lg p-4 shadow-sm">
-                          <div className="flex items-start justify-between gap-4">
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4">
                             <div className="flex-1">
                               <h4 className="font-medium text-foreground">
                                 {config.label}
@@ -301,10 +301,8 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
                               )}
                             </div>
                             
-                            <time className="text-xs text-muted-foreground whitespace-nowrap">
-                              {format(new Date(log.created_at), 'dd MMM yyyy')}
-                              <br />
-                              {format(new Date(log.created_at), 'hh:mm a')}
+                            <time className="text-xs text-muted-foreground sm:whitespace-nowrap text-left sm:text-right">
+                              {format(new Date(log.created_at), 'dd MMM yyyy, hh:mm a')}
                             </time>
                           </div>
                         </div>
