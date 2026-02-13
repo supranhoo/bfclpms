@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { 
   Clock, 
   FileText, 
@@ -244,8 +244,7 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
             <Badge variant="secondary">{kpi.review_period} {kpi.review_year}</Badge>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-hidden">
-          <ScrollArea className="h-full pr-4">
+          <div className="flex-1 min-h-0 overflow-y-auto pr-4">
             {isLoading ? (
               <div className="flex items-center justify-center py-12 text-muted-foreground">
                 Loading timeline...
@@ -313,7 +312,6 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
                 </div>
               </div>
             )}
-          </ScrollArea>
           </div>
         </div>
 
