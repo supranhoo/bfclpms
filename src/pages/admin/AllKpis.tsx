@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useAllKpis, useKpiQueries, KPI } from '@/hooks/useKpis';
+import { useAllKpis, useKpiQueries, useAdminDeleteKpi, KPI } from '@/hooks/useKpis';
 import { useKraCategories, useProfiles, useDivisions, useDepartments } from '@/hooks/useOrganization';
 import { getStageLabel } from '@/hooks/useWorkflowConfig';
 import * as XLSX from 'xlsx';
@@ -16,7 +16,17 @@ import { ScoringSimulatorPopover } from '@/components/admin/ScoringSimulatorPopo
 import { AdminDataEntryDialog } from '@/components/admin/AdminDataEntryDialog';
 import { AdminDailyEntryDialog } from '@/components/admin/AdminDailyEntryDialog';
 import { CopyKrasDialog } from '@/components/admin/CopyKrasDialog';
-import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy } from 'lucide-react';
+import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy, Trash2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -67,6 +77,9 @@ export default function AllKpis() {
   const [dataEntryEmployee, setDataEntryEmployee] = useState<{ id: string; name: string; code?: string } | null>(null);
   const [dailyEntryKpi, setDailyEntryKpi] = useState<KPI | null>(null);
   const [dailyEntryEmployee, setDailyEntryEmployee] = useState<{ id: string; name: string; code?: string } | null>(null);
+  const [deletingKpi, setDeletingKpi] = useState<KPI | null>(null);
+
+  const deleteKpiMutation = useAdminDeleteKpi();
 
   // Get unique managers (profiles who have reports)
   const managers = useMemo(() => {
@@ -688,6 +701,22 @@ export default function AllKpis() {
                                         >
                                           <Edit className="h-4 w-4" />
                                         </Button>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button 
+                                              variant="ghost" 
+                                              size="sm"
+                                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setDeletingKpi(kpi);
+                                              }}
+                                            >
+                                              <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>Delete KRA</TooltipContent>
+                                        </Tooltip>
                                       </div>
                                     </div>
                                   );
@@ -759,6 +788,36 @@ export default function AllKpis() {
         isOpen={isCopyKrasOpen}
         onClose={() => setIsCopyKrasOpen(false)}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deletingKpi} onOpenChange={(open) => !open && setDeletingKpi(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Assigned KRA</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this KRA? This action cannot be undone.
+              <div className="mt-3 p-3 bg-muted rounded-md space-y-1">
+                <div className="text-sm font-medium text-foreground">{deletingKpi?.kra_name}</div>
+                <div className="text-sm text-muted-foreground">{deletingKpi?.kpi_name}</div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deletingKpi) {
+                  deleteKpiMutation.mutate(deletingKpi.id);
+                  setDeletingKpi(null);
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

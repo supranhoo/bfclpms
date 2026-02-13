@@ -415,6 +415,33 @@ export function useAdminUpdateKpi() {
   });
 }
 
+// Admin delete KPI
+export function useAdminDeleteKpi() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (kpiId: string) => {
+      const { error } = await supabase
+        .from('kpis')
+        .delete()
+        .eq('id', kpiId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
+      toast({ title: 'KRA deleted successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to delete KRA', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
 // Self review submission with optimistic updates
 export function useSubmitSelfReview() {
   const queryClient = useQueryClient();

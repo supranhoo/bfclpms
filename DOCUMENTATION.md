@@ -1333,6 +1333,12 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - **Duplicate Detection:** Automatically detects and skips KRAs already assigned to target employees for the target period (using `kra_name + kpi_name` composite key). Displays per-employee duplicate count and a summary warning.
   - **Fields Copied:** `category_id`, `kra_name`, `kpi_name`, `target_value`, `uom`, `uom_type`, `weightage`, `frequency`, `sub_frequency`, `criteria`, `source_of_data`, `r0-r5`, `threshold_mode`, `qualitative_options`, `is_org_level`, `org_level_scope`, `ref_code`, `day_count_type`, `frequency_cycle_start`, `require_resubmit_reason`. New KPIs are created with `status: 'kra_set'`.
   - **No new infrastructure:** Reuses existing `kpis` table INSERT path and admin RLS policies.
+- **Delete Assigned KRA:** Admins can permanently remove an assigned KRA from any employee.
+  - A red trash icon button appears on each KPI row in the expanded employee view on the All KPIs page.
+  - Clicking opens a confirmation dialog displaying the KRA name and KPI name to prevent accidental deletions.
+  - On confirm, the KRA is deleted from the `kpis` table and the table refreshes automatically.
+  - Enforced by a DELETE RLS policy on `kpis` restricted to admin role via `has_role()`.
+  - If dependent data exists (review submissions, queries) with CASCADE foreign keys, it is also removed; otherwise the delete fails gracefully with an error toast.
 
 #### 4.9.7 Review Periods (`/admin/review-periods`)
 - Create review periods (monthly/quarterly)
