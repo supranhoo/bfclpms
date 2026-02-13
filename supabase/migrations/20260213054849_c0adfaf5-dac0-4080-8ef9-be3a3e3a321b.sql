@@ -1,0 +1,1 @@
+UPDATE workflow_settings SET max_value = 60 WHERE setting_key = 'daily_submission_window_days';
