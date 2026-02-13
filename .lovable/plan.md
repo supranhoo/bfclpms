@@ -1,55 +1,71 @@
 
-# Propagate Workflow Engine to ALL Remaining Components
+
+# Fix: Notification Navigation ("Open in App") for All Event Types
 
 ## Problem
-The workflow engine was only wired into `UnifiedScorecard` and `AuditScorecard`. Five other components still use hardcoded 6-stage pipelines, meaning employees with custom workflows (like skip-manager) see incorrect stages and buttons across Team Review, Management Review, Dashboard, and KPI detail panels.
 
-## Gaps Found
+Two issues found with the Inbox notification navigation:
 
-| Component | WorkflowProgressTracker | KpiDetailsTable | KpiJourneySection |
+### Issue 1: Missing Navigation Mappings
+The `getNotificationNavigationPath()` function in `src/lib/inboxUtils.ts` is missing mappings for 2 notification types that exist in the database:
+
+| Type | Count in DB | Current Behavior | Expected |
 |---|---|---|---|
-| UnifiedScorecard | DONE | DONE | MISSING (via KpiReviewPanel) |
-| AuditScorecard | DONE | DONE | MISSING (via KpiReviewPanel) |
-| EmployeeScorecard (Team Review) | MISSING | MISSING | MISSING (via KpiReviewPanel) |
-| ManagementScorecard | MISSING | MISSING | MISSING (via KpiReviewPanel) |
-| Dashboard (self view) | MISSING | N/A | N/A |
-| KpiTimeline modal | Hardcoded 6 stages | N/A | N/A |
+| `kra_assigned` | 18,652 | No "Open in App" button | Navigate to `/my-kpis` |
+| `observation_resolved` | 2 | No "Open in App" button | Navigate to `/my-kpis?kpi={kpiId}` |
+
+When these notifications are clicked in the row, or when the detail sheet is opened, there is no "Open in App" button because `getNotificationNavigationPath` returns `null`.
+
+### Issue 2: Incomplete Display Labels
+The `getNotificationTypeLabel()` function only has labels for 8 types, but there are 12+ distinct types in the database. Missing labels cause raw type strings (e.g., `admin_status_step_back`) to appear in the detail sheet badge.
+
+## What Already Works
+
+The `admin_status_step_back` type **is already correctly mapped** (line 168-171) to `/my-kpis?kpi={kpiId}`. When an employee receives a rollback notification:
+- Clicking the row navigates directly to the KPI details page
+- The detail sheet shows an "Open in App" button that links to the correct KPI
+
+So the rollback navigation is already functional. The fixes below address the remaining gaps.
 
 ## Changes
 
-### 1. EmployeeScorecard.tsx (Team Review)
-- Already imports `useEmployeeWorkflowStages` and computes `effectiveStages` -- but never passes it down
-- Add `workflowStages={effectiveStages}` to `WorkflowProgressTracker` (line 504)
-- Add `workflowStages={effectiveStages}` to `KpiDetailsTable` (line 627)
+### 1. Add Missing Navigation Mappings (`src/lib/inboxUtils.ts`)
 
-### 2. ManagementScorecard.tsx
-- Import `useEmployeeWorkflowStages` and compute `effectiveStages`
-- Add `workflowStages={effectiveStages}` to `WorkflowProgressTracker` (line 550)
-- Add `workflowStages={effectiveStages}` to `KpiDetailsTable` (line 671)
-- Update hardcoded send-back and forward status logic to use workflow engine
+Add to the `getNotificationNavigationPath` switch statement:
+- `kra_assigned` -> `/my-kpis` (same as `kra_batch_assigned`)
+- `observation_resolved` -> `/my-kpis?kpi={kpiId}` (same as `observation_raised`)
 
-### 3. KpiReviewPanel.tsx -> KpiJourneySection
-- Add optional `workflowStages` prop to `KpiReviewPanel`
-- Pass it through to `KpiJourneySection`
-- Update all callers (UnifiedScorecard, AuditScorecard, EmployeeScorecard, ManagementScorecard) to pass `workflowStages` when rendering `KpiReviewPanel`
+### 2. Complete the Display Labels (`src/lib/inboxUtils.ts`)
 
-### 4. Dashboard.tsx (self view)
-- Import `useEmployeeWorkflowStages` with the logged-in user's ID
-- Pass `workflowStages` to `WorkflowProgressTracker`
+Update `getNotificationTypeLabel` to include all 22 event types:
+- `admin_status_step_back` -> "Status Rolled Back"
+- `admin_status_change` -> "Status Changed"
+- `admin_data_entry` -> "Data Updated by Admin"
+- `manager_rejected` -> "Sent Back by Manager"
+- `kra_assigned` -> "KRA Assigned"
+- `kra_batch_assigned` -> "KRAs Assigned"
+- `observation_raised` -> "Observation Raised"
+- `observation_reply` -> "Observation Reply"
+- `observation_resolved` -> "Observation Resolved"
+- `period_locked` -> "Period Locked"
+- `pip_initiated` -> "PIP Initiated"
+- `pip_completed` -> "PIP Completed"
+- `pip_milestone_reminder` -> "PIP Milestone Reminder"
+- `password_rollout` -> "Password Reset"
+- `query_response_submitted` -> "Query Response"
+- `query_resolved_fyi` -> "Query Resolved"
 
-### 5. KpiTimeline.tsx
-- Accept optional `workflowStages` prop
-- Filter the hardcoded 6-stage array to only show stages present in the employee's workflow
+### 3. Update DOCUMENTATION.md
 
-### 6. DOCUMENTATION.md
-- Update the workflow integration checklist with all components that must receive `workflowStages`
+Document the complete notification-to-route mapping table.
 
-## Technical Details
+## Files to Modify
+- `src/lib/inboxUtils.ts` -- Add missing navigation paths and labels
+- `DOCUMENTATION.md` -- Update notification mapping docs
 
-### Files to modify:
-- `src/components/review/EmployeeScorecard.tsx` -- Pass `workflowStages` to WorkflowProgressTracker and KpiDetailsTable
-- `src/components/review/ManagementScorecard.tsx` -- Import workflow engine, pass `workflowStages` to tracker and table, dynamic transitions
-- `src/components/review/KpiReviewPanel.tsx` -- Accept and forward `workflowStages` prop to KpiJourneySection
-- `src/pages/Dashboard.tsx` -- Pass logged-in user's workflow stages to tracker
-- `src/components/dashboard/KpiTimeline.tsx` -- Accept `workflowStages` prop, filter displayed stages
-- `DOCUMENTATION.md` -- Update integration checklist
+## Verification
+After changes:
+1. All notification types will show the "Open in App" button in the detail sheet
+2. Clicking any notification row will navigate to the correct page
+3. All notification badges will show human-readable labels instead of raw type strings
+
