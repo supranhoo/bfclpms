@@ -501,7 +501,7 @@ export function EmployeeScorecard({
       </div>
 
       {/* Workflow Progress Tracker */}
-      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} compact />
+      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} compact workflowStages={effectiveStages} />
 
       {/* Score Overview */}
       <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-3">
@@ -637,6 +637,7 @@ export function EmployeeScorecard({
               onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
               expandedKpis={expandedDailyKpis}
               onToggleExpand={toggleDailyExpand}
+              workflowStages={effectiveStages}
             />
           )}
         </CardContent>
@@ -672,6 +673,7 @@ export function EmployeeScorecard({
                 onOpenQueryHistory={() => setHistoryDialogOpen(true)}
                 onOpenFullHistory={() => setTrackerModalOpen(true)}
                 onOpenTimeline={() => setTimelineOpen(true)}
+                workflowStages={effectiveStages}
               />
               
               {/* N/A Confirmation Card - Show when KPI is marked as N/A */}

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-13  
-> **Version:** 1.18.0
+> **Version:** 1.19.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -2984,7 +2984,17 @@ The workflow engine provides pure utility functions that resolve status transiti
 - `KpiDetailsTable.tsx` — Accepts optional `workflowStages` prop for workflow-aware reviewability (`canReviewKpi`)
 - `EmployeeSelectorGrid.tsx` — Audit view includes `self_review` in pending count for skip-manager employees
 
-**⚠️ Critical:** Every component rendering `KpiDetailsTable` or `WorkflowProgressTracker` MUST pass the `workflowStages` prop. Omitting it causes fallback to the default 6-stage pipeline, which breaks skip-manager workflows.
+**⚠️ Critical:** Every component rendering `KpiDetailsTable`, `WorkflowProgressTracker`, or `KpiReviewPanel` MUST pass the `workflowStages` prop. Omitting it causes fallback to the default 6-stage pipeline, which breaks skip-manager workflows.
+
+**Callers passing `workflowStages` (v1.19.0):**
+| Caller Component | Passes to |
+|---|---|
+| `UnifiedScorecard` | `WorkflowProgressTracker`, `KpiDetailsTable`, `KpiReviewPanel` |
+| `AuditScorecard` | `WorkflowProgressTracker`, `KpiDetailsTable`, `KpiReviewPanel` |
+| `EmployeeScorecard` | `WorkflowProgressTracker`, `KpiDetailsTable`, `KpiReviewPanel` |
+| `ManagementScorecard` | `WorkflowProgressTracker`, `KpiDetailsTable`, `KpiReviewPanel` |
+| `Dashboard` (self view) | `WorkflowProgressTracker` |
+| `KpiTimeline` | Filters internal stage array via optional `workflowStages` prop |
 
 ---
 

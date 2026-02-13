@@ -851,6 +851,7 @@ export function UnifiedScorecard({
                 onOpenQueryHistory={() => setHistoryDialogOpen(true)}
                 onOpenFullHistory={() => setTrackerModalOpen(true)}
                 onOpenTimeline={() => setTimelineOpen(true)}
+                workflowStages={effectiveStages}
               />
               
               {/* N/A Confirmation Card */}

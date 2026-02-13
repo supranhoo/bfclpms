@@ -27,6 +27,7 @@ interface KpiTimelineProps {
   isOpen: boolean;
   onClose: () => void;
   kpi: KPI | null;
+  workflowStages?: string[];
 }
 
 interface AuditLog {
@@ -86,7 +87,7 @@ const actionConfig: Record<string, { icon: React.ElementType; color: string; lab
   'MANAGER_FORWARDED': { icon: CheckCircle, color: 'bg-green-500', label: 'Manager Forwarded' },
 };
 
-export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
+export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }: KpiTimelineProps) {
   // Fetch audit logs for this KPI
   const { data: auditLogs = [], isLoading } = useQuery({
     queryKey: ['kpi-timeline', kpi?.id],
@@ -175,8 +176,8 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
     return details;
   };
 
-  // Workflow stages
-  const workflowStages = [
+  // Workflow stages - filter based on employee's workflow config
+  const allWorkflowStages = [
     { key: 'kra_set', label: 'KRA Set', icon: FileText },
     { key: 'self_review', label: 'Self Review', icon: Send },
     { key: 'manager_check', label: 'Manager', icon: User },
@@ -184,6 +185,9 @@ export function KpiTimeline({ isOpen, onClose, kpi }: KpiTimelineProps) {
     { key: 'management_review', label: 'Management', icon: Briefcase },
     { key: 'approved', label: 'Approved', icon: CheckCircle },
   ];
+  const workflowStages = propStages
+    ? allWorkflowStages.filter(s => propStages.includes(s.key))
+    : allWorkflowStages;
 
   const currentStageIndex = workflowStages.findIndex(s => s.key === kpi?.status);
 
