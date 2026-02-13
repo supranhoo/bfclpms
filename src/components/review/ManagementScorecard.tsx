@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
+import { resolveForwardStatus, resolveSendBackTargets, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { useKpisByEmployee, useReviewSubmissions, useKpiQueries, RatingLevel, KPI, KpiQuery } from '@/hooks/useKpis';
 import { useSubPeriodSubmissions, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
@@ -78,6 +80,11 @@ export function ManagementScorecard({
   const { data: allKpis, isLoading } = useKpisByEmployee(employee.id);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  
+  // Fetch workflow stages for this employee
+  const { data: workflowStages } = useEmployeeWorkflowStages(employee.id);
+  const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
+  const sendBackTargets = resolveSendBackTargets('management', effectiveStages);
   
   // Filter KPIs by period and year
   const kpis = useMemo(() => allKpis?.filter(k => {
@@ -547,7 +554,7 @@ export function ManagementScorecard({
       </div>
 
       {/* Workflow Progress Tracker */}
-      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} compact />
+      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} compact workflowStages={effectiveStages} />
 
       {/* Score Overview */}
       <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-3">
@@ -681,6 +688,7 @@ export function ManagementScorecard({
               onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
               expandedKpis={expandedDailyKpis}
               onToggleExpand={toggleDailyExpand}
+              workflowStages={effectiveStages}
             />
           )}
         </CardContent>
@@ -716,6 +724,7 @@ export function ManagementScorecard({
                 onOpenQueryHistory={() => setHistoryDialogOpen(true)}
                 onOpenFullHistory={() => setTrackerModalOpen(true)}
                 onOpenTimeline={() => setTimelineOpen(true)}
+                workflowStages={effectiveStages}
               />
             )}
             

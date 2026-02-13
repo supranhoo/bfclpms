@@ -28,6 +28,7 @@ interface KpiReviewPanelProps {
   onOpenQueryHistory?: () => void;
   onOpenFullHistory?: () => void;
   onOpenTimeline?: () => void;
+  workflowStages?: string[];
 }
 
 export function KpiReviewPanel({
@@ -43,6 +44,7 @@ export function KpiReviewPanel({
   onOpenQueryHistory,
   onOpenFullHistory,
   onOpenTimeline,
+  workflowStages,
 }: KpiReviewPanelProps) {
   const isOwnKpi = currentUserId ? kpi.employee_id === currentUserId : false;
   return (
@@ -77,6 +79,7 @@ export function KpiReviewPanel({
             queries={queries}
             viewLevel={viewLevel}
             onOpenQueryHistory={onOpenQueryHistory}
+            workflowStages={workflowStages}
           />
           
           <KpiObservationsSection

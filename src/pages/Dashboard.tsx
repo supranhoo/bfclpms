@@ -2,6 +2,8 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, KPI } from '@/hooks/useKpis';
+import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
+import { DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
@@ -75,6 +77,8 @@ export default function Dashboard() {
   const [searchParams] = useSearchParams();
   const { data: kpis, isLoading: kpisLoading } = useMyKpis();
   const { data: categories, isLoading: categoriesLoading } = useKraCategories();
+  const { data: selfWorkflowStagesData } = useEmployeeWorkflowStages(profile?.id || '');
+  const selfWorkflowStages = selfWorkflowStagesData || DEFAULT_WORKFLOW_STAGES;
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
 
@@ -485,6 +489,7 @@ export default function Dashboard() {
         kpis={periodFilteredKpis}
         activeFilter={statusFilter}
         onFilterChange={setStatusFilter}
+        workflowStages={selfWorkflowStages}
       />
 
       {/* 6. KPI Details - Table on desktop, Cards on mobile */}
