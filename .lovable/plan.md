@@ -1,89 +1,48 @@
 
 
-# Merge "My KPIs" into "My Dashboard" — Unified Self-Service View
+# Fix: Show "N/A" for Not-Applicable KPIs in Tracker and History Views
 
-## What Changes for the User
+## Problem
 
-Instead of two separate tabs in the sidebar ("Dashboard" and "My KPIs"), there will be **one unified "My Dashboard"** page. When an employee clicks on a KPI — whether to submit a self-review or view details — the same rich sheet opens right there on the Dashboard. No more redirecting to a separate page.
+When a KPI is marked as "Not Applicable" for a given month (e.g., November, December), the KPI Tracker Modal and History Card show "-" in the Achieved column instead of "N/A". The `is_na` flag exists on submissions but is never checked in these display components.
 
-## Current State
+## Affected Components
 
-| Feature | Dashboard | My KPIs |
-|---|---|---|
-| KPI list/table | Yes (read-only) | Yes (with submit actions) |
-| Performance charts | Yes | No |
-| Workflow progress tracker | Yes | No |
-| Profile card | Yes | No |
-| Cumulative/YTD mode | Yes | No |
-| View mode toggle (team/audit) | Yes | No |
-| Self-review submission form | No (redirects to My KPIs) | Yes |
-| Sub-period entry (daily/weekly) | No | Yes |
-| Evidence upload | No | Yes |
-| NA marking | No | Yes |
-| Resubmission flow | No | Yes |
-| Monthly aggregation submit | No | Yes |
-| Deep-link from notifications | No (goes to My KPIs) | Yes |
+| Component | File | Current Display | Fix |
+|---|---|---|---|
+| KPI Tracker Modal (table) | `src/components/dashboard/KpiTrackerModal.tsx` | Shows "-" for N/A months | Show "N/A" badge |
+| KPI Tracker Modal (chart) | Same file | Plots null as gap | Exclude N/A months from trend line |
+| KPI History Card (inline) | `src/components/review/KpiHistoryCard.tsx` | Shows "0/100" for N/A months | Show "N/A" instead |
 
-## Plan
+The `KpiDetailsTable` already handles this correctly (line 328-329 shows N/A badge).
 
-### Step 1: Move Self-Review Sheet Logic into Dashboard
+## Changes
 
-Extract the self-review submission sheet from `MyKpis.tsx` (~600 lines of form state, handlers, and sheet UI) into a new reusable component:
+### 1. `src/components/dashboard/KpiTrackerModal.tsx`
 
-**New file: `src/components/review/SelfReviewSheet.tsx`**
-- All form state (achieved value, remarks, evidence, NA, sub-period selection)
-- Score calculation logic
-- Submit handlers (regular, sub-period, monthly aggregation, resubmission)
-- The full Sheet UI with all form fields
-- Props: `kpi`, `submissionMap`, `orgKpiValues`, `onClose`, period info
+**Data layer** (lines 43-65): Add `isNa: boolean` to the monthly data structure. When building each entry, read `sub.is_na` from the submission.
 
-### Step 2: Integrate into Dashboard
+**Chart**: For N/A months, set `achieved` and `target` to `null` so the trend line skips them cleanly (Recharts handles null gaps by default).
 
-Update `Dashboard.tsx` to:
-- Import and render `SelfReviewSheet` instead of the read-only `KpiReviewPanel`
-- Change the "Review" button (currently navigates to `/my-kpis`) to open the sheet directly
-- Add the sub-period submissions hook for daily/weekly KPIs
-- Fetch `allSubmissions` for historical data (already partially done)
-- Handle deep-link query params (`?kpi=...`) that currently only work on My KPIs
+**Table** (line 160): Instead of showing "-" when achieved is null, check `isNa` first. If true, show an amber "N/A" badge. Same for the Rating column.
 
-### Step 3: Update KPI Table Actions
+### 2. `src/components/review/KpiHistoryCard.tsx`
 
-In the Dashboard's KPI table:
-- Replace the current split behavior (Review button navigates away for `kra_set`, Eye button opens read-only sheet) with a single action that always opens the `SelfReviewSheet`
-- The sheet itself handles read-only vs. editable based on KPI status
+**Data layer** (lines 38-48): Add `isNa: boolean` to each entry, read from `sub?.is_na`.
 
-### Step 4: Update Navigation
+**Display** (lines 123-124): Where it currently shows `{entry.achieved}/{entry.target}`, check `isNa` first. If true, show "N/A" text instead of the numeric ratio.
 
-- Remove "My KPIs" from the sidebar menu items
-- Rename "Dashboard" to "My Dashboard" if desired
-- Redirect `/my-kpis` route to `/dashboard` for backward compatibility (deep links, notifications)
-- Update notification navigation paths in `inboxUtils.ts` to point to `/dashboard?kpi={kpiId}`
+**Score badge** (line 127): Show "N/A" instead of "-" for N/A months.
 
-### Step 5: Clean Up
+**Sparkline**: Exclude N/A entries from the chart data so the trend line only reflects actual performance.
 
-- Keep `MyKpis.tsx` temporarily as a redirect, then remove later
-- Update all references that navigate to `/my-kpis`
+### 3. `DOCUMENTATION.md`
 
-## Technical Details
+Document that N/A months are visually distinguished in tracker and history views.
 
-### Files to create:
-- `src/components/review/SelfReviewSheet.tsx` — Extracted self-review form component (~400 lines)
+## Files to Modify
 
-### Files to modify:
-- `src/pages/Dashboard.tsx` — Integrate SelfReviewSheet, add submission hooks, handle deep-links
-- `src/components/layout/AppSidebar.tsx` — Remove "My KPIs" menu item, rename "Dashboard"
-- `src/lib/inboxUtils.ts` — Update notification navigation paths from `/my-kpis` to `/dashboard`
-- `src/pages/MyKpis.tsx` — Convert to redirect component
-- `src/App.tsx` — Update routing
-- `DOCUMENTATION.md` — Update architecture docs
-
-### Risks and Mitigations
-- **Dashboard.tsx complexity**: Adding ~600 lines of form logic to an already 714-line file would make it unwieldy. The extraction into `SelfReviewSheet.tsx` keeps Dashboard clean.
-- **Deep-links**: All existing notification links (`/my-kpis?kpi=...`) will be caught by the redirect and forwarded to Dashboard.
-- **Sub-period hooks**: Dashboard currently doesn't fetch sub-period submissions. Adding the `useSubPeriodSubmissionsByKpis` hook is straightforward since the KPI IDs are already available.
-
-### What stays the same
-- All reviewer views (Team, Audit, Management) remain unchanged
-- The submission logic itself is unchanged, just relocated
-- Charts, workflow tracker, profile card all stay as-is
+- `src/components/dashboard/KpiTrackerModal.tsx`
+- `src/components/review/KpiHistoryCard.tsx`
+- `DOCUMENTATION.md`
 
