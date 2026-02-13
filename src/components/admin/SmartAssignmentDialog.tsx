@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Package, FileText, Target, Sparkles, CheckCircle, AlertTriangle, Copy } from 'lucide-react';
+import { sendKraAssignmentNotifications, KraNotificationItem } from '@/lib/kraNotifications';
 
 type AppRole = 'employee' | 'manager' | 'auditor' | 'admin' | 'management';
 
@@ -272,6 +273,25 @@ export function SmartAssignmentDialog({
         title: 'KPIs Assigned Successfully',
         description: `${data?.kpisCreated} KPIs from "${selectedBundle?.name}" assigned to ${employeeName}${skippedMsg}`,
       });
+
+      // Send notifications for assigned KPIs
+      if (selectedBundle?.template_bundle_items && data?.kpisCreated && data.kpisCreated > 0) {
+        const items = skipDuplicates
+          ? selectedBundle.template_bundle_items.filter(item => {
+              const sig = `${item.kpi_templates.kra_name}::${item.kpi_templates.kpi_name}`.toLowerCase();
+              return !existingKpiSignatures.has(sig);
+            })
+          : selectedBundle.template_bundle_items;
+        const kraItems: KraNotificationItem[] = items.map(item => ({
+          kra_name: item.kpi_templates.kra_name,
+          kpi_name: item.kpi_templates.kpi_name,
+          target_value: item.kpi_templates.target_value,
+          weightage: item.kpi_templates.weightage,
+          uom: item.kpi_templates.uom || null,
+        }));
+        sendKraAssignmentNotifications(employeeId, kraItems, currentPeriod, currentYear);
+      }
+
       handleClose();
     },
     onError: (error: Error) => {
@@ -340,6 +360,26 @@ export function SmartAssignmentDialog({
         title: 'KPIs Assigned Successfully',
         description: `${data?.created} KPIs have been assigned to ${employeeName}${skippedMsg}`,
       });
+
+      // Send notifications for assigned templates
+      if (data?.created && data.created > 0) {
+        let assignedTemplates = templates?.filter(t => Array.from(selectedTemplateIds).includes(t.id)) || [];
+        if (skipDuplicates) {
+          assignedTemplates = assignedTemplates.filter(t => {
+            const sig = `${t.kra_name}::${t.kpi_name}`.toLowerCase();
+            return !existingKpiSignatures.has(sig);
+          });
+        }
+        const kraItems: KraNotificationItem[] = assignedTemplates.map(t => ({
+          kra_name: t.kra_name,
+          kpi_name: t.kpi_name,
+          target_value: t.target_value,
+          weightage: t.weightage,
+          uom: t.uom || null,
+        }));
+        sendKraAssignmentNotifications(employeeId, kraItems, currentPeriod, currentYear);
+      }
+
       handleClose();
     },
     onError: (error: Error) => {
