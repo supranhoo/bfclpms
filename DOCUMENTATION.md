@@ -1884,6 +1884,29 @@ The database trigger `send_email_on_notification()` maps internal notification t
 - **Email Header Logo**: The App Logo configured in Global Branding (`app_settings.logo_url`) is automatically displayed in the **top-right corner** of all email headers. Falls back to the email-specific company logo if the branding logo is not set.
 - **Auto-Linkified URLs**: All URLs (http/https) in email template bodies are automatically converted to **clickable blue hyperlinks** when the email is rendered. This applies to all existing and future templates — no manual HTML is needed.
 
+**Smart Notification Navigation (Deep-Link):**
+
+Clicking a notification row in the Inbox navigates directly to the relevant page. The centralized `getNotificationNavigationPath()` utility in `src/lib/inboxUtils.ts` maps each notification type to a target route:
+
+| Notification Type | Target Route |
+|---|---|
+| `kpi_submitted` | `/dashboard?view=team&kpi={kpiId}` |
+| `kpi_approved` / `kpi_finalized` / `manager_rejected` / `admin_status_step_back` / `admin_status_change` / `admin_data_entry` | `/my-kpis?kpi={kpiId}` |
+| `kpi_ready_for_audit` | `/dashboard?view=audit&kpi={kpiId}` |
+| `kpi_ready_for_management` | `/dashboard?view=management&kpi={kpiId}` |
+| `kra_batch_assigned` / `period_locked` | `/my-kpis` |
+| `query_raised` | `/queries?tab=received` |
+| `query_resolved` / `query_responded` / `query_response_submitted` | `/queries?tab=sent` |
+| `query_resolved_fyi` | `/queries?tab=team` |
+| `observation_raised` / `observation_reply` | `/my-kpis?kpi={kpiId}` |
+| `pip_initiated` / `pip_completed` / `pip_milestone_reminder` | `/admin/pip` |
+| `password_rollout` | `/` (home) |
+
+- **Notification rows**: Click navigates to the target page (marks as read automatically)
+- **Query rows**: Click opens the detail sheet (queries need inline respond/accept actions)
+- **Eye icon**: Always opens the detail sheet for all item types
+- **Fallback**: If no deep-link exists, the detail sheet opens instead
+
 ### 4.13 Frequency & Sub-Frequency Logic
 
 The PMS supports 7 frequency types for KPIs, each with specific submission rules and scoring behavior:

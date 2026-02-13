@@ -146,6 +146,73 @@ export function getItemSlaStatus(item: InboxItem): SlaStatus | null {
 /**
  * Apply client-side filters (including advanced search syntax) to inbox items.
  */
+/**
+ * Get the navigation path for a notification or query item.
+ * Returns null if no meaningful deep-link exists (fallback to detail sheet).
+ */
+export function getNotificationNavigationPath(item: InboxItem): string | null {
+  if (item.type === 'query') {
+    // Queries open detail sheet — no direct navigation
+    return null;
+  }
+
+  const kpiParam = item.kpiId ? `?kpi=${item.kpiId}` : '';
+
+  switch (item.notificationType) {
+    // KPI workflow transitions
+    case 'kpi_submitted':
+      return `/dashboard?view=team${kpiParam ? `&kpi=${item.kpiId}` : ''}`;
+    case 'kpi_approved':
+    case 'kpi_finalized':
+    case 'manager_rejected':
+    case 'admin_status_step_back':
+    case 'admin_status_change':
+    case 'admin_data_entry':
+      return item.kpiId ? `/my-kpis?kpi=${item.kpiId}` : '/my-kpis';
+    case 'kpi_ready_for_audit':
+      return `/dashboard?view=audit${kpiParam ? `&kpi=${item.kpiId}` : ''}`;
+    case 'kpi_ready_for_management':
+      return `/dashboard?view=management${kpiParam ? `&kpi=${item.kpiId}` : ''}`;
+
+    // KRA assignment
+    case 'kra_batch_assigned':
+      return '/my-kpis';
+
+    // Query notifications (these are notifications about queries, not query items)
+    case 'query_raised':
+      return '/queries?tab=received';
+    case 'query_resolved':
+      return '/queries?tab=sent';
+    case 'query_responded':
+    case 'query_response_submitted':
+      return '/queries?tab=sent';
+    case 'query_resolved_fyi':
+      return '/queries?tab=team';
+
+    // Observations
+    case 'observation_raised':
+    case 'observation_reply':
+      return item.kpiId ? `/my-kpis?kpi=${item.kpiId}` : '/my-kpis';
+
+    // Period events
+    case 'period_locked':
+      return '/my-kpis';
+
+    // PIP
+    case 'pip_initiated':
+    case 'pip_completed':
+    case 'pip_milestone_reminder':
+      return '/admin/pip';
+
+    // Password
+    case 'password_rollout':
+      return '/';
+
+    default:
+      return null;
+  }
+}
+
 export function filterInboxItems(items: InboxItem[], filters: InboxFiltersState): InboxItem[] {
   const parsed = parseSearchSyntax(filters.search);
   const textLower = parsed.plainText.toLowerCase();

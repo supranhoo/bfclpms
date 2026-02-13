@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { InboxItem, getNotificationTypeLabel, getQueryStatusClasses } from '@/lib/inboxUtils';
+import { InboxItem, getNotificationTypeLabel, getQueryStatusClasses, getNotificationNavigationPath } from '@/lib/inboxUtils';
 import { cn } from '@/lib/utils';
 
 interface InboxDetailSheetProps {
@@ -33,28 +33,11 @@ export function InboxDetailSheet({
   const isRecipient = item.toUser?.id === currentUserId;
   const isRaiser = item.fromUser?.id === currentUserId;
 
-  const getNavigationPath = (): string | null => {
-    if (isQuery) return null;
-    
-    switch (item.notificationType) {
-      case 'kpi_submitted':
-        return item.kpiId ? `/team-review?kpi=${item.kpiId}` : '/team-review';
-      case 'kpi_approved':
-      case 'kpi_finalized':
-        return item.kpiId ? `/my-kpis?kpi=${item.kpiId}` : '/my-kpis';
-      case 'kpi_ready_for_audit':
-        return item.kpiId ? `/audit?kpi=${item.kpiId}` : '/audit';
-      case 'kpi_ready_for_management':
-        return item.kpiId ? `/management-review?kpi=${item.kpiId}` : '/management-review';
-      default:
-        return '/my-kpis';
-    }
-  };
+  const navigationPath = getNotificationNavigationPath(item);
 
   const handleNavigate = () => {
-    const path = getNavigationPath();
-    if (path && onNavigate) {
-      onNavigate(path);
+    if (navigationPath && onNavigate) {
+      onNavigate(navigationPath);
       onOpenChange(false);
     }
   };
@@ -193,7 +176,7 @@ export function InboxDetailSheet({
             )}
 
             {/* Notification Navigation */}
-            {!isQuery && getNavigationPath() && (
+            {!isQuery && navigationPath && (
               <Button onClick={handleNavigate} className="w-full">
                 <ExternalLink className="h-4 w-4 mr-2" />
                 Open in App

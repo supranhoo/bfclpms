@@ -17,6 +17,7 @@ interface InboxTableProps {
   onLoadMore?: () => void;
   onViewItem: (item: InboxItem) => void;
   onMarkRead?: (item: InboxItem) => void;
+  onNavigate?: (path: string) => void;
   emptyMessage?: string;
   emptyDescription?: string;
   enableGrouping?: boolean;
@@ -38,6 +39,7 @@ export function InboxTable({
   onLoadMore,
   onViewItem,
   onMarkRead,
+  onNavigate,
   emptyMessage = 'No items',
   emptyDescription = 'Nothing to show here',
   enableGrouping = true,
@@ -71,6 +73,7 @@ export function InboxTable({
         hasMore={hasMore}
         onLoadMore={onLoadMore}
         onViewItem={onViewItem}
+        onNavigate={onNavigate}
         emptyMessage={emptyMessage}
         emptyDescription={emptyDescription}
         enableGrouping={enableGrouping}
@@ -141,6 +144,7 @@ export function InboxTable({
                       item={item}
                       onView={onViewItem}
                       onMarkRead={onMarkRead}
+                      onNavigate={onNavigate}
                       onToggleExpand={currentUserId ? handleToggleExpand : undefined}
                       isExpanded={expandedItemId === item.id}
                       currentUserId={currentUserId}

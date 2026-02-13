@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -55,6 +55,7 @@ export default function QueryInbox() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // Filter state
   const [filters, setFilters] = useState<InboxFiltersState>({
@@ -66,7 +67,11 @@ export default function QueryInbox() {
     notificationType: 'all',
   });
 
-  const [activeTab, setActiveTab] = useState<'notifications' | 'received' | 'sent' | 'team' | 'snoozed' | 'insights'>('notifications');
+  const [activeTab, setActiveTab] = useState<'notifications' | 'received' | 'sent' | 'team' | 'snoozed' | 'insights'>(() => {
+    const tabParam = searchParams.get('tab');
+    const validTabs = ['notifications', 'received', 'sent', 'team', 'snoozed', 'insights'];
+    return validTabs.includes(tabParam || '') ? tabParam as any : 'notifications';
+  });
   const [selectedItem, setSelectedItem] = useState<InboxItem | null>(null);
   const [detailSheetOpen, setDetailSheetOpen] = useState(false);
 
@@ -501,6 +506,7 @@ export default function QueryInbox() {
             onLoadMore={loadMoreNotifications}
             onViewItem={handleViewItem}
             onMarkRead={handleMarkRead}
+            onNavigate={handleNavigate}
             emptyMessage="No notifications yet"
             emptyDescription="You'll receive notifications when there are updates to your KPIs"
             currentUserId={user?.id}
@@ -592,6 +598,7 @@ export default function QueryInbox() {
             onLoadMore={loadMoreSnoozed}
             onViewItem={handleViewItem}
             onMarkRead={handleMarkRead}
+            onNavigate={handleNavigate}
             emptyMessage="No snoozed items"
             emptyDescription="Snooze notifications to defer them for later"
             enableGrouping={false}

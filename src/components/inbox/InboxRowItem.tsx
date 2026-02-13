@@ -2,7 +2,7 @@ import { Bell, MessageSquare, Send, CheckCircle2, Clock, AlertCircle, CheckCheck
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TableRow, TableCell } from '@/components/ui/table';
-import { InboxItem, formatRelativeTime, getQueryStatusClasses, getQuickAction } from '@/lib/inboxUtils';
+import { InboxItem, formatRelativeTime, getQueryStatusClasses, getQuickAction, getNotificationNavigationPath } from '@/lib/inboxUtils';
 import { cn } from '@/lib/utils';
 import { SnoozePopover } from './SnoozePopover';
 
@@ -10,6 +10,7 @@ interface InboxRowItemProps {
   item: InboxItem;
   onView: (item: InboxItem) => void;
   onMarkRead?: (item: InboxItem) => void;
+  onNavigate?: (path: string) => void;
   onToggleExpand?: (itemId: string) => void;
   isExpanded?: boolean;
   currentUserId?: string;
@@ -19,7 +20,7 @@ interface InboxRowItemProps {
   showSnoozedInfo?: boolean;
 }
 
-export function InboxRowItem({ item, onView, onMarkRead, onToggleExpand, isExpanded, currentUserId, onSnooze, onUnsnooze, isSnoozing, showSnoozedInfo }: InboxRowItemProps) {
+export function InboxRowItem({ item, onView, onMarkRead, onNavigate, onToggleExpand, isExpanded, currentUserId, onSnooze, onUnsnooze, isSnoozing, showSnoozedInfo }: InboxRowItemProps) {
   const getTypeIcon = () => {
     if (item.type === 'query') {
       switch (item.queryStatus) {
@@ -58,6 +59,16 @@ export function InboxRowItem({ item, onView, onMarkRead, onToggleExpand, isExpan
     if (!item.isRead && onMarkRead) {
       onMarkRead(item);
     }
+    // Navigate for notifications; open detail sheet for queries (which need inline actions)
+    if (item.type === 'notification' && onNavigate) {
+      const path = getNotificationNavigationPath(item);
+      if (path) {
+        onNavigate(path);
+        return;
+      }
+    }
+    // Fallback: open detail sheet
+    onView(item);
   };
 
   const quickAction = currentUserId ? getQuickAction(item, currentUserId) : null;
