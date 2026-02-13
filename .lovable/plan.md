@@ -1,51 +1,107 @@
 
 
-# CAPA: Add Skip-Level and HR PMS Sidebar Navigation
+# RCA and CAPA: Skip-Level "Review" Button Not Visible
 
 ## Root Cause Analysis (RCA)
 
-The skip-level review functionality was added to the Dashboard's ViewModeToggle and EmployeeSelectorGrid, but no sidebar navigation entries were created for it. Jaspal can only access skip-level review by going to "My Dashboard" and finding the small toggle button at the top -- there is no dedicated "Skip-Level Review" menu item like there is for "Team Review" or "Audit Panel".
+The bug is in `src/lib/workflowEngine.ts`. The workflow engine uses **wrong status values** for the `skip_level` and `hr_pms` view levels, creating a gap where KPIs can never reach the expected status.
 
-Additionally, the `hr_pms` role is missing from the "My Dashboard" sidebar roles list, which would prevent HR PMS users from accessing the dashboard entirely.
+### How the Status Convention Works
 
-## Corrective Actions (CAPA)
+Each status name means "this stage is complete, KPI is waiting for the next reviewer":
 
-### File: `src/components/layout/AppSidebar.tsx`
+```text
+self_review    = employee submitted, WAITING FOR manager
+manager_check  = manager checked, WAITING FOR next reviewer
+skip_level_check = skip-level checked, WAITING FOR next reviewer
+hr_pms_review  = HR PMS reviewed, WAITING FOR next reviewer
+```
 
-1. **Add `hr_pms` role to the "My Dashboard" menu item** -- so HR PMS users can access the dashboard
-2. **Add a "Skip-Level Review" sidebar entry** in the `manager` section pointing to `/dashboard?view=skip_level`, visible to managers and admins
-3. **Add an "HR PMS Review" sidebar entry** in a new or existing section pointing to `/dashboard?view=hr_pms`, visible to `hr_pms` and `admin` roles
-4. **Update `getSectionForPath` helper** to handle `view=skip_level` and `view=hr_pms` URL params for proper sidebar highlighting
+### The Pattern (Manager works correctly)
+
+- Manager sees KPIs at: `self_review` (the stage BEFORE their own)
+- Manager forwards to: `manager_check` (their OWN stage)
+
+### The Bug (Skip-Level and HR PMS are broken)
+
+| Function | skip_level (Current - WRONG) | skip_level (Correct) |
+|---|---|---|
+| resolvePendingStatuses | `['skip_level_check']` | `['manager_check']` |
+| resolveReviewableStatuses | `['skip_level_check']` | `['manager_check']` |
+| resolveForwardStatus | next after skip_level_check (= hr_pms_review) | `'skip_level_check'` |
+
+| Function | hr_pms (Current - WRONG) | hr_pms (Correct) |
+|---|---|---|
+| resolvePendingStatuses | `['hr_pms_review']` | `['skip_level_check']` |
+| resolveReviewableStatuses | `['hr_pms_review']` | `['skip_level_check']` |
+| resolveForwardStatus | next after hr_pms_review (= audit) | `'hr_pms_review'` |
+
+### What Happens Today
+
+1. Manager approves Purnima's KPI -> status becomes `manager_check`
+2. Jaspal (skip-level) looks for KPIs at `skip_level_check` -> finds nothing
+3. "Review" button never appears because no KPIs match the expected status
+4. KPIs are stuck at `manager_check` forever -- nobody can pick them up
+
+### Additional Issue: Auditor in 8-Stage Workflow
+
+The auditor's pending statuses are hardcoded to `['manager_check', 'audit']`. In the 8-stage workflow, the stage before `audit` is `hr_pms_review`, not `manager_check`. This needs to be made dynamic too.
+
+## Corrective Action Plan (CAPA)
+
+### File: `src/lib/workflowEngine.ts`
+
+Fix three functions to use **dynamic stage resolution** instead of hardcoded values:
+
+**1. `resolvePendingStatuses`** -- Fix skip_level, hr_pms, and auditor cases:
+
+```typescript
+case 'skip_level': {
+  // Skip-level sees KPIs at the stage BEFORE skip_level_check
+  const idx = workflowStages.indexOf('skip_level_check');
+  return idx > 0 ? [workflowStages[idx - 1]] : ['manager_check'];
+}
+case 'hr_pms': {
+  const idx = workflowStages.indexOf('hr_pms_review');
+  return idx > 0 ? [workflowStages[idx - 1]] : ['skip_level_check'];
+}
+case 'auditor': {
+  const idx = workflowStages.indexOf('audit');
+  const preceding = idx > 0 ? workflowStages[idx - 1] : 'manager_check';
+  return [preceding, 'audit'];
+}
+```
+
+**2. `resolveReviewableStatuses`** -- Same fix, same logic as pending statuses.
+
+**3. `resolveForwardStatus`** -- Fix skip_level and hr_pms to set their OWN stage:
+
+```typescript
+case 'skip_level':
+  return 'skip_level_check';   // was: resolveNextStatus('skip_level_check', ...)
+case 'hr_pms':
+  return 'hr_pms_review';      // was: resolveNextStatus('hr_pms_review', ...)
+```
+
+**4. Update existing tests** in `src/lib/workflowEngine.test.ts` and add new test cases for 8-stage workflows.
+
+### File: `src/components/review/EmployeeSelectorGrid.tsx`
+
+The `EmployeeSelectorGrid` stat calculation and filtering for `skip_level` and `hr_pms` also use hardcoded statuses. These need to match the corrected workflow engine:
+
+- For `skip_level`: filter pending by `manager_check` (not `skip_level_check`)
+- For `hr_pms`: filter pending by `skip_level_check` (not `hr_pms_review`)
 
 ### File: `DOCUMENTATION.md`
 
-Update to document the new sidebar navigation entries.
-
-## Technical Details
-
-Changes to the `menuItems` object:
-
-```text
-main section:
-  "My Dashboard" roles: add 'hr_pms'
-
-manager section:
-  Add: { title: 'Skip-Level Review', icon: UserCheck, path: '/dashboard?view=skip_level', roles: ['manager', 'admin'] }
-
-New hr_pms section (or add to existing):
-  Add: { title: 'HR PMS Review', icon: ClipboardCheck, path: '/dashboard?view=hr_pms', roles: ['hr_pms', 'admin'] }
-```
-
-Changes to `getSectionForPath`:
-```text
-Add: if (fullPath.includes('view=skip_level')) return 'manager';
-Add: if (fullPath.includes('view=hr_pms')) return 'hr_pms';  (or appropriate section)
-```
+Update to document the status convention and the corrected workflow engine behavior.
 
 ## Files to Modify
 
 | File | Change |
 |---|---|
-| `src/components/layout/AppSidebar.tsx` | Add sidebar entries for Skip-Level and HR PMS review, update roles |
-| `DOCUMENTATION.md` | Document new sidebar navigation items |
+| `src/lib/workflowEngine.ts` | Fix `resolvePendingStatuses`, `resolveReviewableStatuses`, `resolveForwardStatus` for skip_level, hr_pms, and auditor |
+| `src/lib/workflowEngine.test.ts` | Update/add tests for 8-stage workflow |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Fix hardcoded status filters for skip_level and hr_pms in stats, displayMembers, and badge calculations |
+| `DOCUMENTATION.md` | Document status convention and fixes |
 
