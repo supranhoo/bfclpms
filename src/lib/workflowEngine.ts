@@ -6,7 +6,7 @@
  * rather than relying on a hardcoded 6-stage pipeline.
  * 
  * Default full pipeline: ['kra_set', 'self_review', 'manager_check', 'audit', 'management_review', 'approved']
- * Example skip_manager: ['kra_set', 'self_review', 'audit', 'management_review', 'approved']
+ * 8-stage pipeline: ['kra_set', 'self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved']
  */
 
 export const DEFAULT_WORKFLOW_STAGES = [
@@ -44,19 +44,32 @@ export function resolvePreviousStatus(
  * Only returns targets for stages that exist in the workflow.
  */
 export function resolveSendBackTargets(
-  viewLevel: 'manager' | 'auditor' | 'management',
+  viewLevel: 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): Array<{ value: string; label: string }> {
   const allTargets: Record<string, Array<{ value: string; label: string; requiredStage?: string }>> = {
     manager: [
       { value: 'employee', label: 'Employee' },
     ],
+    skip_level: [
+      { value: 'manager', label: 'Manager', requiredStage: 'manager_check' },
+      { value: 'employee', label: 'Employee' },
+    ],
+    hr_pms: [
+      { value: 'skip_level', label: 'Skip-Level Manager', requiredStage: 'skip_level_check' },
+      { value: 'manager', label: 'Manager', requiredStage: 'manager_check' },
+      { value: 'employee', label: 'Employee' },
+    ],
     auditor: [
+      { value: 'hr_pms', label: 'HR PMS Team', requiredStage: 'hr_pms_review' },
+      { value: 'skip_level', label: 'Skip-Level Manager', requiredStage: 'skip_level_check' },
       { value: 'manager', label: 'Manager', requiredStage: 'manager_check' },
       { value: 'employee', label: 'Employee' },
     ],
     management: [
       { value: 'auditor', label: 'Auditor', requiredStage: 'audit' },
+      { value: 'hr_pms', label: 'HR PMS Team', requiredStage: 'hr_pms_review' },
+      { value: 'skip_level', label: 'Skip-Level Manager', requiredStage: 'skip_level_check' },
       { value: 'manager', label: 'Manager', requiredStage: 'manager_check' },
       { value: 'employee', label: 'Employee' },
     ],
@@ -70,30 +83,39 @@ export function resolveSendBackTargets(
 
 /**
  * Resolve the send-back status for a given target and workflow.
- * When sending back to 'manager' but manager_check doesn't exist, falls back to self_review.
  */
 export function resolveSendBackStatus(
   target: string,
-  viewLevel: 'manager' | 'auditor' | 'management',
+  viewLevel: 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): string {
-  const statusMap: Record<string, string> = {
-    employee: 'kra_set',
-    manager: workflowStages.includes('manager_check') ? 'self_review' : 'self_review',
-    auditor: 'audit',
-  };
+  // Send back to employee always goes to kra_set
+  if (target === 'employee') return 'kra_set';
 
-  // For auditor sending back to manager: if manager_check doesn't exist, send to self_review
-  if (target === 'manager' && viewLevel === 'auditor') {
-    return workflowStages.includes('manager_check') ? 'self_review' : 'self_review';
+  // Send back to manager: set to self_review (so manager picks it up again)
+  if (target === 'manager') {
+    if (viewLevel === 'management' || viewLevel === 'auditor' || viewLevel === 'hr_pms' || viewLevel === 'skip_level') {
+      return workflowStages.includes('manager_check') ? 'manager_check' : 'self_review';
+    }
+    return 'self_review';
   }
 
-  // For management sending back to manager
-  if (target === 'manager' && viewLevel === 'management') {
-    return workflowStages.includes('manager_check') ? 'manager_check' : 'self_review';
+  // Send back to skip_level: set to skip_level_check
+  if (target === 'skip_level') {
+    return 'skip_level_check';
   }
 
-  return statusMap[target] || 'kra_set';
+  // Send back to hr_pms: set to hr_pms_review
+  if (target === 'hr_pms') {
+    return 'hr_pms_review';
+  }
+
+  // Send back to auditor: set to audit
+  if (target === 'auditor') {
+    return 'audit';
+  }
+
+  return 'kra_set';
 }
 
 /**
@@ -101,12 +123,16 @@ export function resolveSendBackStatus(
  * for this reviewer to see them as pending.
  */
 export function resolvePendingStatuses(
-  viewLevel: 'manager' | 'auditor' | 'management',
+  viewLevel: 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): string[] {
   switch (viewLevel) {
     case 'manager':
       return ['self_review'];
+    case 'skip_level':
+      return ['skip_level_check'];
+    case 'hr_pms':
+      return ['hr_pms_review'];
     case 'auditor':
       // If manager_check is skipped, auditor picks up from self_review
       if (!workflowStages.includes('manager_check')) {
@@ -124,14 +150,16 @@ export function resolvePendingStatuses(
  * Get the forward status for a view level — what status to set after approval.
  */
 export function resolveForwardStatus(
-  viewLevel: 'manager' | 'auditor' | 'management',
+  viewLevel: 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): string {
   switch (viewLevel) {
     case 'manager':
-      // After manager approves, advance to next stage in workflow after manager_check
-      // If manager_check exists, set to manager_check. If not, this shouldn't be called.
       return 'manager_check';
+    case 'skip_level':
+      return resolveNextStatus('skip_level_check', workflowStages) || 'hr_pms_review';
+    case 'hr_pms':
+      return resolveNextStatus('hr_pms_review', workflowStages) || 'audit';
     case 'auditor':
       return resolveNextStatus('audit', workflowStages) || 'management_review';
     case 'management':
@@ -145,12 +173,16 @@ export function resolveForwardStatus(
  * Get reviewable statuses — which KPI statuses this view level can act on.
  */
 export function resolveReviewableStatuses(
-  viewLevel: 'manager' | 'auditor' | 'management',
+  viewLevel: 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): string[] {
   switch (viewLevel) {
     case 'manager':
       return ['self_review'];
+    case 'skip_level':
+      return ['skip_level_check'];
+    case 'hr_pms':
+      return ['hr_pms_review'];
     case 'auditor':
       if (!workflowStages.includes('manager_check')) {
         return ['self_review', 'audit'];
@@ -169,15 +201,17 @@ export function resolveReviewableStatuses(
  */
 export function getVisibleJourneyStages(
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
-): ('self' | 'manager' | 'auditor' | 'management')[] {
-  const stageMap: Record<string, 'self' | 'manager' | 'auditor' | 'management'> = {
+): ('self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management')[] {
+  const stageMap: Record<string, 'self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management'> = {
     self_review: 'self',
     manager_check: 'manager',
+    skip_level_check: 'skip_level',
+    hr_pms_review: 'hr_pms',
     audit: 'auditor',
     management_review: 'management',
   };
 
-  const visible: ('self' | 'manager' | 'auditor' | 'management')[] = [];
+  const visible: ('self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management')[] = [];
   for (const status of workflowStages) {
     const journeyStage = stageMap[status];
     if (journeyStage && !visible.includes(journeyStage)) {
@@ -212,7 +246,7 @@ export function hasStage(
  */
 export function canReviewKpi(
   kpiStatus: string,
-  viewType: 'my-kpis' | 'team-review' | 'audit' | 'management',
+  viewType: 'my-kpis' | 'team-review' | 'audit' | 'management' | 'skip-level-review' | 'hr-pms-review',
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): boolean {
   switch (viewType) {
@@ -220,6 +254,10 @@ export function canReviewKpi(
       return kpiStatus === 'kra_set';
     case 'team-review':
       return kpiStatus === 'self_review';
+    case 'skip-level-review':
+      return kpiStatus === 'skip_level_check';
+    case 'hr-pms-review':
+      return kpiStatus === 'hr_pms_review';
     case 'audit':
       if (!workflowStages.includes('manager_check')) {
         return kpiStatus === 'self_review' || kpiStatus === 'audit';

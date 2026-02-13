@@ -1,8 +1,8 @@
-import { Home, Users, Shield, Briefcase } from 'lucide-react';
+import { Home, Users, Shield, Briefcase, UserCheck, ClipboardCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-export type ViewMode = 'self' | 'team' | 'audit' | 'management';
+export type ViewMode = 'self' | 'team' | 'skip_level' | 'hr_pms' | 'audit' | 'management';
 
 interface ViewModeToggleProps {
   currentMode: ViewMode;
@@ -13,6 +13,8 @@ interface ViewModeToggleProps {
 const modeConfig: Record<ViewMode, { label: string; icon: React.ElementType; description: string }> = {
   self: { label: 'My Dashboard', icon: Home, description: 'View your own KPIs' },
   team: { label: 'Team Review', icon: Users, description: 'Review team KPIs' },
+  skip_level: { label: 'Skip-Level', icon: UserCheck, description: 'Skip-level review' },
+  hr_pms: { label: 'HR PMS', icon: ClipboardCheck, description: 'HR PMS team review' },
   audit: { label: 'Audit', icon: Shield, description: 'Audit performance evaluations' },
   management: { label: 'Management', icon: Briefcase, description: 'Final management review' },
 };

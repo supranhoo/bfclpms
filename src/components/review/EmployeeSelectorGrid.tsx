@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ReviewPeriodSelectorEnhanced, type PeriodSelection } from '@/components/ui/ReviewPeriodSelectorEnhanced';
 import { EmployeeFilters } from '@/components/review/EmployeeFilters';
 import { supabase } from '@/integrations/supabase/client';
-import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck } from 'lucide-react';
 import { ViewMode } from './ViewModeToggle';
 
 interface EmployeeProfile {
@@ -38,6 +38,16 @@ const STATUS_OPTIONS_BY_LEVEL: Record<Exclude<ViewMode, 'self'>, Array<{ value: 
     { value: 'pending', label: 'With Pending Reviews' },
     { value: 'reviewed', label: 'Reviewed' },
   ],
+  skip_level: [
+    { value: 'all', label: 'All Employees' },
+    { value: 'pending', label: 'Pending Skip-Level Review' },
+    { value: 'reviewed', label: 'Reviewed' },
+  ],
+  hr_pms: [
+    { value: 'all', label: 'All Employees' },
+    { value: 'pending', label: 'Pending HR PMS Review' },
+    { value: 'reviewed', label: 'Reviewed' },
+  ],
   audit: [
     { value: 'all', label: 'All Employees' },
     { value: 'pending', label: 'With Pending Audit' },
@@ -58,6 +68,18 @@ const HEADER_CONFIG: Record<Exclude<ViewMode, 'self'>, { icon: React.ElementType
     title: 'Team Review', 
     description: "Review and manage your team's performance",
     gradient: 'from-blue-500 to-indigo-600'
+  },
+  skip_level: { 
+    icon: UserCheck, 
+    title: 'Skip-Level Review', 
+    description: 'Review as skip-level reporting manager',
+    gradient: 'from-teal-500 to-cyan-600'
+  },
+  hr_pms: { 
+    icon: ClipboardCheck, 
+    title: 'HR PMS Review', 
+    description: 'HR PMS team review and assessment',
+    gradient: 'from-rose-500 to-pink-600'
   },
   audit: { 
     icon: Shield, 

@@ -40,7 +40,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
-  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays
+  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays, UserCheck, ClipboardCheck
 } from 'lucide-react';
 import { 
   kpiStatusColors, 
@@ -62,7 +62,7 @@ import {
 } from '@/lib/workflowEngine';
 
 // View level type - determines behavior and data access
-export type ScorecardViewLevel = 'manager' | 'auditor' | 'management';
+export type ScorecardViewLevel = 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms';
 
 interface EmployeeProfile {
   id: string;
@@ -91,7 +91,7 @@ const VIEW_LEVEL_STATIC: Record<ScorecardViewLevel, {
   title: string;
   description: string;
   scoreFieldPrefix: string;
-  previousScoreField: 'self_score' | 'manager_score' | 'auditor_score';
+  previousScoreField: 'self_score' | 'manager_score' | 'auditor_score' | 'skip_level_score' | 'hr_pms_score';
   actionLabel: string;
   roleIcon: React.ElementType;
 }> = {
@@ -102,6 +102,22 @@ const VIEW_LEVEL_STATIC: Record<ScorecardViewLevel, {
     previousScoreField: 'self_score',
     actionLabel: 'Approve',
     roleIcon: User,
+  },
+  skip_level: {
+    title: 'Skip-Level Review',
+    description: 'Review as skip-level reporting manager',
+    scoreFieldPrefix: 'skip_level',
+    previousScoreField: 'manager_score',
+    actionLabel: 'Forward',
+    roleIcon: UserCheck,
+  },
+  hr_pms: {
+    title: 'HR PMS Review',
+    description: 'HR PMS team review and assessment',
+    scoreFieldPrefix: 'hr_pms',
+    previousScoreField: 'skip_level_score',
+    actionLabel: 'Forward to Audit',
+    roleIcon: ClipboardCheck,
   },
   auditor: {
     title: 'Audit Review',
@@ -578,7 +594,7 @@ export function UnifiedScorecard({
           await reviewerOverride.saveOverrides.mutateAsync({
             kpi_id: selectedKpi.id,
             employee_id: employee.id,
-            review_level: viewLevel,
+            review_level: viewLevel as any,
             overrides: overrideEntries,
             reason: overrideReason,
             review_month: selectedPeriod,
@@ -598,7 +614,7 @@ export function UnifiedScorecard({
         } else {
           await reviewerOverride.acceptPreviousLevel.mutateAsync({
             kpi_id: selectedKpi.id,
-            review_level: viewLevel,
+            review_level: viewLevel as any,
             review_month: selectedPeriod,
             review_year: selectedYear,
           });

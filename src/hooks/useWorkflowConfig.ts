@@ -188,6 +188,8 @@ export function getStageLabel(stage: string): string {
     kra_set: 'KRA Set',
     self_review: 'Self Review',
     manager_check: 'Manager Review',
+    skip_level_check: 'Skip-Level Review',
+    hr_pms_review: 'HR PMS Review',
     audit: 'Audit Review',
     admin_review: 'Admin Review',
     management_review: 'Management Review',

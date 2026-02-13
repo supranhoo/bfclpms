@@ -34,7 +34,7 @@ import {
 interface KpiObservationsSectionProps {
   kpiId: string;
   kpiStatus: string;
-  viewLevel: 'employee' | 'manager' | 'auditor' | 'management';
+  viewLevel: 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms';
   baseScore?: number | null;
   isOwnKpi?: boolean;
 }
@@ -43,6 +43,8 @@ function getObserverRole(viewLevel: string, isOwnKpi: boolean): ObserverRole {
   if (isOwnKpi && viewLevel === 'employee') return 'self';
   switch (viewLevel) {
     case 'manager': return 'manager';
+    case 'skip_level': return 'manager';
+    case 'hr_pms': return 'manager';
     case 'auditor': return 'auditor';
     case 'management': return 'management';
     default: return 'self';
