@@ -138,6 +138,113 @@ export function useUpsertWorkflowConfig() {
   });
 }
 
+// Create a new workflow template
+export function useCreateWorkflowTemplate() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({
+      name,
+      displayName,
+      description,
+      stages,
+    }: {
+      name: string;
+      displayName: string;
+      description?: string;
+      stages: string[];
+    }) => {
+      const { data, error } = await supabase
+        .from('workflow_templates')
+        .insert({
+          name,
+          display_name: displayName,
+          description: description || null,
+          stages,
+          is_default: false,
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflow-templates'] });
+    },
+  });
+}
+
+// Update an existing workflow template
+export function useUpdateWorkflowTemplate() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({
+      id,
+      name,
+      displayName,
+      description,
+      stages,
+    }: {
+      id: string;
+      name: string;
+      displayName: string;
+      description?: string;
+      stages: string[];
+    }) => {
+      const { data, error } = await supabase
+        .from('workflow_templates')
+        .update({
+          name,
+          display_name: displayName,
+          description: description || null,
+          stages,
+        })
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflow-templates'] });
+    },
+  });
+}
+
+// Delete a workflow template (only if not in use)
+export function useDeleteWorkflowTemplate() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (templateId: string) => {
+      // Check if any configs reference this template
+      const { data: configs, error: checkError } = await supabase
+        .from('workflow_config')
+        .select('id')
+        .eq('workflow_template_id', templateId)
+        .limit(1);
+      
+      if (checkError) throw checkError;
+      if (configs && configs.length > 0) {
+        throw new Error('Cannot delete: this template is currently assigned to employees, departments, or PMS grades.');
+      }
+      
+      const { error } = await supabase
+        .from('workflow_templates')
+        .delete()
+        .eq('id', templateId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflow-templates'] });
+    },
+  });
+}
+
 // Delete a workflow configuration
 export function useDeleteWorkflowConfig() {
   const queryClient = useQueryClient();

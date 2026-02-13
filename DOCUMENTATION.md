@@ -3003,4 +3003,29 @@ The workflow engine provides pure utility functions that resolve status transiti
 
 ---
 
+### 4.X Custom Workflow Builder
+
+Admins can create, edit, and delete custom workflow templates from the **Templates** tab on the Workflow Configuration page (`/admin/system-settings` → Workflow tab).
+
+**How it works:**
+- Click **"Create Custom Template"** to open a dialog.
+- Enter a template name and optional description.
+- Toggle optional review stages ON/OFF from a fixed-order checklist:
+  - **Fixed (always included):** KRA Set, Self Review, Approved
+  - **Optional (toggleable):** Manager Review, Skip-Level Review, HR PMS Review, Audit Review, Management Review
+- A live arrow-chain preview updates as stages are toggled.
+- At least one optional stage must be selected.
+- Template names must be unique.
+
+**Edit / Delete:**
+- Non-default templates show Edit (pencil) and Delete (trash) icons.
+- Templates currently assigned to employees, departments, or PMS grades cannot be deleted.
+
+**Files:**
+- `src/components/admin/CustomWorkflowDialog.tsx` — Dialog component with stage selector
+- `src/hooks/useWorkflowConfig.ts` — `useCreateWorkflowTemplate`, `useUpdateWorkflowTemplate`, `useDeleteWorkflowTemplate` mutations
+- `src/pages/admin/WorkflowConfig.tsx` — Templates tab with create/edit/delete actions
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*

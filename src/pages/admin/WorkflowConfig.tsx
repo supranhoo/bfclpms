@@ -14,11 +14,15 @@ import {
   useWorkflowConfigs, 
   useUpsertWorkflowConfig, 
   useDeleteWorkflowConfig,
-  getStageLabel 
+  useDeleteWorkflowTemplate,
+  getStageLabel,
+  type WorkflowTemplate,
 } from '@/hooks/useWorkflowConfig';
 import { useDepartments } from '@/hooks/useOrganization';
-import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check } from 'lucide-react';
+import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil } from 'lucide-react';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
+import CustomWorkflowDialog from '@/components/admin/CustomWorkflowDialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 // Stage color mapping
 const stageColors: Record<string, string> = {
@@ -52,12 +56,16 @@ export default function WorkflowConfig() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('templates');
   const [employeeSearch, setEmployeeSearch] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<WorkflowTemplate | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<WorkflowTemplate | null>(null);
   
   const { data: templates, isLoading: templatesLoading } = useWorkflowTemplates();
   const { data: configs, isLoading: configsLoading } = useWorkflowConfigs();
   const { data: departments } = useDepartments();
   const upsertConfig = useUpsertWorkflowConfig();
   const deleteConfig = useDeleteWorkflowConfig();
+  const deleteTemplate = useDeleteWorkflowTemplate();
   
   // Fetch all profiles for employee tab
   const { data: profiles } = useQuery({
@@ -195,10 +203,18 @@ export default function WorkflowConfig() {
         <TabsContent value="templates" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Available Workflow Templates</CardTitle>
-              <CardDescription>
-                These are the predefined workflows that can be assigned
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Available Workflow Templates</CardTitle>
+                  <CardDescription>
+                    Predefined and custom workflows that can be assigned
+                  </CardDescription>
+                </div>
+                <Button onClick={() => { setEditingTemplate(null); setDialogOpen(true); }}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Custom Template
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -215,6 +231,24 @@ export default function WorkflowConfig() {
                           </div>
                           <p className="text-sm text-muted-foreground">{template.description}</p>
                         </div>
+                        {!template.is_default && (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => { setEditingTemplate(template); setDialogOpen(true); }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDeleteTarget(template)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
                       <WorkflowStagesPreview stages={template.stages} />
                     </CardContent>
@@ -466,6 +500,46 @@ export default function WorkflowConfig() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Custom Workflow Dialog */}
+      <CustomWorkflowDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        editTemplate={editingTemplate}
+      />
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Template</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deleteTarget?.display_name}"? This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!deleteTarget) return;
+                try {
+                  await deleteTemplate.mutateAsync(deleteTarget.id);
+                  toast({ title: 'Template deleted' });
+                } catch (err: any) {
+                  toast({
+                    title: 'Cannot delete',
+                    description: err?.message || 'Failed to delete template.',
+                    variant: 'destructive',
+                  });
+                }
+                setDeleteTarget(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
