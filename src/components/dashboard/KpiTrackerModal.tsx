@@ -42,24 +42,27 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
     // Deduplicate by period + year to avoid showing same month twice
     const periodMap = new Map<string, {
       month: string;
-      target: number;
+      target: number | null;
       achieved: number | null;
       rating: number | null;
       status: string;
       year: number;
+      isNa: boolean;
     }>();
 
     relatedKpis.forEach(k => {
       const periodKey = `${k.review_period}-${k.review_year}`;
       if (!periodMap.has(periodKey)) {
         const sub = submissionMap.get(k.id);
+        const isNa = sub?.is_na === true;
         periodMap.set(periodKey, {
           month: k.review_period || 'N/A',
-          target: k.target_value || 0,
-          achieved: sub ? (sub.achieved_value ?? null) : null,
-          rating: sub ? (sub.final_score ?? sub.management_score ?? sub.auditor_score ?? sub.manager_score ?? sub.self_score ?? null) : null,
+          target: isNa ? null : (k.target_value || 0),
+          achieved: isNa ? null : (sub ? (sub.achieved_value ?? null) : null),
+          rating: isNa ? null : (sub ? (sub.final_score ?? sub.management_score ?? sub.auditor_score ?? sub.manager_score ?? sub.self_score ?? null) : null),
           status: k.status || 'open',
           year: k.review_year || new Date().getFullYear(),
+          isNa,
         });
       }
     });
@@ -157,9 +160,15 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
                       <TableRow key={idx}>
                         <TableCell className="text-center font-medium">{entry.month}</TableCell>
                         <TableCell className="text-center">{entry.target}</TableCell>
-                        <TableCell className="text-center font-semibold">{entry.achieved != null ? entry.achieved : '-'}</TableCell>
+                        <TableCell className="text-center font-semibold">
+                          {entry.isNa ? (
+                            <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200">N/A</Badge>
+                          ) : entry.achieved != null ? entry.achieved : '-'}
+                        </TableCell>
                         <TableCell className="text-center">
-                          {entry.rating != null ? (
+                          {entry.isNa ? (
+                            <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200">N/A</Badge>
+                          ) : entry.rating != null ? (
                             <Badge className={getRatingColor(entry.rating)}>
                               {entry.rating.toFixed(1)}
                             </Badge>

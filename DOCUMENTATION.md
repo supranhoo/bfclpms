@@ -2374,6 +2374,9 @@ interface KpiReviewPanelProps {
 **Important — Data Scoping:**
 The `allSubmissions` prop and the `submissions` passed to `KpiTrackerModal` must contain submissions for **all periods** (not just the currently selected period). Scorecard components fetch KPIs for all periods via `useKpisByEmployee`, then filter to the current period for display. A separate `allKpiIds` array (derived from the unfiltered `allKpis`) is used to fetch all-period submissions via a second `useReviewSubmissions(allKpiIds)` call. The current-period `submissions` remain unchanged for scoring and workflow logic.
 
+**N/A Month Handling:**
+Both `KpiTrackerModal` and `KpiHistoryCard` check the `is_na` flag on each submission. When a month is marked Not Applicable: the Tracker Modal table shows an amber "N/A" badge in both the Achieved and Rating columns (instead of "-"), and nulls out `achieved`/`target` so the trend chart skips that month. The History Card shows "N/A" text instead of the numeric ratio and excludes N/A entries from the sparkline trend line. This is consistent with the existing `KpiDetailsTable` N/A badge behavior.
+
 #### `EmployeeScorecard`
 Comprehensive employee performance view with:
 - **KpiReviewPanel** for unified KPI details
