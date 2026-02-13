@@ -44,17 +44,23 @@ import {
   Eye,
   ArrowLeft,
   Mail,
+  UserCheck,
+  ClipboardCheck,
 } from 'lucide-react';
 import { CollapsibleSidebarGroup } from './CollapsibleSidebarGroup';
 
 const menuItems = {
   main: [
-    { title: 'My Dashboard', icon: Home, path: '/dashboard', roles: ['admin', 'manager', 'employee', 'auditor', 'management'] },
+    { title: 'My Dashboard', icon: Home, path: '/dashboard', roles: ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'] },
     { title: 'Inbox', icon: MessageSquare, path: '/queries', roles: ['employee', 'manager', 'admin', 'auditor', 'management'], showBadge: true },
     { title: 'PMS Policy', icon: FileText, path: '/pms-policy', roles: ['admin'] },
   ],
   manager: [
     { title: 'Team Review', icon: Users, path: '/dashboard?view=team', roles: ['manager', 'admin', 'management'] },
+    { title: 'Skip-Level Review', icon: UserCheck, path: '/dashboard?view=skip_level', roles: ['manager', 'admin'] },
+  ],
+  hr_pms: [
+    { title: 'HR PMS Review', icon: ClipboardCheck, path: '/dashboard?view=hr_pms', roles: ['hr_pms', 'admin'] },
   ],
   management: [
     { title: 'Management Dashboard', icon: LayoutDashboard, path: '/management-dashboard', roles: ['management', 'admin'] },
@@ -97,14 +103,17 @@ const getSectionForPath = (pathname: string, search: string = ''): string => {
   const fullPath = pathname + search;
   // Check for view query params first
   if (fullPath.includes('view=team')) return 'manager';
+  if (fullPath.includes('view=skip_level')) return 'manager';
   if (fullPath.includes('view=audit')) return 'audit';
   if (fullPath.includes('view=management')) return 'management';
+  if (fullPath.includes('view=hr_pms')) return 'hr_pms';
   // Check for management dashboard path
   if (pathname === '/management-dashboard') return 'management';
   // Existing path checks
   if (menuItems.main.some(item => pathname === item.path.split('?')[0])) return 'main';
   if (menuItems.admin.some(item => pathname.startsWith(item.path))) return 'admin';
   if (menuItems.reports.some(item => pathname.startsWith(item.path))) return 'reports';
+  if (menuItems.hr_pms.some(item => pathname === item.path.split('?')[0])) return 'hr_pms';
   if (pathname === '/admin/org-kpi-data') return 'dataEntry';
   return 'main';
 };
@@ -240,6 +249,20 @@ export function AppSidebar() {
             currentPath={location.pathname + location.search}
             onNavigate={handleNavigation}
             hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'management'}
+          />
+        )}
+
+        {/* HR PMS Section */}
+        {(role === 'hr_pms' || role === 'admin') && (
+          <CollapsibleSidebarGroup
+            label="HR PMS"
+            items={menuItems.hr_pms}
+            isOpen={openSections.has('hr_pms')}
+            onToggle={() => toggleSection('hr_pms')}
+            filterByRole={filterByRole}
+            currentPath={location.pathname + location.search}
+            onNavigate={handleNavigation}
+            hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'hr_pms'}
           />
         )}
 
