@@ -64,7 +64,7 @@ export default function AuditPanel() {
     if (statusFilter !== 'all' && periodKpis) {
       const employeeIds = new Set<string>();
       periodKpis.forEach(kpi => {
-        if (statusFilter === 'pending' && kpi.status === 'manager_check') {
+        if (statusFilter === 'pending' && (kpi.status === 'manager_check' || kpi.status === 'self_review')) {
           employeeIds.add(kpi.employee_id);
         } else if (statusFilter === 'in_audit' && kpi.status === 'audit') {
           employeeIds.add(kpi.employee_id);
@@ -86,7 +86,7 @@ export default function AuditPanel() {
 
     return {
       totalEmployees: allProfiles.length,
-      pendingAudit: periodKpis.filter(k => k.status === 'manager_check').length,
+      pendingAudit: periodKpis.filter(k => k.status === 'manager_check' || k.status === 'self_review').length,
       inAudit: periodKpis.filter(k => k.status === 'audit').length,
       forwarded: periodKpis.filter(k => k.status === 'management_review' || k.status === 'approved').length,
       totalKpis: periodKpis.length,
@@ -129,7 +129,7 @@ export default function AuditPanel() {
     if (!periodKpis) return { pending: 0, inAudit: 0, forwarded: 0, total: 0 };
     const empKpis = periodKpis.filter(k => k.employee_id === employeeId);
     return {
-      pending: empKpis.filter(k => k.status === 'manager_check').length,
+      pending: empKpis.filter(k => k.status === 'manager_check' || k.status === 'self_review').length,
       inAudit: empKpis.filter(k => k.status === 'audit').length,
       forwarded: empKpis.filter(k => k.status === 'management_review' || k.status === 'approved').length,
       total: empKpis.length,

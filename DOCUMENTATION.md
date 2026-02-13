@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-13  
-> **Version:** 1.17.0
+> **Version:** 1.18.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -2973,14 +2973,18 @@ The workflow engine provides pure utility functions that resolve status transiti
 - WorkflowProgressTracker shows 5 cards instead of 6
 - KpiJourneySection shows 3 review stages (Self, Auditor, Management)
 
-**Components Using Workflow Engine:**
-- `UnifiedScorecard.tsx` — Dynamic forward/send-back status resolution
+**Components Using Workflow Engine (MUST pass `workflowStages` prop):**
+- `UnifiedScorecard.tsx` — Dynamic forward/send-back status resolution; passes `workflowStages={effectiveStages}` to `KpiDetailsTable`, `WorkflowProgressTracker`
+- `AuditScorecard.tsx` — Legacy audit page; uses `useEmployeeWorkflowStages` for dynamic transitions, pending counts, send-back targets; passes `workflowStages` to `KpiDetailsTable`, `WorkflowProgressTracker`
+- `AuditPanel.tsx` — Legacy audit list; includes `self_review` in pending audit counts for skip-manager workflows
 - `EmployeeScorecard.tsx` — Dynamic manager approval target status
 - `useKpis.ts` (`useApproveKpi`) — Accepts optional `forwardStatus` parameter
 - `WorkflowProgressTracker.tsx` — Accepts optional `workflowStages` prop to filter displayed stages
 - `KpiJourneySection.tsx` — Accepts optional `workflowStages` prop to filter journey cards
-- `KpiDetailsTable.tsx` — Accepts optional `workflowStages` prop for workflow-aware reviewability
+- `KpiDetailsTable.tsx` — Accepts optional `workflowStages` prop for workflow-aware reviewability (`canReviewKpi`)
 - `EmployeeSelectorGrid.tsx` — Audit view includes `self_review` in pending count for skip-manager employees
+
+**⚠️ Critical:** Every component rendering `KpiDetailsTable` or `WorkflowProgressTracker` MUST pass the `workflowStages` prop. Omitting it causes fallback to the default 6-stage pipeline, which breaks skip-manager workflows.
 
 ---
 
