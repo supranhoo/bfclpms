@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 
-type AppRole = 'admin' | 'manager' | 'employee' | 'auditor' | 'management';
+type AppRole = 'admin' | 'manager' | 'employee' | 'auditor' | 'management' | 'hr_pms';
 
 interface Profile {
   id: string;
