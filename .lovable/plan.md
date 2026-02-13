@@ -1,54 +1,48 @@
 
-# Fix: Review Timeline Dialog Overflow and Floating Content
+# Fix: Review Timeline Mobile UI Issues
 
-## Root Cause
+## Issues Identified
 
-The dialog content overflows its boundary because of a **layout structure problem**:
+### 1. Workflow Progress Bar Overflow
+The 6 workflow stages each have `minWidth: 48px` (288px total) plus connector lines. On a 390px mobile screen with 80px of combined padding (dialog p-6 + inner p-4), only ~310px remains. Stage labels like "Self Review" and "Management" get cramped and the connector lines compress to nearly zero width.
 
-1. `DialogContent` has `max-h-[85vh]` but the inner wrapper `div.py-2` has **no overflow control**
-2. `ScrollArea` uses a **fixed `h-[500px]`** which, combined with the header (~80px), workflow progress (~120px), badges (~40px), and footer (~50px), totals ~790px -- exceeding 85vh on most screens
-3. Without `overflow-hidden` on the dialog content, the excess content visually "breaks through" the dialog border and floats below it
+### 2. Timeline Card Layout Too Wide
+Each timeline entry uses `flex items-start justify-between gap-4` with the timestamp forced to `whitespace-nowrap` on the right side. On mobile, this leaves very little room for the action label and details text, causing text to wrap awkwardly.
 
-Additionally:
-- `MANAGER_SENT_BACK_TO_EMPLOYEE` action is missing from `actionConfig`, causing its card to render with an invisible `bg-muted-foreground` dot (CSS variable, not a valid Tailwind bg color)
-- The description still shows too much text because `kpi.kpi_name` often has no newlines, so `.split('\n')[0]` returns everything
+### 3. Dialog Padding Too Large
+The dialog uses `p-6` (24px each side) which is excessive on small screens, wasting 48px of horizontal space.
+
+### 4. Badge Row Overflow
+The KRA name badge and period badge sit in a horizontal row that can overflow if the KRA name is long.
 
 ## Fix Plan
 
 ### File: `src/components/dashboard/KpiTimeline.tsx`
 
-**Fix 1 -- Restructure dialog layout for proper overflow containment**
+**Fix 1 -- Reduce mobile padding**
+Change `DialogContent` className to use `p-4 sm:p-6` so mobile gets tighter padding.
 
-Change the dialog content to use a flex column layout:
+**Fix 2 -- Responsive workflow progress**
+- Hide the text labels on mobile, show only icons (add `hidden sm:block` to the label span)
+- Reduce `minWidth` to 32px on mobile via a responsive approach
+- This prevents the 6 labels from fighting for space
 
-```text
-DialogContent (max-h-[85vh], flex flex-col, overflow-hidden)
-  DialogHeader (shrink-0)
-  div (flex-1, min-h-0, flex flex-col, overflow-hidden)
-    Workflow Progress (shrink-0)
-    Badges (shrink-0)
-    ScrollArea (flex-1, min-h-0)  <-- replaces fixed h-[500px]
-  Footer (shrink-0)
-```
+**Fix 3 -- Stack timestamp below content on mobile**
+Change the timeline card layout from side-by-side to stacked on mobile:
+- Use `flex-col sm:flex-row sm:items-start sm:justify-between` on the card inner div
+- Move timestamp to bottom-left with `text-left sm:text-right` and remove `whitespace-nowrap` on mobile
 
-This ensures the ScrollArea dynamically fills available space and the dialog never overflows.
-
-**Fix 2 -- Add missing action config**
-
-Add `MANAGER_SENT_BACK_TO_EMPLOYEE` to `actionConfig` with proper icon and color.
-
-**Fix 3 -- Simplify description**
-
-Show only the KRA name in the description. Remove the raw `kpi_name` dump entirely since it contains formulas and scoring logic.
+**Fix 4 -- Truncate badges**
+Add `max-w-[150px] truncate` to the KRA name badge so it doesn't push the period badge off-screen. Wrap in `flex-wrap` for safety.
 
 ### File: `DOCUMENTATION.md`
-
-Update to reflect the layout fix and new action config entry.
+Update the mobile optimization section to document the Review Timeline mobile fixes.
 
 ## Summary
 
-| Fix | Issue | Change |
-|-----|-------|--------|
-| 1 | Content overflows dialog | Flex column layout with dynamic ScrollArea height |
-| 2 | Missing MANAGER_SENT_BACK_TO_EMPLOYEE | Add to actionConfig map |
-| 3 | Description shows raw formula text | Show only KRA name |
+| Fix | Issue | Approach |
+|-----|-------|----------|
+| 1 | Dialog padding too large | `p-4 sm:p-6` |
+| 2 | Workflow stages overflow | Hide labels on mobile, icon-only |
+| 3 | Timeline cards cramped | Stack timestamp below on mobile |
+| 4 | Badge overflow | Truncate + flex-wrap |
