@@ -1,107 +1,54 @@
 
+# RCA and CAPA: "Review" Button Missing for Skip-Level and HR PMS in KPI Details Table
 
-# RCA and CAPA: Skip-Level "Review" Button Not Visible
+## Root Cause Analysis
 
-## Root Cause Analysis (RCA)
+The bug is on **line 685** of `src/components/review/UnifiedScorecard.tsx`:
 
-The bug is in `src/lib/workflowEngine.ts`. The workflow engine uses **wrong status values** for the `skip_level` and `hr_pms` view levels, creating a gap where KPIs can never reach the expected status.
-
-### How the Status Convention Works
-
-Each status name means "this stage is complete, KPI is waiting for the next reviewer":
-
-```text
-self_review    = employee submitted, WAITING FOR manager
-manager_check  = manager checked, WAITING FOR next reviewer
-skip_level_check = skip-level checked, WAITING FOR next reviewer
-hr_pms_review  = HR PMS reviewed, WAITING FOR next reviewer
+```
+const viewType = viewLevel === 'manager' ? 'team-review'
+               : viewLevel === 'auditor' ? 'audit'
+               : 'management';
 ```
 
-### The Pattern (Manager works correctly)
+When `viewLevel` is `skip_level` or `hr_pms`, this ternary chain falls through to `'management'`. The workflow engine's `canReviewKpi('manager_check', 'management', ...)` returns `false` because management only reviews KPIs at `management_review` status. This causes the "Review" button to never appear, and the fallback "View" button is shown instead.
 
-- Manager sees KPIs at: `self_review` (the stage BEFORE their own)
-- Manager forwards to: `manager_check` (their OWN stage)
+Additionally, the `KpiTableViewType` in `KpiDetailsTable.tsx` only defines four values: `'my-kpis' | 'team-review' | 'audit' | 'management'`. It is missing `'skip-level-review'` and `'hr-pms-review'`, which the workflow engine already supports.
 
-### The Bug (Skip-Level and HR PMS are broken)
+## Corrective Action Plan
 
-| Function | skip_level (Current - WRONG) | skip_level (Correct) |
-|---|---|---|
-| resolvePendingStatuses | `['skip_level_check']` | `['manager_check']` |
-| resolveReviewableStatuses | `['skip_level_check']` | `['manager_check']` |
-| resolveForwardStatus | next after skip_level_check (= hr_pms_review) | `'skip_level_check'` |
+### File 1: `src/components/review/KpiDetailsTable.tsx`
 
-| Function | hr_pms (Current - WRONG) | hr_pms (Correct) |
-|---|---|---|
-| resolvePendingStatuses | `['hr_pms_review']` | `['skip_level_check']` |
-| resolveReviewableStatuses | `['hr_pms_review']` | `['skip_level_check']` |
-| resolveForwardStatus | next after hr_pms_review (= audit) | `'hr_pms_review'` |
-
-### What Happens Today
-
-1. Manager approves Purnima's KPI -> status becomes `manager_check`
-2. Jaspal (skip-level) looks for KPIs at `skip_level_check` -> finds nothing
-3. "Review" button never appears because no KPIs match the expected status
-4. KPIs are stuck at `manager_check` forever -- nobody can pick them up
-
-### Additional Issue: Auditor in 8-Stage Workflow
-
-The auditor's pending statuses are hardcoded to `['manager_check', 'audit']`. In the 8-stage workflow, the stage before `audit` is `hr_pms_review`, not `manager_check`. This needs to be made dynamic too.
-
-## Corrective Action Plan (CAPA)
-
-### File: `src/lib/workflowEngine.ts`
-
-Fix three functions to use **dynamic stage resolution** instead of hardcoded values:
-
-**1. `resolvePendingStatuses`** -- Fix skip_level, hr_pms, and auditor cases:
+**Line 32** -- Expand the `KpiTableViewType` to include the two missing view types:
 
 ```typescript
-case 'skip_level': {
-  // Skip-level sees KPIs at the stage BEFORE skip_level_check
-  const idx = workflowStages.indexOf('skip_level_check');
-  return idx > 0 ? [workflowStages[idx - 1]] : ['manager_check'];
-}
-case 'hr_pms': {
-  const idx = workflowStages.indexOf('hr_pms_review');
-  return idx > 0 ? [workflowStages[idx - 1]] : ['skip_level_check'];
-}
-case 'auditor': {
-  const idx = workflowStages.indexOf('audit');
-  const preceding = idx > 0 ? workflowStages[idx - 1] : 'manager_check';
-  return [preceding, 'audit'];
-}
+export type KpiTableViewType = 'my-kpis' | 'team-review' | 'audit' | 'management' | 'skip-level-review' | 'hr-pms-review';
 ```
 
-**2. `resolveReviewableStatuses`** -- Same fix, same logic as pending statuses.
+**Lines 128-129** -- Update the `isTeamReviewPastStage` check to also handle skip-level and HR PMS "past stage" states so those views show "Reviewed" badges correctly for KPIs that have already been forwarded.
 
-**3. `resolveForwardStatus`** -- Fix skip_level and hr_pms to set their OWN stage:
+**Lines 147** -- Update the send-back button visibility condition to include `'skip-level-review'` and `'hr-pms-review'` alongside `'team-review'`, `'audit'`, and `'management'`.
+
+### File 2: `src/components/review/UnifiedScorecard.tsx`
+
+**Line 685** -- Fix the viewType mapping to include skip-level and HR PMS:
 
 ```typescript
-case 'skip_level':
-  return 'skip_level_check';   // was: resolveNextStatus('skip_level_check', ...)
-case 'hr_pms':
-  return 'hr_pms_review';      // was: resolveNextStatus('hr_pms_review', ...)
+const viewType = viewLevel === 'manager' ? 'team-review'
+               : viewLevel === 'auditor' ? 'audit'
+               : viewLevel === 'skip_level' ? 'skip-level-review'
+               : viewLevel === 'hr_pms' ? 'hr-pms-review'
+               : 'management';
 ```
 
-**4. Update existing tests** in `src/lib/workflowEngine.test.ts` and add new test cases for 8-stage workflows.
+### File 3: `DOCUMENTATION.md`
 
-### File: `src/components/review/EmployeeSelectorGrid.tsx`
+Update to document the expanded `KpiTableViewType` and the corrected viewType mapping.
 
-The `EmployeeSelectorGrid` stat calculation and filtering for `skip_level` and `hr_pms` also use hardcoded statuses. These need to match the corrected workflow engine:
-
-- For `skip_level`: filter pending by `manager_check` (not `skip_level_check`)
-- For `hr_pms`: filter pending by `skip_level_check` (not `hr_pms_review`)
-
-### File: `DOCUMENTATION.md`
-
-Update to document the status convention and the corrected workflow engine behavior.
-
-## Files to Modify
+## Summary of Changes
 
 | File | Change |
 |---|---|
-| `src/lib/workflowEngine.ts` | Fix `resolvePendingStatuses`, `resolveReviewableStatuses`, `resolveForwardStatus` for skip_level, hr_pms, and auditor |
-| `src/lib/workflowEngine.test.ts` | Update/add tests for 8-stage workflow |
-| `src/components/review/EmployeeSelectorGrid.tsx` | Fix hardcoded status filters for skip_level and hr_pms in stats, displayMembers, and badge calculations |
-| `DOCUMENTATION.md` | Document status convention and fixes |
-
+| `src/components/review/KpiDetailsTable.tsx` | Add `'skip-level-review'` and `'hr-pms-review'` to `KpiTableViewType`; update past-stage and send-back button conditions |
+| `src/components/review/UnifiedScorecard.tsx` | Fix viewType mapping for `skip_level` and `hr_pms` view levels |
+| `DOCUMENTATION.md` | Document the fix |
