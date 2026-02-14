@@ -1914,6 +1914,9 @@ The database trigger `send_email_on_notification()` maps internal notification t
 - `observation_raised`, `observation_reply`, `observation_resolved` → pass through as-is
 - All other types pass through unchanged
 
+**Trigger HTTP Call:**
+The `send_email_on_notification()` trigger uses `net.http_post()` (from the `pg_net` extension) to call the `send-email-notification` edge function. The call signature is `net.http_post(url, body::jsonb, params::jsonb, headers::jsonb)`. The body is passed as native `jsonb` (not cast to `text`), and an empty `params := '{}'::jsonb` argument is required. Earlier versions incorrectly used `extensions.http_post()` with a `::text` body cast, which caused silent failures for all trigger-based emails.
+
 **Delivery:**
 - In-app notifications (real-time via Supabase Realtime)
 - Email notifications (via configurable provider: Resend, SMTP, or Microsoft 365 Graph API)
