@@ -2,7 +2,7 @@ import { Bell, MessageSquare, Send, CheckCircle2, Clock, AlertCircle, CheckCheck
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TableRow, TableCell } from '@/components/ui/table';
-import { InboxItem, formatRelativeTime, getQueryStatusClasses, getQuickAction, getNotificationNavigationPath } from '@/lib/inboxUtils';
+import { InboxItem, formatRelativeTime, getQueryStatusClasses, getQuickAction } from '@/lib/inboxUtils';
 import { cn } from '@/lib/utils';
 import { SnoozePopover } from './SnoozePopover';
 
@@ -59,15 +59,7 @@ export function InboxRowItem({ item, onView, onMarkRead, onNavigate, onToggleExp
     if (!item.isRead && onMarkRead) {
       onMarkRead(item);
     }
-    // Navigate for notifications; open detail sheet for queries (which need inline actions)
-    if (item.type === 'notification' && onNavigate) {
-      const path = getNotificationNavigationPath(item);
-      if (path) {
-        onNavigate(path);
-        return;
-      }
-    }
-    // Fallback: open detail sheet
+    // Always open the detail sheet first; navigation happens via "Open in App" button inside
     onView(item);
   };
 

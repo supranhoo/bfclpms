@@ -111,6 +111,23 @@ export function getNotificationTypeLabel(type: string): string {
 /**
  * Get query status color classes
  */
+/**
+ * Convert internal workflow status codes to human-readable labels
+ */
+export function getStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    kra_set: 'KRA Set',
+    self_review: 'Self Review',
+    manager_check: 'Manager Review',
+    skip_level_check: 'Skip-Level Review',
+    hr_pms_check: 'HR PMS Review',
+    audit: 'Audit',
+    management_review: 'Management Review',
+    approved: 'Approved',
+  };
+  return labels[status] || status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 export function getQueryStatusClasses(status: 'open' | 'responded' | 'resolved'): string {
   switch (status) {
     case 'open':

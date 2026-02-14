@@ -1,11 +1,11 @@
 import { format } from 'date-fns';
-import { X, Bell, MessageSquare, User, Calendar, Paperclip, ExternalLink, Clock, CheckCircle2, MessageCircle, Send } from 'lucide-react';
+import { X, Bell, MessageSquare, User, Calendar, Paperclip, ExternalLink, Clock, CheckCircle2, MessageCircle, Send, ArrowRight } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { InboxItem, getNotificationTypeLabel, getQueryStatusClasses, getNotificationNavigationPath } from '@/lib/inboxUtils';
+import { InboxItem, getNotificationTypeLabel, getQueryStatusClasses, getNotificationNavigationPath, getStatusLabel } from '@/lib/inboxUtils';
 import { cn } from '@/lib/utils';
 
 interface InboxDetailSheetProps {
@@ -64,6 +64,18 @@ export function InboxDetailSheet({
                 </Badge>
               )}
             </div>
+            {/* Workflow Status Transition for notifications */}
+            {!isQuery && item.metadata?.from_status && item.metadata?.to_status && (
+              <div className="flex items-center gap-2 mt-2">
+                <Badge variant="secondary" className="text-xs">
+                  {getStatusLabel(item.metadata.from_status)}
+                </Badge>
+                <ArrowRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                <Badge variant="default" className="text-xs">
+                  {getStatusLabel(item.metadata.to_status)}
+                </Badge>
+              </div>
+            )}
           </div>
           <SheetTitle className="text-left">{item.title}</SheetTitle>
           <SheetDescription className="text-left">
