@@ -471,16 +471,70 @@ export function UnifiedScorecard({
         throw new Error('Failed to update KPI status. You may not have permission to perform this action.');
       }
 
-      // Clear reviewer fields
-      const updateData: any = {};
-      const prefix = config.scoreFieldPrefix;
-      updateData[`${prefix}_rating`] = null;
-      updateData[`${prefix}_score`] = null;
-      updateData[`${prefix}_remarks`] = null;
+      // Cascading clear: clear ALL downstream fields from the target status onward
+      // This mirrors the admin step-back logic in useAdminDataEntry.ts
+      const clearFields: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      const statusOrder = ['kra_set', 'self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'];
+      const targetIdx = statusOrder.indexOf(newStatus);
+
+      // Clear kpi_status and self fields if going back to kra_set
+      if (newStatus === 'kra_set') {
+        clearFields.kpi_status = 'open';
+        clearFields.self_rating = null;
+        clearFields.self_score = null;
+        clearFields.self_remarks = null;
+        clearFields.self_evidence_url = null;
+        clearFields.achieved_value = null;
+      }
+
+      // Clear manager fields when target <= self_review
+      if (targetIdx <= statusOrder.indexOf('self_review')) {
+        clearFields.manager_rating = null;
+        clearFields.manager_score = null;
+        clearFields.manager_remarks = null;
+        clearFields.manager_evidence_url = null;
+        clearFields.manager_achieved_value = null;
+      }
+
+      // Clear skip_level fields when target <= manager_check
+      if (targetIdx <= statusOrder.indexOf('manager_check')) {
+        clearFields.skip_level_rating = null;
+        clearFields.skip_level_score = null;
+        clearFields.skip_level_remarks = null;
+        clearFields.skip_level_evidence_url = null;
+        clearFields.skip_level_achieved_value = null;
+      }
+
+      // Clear hr_pms fields when target <= skip_level_check
+      if (targetIdx <= statusOrder.indexOf('skip_level_check')) {
+        clearFields.hr_pms_rating = null;
+        clearFields.hr_pms_score = null;
+        clearFields.hr_pms_remarks = null;
+        clearFields.hr_pms_evidence_url = null;
+        clearFields.hr_pms_achieved_value = null;
+      }
+
+      // Clear auditor fields when target <= hr_pms_review
+      if (targetIdx <= statusOrder.indexOf('hr_pms_review')) {
+        clearFields.auditor_rating = null;
+        clearFields.auditor_score = null;
+        clearFields.auditor_remarks = null;
+        clearFields.auditor_evidence_url = null;
+        clearFields.auditor_achieved_value = null;
+      }
+
+      // Clear management fields when target before management_review
+      if (targetIdx < statusOrder.indexOf('management_review')) {
+        clearFields.management_rating = null;
+        clearFields.management_score = null;
+        clearFields.management_remarks = null;
+        clearFields.management_evidence_url = null;
+        clearFields.management_achieved_value = null;
+      }
 
       const { error: submissionError } = await supabase
         .from('review_submissions')
-        .update(updateData)
+        .update(clearFields)
         .eq('kpi_id', kpi_id);
 
       if (submissionError) throw submissionError;
