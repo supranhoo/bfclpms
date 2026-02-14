@@ -393,6 +393,51 @@ Total Weightage: {{total_weightage}}
 
 Please log in to review the assignments.`,
   },
+  admin_status_step_back: {
+    subject: '[PMS] Admin Moved Your KPI Back',
+    body: `Hi {{recipient_name}},
+
+An administrator has moved your KPI back one stage in the workflow.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+
+Please check your dashboard for details and take any required action.`,
+  },
+  rollback_requested: {
+    subject: '[PMS] Rollback Requested on KPI',
+    body: `Hi {{recipient_name}},
+
+A rollback has been requested on a KPI that requires your review.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+Reason: {{rollback_reason}}
+
+Please log in to review and approve or dismiss this request.`,
+  },
+  rollback_approved: {
+    subject: '[PMS] Rollback Approved',
+    body: `Hi {{recipient_name}},
+
+Your rollback request has been approved.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+
+You can now edit and resubmit your KPI.`,
+  },
+  rollback_rejected: {
+    subject: '[PMS] Rollback Request Dismissed',
+    body: `Hi {{recipient_name}},
+
+Your rollback request has been dismissed by the reviewer.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+
+The KPI will remain at its current stage. Please contact your reviewer if you have questions.`,
+  },
 };
 
 const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string }> = {
@@ -416,6 +461,10 @@ const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string
   org_kpi_sent_back: { color: '#f59e0b', emoji: '↩️', title: 'Org KPI Sent Back' },
   password_rollout: { color: '#6366f1', emoji: '🔑', title: 'Login Credentials' },
   kra_batch_assigned: { color: '#3b82f6', emoji: '📋', title: 'New KRA Assignment' },
+  admin_status_step_back: { color: '#f97316', emoji: '⏪', title: 'Admin Step Back' },
+  rollback_requested: { color: '#f59e0b', emoji: '🔙', title: 'Rollback Requested' },
+  rollback_approved: { color: '#10b981', emoji: '✅', title: 'Rollback Approved' },
+  rollback_rejected: { color: '#64748b', emoji: '🚫', title: 'Rollback Dismissed' },
 };
 
 // Build KRA table HTML for batch assignment emails

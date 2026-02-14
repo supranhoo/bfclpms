@@ -25,7 +25,11 @@ export type EmailEventType =
   | 'observation_reply'
   | 'observation_resolved'
   | 'password_rollout'
-  | 'kra_batch_assigned';
+  | 'kra_batch_assigned'
+  | 'admin_status_step_back'
+  | 'rollback_requested'
+  | 'rollback_approved'
+  | 'rollback_rejected';
 
 export type EmailProvider = 'resend' | 'smtp' | 'microsoft_graph';
 export type SmtpSecurity = 'tls' | 'starttls' | 'none';
