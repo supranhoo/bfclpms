@@ -244,6 +244,10 @@ export function UnifiedScorecard({
   // N/A confirmation state
   const [naConfirmed, setNaConfirmed] = useState(false);
   const [naRemarks, setNaRemarks] = useState('');
+  
+  // Reviewer-initiated N/A state
+  const [reviewerMarkNa, setReviewerMarkNa] = useState(false);
+  const [markNaRemarks, setMarkNaRemarks] = useState('');
 
   // Org KPI send-back dialog state (for management)
   const [orgKpiSendBackOpen, setOrgKpiSendBackOpen] = useState(false);
@@ -521,6 +525,8 @@ export function UnifiedScorecard({
     setOverrideReason('');
     setNaConfirmed(false);
     setNaRemarks('');
+    setReviewerMarkNa(false);
+    setMarkNaRemarks('');
     setReviewSheetOpen(true);
   };
 
@@ -531,7 +537,59 @@ export function UnifiedScorecard({
     const submission = submissionMap.get(selectedKpi.id);
     const isNaKpi = submission?.is_na || false;
     
-    // For N/A KPIs
+    // Reviewer-initiated N/A marking
+    if (reviewerMarkNa && !isNaKpi) {
+      if (!markNaRemarks.trim()) return;
+      
+      // Set is_na and na_marked_by_role on submission
+      const remarkField = `${config.scoreFieldPrefix}_remarks`;
+      const updateData: any = {
+        is_na: true,
+        na_marked_by_role: viewLevel,
+        [remarkField]: markNaRemarks,
+      };
+      
+      const { error: submissionError } = await supabase
+        .from('review_submissions')
+        .update(updateData)
+        .eq('kpi_id', selectedKpi.id);
+      
+      if (submissionError) {
+        toast({ title: 'Failed to mark N/A', description: submissionError.message, variant: 'destructive' });
+        return;
+      }
+      
+      // Advance status
+      const newStatus = approve ? config.forwardStatus : config.pendingStatus;
+      const { error: kpiError } = await supabase
+        .from('kpis')
+        .update({ status: newStatus as any })
+        .eq('id', selectedKpi.id);
+      
+      if (kpiError) {
+        toast({ title: 'Failed to update status', description: kpiError.message, variant: 'destructive' });
+        return;
+      }
+      
+      // Audit log
+      if (user?.id) {
+        await supabase.from('kpi_audit_logs').insert({
+          kpi_id: selectedKpi.id,
+          action: `${viewLevel.toUpperCase()}_MARKED_NA`,
+          performed_by: user.id,
+          new_value: { na_remarks: markNaRemarks, na_marked_by_role: viewLevel },
+          metadata: { marked_at: new Date().toISOString() },
+        });
+      }
+      
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      toast({ title: 'KPI marked as N/A and forwarded' });
+      setReviewSheetOpen(false);
+      return;
+    }
+    
+    // For existing N/A KPIs (confirmation flow)
     if (isNaKpi) {
       if (!naConfirmed) return;
       
@@ -874,7 +932,7 @@ export function UnifiedScorecard({
                 workflowStages={effectiveStages}
               />
               
-              {/* N/A Confirmation Card */}
+              {/* N/A Confirmation Card - existing N/A */}
               {submissionMap.get(selectedKpi.id)?.is_na && isReviewable(selectedKpi) && (
                 <NaConfirmationCard
                   selfRemarks={submissionMap.get(selectedKpi.id)?.self_remarks || null}
@@ -883,30 +941,50 @@ export function UnifiedScorecard({
                   remarks={naRemarks}
                   onRemarksChange={setNaRemarks}
                   reviewerLevel={viewLevel === 'manager' ? 'Manager' : viewLevel === 'auditor' ? 'Auditor' : 'Management'}
+                  naMarkedByRole={(submissionMap.get(selectedKpi.id) as any)?.na_marked_by_role || null}
                 />
               )}
               
-              {/* Daily Submission Summary + Override */}
-              <DailySubmissionSummaryWithOverride 
-                kpi={selectedKpi} 
-                selectedPeriod={selectedPeriod} 
-                selectedYear={selectedYear}
-                viewLevel={viewLevel}
-                isReviewMode={isReviewable(selectedKpi)}
-                reviewerAgrees={reviewerAgrees}
-                onReviewerAgreesChange={setReviewerAgrees}
-                dailyOverrides={dailyOverrides}
-                onDailyOverridesChange={setDailyOverrides}
-                overrideReason={overrideReason}
-                onOverrideReasonChange={setOverrideReason}
-                reviewerScore={reviewerScore}
-                onReviewerScoreChange={setReviewerScore}
-                submissionMap={submissionMap}
-                config={config}
-              />
+              {/* Reviewer-initiated Mark as N/A */}
+              {!submissionMap.get(selectedKpi.id)?.is_na && isReviewable(selectedKpi) && (
+                <NaConfirmationCard
+                  selfRemarks={null}
+                  confirmed={false}
+                  onConfirmChange={() => {}}
+                  remarks=""
+                  onRemarksChange={() => {}}
+                  reviewerLevel={viewLevel === 'manager' ? 'Manager' : viewLevel === 'auditor' ? 'Auditor' : 'Management'}
+                  canMarkNa
+                  reviewerMarkedNa={reviewerMarkNa}
+                  onReviewerMarkNa={setReviewerMarkNa}
+                  markNaRemarks={markNaRemarks}
+                  onMarkNaRemarksChange={setMarkNaRemarks}
+                />
+              )}
+              
+              {/* Daily Submission Summary + Override - hidden when reviewer marks N/A */}
+              {!reviewerMarkNa && (
+                <DailySubmissionSummaryWithOverride 
+                  kpi={selectedKpi} 
+                  selectedPeriod={selectedPeriod} 
+                  selectedYear={selectedYear}
+                  viewLevel={viewLevel}
+                  isReviewMode={isReviewable(selectedKpi)}
+                  reviewerAgrees={reviewerAgrees}
+                  onReviewerAgreesChange={setReviewerAgrees}
+                  dailyOverrides={dailyOverrides}
+                  onDailyOverridesChange={setDailyOverrides}
+                  overrideReason={overrideReason}
+                  onOverrideReasonChange={setOverrideReason}
+                  reviewerScore={reviewerScore}
+                  onReviewerScoreChange={setReviewerScore}
+                  submissionMap={submissionMap}
+                  config={config}
+                />
+              )}
 
-              {/* Score Input - Only for reviewable KPIs and non-daily-binary */}
-              {isReviewable(selectedKpi) && !(selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary') && (
+              {/* Score Input - hidden when reviewer marks N/A */}
+              {!reviewerMarkNa && isReviewable(selectedKpi) && !(selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary') && (
                 <>
                   <AchievedValueScoreInput
                     kpi={selectedKpi}
@@ -919,7 +997,6 @@ export function UnifiedScorecard({
                     reviewYear={selectedYear}
                   />
 
-                  {/* Remarks */}
                   <div className="space-y-2">
                     <Label>{viewLevel.charAt(0).toUpperCase() + viewLevel.slice(1)} Remarks</Label>
                     <Textarea
@@ -930,7 +1007,6 @@ export function UnifiedScorecard({
                     />
                   </div>
 
-                  {/* Evidence Upload */}
                   {user?.id && (
                     <EvidenceUpload
                       userId={user.id}
@@ -942,8 +1018,8 @@ export function UnifiedScorecard({
                 </>
               )}
               
-              {/* Remarks for Daily Binary */}
-              {isReviewable(selectedKpi) && selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary' && reviewerAgrees !== null && (
+              {/* Remarks for Daily Binary - hidden when reviewer marks N/A */}
+              {!reviewerMarkNa && isReviewable(selectedKpi) && selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary' && reviewerAgrees !== null && (
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>{viewLevel.charAt(0).toUpperCase() + viewLevel.slice(1)} Remarks</Label>
@@ -1000,7 +1076,7 @@ export function UnifiedScorecard({
                   )}
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                  {!submissionMap.get(selectedKpi?.id || '')?.is_na && (
+                  {!submissionMap.get(selectedKpi?.id || '')?.is_na && !reviewerMarkNa && (
                     <Button
                       variant="secondary"
                       className="w-full sm:w-auto"
@@ -1015,6 +1091,7 @@ export function UnifiedScorecard({
                     className="w-full sm:w-auto bg-green-600 hover:bg-green-700"
                     onClick={() => handleSubmitReview(true)}
                     disabled={
+                      reviewerMarkNa ? !markNaRemarks.trim() :
                       submissionMap.get(selectedKpi?.id || '')?.is_na ? !naConfirmed :
                       (reviewerScore === null || 
                        submitReview.isPending || 
@@ -1024,9 +1101,11 @@ export function UnifiedScorecard({
                     }
                   >
                     <Check className="h-4 w-4 mr-2" />
-                    {submissionMap.get(selectedKpi?.id || '')?.is_na 
-                      ? 'Confirm N/A' 
-                      : isSavingOverrides ? 'Saving...' : submitReview.isPending ? 'Processing...' : config.actionLabel}
+                    {reviewerMarkNa 
+                      ? 'Mark N/A & Forward'
+                      : submissionMap.get(selectedKpi?.id || '')?.is_na 
+                        ? 'Confirm N/A' 
+                        : isSavingOverrides ? 'Saving...' : submitReview.isPending ? 'Processing...' : config.actionLabel}
                   </Button>
                 </div>
               </>

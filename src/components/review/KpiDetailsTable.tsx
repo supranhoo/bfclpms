@@ -190,6 +190,12 @@ export function KpiDetailsTable({
           <div className="flex items-center gap-1">
             <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-300">
               N/A
+              {(submission as any)?.na_marked_by_role && (
+                <span className="ml-1 text-xs opacity-75">
+                  ({(submission as any).na_marked_by_role === 'employee' ? 'Self' : 
+                    (submission as any).na_marked_by_role.charAt(0).toUpperCase() + (submission as any).na_marked_by_role.slice(1).replace('_', ' ')})
+                </span>
+              )}
             </Badge>
             {onView && (
               <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View N/A Details">
