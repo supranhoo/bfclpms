@@ -1,82 +1,90 @@
 
-# Architectural Stability and Race Condition Fixes
 
-## Overview
+# RCA: Page Load Time Regression on /admin/kpis
 
-Two targeted fixes: (1) eliminate the AuthContext race condition that can cause "forever loading" or duplicate fetches, and (2) wrap all unmemoized `submissionMap` / `queryMap` instances in `useMemo` to prevent unnecessary re-renders.
+## Root Cause
 
-## Change 1: AuthContext Refactor
+The AllKpis page fetches **all 4,693 KPIs across all periods and years** upfront, then fires **~47 sequential HTTP requests** to fetch queries for those KPIs (batched 100 IDs per request). The page only displays one period at a time via client-side filtering, but downloads the entire dataset on mount.
 
-**File**: `src/contexts/AuthContext.tsx`
+### Request Waterfall (current state)
 
-**Problem**: Both `onAuthStateChange` and `getSession()` run concurrently on mount. If both fire for the same user, `fetchProfile` and `fetchRole` execute twice. If either fetch fails silently, the user sees a forever-loading state or gets null profile/role with no feedback.
-
-**Fix**:
-- Add a `useRef` flag (`initializedRef`) set to `true` after the first successful processing
-- `getSession()` sets user/session and calls fetch only if `initializedRef` is still `false`
-- `onAuthStateChange` always processes (it handles login/logout/token refresh events throughout the session lifetime), but the `setTimeout` workaround is removed -- fetches are called directly since they don't call Supabase Auth APIs
-- Wrap `fetchProfile` and `fetchRole` in try/catch blocks. On failure, show a toast: "Failed to load user profile. Please refresh." and set `loading` to `false` so the UI doesn't hang
-
-**Before (simplified)**:
 ```text
-useEffect:
-  onAuthStateChange -> setUser, setTimeout(fetchProfile, fetchRole)
-  getSession        -> setUser, fetchProfile, fetchRole
-  // Both can fire for same user = double fetch
-  // No error handling = silent failure
+1. useAllKpis()        --> 5 paginated requests (1000 KPIs each)
+2. useKpiQueries()     --> 47 sequential requests (100 IDs each, all returning empty [])
+3. useProfiles()       --> 1 request
+4. useDepartments()    --> 1 request
+5. useDivisions()      --> 1 request
+6. useKraCategories()  --> 1 request
+                       --------
+Total:                    ~55 HTTP requests on page load
 ```
 
-**After (simplified)**:
-```text
-useEffect:
-  initializedRef = false
+The 47 kpi_queries requests alone add ~2-5 seconds of sequential latency (each waits for the previous to complete).
 
-  onAuthStateChange -> if not initialized: mark initialized, setUser, fetchProfile, fetchRole
-                       if already initialized: handle event normally (login/logout/refresh)
+## Fix: Server-Side Filtering + Query Count via Database View
 
-  getSession        -> if not initialized: mark initialized, setUser, fetchProfile, fetchRole
-                       if already initialized: skip (subscription already handled it)
+### Change 1: Replace `useAllKpis()` with period-scoped fetch
 
-  fetchProfile/fetchRole -> try/catch with toast on failure
+The page already has period/year filter state. Instead of fetching all KPIs then filtering client-side, fetch only the selected period's KPIs from the database.
+
+**File**: `src/pages/admin/AllKpis.tsx`
+
+- Default `selectedPeriod` and `selectedYear` to the current month/year (instead of "all")
+- Replace `useAllKpis()` with `useKpisByPeriod(selectedPeriod, selectedYear)` which already exists in `useKpis.ts`
+- When "all" is selected, fall back to `useAllKpis()` but this becomes the exception, not the default
+
+This alone reduces KPI count from ~4,693 to ~300-500 per period.
+
+### Change 2: Replace kpi_queries batch fetch with a lightweight count query
+
+The page only needs **open query counts per KPI** (for badge display). It does not render query details. Instead of fetching full query objects for all KPIs:
+
+**File**: `src/hooks/useKpis.ts` (new hook)
+
+Create a `useOpenQueryCounts(kpiIds)` hook that runs a single aggregated query:
+
+```sql
+SELECT kpi_id, COUNT(*) as count
+FROM kpi_queries
+WHERE kpi_id = ANY(kpiIds) AND status = 'open'
+GROUP BY kpi_id
 ```
 
-This guarantees exactly one initialization path fires, while ongoing auth events (token refresh, sign-out) continue to work normally.
+This replaces 47 sequential requests with **1 request** returning only the KPIs that have open queries.
 
-## Change 2: Memoization Fixes
+### Change 3: Update AllKpis.tsx to use new hooks
 
-Four components create `submissionMap` and/or `queryMap` on every render without `useMemo`. These need wrapping:
+- Use period-scoped KPI fetch as default
+- Use the lightweight count hook instead of `useKpiQueries`
+- Keep the "All Periods" option but warn that it may be slower
+- Remove the `openQueryCountByKpi` derived memo (the new hook returns it directly)
 
-| File | Variable(s) | Fix |
-|---|---|---|
-| `src/components/review/AuditScorecard.tsx` | `submissionMap`, `queryMap` | Wrap in `useMemo` |
-| `src/components/review/ManagementScorecard.tsx` | `submissionMap`, `queryMap` | Wrap in `useMemo` |
-| `src/pages/reports/PerformanceReport.tsx` | `submissionMap` | Wrap in `useMemo` |
-| `src/components/dashboard/KpiTrackerModal.tsx` | `submissionMap` | Wrap in `useMemo` |
+### Change 4: Derive available periods/years from a lightweight query
 
-**Already correct** (no changes needed):
-- `Dashboard.tsx` -- already uses `useMemo`
-- `UnifiedScorecard.tsx` -- already uses `useMemo`
-- `EmployeeScorecard.tsx` -- already uses `useMemo`
-- `useReviewPageState.ts` -- already uses `useMemo`
-- `KpiHistoryCard.tsx` -- computed inside a `useMemo` callback (derived data)
-- `MonthlyScorecardReport.tsx` -- computed inside a `useMemo` callback
+Instead of fetching all KPIs just to extract unique periods, add a small hook that queries distinct `review_period` and `review_year` values from the KPIs table.
 
-## Change 3: Documentation
+### Change 5: Update DOCUMENTATION.md
 
-Update `DOCUMENTATION.md` to record the AuthContext fix and memoization improvements.
+Record the performance fix and the new query patterns.
 
 ## Files Modified
 
 | File | Change |
 |---|---|
-| `src/contexts/AuthContext.tsx` | Add ref guard, try/catch with toast, remove setTimeout |
-| `src/components/review/AuditScorecard.tsx` | Wrap submissionMap + queryMap in useMemo |
-| `src/components/review/ManagementScorecard.tsx` | Wrap submissionMap + queryMap in useMemo |
-| `src/pages/reports/PerformanceReport.tsx` | Wrap submissionMap in useMemo |
-| `src/components/dashboard/KpiTrackerModal.tsx` | Wrap submissionMap in useMemo |
-| `DOCUMENTATION.md` | Record changes |
+| `src/hooks/useKpis.ts` | Add `useOpenQueryCounts` hook and `useDistinctPeriods` hook |
+| `src/pages/admin/AllKpis.tsx` | Default to current period, use scoped fetch, use count hook |
+| `DOCUMENTATION.md` | Record performance optimization |
+
+## Expected Impact
+
+| Metric | Before | After |
+|---|---|---|
+| HTTP requests on load | ~55 | ~6-8 |
+| KPIs fetched | 4,693 | ~300-500 |
+| Query data fetched | 47 batch requests | 1 aggregate query |
+| Estimated load time | 3-6 seconds | < 1 second |
 
 ## Risk
 
-- **AuthContext**: Low risk. The ref guard is additive -- it prevents duplicate processing but doesn't change the auth flow. Sign-in, sign-out, and token refresh continue to work via `onAuthStateChange`.
-- **Memoization**: Zero risk. Wrapping in `useMemo` only prevents unnecessary recalculation; the output is identical.
+Low. The page behavior is identical -- same filters, same display. Only the data fetching strategy changes from "fetch everything, filter client-side" to "fetch what you need."
+
