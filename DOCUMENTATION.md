@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-14  
-> **Version:** 1.23.0
+> **Version:** 1.24.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -1327,6 +1327,7 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
 - Assign to departments/designations
 - Bulk assign to employees
 - Assignment history
+- **Auto-Generate from KPIs:** "Generate from KPIs" button analyzes all existing assigned KPIs and automatically creates KPI templates and bundles for each unique department + designation combination. Uses the `generate_bundles_from_kpis()` database function. Safe to run multiple times — skips existing bundles/templates. Shows a confirmation dialog before execution and displays a success toast with counts of templates, bundles, and links created.
 
 #### 4.9.6 All KPIs (`/admin/all-kpis`)
 - View all KPIs across organization

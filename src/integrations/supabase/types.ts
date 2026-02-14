@@ -2758,6 +2758,7 @@ export type Database = {
         }
         Returns: number
       }
+      generate_bundles_from_kpis: { Args: never; Returns: Json }
       get_bulk_employee_workflows: {
         Args: { employee_ids: string[] }
         Returns: {

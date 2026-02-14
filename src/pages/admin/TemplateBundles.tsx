@@ -11,12 +11,18 @@ import { useTemplateBundles, useDeleteTemplateBundle, useDuplicateTemplateBundle
 import { BundleFormDialog } from '@/components/admin/BundleFormDialog';
 import { BundleAssignDialog } from '@/components/admin/BundleAssignDialog';
 import { BundleHistoryDialog } from '@/components/admin/BundleHistoryDialog';
-import { Plus, Package, MoreHorizontal, Pencil, Trash2, Users, FileText, CheckCircle, XCircle, Copy, History } from 'lucide-react';
+import { Plus, Package, MoreHorizontal, Pencil, Trash2, Users, FileText, CheckCircle, XCircle, Copy, History, Wand2, Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function TemplateBundles() {
   const { data: bundles, isLoading } = useTemplateBundles();
   const deleteBundle = useDeleteTemplateBundle();
   const duplicateBundle = useDuplicateTemplateBundle();
+
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
@@ -24,6 +30,8 @@ export default function TemplateBundles() {
   const [editingBundle, setEditingBundle] = useState<TemplateBundle | null>(null);
   const [deletingBundle, setDeletingBundle] = useState<TemplateBundle | null>(null);
   const [historyBundle, setHistoryBundle] = useState<TemplateBundle | null>(null);
+  const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const handleEdit = (bundle: TemplateBundle) => {
     setEditingBundle(bundle);
@@ -49,6 +57,26 @@ export default function TemplateBundles() {
   const handleViewHistory = (bundle: TemplateBundle | null) => {
     setHistoryBundle(bundle);
     setIsHistoryOpen(true);
+  };
+
+  const handleGenerateFromKpis = async () => {
+    setIsGenerating(true);
+    try {
+      const { data, error } = await supabase.rpc('generate_bundles_from_kpis');
+      if (error) throw error;
+      const result = data as { templates_created: number; bundles_created: number; links_created: number };
+      queryClient.invalidateQueries({ queryKey: ['template-bundles'] });
+      queryClient.invalidateQueries({ queryKey: ['kpi-templates'] });
+      toast({
+        title: 'Bundles generated successfully',
+        description: `Created ${result.templates_created} templates, ${result.bundles_created} bundles, and ${result.links_created} links.`,
+      });
+    } catch (error: any) {
+      toast({ title: 'Generation failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsGenerating(false);
+      setShowGenerateConfirm(false);
+    }
   };
 
   // Stats
@@ -77,6 +105,10 @@ export default function TemplateBundles() {
         description="Create and manage KRA bundles for fast employee onboarding"
         actions={
           <>
+            <Button variant="outline" onClick={() => setShowGenerateConfirm(true)} disabled={isGenerating}>
+              {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+              Generate from KPIs
+            </Button>
             <Button variant="outline" onClick={() => handleViewHistory(null)}>
               <History className="mr-2 h-4 w-4" />
               Assignment History
@@ -266,6 +298,24 @@ export default function TemplateBundles() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Generate from KPIs Confirmation */}
+      <AlertDialog open={showGenerateConfirm} onOpenChange={setShowGenerateConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Generate Bundles from Existing KPIs</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will analyze all assigned KPIs and automatically create KPI templates and bundles for each unique department + designation combination. Existing bundles and templates will not be modified or duplicated. This operation is safe to run multiple times.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isGenerating}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleGenerateFromKpis} disabled={isGenerating}>
+              {isGenerating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating...</> : 'Generate'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
