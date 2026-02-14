@@ -214,6 +214,36 @@ export function useUpdateWorkflowTemplate() {
   });
 }
 
+// Set a workflow template as the new default (only affects inherit/fallback cascade)
+export function useSetDefaultWorkflowTemplate() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (templateId: string) => {
+      // Unset all defaults
+      const { error: unsetError } = await supabase
+        .from('workflow_templates')
+        .update({ is_default: false })
+        .neq('id', templateId);
+      
+      if (unsetError) throw unsetError;
+      
+      // Set new default
+      const { error: setError } = await supabase
+        .from('workflow_templates')
+        .update({ is_default: true })
+        .eq('id', templateId);
+      
+      if (setError) throw setError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflow-templates'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-workflow'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-workflow-stages'] });
+    },
+  });
+}
+
 // Delete a workflow template (only if not in use)
 export function useDeleteWorkflowTemplate() {
   const queryClient = useQueryClient();

@@ -15,11 +15,12 @@ import {
   useUpsertWorkflowConfig, 
   useDeleteWorkflowConfig,
   useDeleteWorkflowTemplate,
+  useSetDefaultWorkflowTemplate,
   getStageLabel,
   type WorkflowTemplate,
 } from '@/hooks/useWorkflowConfig';
 import { useDepartments } from '@/hooks/useOrganization';
-import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil } from 'lucide-react';
+import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil, Star } from 'lucide-react';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import CustomWorkflowDialog from '@/components/admin/CustomWorkflowDialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -66,6 +67,7 @@ export default function WorkflowConfig() {
   const upsertConfig = useUpsertWorkflowConfig();
   const deleteConfig = useDeleteWorkflowConfig();
   const deleteTemplate = useDeleteWorkflowTemplate();
+  const setDefaultTemplate = useSetDefaultWorkflowTemplate();
   
   // Fetch all profiles for employee tab
   const { data: profiles } = useQuery({
@@ -231,24 +233,45 @@ export default function WorkflowConfig() {
                           </div>
                           <p className="text-sm text-muted-foreground">{template.description}</p>
                         </div>
-                        {!template.is_default && (
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => { setEditingTemplate(template); setDialogOpen(true); }}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setDeleteTarget(template)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => { setEditingTemplate(template); setDialogOpen(true); }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          {!template.is_default && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Set as Default"
+                                disabled={setDefaultTemplate.isPending}
+                                onClick={async () => {
+                                  try {
+                                    await setDefaultTemplate.mutateAsync(template.id);
+                                    toast({
+                                      title: 'Default updated',
+                                      description: 'This only affects employees inheriting the default workflow.',
+                                    });
+                                  } catch {
+                                    toast({ title: 'Error', description: 'Failed to set default.', variant: 'destructive' });
+                                  }
+                                }}
+                              >
+                                <Star className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setDeleteTarget(template)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
                       <WorkflowStagesPreview stages={template.stages} />
                     </CardContent>
