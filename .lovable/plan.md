@@ -1,69 +1,98 @@
 
 
-# RCA and CAPA: January Month KRAs Not Visible for Jitendra Bharti
+# RCA and CAPA: Admin Corrections Not Visible for Anil Pathak
 
 ## Root Cause Analysis
 
-### Finding: Not a Data Issue -- It's a Default Period Problem
+### The Data Trail
 
-Jitendra Bharti (101715) has **13 KPIs for January 2026**, all at **self_review** status (pending action). The data is fully present in the database.
+| Field | Before Admin Edit | After Admin Edit |
+|---|---|---|
+| achieved_value | null | 0 |
+| self_rating | null | blue (Outstanding) |
+| self_score | null | 5 |
+| self_remarks | No | No |
+| **is_na** | **true** | **true (UNCHANGED)** |
+| KPI status | approved | approved |
 
-The issue is that the **My Dashboard defaults to February 2026** (current month). When the user lands on the dashboard, they see only February KPIs. January KPIs require manually switching the month dropdown from "Feb" to "Jan."
+Admin Jaspal entered valid self-review data at 05:45 UTC today with reason "As per boss". The data was saved correctly to `review_submissions`. However, the `is_na` (Not Applicable) flag was never cleared.
 
-### Data Summary for Jitendra Bharti
+### Why the Dashboard Hides It
+
+The Dashboard score calculation in `Dashboard.tsx` (line 283) explicitly skips any KPI where `is_na === true`:
 
 ```text
-Period           Status          Count
------------      -----------     -----
-January 2026     self_review     13     <-- Pending action, but hidden by default
-February 2026    kra_set         9      <-- What the user sees on load
-February 2026    self_review     4
-December 2025    approved        13
-November 2025    approved        13
+data.forEach(kpi => {
+  const submission = submissionMap.get(kpi.id);
+  if (submission?.is_na) return;  // <-- This KPI is skipped entirely
+  ...
+});
 ```
 
-### Why It Happens
+The same skip logic exists in `EmployeePerformanceSummary.tsx` (line 154) and `KpiTrackerModal.tsx` (line 57). So the corrected scores (self_score=5) exist in the database but are invisible across all views.
 
-1. `useDefaultPeriodSelection()` returns the current calendar month (February 2026)
-2. `useMyKpis()` fetches all KPIs for the employee (correct)
-3. `periodFilteredKpis` filters by `selectedPeriod === 'February'` -- so January KPIs are loaded but not displayed
-4. The "smart period detection" feature only works for **reviewer views** (Team Review, Audit, Management), not the employee's own self-dashboard
+### Root Cause
 
-### Impact
+The Admin Data Entry system (`useAdminDataEntry.ts` -> `buildUpdateFields`) only handles 5 fields:
+1. achieved_value
+2. rating
+3. score
+4. remarks
+5. evidence_url
 
-Any employee with pending KPIs from a previous month will not see them unless they manually switch the period dropdown. This causes confusion and missed deadlines.
+It has **no awareness of the `is_na` flag**. The Admin Data Entry Dialog UI also provides **no toggle to clear N/A status**. This means:
+- When an admin enters valid data for a KPI that was previously marked N/A, the N/A flag persists
+- The dashboard treats it as still not applicable and excludes it from all score calculations and displays
 
-## CAPA: Add Pending Period Alert to Self Dashboard
+## CAPA: Auto-Clear is_na + Add Manual Toggle
 
-### The Fix
+### Fix 1: Auto-clear `is_na` when admin enters achieved value (Backend Logic)
 
-Add a small alert banner at the top of the self-dashboard when the employee has **KPIs in earlier periods that are still at actionable statuses** (self_review, kra_set). The banner will say something like:
+**File: `src/hooks/useAdminDataEntry.ts`**
 
-> "You have 13 pending KPIs for January 2026. [Switch to January]"
+In the `useAdminSubmitReviewData` mutation, after building update fields, if `achieved_value` is provided (not null/undefined), automatically add `is_na: false` to the upsert payload. This ensures that entering actual data always overrides the N/A flag.
 
-This reuses the same `useMyKpis()` data already loaded -- zero additional API calls.
+```text
+if achieved_value is provided and not null:
+  add is_na = false to updateFields
+```
 
-### Implementation Details
+### Fix 2: Add N/A toggle to Admin Data Entry Dialog (UI)
 
-**File: `src/pages/Dashboard.tsx`**
+**File: `src/components/admin/AdminDataEntryDialog.tsx`**
 
-1. Add a `pendingPeriods` memo that scans all loaded KPIs for periods earlier than the selected one where `status` is `kra_set` or `self_review`
-2. Render a dismissible alert banner above the scorecard when pending periods are found
-3. The "Switch" button sets `periodSelection` to the pending period
-4. Only show for `viewMode === 'self'` (employee's own dashboard)
+Add a Switch/Checkbox labeled "Mark as N/A" that:
+- Shows the current `is_na` status from the existing submission
+- When toggled OFF (unchecked), includes `is_na: false` in the save payload
+- When toggled ON (checked), includes `is_na: true` and optionally clears score fields
+- This gives admins explicit control over the N/A flag
 
-**File: `DOCUMENTATION.md`**
+### Fix 3: Immediate data fix for Anil Pathak's KPI
 
-Record the pending period alert feature.
+Run a one-time update to clear the `is_na` flag on the affected submission so the correction becomes visible immediately:
 
-### What Does NOT Change
+```text
+UPDATE review_submissions
+SET is_na = false
+WHERE kpi_id = '526153d6-0542-4c9a-bca3-835bd98b147b'
+```
 
-- No new API calls or hooks
-- No database changes
-- No changes to the period selector itself
-- Reviewer views (Team, Audit, Management) are unaffected -- they already have smart period detection
+### Fix 4: Update DOCUMENTATION.md
 
-### Risk: None
+Record the N/A flag handling in admin data entry.
 
-The alert is purely informational, derived from already-fetched data. It adds a convenience shortcut without modifying any existing logic.
+## Files Modified
+
+| File | Change |
+|---|---|
+| `src/hooks/useAdminDataEntry.ts` | Auto-clear `is_na` when achieved_value is provided; accept `is_na` parameter |
+| `src/components/admin/AdminDataEntryDialog.tsx` | Add N/A toggle switch; pass `is_na` to mutation |
+| `DOCUMENTATION.md` | Document N/A handling in admin data entry |
+| Database migration | One-time fix for Anil Pathak's submission |
+
+## Risk: Low
+
+- The auto-clear logic is intuitive: if an admin enters an actual value, the KPI is no longer "not applicable"
+- The manual toggle gives admins explicit override control
+- Existing N/A KPIs without admin edits are unaffected
 
