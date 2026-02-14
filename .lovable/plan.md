@@ -1,72 +1,107 @@
 
 
-# Fix: Notification Click Opens Detail Sheet + Status Display
+# RCA and CAPA: Admin Data Entry -- Rating Dropdown Gaps, Score Limits, and Auto-Calculation
 
-## Problem 1: Clicking a notification skips the detail sheet
-In `InboxRowItem.tsx`, the `handleRowClick` function (lines 58-72) immediately navigates to the dashboard for notification items. The detail sheet only opens as a fallback when no navigation path exists. This means the enriched detail view (KPI name, KRA name, From user) is never shown.
+## Root Cause Analysis (RCA)
 
-## Problem 2: No status information in the notification detail sheet
-The `InboxDetailSheet.tsx` only renders status badges for query items (open/responded/resolved). For notifications, there is no workflow status display, even though the notification `metadata` contains `from_status` and `to_status` fields describing the workflow transition.
+### Issue 1: Rating not driven by Achieved Value reliably
+The auto-calculation engine (`autoCalculateFromAchieved`) exists but has a flaw: when `calculateRating()` returns a rating of **0** or **1**, the `ratingToLevel()` function maps both to `'red'`. The dropdown then shows "Below (2)" as the selected value -- which is wrong. The `calculateRating` engine correctly returns 0 or 1, but the UI cannot represent these values because the Rating dropdown only has 4 options (scores 2-5).
+
+**Evidence from code** (line 29-34):
+```text
+RATING_OPTIONS = [
+  { value: 'blue',   label: 'Outstanding (5)', score: 5 },
+  { value: 'green',  label: 'Exceeds (4)',     score: 4 },
+  { value: 'yellow', label: 'Meets (3)',       score: 3 },
+  { value: 'red',    label: 'Below (2)',       score: 2 },
+]
+```
+Ratings 1 ("Needs Improvement") and 0 ("Not Achieved") are absent.
+
+### Issue 2: Rating dropdown missing 0 and 1
+The `RATING_OPTIONS` array only defines 4 levels (2-5). The scoring engine supports a full 0-5 range. When auto-calculation returns rating=1 or rating=0, the `ratingToLevel` maps both to `'red'`, so the dropdown shows "Below (2)" -- displaying the wrong rating and computing the wrong score.
+
+### Issue 3: Score can exceed the maximum allowed value
+The Score field is a plain `<Input type="number">` with no upper bound validation. The maximum valid score for a KPI is `(5/5) * weightage = weightage`. For example, a KPI with weightage 1.5% should never have a score above 1.50. Currently an admin can type any number (e.g., 10, 100), which corrupts the scoring totals.
+
+| Issue | Root Cause |
+|---|---|
+| Auto-calc shows wrong rating for 0/1 | `RATING_OPTIONS` only has 4 entries (2-5); ratings 0 and 1 have no dropdown option |
+| Dropdown missing options | `RATING_OPTIONS` array is incomplete |
+| Score exceeds maximum | No `max` attribute or validation on the score input field |
 
 ---
 
-## Fix 1: Always open detail sheet on row click
+## Corrective and Preventive Action (CAPA)
 
-**File: `src/components/inbox/InboxRowItem.tsx`**
+### Fix 1: Expand RATING_OPTIONS to include all 6 ratings (0-5)
 
-Change `handleRowClick` to always call `onView(item)` for both notifications and queries. Remove the direct navigation block (lines 62-69). Users will navigate via the existing "Open in App" button inside the detail sheet.
+**File: `src/components/admin/AdminDataEntryDialog.tsx`**
 
-Before:
-```text
-handleRowClick:
-  mark as read
-  if notification -> navigate directly (skips detail sheet)
-  fallback: onView(item)
-```
+Add two new entries to `RATING_OPTIONS`:
 
-After:
-```text
-handleRowClick:
-  mark as read
-  always call onView(item) -> opens detail sheet
-```
+| Value | Label | Score | Color |
+|---|---|---|---|
+| `orange` | Needs Improvement (1) | 1 | orange-500 |
+| `gray` | Not Achieved (0) | 0 | gray-400 |
 
-## Fix 2: Add workflow status transition to notification detail sheet
+Since the database `rating_level` enum only supports `blue | green | yellow | red`, the new dropdown entries will still map to the `red` DB enum value but display distinct labels. The auto-calculate logic will use the **numeric score** (0-5) as the source of truth, with the rating dropdown serving as a visual aid only.
 
-**File: `src/lib/inboxUtils.ts`**
+Updated approach:
+- Change the Rating state from storing a `RatingLevel` color to storing the **numeric score** (0-5) internally
+- The dropdown displays all 6 options with distinct labels and colors
+- On submit, the numeric score is mapped to the closest DB-compatible `RatingLevel` via `ratingToLevel()`
 
-Add a new helper function `getStatusLabel()` that converts internal status codes to human-readable labels:
+### Fix 2: Cap the Score field at maximum allowed value
 
-| Code | Label |
-|---|---|
-| kra_set | KRA Set |
-| self_review | Self Review |
-| manager_check | Manager Review |
-| skip_level_check | Skip-Level Review |
-| hr_pms_check | HR PMS Review |
-| audit | Audit |
-| management_review | Management Review |
-| approved | Approved |
+**File: `src/components/admin/AdminDataEntryDialog.tsx`**
 
-**File: `src/components/inbox/InboxDetailSheet.tsx`**
+Add validation to the Score input:
+- Set `max` attribute to `(5/5) * weightage = weightage`
+- On blur or change, clamp the value: `Math.min(parseFloat(value), maxScore)`
+- Display the maximum allowed score as helper text below the field
 
-Add a status transition section for notification items. When `metadata.from_status` and `metadata.to_status` are present, display them as a visual transition using badges and an arrow icon:
+Formula: `maxScore = kpi.weightage` (since max rating is 5, and score = (rating/5) * weightage)
 
-```text
-[Self Review]  -->  [Manager Review]
-```
+### Fix 3: Ensure auto-calculate correctly populates all rating levels
 
-When only the notification type is available (no status transition metadata), the existing notification type badge continues to display as-is.
+**File: `src/components/admin/AdminDataEntryDialog.tsx`**
 
-## Files to Modify
+Update `autoCalculateFromAchieved` to:
+1. Store the raw numeric rating (0-5) from `calculateRating()` result
+2. Map it to the expanded dropdown option
+3. Calculate score as `(result.rating / 5) * weightage`, clamped to max
+
+### Files to Modify
 
 | File | Change |
 |---|---|
-| `src/components/inbox/InboxRowItem.tsx` | Remove direct navigation from `handleRowClick`; always open detail sheet |
-| `src/components/inbox/InboxDetailSheet.tsx` | Add workflow status transition display for notifications using `from_status` / `to_status` from metadata |
-| `src/lib/inboxUtils.ts` | Add `getStatusLabel()` helper for human-readable status labels |
-| `DOCUMENTATION.md` | Document updated click behavior and status display |
+| `src/components/admin/AdminDataEntryDialog.tsx` | Expand `RATING_OPTIONS` to 6 levels (0-5). Add score max validation with `max` attribute and clamping logic. Update auto-calculate to correctly populate all rating levels. Add helper text showing max score. |
+| `DOCUMENTATION.md` | Document the expanded rating scale and score capping behavior in Admin Data Entry |
 
-## Risk
+### Technical Detail
 
-Very Low -- the "Open in App" button inside the detail sheet already handles navigation correctly with employee deep-linking. This change only alters the entry point (click row -> see details first -> then navigate) without removing any functionality.
+**Expanded RATING_OPTIONS:**
+```text
+Score 5 -> blue   -> "Outstanding (5)"
+Score 4 -> green  -> "Exceeds (4)"
+Score 3 -> yellow -> "Meets (3)"
+Score 2 -> red    -> "Below (2)"
+Score 1 -> red    -> "Needs Improvement (1)"
+Score 0 -> red    -> "Not Achieved (0)"
+```
+
+**Score clamping logic:**
+```text
+maxScore = kpi.weightage  // e.g., 1.5 for 1.5% weightage
+score = Math.min(enteredScore, maxScore)
+score = Math.max(score, 0)  // floor at 0
+```
+
+**Rating state change:**
+Instead of storing `RatingLevel` (color string), the Rating select will use string-encoded numeric scores ("5", "4", "3", "2", "1", "0") as values. On submit, the numeric score maps to a `RatingLevel` via `ratingToLevel()` for DB storage.
+
+### Risk
+
+Low -- the scoring engine already supports 0-5 ratings. This change only updates the Admin UI to expose the full range. The `ratingToLevel()` function already handles the 0-1 range by mapping to `'red'`, so DB compatibility is maintained. The score clamping prevents data corruption without breaking any existing valid entries.
+
