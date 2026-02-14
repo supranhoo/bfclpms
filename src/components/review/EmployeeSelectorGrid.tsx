@@ -4,6 +4,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTeamMembers, useProfiles, useSkipLevelTeamMembers } from '@/hooks/useOrganization';
 import { useKpisByPeriod, KPI } from '@/hooks/useKpis';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
+import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
+import { resolvePendingStatuses, resolveReviewableStatuses, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -124,6 +126,31 @@ export function EmployeeSelectorGrid({
 
   const { data: periodKpis } = useKpisByPeriod(selectedPeriod, selectedYear);
 
+  // Batch-fetch workflow stages for all employees shown in the grid
+  const allEmployeeIds = useMemo(() => {
+    if (!periodKpis) return [];
+    return [...new Set(periodKpis.map(k => k.employee_id))];
+  }, [periodKpis]);
+  
+  const { data: workflowMap } = useBulkEmployeeWorkflows(allEmployeeIds);
+
+  // Helper: get workflow stages for an employee (with fallback)
+  const getStages = (employeeId: string): string[] => {
+    return workflowMap?.get(employeeId) || DEFAULT_WORKFLOW_STAGES;
+  };
+
+  // Helper: map viewLevel to workflow engine's viewLevel format
+  const getEngineViewLevel = (): 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' => {
+    const map: Record<string, 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms'> = {
+      team: 'manager',
+      skip_level: 'skip_level',
+      hr_pms: 'hr_pms',
+      audit: 'auditor',
+      management: 'management',
+    };
+    return map[viewLevel] || 'manager';
+  };
+
   // Determine which employees to show based on view level and role
   const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
   const isLoading = viewLevel === 'skip_level' ? skipLevelLoading : (isFullAccess ? profilesLoading : teamLoading);
@@ -182,21 +209,24 @@ export function EmployeeSelectorGrid({
       filtered = filtered?.filter(p => p.reporting_manager_id === selectedManager);
     }
 
-    // Status-based filtering per view level
+    // Status-based filtering using per-employee workflow resolution
     if (statusFilter !== 'all' && periodKpis) {
       const employeeIds = new Set<string>();
+      const engineLevel = getEngineViewLevel();
       
       periodKpis.forEach(kpi => {
+        const stages = getStages(kpi.employee_id);
+        const pendingStatuses = resolvePendingStatuses(engineLevel, stages);
+        const reviewableStatuses = resolveReviewableStatuses(engineLevel, stages);
+        
         if (viewLevel === 'team') {
           if (statusFilter === 'pending' && kpi.status === 'self_review') {
             employeeIds.add(kpi.employee_id);
-          } else if (statusFilter === 'reviewed' && ['manager_check', 'audit', 'management_review', 'approved'].includes(kpi.status || '')) {
+          } else if (statusFilter === 'reviewed' && !['kra_set', 'self_review'].includes(kpi.status || '')) {
             employeeIds.add(kpi.employee_id);
           }
         } else if (viewLevel === 'audit') {
-          // For audit: pending includes both manager_check AND self_review
-          // (employees with skip_manager workflow go directly from self_review to audit)
-          if (statusFilter === 'pending' && (kpi.status === 'manager_check' || kpi.status === 'self_review')) {
+          if (statusFilter === 'pending' && reviewableStatuses.includes(kpi.status || '')) {
             employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'in_audit' && kpi.status === 'audit') {
             employeeIds.add(kpi.employee_id);
@@ -204,16 +234,25 @@ export function EmployeeSelectorGrid({
             employeeIds.add(kpi.employee_id);
           }
         } else if (viewLevel === 'skip_level') {
-          if (statusFilter === 'pending' && kpi.status === 'manager_check') {
+          if (statusFilter === 'pending' && reviewableStatuses.includes(kpi.status || '')) {
             employeeIds.add(kpi.employee_id);
-          } else if (statusFilter === 'reviewed' && ['skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'].includes(kpi.status || '')) {
-            employeeIds.add(kpi.employee_id);
+          } else if (statusFilter === 'reviewed') {
+            // Everything past the skip_level_check stage
+            const slIdx = stages.indexOf('skip_level_check');
+            if (slIdx >= 0) {
+              const doneStatuses = stages.slice(slIdx);
+              if (doneStatuses.includes(kpi.status || '')) employeeIds.add(kpi.employee_id);
+            }
           }
         } else if (viewLevel === 'hr_pms') {
-          if (statusFilter === 'pending' && kpi.status === 'skip_level_check') {
+          if (statusFilter === 'pending' && reviewableStatuses.includes(kpi.status || '')) {
             employeeIds.add(kpi.employee_id);
-          } else if (statusFilter === 'reviewed' && ['hr_pms_review', 'audit', 'management_review', 'approved'].includes(kpi.status || '')) {
-            employeeIds.add(kpi.employee_id);
+          } else if (statusFilter === 'reviewed') {
+            const hrIdx = stages.indexOf('hr_pms_review');
+            if (hrIdx >= 0) {
+              const doneStatuses = stages.slice(hrIdx);
+              if (doneStatuses.includes(kpi.status || '')) employeeIds.add(kpi.employee_id);
+            }
           }
         } else if (viewLevel === 'management') {
           if (statusFilter === 'pending' && kpi.status === 'management_review') {
@@ -228,9 +267,9 @@ export function EmployeeSelectorGrid({
     }
 
     return filtered;
-  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, statusFilter, periodKpis, viewLevel]);
+  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, statusFilter, periodKpis, viewLevel, workflowMap]);
 
-  // Calculate stats based on view level
+  // Calculate stats using per-employee workflow-aware resolution
   const stats = useMemo(() => {
     if (!periodKpis || !baseMembers) {
       return { totalEmployees: 0, stat1: 0, stat2: 0, stat3: 0, totalKpis: 0 };
@@ -238,39 +277,50 @@ export function EmployeeSelectorGrid({
 
     const memberIds = new Set(baseMembers.map(m => m.id));
     const relevantKpis = periodKpis.filter(k => memberIds.has(k.employee_id));
+    const engineLevel = getEngineViewLevel();
 
     if (viewLevel === 'team') {
       return {
         totalEmployees: baseMembers.length,
         stat1: relevantKpis.filter(k => k.status === 'kra_set').length,
         stat2: relevantKpis.filter(k => k.status === 'self_review').length,
-        stat3: relevantKpis.filter(k => ['manager_check', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
-        totalKpis: relevantKpis.length,
-      };
-    } else if (viewLevel === 'skip_level') {
-      return {
-        totalEmployees: baseMembers.length,
-        stat1: relevantKpis.filter(k => k.status === 'manager_check').length,
-        stat2: relevantKpis.filter(k => ['skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
-        stat3: relevantKpis.length,
-        totalKpis: relevantKpis.length,
-      };
-    } else if (viewLevel === 'hr_pms') {
-      return {
-        totalEmployees: baseMembers.length,
-        stat1: relevantKpis.filter(k => k.status === 'skip_level_check').length,
-        stat2: relevantKpis.filter(k => ['hr_pms_review', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
-        stat3: relevantKpis.length,
+        stat3: relevantKpis.filter(k => !['kra_set', 'self_review'].includes(k.status || '')).length,
         totalKpis: relevantKpis.length,
       };
     } else if (viewLevel === 'audit') {
-      return {
-        totalEmployees: baseMembers.length,
-        stat1: relevantKpis.filter(k => k.status === 'manager_check' || k.status === 'self_review').length,
-        stat2: relevantKpis.filter(k => k.status === 'audit').length,
-        stat3: relevantKpis.filter(k => ['management_review', 'approved'].includes(k.status || '')).length,
-        totalKpis: relevantKpis.length,
-      };
+      let pending = 0, inAudit = 0, forwarded = 0;
+      relevantKpis.forEach(k => {
+        const stages = getStages(k.employee_id);
+        const reviewable = resolveReviewableStatuses('auditor', stages);
+        if (reviewable.includes(k.status || '') && k.status !== 'audit') pending++;
+        else if (k.status === 'audit') inAudit++;
+        else if (['management_review', 'approved'].includes(k.status || '')) forwarded++;
+      });
+      return { totalEmployees: baseMembers.length, stat1: pending, stat2: inAudit, stat3: forwarded, totalKpis: relevantKpis.length };
+    } else if (viewLevel === 'skip_level') {
+      let pending = 0, reviewed = 0;
+      relevantKpis.forEach(k => {
+        const stages = getStages(k.employee_id);
+        const reviewable = resolveReviewableStatuses('skip_level', stages);
+        if (reviewable.includes(k.status || '')) pending++;
+        else {
+          const slIdx = stages.indexOf('skip_level_check');
+          if (slIdx >= 0 && stages.slice(slIdx).includes(k.status || '')) reviewed++;
+        }
+      });
+      return { totalEmployees: baseMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, totalKpis: relevantKpis.length };
+    } else if (viewLevel === 'hr_pms') {
+      let pending = 0, reviewed = 0;
+      relevantKpis.forEach(k => {
+        const stages = getStages(k.employee_id);
+        const reviewable = resolveReviewableStatuses('hr_pms', stages);
+        if (reviewable.includes(k.status || '')) pending++;
+        else {
+          const hrIdx = stages.indexOf('hr_pms_review');
+          if (hrIdx >= 0 && stages.slice(hrIdx).includes(k.status || '')) reviewed++;
+        }
+      });
+      return { totalEmployees: baseMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, totalKpis: relevantKpis.length };
     } else {
       return {
         totalEmployees: baseMembers.length,
@@ -280,37 +330,45 @@ export function EmployeeSelectorGrid({
         totalKpis: relevantKpis.length,
       };
     }
-  }, [periodKpis, baseMembers, viewLevel]);
+  }, [periodKpis, baseMembers, viewLevel, workflowMap]);
 
-  // Get employee KPI stats based on view level
+  // Get employee KPI stats using workflow-aware resolution
   const getEmployeeKpiStats = (employeeId: string) => {
     if (!periodKpis) return { badge1: 0, badge2: 0, badge3: 0, total: 0 };
     const empKpis = periodKpis.filter(k => k.employee_id === employeeId);
+    const stages = getStages(employeeId);
 
     if (viewLevel === 'team') {
       return {
         badge1: empKpis.filter(k => k.status === 'self_review').length,
-        badge2: empKpis.filter(k => ['manager_check', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
+        badge2: empKpis.filter(k => !['kra_set', 'self_review'].includes(k.status || '')).length,
         badge3: 0,
         total: empKpis.length,
       };
     } else if (viewLevel === 'skip_level') {
+      const reviewable = resolveReviewableStatuses('skip_level', stages);
+      const slIdx = stages.indexOf('skip_level_check');
+      const doneStatuses = slIdx >= 0 ? stages.slice(slIdx) : [];
       return {
-        badge1: empKpis.filter(k => k.status === 'manager_check').length,
-        badge2: empKpis.filter(k => ['skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
+        badge1: empKpis.filter(k => reviewable.includes(k.status || '')).length,
+        badge2: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
         badge3: 0,
         total: empKpis.length,
       };
     } else if (viewLevel === 'hr_pms') {
+      const reviewable = resolveReviewableStatuses('hr_pms', stages);
+      const hrIdx = stages.indexOf('hr_pms_review');
+      const doneStatuses = hrIdx >= 0 ? stages.slice(hrIdx) : [];
       return {
-        badge1: empKpis.filter(k => k.status === 'skip_level_check').length,
-        badge2: empKpis.filter(k => ['hr_pms_review', 'audit', 'management_review', 'approved'].includes(k.status || '')).length,
+        badge1: empKpis.filter(k => reviewable.includes(k.status || '')).length,
+        badge2: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
         badge3: 0,
         total: empKpis.length,
       };
     } else if (viewLevel === 'audit') {
+      const reviewable = resolveReviewableStatuses('auditor', stages);
       return {
-        badge1: empKpis.filter(k => k.status === 'manager_check' || k.status === 'self_review').length,
+        badge1: empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'audit').length,
         badge2: empKpis.filter(k => k.status === 'audit').length,
         badge3: empKpis.filter(k => ['management_review', 'approved'].includes(k.status || '')).length,
         total: empKpis.length,
