@@ -101,6 +101,9 @@ export function getNotificationTypeLabel(type: string): string {
     password_rollout: 'Password Reset',
     query_response_submitted: 'Query Response',
     query_resolved_fyi: 'Query Resolved',
+    rollback_requested: 'Rollback Requested',
+    rollback_approved: 'Rollback Approved',
+    rollback_rejected: 'Rollback Dismissed',
   };
   return labels[type] || type;
 }
@@ -222,6 +225,12 @@ export function getNotificationNavigationPath(item: InboxItem): string | null {
     // Password
     case 'password_rollout':
       return '/';
+
+    // Rollback requests
+    case 'rollback_requested':
+    case 'rollback_approved':
+    case 'rollback_rejected':
+      return item.kpiId ? `/dashboard?kpi=${item.kpiId}` : '/dashboard';
 
     default:
       return null;
