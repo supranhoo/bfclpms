@@ -1,91 +1,119 @@
 
 
-# RCA and CAPA: Admin Data Entry Not Persisting + Workflow-Dependent Data Visibility
+# Rollback Request Feature: User-Initiated KPI Status Reversal
+
+## Overview
+
+This feature allows any workflow participant (Employee, Manager, Skip-Level, HR PMS, Auditor) to request a rollback of a KPI they have already submitted/forwarded. The next-level reviewer sees a prominent red notification banner with a "Roll Back" button. Clicking it moves the KPI back to the requester's stage so they can make corrections and resubmit.
 
 ---
 
-## Part A: Admin Data Entry Not Persisting
+## How It Works
 
-### Root Cause 1: Cache Key Mismatch (CRITICAL)
-
-The `AdminDataEntryDialog` fetches existing submission data using:
 ```text
-queryKey: ['review-submission-admin', kpi.id]
+Employee submits KPI (status: self_review)
+  |
+  v
+Employee realizes error -> clicks "Request Rollback"
+  |
+  v
+KPI gets a rollback_requested flag (stored in DB)
+  |
+  v
+Manager opens KPI -> sees RED banner: "Employee has requested a rollback"
+  with a [Roll Back] button next to Approve/Send Back
+  |
+  v
+Manager clicks [Roll Back]
+  -> KPI status reverts to kra_set (previous stage)
+  -> Employee can now edit and resubmit
 ```
 
-But the mutation's `onSuccess` only invalidates:
-```text
-queryClient.invalidateQueries({ queryKey: ['review-submissions'] })
-```
-
-Since `review-submissions` does NOT prefix-match `review-submission-admin`, the dialog continues showing stale data after saving, making it appear the update never happened.
-
-### Root Cause 2: Zero-Value Bug (HIGH)
-
-In `AdminDataEntryDialog.tsx` line 161:
-```text
-achieved_value: achievedValue ? parseFloat(achievedValue) : null
-score: score ? parseFloat(score) : null
-```
-
-JavaScript treats `"0"` as falsy. Any legitimate zero entry is silently converted to `null`.
-
-### Fix for Part A
-
-**File: `src/hooks/useAdminDataEntry.ts`** (line 192)
-- Add `review-submission-admin` to the cache invalidation list in `onSuccess`
-
-**File: `src/components/admin/AdminDataEntryDialog.tsx`** (lines 161-163)
-- Replace `achievedValue ? parseFloat(...)` with `achievedValue !== '' ? parseFloat(...)`
-- Same for `score`
+This works at every level: Manager can request rollback from Auditor, Auditor from Management, etc.
 
 ---
 
-## Part B: Data Not Visible as Per New Workflows (CRITICAL)
+## Database Changes
 
-### Root Cause: Hardcoded Status Filters in EmployeeSelectorGrid
+### New table: `kpi_rollback_requests`
 
-The `EmployeeSelectorGrid.tsx` component uses **hardcoded status values** for filtering and stat calculations instead of resolving them dynamically from each employee's workflow template.
+| Column | Type | Description |
+|---|---|---|
+| id | UUID (PK) | Auto-generated |
+| kpi_id | UUID (FK to kpis) | The KPI being rolled back |
+| requested_by | UUID (FK to profiles) | Who requested the rollback |
+| requested_from_status | text | Status when request was made (e.g., `self_review`) |
+| target_status | text | Status to revert to (e.g., `kra_set`) |
+| reason | text | Mandatory justification |
+| status | text | `pending`, `approved`, `rejected` (default: `pending`) |
+| actioned_by | UUID | Who approved/rejected |
+| actioned_at | timestamptz | When it was acted on |
+| created_at | timestamptz | Request timestamp |
 
-For example, the audit "pending" filter (line 199) checks:
-```text
-kpi.status === 'manager_check' || kpi.status === 'self_review'
-```
+RLS policies:
+- Users can INSERT if they are the `requested_by`
+- Users can SELECT if the KPI belongs to an employee they manage or if they are the requester
+- Reviewers can UPDATE (to approve/reject) based on their role relationship to the KPI
 
-But for employees on the 8-stage workflow (Self -> L1 -> L2 -> HR PMS -> Audit -> ...), the status preceding audit is `hr_pms_review`, NOT `manager_check`. So KPIs at `hr_pms_review` or `skip_level_check` are invisible to their respective reviewers in the grid.
+### Notification event type
 
-Current database confirms:
-- 6 KPIs stuck at `skip_level_check` (invisible to skip-level reviewers using "pending" filter)
-- 20 KPIs at `manager_check` (visible only because they match the hardcoded default)
+Add a new notification type `rollback_requested` to the existing notifications table. When a rollback is requested, a notification is created for the next-level reviewer(s).
 
-### Impact
+---
 
-| View Level | Hardcoded "Pending" Status | Should Be (for 8-stage) | Result |
-|---|---|---|---|
-| Skip-Level | `manager_check` | `manager_check` | Correct (by coincidence) |
-| HR PMS | `skip_level_check` | `skip_level_check` | Correct (by coincidence) |
-| Audit | `manager_check`, `self_review` | `hr_pms_review` | **WRONG -- employees on 8-stage workflow are invisible** |
+## UI Changes
 
-The real problem becomes apparent when employees have mixed workflows. The grid does a global filter across all employees but each employee may have a different workflow. The grid cannot use the workflow engine functions because it processes KPIs in bulk without per-employee workflow lookups.
+### 1. "Request Rollback" Button (Requester Side)
 
-### Fix for Part B
+**Where**: Inside the KPI detail views -- both `SelfReviewSheet` (for employees) and `UnifiedScorecard` (for reviewers viewing already-submitted KPIs in read-only mode).
 
-The fix requires fetching workflow stages per employee and using them for status resolution. Two approaches:
+**Visibility condition**: The KPI has been submitted by this level (i.e., current status is one step ahead of where this user operates), AND no pending rollback request already exists for this KPI, AND status is not `approved`.
 
-**Approach: Batch workflow resolution**
+**Example for Employee**: If KPI status is `self_review` (meaning employee already submitted), show a "Request Rollback" button in the sheet footer.
 
-1. Fetch all unique employee IDs from `periodKpis`
-2. Batch-fetch workflow info for all those employees using a new RPC or by joining workflow data
-3. Use `resolveReviewableStatuses()` per employee to determine if their KPIs are "pending" for the current view level
+**Example for Manager**: If KPI status is `manager_check` or further (meaning manager already forwarded), and manager is viewing it in read-only mode, show the button.
 
-**File: `src/components/review/EmployeeSelectorGrid.tsx`**
-- Add a batch query to fetch workflow stages for all employees shown in the grid
-- Replace hardcoded status checks in the filtering logic (lines 186-225) with dynamic resolution using each employee's workflow stages
-- Replace hardcoded status checks in the stats calculation (lines 234-283) with the same dynamic resolution
-- Replace hardcoded status checks in the per-employee badge stats (lines 286-326)
+**UX flow**:
+- User clicks "Request Rollback"
+- A dialog appears asking for a mandatory reason
+- On submit: creates a row in `kpi_rollback_requests` + creates a notification for the next-level reviewer
 
-**New database function (migration)**
-- Create `get_bulk_employee_workflows(employee_ids UUID[])` that returns `(employee_id, stages)` for a batch of employees, to avoid N+1 queries
+### 2. Red Rollback Banner (Reviewer Side)
+
+**Where**: Inside `UnifiedScorecard` review sheet, displayed prominently above the action buttons when a pending rollback request exists for the selected KPI.
+
+**Appearance**:
+- Red/rose background banner with warning icon
+- Text: "[Employee Name] has requested a rollback for this KPI"
+- Shows the reason provided
+- A prominent "Roll Back" button (red/destructive variant)
+- A "Dismiss" option to reject the request
+
+**When "Roll Back" is clicked**:
+1. KPI status is reverted to the previous stage using `resolvePreviousStatus()` from the workflow engine
+2. The rollback request status is updated to `approved`
+3. An audit log entry is created in `kpi_audit_logs`
+4. A notification is sent to the requester confirming the rollback
+5. All relevant query caches are invalidated
+
+**When "Dismiss" is clicked**:
+1. The rollback request status is updated to `rejected`
+2. A notification is sent to the requester informing them
+
+---
+
+## New Components
+
+| Component | Purpose |
+|---|---|
+| `RollbackRequestDialog.tsx` | Modal for submitting a rollback request with mandatory reason |
+| `RollbackRequestBanner.tsx` | Red banner shown to reviewers with Roll Back / Dismiss actions |
+
+## New Hook
+
+| Hook | Purpose |
+|---|---|
+| `useKpiRollbackRequests.ts` | Queries pending rollback requests for a KPI; mutations for create, approve, reject |
 
 ---
 
@@ -93,17 +121,41 @@ The fix requires fetching workflow stages per employee and using them for status
 
 | File | Change |
 |---|---|
-| `src/hooks/useAdminDataEntry.ts` | Add `review-submission-admin` to cache invalidation |
-| `src/components/admin/AdminDataEntryDialog.tsx` | Fix zero-value falsy bug |
-| `src/components/review/EmployeeSelectorGrid.tsx` | Replace hardcoded status filters with workflow-aware dynamic resolution |
-| `src/hooks/useWorkflowConfig.ts` | Add `useBulkEmployeeWorkflows` hook |
-| Database migration | Create `get_bulk_employee_workflows` RPC function |
-| `DOCUMENTATION.md` | Document both fixes |
+| **New migration** | Create `kpi_rollback_requests` table with RLS policies |
+| **src/hooks/useKpiRollbackRequests.ts** (new) | Hook for CRUD operations on rollback requests |
+| **src/components/review/RollbackRequestDialog.tsx** (new) | Dialog component for requesting rollback |
+| **src/components/review/RollbackRequestBanner.tsx** (new) | Red banner component for reviewers |
+| **src/components/review/SelfReviewSheet.tsx** | Add "Request Rollback" button when KPI is in `self_review` status (employee already submitted) |
+| **src/components/review/UnifiedScorecard.tsx** | Add "Request Rollback" button in read-only mode; Add `RollbackRequestBanner` above action buttons in review mode |
+| **src/hooks/useNotifications.ts** | Add `rollback_requested` and `rollback_approved` event types |
+| **src/lib/workflowEngine.ts** | Already has `resolvePreviousStatus()` -- no changes needed |
+| **DOCUMENTATION.md** | Document the new feature |
 
 ---
 
-## Risk Assessment
+## Technical Details
 
-- **Part A**: Very Low -- only cache key and value parsing changes
-- **Part B**: Medium -- changes the core filtering logic of the employee grid, but uses the existing tested workflow engine functions. The batch RPC avoids performance regression from N+1 queries.
+### Determining "who is the next reviewer"
+
+When creating a rollback request notification, the system needs to notify the correct person. This is determined by:
+- For employee requests: notify the employee's reporting manager
+- For manager requests: resolved dynamically using the workflow -- could be skip-level, HR PMS, auditor, etc.
+- The existing notification creation patterns in `useKpis.ts` (used by `useRaiseQuery`) will be followed
+
+### Clearing downstream data on rollback
+
+When a rollback is approved, downstream review data (ratings, scores, remarks) entered by the approving reviewer should be cleared, consistent with the existing Step Back behavior in `useAdminDataEntry.ts`. The rollback approval mutation will handle this.
+
+### Preventing duplicate requests
+
+Only one `pending` rollback request per KPI is allowed. The UI hides the "Request Rollback" button if one already exists, and a unique partial index enforces this at the database level.
+
+---
+
+## Edge Cases
+
+- **KPI already approved**: Rollback requests are not allowed for approved KPIs
+- **Multiple KPIs**: Each KPI's rollback request is independent
+- **Concurrent actions**: If the reviewer forwards the KPI before seeing the rollback request, the request is auto-expired (status set to `expired` via a trigger that fires on KPI status change)
+- **Admin override**: Admins can still use the existing "Step Back" feature independently of this workflow
 
