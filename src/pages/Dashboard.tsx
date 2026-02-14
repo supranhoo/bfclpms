@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMyKpis, useReviewSubmissions, KPI } from '@/hooks/useKpis';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
@@ -232,6 +233,42 @@ export default function Dashboard() {
   useEffect(() => {
     const kpiParam = searchParams.get('kpi');
     const panelParam = searchParams.get('panel');
+    const employeeParam = searchParams.get('employee');
+
+    // If employee param is present, handle cross-user deep-link (reviewer flow)
+    if (employeeParam && kpiParam) {
+      const fetchAndSelectEmployee = async () => {
+        const { data: empProfile } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, designation, employee_code, avatar_url, department_id, reporting_manager_id')
+          .eq('id', employeeParam)
+          .single();
+
+        if (empProfile) {
+          // Determine view from URL or default to team
+          const viewParam = searchParams.get('view') as ViewMode | null;
+          if (viewParam && availableModes.includes(viewParam)) {
+            setViewMode(viewParam);
+          } else if (viewMode === 'self') {
+            setViewMode('team');
+          }
+          handleSelectEmployee(empProfile as EmployeeProfile, kpiParam);
+        }
+
+        // Clean up URL params
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('kpi');
+          next.delete('panel');
+          next.delete('employee');
+          return next;
+        }, { replace: true });
+      };
+      fetchAndSelectEmployee();
+      return;
+    }
+
+    // Standard self-view deep-link
     if (!kpiParam || !periodFilteredKpis || periodFilteredKpis.length === 0) return;
 
     const targetKpi = periodFilteredKpis.find(k => k.id === kpiParam);

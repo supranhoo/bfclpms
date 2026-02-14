@@ -181,22 +181,65 @@ export default function QueryInbox() {
     return resolvedReceived + resolvedSent;
   }, [receivedQueries, sentQueries]);
 
-  // Convert notifications to InboxItems
+  // Fetch profiles for related_user_id values from notifications
+  const relatedUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    notifications.forEach(n => {
+      if (n.related_user_id) ids.add(n.related_user_id);
+    });
+    return Array.from(ids);
+  }, [notifications]);
+
+  const { data: relatedProfiles } = useQuery({
+    queryKey: ['related-profiles', relatedUserIds],
+    queryFn: async () => {
+      if (relatedUserIds.length === 0) return [];
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', relatedUserIds);
+      return data || [];
+    },
+    enabled: relatedUserIds.length > 0,
+  });
+
+  const relatedProfileMap = useMemo(() =>
+    new Map(relatedProfiles?.map(p => [p.id, p]) || []),
+    [relatedProfiles]
+  );
+
+  // Convert notifications to InboxItems with enriched metadata
   const notificationItems: InboxItem[] = useMemo(() =>
-    notifications.map(n => ({
-      id: n.id,
-      type: 'notification' as const,
-      title: n.title,
-      message: n.message,
-      isRead: n.is_read,
-      createdAt: n.created_at,
-      notificationType: n.type,
-      kpiId: n.kpi_id,
-      metadata: n.metadata,
-      snoozedUntil: n.snoozed_until,
-      snoozeCount: n.snooze_count,
-    })),
-    [notifications]
+    notifications.map(n => {
+      const meta = (n.metadata && typeof n.metadata === 'object') ? n.metadata as Record<string, any> : {};
+      const relatedProfile = n.related_user_id ? relatedProfileMap.get(n.related_user_id) : null;
+
+      return {
+        id: n.id,
+        type: 'notification' as const,
+        title: n.title,
+        message: n.message,
+        isRead: n.is_read,
+        createdAt: n.created_at,
+        notificationType: n.type,
+        kpiId: n.kpi_id,
+        kpiName: meta.kpi_name || null,
+        kraName: meta.kra_name || null,
+        fromUser: relatedProfile ? {
+          id: relatedProfile.id,
+          fullName: relatedProfile.full_name,
+          email: relatedProfile.email,
+        } : (meta.employee_name ? {
+          id: n.related_user_id || '',
+          fullName: meta.employee_name,
+          email: '',
+        } : null),
+        metadata: meta,
+        snoozedUntil: n.snoozed_until,
+        snoozeCount: n.snooze_count,
+      };
+    }),
+    [notifications, relatedProfileMap]
   );
 
   // Convert snoozed notifications to InboxItems
