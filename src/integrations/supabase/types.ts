@@ -28,6 +28,7 @@ export type Database = {
           organization_name: string
           pms_policy_content: string | null
           pms_policy_url: string | null
+          pms_policy_visible_roles: Json | null
           updated_at: string
         }
         Insert: {
@@ -43,6 +44,7 @@ export type Database = {
           organization_name?: string
           pms_policy_content?: string | null
           pms_policy_url?: string | null
+          pms_policy_visible_roles?: Json | null
           updated_at?: string
         }
         Update: {
@@ -58,6 +60,7 @@ export type Database = {
           organization_name?: string
           pms_policy_content?: string | null
           pms_policy_url?: string | null
+          pms_policy_visible_roles?: Json | null
           updated_at?: string
         }
         Relationships: []

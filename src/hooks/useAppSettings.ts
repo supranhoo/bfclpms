@@ -17,6 +17,7 @@ export interface AppSettings {
   login_hero_description: string | null;
   pms_policy_url: string | null;
   pms_policy_content: string | null;
+  pms_policy_visible_roles: string[];
   created_at: string;
   updated_at: string;
 }
@@ -45,9 +46,14 @@ export function useAppSettings() {
           parsedWallpapers = wallpapers.filter((item): item is string => typeof item === 'string');
         }
         
+        const visibleRoles = Array.isArray(data.pms_policy_visible_roles)
+          ? (data.pms_policy_visible_roles as string[])
+          : ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'];
+
         return {
           ...data,
           login_wallpapers: parsedWallpapers,
+          pms_policy_visible_roles: visibleRoles,
         } as AppSettings;
       }
 
@@ -62,7 +68,7 @@ export function useUpdateAppSettings() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (updates: Partial<Pick<AppSettings, 'organization_name' | 'app_name' | 'logo_url' | 'login_background_url' | 'login_wallpapers' | 'login_hero_headline' | 'login_hero_description' | 'pms_policy_url' | 'pms_policy_content'>>) => {
+    mutationFn: async (updates: Partial<Pick<AppSettings, 'organization_name' | 'app_name' | 'logo_url' | 'login_background_url' | 'login_wallpapers' | 'login_hero_headline' | 'login_hero_description' | 'pms_policy_url' | 'pms_policy_content' | 'pms_policy_visible_roles'>>) => {
       const { data, error } = await supabase
         .from('app_settings')
         .update({

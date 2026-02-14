@@ -1,20 +1,48 @@
 import { useState } from 'react';
-import { useAppSettings } from '@/hooks/useAppSettings';
+import { useAppSettings, useUpdateAppSettings } from '@/hooks/useAppSettings';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { FileText, ExternalLink, AlertCircle, Pencil } from 'lucide-react';
+import { FileText, ExternalLink, AlertCircle, Pencil, Eye } from 'lucide-react';
 import { PolicyRenderer } from '@/components/policy/PolicyRenderer';
 import { PolicyEditorDialog } from '@/components/policy/PolicyEditorDialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Navigate } from 'react-router-dom';
+
+const ALL_ROLES = [
+  { value: 'admin', label: 'Admin' },
+  { value: 'manager', label: 'Manager' },
+  { value: 'employee', label: 'Employee' },
+  { value: 'auditor', label: 'Auditor' },
+  { value: 'management', label: 'Management' },
+  { value: 'hr_pms', label: 'HR PMS' },
+];
 
 export default function PMSPolicy() {
   const { data: appSettings, isLoading } = useAppSettings();
   const { role } = useAuth();
   const [editorOpen, setEditorOpen] = useState(false);
+  const updateSettings = useUpdateAppSettings();
 
   const policyContent = (appSettings as any)?.pms_policy_content as string | null;
   const policyUrl = appSettings?.pms_policy_url;
+  const visibleRoles = appSettings?.pms_policy_visible_roles || ALL_ROLES.map(r => r.value);
+
+  // Route guard: if user's role is not in visible roles and not admin, redirect
+  if (!isLoading && role && role !== 'admin' && !visibleRoles.includes(role)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  const handleToggleRole = (roleValue: string, checked: boolean) => {
+    if (roleValue === 'admin') return; // Admin always visible
+    const newRoles = checked
+      ? [...visibleRoles, roleValue]
+      : visibleRoles.filter(r => r !== roleValue);
+    updateSettings.mutate({ pms_policy_visible_roles: newRoles });
+  };
 
   if (isLoading) {
     return (
@@ -28,6 +56,44 @@ export default function PMSPolicy() {
     );
   }
 
+  const AdminControls = () => (
+    role === 'admin' ? (
+      <div className="flex items-center gap-2">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Eye className="h-4 w-4 mr-2" />
+              Visibility
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64" align="end">
+            <div className="space-y-3">
+              <p className="text-sm font-medium">Visible to Roles</p>
+              {ALL_ROLES.map(r => (
+                <div key={r.value} className="flex items-center gap-2">
+                  <Checkbox
+                    id={`role-${r.value}`}
+                    checked={visibleRoles.includes(r.value)}
+                    disabled={r.value === 'admin'}
+                    onCheckedChange={(checked) => handleToggleRole(r.value, !!checked)}
+                  />
+                  <Label htmlFor={`role-${r.value}`} className="text-sm cursor-pointer">
+                    {r.label}
+                    {r.value === 'admin' && <span className="text-muted-foreground ml-1">(always)</span>}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+        <Button variant="outline" size="sm" onClick={() => setEditorOpen(true)}>
+          <Pencil className="h-4 w-4 mr-2" />
+          Edit Policy
+        </Button>
+      </div>
+    ) : null
+  );
+
   // If we have stored content, render it inline
   if (policyContent) {
     return (
@@ -40,12 +106,7 @@ export default function PMSPolicy() {
               <p className="text-muted-foreground">Performance Management System Policy Document</p>
             </div>
           </div>
-          {role === 'admin' && (
-            <Button variant="outline" onClick={() => setEditorOpen(true)}>
-              <Pencil className="h-4 w-4 mr-2" />
-              Edit Policy
-            </Button>
-          )}
+          <AdminControls />
         </div>
 
         <Card>
@@ -80,12 +141,15 @@ export default function PMSPolicy() {
               <p className="text-muted-foreground">Performance Management System Policy Document</p>
             </div>
           </div>
-          <Button variant="outline" asChild>
-            <a href={policyUrl} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Open in New Tab
-            </a>
-          </Button>
+          <div className="flex items-center gap-2">
+            <AdminControls />
+            <Button variant="outline" asChild>
+              <a href={policyUrl} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Open in New Tab
+              </a>
+            </Button>
+          </div>
         </div>
         <Card className="overflow-hidden">
           <CardContent className="p-0">
@@ -105,9 +169,12 @@ export default function PMSPolicy() {
   // No content and no URL
   return (
     <div className="container mx-auto p-6 max-w-4xl">
-      <div className="flex items-center gap-3 mb-6">
-        <FileText className="h-8 w-8 text-primary" />
-        <h1 className="text-3xl font-bold">PMS Policy</h1>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <FileText className="h-8 w-8 text-primary" />
+          <h1 className="text-3xl font-bold">PMS Policy</h1>
+        </div>
+        <AdminControls />
       </div>
       <Card>
         <CardContent className="pt-6">
