@@ -1913,6 +1913,7 @@ The database trigger `send_email_on_notification()` maps internal notification t
 - `query_response_submitted` / `query_response_fyi` → `query_response_received`
 - `query_resolved_fyi` → `query_resolved`
 - `observation_raised`, `observation_reply`, `observation_resolved` → pass through as-is
+- `admin_status_step_back`, `rollback_requested`, `rollback_approved`, `rollback_rejected` → pass through as-is
 - All other types pass through unchanged
 
 **Trigger HTTP Call:**
@@ -1922,7 +1923,7 @@ The `send_email_on_notification()` trigger uses `net.http_post()` (from the `pg_
 - In-app notifications (real-time via Supabase Realtime)
 - Email notifications (via configurable provider: Resend, SMTP, or Microsoft 365 Graph API)
 - Email events are individually toggleable in System Settings → Email Notifications
-- 22 event types supported with customizable email templates (including observation raised, reply, resolved, and password rollout)
+- 27 event types supported with customizable email templates (including observation raised, reply, resolved, password rollout, admin status step back, rollback requested/approved/rejected)
 - **Email Header Logo**: The App Logo configured in Global Branding (`app_settings.logo_url`) is automatically displayed in the **top-right corner** of all email headers. Falls back to the email-specific company logo if the branding logo is not set.
 - **Auto-Linkified URLs**: All URLs (http/https) in email template bodies are automatically converted to **clickable blue hyperlinks** when the email is rendered. This applies to all existing and future templates — no manual HTML is needed.
 

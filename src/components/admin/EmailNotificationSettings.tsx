@@ -48,6 +48,10 @@ const EMAIL_EVENTS: { key: EmailEventType; label: string; description: string }[
   { key: 'observation_resolved', label: 'Observation Resolved', description: 'Notify participants when an observation is marked as resolved' },
   { key: 'password_rollout', label: 'Password Rollout', description: 'Send login credentials when admin generates passwords for users' },
   { key: 'kra_batch_assigned', label: 'Batch KRA Assignment', description: 'Notify employee & manager when KRAs are assigned in bulk' },
+  { key: 'admin_status_step_back', label: 'Admin Status Step Back', description: 'Notify employee when admin moves KPI back one workflow stage' },
+  { key: 'rollback_requested', label: 'Rollback Requested', description: 'Notify reviewer when a rollback is requested on a KPI' },
+  { key: 'rollback_approved', label: 'Rollback Approved', description: 'Notify requester when their rollback request is approved' },
+  { key: 'rollback_rejected', label: 'Rollback Dismissed', description: 'Notify requester when their rollback request is dismissed' },
 ];
 
 export function EmailNotificationSettings() {
