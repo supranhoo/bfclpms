@@ -26,6 +26,7 @@ export type Database = {
           login_wallpapers: Json | null
           logo_url: string | null
           organization_name: string
+          pms_policy_content: string | null
           pms_policy_url: string | null
           updated_at: string
         }
@@ -40,6 +41,7 @@ export type Database = {
           login_wallpapers?: Json | null
           logo_url?: string | null
           organization_name?: string
+          pms_policy_content?: string | null
           pms_policy_url?: string | null
           updated_at?: string
         }
@@ -54,6 +56,7 @@ export type Database = {
           login_wallpapers?: Json | null
           logo_url?: string | null
           organization_name?: string
+          pms_policy_content?: string | null
           pms_policy_url?: string | null
           updated_at?: string
         }

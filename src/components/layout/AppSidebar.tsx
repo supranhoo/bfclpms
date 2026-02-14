@@ -53,7 +53,7 @@ const menuItems = {
   main: [
     { title: 'My Dashboard', icon: Home, path: '/dashboard', roles: ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'] },
     { title: 'Inbox', icon: MessageSquare, path: '/queries', roles: ['employee', 'manager', 'admin', 'auditor', 'management'], showBadge: true },
-    { title: 'PMS Policy', icon: FileText, path: '/pms-policy', roles: ['admin'] },
+    { title: 'PMS Policy', icon: FileText, path: '/pms-policy', roles: ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'] },
   ],
   manager: [
     { title: 'Team Review', icon: Users, path: '/dashboard?view=team', roles: ['manager', 'admin', 'management'] },
