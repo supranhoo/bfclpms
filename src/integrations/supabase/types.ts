@@ -2770,6 +2770,10 @@ export type Database = {
         Args: { p_frequency: string; p_month: string; p_year: number }
         Returns: string[]
       }
+      get_direct_report_ids: {
+        Args: { _manager_id: string }
+        Returns: string[]
+      }
       get_employee_workflow: { Args: { employee_uuid: string }; Returns: Json }
       get_employee_workflow_info: {
         Args: { employee_uuid: string }

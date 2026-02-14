@@ -332,7 +332,7 @@ has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
 **Profiles Table RLS:**
 - Users can view their own profile (`authenticated` only)
 - Managers can view direct reports (`authenticated` only)
-- Managers can view skip-level reports — employees whose `reporting_manager_id` is one of the manager's direct reports (`authenticated` only, v1.28.2)
+- Managers can view skip-level reports — employees whose `reporting_manager_id` is one of the manager's direct reports (`authenticated` only, v1.28.2). Uses `get_direct_report_ids()` SECURITY DEFINER function to avoid infinite recursion (same pattern as `has_role` and `is_data_owner_for_employee`).
 - Admins, Auditors, and Management can view all profiles (`authenticated` only)
 
 **Audit/System Log INSERT Policies:**
