@@ -1,54 +1,64 @@
 
-# RCA and CAPA: "Review" Button Missing for Skip-Level and HR PMS in KPI Details Table
 
-## Root Cause Analysis
+# CAPA: Employee Re-Import -- Role Updates for Existing Employees
 
-The bug is on **line 685** of `src/components/review/UnifiedScorecard.tsx`:
+## Problem
 
-```
-const viewType = viewLevel === 'manager' ? 'team-review'
-               : viewLevel === 'auditor' ? 'audit'
-               : 'management';
-```
+When re-importing the Employee Master with updated details, the system correctly updates profile fields (designation, department, pmsGrade, level, manager) for existing employees. However, **role changes are silently ignored** for existing employees. Roles are only assigned during initial creation (new employees).
 
-When `viewLevel` is `skip_level` or `hr_pms`, this ternary chain falls through to `'management'`. The workflow engine's `canReviewKpi('manager_check', 'management', ...)` returns `false` because management only reviews KPIs at `management_review` status. This causes the "Review" button to never appear, and the fallback "View" button is shown instead.
+## Root Cause
 
-Additionally, the `KpiTableViewType` in `KpiDetailsTable.tsx` only defines four values: `'my-kpis' | 'team-review' | 'audit' | 'management'`. It is missing `'skip-level-review'` and `'hr-pms-review'`, which the workflow engine already supports.
+In `src/pages/admin/ImportData.tsx` lines 1171-1196, the existing-employee branch updates the `profiles` table but has **no role-update logic**. The role handling code (lines 1226-1236) only runs inside the `else if (row.email)` branch for new employee creation.
 
-## Corrective Action Plan
+## Fix
 
-### File 1: `src/components/review/KpiDetailsTable.tsx`
+### File: `src/pages/admin/ImportData.tsx`
 
-**Line 32** -- Expand the `KpiTableViewType` to include the two missing view types:
+After the profile update succeeds (line 1195), add role update logic for existing employees:
 
 ```typescript
-export type KpiTableViewType = 'my-kpis' | 'team-review' | 'audit' | 'management' | 'skip-level-review' | 'hr-pms-review';
+if (error) throw error;
+
+// Update role for existing employee if provided in import
+if (row.role) {
+  const newRole = normalizeRole(row.role);
+  const { data: existingRole } = await supabase
+    .from('user_roles')
+    .select('id, role')
+    .eq('user_id', existingEmployee.id)
+    .maybeSingle();
+
+  if (existingRole) {
+    if (existingRole.role !== newRole) {
+      await supabase.from('user_roles')
+        .update({ role: newRole })
+        .eq('id', existingRole.id);
+    }
+  } else {
+    await supabase.from('user_roles')
+      .insert({ user_id: existingEmployee.id, role: newRole });
+  }
+}
+
+return { success: true, userId: existingEmployee.id };
 ```
 
-**Lines 128-129** -- Update the `isTeamReviewPastStage` check to also handle skip-level and HR PMS "past stage" states so those views show "Reviewed" badges correctly for KPIs that have already been forwarded.
+This mirrors the same pattern already used for new employees (lines 1226-1236) and the second-pass manager promotion (lines 1300-1312).
 
-**Lines 147** -- Update the send-back button visibility condition to include `'skip-level-review'` and `'hr-pms-review'` alongside `'team-review'`, `'audit'`, and `'management'`.
+### File: `DOCUMENTATION.md`
 
-### File 2: `src/components/review/UnifiedScorecard.tsx`
+Add a note under the Employee Import section documenting that role updates now apply to existing employees on re-import.
 
-**Line 685** -- Fix the viewType mapping to include skip-level and HR PMS:
+## What This Does NOT Change
 
-```typescript
-const viewType = viewLevel === 'manager' ? 'team-review'
-               : viewLevel === 'auditor' ? 'audit'
-               : viewLevel === 'skip_level' ? 'skip-level-review'
-               : viewLevel === 'hr_pms' ? 'hr-pms-review'
-               : 'management';
-```
+- **Second-pass manager promotion** (lines 1276-1314) continues to work as before -- it promotes employees to "manager" if they appear as someone's `managerEmployeeId`, unless they already have an explicit higher role from the import.
+- **Blank role column** still defaults to "employee" via `normalizeRole()`, but the role update only triggers when `row.role` is truthy (non-empty). So leaving the role column blank in the Excel will NOT downgrade an existing admin/manager to employee.
+- **No "field clearing" change** -- intentional clearing of profile fields (e.g., removing a manager assignment) remains unsupported. That is a separate enhancement if needed.
 
-### File 3: `DOCUMENTATION.md`
-
-Update to document the expanded `KpiTableViewType` and the corrected viewType mapping.
-
-## Summary of Changes
+## Summary
 
 | File | Change |
 |---|---|
-| `src/components/review/KpiDetailsTable.tsx` | Add `'skip-level-review'` and `'hr-pms-review'` to `KpiTableViewType`; update past-stage and send-back button conditions |
-| `src/components/review/UnifiedScorecard.tsx` | Fix viewType mapping for `skip_level` and `hr_pms` view levels |
-| `DOCUMENTATION.md` | Document the fix |
+| `src/pages/admin/ImportData.tsx` | Add role update logic after profile update for existing employees |
+| `DOCUMENTATION.md` | Document role update behavior on re-import |
+
