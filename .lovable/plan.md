@@ -1,92 +1,87 @@
 
-# RCA and CAPA: Email Flow Broken for Trigger-Based Notifications (including KPI Submission)
+
+# RCA and CAPA: Send-Back KPI Not Updating Status Without Page Refresh
 
 ## Root Cause Analysis
 
-### Finding
-The `kpi_submitted` in-app notifications ARE being created correctly (confirmed: recent entries exist in the `notifications` table). However, the database trigger `send_email_on_notification` that fires on notification INSERT to call the edge function is **silently failing**.
+### Problem
+After Jaspal sends back Purnima's KPI, the KPI still appears as "reviewable" in the scorecard until the page is manually refreshed.
 
-### Root Cause: Wrong schema and function signature for HTTP call
+### Root Cause: Missing cache invalidation for `kpis-by-period` query
 
-The trigger function `send_email_on_notification()` calls:
+The send-back mutation in `UnifiedScorecard.tsx` (line 494-498) invalidates these query keys on success:
+
 ```text
-extensions.http_post(url, body::text, headers::jsonb)
+queryClient.invalidateQueries({ queryKey: ['kpis'] });
+queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
 ```
 
-But the actual installed function is:
+However, the **EmployeeSelectorGrid** (the parent employee list with pending/reviewed counts) uses a DIFFERENT query:
+
 ```text
-net.http_post(url text, body jsonb, params jsonb, headers jsonb)
+useKpisByPeriod() -> queryKey: ['kpis-by-period', period, year]
 ```
 
-| Issue | Detail |
-|---|---|
-| Wrong schema | Trigger calls `extensions.http_post` but the function lives in `net.http_post` |
-| Wrong body type | Trigger casts body to `::text`, but `net.http_post` expects `::jsonb` |
-| Missing params argument | `net.http_post` requires a `params` argument (can be `'{}'::jsonb`) |
-| Silent failure | The `EXCEPTION WHEN OTHERS` block catches the error and only raises a WARNING, so no visible error occurs |
+TanStack Query's `invalidateQueries({ queryKey: ['kpis'] })` matches keys that START with `['kpis']` -- for example `['kpis', employeeId]`. But `['kpis-by-period', ...]` does NOT match because `'kpis-by-period'` is not equal to `'kpis'`.
 
-This is why **all trigger-based emails** fail silently -- not just `kpi_submitted`, but also `manager_approved`, `manager_rejected`, `query_raised`, `kpi_ready_for_audit`, etc.
+| Query | Key | Invalidated? |
+|---|---|---|
+| `useKpisByEmployee` (scorecard) | `['kpis', employeeId]` | Yes |
+| `useKpisByPeriod` (employee grid) | `['kpis-by-period', period, year]` | **No** |
 
-The only emails that work (`kra_batch_assigned`) are sent directly from the frontend via `supabase.functions.invoke()`, which bypasses the broken trigger entirely.
+This means:
+1. The scorecard's own KPI list does refetch (status updates in the KPI table)
+2. But the employee grid's pending badge counts stay stale
+3. And if the reviewer navigates back to the grid, the employee still shows old pending counts
 
-### Evidence
-- `pg_extension` shows only `pg_net` is installed (no `http` extension)
-- `pg_proc` confirms `http_post` exists only in the `net` schema
-- `email_logs` table has zero entries for `kpi_submitted` despite many notifications existing
-- The last email logs are for `kra_batch_assigned` (sent from frontend code, not the trigger)
+### Secondary Issue
+After the send-back succeeds, the send-back dialog closes but the review sheet stays open on the same KPI. The KPI's `isReviewable()` check should now return false (status changed), but the reviewer sees no visual feedback that the action completed beyond the toast message.
 
 ---
 
-## CAPA: Fix the trigger function to use the correct schema and signature
+## CAPA (Corrective and Preventive Action)
 
-### Database Migration
+### Fix 1: Add missing cache invalidation keys
 
-Recreate `send_email_on_notification()` with the correct call:
+**File: `src/components/review/UnifiedScorecard.tsx`**
 
-Replace:
+Add `kpis-by-period` to the send-back mutation's `onSuccess` handler so the employee grid refreshes:
+
 ```text
-PERFORM extensions.http_post(
-  url := supabase_url || '/functions/v1/send-email-notification',
-  body := jsonb_build_object(...)::text,
-  headers := jsonb_build_object(...)::jsonb
-);
+onSuccess: () => {
+  queryClient.invalidateQueries({ queryKey: ['kpis'] });
+  queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });  // NEW
+  queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+  ...
+}
 ```
 
-With:
+Also apply the same fix to the `useSendBackKpi` hook in `useKpis.ts` (used by `EmployeeScorecard`).
+
+### Fix 2: Close review sheet after successful send-back
+
+After the send-back succeeds, automatically close the review sheet so the reviewer returns to the updated KPI list. This provides clear visual feedback that the action completed.
+
 ```text
-PERFORM net.http_post(
-  url := supabase_url || '/functions/v1/send-email-notification',
-  body := jsonb_build_object(...),
-  params := '{}'::jsonb,
-  headers := jsonb_build_object(...)
-);
+onSuccess: () => {
+  ...
+  setSendBackDialogOpen(false);
+  setReviewSheetOpen(false);  // NEW - close the review sheet too
+}
 ```
 
-Key changes:
-1. Schema: `extensions` changed to `net`
-2. Body: Remove `::text` cast -- pass as native `jsonb`
-3. Add `params := '{}'::jsonb` argument
-4. Keep all existing event type mappings and metadata extraction unchanged
+### Fix 3: Audit all other mutations for the same gap
+
+Check `approveKpi` and `handleSubmitReview` for the same missing `kpis-by-period` invalidation and add it where needed.
 
 ### Files to Modify
 
 | File | Change |
 |---|---|
-| Database migration (SQL) | Recreate `send_email_on_notification()` using `net.http_post()` with correct signature |
-| `DOCUMENTATION.md` | Document the fix and correct HTTP function reference |
-
-### Scope of Impact
-
-This fix will restore email delivery for ALL trigger-based notification events:
-- `kpi_submitted` (the reported issue)
-- `manager_approved` / `manager_rejected`
-- `kpi_ready_for_audit` / `kpi_ready_for_management`
-- `final_approved`
-- `query_raised` / `query_resolved` / `query_response_received`
-- `admin_status_change` / `admin_data_entry` / `admin_data_override`
-- `org_kpi_sent_back`
-- `observation_raised` / `observation_reply` / `observation_resolved`
+| `src/components/review/UnifiedScorecard.tsx` | Add `kpis-by-period` invalidation to send-back, approve, and submit mutations. Close review sheet on send-back success. |
+| `src/hooks/useKpis.ts` | Add `kpis-by-period` invalidation to `useSendBackKpi` and `useApproveKpi` hooks. |
+| `DOCUMENTATION.md` | Document cache invalidation requirements for workflow mutations. |
 
 ### Risk
 
-Low -- this is a direct fix to the function call signature. No business logic changes. The trigger, event mappings, and edge function all remain identical.
+Very Low -- adding extra invalidation keys only causes additional refetches (ensuring fresh data). No business logic changes.
