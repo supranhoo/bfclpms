@@ -100,21 +100,33 @@ export const EmployeeImportRowSchema = z.object({
 export function validateKpiImportData(data: unknown[]): { 
   valid: boolean; 
   errors: string[];
+  warnings: string[];
   validatedData: z.infer<typeof KpiImportRowSchema>[];
 } {
   const errors: string[] = [];
+  const warnings: string[] = [];
   const validatedData: z.infer<typeof KpiImportRowSchema>[] = [];
 
   // Check row count limit
   if (data.length > IMPORT_LIMITS.MAX_ROWS) {
     errors.push(`File contains ${data.length} rows, maximum allowed is ${IMPORT_LIMITS.MAX_ROWS}`);
-    return { valid: false, errors, validatedData: [] };
+    return { valid: false, errors, warnings, validatedData: [] };
   }
 
   for (let i = 0; i < data.length; i++) {
     try {
       const validated = KpiImportRowSchema.parse(data[i]);
       validatedData.push(validated);
+
+      // P1: Binary KPI validation warnings
+      const row = validated as Record<string, unknown>;
+      const uomType = row.uomType || row.uom_type;
+      if (uomType === 'binary' || uomType === 'tiered') {
+        const hasThresholds = [row.r5, row.r4, row.r3, row.r2, row.r1].some(t => t !== null && t !== undefined && t !== '');
+        if (!hasThresholds) {
+          warnings.push(`Row ${i + 2}: Binary/Tiered KPI "${validated.kpi}" has no R5-R1 thresholds. Auto-scoring may not work correctly.`);
+        }
+      }
     } catch (error) {
       if (error instanceof z.ZodError) {
         error.errors.forEach(err => {
@@ -127,6 +139,7 @@ export function validateKpiImportData(data: unknown[]): {
   return { 
     valid: errors.length === 0, 
     errors,
+    warnings,
     validatedData: errors.length === 0 ? validatedData : []
   };
 }
