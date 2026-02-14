@@ -1,82 +1,72 @@
 
 
-# RCA: Send Back KPI Still Failing for Tanaaz's KPI
+# Fix: Manager Cannot See Skip-Level Dashboard (RLS Policy Gap)
 
-## Root Cause: Code Not Published to Live Site
+## Root Cause
 
-The fix to `resolveSendBackStatus` is **correctly implemented in source code** but has **not been published** to the live site (`bfclpms.lovable.app`). Jaspal is using the published URL, which still runs the old (buggy) code.
+The `profiles` table has an RLS policy for managers that only allows viewing **direct reports**:
 
-### Evidence from Database
+```text
+Policy: "Managers can view their direct reports"
+Condition: reporting_manager_id = auth.uid()
+```
 
-| Field | Current Value | Expected Value |
-|-------|--------------|----------------|
-| `kpis.status` | `manager_check` | `self_review` |
-| `review_submissions.manager_score` | `5.00` | `null` (cleared) |
-| `review_submissions.manager_rating` | `blue` | `null` (cleared) |
-| `review_submissions.skip_level_*` | `null` | `null` (correct) |
-| Audit logs | 2 entries: `SKIP_LEVEL_SENT_BACK_TO_MANAGER` | Written correctly |
-| `submission.updated_at` | `14:25:47` (updated!) | -- |
+The skip-level feature needs managers to also see their **indirect reports** (employees who report to their direct reports). The `useSkipLevelTeamMembers` hook does a two-step query:
 
-### What the Old Code Did
+1. Step 1: Fetch direct reports (`reporting_manager_id = Jaspal`) -- RLS allows this
+2. Step 2: Fetch employees reporting to those direct reports (`reporting_manager_id IN [direct_report_ids]`) -- **RLS BLOCKS this** because these employees' `reporting_manager_id` is NOT Jaspal's ID
 
-Both attempts at 14:10 and 14:25 ran the old `resolveSendBackStatus('manager', ...)` which returned `manager_check` instead of `self_review`. This caused:
+When Jaspal had the `admin` role, the "Admins can view all profiles" policy let both queries succeed. Now with only the `manager` role, step 2 returns zero rows, so the skip-level tab never appears.
 
-1. **KPI status**: Set to `manager_check` (same as current -- effectively a no-op)
-2. **Cascading clear**: `targetIdx = 2` (manager_check), condition `2 <= 1` (self_review index) = false, so manager fields were **NOT cleared**
-3. **Audit log**: Written successfully (giving the false impression of success)
-4. **Toast**: Shown to user (success notification), because no error was thrown
+## Fix
 
-## CAPA Plan
+Add a new RLS SELECT policy on the `profiles` table that allows managers to view their skip-level subordinates (employees whose manager reports to them).
 
-### Action 1: Publish the Code to Live
+### New RLS Policy
 
-The source code fix is correct. It needs to be published to the live site so Jaspal's browser loads the updated logic.
+```text
+Policy name: "Managers can view skip-level reports"
+Table: profiles
+Operation: SELECT
+Condition:
+  The row's reporting_manager_id is in the set of profile IDs
+  whose reporting_manager_id equals auth.uid()
+```
 
-### Action 2: Fix Corrupted Data via SQL
+In SQL terms:
 
-Run a one-time data correction to reset the KPI to the correct state (what the send-back should have done):
+```text
+CREATE POLICY "Managers can view skip-level reports"
+  ON public.profiles
+  FOR SELECT
+  TO authenticated
+  USING (
+    has_role(auth.uid(), 'manager'::app_role)
+    AND reporting_manager_id IN (
+      SELECT id FROM public.profiles
+      WHERE reporting_manager_id = auth.uid()
+    )
+  );
+```
 
-- Set `kpis.status` to `self_review` (so the manager sees it as pending)
-- Clear `manager_score`, `manager_rating`, `manager_remarks`, `manager_evidence_url`, `manager_achieved_value` in `review_submissions`
-- Clear `skip_level_*` fields (already null, but for safety)
+This policy says: "If you are a manager, you can see any profile whose reporting manager is one of your direct reports." This is exactly the skip-level relationship.
 
-### Action 3: Add Audit Trail Protection
+### Why This Is Safe
 
-The current code writes the audit log AFTER the KPI update but BEFORE the submission update. If the submission update fails, the audit log is already written, creating a misleading success record. Move the audit log insert to AFTER both updates succeed, so the trail is only written when the full operation completes.
+- Only extends visibility one additional level down (not full org tree)
+- Only applies to users with the `manager` role
+- Uses the existing `has_role()` security-definer function (no recursion risk)
+- The subquery `SELECT id FROM profiles WHERE reporting_manager_id = auth.uid()` is allowed because it matches the existing "Managers can view their direct reports" policy
 
 ## Files to Modify
 
 | File | Change |
 |---|---|
-| SQL (manual correction) | Fix corrupted data for KPI `9f08d421` |
-| `src/components/review/UnifiedScorecard.tsx` | Move audit log insert after submission update (minor reorder, lines 543-550 move after line 540) |
-| `DOCUMENTATION.md` | Document the data correction |
+| Database migration | Add new RLS policy for skip-level profile visibility |
+| `DOCUMENTATION.md` | Document the RLS policy addition |
 
-## Technical Details
+## Risk Assessment
+- **Low risk**: Additive policy only (does not modify existing policies)
+- **Security**: Scoped strictly to one level below direct reports
+- **No code changes**: The frontend hook `useSkipLevelTeamMembers` already works correctly; it was just being blocked by RLS
 
-### Data Correction SQL
-
-```text
--- Fix KPI status
-UPDATE kpis SET status = 'self_review'
-WHERE id = '9f08d421-a688-44da-acb2-2087f88ce740';
-
--- Clear manager fields on submission
-UPDATE review_submissions SET
-  manager_score = null, manager_rating = null,
-  manager_remarks = null, manager_evidence_url = null,
-  manager_achieved_value = null,
-  skip_level_score = null, skip_level_rating = null,
-  skip_level_remarks = null, skip_level_evidence_url = null,
-  skip_level_achieved_value = null
-WHERE kpi_id = '9f08d421-a688-44da-acb2-2087f88ce740';
-```
-
-### Audit Log Reorder (UnifiedScorecard.tsx)
-
-Move the `kpi_audit_logs.insert(...)` call (currently at line 543) to after the submission update success check (after line 540). This ensures the audit trail is only created when the entire operation (KPI status + submission clear) succeeds.
-
-### Risk Assessment
-- **Data fix**: Targeted to one KPI only, reversible
-- **Code change**: Minor line reorder, no logic change
-- **Publish**: Required for all recent fixes to reach users
