@@ -1,82 +1,70 @@
 
 
-# Plan: Secure Edge Functions Without Breaking Existing Flows
+# Codebase Decoupling and Dead Code Deletion
 
-## Overview
+## Scope
 
-Two edge functions have critical security gaps: `auto-rollover-kpis` (zero authentication) and `create-backup` (scheduled bypass). A third, `send-email-notification`, is called by database triggers and other edge functions with the service role key, so it needs a lightweight authorization check. All other functions already have proper internal auth.
+Remove approximately 2,000 lines of unreachable code and consolidate a duplicate utility file. Zero functional impact -- all targeted code is confirmed dead.
 
-## Strategy
+## Pre-Flight Verification (Completed)
 
-All six functions already have `verify_jwt = false` in `config.toml` and implement their own auth validation in code. We will NOT change `config.toml` -- we will add missing auth checks directly in the function code. This avoids breaking the existing cron jobs or DB trigger calls.
+- **SelfReview.tsx, TeamReview.tsx, ManagementReview.tsx, AuditPanel.tsx**: Not imported anywhere. Their routes in `App.tsx` are already `Navigate` redirects -- the page components are never rendered.
+- **Index.tsx**: Not imported or routed anywhere.
+- **tmp/reference/**: 6 files, not imported anywhere.
+- **src/components/ui/use-toast.ts**: A 3-line re-export shim. Zero files import from it -- all 59 consumers already use `@/hooks/use-toast`.
+- **useReviewPageState.ts**: Only referenced in its own JSDoc comment. No actual import. Safe to keep for now (it IS used as a shared hook pattern), but worth noting.
 
 ## Changes
 
-### 1. `auto-rollover-kpis/index.ts` -- Add dual auth (Bearer OR CRON_SECRET)
+### 1. Delete Dead Page Files
 
-**Current**: No authentication whatsoever. Anyone can call it.
+| File | Lines Removed |
+|---|---|
+| `src/pages/SelfReview.tsx` | ~997 |
+| `src/pages/TeamReview.tsx` | ~362 |
+| `src/pages/ManagementReview.tsx` | ~335 |
+| `src/pages/AuditPanel.tsx` | ~345 |
+| `src/pages/Index.tsx` | ~14 |
+| **Total** | **~2,053** |
 
-**Fix**: Add an auth gate at the top of the handler:
-- If `Authorization: Bearer <jwt>` header is present, validate the user is an admin (same pattern used by `create-employee`, `password-rollout`, etc.)
-- If `X-Cron-Secret` header is present, compare it against `Deno.env.get('CRON_SECRET')`
-- If neither is valid, return 401
+### 2. Delete Reference Files
 
-This ensures:
-- Frontend calls (from `RolloverDialog.tsx` and `useSystemSettings.ts`) continue to work -- they already pass the user's JWT via `supabase.functions.invoke()`
-- Future cron jobs work if a `CRON_SECRET` is configured and passed in the cron SQL
+| File | Reason |
+|---|---|
+| `tmp/reference/IndividualDashboard.tsx` | Development artifact |
+| `tmp/reference/KeyStatCard.tsx` | Development artifact |
+| `tmp/reference/KpiTable.tsx` | Development artifact |
+| `tmp/reference/KpiTrackerModal.tsx` | Development artifact |
+| `tmp/reference/OverallScoreChart.tsx` | Development artifact |
+| `tmp/reference/ProfileCard.tsx` | Development artifact |
 
-### 2. `create-backup/index.ts` -- Add CRON_SECRET check for scheduled backups
+### 3. Delete Toast Shim
 
-**Current**: Auth is only checked when `backup_type === 'manual'`. Sending `{"backup_type": "scheduled"}` bypasses all auth.
+Delete `src/components/ui/use-toast.ts` (3 lines). No consumers exist.
 
-**Fix**: For `backup_type !== 'manual'` (i.e., scheduled/cron), require the `X-Cron-Secret` header and validate it against `Deno.env.get('CRON_SECRET')`. If no secret is configured or the header doesn't match, return 401.
+### 4. Clean Up App.tsx
 
-Manual backups continue to use the existing Bearer + admin role check (no change).
+Remove these unused lazy imports (the routes themselves stay as `Navigate` redirects -- no routing change):
 
-### 3. `send-email-notification/index.ts` -- Add service-role check
+```
+- const ManagementDashboard = lazy(() => import("./pages/ManagementDashboard"));
+```
 
-**Current**: No auth. Called by DB triggers via `http_post` with the service role key, and by `password-rollout` with the service role key.
+Wait -- `ManagementDashboard` IS still routed (line ~108 renders the component, not a redirect). Only the legacy review pages are redirects. Let me confirm: the route `/management-dashboard` renders `ManagementDashboard` directly. So that import stays.
 
-**Fix**: At the top of the handler, check that the `Authorization` header contains either:
-- A valid service role key (matches `SUPABASE_SERVICE_ROLE_KEY`)
-- Or a valid user JWT (for admin test-email calls from the frontend)
+The only lazy import to remove is: none. The dead pages (`SelfReview`, `TeamReview`, `ManagementReview`, `AuditPanel`) are NOT lazy-imported in `App.tsx` -- their routes are inline `Navigate` components. `Index.tsx` is also not imported. So App.tsx needs no import cleanup.
 
-This blocks unauthenticated external callers while preserving all existing call paths.
+### 5. Update DOCUMENTATION.md
 
-### 4. `update-backup-schedule/index.ts` -- Update cron SQL to pass CRON_SECRET
-
-The cron job SQL on line 101 currently passes the anon key. After changes, the cron-triggered `create-backup` will need the `CRON_SECRET` header. Update the `net.http_post` headers in the cron schedule SQL to include `X-Cron-Secret`.
-
-### 5. `CRON_SECRET` Setup
-
-A new secret called `CRON_SECRET` needs to be added to the project. This is a random string used to authorize cron-triggered function calls.
-
-### 6. `DOCUMENTATION.md` -- Update
-
-Document the new auth patterns for each edge function.
+Add a note recording the deletion of these files and the rationale.
 
 ## What Does NOT Change
 
-- `supabase/config.toml` -- no changes (all functions stay `verify_jwt = false`)
-- `create-employee` -- already has Bearer + admin check
-- `password-rollout` -- already has Bearer + admin check
-- `update-smtp-password` -- already has Bearer + admin check
-- `update-backup-schedule` -- already has Bearer + admin check
-- Frontend code -- no changes needed (all frontend calls already pass JWT via `supabase.functions.invoke()`)
+- All routes in `App.tsx` remain unchanged (the `Navigate` redirects stay)
+- `useReviewPageState.ts` -- kept (provides shared logic for the unified dashboard)
+- `MobileSelfReviewCard.tsx` -- kept (used by the unified dashboard's `SelfReviewSheet`)
+- No frontend behavior changes whatsoever
 
-## Files Modified
+## Risk: None
 
-| File | Change |
-|---|---|
-| `supabase/functions/auto-rollover-kpis/index.ts` | Add Bearer+admin OR CRON_SECRET auth gate |
-| `supabase/functions/create-backup/index.ts` | Add CRON_SECRET check for non-manual backups |
-| `supabase/functions/send-email-notification/index.ts` | Add service-role or valid-user auth check |
-| `supabase/functions/update-backup-schedule/index.ts` | Update cron SQL headers to include X-Cron-Secret |
-| `DOCUMENTATION.md` | Document edge function auth patterns |
-
-## Risk Assessment
-
-- **Zero regression risk to frontend**: All frontend calls already pass Bearer tokens via `supabase.functions.invoke()`
-- **Cron jobs**: Will need the CRON_SECRET to be set as a secret AND passed in cron SQL headers. Existing cron schedules will need to be re-saved (admin can do this from the Backup Settings UI)
-- **DB trigger emails**: The `send_email_on_notification` trigger already passes `Authorization: Bearer <service_role_key>` -- this will continue to work with the new service-role check
-
+All deleted code is confirmed unreachable. No imports, no routes, no side effects.
