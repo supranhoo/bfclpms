@@ -862,7 +862,7 @@ Footer Layout:
 **Flow:**
 1. Employee views all assigned KPIs including those with `kra_set` status
 2. For new KPIs (`kra_set` status), clicks "Review" button
-3. Reviews KPI details (target, criteria, rating scale) in the side sheet (scrollable for Daily KPIs with extended content)
+3. Reviews KPI details (target, criteria, rating scale via KpiMetricsSection inside KpiReviewPanel) in the side sheet (scrollable for Daily KPIs with extended content). Note: The rating scale is shown only once, inside the KpiReviewPanel's Metrics & Scale card.
 4. Enters achieved value, justification, and evidence
 5. For Daily KPIs, views the Daily Submission Summary table by scrolling down
 6. Clicks "Submit" → KPI transitions from `kra_set` to `self_review`
