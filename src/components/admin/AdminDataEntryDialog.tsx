@@ -19,23 +19,38 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { AlertTriangle, Calculator, Loader2, ShieldAlert } from 'lucide-react';
 import { useAdminSubmitReviewData, AdminRoleLevel } from '@/hooks/useAdminDataEntry';
-import { calculateRating, ratingToLevel, type RatingThresholds } from '@/lib/ratingCalculation';
+import { calculateRating, type RatingThresholds } from '@/lib/ratingCalculation';
 import type { KPI } from '@/hooks/useKpis';
 import type { Database } from '@/integrations/supabase/types';
 
 type RatingLevel = Database['public']['Enums']['rating_level'];
 
 // Rating options matching existing RatingSelector component
-const RATING_OPTIONS: { value: RatingLevel; label: string; colorClass: string; score: number }[] = [
-  { value: 'blue', label: 'Outstanding (5)', colorClass: 'bg-blue-500', score: 5 },
-  { value: 'green', label: 'Exceeds (4)', colorClass: 'bg-green-500', score: 4 },
-  { value: 'yellow', label: 'Meets (3)', colorClass: 'bg-yellow-500', score: 3 },
-  { value: 'red', label: 'Below (2)', colorClass: 'bg-red-500', score: 2 },
+// Full 0-5 rating scale. DB enum only supports blue|green|yellow|red,
+// so ratings 0 and 1 map to 'red' on submission but display distinct labels.
+const RATING_OPTIONS: { value: string; dbRating: RatingLevel; label: string; colorClass: string; score: number }[] = [
+  { value: '5', dbRating: 'blue',   label: 'Outstanding (5)',        colorClass: 'bg-blue-500',   score: 5 },
+  { value: '4', dbRating: 'green',  label: 'Exceeds (4)',            colorClass: 'bg-green-500',  score: 4 },
+  { value: '3', dbRating: 'yellow', label: 'Meets (3)',              colorClass: 'bg-yellow-500', score: 3 },
+  { value: '2', dbRating: 'red',    label: 'Below (2)',              colorClass: 'bg-red-500',    score: 2 },
+  { value: '1', dbRating: 'red',    label: 'Needs Improvement (1)',  colorClass: 'bg-orange-500', score: 1 },
+  { value: '0', dbRating: 'red',    label: 'Not Achieved (0)',       colorClass: 'bg-gray-400',   score: 0 },
 ];
 
-// Get score for a rating
-function getRatingScore(rating: RatingLevel): number {
-  return RATING_OPTIONS.find(r => r.value === rating)?.score || 0;
+// Get score for a rating option value (numeric string "0"-"5")
+function getRatingScore(ratingValue: string): number {
+  return RATING_OPTIONS.find(r => r.value === ratingValue)?.score ?? 0;
+}
+
+// Map a DB RatingLevel + numeric score back to our dropdown value
+function dbRatingToDropdownValue(dbRating: RatingLevel, numericScore: number | null): string {
+  if (numericScore != null) {
+    const matched = RATING_OPTIONS.find(r => r.score === Math.round(numericScore));
+    if (matched) return matched.value;
+  }
+  // Fallback: map by color
+  const byColor = RATING_OPTIONS.find(r => r.dbRating === dbRating);
+  return byColor?.value ?? '';
 }
 
 const ROLE_LEVELS: { value: AdminRoleLevel; label: string }[] = [
@@ -67,7 +82,7 @@ export function AdminDataEntryDialog({
   // Form state
   const [roleLevel, setRoleLevel] = useState<AdminRoleLevel>('self');
   const [achievedValue, setAchievedValue] = useState<string>('');
-  const [rating, setRating] = useState<RatingLevel | ''>('');
+  const [rating, setRating] = useState<string>(''); // stores "0"-"5" numeric string
   const [score, setScore] = useState<string>('');
   const [remarks, setRemarks] = useState<string>('');
   const [reason, setReason] = useState<string>('');
@@ -97,17 +112,12 @@ export function AdminDataEntryDialog({
       (kpi.threshold_mode as 'absolute' | 'ratio') || 'absolute'
     );
 
-    // Map numeric rating to RatingLevel color
-    const level = ratingToLevel(result.rating);
-    // Map ratingToLevel output to DB enum
-    const levelToDbRating: Record<string, RatingLevel> = {
-      blue: 'blue', green: 'green', yellow: 'yellow', red: 'red',
-    };
-    const dbRating = levelToDbRating[level] || '';
-
-    setRating(dbRating);
-    // Score = (rating / 5) * weightage, matching the existing formula
-    const calculatedScore = (result.rating / 5) * (kpi.weightage || 0);
+    // Map numeric rating to our dropdown value directly
+    const dropdownValue = String(Math.round(result.rating));
+    setRating(dropdownValue);
+    // Score = (rating / 5) * weightage, clamped to max
+    const maxScore = kpi.weightage || 0;
+    const calculatedScore = Math.min((result.rating / 5) * maxScore, maxScore);
     setScore(calculatedScore.toFixed(2));
     setIsAutoCalculated(true);
   }, [kpi]);
@@ -141,31 +151,38 @@ export function AdminDataEntryDialog({
 
     setIsNa(existingSubmission.is_na === true);
 
-    // Get values based on role level
+    // Get values based on role level — map DB rating back to dropdown value using score
+    const loadLevel = (
+      achievedVal: number | null,
+      dbRatingVal: string | null,
+      scoreVal: number | null,
+      remarksVal: string | null
+    ) => {
+      setAchievedValue(achievedVal != null ? achievedVal.toString() : '');
+      // Derive dropdown value from score (more accurate) falling back to DB rating
+      if (dbRatingVal && scoreVal != null) {
+        setRating(dbRatingToDropdownValue(dbRatingVal as RatingLevel, (scoreVal / (kpi?.weightage || 1)) * 5));
+      } else if (dbRatingVal) {
+        setRating(dbRatingToDropdownValue(dbRatingVal as RatingLevel, null));
+      } else {
+        setRating('');
+      }
+      setScore(scoreVal != null ? scoreVal.toString() : '');
+      setRemarks(remarksVal || '');
+    };
+
     switch (roleLevel) {
       case 'self':
-        setAchievedValue(existingSubmission.achieved_value != null ? existingSubmission.achieved_value.toString() : '');
-        setRating(existingSubmission.self_rating || '');
-        setScore(existingSubmission.self_score != null ? existingSubmission.self_score.toString() : '');
-        setRemarks(existingSubmission.self_remarks || '');
+        loadLevel(existingSubmission.achieved_value, existingSubmission.self_rating, existingSubmission.self_score, existingSubmission.self_remarks);
         break;
       case 'manager':
-        setAchievedValue(existingSubmission.manager_achieved_value != null ? existingSubmission.manager_achieved_value.toString() : '');
-        setRating(existingSubmission.manager_rating || '');
-        setScore(existingSubmission.manager_score != null ? existingSubmission.manager_score.toString() : '');
-        setRemarks(existingSubmission.manager_remarks || '');
+        loadLevel(existingSubmission.manager_achieved_value, existingSubmission.manager_rating, existingSubmission.manager_score, existingSubmission.manager_remarks);
         break;
       case 'auditor':
-        setAchievedValue(existingSubmission.auditor_achieved_value != null ? existingSubmission.auditor_achieved_value.toString() : '');
-        setRating(existingSubmission.auditor_rating || '');
-        setScore(existingSubmission.auditor_score != null ? existingSubmission.auditor_score.toString() : '');
-        setRemarks(existingSubmission.auditor_remarks || '');
+        loadLevel(existingSubmission.auditor_achieved_value, existingSubmission.auditor_rating, existingSubmission.auditor_score, existingSubmission.auditor_remarks);
         break;
       case 'management':
-        setAchievedValue(existingSubmission.management_achieved_value != null ? existingSubmission.management_achieved_value.toString() : '');
-        setRating(existingSubmission.management_rating || '');
-        setScore(existingSubmission.management_score != null ? existingSubmission.management_score.toString() : '');
-        setRemarks(existingSubmission.management_remarks || '');
+        loadLevel(existingSubmission.management_achieved_value, existingSubmission.management_rating, existingSubmission.management_score, existingSubmission.management_remarks);
         break;
     }
   }, [roleLevel, existingSubmission]);
@@ -173,10 +190,10 @@ export function AdminDataEntryDialog({
   // Auto-calculate score when rating changes (manual override)
   useEffect(() => {
     if (rating && kpi?.weightage) {
-      const ratingScore = getRatingScore(rating as RatingLevel);
-      const calculatedScore = (ratingScore / 5) * kpi.weightage;
+      const ratingScore = getRatingScore(rating);
+      const maxScore = kpi.weightage;
+      const calculatedScore = Math.min((ratingScore / 5) * maxScore, maxScore);
       setScore(calculatedScore.toFixed(2));
-      // If user manually changed rating, mark as not auto-calculated
       if (!isAutoCalculated) {
         setIsAutoCalculated(false);
       }
@@ -196,15 +213,32 @@ export function AdminDataEntryDialog({
     }
   }, [isOpen]);
 
+  const maxScore = kpi?.weightage || 0;
+
+  const handleScoreChange = (val: string) => {
+    const num = parseFloat(val);
+    if (val === '' || isNaN(num)) {
+      setScore(val);
+    } else {
+      const clamped = Math.max(0, Math.min(num, maxScore));
+      setScore(clamped.toFixed(2));
+    }
+    setIsAutoCalculated(false);
+  };
+
   const handleSubmit = async () => {
     if (!kpi || !reason.trim()) return;
+
+    // Map dropdown value back to DB-compatible RatingLevel
+    const selectedOption = RATING_OPTIONS.find(r => r.value === rating);
+    const dbRating: RatingLevel | null = selectedOption ? selectedOption.dbRating : null;
 
     await submitMutation.mutateAsync({
       kpi_id: kpi.id,
       employee_id: employeeId,
       role_level: roleLevel,
       achieved_value: achievedValue !== '' ? parseFloat(achievedValue) : null,
-      rating: rating || null,
+      rating: dbRating,
       score: score !== '' ? parseFloat(score) : null,
       remarks: remarks || null,
       is_na: isNa,
@@ -329,7 +363,7 @@ export function AdminDataEntryDialog({
               {/* Rating */}
               <div className="space-y-2">
                 <Label>Rating {isAutoCalculated && <Badge variant="secondary" className="ml-2 text-xs"><Calculator className="h-3 w-3 mr-1 inline" />Auto</Badge>}</Label>
-                <Select value={rating} onValueChange={(v) => { setRating(v as RatingLevel); setIsAutoCalculated(false); }}>
+                <Select value={rating} onValueChange={(v) => { setRating(v); setIsAutoCalculated(false); }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select rating" />
                   </SelectTrigger>
@@ -353,12 +387,14 @@ export function AdminDataEntryDialog({
                   id="score"
                   type="number"
                   step="0.01"
+                  min="0"
+                  max={maxScore}
                   value={score}
-                  onChange={(e) => { setScore(e.target.value); setIsAutoCalculated(false); }}
+                  onChange={(e) => handleScoreChange(e.target.value)}
                   placeholder="Calculated from achieved value"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Auto-calculated from achieved value using KPI thresholds. Override manually if needed.
+                  Max score: {maxScore.toFixed(2)} (based on weightage). Auto-calculated from achieved value using KPI thresholds.
                 </p>
               </div>
 
