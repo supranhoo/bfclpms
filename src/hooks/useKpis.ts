@@ -749,6 +749,7 @@ export function useApproveKpi() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
     },
   });
@@ -914,6 +915,7 @@ export function useSendBackKpi() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['kpi-queries'] });
       toast({ title: 'KPI sent back to employee' });
