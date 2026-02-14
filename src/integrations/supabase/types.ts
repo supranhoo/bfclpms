@@ -2037,6 +2037,7 @@ export type Database = {
           manager_rating: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks: string | null
           manager_score: number | null
+          na_marked_by_role: string | null
           performance_review_id: string | null
           self_evidence_url: string | null
           self_evidence_urls: Json | null
@@ -2084,6 +2085,7 @@ export type Database = {
           manager_rating?: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks?: string | null
           manager_score?: number | null
+          na_marked_by_role?: string | null
           performance_review_id?: string | null
           self_evidence_url?: string | null
           self_evidence_urls?: Json | null
@@ -2131,6 +2133,7 @@ export type Database = {
           manager_rating?: Database["public"]["Enums"]["rating_level"] | null
           manager_remarks?: string | null
           manager_score?: number | null
+          na_marked_by_role?: string | null
           performance_review_id?: string | null
           self_evidence_url?: string | null
           self_evidence_urls?: Json | null

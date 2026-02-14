@@ -162,6 +162,10 @@ export function ManagementScorecard({
   const [naConfirmed, setNaConfirmed] = useState(false);
   const [naRemarks, setNaRemarks] = useState('');
   
+  // Reviewer-initiated N/A state
+  const [reviewerMarkNa, setReviewerMarkNa] = useState(false);
+  const [markNaRemarks, setMarkNaRemarks] = useState('');
+  
   const { saveOverrides, acceptPreviousLevel, isLoading: isSavingOverrides } = useReviewerSubPeriodOverride();
 
   const submissionMap = useMemo(() => new Map(submissions?.map(s => [s.kpi_id, s])), [submissions]);
@@ -383,6 +387,8 @@ export function ManagementScorecard({
     // Reset N/A confirmation state
     setNaConfirmed(false);
     setNaRemarks('');
+    setReviewerMarkNa(false);
+    setMarkNaRemarks('');
     setReviewSheetOpen(true);
   };
 
@@ -731,7 +737,7 @@ export function ManagementScorecard({
               />
             )}
             
-            {/* N/A Confirmation Card - Show when KPI is marked as N/A */}
+            {/* N/A Confirmation Card */}
             {selectedKpi && submissionMap.get(selectedKpi.id)?.is_na && (
               <NaConfirmationCard
                 selfRemarks={submissionMap.get(selectedKpi.id)?.self_remarks || null}
@@ -740,6 +746,23 @@ export function ManagementScorecard({
                 remarks={naRemarks}
                 onRemarksChange={setNaRemarks}
                 reviewerLevel="Management"
+                naMarkedByRole={(submissionMap.get(selectedKpi.id) as any)?.na_marked_by_role || null}
+              />
+            )}
+            {/* Reviewer-initiated Mark as N/A */}
+            {selectedKpi && !submissionMap.get(selectedKpi.id)?.is_na && (
+              <NaConfirmationCard
+                selfRemarks={null}
+                confirmed={false}
+                onConfirmChange={() => {}}
+                remarks=""
+                onRemarksChange={() => {}}
+                reviewerLevel="Management"
+                canMarkNa
+                reviewerMarkedNa={reviewerMarkNa}
+                onReviewerMarkNa={setReviewerMarkNa}
+                markNaRemarks={markNaRemarks}
+                onMarkNaRemarksChange={setMarkNaRemarks}
               />
             )}
             

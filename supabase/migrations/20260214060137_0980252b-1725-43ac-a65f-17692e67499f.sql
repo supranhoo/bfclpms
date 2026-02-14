@@ -1,0 +1,1 @@
+ALTER TABLE review_submissions ADD COLUMN na_marked_by_role text;
