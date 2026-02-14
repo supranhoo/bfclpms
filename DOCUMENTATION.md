@@ -100,8 +100,9 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 |-------------|---------------|--------|
 | **Code Splitting** | All 28+ page components use `React.lazy()` with `Suspense` boundaries | Each page is a separate chunk; initial bundle reduced significantly |
 | **QueryClient Caching** | `staleTime: 5min`, `gcTime: 10min`, `refetchOnWindowFocus: false`, `retry: 1` | Cached data reused for 5 minutes; ~50% fewer API calls |
-| **Memoization** | Targeted `useMemo`/`useCallback` in Dashboard.tsx and QueryInbox.tsx for derived data, handlers, and insights props | Reduced unnecessary re-renders in heavy components |
+| **Memoization** | Targeted `useMemo`/`useCallback` in Dashboard.tsx, QueryInbox.tsx, AuditScorecard.tsx, ManagementScorecard.tsx, PerformanceReport.tsx, and KpiTrackerModal.tsx for derived data (submissionMap, queryMap), handlers, and insights props | Reduced unnecessary re-renders in heavy components |
 | **Error Boundaries** | Top-level `ErrorBoundary` in App.tsx + per-route boundary in DashboardLayout with Suspense | Graceful error recovery instead of white screen |
+| **AuthContext Init Guard** | `useRef` flag ensures `fetchProfile`/`fetchRole` fire exactly once on mount, preventing race between `onAuthStateChange` and `getSession()`. Try/catch with toast on fetch failure prevents "forever loading" | Eliminates duplicate fetches and silent auth failures |
 | **Inbox Filter Stability** | `usePaginatedNotifications` keeps stale items visible during filter changes instead of clearing them eagerly; loading guard uses `\|\|` not `&&` | No more "No notifications yet" flash on tab/filter switch |
 
 ### State Management

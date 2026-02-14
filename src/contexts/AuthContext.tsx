@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -39,58 +39,92 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const initializedRef = useRef(false);
 
   const fetchProfile = async (userId: string) => {
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-    
-    if (profileData) {
-      setProfile(profileData);
+    try {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (profileData) {
+        setProfile(profileData);
+      }
+    } catch (error) {
+      console.error('Failed to fetch profile:', error);
+      toast({
+        title: "Failed to load user profile",
+        description: "Please refresh the page to try again.",
+        variant: "destructive",
+      });
     }
   };
 
   const fetchRole = async (userId: string) => {
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
-      .single();
-    
-    if (roleData) {
-      setRole(roleData.role as AppRole);
+    try {
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .single();
+      
+      if (roleData) {
+        setRole(roleData.role as AppRole);
+      }
+    } catch (error) {
+      console.error('Failed to fetch role:', error);
+      toast({
+        title: "Failed to load user role",
+        description: "Please refresh the page to try again.",
+        variant: "destructive",
+      });
     }
   };
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          // Invalidate module cache to clear any stale empty results from pre-auth queries
+        if (!initializedRef.current && session?.user) {
+          // First auth event on mount — initialize
+          initializedRef.current = true;
+          setSession(session);
+          setUser(session.user);
           queryClient.invalidateQueries({ queryKey: ['modules'] });
-          setTimeout(() => {
+          fetchProfile(session.user.id);
+          fetchRole(session.user.id);
+          setLoading(false);
+        } else if (initializedRef.current) {
+          // Subsequent events (login, logout, token refresh)
+          setSession(session);
+          setUser(session?.user ?? null);
+          if (session?.user) {
+            queryClient.invalidateQueries({ queryKey: ['modules'] });
             fetchProfile(session.user.id);
             fetchRole(session.user.id);
-          }, 0);
-        } else {
-          setProfile(null);
-          setRole(null);
+          } else {
+            setProfile(null);
+            setRole(null);
+          }
+          setLoading(false);
+        } else if (!session) {
+          // No session on first event (user not logged in)
+          initializedRef.current = true;
+          setLoading(false);
         }
-        
-        setLoading(false);
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (initializedRef.current) return; // Already handled by onAuthStateChange
+      
+      initializedRef.current = true;
       setSession(session);
       setUser(session?.user ?? null);
       
       if (session?.user) {
+        queryClient.invalidateQueries({ queryKey: ['modules'] });
         fetchProfile(session.user.id);
         fetchRole(session.user.id);
       }
