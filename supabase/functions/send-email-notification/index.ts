@@ -10,6 +10,36 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// --- Auth helper: validate service-role key or valid user JWT ---
+const validateCaller = async (req: Request): Promise<{ authorized: boolean; error?: string }> => {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    return { authorized: false, error: "Authorization required" };
+  }
+
+  const token = authHeader.replace("Bearer ", "");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  // Allow service-role callers (DB triggers, other edge functions)
+  if (serviceRoleKey && token === serviceRoleKey) {
+    return { authorized: true };
+  }
+
+  // Allow authenticated user callers (admin test emails from frontend)
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabase = createClient(supabaseUrl, serviceRoleKey!);
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (!error && user) {
+      return { authorized: true };
+    }
+  } catch {
+    // fall through
+  }
+
+  return { authorized: false, error: "Invalid authorization" };
+};
+
 // Get SMTP password: env secret first, then fall back to system_settings
 const getSmtpPassword = async (supabase: any): Promise<string | null> => {
   const envPassword = Deno.env.get("SMTP_PASSWORD");
@@ -562,6 +592,15 @@ const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // --- Auth gate: require service-role key or valid user JWT ---
+  const authResult = await validateCaller(req);
+  if (!authResult.authorized) {
+    return new Response(
+      JSON.stringify({ error: authResult.error }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 
   try {

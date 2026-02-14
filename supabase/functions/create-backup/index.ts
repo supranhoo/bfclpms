@@ -75,8 +75,9 @@ Deno.serve(async (req) => {
     // Parse request body
     const { backup_type = 'manual' } = await req.json().catch(() => ({}))
 
-    // For manual backups, verify admin role
+    // --- Auth gate ---
     if (backup_type === 'manual') {
+      // Manual backups: require Bearer JWT + admin role
       const authHeader = req.headers.get('Authorization')
       if (!authHeader) {
         return new Response(JSON.stringify({ error: 'Authorization required' }), {
@@ -104,6 +105,16 @@ Deno.serve(async (req) => {
       if (!roles || roles.length === 0) {
         return new Response(JSON.stringify({ error: 'Admin access required' }), {
           status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    } else {
+      // Scheduled/cron backups: require X-Cron-Secret header
+      const cronSecret = Deno.env.get('CRON_SECRET')
+      const cronHeader = req.headers.get('X-Cron-Secret')
+      if (!cronSecret || !cronHeader || cronHeader !== cronSecret) {
+        return new Response(JSON.stringify({ error: 'Unauthorized: valid CRON_SECRET required for scheduled backups' }), {
+          status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
