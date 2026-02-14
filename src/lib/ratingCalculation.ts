@@ -143,25 +143,57 @@ export function calculateRating(
   // Handle qualitative UOM types (binary, tiered)
   if (uomType === 'binary' || uomType === 'tiered') {
     const stringValue = typeof achievedValue === 'string' ? achievedValue : null;
-    
-    if (!stringValue) {
-      return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0, achievedWeight: 0 };
-    }
-
     const options = uomType === 'binary' ? BINARY_OPTIONS : qualitativeOptions || [];
-    const selected = options.find(opt => opt.label === stringValue);
-    
-    if (!selected) {
-      return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0, achievedWeight: 0 };
+
+    // Try label matching first (for proper qualitative values like "Yes"/"No")
+    if (stringValue) {
+      const selected = options.find(opt => opt.label === stringValue);
+      if (selected) {
+        const rating = selected.rating;
+        const ratingLevel = scoreToRatingLevel(rating);
+        const percentage = (rating / 5) * 100;
+        const weightedScore = weightage * rating;
+        const achievedWeight = rating / 5;
+        return { rating, ratingLevel, weightedScore, percentage, achievedWeight };
+      }
     }
 
-    const rating = selected.rating;
-    const ratingLevel = scoreToRatingLevel(rating);
-    const percentage = (rating / 5) * 100;
-    const weightedScore = weightage * rating;
-    const achievedWeight = rating / 5;
+    // FALLBACK: If no label match (numeric value or missing qualitative options),
+    // treat as numeric and use threshold-based calculation
+    const numVal = typeof achievedValue === 'number'
+      ? achievedValue
+      : parseFloat(String(achievedValue ?? ''));
+    if (!isNaN(numVal)) {
+      const hasThresholds = [thresholds.r5, thresholds.r4, thresholds.r3, thresholds.r2, thresholds.r1]
+        .some(t => t !== null && t !== undefined && t !== '');
+      if (hasThresholds) {
+        return calculateAbsoluteRating(numVal, thresholds, criteria, weightage, target || 0);
+      }
+      // No thresholds but target exists — use ratio-based calculation
+      if (target && target > 0) {
+        const isLowerBetter = criteria?.toLowerCase().includes('lower');
+        const achievedWeight = isLowerBetter
+          ? (numVal !== 0 ? target / numVal : 0)
+          : target !== 0 ? numVal / target : 0;
+        // Simple ratio-to-rating mapping
+        let rating = 0;
+        if (achievedWeight >= 1.0) rating = 5;
+        else if (achievedWeight >= 0.9) rating = 4;
+        else if (achievedWeight >= 0.8) rating = 3;
+        else if (achievedWeight >= 0.6) rating = 2;
+        else if (achievedWeight >= 0.4) rating = 1;
+        return {
+          rating,
+          ratingLevel: ratingToLevel(rating),
+          weightedScore: weightage * rating,
+          percentage: achievedWeight * 100,
+          achievedWeight,
+        };
+      }
+    }
 
-    return { rating, ratingLevel, weightedScore, percentage, achievedWeight };
+    // Final fallback: rating 0
+    return { rating: 0, ratingLevel: 'red', weightedScore: 0, percentage: 0, achievedWeight: 0 };
   }
 
   // Numeric UOM handling

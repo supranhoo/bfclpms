@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -17,7 +17,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { AlertTriangle, Calculator, Loader2, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Calculator, Info, Loader2, ShieldAlert } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAdminSubmitReviewData, AdminRoleLevel } from '@/hooks/useAdminDataEntry';
 import { calculateRating, type RatingThresholds } from '@/lib/ratingCalculation';
 import type { KPI } from '@/hooks/useKpis';
@@ -89,6 +90,24 @@ export function AdminDataEntryDialog({
   const [isNa, setIsNa] = useState<boolean>(false);
   const [isAutoCalculated, setIsAutoCalculated] = useState<boolean>(false);
 
+  // Detect misconfigured binary KPIs (C3: validation warning)
+  const binaryMisconfigWarning = useMemo(() => {
+    if (!kpi) return null;
+    const uomType = kpi.uom_type;
+    if (uomType !== 'binary' && uomType !== 'tiered') return null;
+    const hasOptions = Array.isArray(kpi.qualitative_options) && (kpi.qualitative_options as any[]).length > 0;
+    const hasThresholds = [kpi.r5, kpi.r4, kpi.r3, kpi.r2, kpi.r1].some(t => t !== null && t !== undefined && t !== '');
+    if (!hasOptions && !hasThresholds) {
+      return 'This KPI is configured as Binary/Tiered but has no scoring options or thresholds defined. Auto-calculation will use ratio-based fallback. Please verify the rating manually.';
+    }
+    if (!hasOptions) {
+      return 'This KPI is configured as Binary/Tiered but has no qualitative options defined. Numeric threshold fallback will be used.';
+    }
+    return null;
+  }, [kpi]);
+
+  
+
   // Auto-calculate rating/score from achieved value using the same engine as self-review
   const autoCalculateFromAchieved = useCallback((value: string) => {
     if (!kpi || value === '') {
@@ -100,13 +119,26 @@ export function AdminDataEntryDialog({
       r5: kpi.r5, r4: kpi.r4, r3: kpi.r3, r2: kpi.r2, r1: kpi.r1, r0: null,
     };
 
+    // For binary/tiered KPIs, pass raw string first so label matching can work
+    // then fall back to numeric. For other types, pass parsed number.
+    const uomType = (kpi.uom_type as 'numeric' | 'binary' | 'tiered') || 'numeric';
+    const parsedNum = parseFloat(value);
+    const achievedInput = (uomType === 'binary' || uomType === 'tiered')
+      ? (isNaN(parsedNum) ? value : parsedNum)  // Pass string for labels, number for numeric
+      : parsedNum;
+
+    if (typeof achievedInput === 'number' && isNaN(achievedInput)) {
+      setIsAutoCalculated(false);
+      return;
+    }
+
     const result = calculateRating(
-      parseFloat(value),
+      achievedInput,
       kpi.target_value,
       thresholds,
       kpi.criteria || 'Higher is Better',
       kpi.weightage || 0,
-      (kpi.uom_type as 'numeric' | 'binary' | 'tiered') || 'numeric',
+      uomType,
       kpi.qualitative_options as any,
       kpi.uom,
       (kpi.threshold_mode as 'absolute' | 'ratio') || 'absolute'
@@ -137,6 +169,39 @@ export function AdminDataEntryDialog({
     },
     enabled: !!kpi?.id && isOpen,
   });
+  // Consistency check (C4): compare stored vs calculated rating on load
+  const consistencyWarning = useMemo(() => {
+    if (!kpi || !existingSubmission) return null;
+    const storedAchieved = existingSubmission.achieved_value;
+    const storedScore = existingSubmission.self_score;
+    const storedRating = existingSubmission.self_rating;
+    if (storedAchieved == null || storedRating == null) return null;
+
+    const thresholds: RatingThresholds = {
+      r5: kpi.r5, r4: kpi.r4, r3: kpi.r3, r2: kpi.r2, r1: kpi.r1, r0: null,
+    };
+    const result = calculateRating(
+      storedAchieved,
+      kpi.target_value,
+      thresholds,
+      kpi.criteria || 'Higher is Better',
+      kpi.weightage || 0,
+      (kpi.uom_type as 'numeric' | 'binary' | 'tiered') || 'numeric',
+      kpi.qualitative_options as any,
+      kpi.uom,
+      (kpi.threshold_mode as 'absolute' | 'ratio') || 'absolute'
+    );
+
+    const calculatedRating = Math.round(result.rating);
+    const storedRatingNum = storedScore != null ? Math.round((storedScore / (kpi.weightage || 1)) * 5) : null;
+    
+    if (storedRatingNum != null && Math.abs(calculatedRating - storedRatingNum) >= 2) {
+      const calcLabel = RATING_OPTIONS.find(r => r.score === calculatedRating)?.label || `Rating ${calculatedRating}`;
+      const storedLabel = RATING_OPTIONS.find(r => r.score === storedRatingNum)?.label || `Rating ${storedRatingNum}`;
+      return `Stored rating (${storedLabel}) differs significantly from calculated rating (${calcLabel}). The KPI may be misconfigured.`;
+    }
+    return null;
+  }, [kpi, existingSubmission]);
 
   // Load existing data when role level changes
   useEffect(() => {
@@ -325,6 +390,26 @@ export function AdminDataEntryDialog({
                   );
                 })()}
               </div>
+            )}
+
+            {/* Binary KPI misconfiguration warning (C3) */}
+            {binaryMisconfigWarning && (
+              <Alert className="border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20">
+                <Info className="h-4 w-4 text-yellow-600" />
+                <AlertDescription className="text-sm text-yellow-800 dark:text-yellow-200">
+                  {binaryMisconfigWarning}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Consistency check warning (C4) */}
+            {consistencyWarning && (
+              <Alert className="border-orange-500/50 bg-orange-50 dark:bg-orange-950/20">
+                <AlertTriangle className="h-4 w-4 text-orange-600" />
+                <AlertDescription className="text-sm text-orange-800 dark:text-orange-200">
+                  {consistencyWarning}
+                </AlertDescription>
+              </Alert>
             )}
 
             {/* N/A Toggle */}
