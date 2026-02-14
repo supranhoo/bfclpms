@@ -94,7 +94,7 @@ const App = () => (
                 <Route path="/kra-acceptance" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/queries" element={<QueryInbox />} />
                 <Route path="/pms-policy" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms']}>
                     <PMSPolicy />
                   </ProtectedRoute>
                 } />

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-14  
-> **Version:** 1.21.0
+> **Version:** 1.22.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -3145,6 +3145,41 @@ Admins can create, edit, and delete custom workflow templates from the **Templat
 - All `<Navigate>` redirect routes in `App.tsx` remain intact
 - `useReviewPageState.ts` retained (shared hook for unified dashboard)
 - `MobileSelfReviewCard.tsx` retained (used by `SelfReviewSheet`)
+
+---
+
+### In-App PMS Policy Document (v1.22.0)
+
+**What changed:**
+
+The PMS Policy page was converted from an external iframe-based viewer to a fully in-app document stored in the database.
+
+**Database:**
+- Added `pms_policy_content` (text) column to `app_settings` table
+- Seeded with the full 18-section PMS Policy document in markdown format
+
+**Access Control:**
+- PMS Policy route (`/pms-policy`) now accessible to all authenticated roles (was admin-only)
+- Sidebar entry visible to all roles: admin, manager, employee, auditor, management, hr_pms
+
+**Components Created:**
+| Component | Purpose |
+|---|---|
+| `src/components/policy/PolicyRenderer.tsx` | Parses markdown content and renders as structured HTML with auto-generated Table of Contents sidebar, styled tables, headings, lists, code blocks |
+| `src/components/policy/PolicyEditorDialog.tsx` | Full-screen dialog with textarea for admins to edit policy content |
+
+**Page Behavior:**
+- **All roles**: See formatted policy document with clickable Table of Contents
+- **Admin only**: "Edit Policy" button opens editor dialog to modify content
+- **Fallback**: If only `pms_policy_url` is set (no content), falls back to iframe viewer for backward compatibility
+
+**Files Modified:**
+| File | Change |
+|---|---|
+| `src/pages/PMSPolicy.tsx` | Rewritten to render stored content via PolicyRenderer |
+| `src/hooks/useAppSettings.ts` | Added `pms_policy_content` to AppSettings interface and mutation |
+| `src/components/layout/AppSidebar.tsx` | PMS Policy roles expanded to all roles |
+| `src/App.tsx` | Route allowedRoles expanded to all authenticated roles |
 
 ---
 
