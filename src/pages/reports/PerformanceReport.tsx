@@ -24,7 +24,7 @@ export default function PerformanceReport() {
   const kpiIds = allKpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
 
-  const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
+  const submissionMap = useMemo(() => new Map(submissions?.map(s => [s.kpi_id, s])), [submissions]);
 
   // Calculate rating distribution
   const ratingDistribution = { red: 0, yellow: 0, green: 0, blue: 0 };

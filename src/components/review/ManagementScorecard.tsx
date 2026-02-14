@@ -164,12 +164,15 @@ export function ManagementScorecard({
   
   const { saveOverrides, acceptPreviousLevel, isLoading: isSavingOverrides } = useReviewerSubPeriodOverride();
 
-  const submissionMap = new Map(submissions?.map(s => [s.kpi_id, s]));
-  const queryMap = new Map<string, typeof queries>();
-  queries?.forEach(q => {
-    const existing = queryMap.get(q.kpi_id) || [];
-    queryMap.set(q.kpi_id, [...existing, q]);
-  });
+  const submissionMap = useMemo(() => new Map(submissions?.map(s => [s.kpi_id, s])), [submissions]);
+  const queryMap = useMemo(() => {
+    const map = new Map<string, typeof queries>();
+    queries?.forEach(q => {
+      const existing = map.get(q.kpi_id) || [];
+      map.set(q.kpi_id, [...existing, q]);
+    });
+    return map;
+  }, [queries]);
 
   // Calculate scores - include ALL categories with KPIs (even without scores)
   const scoreData = useMemo(() => {
