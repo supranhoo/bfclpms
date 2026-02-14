@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-14  
-> **Version:** 1.28.0
+> **Version:** 1.28.1
 > **Maintainer:** Lovable AI
 
 ---
@@ -3204,6 +3204,17 @@ The PMS Policy page was converted from an external iframe-based viewer to a full
 **Fix:**
 1. Added RLS policies: `"Admin can update KPI status"` (kpis UPDATE), `"Admin can update submissions"` (review_submissions UPDATE), `"Admin can insert audit logs"` (kpi_audit_logs INSERT)
 2. Added row-count verification in `UnifiedScorecard.tsx` send-back mutation — throws explicit error if zero rows updated
+
+---
+
+### v1.28.1 — Send-Back Data Correction (Tanaaz KPI 9f08d421)
+
+**Problem:** The `resolveSendBackStatus` fix from v1.28.0 was not yet published to the live site. Jaspal's send-back attempts ran the old code, setting the KPI status to `manager_check` (no-op) instead of `self_review`, and leaving manager scores uncleaned.
+
+**Fix:**
+1. Manual SQL data correction: set KPI status to `self_review`, cleared `manager_score`, `manager_rating`, `manager_remarks`, `manager_evidence_url`, `manager_achieved_value`, and all `skip_level_*` fields
+2. Confirmed audit log ordering is already correct (insert occurs after both KPI and submission updates succeed)
+3. **Action required:** Publish latest code to live site so the v1.28.0 logic fix takes effect for all users
 
 ---
 
