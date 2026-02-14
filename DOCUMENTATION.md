@@ -1323,6 +1323,7 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - **Enter Daily/Weekly Data:** For KPIs with Daily or Weekly frequency, admins can enter sub-period submissions for any day or week via the "Daily Data" button (calendar icon) - **NO DATE RESTRICTIONS** apply to admins
   - Admins can override locked entries (e.g., entries marked as "Final" with `is_resubmitted: true`)
   - **Mandatory reason field** for all admin entries to ensure audit compliance
+  - **N/A Flag Handling:** The Admin Data Entry Dialog includes a "Mark as Not Applicable" toggle switch showing the current `is_na` status. Admins can explicitly set or clear the N/A flag. Additionally, when an admin enters an `achieved_value`, the `is_na` flag is **automatically cleared** (set to `false`) to ensure the KPI is included in dashboard score calculations. This prevents the scenario where admin corrections remain invisible because a stale N/A flag excludes the KPI from scoring.
   - All admin actions are logged in `kpi_audit_logs` with `on_behalf_of` and `on_behalf_role` tracking
   - Affected employees receive notifications about admin data changes
 - **Admin Visibility in Audit Trails:**
