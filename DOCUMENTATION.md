@@ -3075,4 +3075,27 @@ Admins can create, edit, and delete custom workflow templates from the **Templat
 
 ---
 
+## Codebase Hygiene Log
+
+### 2026-02-14 — Dead Code Deletion (~2,053 lines removed)
+
+**Deleted files (confirmed unreachable — no imports, no active routes):**
+
+| File | Reason |
+|---|---|
+| `src/pages/SelfReview.tsx` | Replaced by unified `/dashboard` with `SelfReviewSheet` |
+| `src/pages/TeamReview.tsx` | Replaced by unified `/dashboard?view=team` |
+| `src/pages/ManagementReview.tsx` | Replaced by unified `/dashboard?view=management` |
+| `src/pages/AuditPanel.tsx` | Replaced by unified `/dashboard?view=audit` |
+| `src/pages/Index.tsx` | Unused fallback page — never routed |
+| `tmp/reference/*` (6 files) | Development artifacts — never imported |
+| `src/components/ui/use-toast.ts` | Redundant 3-line shim — all consumers use `@/hooks/use-toast` |
+
+**What was NOT changed:**
+- All `<Navigate>` redirect routes in `App.tsx` remain intact
+- `useReviewPageState.ts` retained (shared hook for unified dashboard)
+- `MobileSelfReviewCard.tsx` retained (used by `SelfReviewSheet`)
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
