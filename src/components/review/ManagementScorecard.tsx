@@ -786,7 +786,17 @@ export function ManagementScorecard({
             {/* N/A Confirmation Card */}
             {selectedKpi && submissionMap.get(selectedKpi.id)?.is_na && (
               <NaConfirmationCard
-                selfRemarks={submissionMap.get(selectedKpi.id)?.self_remarks || null}
+                selfRemarks={(() => {
+                  const sub = submissionMap.get(selectedKpi.id) as any;
+                  if (!sub) return null;
+                  const role = sub.na_marked_by_role;
+                  if (role === 'manager') return sub.manager_remarks || null;
+                  if (role === 'skip_level') return sub.skip_level_remarks || null;
+                  if (role === 'hr_pms') return sub.hr_pms_remarks || null;
+                  if (role === 'auditor') return sub.auditor_remarks || null;
+                  if (role === 'management') return sub.management_remarks || null;
+                  return sub.self_remarks || null;
+                })()}
                 confirmed={naConfirmed}
                 onConfirmChange={setNaConfirmed}
                 remarks={naRemarks}
