@@ -1,78 +1,46 @@
 
 
-# RCA and CAPA: Wrong Remarks Shown in N/A Confirmation Card
+# Add "Set as Default" and Allow Editing Default Workflow Template
 
-## Root Cause
+## Clarification: What "Default" Means
 
-When a reviewer (e.g., Skip-Level Jaspal) marks a KPI as N/A, the justification is stored in their level-specific remarks field (e.g., `skip_level_remarks: "Training on 5S pending"`). However, the N/A Confirmation Card always reads from `self_remarks` to display the reason:
+The priority cascade is: **Employee > Department > PMS Grade > Default**
 
-```text
-UnifiedScorecard.tsx, line 938:
-  selfRemarks={submissionMap.get(selectedKpi.id)?.self_remarks || null}
-```
+Changing the default template ONLY affects employees/departments/grades that show **"Inherit (default)"** in their workflow dropdown -- i.e., those with no explicit assignment. Any explicitly set workflows remain completely untouched.
 
-This means:
-- Employee's self-remarks ("Attach system ss and table ss") are shown as the N/A reason
-- The actual reviewer justification ("Training on 5S pending") is invisible to downstream reviewers (HR PMS, Management)
+## Changes
 
-The same bug exists in all 4 scorecard components:
-- `UnifiedScorecard.tsx` (line 938)
-- `EmployeeScorecard.tsx` (line 731)
-- `AuditScorecard.tsx` (line 765)
-- `ManagementScorecard.tsx` (line 789)
+### 1. New mutation in `src/hooks/useWorkflowConfig.ts`
 
-## Fix
+Add `useSetDefaultWorkflowTemplate`:
+- Unset `is_default = false` on all templates
+- Set `is_default = true` on the selected template
+- Invalidate query caches
 
-### 1. Add remarks resolution logic
+### 2. Update `src/pages/admin/WorkflowConfig.tsx` template cards
 
-When displaying the N/A reason, resolve the correct remarks based on `na_marked_by_role`:
+Current behavior (line 234): `{!template.is_default && (` blocks both Edit and Delete for the default template.
 
-| `na_marked_by_role` | Remarks field to show |
-|---|---|
-| `null` or `employee` | `self_remarks` (current behavior) |
-| `manager` | `manager_remarks` |
-| `skip_level` | `skip_level_remarks` |
-| `hr_pms` | `hr_pms_remarks` |
-| `auditor` | `auditor_remarks` |
-| `management` | `management_remarks` |
+New behavior:
+- **Edit button**: Always visible on ALL templates (including default) -- allows editing name, description, stages
+- **Delete button**: Only visible on non-default templates (cannot delete the active default)
+- **"Set as Default" button**: New star/shield icon button on non-default templates. When clicked, swaps the default flag. A confirmation toast clarifies: "This only affects employees inheriting the default workflow."
 
-### 2. Files to update
+### 3. Update `DOCUMENTATION.md`
+
+Document that "Set as Default" only impacts the inherit/fallback cascade.
+
+## Files Modified
 
 | File | Change |
 |---|---|
-| `src/components/review/UnifiedScorecard.tsx` | Replace hardcoded `self_remarks` with role-aware remarks lookup |
-| `src/components/review/EmployeeScorecard.tsx` | Same fix |
-| `src/components/review/AuditScorecard.tsx` | Same fix |
-| `src/components/review/ManagementScorecard.tsx` | Same fix |
-| `DOCUMENTATION.md` | Document the remarks resolution logic |
-
-### 3. Implementation detail
-
-Create a small helper function (inline or shared) that resolves the correct remarks:
-
-```text
-function getNaRemarks(submission):
-  role = submission.na_marked_by_role
-  if role == 'manager'    -> return submission.manager_remarks
-  if role == 'skip_level' -> return submission.skip_level_remarks
-  if role == 'hr_pms'     -> return submission.hr_pms_remarks
-  if role == 'auditor'    -> return submission.auditor_remarks
-  if role == 'management' -> return submission.management_remarks
-  default                 -> return submission.self_remarks
-```
-
-Then in each scorecard, replace:
-```text
-selfRemarks={submissionMap.get(selectedKpi.id)?.self_remarks || null}
-```
-with:
-```text
-selfRemarks={getNaRemarks(submissionMap.get(selectedKpi.id)) || null}
-```
+| `src/hooks/useWorkflowConfig.ts` | Add `useSetDefaultWorkflowTemplate` mutation |
+| `src/pages/admin/WorkflowConfig.tsx` | Add "Set as Default" button, allow editing default template |
+| `DOCUMENTATION.md` | Document the feature |
 
 ## Risk: Very Low
 
-- Only changes which remarks field is read for display -- no write logic affected
-- Falls back to `self_remarks` when `na_marked_by_role` is null (backward compatible)
-- No database changes needed
+- Only changes the `is_default` boolean on `workflow_templates` -- no `workflow_config` rows are touched
+- Explicitly assigned workflows (Employee/Department/PMS Grade level) are completely unaffected
+- Only the fallback/inherit path changes
 
