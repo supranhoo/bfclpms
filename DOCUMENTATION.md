@@ -2414,6 +2414,7 @@ Any reviewer (Manager, Skip-Level, HR PMS, Auditor, Management) can mark a KPI a
 - The `na_marked_by_role` column (nullable text on `review_submissions`) tracks which role initiated the N/A, displayed as a badge in `KpiDetailsTable` (e.g., "N/A (Auditor)")
 - Dashboard scoring automatically excludes the KPI since it checks `is_na = true`
 - Components: `UnifiedScorecard`, `EmployeeScorecard`, `AuditScorecard`, `ManagementScorecard` all support this flow
+- **N/A Remarks Resolution:** When displaying the N/A reason in the confirmation card, the system resolves the correct remarks field based on `na_marked_by_role` (e.g., `skip_level` → `skip_level_remarks`, `auditor` → `auditor_remarks`). Falls back to `self_remarks` when `na_marked_by_role` is null or `employee`.
 
 #### `EmployeeScorecard`
 Comprehensive employee performance view with:
