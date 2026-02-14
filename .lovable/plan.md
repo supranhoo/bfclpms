@@ -1,74 +1,90 @@
 
 
-# RCA and CAPA: Incorrect Ratings in Admin Data Entry
+# RCA and CAPA: Notification Detail Sheet Lacks Details and Navigation Fails
 
 ## Root Cause Analysis (RCA)
 
-### What happened
-The screenshot shows KPI "RM Quality" (Incoming Quality of RM) for December 2025 with incorrect ratings:
-- **Self**: Achieved Value = 0, Rating shown = 1.5 (should be **5**)
-- **Auditor**: Achieved Value = 1, Rating shown = 0 (correct -- 1 exceeds R5=0 threshold, no other thresholds defined)
-- **Management**: Achieved Value = 0, Rating shown = 1.5 (should be **5**)
+### Problem 1: Detail sheet shows sparse information
+When a notification is clicked, the detail popup lacks key context -- no KPI name, no KRA name, no "From" user. This is because the `notificationItems` mapping in `QueryInbox.tsx` (lines 185-200) only maps basic fields (`id`, `title`, `message`, `kpiId`, etc.) but leaves `kpiName`, `kraName`, and `fromUser` undefined. The notification `metadata` JSON already contains `employee_name`, `kra_name`, and other useful fields, but they are never extracted.
 
-### KPI Configuration
-- Target: 0, UOM: Number, Criteria: Lower is Better
-- Threshold Mode: Absolute
-- R5 = 0 (only threshold defined; R4-R1 are null)
-- Weightage: 1.5%
+### Problem 2: "Open in App" navigates to plain Dashboard, not to the exact KPI
+The `getNotificationNavigationPath()` correctly builds URLs like `/dashboard?kpi={kpiId}`. However, the Dashboard's deep-link handler (line 237) searches for that KPI in `periodFilteredKpis` -- the **current user's own KPIs**. Most notifications are about **another employee's** KPI (e.g., a manager receiving a "Self Review Submitted" notification). Since the KPI doesn't belong to the current user, the lookup fails silently, and the user lands on the plain Dashboard with nothing opened.
 
-### Why ratings are wrong
+### Summary of Root Causes
 
-**Primary Root Cause**: The Admin Data Entry Dialog (`AdminDataEntryDialog.tsx`) does **NOT** auto-calculate rating or score when an achieved value is entered. Despite the field being labeled "Score (Auto-calculated)", it is a plain manual text input with no calculation logic.
-
-The flow is:
-1. Admin enters an "Achieved Value" (e.g., 0)
-2. Admin must then **manually** select a Rating (blue/green/yellow/red) and **manually** type a Score number
-3. Without understanding the KPI's threshold logic, the admin entered incorrect values
-
-**Evidence from database audit logs**: The `kpi_audit_logs` table shows the admin stored `self_score: 1.50` (which equals the KPI's weightage, not the correct rating of 5) and `management_score` was set to 10 (also incorrect).
-
-**Contributing Factor**: The normal self-review flow in `SelfReviewSheet.tsx` correctly uses `calculateRating()` to auto-compute scores (line 185-190). However, the Admin Data Entry Dialog bypasses this calculation entirely, relying on error-prone manual input.
+| Issue | Root Cause |
+|---|---|
+| Missing details in popup | `notificationItems` doesn't extract `kpiName`, `kraName`, `fromUser` from `metadata` or `related_user_id` |
+| Navigation goes to plain Dashboard | Dashboard deep-link only searches the user's own KPIs; it has no mechanism to auto-select an employee and open their KPI in the reviewer view |
 
 ---
 
 ## Corrective and Preventive Action (CAPA)
 
-### Fix: Auto-calculate Rating and Score in Admin Data Entry Dialog
+### Fix 1: Enrich notification items with metadata
 
-When the admin enters an achieved value, the dialog should automatically:
-1. Run `calculateRating()` using the KPI's thresholds, criteria, UOM, and threshold mode
-2. Pre-fill the Rating dropdown and Score field with the correct calculated values
-3. Still allow manual override if the admin needs to set a different value
-4. Show a visual indicator distinguishing auto-calculated vs manually overridden scores
+**File: `src/pages/QueryInbox.tsx`** (lines 185-200)
+
+Update the `notificationItems` mapping to extract `kpiName` and `kraName` from the notification's `metadata` JSON. Also look up `related_user_id` from the already-fetched profiles to populate the `fromUser` field.
+
+Changes:
+- Fetch profiles for all `related_user_id` values from notifications (batch query)
+- Map `metadata.kra_name` to `kraName`
+- Extract the KPI name from the notification `title` or `metadata`
+- Populate `fromUser` using the `related_user_id` profile lookup
+
+### Fix 2: Add employee deep-link to navigation paths
+
+**File: `src/lib/inboxUtils.ts`**
+
+Update `getNotificationNavigationPath` to include an `employee` query parameter using the notification's `metadata` for employee-related notification types:
+
+```text
+/dashboard?view=team&employee={related_user_id}&kpi={kpiId}
+```
+
+This requires passing `metadata` and building the URL with the employee context. The function signature will accept the full `InboxItem` (which it already does).
+
+### Fix 3: Dashboard handles `employee` query parameter
+
+**File: `src/pages/Dashboard.tsx`**
+
+Add a new `useEffect` that reads `employee` from URL params. When present:
+1. Switch to the appropriate view mode (from `view` param, defaulting to `team`)
+2. Fetch the employee's profile
+3. Call `setSelectedEmployee()` with the profile
+4. Set `autoOpenKpiId` from the `kpi` param
+
+This leverages the existing `UnifiedScorecard` component which already accepts `autoOpenKpiId` and will auto-open the correct KPI.
 
 ### Files to Modify
 
 | File | Change |
 |---|---|
-| `src/components/admin/AdminDataEntryDialog.tsx` | Import `calculateRating` and `RatingThresholds` from `ratingCalculation.ts`. Add a `useEffect` or `useCallback` that triggers when the achieved value changes, calling `calculateRating()` with the KPI's properties. Auto-populate the rating and score fields with the result. Update the "Score" label to clarify it is auto-calculated but overridable. |
-| `DOCUMENTATION.md` | Document the auto-calculation behavior in the Admin Data Entry section |
+| `src/pages/QueryInbox.tsx` | Enrich `notificationItems` mapping with `kpiName`, `kraName`, `fromUser` from metadata and profile lookups |
+| `src/lib/inboxUtils.ts` | Update `getNotificationNavigationPath` to include `employee` param for reviewer-targeted notifications |
+| `src/pages/Dashboard.tsx` | Add `useEffect` to handle `employee` query param for auto-selecting employee and opening their KPI |
+| `DOCUMENTATION.md` | Document the enhanced deep-link format and enriched notification detail sheet |
 
 ### Technical Detail
 
-The auto-calculation will use the same function as the employee self-review:
-
+Navigation URL format will change from:
 ```text
-calculateRating(
-  achievedValue,      // from admin input
-  kpi.target_value,   // from KPI record
-  { r5, r4, r3, r2, r1, r0 },  // from KPI thresholds
-  kpi.criteria,       // "Higher is Better" or "Lower is Better"
-  kpi.weightage,      // KPI weightage
-  kpi.uom_type,       // numeric, binary, tiered
-  kpi.qualitative_options,
-  kpi.uom,            // Number, %, Date, etc.
-  kpi.threshold_mode  // absolute or ratio
-)
+/dashboard?kpi={kpiId}
+```
+to:
+```text
+/dashboard?view=team&employee={relatedUserId}&kpi={kpiId}
 ```
 
-The returned `result.rating` (0-5) will populate the Score field, and `ratingToLevel(result.rating)` will set the Rating dropdown.
+The Dashboard will handle this by:
+1. Reading `employee` param
+2. Fetching that employee's profile from the `profiles` table
+3. Calling `handleSelectEmployee(profile, kpiId)` which triggers `UnifiedScorecard` with `autoOpenKpiId`
+
+For the user's own notifications (e.g., `kpi_approved`, `manager_rejected`), the existing self-view deep-link will continue to work since the KPI belongs to the current user.
 
 ### Risk
 
-Low -- uses the same calculation engine already proven in the self-review flow. Manual override remains available for edge cases.
+Low -- enrichment uses existing metadata fields. Dashboard changes add a new entry point to existing employee selection logic. No changes to data or workflow.
 
