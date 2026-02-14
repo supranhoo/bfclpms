@@ -460,12 +460,16 @@ export function UnifiedScorecard({
     }) => {
       const newStatus = resolveSendBackStatus(target, viewLevel, effectiveStages);
 
-      const { error: kpiError } = await supabase
+      const { data: updatedRows, error: kpiError } = await supabase
         .from('kpis')
         .update({ status: newStatus as any })
-        .eq('id', kpi_id);
+        .eq('id', kpi_id)
+        .select('id');
 
       if (kpiError) throw kpiError;
+      if (!updatedRows || updatedRows.length === 0) {
+        throw new Error('Failed to update KPI status. You may not have permission to perform this action.');
+      }
 
       // Clear reviewer fields
       const updateData: any = {};

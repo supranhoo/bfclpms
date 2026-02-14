@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-14  
-> **Version:** 1.25.0
+> **Version:** 1.26.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -3181,6 +3181,16 @@ The PMS Policy page was converted from an external iframe-based viewer to a full
 | `src/hooks/useAppSettings.ts` | Added `pms_policy_content` to AppSettings interface and mutation |
 | `src/components/layout/AppSidebar.tsx` | PMS Policy roles expanded to all roles |
 | `src/App.tsx` | Route allowedRoles expanded to all authenticated roles |
+
+---
+
+### v1.26.0 — Admin Send-Back RLS Fix
+
+**Problem:** Admin users could not successfully send back KPIs because the `kpis` and `review_submissions` tables lacked UPDATE RLS policies for the `admin` role. The update was silently blocked (zero rows affected, no error), so the UI showed stale status.
+
+**Fix:**
+1. Added RLS policies: `"Admin can update KPI status"` (kpis UPDATE), `"Admin can update submissions"` (review_submissions UPDATE), `"Admin can insert audit logs"` (kpi_audit_logs INSERT)
+2. Added row-count verification in `UnifiedScorecard.tsx` send-back mutation — throws explicit error if zero rows updated
 
 ---
 
