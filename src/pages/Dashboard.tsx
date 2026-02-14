@@ -32,9 +32,15 @@ import { EmployeeSelectorGrid } from '@/components/review/EmployeeSelectorGrid';
 import { UnifiedScorecard } from '@/components/review/UnifiedScorecard';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Target, TrendingUp, CheckCircle2, Clock, BarChart3, Info, Building2, ClipboardEdit, Eye } from 'lucide-react';
+import { Target, TrendingUp, CheckCircle2, Clock, BarChart3, Info, Building2, ClipboardEdit, Eye, AlertTriangle, X } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { calculateOverallCumulativeScore, calculateCategoryCumulative, getScoreForPeriod } from '@/lib/cumulativeScoring';
+
+const MONTH_ORDER = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
 
 interface EmployeeProfile {
   id: string;
@@ -148,6 +154,39 @@ export default function Dashboard() {
       k.review_period === selectedPeriod && k.review_year === selectedYear
     ) || [];
   }, [kpis, selectedPeriod, selectedYear]);
+
+  // Pending period alert: detect earlier periods with actionable KPIs
+  const [dismissedPendingPeriods, setDismissedPendingPeriods] = useState<string[]>([]);
+
+  const pendingPeriods = useMemo(() => {
+    if (!kpis || kpis.length === 0) return [];
+    const actionableStatuses = ['kra_set', 'self_review'];
+    const currentMonthIdx = MONTH_ORDER.indexOf(selectedPeriod);
+
+    const periodMap = new Map<string, number>();
+    kpis.forEach(k => {
+      if (!actionableStatuses.includes(k.status || '')) return;
+      if (!k.review_period || k.review_year == null) return;
+      // Earlier year, or same year but earlier month
+      const monthIdx = MONTH_ORDER.indexOf(k.review_period);
+      const isEarlier = k.review_year < selectedYear || 
+        (k.review_year === selectedYear && monthIdx < currentMonthIdx && monthIdx >= 0);
+      if (!isEarlier) return;
+      const key = `${k.review_period}-${k.review_year}`;
+      periodMap.set(key, (periodMap.get(key) || 0) + 1);
+    });
+
+    return Array.from(periodMap.entries())
+      .map(([key, count]) => {
+        const [month, yearStr] = key.split('-');
+        return { month, year: parseInt(yearStr), count, key };
+      })
+      .filter(p => !dismissedPendingPeriods.includes(p.key))
+      .sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        return MONTH_ORDER.indexOf(b.month) - MONTH_ORDER.indexOf(a.month);
+      });
+  }, [kpis, selectedPeriod, selectedYear, dismissedPendingPeriods]);
 
   // Sub-period submissions for Daily/Weekly KPIs
   const periodFilteredKpiIds = useMemo(() => periodFilteredKpis.map(k => k.id), [periodFilteredKpis]);
@@ -403,6 +442,49 @@ export default function Dashboard() {
           availableModes={availableModes}
           onModeChange={handleModeChange}
         />
+      )}
+
+      {/* Pending Period Alert */}
+      {pendingPeriods.length > 0 && (
+        <div className="space-y-2">
+          {pendingPeriods.map(pp => (
+            <Alert key={pp.key} className="border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <AlertDescription className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-sm text-amber-800 dark:text-amber-200">
+                  You have <strong>{pp.count} pending KPI{pp.count > 1 ? 's' : ''}</strong> for {pp.month} {pp.year} that need your action.
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs border-amber-400 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900"
+                    onClick={() => {
+                      setPeriodSelection(prev => ({
+                        ...prev,
+                        mode: 'single',
+                        selectedMonth: pp.month,
+                        selectedYear: pp.year,
+                        months: [pp.month],
+                        periodRanges: [{ month: pp.month, year: pp.year }],
+                      }));
+                    }}
+                  >
+                    Switch to {pp.month.substring(0, 3)} {pp.year}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-amber-600 dark:text-amber-400"
+                    onClick={() => setDismissedPendingPeriods(prev => [...prev, pp.key])}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          ))}
+        </div>
       )}
 
       {/* 1. Profile + Filters Row */}
