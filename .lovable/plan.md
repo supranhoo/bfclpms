@@ -1,87 +1,76 @@
 
 
-# RCA and CAPA: Send-Back KPI Not Updating Status Without Page Refresh
+# Add Email Mapping for 4 Missing Notification Types
 
-## Root Cause Analysis
+## Summary
 
-### Problem
-After Jaspal sends back Purnima's KPI, the KPI still appears as "reviewable" in the scorecard until the page is manually refreshed.
+Four notification types generate in-app notifications but are NOT mapped in the email pipeline, so no emails are sent for them. This plan adds full email support for all four.
 
-### Root Cause: Missing cache invalidation for `kpis-by-period` query
+## Missing Event Types
 
-The send-back mutation in `UnifiedScorecard.tsx` (line 494-498) invalidates these query keys on success:
-
-```text
-queryClient.invalidateQueries({ queryKey: ['kpis'] });
-queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
-```
-
-However, the **EmployeeSelectorGrid** (the parent employee list with pending/reviewed counts) uses a DIFFERENT query:
-
-```text
-useKpisByPeriod() -> queryKey: ['kpis-by-period', period, year]
-```
-
-TanStack Query's `invalidateQueries({ queryKey: ['kpis'] })` matches keys that START with `['kpis']` -- for example `['kpis', employeeId]`. But `['kpis-by-period', ...]` does NOT match because `'kpis-by-period'` is not equal to `'kpis'`.
-
-| Query | Key | Invalidated? |
+| Notification Type | When It Fires | Who Gets It |
 |---|---|---|
-| `useKpisByEmployee` (scorecard) | `['kpis', employeeId]` | Yes |
-| `useKpisByPeriod` (employee grid) | `['kpis-by-period', period, year]` | **No** |
+| `admin_status_step_back` | Admin moves a KPI back one workflow stage | Employee |
+| `rollback_requested` | Any participant requests a rollback | Next-level reviewer |
+| `rollback_approved` | Reviewer approves the rollback | Requester |
+| `rollback_rejected` | Reviewer dismisses the rollback | Requester |
 
-This means:
-1. The scorecard's own KPI list does refetch (status updates in the KPI table)
-2. But the employee grid's pending badge counts stay stale
-3. And if the reviewer navigates back to the grid, the employee still shows old pending counts
+## Changes Required
 
-### Secondary Issue
-After the send-back succeeds, the send-back dialog closes but the review sheet stays open on the same KPI. The KPI's `isReviewable()` check should now return false (status changed), but the reviewer sees no visual feedback that the action completed beyond the toast message.
+### 1. Database Trigger -- `send_email_on_notification()`
 
----
-
-## CAPA (Corrective and Preventive Action)
-
-### Fix 1: Add missing cache invalidation keys
-
-**File: `src/components/review/UnifiedScorecard.tsx`**
-
-Add `kpis-by-period` to the send-back mutation's `onSuccess` handler so the employee grid refreshes:
+Add 4 new CASE mappings so these notification types are forwarded to the edge function:
 
 ```text
-onSuccess: () => {
-  queryClient.invalidateQueries({ queryKey: ['kpis'] });
-  queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });  // NEW
-  queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
-  ...
-}
+WHEN 'admin_status_step_back' THEN mapped_event_type := 'admin_status_step_back';
+WHEN 'rollback_requested'     THEN mapped_event_type := 'rollback_requested';
+WHEN 'rollback_approved'      THEN mapped_event_type := 'rollback_approved';
+WHEN 'rollback_rejected'      THEN mapped_event_type := 'rollback_rejected';
 ```
 
-Also apply the same fix to the `useSendBackKpi` hook in `useKpis.ts` (used by `EmployeeScorecard`).
+Also add `rollback_reason` to the JSON body so rollback emails can include the justification text.
 
-### Fix 2: Close review sheet after successful send-back
+### 2. Edge Function -- `send-email-notification/index.ts`
 
-After the send-back succeeds, automatically close the review sheet so the reviewer returns to the updated KPI list. This provides clear visual feedback that the action completed.
+Add to `DEFAULT_TEMPLATES`:
+- **admin_status_step_back**: Subject "[PMS] Admin Moved Your KPI Back", body includes KPI name and a note to check the dashboard
+- **rollback_requested**: Subject "[PMS] Rollback Requested on KPI", body includes reason and prompt to review
+- **rollback_approved**: Subject "[PMS] Rollback Approved", body confirms the requester can now edit/resubmit
+- **rollback_rejected**: Subject "[PMS] Rollback Request Dismissed", body informs the requester
 
-```text
-onSuccess: () => {
-  ...
-  setSendBackDialogOpen(false);
-  setReviewSheetOpen(false);  // NEW - close the review sheet too
-}
-```
+Add to `EVENT_STYLES`:
+- `admin_status_step_back`: orange/warning style
+- `rollback_requested`: amber style
+- `rollback_approved`: green/success style
+- `rollback_rejected`: gray/neutral style
 
-### Fix 3: Audit all other mutations for the same gap
+### 3. Email Settings Hook -- `useEmailNotificationSettings.ts`
 
-Check `approveKpi` and `handleSubmitReview` for the same missing `kpis-by-period` invalidation and add it where needed.
+Add the 4 new types to the `EmailEventType` union type.
 
-### Files to Modify
+### 4. Admin UI -- `EmailNotificationSettings.tsx`
+
+Add 4 new entries to the `EMAIL_EVENTS` array so admins can toggle these events on/off:
+- "Admin Status Step Back" -- Notify employee when admin moves KPI back
+- "Rollback Requested" -- Notify reviewer when a rollback is requested
+- "Rollback Approved" -- Notify requester when rollback is approved
+- "Rollback Dismissed" -- Notify requester when rollback is dismissed
+
+### 5. Documentation -- `DOCUMENTATION.md`
+
+Update the email event mapping section to list 27 total event types (up from 23).
+
+## Files Modified
 
 | File | Change |
 |---|---|
-| `src/components/review/UnifiedScorecard.tsx` | Add `kpis-by-period` invalidation to send-back, approve, and submit mutations. Close review sheet on send-back success. |
-| `src/hooks/useKpis.ts` | Add `kpis-by-period` invalidation to `useSendBackKpi` and `useApproveKpi` hooks. |
-| `DOCUMENTATION.md` | Document cache invalidation requirements for workflow mutations. |
+| New SQL migration | Add 4 CASE mappings + `rollback_reason` to `send_email_on_notification()` |
+| `supabase/functions/send-email-notification/index.ts` | Add 4 templates + 4 event styles |
+| `src/hooks/useEmailNotificationSettings.ts` | Add 4 types to `EmailEventType` union |
+| `src/components/admin/EmailNotificationSettings.tsx` | Add 4 toggle entries to `EMAIL_EVENTS` |
+| `DOCUMENTATION.md` | Update event count and list |
 
-### Risk
+## Risk
 
-Very Low -- adding extra invalidation keys only causes additional refetches (ensuring fresh data). No business logic changes.
+Very Low -- additive changes only. Existing email mappings are untouched. New events default to "off" until an admin enables them.
+
