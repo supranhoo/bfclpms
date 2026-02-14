@@ -1,70 +1,82 @@
 
+# Architectural Stability and Race Condition Fixes
 
-# Codebase Decoupling and Dead Code Deletion
+## Overview
 
-## Scope
+Two targeted fixes: (1) eliminate the AuthContext race condition that can cause "forever loading" or duplicate fetches, and (2) wrap all unmemoized `submissionMap` / `queryMap` instances in `useMemo` to prevent unnecessary re-renders.
 
-Remove approximately 2,000 lines of unreachable code and consolidate a duplicate utility file. Zero functional impact -- all targeted code is confirmed dead.
+## Change 1: AuthContext Refactor
 
-## Pre-Flight Verification (Completed)
+**File**: `src/contexts/AuthContext.tsx`
 
-- **SelfReview.tsx, TeamReview.tsx, ManagementReview.tsx, AuditPanel.tsx**: Not imported anywhere. Their routes in `App.tsx` are already `Navigate` redirects -- the page components are never rendered.
-- **Index.tsx**: Not imported or routed anywhere.
-- **tmp/reference/**: 6 files, not imported anywhere.
-- **src/components/ui/use-toast.ts**: A 3-line re-export shim. Zero files import from it -- all 59 consumers already use `@/hooks/use-toast`.
-- **useReviewPageState.ts**: Only referenced in its own JSDoc comment. No actual import. Safe to keep for now (it IS used as a shared hook pattern), but worth noting.
+**Problem**: Both `onAuthStateChange` and `getSession()` run concurrently on mount. If both fire for the same user, `fetchProfile` and `fetchRole` execute twice. If either fetch fails silently, the user sees a forever-loading state or gets null profile/role with no feedback.
 
-## Changes
+**Fix**:
+- Add a `useRef` flag (`initializedRef`) set to `true` after the first successful processing
+- `getSession()` sets user/session and calls fetch only if `initializedRef` is still `false`
+- `onAuthStateChange` always processes (it handles login/logout/token refresh events throughout the session lifetime), but the `setTimeout` workaround is removed -- fetches are called directly since they don't call Supabase Auth APIs
+- Wrap `fetchProfile` and `fetchRole` in try/catch blocks. On failure, show a toast: "Failed to load user profile. Please refresh." and set `loading` to `false` so the UI doesn't hang
 
-### 1. Delete Dead Page Files
-
-| File | Lines Removed |
-|---|---|
-| `src/pages/SelfReview.tsx` | ~997 |
-| `src/pages/TeamReview.tsx` | ~362 |
-| `src/pages/ManagementReview.tsx` | ~335 |
-| `src/pages/AuditPanel.tsx` | ~345 |
-| `src/pages/Index.tsx` | ~14 |
-| **Total** | **~2,053** |
-
-### 2. Delete Reference Files
-
-| File | Reason |
-|---|---|
-| `tmp/reference/IndividualDashboard.tsx` | Development artifact |
-| `tmp/reference/KeyStatCard.tsx` | Development artifact |
-| `tmp/reference/KpiTable.tsx` | Development artifact |
-| `tmp/reference/KpiTrackerModal.tsx` | Development artifact |
-| `tmp/reference/OverallScoreChart.tsx` | Development artifact |
-| `tmp/reference/ProfileCard.tsx` | Development artifact |
-
-### 3. Delete Toast Shim
-
-Delete `src/components/ui/use-toast.ts` (3 lines). No consumers exist.
-
-### 4. Clean Up App.tsx
-
-Remove these unused lazy imports (the routes themselves stay as `Navigate` redirects -- no routing change):
-
-```
-- const ManagementDashboard = lazy(() => import("./pages/ManagementDashboard"));
+**Before (simplified)**:
+```text
+useEffect:
+  onAuthStateChange -> setUser, setTimeout(fetchProfile, fetchRole)
+  getSession        -> setUser, fetchProfile, fetchRole
+  // Both can fire for same user = double fetch
+  // No error handling = silent failure
 ```
 
-Wait -- `ManagementDashboard` IS still routed (line ~108 renders the component, not a redirect). Only the legacy review pages are redirects. Let me confirm: the route `/management-dashboard` renders `ManagementDashboard` directly. So that import stays.
+**After (simplified)**:
+```text
+useEffect:
+  initializedRef = false
 
-The only lazy import to remove is: none. The dead pages (`SelfReview`, `TeamReview`, `ManagementReview`, `AuditPanel`) are NOT lazy-imported in `App.tsx` -- their routes are inline `Navigate` components. `Index.tsx` is also not imported. So App.tsx needs no import cleanup.
+  onAuthStateChange -> if not initialized: mark initialized, setUser, fetchProfile, fetchRole
+                       if already initialized: handle event normally (login/logout/refresh)
 
-### 5. Update DOCUMENTATION.md
+  getSession        -> if not initialized: mark initialized, setUser, fetchProfile, fetchRole
+                       if already initialized: skip (subscription already handled it)
 
-Add a note recording the deletion of these files and the rationale.
+  fetchProfile/fetchRole -> try/catch with toast on failure
+```
 
-## What Does NOT Change
+This guarantees exactly one initialization path fires, while ongoing auth events (token refresh, sign-out) continue to work normally.
 
-- All routes in `App.tsx` remain unchanged (the `Navigate` redirects stay)
-- `useReviewPageState.ts` -- kept (provides shared logic for the unified dashboard)
-- `MobileSelfReviewCard.tsx` -- kept (used by the unified dashboard's `SelfReviewSheet`)
-- No frontend behavior changes whatsoever
+## Change 2: Memoization Fixes
 
-## Risk: None
+Four components create `submissionMap` and/or `queryMap` on every render without `useMemo`. These need wrapping:
 
-All deleted code is confirmed unreachable. No imports, no routes, no side effects.
+| File | Variable(s) | Fix |
+|---|---|---|
+| `src/components/review/AuditScorecard.tsx` | `submissionMap`, `queryMap` | Wrap in `useMemo` |
+| `src/components/review/ManagementScorecard.tsx` | `submissionMap`, `queryMap` | Wrap in `useMemo` |
+| `src/pages/reports/PerformanceReport.tsx` | `submissionMap` | Wrap in `useMemo` |
+| `src/components/dashboard/KpiTrackerModal.tsx` | `submissionMap` | Wrap in `useMemo` |
+
+**Already correct** (no changes needed):
+- `Dashboard.tsx` -- already uses `useMemo`
+- `UnifiedScorecard.tsx` -- already uses `useMemo`
+- `EmployeeScorecard.tsx` -- already uses `useMemo`
+- `useReviewPageState.ts` -- already uses `useMemo`
+- `KpiHistoryCard.tsx` -- computed inside a `useMemo` callback (derived data)
+- `MonthlyScorecardReport.tsx` -- computed inside a `useMemo` callback
+
+## Change 3: Documentation
+
+Update `DOCUMENTATION.md` to record the AuthContext fix and memoization improvements.
+
+## Files Modified
+
+| File | Change |
+|---|---|
+| `src/contexts/AuthContext.tsx` | Add ref guard, try/catch with toast, remove setTimeout |
+| `src/components/review/AuditScorecard.tsx` | Wrap submissionMap + queryMap in useMemo |
+| `src/components/review/ManagementScorecard.tsx` | Wrap submissionMap + queryMap in useMemo |
+| `src/pages/reports/PerformanceReport.tsx` | Wrap submissionMap in useMemo |
+| `src/components/dashboard/KpiTrackerModal.tsx` | Wrap submissionMap in useMemo |
+| `DOCUMENTATION.md` | Record changes |
+
+## Risk
+
+- **AuthContext**: Low risk. The ref guard is additive -- it prevents duplicate processing but doesn't change the auth flow. Sign-in, sign-out, and token refresh continue to work via `onAuthStateChange`.
+- **Memoization**: Zero risk. Wrapping in `useMemo` only prevents unnecessary recalculation; the output is identical.
