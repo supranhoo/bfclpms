@@ -92,30 +92,21 @@ export function resolveSendBackStatus(
   // Send back to employee always goes to kra_set
   if (target === 'employee') return 'kra_set';
 
-  // Send back to manager: set to self_review (so manager picks it up again)
-  if (target === 'manager') {
-    if (viewLevel === 'management' || viewLevel === 'auditor' || viewLevel === 'hr_pms' || viewLevel === 'skip_level') {
-      return workflowStages.includes('manager_check') ? 'manager_check' : 'self_review';
-    }
-    return 'self_review';
-  }
+  // Map each target to the workflow stage they OWN (their "completed" status)
+  const targetStageMap: Record<string, string> = {
+    manager: 'manager_check',
+    skip_level: 'skip_level_check',
+    hr_pms: 'hr_pms_review',
+    auditor: 'audit',
+  };
 
-  // Send back to skip_level: set to skip_level_check
-  if (target === 'skip_level') {
-    return 'skip_level_check';
-  }
+  const targetStage = targetStageMap[target];
+  if (!targetStage) return 'kra_set';
 
-  // Send back to hr_pms: set to hr_pms_review
-  if (target === 'hr_pms') {
-    return 'hr_pms_review';
-  }
-
-  // Send back to auditor: set to audit
-  if (target === 'auditor') {
-    return 'audit';
-  }
-
-  return 'kra_set';
+  // Return the status BEFORE the target's stage so they see it as pending
+  // e.g. manager reviews at 'self_review', skip_level reviews at 'manager_check'
+  const previous = resolvePreviousStatus(targetStage, workflowStages);
+  return previous || 'kra_set';
 }
 
 /**

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-14  
-> **Version:** 1.27.0
+> **Version:** 1.28.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -802,9 +802,10 @@ When a reviewer approves (whether agreeing or overriding), ALL daily entries get
 **Send Back from Review Sheet:**
 Auditors can send a KPI back for revision directly from the review sheet footer:
 - **Send Back Button:** Orange-styled button at left side of footer opens Send Back dialog
-- **Target Options:** Manager or Employee
+- **Target Options:** Manager or Employee (plus Skip-Level, HR PMS if those stages exist in the workflow)
 - **Required Reason:** Must provide explanation for sending back
-- **Status Update:** KPI status resets to target's stage (`self_review` or `kra_set`)
+- **Status Update:** KPI status resets to the stage PRECEDING the target reviewer's stage (e.g., sending to Manager sets status to `self_review`, sending to Employee sets `kra_set`)
+- **Cascading Data Clear (v1.28.0):** All review submission fields from the target stage onward are cleared (ratings, scores, remarks, evidence, achieved values) to prevent stale data. This mirrors the admin step-back logic.
 - **Audit Trail:** Action logged in `kpi_audit_logs` table
 
 Footer Layout:
@@ -826,9 +827,10 @@ Footer Layout:
 **Send Back from Review Sheet:**
 Management can send a KPI back for revision directly from the review sheet footer without closing the dialog:
 - **Send Back Button:** Orange-styled button at left side of footer opens Send Back dialog
-- **Target Options:** Auditor, Manager, or Employee
+- **Target Options:** Auditor, HR PMS, Skip-Level, Manager, or Employee (filtered by active workflow stages)
 - **Required Reason:** Must provide explanation for sending back
-- **Status Update:** KPI status resets to target's stage (`audit`, `manager_check`, or `kra_set`)
+- **Status Update:** KPI status resets to the stage PRECEDING the target reviewer's stage (e.g., sending to Auditor sets status to the stage before `audit`)
+- **Cascading Data Clear (v1.28.0):** All downstream review fields are cleared from the target stage onward
 - **Audit Trail:** Action logged in `kpi_audit_logs` table
 
 Footer Layout:
@@ -1374,13 +1376,16 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - **Mandatory reason field** required for audit compliance
   - On submit: updates `kpis.status`, clears downstream review data, inserts `ADMIN_STATUS_STEP_BACK` entry in `kpi_audit_logs`, creates a `kpi_queries` entry with `[ADMIN SENT BACK]` prefix, and notifies the affected employee
   - **Downstream data clearing:** When stepping back, all review submission fields for stages **after** the target status are cleared to prevent stale data:
-    - To `kra_set`: Clears self, manager, auditor, and management fields; resets `kpi_status` to `open`
-    - To `self_review`: Clears manager, auditor, and management fields
-    - To `manager_check`: Clears auditor and management fields
+    - To `kra_set`: Clears self, manager, skip_level, hr_pms, auditor, and management fields; resets `kpi_status` to `open`
+    - To `self_review`: Clears manager, skip_level, hr_pms, auditor, and management fields
+    - To `manager_check`: Clears skip_level, hr_pms, auditor, and management fields
+    - To `skip_level_check`: Clears hr_pms, auditor, and management fields
+    - To `hr_pms_review`: Clears auditor and management fields
     - To `audit`: Clears management fields
+  - **Reviewer Send-Back (v1.28.0):** The same cascading clear logic is used by the `UnifiedScorecard` send-back mutation, ensuring consistency between admin step-back and reviewer send-back operations.
   - **Visible send-back reason:** A `kpi_queries` row with `[ADMIN SENT BACK] <reason>` is created, making the reason visible in the employee's Review Journey and query trail (matching `useSendBackKpi` behavior)
   - **Safety-net trigger (`trg_sync_submission_on_kra_set`):** A database trigger on `kpis` automatically resets `review_submissions.kpi_status` to `open` whenever `kpis.status` transitions to `kra_set`, preventing any code path from causing a desync.
-  - Status step-back mapping: `approved` → `management_review` → `audit` → `manager_check` → `self_review` → `kra_set`
+  - Status step-back mapping: `approved` → `management_review` → `audit` → `hr_pms_review` → `skip_level_check` → `manager_check` → `self_review` → `kra_set`
 - Audit logging for all changes
 - **Copy KRAs (`CopyKrasDialog`):** Replicate KRAs from one employee to another without re-drafting.
   - **Step 1 – Source:** Select source employee, review period, and year. KRAs auto-load.

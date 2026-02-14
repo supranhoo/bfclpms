@@ -169,4 +169,35 @@ describe('workflowEngine', () => {
       expect(canReviewKpi('hr_pms_review', 'audit', EIGHT_STAGE_PIPELINE)).toBe(true);
     });
   });
+
+  describe('resolveSendBackStatus', () => {
+    it('employee target always returns kra_set', () => {
+      expect(resolveSendBackStatus('employee', 'manager')).toBe('kra_set');
+      expect(resolveSendBackStatus('employee', 'auditor')).toBe('kra_set');
+    });
+
+    it('manager target returns self_review (preceding stage)', () => {
+      expect(resolveSendBackStatus('manager', 'auditor')).toBe('self_review');
+      expect(resolveSendBackStatus('manager', 'management')).toBe('self_review');
+      expect(resolveSendBackStatus('manager', 'skip_level', EIGHT_STAGE_PIPELINE)).toBe('self_review');
+    });
+
+    it('skip_level target returns manager_check (preceding stage)', () => {
+      expect(resolveSendBackStatus('skip_level', 'hr_pms', EIGHT_STAGE_PIPELINE)).toBe('manager_check');
+      expect(resolveSendBackStatus('skip_level', 'auditor', EIGHT_STAGE_PIPELINE)).toBe('manager_check');
+    });
+
+    it('hr_pms target returns skip_level_check (preceding stage)', () => {
+      expect(resolveSendBackStatus('hr_pms', 'auditor', EIGHT_STAGE_PIPELINE)).toBe('skip_level_check');
+    });
+
+    it('auditor target returns preceding stage of audit', () => {
+      expect(resolveSendBackStatus('auditor', 'management')).toBe('manager_check');
+      expect(resolveSendBackStatus('auditor', 'management', EIGHT_STAGE_PIPELINE)).toBe('hr_pms_review');
+    });
+
+    it('unknown target returns kra_set', () => {
+      expect(resolveSendBackStatus('unknown', 'auditor')).toBe('kra_set');
+    });
+  });
 });
