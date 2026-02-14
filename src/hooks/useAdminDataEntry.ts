@@ -189,6 +189,7 @@ export function useAdminSubmitReviewData() {
       return newSubmission;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['review-submission-admin'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['all-kpis'] });

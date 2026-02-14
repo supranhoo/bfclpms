@@ -2677,6 +2677,13 @@ export type Database = {
         }
         Returns: number
       }
+      get_bulk_employee_workflows: {
+        Args: { employee_ids: string[] }
+        Returns: {
+          employee_id: string
+          stages: string[]
+        }[]
+      }
       get_cycle_months: {
         Args: { p_frequency: string; p_month: string; p_year: number }
         Returns: string[]

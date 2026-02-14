@@ -318,6 +318,34 @@ export function hasWorkflowStage(stage: string, workflowStages: string[]): boole
 }
 
 /**
+ * Batch-fetch workflow stages for multiple employees in a single RPC call.
+ * Returns a map of employeeId -> stages[].
+ */
+export function useBulkEmployeeWorkflows(employeeIds: string[]) {
+  return useQuery({
+    queryKey: ['bulk-employee-workflows', employeeIds.sort().join(',')],
+    queryFn: async () => {
+      if (employeeIds.length === 0) return new Map<string, string[]>();
+
+      const { data, error } = await supabase
+        .rpc('get_bulk_employee_workflows' as any, { employee_ids: employeeIds }) as { data: { employee_id: string; stages: string[] }[] | null; error: any };
+
+      if (error) throw error;
+
+      const map = new Map<string, string[]>();
+      if (data) {
+        for (const row of data) {
+          map.set(row.employee_id, row.stages);
+        }
+      }
+      return map;
+    },
+    enabled: employeeIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
  * Get display label for a workflow stage
  */
 export function getStageLabel(stage: string): string {

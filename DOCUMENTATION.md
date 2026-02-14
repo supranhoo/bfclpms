@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-13  
-> **Version:** 1.19.0
+> **Version:** 1.20.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -374,6 +374,7 @@ The `kpis` table has specific UPDATE policies for workflow progression:
 | `get_user_role(user_id)` | Get user's primary role |
 | `get_employee_workflow(employee_uuid)` | Get workflow stages for employee |
 | `get_employee_workflow_info(employee_uuid)` | Get full workflow details |
+| `get_bulk_employee_workflows(employee_ids UUID[])` | Batch-fetch workflow stages for multiple employees (used by EmployeeSelectorGrid) |
 | `is_period_locked(period, year)` | Check if review period is locked |
 | `detect_training_needs_for_period(period, year, threshold)` | Auto-detect TNI |
 | `handle_new_user()` | Trigger: Create profile on signup |
@@ -1324,6 +1325,8 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - Admins can override locked entries (e.g., entries marked as "Final" with `is_resubmitted: true`)
   - **Mandatory reason field** for all admin entries to ensure audit compliance
   - **N/A Flag Handling:** The Admin Data Entry Dialog includes a "Mark as Not Applicable" toggle switch showing the current `is_na` status. Admins can explicitly set or clear the N/A flag. Additionally, when an admin enters an `achieved_value`, the `is_na` flag is **automatically cleared** (set to `false`) to ensure the KPI is included in dashboard score calculations. This prevents the scenario where admin corrections remain invisible because a stale N/A flag excludes the KPI from scoring.
+  - **Zero-Value Preservation:** Achieved values and scores of `0` are valid entries. The dialog uses explicit empty-string checks (`value !== ''`) instead of truthy checks to prevent JavaScript falsy coercion from discarding legitimate zero entries.
+  - **Cache Invalidation:** The admin data entry mutation invalidates both `review-submission-admin` (dialog's own fetch key) and `review-submissions` (shared key) to ensure the UI reflects saved data immediately.
   - All admin actions are logged in `kpi_audit_logs` with `on_behalf_of` and `on_behalf_role` tracking
   - Affected employees receive notifications about admin data changes
 - **Admin Visibility in Audit Trails:**
@@ -3048,7 +3051,7 @@ The workflow engine provides pure utility functions that resolve status transiti
 - `WorkflowProgressTracker.tsx` — Accepts optional `workflowStages` prop to filter displayed stages
 - `KpiJourneySection.tsx` — Accepts optional `workflowStages` prop to filter journey cards
 - `KpiDetailsTable.tsx` — Accepts optional `workflowStages` prop for workflow-aware reviewability (`canReviewKpi`)
-- `EmployeeSelectorGrid.tsx` — Uses dynamic preceding-stage resolution for pending counts per view level
+- `EmployeeSelectorGrid.tsx` — Uses `useBulkEmployeeWorkflows` hook to batch-fetch per-employee workflow stages, then calls `resolveReviewableStatuses()` for dynamic pending/reviewed filtering and stats. Eliminates all hardcoded status checks.
 
 **⚠️ Critical:** Every component rendering `KpiDetailsTable`, `WorkflowProgressTracker`, or `KpiReviewPanel` MUST pass the `workflowStages` prop. Omitting it causes fallback to the default 6-stage pipeline, which breaks skip-manager workflows.
 
