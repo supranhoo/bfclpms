@@ -31,7 +31,11 @@ import { QualitativeValueInput } from './QualitativeValueInput';
 import { DateCalendarInput } from './DateCalendarInput';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
-import { Target, TrendingUp, CheckCircle2, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
+import { Target, TrendingUp, CheckCircle2, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar, AlertTriangle, Loader2, Undo2 } from 'lucide-react';
+import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
+import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog';
+import { DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
+import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { format } from 'date-fns';
 import {
   AlertDialog,
@@ -103,6 +107,12 @@ export function SelfReviewSheet({
   const { method: dailyAggregationMethod } = useDailyAggregationMethod();
   const submitReview = useSubmitSelfReview();
   const submitSubPeriod = useSubmitSubPeriod();
+
+  // Rollback state
+  const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false);
+  const { data: pendingRollback } = usePendingRollbackRequest(selectedKpi?.id);
+  const { data: employeeWorkflowStages } = useEmployeeWorkflowStages(profile?.id);
+  const effectiveStages = employeeWorkflowStages || DEFAULT_WORKFLOW_STAGES;
 
   // Form state
   const [achievedValue, setAchievedValue] = useState('');
@@ -704,9 +714,29 @@ export function SelfReviewSheet({
           {/* Footer */}
           <SheetFooter className="pt-3 border-t flex-shrink-0">
             <div className="flex items-center gap-2 w-full justify-between">
-              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-                {isReadOnly ? 'Close' : (needsSubPeriodForKpi ? 'Done' : 'Cancel')}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+                  {isReadOnly ? 'Close' : (needsSubPeriodForKpi ? 'Done' : 'Cancel')}
+                </Button>
+                {/* Request Rollback button - shown when KPI is submitted (read-only) and not approved, and no pending request */}
+                {isReadOnly && selectedKpi?.status !== 'approved' && !pendingRollback && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950"
+                    onClick={() => setRollbackDialogOpen(true)}
+                  >
+                    <Undo2 className="h-3 w-3 mr-1" />
+                    Request Rollback
+                  </Button>
+                )}
+                {isReadOnly && pendingRollback && (
+                  <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    Rollback requested
+                  </span>
+                )}
+              </div>
 
               {!isReadOnly && (
                 <div className="flex items-center gap-2">
@@ -930,6 +960,19 @@ export function SelfReviewSheet({
           kpiName={selectedKpi.kpi_name}
           open={queryHistoryOpen}
           onOpenChange={setQueryHistoryOpen}
+        />
+      )}
+
+      {/* Rollback Request Dialog */}
+      {selectedKpi && (
+        <RollbackRequestDialog
+          open={rollbackDialogOpen}
+          onOpenChange={setRollbackDialogOpen}
+          kpiId={selectedKpi.id}
+          kpiName={selectedKpi.kpi_name}
+          currentStatus={selectedKpi.status}
+          workflowStages={effectiveStages}
+          notifyUserId={profile?.reporting_manager_id || undefined}
         />
       )}
     </>
