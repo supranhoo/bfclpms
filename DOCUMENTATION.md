@@ -3078,14 +3078,16 @@ Admins can create, edit, and delete custom workflow templates from the **Templat
 - At least one optional stage must be selected.
 - Template names must be unique.
 
-**Edit / Delete:**
-- Non-default templates show Edit (pencil) and Delete (trash) icons.
+**Edit / Delete / Set as Default:**
+- All templates (including the current default) show an Edit (pencil) icon.
+- Non-default templates show a **Set as Default** (star) button and a Delete (trash) icon.
+- Clicking "Set as Default" swaps the `is_default` flag. This **only affects the inherit/fallback cascade** (Employee > Department > PMS Grade > Default). Explicitly assigned workflows are never touched.
 - Templates currently assigned to employees, departments, or PMS grades cannot be deleted.
 
 **Files:**
 - `src/components/admin/CustomWorkflowDialog.tsx` — Dialog component with stage selector
-- `src/hooks/useWorkflowConfig.ts` — `useCreateWorkflowTemplate`, `useUpdateWorkflowTemplate`, `useDeleteWorkflowTemplate` mutations
-- `src/pages/admin/WorkflowConfig.tsx` — Templates tab with create/edit/delete actions
+- `src/hooks/useWorkflowConfig.ts` — `useCreateWorkflowTemplate`, `useUpdateWorkflowTemplate`, `useDeleteWorkflowTemplate`, `useSetDefaultWorkflowTemplate` mutations
+- `src/pages/admin/WorkflowConfig.tsx` — Templates tab with create/edit/delete/set-default actions
 
 ---
 
