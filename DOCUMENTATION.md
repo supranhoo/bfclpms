@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-14  
-> **Version:** 1.26.0
+> **Version:** 1.27.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -1340,9 +1340,17 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - Status changes require reason and trigger notifications to employee/manager
 - **Admin Data Entry on Behalf of Users:**
   - **Enter Review Data:** Admins can enter or modify review submission data (achieved value, rating, score, remarks) for any role level (Self, Manager, Auditor, Management) via the "Enter Data" button (pen icon) on expanded KPI rows
-  - **Auto-Calculated Rating & Score:** When an admin enters an achieved value, the dialog automatically runs `calculateRating()` from `ratingCalculation.ts` using the KPI's thresholds (R5-R1), criteria (Higher/Lower is Better), UOM type, and threshold mode. The resulting rating level and weighted score are pre-filled into the Rating dropdown and Score field. An "Auto" badge indicates calculated values. Admins can manually override both fields if needed — doing so clears the auto badge. This prevents incorrect manual entries (e.g., confusing weightage with rating).
+  - **Scoring Logic Alignment (v1.27.0):** The Admin Data Entry dialog now uses the **exact same scoring logic** as the Self Review Sheet (`SelfReviewSheet.tsx`). This ensures identical results regardless of whether data is entered by the employee or the admin. Key alignments:
+    - **Qualitative KPI Input:** Binary/Tiered KPIs now render `QualitativeValueInput` (the same button-based label selector used in Self Review) instead of a plain numeric input. Admin selects "Yes"/"No" or tiered options; the component maps labels to numeric ratings automatically.
+    - **Date UOM Input:** KPIs with `uom === 'Date'` now render `DateCalendarInput` (the same calendar picker used in Self Review) instead of a plain numeric input.
+    - **R0 Threshold:** The scoring engine now receives `r0: kpi.r0` (the actual KPI threshold) instead of the previously hardcoded `r0: null`.
+    - **Daily/Weekly Qualitative Special Case:** For qualitative KPIs with Daily or Weekly frequency, the rating is clamped directly (0-5) from the aggregated achieved value, matching the Self Review behavior.
+    - **Score Storage:** The `score` field now stores the **raw rating (0-5)** from the scoring engine, NOT the previous `(rating / 5) * weightage` formula. This matches what Self Review stores as `self_score`.
+    - **Achieved Value for Qualitative KPIs:** For binary/tiered KPIs, the `achieved_value` field stores the **numeric rating** (e.g., 5 for "Yes", 0 for "No"), not the raw text label. This matches Self Review's behavior.
+    - **Rating Level Derivation:** Uses `getRatingLevel(score)` (>=4=blue, >=3=green, >=2=yellow, else red) matching Self Review, or the rating level returned directly from `QualitativeValueInput` for qualitative KPIs.
+  - **Auto-Calculated Rating & Score:** When an admin enters an achieved value, the dialog automatically runs the aligned `calculateScoreFromAchieved()` function using the KPI's full thresholds (R5-R0), criteria, UOM type, and threshold mode. An "Auto" badge indicates calculated values. Admins can manually override both fields if needed — doing so clears the auto badge.
   - **Full 0-5 Rating Scale:** The Rating dropdown displays all 6 rating levels: Outstanding (5), Exceeds (4), Meets (3), Below (2), Needs Improvement (1), and Not Achieved (0). Ratings 0 and 1 map to the `red` DB enum value but display distinct labels and colors (orange for 1, gray for 0). The dropdown uses numeric string values ("0"-"5") internally and converts to DB-compatible `RatingLevel` on submission.
-  - **Score Capping:** The Score field enforces a maximum value equal to the KPI's weightage (since `maxScore = (5/5) × weightage`). The `max` attribute is set on the input and values are clamped on change. Helper text displays the maximum allowed score. This prevents data corruption from scores exceeding the mathematically possible maximum.
+  - **Score Range:** The Score field now represents the raw rating (0-5) from the scoring engine, clamped to this range. This replaces the previous weighted score formula.
   - **Enter Daily/Weekly Data:** For KPIs with Daily or Weekly frequency, admins can enter sub-period submissions for any day or week via the "Daily Data" button (calendar icon) - **NO DATE RESTRICTIONS** apply to admins
   - Admins can override locked entries (e.g., entries marked as "Final" with `is_resubmitted: true`)
   - **Mandatory reason field** for all admin entries to ensure audit compliance

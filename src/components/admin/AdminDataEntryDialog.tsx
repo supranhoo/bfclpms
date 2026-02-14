@@ -21,10 +21,11 @@ import { AlertTriangle, Calculator, Info, Loader2, ShieldAlert } from 'lucide-re
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAdminSubmitReviewData, AdminRoleLevel } from '@/hooks/useAdminDataEntry';
 import { calculateRating, type RatingThresholds } from '@/lib/ratingCalculation';
-import type { KPI } from '@/hooks/useKpis';
+import { QualitativeValueInput } from '@/components/review/QualitativeValueInput';
+import { DateCalendarInput } from '@/components/review/DateCalendarInput';
+import { QualitativeOption, scoreToRatingLevel } from '@/lib/qualitativeUom';
+import type { KPI, RatingLevel } from '@/hooks/useKpis';
 import type { Database } from '@/integrations/supabase/types';
-
-type RatingLevel = Database['public']['Enums']['rating_level'];
 
 // Rating options matching existing RatingSelector component
 // Full 0-5 rating scale. DB enum only supports blue|green|yellow|red,
@@ -37,11 +38,6 @@ const RATING_OPTIONS: { value: string; dbRating: RatingLevel; label: string; col
   { value: '1', dbRating: 'red',    label: 'Needs Improvement (1)',  colorClass: 'bg-orange-500', score: 1 },
   { value: '0', dbRating: 'red',    label: 'Not Achieved (0)',       colorClass: 'bg-gray-400',   score: 0 },
 ];
-
-// Get score for a rating option value (numeric string "0"-"5")
-function getRatingScore(ratingValue: string): number {
-  return RATING_OPTIONS.find(r => r.value === ratingValue)?.score ?? 0;
-}
 
 // Map a DB RatingLevel + numeric score back to our dropdown value
 function dbRatingToDropdownValue(dbRating: RatingLevel, numericScore: number | null): string {
@@ -60,6 +56,27 @@ const ROLE_LEVELS: { value: AdminRoleLevel; label: string }[] = [
   { value: 'auditor', label: 'Auditor' },
   { value: 'management', label: 'Management' },
 ];
+
+// Helper: determine if a KPI uses qualitative input
+function isQualitativeKpi(kpi: KPI | null): boolean {
+  return kpi?.uom_type === 'binary' || kpi?.uom_type === 'tiered';
+}
+
+// Helper: derive rating level from numeric score (matches SelfReviewSheet.getRatingLevel)
+function getRatingLevel(score: number): RatingLevel {
+  if (score >= 4) return 'blue';
+  if (score >= 3) return 'green';
+  if (score >= 2) return 'yellow';
+  return 'red';
+}
+
+// Helper: extract review month/year from KPI review_period string
+function parseReviewPeriod(kpi: KPI): { month: string; year: number } {
+  return {
+    month: kpi.review_period || 'January',
+    year: kpi.review_year || new Date().getFullYear(),
+  };
+}
 
 interface AdminDataEntryDialogProps {
   isOpen: boolean;
@@ -89,6 +106,9 @@ export function AdminDataEntryDialog({
   const [reason, setReason] = useState<string>('');
   const [isNa, setIsNa] = useState<boolean>(false);
   const [isAutoCalculated, setIsAutoCalculated] = useState<boolean>(false);
+  // Qualitative-specific state (aligned with SelfReviewSheet)
+  const [calculatedRatingLevel, setCalculatedRatingLevel] = useState<RatingLevel | null>(null);
+  const [calculatedScore, setCalculatedScore] = useState<number | null>(null);
 
   // Detect misconfigured binary KPIs (C3: validation warning)
   const binaryMisconfigWarning = useMemo(() => {
@@ -106,53 +126,93 @@ export function AdminDataEntryDialog({
     return null;
   }, [kpi]);
 
-  
+  // Score calculation — matches SelfReviewSheet.calculateScoreFromAchieved exactly
+  const calculateScoreFromAchieved = useCallback((achieved: number, targetKpi: KPI) => {
+    const thresholds: RatingThresholds = {
+      r5: targetKpi.r5, r4: targetKpi.r4, r3: targetKpi.r3,
+      r2: targetKpi.r2, r1: targetKpi.r1, r0: targetKpi.r0,
+    };
+    const uomType = targetKpi.uom_type || 'numeric';
+    const isQualitative = uomType === 'binary' || uomType === 'tiered';
 
-  // Auto-calculate rating/score from achieved value using the same engine as self-review
+    // Special case: qualitative + daily/weekly — clamp rating 0-5 directly
+    if (isQualitative && (targetKpi.frequency === 'Daily' || targetKpi.frequency === 'Weekly')) {
+      const r = Math.min(5, Math.max(0, Math.round(achieved)));
+      const ratingLevel = r >= 4 ? 'blue' : r >= 3 ? 'green' : r >= 2 ? 'yellow' : 'red';
+      return {
+        rating: r,
+        ratingLevel: ratingLevel as RatingLevel,
+        weightedScore: (targetKpi.weightage || 0) * r,
+        percentage: (r / 5) * 100,
+        achievedWeight: r / 5,
+      };
+    }
+
+    return calculateRating(
+      achieved, targetKpi.target_value, thresholds,
+      targetKpi.criteria || 'Higher is Better', targetKpi.weightage || 0,
+      uomType as any, targetKpi.qualitative_options as QualitativeOption[] | null,
+      targetKpi.uom, (targetKpi.threshold_mode as 'absolute' | 'ratio') || 'absolute'
+    );
+  }, []);
+
+  // Auto-calculate from numeric achieved value (non-qualitative, non-date KPIs)
   const autoCalculateFromAchieved = useCallback((value: string) => {
     if (!kpi || value === '') {
       setIsAutoCalculated(false);
+      setCalculatedScore(null);
+      setCalculatedRatingLevel(null);
       return;
     }
 
-    const thresholds: RatingThresholds = {
-      r5: kpi.r5, r4: kpi.r4, r3: kpi.r3, r2: kpi.r2, r1: kpi.r1, r0: null,
-    };
-
-    // For binary/tiered KPIs, pass raw string first so label matching can work
-    // then fall back to numeric. For other types, pass parsed number.
-    const uomType = (kpi.uom_type as 'numeric' | 'binary' | 'tiered') || 'numeric';
     const parsedNum = parseFloat(value);
-    const achievedInput = (uomType === 'binary' || uomType === 'tiered')
-      ? (isNaN(parsedNum) ? value : parsedNum)  // Pass string for labels, number for numeric
-      : parsedNum;
+    if (isNaN(parsedNum)) {
+      setIsAutoCalculated(false);
+      setCalculatedScore(null);
+      setCalculatedRatingLevel(null);
+      return;
+    }
 
-    if (typeof achievedInput === 'number' && isNaN(achievedInput)) {
+    const result = calculateScoreFromAchieved(parsedNum, kpi);
+    const ratingNum = result.rating;
+    setCalculatedScore(ratingNum);
+    setCalculatedRatingLevel(getRatingLevel(ratingNum));
+    setRating(String(Math.round(ratingNum)));
+    setScore(ratingNum.toFixed(2));
+    setIsAutoCalculated(true);
+  }, [kpi, calculateScoreFromAchieved]);
+
+  // Handler for qualitative input (matches SelfReviewSheet.handleQualitativeChange)
+  const handleQualitativeChange = useCallback((value: string, qRating: number, ratingLevel: RatingLevel) => {
+    setAchievedValue(value);
+    setCalculatedScore(qRating);
+    setCalculatedRatingLevel(ratingLevel);
+    setRating(String(Math.round(qRating)));
+    setScore(qRating.toFixed(2));
+    setIsAutoCalculated(true);
+  }, []);
+
+  // Handler for date input
+  const handleDateChange = useCallback((day: number | null) => {
+    if (day === null) {
+      setAchievedValue('');
+      setCalculatedScore(null);
+      setCalculatedRatingLevel(null);
+      setRating('');
+      setScore('');
       setIsAutoCalculated(false);
       return;
     }
-
-    const result = calculateRating(
-      achievedInput,
-      kpi.target_value,
-      thresholds,
-      kpi.criteria || 'Higher is Better',
-      kpi.weightage || 0,
-      uomType,
-      kpi.qualitative_options as any,
-      kpi.uom,
-      (kpi.threshold_mode as 'absolute' | 'ratio') || 'absolute'
-    );
-
-    // Map numeric rating to our dropdown value directly
-    const dropdownValue = String(Math.round(result.rating));
-    setRating(dropdownValue);
-    // Score = (rating / 5) * weightage, clamped to max
-    const maxScore = kpi.weightage || 0;
-    const calculatedScore = Math.min((result.rating / 5) * maxScore, maxScore);
-    setScore(calculatedScore.toFixed(2));
-    setIsAutoCalculated(true);
-  }, [kpi]);
+    setAchievedValue(String(day));
+    if (kpi) {
+      const result = calculateScoreFromAchieved(day, kpi);
+      setCalculatedScore(result.rating);
+      setCalculatedRatingLevel(getRatingLevel(result.rating));
+      setRating(String(Math.round(result.rating)));
+      setScore(result.rating.toFixed(2));
+      setIsAutoCalculated(true);
+    }
+  }, [kpi, calculateScoreFromAchieved]);
 
   // Fetch existing submission
   const { data: existingSubmission, isLoading: loadingSubmission } = useQuery({
@@ -169,7 +229,8 @@ export function AdminDataEntryDialog({
     },
     enabled: !!kpi?.id && isOpen,
   });
-  // Consistency check (C4): compare stored vs calculated rating on load
+
+  // Consistency check: compare stored vs calculated rating on load
   const consistencyWarning = useMemo(() => {
     if (!kpi || !existingSubmission) return null;
     const storedAchieved = existingSubmission.achieved_value;
@@ -177,31 +238,17 @@ export function AdminDataEntryDialog({
     const storedRating = existingSubmission.self_rating;
     if (storedAchieved == null || storedRating == null) return null;
 
-    const thresholds: RatingThresholds = {
-      r5: kpi.r5, r4: kpi.r4, r3: kpi.r3, r2: kpi.r2, r1: kpi.r1, r0: null,
-    };
-    const result = calculateRating(
-      storedAchieved,
-      kpi.target_value,
-      thresholds,
-      kpi.criteria || 'Higher is Better',
-      kpi.weightage || 0,
-      (kpi.uom_type as 'numeric' | 'binary' | 'tiered') || 'numeric',
-      kpi.qualitative_options as any,
-      kpi.uom,
-      (kpi.threshold_mode as 'absolute' | 'ratio') || 'absolute'
-    );
+    const result = calculateScoreFromAchieved(storedAchieved, kpi);
+    const calculatedRatingNum = Math.round(result.rating);
+    const storedRatingNum = storedScore != null ? Math.round(storedScore) : null;
 
-    const calculatedRating = Math.round(result.rating);
-    const storedRatingNum = storedScore != null ? Math.round((storedScore / (kpi.weightage || 1)) * 5) : null;
-    
-    if (storedRatingNum != null && Math.abs(calculatedRating - storedRatingNum) >= 2) {
-      const calcLabel = RATING_OPTIONS.find(r => r.score === calculatedRating)?.label || `Rating ${calculatedRating}`;
+    if (storedRatingNum != null && Math.abs(calculatedRatingNum - storedRatingNum) >= 2) {
+      const calcLabel = RATING_OPTIONS.find(r => r.score === calculatedRatingNum)?.label || `Rating ${calculatedRatingNum}`;
       const storedLabel = RATING_OPTIONS.find(r => r.score === storedRatingNum)?.label || `Rating ${storedRatingNum}`;
       return `Stored rating (${storedLabel}) differs significantly from calculated rating (${calcLabel}). The KPI may be misconfigured.`;
     }
     return null;
-  }, [kpi, existingSubmission]);
+  }, [kpi, existingSubmission, calculateScoreFromAchieved]);
 
   // Load existing data when role level changes
   useEffect(() => {
@@ -211,6 +258,8 @@ export function AdminDataEntryDialog({
       setScore('');
       setRemarks('');
       setIsNa(false);
+      setCalculatedScore(null);
+      setCalculatedRatingLevel(null);
       return;
     }
 
@@ -223,10 +272,36 @@ export function AdminDataEntryDialog({
       scoreVal: number | null,
       remarksVal: string | null
     ) => {
-      setAchievedValue(achievedVal != null ? achievedVal.toString() : '');
-      // Derive dropdown value from score (more accurate) falling back to DB rating
+      if (achievedVal != null) {
+        // For qualitative KPIs, try to resolve label from stored numeric rating
+        if (kpi && isQualitativeKpi(kpi)) {
+          const options = kpi.uom_type === 'binary'
+            ? [{ label: 'Yes', rating: 5, definition: 'Yes' }, { label: 'No', rating: 0, definition: 'No' }]
+            : (kpi.qualitative_options as QualitativeOption[] | null) || [];
+          const matchedOption = options.find(o => o.rating === achievedVal || o.label === String(achievedVal));
+          if (matchedOption) {
+            setAchievedValue(matchedOption.label);
+            setCalculatedScore(matchedOption.rating);
+            setCalculatedRatingLevel(scoreToRatingLevel(matchedOption.rating) as RatingLevel);
+          } else {
+            setAchievedValue(String(achievedVal));
+            setCalculatedScore(scoreVal);
+            setCalculatedRatingLevel(null);
+          }
+        } else {
+          setAchievedValue(String(achievedVal));
+          setCalculatedScore(scoreVal);
+          setCalculatedRatingLevel(null);
+        }
+      } else {
+        setAchievedValue('');
+        setCalculatedScore(null);
+        setCalculatedRatingLevel(null);
+      }
+
+      // Derive dropdown value from score (the raw rating 0-5 is now stored as score)
       if (dbRatingVal && scoreVal != null) {
-        setRating(dbRatingToDropdownValue(dbRatingVal as RatingLevel, (scoreVal / (kpi?.weightage || 1)) * 5));
+        setRating(dbRatingToDropdownValue(dbRatingVal as RatingLevel, scoreVal));
       } else if (dbRatingVal) {
         setRating(dbRatingToDropdownValue(dbRatingVal as RatingLevel, null));
       } else {
@@ -250,20 +325,18 @@ export function AdminDataEntryDialog({
         loadLevel(existingSubmission.management_achieved_value, existingSubmission.management_rating, existingSubmission.management_score, existingSubmission.management_remarks);
         break;
     }
-  }, [roleLevel, existingSubmission]);
+  }, [roleLevel, existingSubmission, kpi]);
 
-  // Auto-calculate score when rating changes (manual override)
+  // Auto-calculate score when rating changes (manual override only for non-qualitative)
   useEffect(() => {
-    if (rating && kpi?.weightage) {
-      const ratingScore = getRatingScore(rating);
-      const maxScore = kpi.weightage;
-      const calculatedScore = Math.min((ratingScore / 5) * maxScore, maxScore);
-      setScore(calculatedScore.toFixed(2));
-      if (!isAutoCalculated) {
-        setIsAutoCalculated(false);
+    if (rating && kpi?.weightage && !isAutoCalculated) {
+      const ratingNum = parseInt(rating, 10);
+      if (!isNaN(ratingNum)) {
+        setCalculatedScore(ratingNum);
+        setScore(ratingNum.toFixed(2));
       }
     }
-  }, [rating, kpi?.weightage]);
+  }, [rating, kpi?.weightage, isAutoCalculated]);
 
   // Reset form when dialog closes
   useEffect(() => {
@@ -275,6 +348,9 @@ export function AdminDataEntryDialog({
       setRemarks('');
       setReason('');
       setIsNa(false);
+      setCalculatedScore(null);
+      setCalculatedRatingLevel(null);
+      setIsAutoCalculated(false);
     }
   }, [isOpen]);
 
@@ -285,8 +361,10 @@ export function AdminDataEntryDialog({
     if (val === '' || isNaN(num)) {
       setScore(val);
     } else {
-      const clamped = Math.max(0, Math.min(num, maxScore));
+      // Score is now raw rating 0-5, clamp accordingly
+      const clamped = Math.max(0, Math.min(num, 5));
       setScore(clamped.toFixed(2));
+      setCalculatedScore(clamped);
     }
     setIsAutoCalculated(false);
   };
@@ -294,17 +372,35 @@ export function AdminDataEntryDialog({
   const handleSubmit = async () => {
     if (!kpi || !reason.trim()) return;
 
-    // Map dropdown value back to DB-compatible RatingLevel
-    const selectedOption = RATING_OPTIONS.find(r => r.value === rating);
-    const dbRating: RatingLevel | null = selectedOption ? selectedOption.dbRating : null;
+    // Determine achieved_value, rating, and score aligned with SelfReviewSheet logic
+    let submitAchievedValue: number | null = null;
+    let submitRating: RatingLevel | null = null;
+    let submitScore: number | null = null;
+
+    if (isNa) {
+      // N/A: null values
+      submitAchievedValue = null;
+      submitRating = null;
+      submitScore = null;
+    } else if (isQualitativeKpi(kpi)) {
+      // Qualitative KPIs: store numeric rating as achieved_value (matches SelfReviewSheet)
+      submitAchievedValue = calculatedScore;
+      submitRating = calculatedRatingLevel;
+      submitScore = calculatedScore;
+    } else {
+      // Numeric/Date KPIs: store parsed number as achieved_value
+      submitAchievedValue = achievedValue !== '' ? parseFloat(achievedValue) : null;
+      submitRating = calculatedScore !== null ? getRatingLevel(calculatedScore) : null;
+      submitScore = calculatedScore;
+    }
 
     await submitMutation.mutateAsync({
       kpi_id: kpi.id,
       employee_id: employeeId,
       role_level: roleLevel,
-      achieved_value: achievedValue !== '' ? parseFloat(achievedValue) : null,
-      rating: dbRating,
-      score: score !== '' ? parseFloat(score) : null,
+      achieved_value: submitAchievedValue,
+      rating: submitRating,
+      score: submitScore,
       remarks: remarks || null,
       is_na: isNa,
       reason: reason.trim(),
@@ -315,6 +411,9 @@ export function AdminDataEntryDialog({
   };
 
   const isValid = reason.trim().length > 0;
+
+  // For DateCalendarInput
+  const reviewPeriod = kpi ? parseReviewPeriod(kpi) : { month: 'January', year: new Date().getFullYear() };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -370,7 +469,6 @@ export function AdminDataEntryDialog({
               <div className="bg-muted/50 rounded-lg p-3 text-sm">
                 <span className="text-muted-foreground">Current {roleLevel} values: </span>
                 {(() => {
-                  const prefix = roleLevel === 'self' ? '' : `${roleLevel}_`;
                   const currentRating = roleLevel === 'self' 
                     ? existingSubmission.self_rating 
                     : (existingSubmission as Record<string, unknown>)[`${roleLevel}_rating`];
@@ -392,7 +490,7 @@ export function AdminDataEntryDialog({
               </div>
             )}
 
-            {/* Binary KPI misconfiguration warning (C3) */}
+            {/* Binary KPI misconfiguration warning */}
             {binaryMisconfigWarning && (
               <Alert className="border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20">
                 <Info className="h-4 w-4 text-yellow-600" />
@@ -402,7 +500,7 @@ export function AdminDataEntryDialog({
               </Alert>
             )}
 
-            {/* Consistency check warning (C4) */}
+            {/* Consistency check warning */}
             {consistencyWarning && (
               <Alert className="border-orange-500/50 bg-orange-50 dark:bg-orange-950/20">
                 <AlertTriangle className="h-4 w-4 text-orange-600" />
@@ -429,26 +527,52 @@ export function AdminDataEntryDialog({
 
             {/* Data Entry Fields */}
             <div className="grid gap-4">
-              {/* Achieved Value */}
+              {/* Achieved Value — conditional rendering based on KPI type */}
               <div className="space-y-2">
-                <Label htmlFor="achieved-value">Achieved Value</Label>
-                <Input
-                  id="achieved-value"
-                  type="number"
-                  step="any"
-                  value={achievedValue}
-                  onChange={(e) => {
-                    setAchievedValue(e.target.value);
-                    autoCalculateFromAchieved(e.target.value);
-                  }}
-                  placeholder={`Target: ${kpi?.target_value ?? 'N/A'}`}
-                />
+                {kpi && isQualitativeKpi(kpi) ? (
+                  /* C1: Qualitative input — same component as SelfReviewSheet */
+                  <QualitativeValueInput
+                    uomType={kpi.uom_type as 'binary' | 'tiered'}
+                    qualitativeOptions={kpi.qualitative_options as QualitativeOption[] | null}
+                    value={achievedValue || null}
+                    onChange={handleQualitativeChange}
+                    disabled={isNa}
+                    label="Achieved Value"
+                  />
+                ) : kpi?.uom === 'Date' ? (
+                  /* C1: Date input — same component as SelfReviewSheet */
+                  <DateCalendarInput
+                    value={achievedValue ? parseInt(achievedValue, 10) : null}
+                    onChange={handleDateChange}
+                    reviewMonth={reviewPeriod.month}
+                    reviewYear={reviewPeriod.year}
+                    disabled={isNa}
+                    label="Achieved Value (Date)"
+                  />
+                ) : (
+                  /* Default: numeric input */
+                  <>
+                    <Label htmlFor="achieved-value">Achieved Value</Label>
+                    <Input
+                      id="achieved-value"
+                      type="number"
+                      step="any"
+                      value={achievedValue}
+                      onChange={(e) => {
+                        setAchievedValue(e.target.value);
+                        autoCalculateFromAchieved(e.target.value);
+                      }}
+                      placeholder={`Target: ${kpi?.target_value ?? 'N/A'}`}
+                      disabled={isNa}
+                    />
+                  </>
+                )}
               </div>
 
               {/* Rating */}
               <div className="space-y-2">
                 <Label>Rating {isAutoCalculated && <Badge variant="secondary" className="ml-2 text-xs"><Calculator className="h-3 w-3 mr-1 inline" />Auto</Badge>}</Label>
-                <Select value={rating} onValueChange={(v) => { setRating(v); setIsAutoCalculated(false); }}>
+                <Select value={rating} onValueChange={(v) => { setRating(v); setIsAutoCalculated(false); const num = parseInt(v, 10); if (!isNaN(num)) { setCalculatedScore(num); setCalculatedRatingLevel(getRatingLevel(num)); setScore(num.toFixed(2)); } }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select rating" />
                   </SelectTrigger>
@@ -465,21 +589,21 @@ export function AdminDataEntryDialog({
                 </Select>
               </div>
 
-              {/* Score */}
+              {/* Score — now stores raw rating (0-5), not (rating/5)*weightage */}
               <div className="space-y-2">
-                <Label htmlFor="score">Score {isAutoCalculated && <Badge variant="secondary" className="ml-2 text-xs"><Calculator className="h-3 w-3 mr-1 inline" />Auto</Badge>}</Label>
+                <Label htmlFor="score">Score (Rating 0-5) {isAutoCalculated && <Badge variant="secondary" className="ml-2 text-xs"><Calculator className="h-3 w-3 mr-1 inline" />Auto</Badge>}</Label>
                 <Input
                   id="score"
                   type="number"
                   step="0.01"
                   min="0"
-                  max={maxScore}
+                  max="5"
                   value={score}
                   onChange={(e) => handleScoreChange(e.target.value)}
                   placeholder="Calculated from achieved value"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Max score: {maxScore.toFixed(2)} (based on weightage). Auto-calculated from achieved value using KPI thresholds.
+                  Score is the raw rating (0-5) from the scoring engine, matching Self Review logic. Auto-calculated from achieved value using KPI thresholds.
                 </p>
               </div>
 
