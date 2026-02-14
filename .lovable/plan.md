@@ -1,76 +1,93 @@
 
 
-# Add Email Mapping for 4 Missing Notification Types
+# Store and Display PMS Policy Document In-App
 
 ## Summary
 
-Four notification types generate in-app notifications but are NOT mapped in the email pipeline, so no emails are sent for them. This plan adds full email support for all four.
+Replace the current iframe/URL-based PMS Policy page with a fully in-app document stored in the database. The policy content will be rendered as formatted HTML, editable by admins, and accessible to all employees via the sidebar.
 
-## Missing Event Types
+## Before
 
-| Notification Type | When It Fires | Who Gets It |
-|---|---|---|
-| `admin_status_step_back` | Admin moves a KPI back one workflow stage | Employee |
-| `rollback_requested` | Any participant requests a rollback | Next-level reviewer |
-| `rollback_approved` | Reviewer approves the rollback | Requester |
-| `rollback_rejected` | Reviewer dismisses the rollback | Requester |
+- PMS Policy page loads an external URL via iframe
+- Only accessible to admins in sidebar
+- No policy content stored in the system
+- Policy URL field in Global Branding settings
 
-## Changes Required
+## Changes
 
-### 1. Database Trigger -- `send_email_on_notification()`
+### 1. Database: Add `pms_policy_content` column
 
-Add 4 new CASE mappings so these notification types are forwarded to the edge function:
+Add a `text` column to `app_settings` to store the full policy document as markdown/HTML content. Seed it with the provided policy text.
 
-```text
-WHEN 'admin_status_step_back' THEN mapped_event_type := 'admin_status_step_back';
-WHEN 'rollback_requested'     THEN mapped_event_type := 'rollback_requested';
-WHEN 'rollback_approved'      THEN mapped_event_type := 'rollback_approved';
-WHEN 'rollback_rejected'      THEN mapped_event_type := 'rollback_rejected';
-```
+### 2. Sidebar: Make PMS Policy visible to all roles
 
-Also add `rollback_reason` to the JSON body so rollback emails can include the justification text.
+Change the sidebar entry from `roles: ['admin']` to all roles so every employee can read the policy.
 
-### 2. Edge Function -- `send-email-notification/index.ts`
+Update the route in `App.tsx` to allow all authenticated roles.
 
-Add to `DEFAULT_TEMPLATES`:
-- **admin_status_step_back**: Subject "[PMS] Admin Moved Your KPI Back", body includes KPI name and a note to check the dashboard
-- **rollback_requested**: Subject "[PMS] Rollback Requested on KPI", body includes reason and prompt to review
-- **rollback_approved**: Subject "[PMS] Rollback Approved", body confirms the requester can now edit/resubmit
-- **rollback_rejected**: Subject "[PMS] Rollback Request Dismissed", body informs the requester
+### 3. Rewrite `PMSPolicy.tsx`
 
-Add to `EVENT_STYLES`:
-- `admin_status_step_back`: orange/warning style
-- `rollback_requested`: amber style
-- `rollback_approved`: green/success style
-- `rollback_rejected`: gray/neutral style
+**Before**: Iframe loading an external URL, admin-only access, no inline content.
 
-### 3. Email Settings Hook -- `useEmailNotificationSettings.ts`
+**After**:
+- Renders the stored policy content directly as formatted HTML with proper headings, tables, and structure
+- All employees see a read-only beautifully formatted document with a Table of Contents sidebar
+- Admins see an "Edit Policy" button that opens a full-screen editor dialog with a large textarea
+- PDF export button for downloading the policy
+- Print-friendly styling
+- Falls back to the URL-based iframe if only `pms_policy_url` is set (backward compatibility)
 
-Add the 4 new types to the `EmailEventType` union type.
+### 4. Create `PolicyEditor` admin component
 
-### 4. Admin UI -- `EmailNotificationSettings.tsx`
+A dialog/sheet with:
+- Large textarea for editing the policy content (markdown-style)
+- Live preview toggle
+- Save button that updates `app_settings.pms_policy_content`
+- Version note field (optional)
 
-Add 4 new entries to the `EMAIL_EVENTS` array so admins can toggle these events on/off:
-- "Admin Status Step Back" -- Notify employee when admin moves KPI back
-- "Rollback Requested" -- Notify reviewer when a rollback is requested
-- "Rollback Approved" -- Notify requester when rollback is approved
-- "Rollback Dismissed" -- Notify requester when rollback is dismissed
+### 5. Create `PolicyRenderer` component
 
-### 5. Documentation -- `DOCUMENTATION.md`
+Parses the stored text and renders it as structured HTML:
+- Headings (h1-h4) from lines starting with `#`
+- Tables from pipe-delimited text
+- Bullet lists, numbered lists
+- Bold/italic formatting
+- Checkbox items
+- Code blocks for flowcharts (monospace)
+- Auto-generated Table of Contents with anchor links
 
-Update the email event mapping section to list 27 total event types (up from 23).
+### 6. Update hooks and types
 
-## Files Modified
+- Add `pms_policy_content` to `AppSettings` interface
+- Add it to the `useUpdateAppSettings` mutation's allowed fields
 
+### 7. Update `DOCUMENTATION.md`
+
+Document the new in-app policy storage and rendering system.
+
+## After
+
+- **All employees**: See "PMS Policy" in sidebar under Main section. Clicking it shows the full formatted policy document with a clickable Table of Contents, professional typography, and styled tables.
+- **Admins**: See an additional "Edit Policy" button in the top-right corner. Clicking opens a full-screen editor where they can modify the policy text and save it back to the database.
+- The policy is a self-contained document inside the app -- no external URLs needed.
+
+## Technical Details
+
+### Files to Create
+| File | Purpose |
+|---|---|
+| `src/components/policy/PolicyRenderer.tsx` | Markdown-to-HTML renderer for policy content |
+| `src/components/policy/PolicyEditorDialog.tsx` | Admin editor dialog with textarea |
+
+### Files to Modify
 | File | Change |
 |---|---|
-| New SQL migration | Add 4 CASE mappings + `rollback_reason` to `send_email_on_notification()` |
-| `supabase/functions/send-email-notification/index.ts` | Add 4 templates + 4 event styles |
-| `src/hooks/useEmailNotificationSettings.ts` | Add 4 types to `EmailEventType` union |
-| `src/components/admin/EmailNotificationSettings.tsx` | Add 4 toggle entries to `EMAIL_EVENTS` |
-| `DOCUMENTATION.md` | Update event count and list |
+| Database migration (SQL) | Add `pms_policy_content` text column, seed with full policy |
+| `src/pages/PMSPolicy.tsx` | Rewrite to use stored content + PolicyRenderer |
+| `src/hooks/useAppSettings.ts` | Add `pms_policy_content` to interface and mutation |
+| `src/components/layout/AppSidebar.tsx` | Change PMS Policy roles to all roles |
+| `src/App.tsx` | Update route to allow all authenticated roles |
+| `DOCUMENTATION.md` | Document the feature |
 
-## Risk
-
-Very Low -- additive changes only. Existing email mappings are untouched. New events default to "off" until an admin enables them.
-
+### Risk
+Low -- additive changes. The iframe fallback is preserved for backward compatibility if only a URL is configured.
