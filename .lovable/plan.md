@@ -1,90 +1,72 @@
 
 
-# RCA and CAPA: Notification Detail Sheet Lacks Details and Navigation Fails
+# Fix: Notification Click Opens Detail Sheet + Status Display
 
-## Root Cause Analysis (RCA)
+## Problem 1: Clicking a notification skips the detail sheet
+In `InboxRowItem.tsx`, the `handleRowClick` function (lines 58-72) immediately navigates to the dashboard for notification items. The detail sheet only opens as a fallback when no navigation path exists. This means the enriched detail view (KPI name, KRA name, From user) is never shown.
 
-### Problem 1: Detail sheet shows sparse information
-When a notification is clicked, the detail popup lacks key context -- no KPI name, no KRA name, no "From" user. This is because the `notificationItems` mapping in `QueryInbox.tsx` (lines 185-200) only maps basic fields (`id`, `title`, `message`, `kpiId`, etc.) but leaves `kpiName`, `kraName`, and `fromUser` undefined. The notification `metadata` JSON already contains `employee_name`, `kra_name`, and other useful fields, but they are never extracted.
-
-### Problem 2: "Open in App" navigates to plain Dashboard, not to the exact KPI
-The `getNotificationNavigationPath()` correctly builds URLs like `/dashboard?kpi={kpiId}`. However, the Dashboard's deep-link handler (line 237) searches for that KPI in `periodFilteredKpis` -- the **current user's own KPIs**. Most notifications are about **another employee's** KPI (e.g., a manager receiving a "Self Review Submitted" notification). Since the KPI doesn't belong to the current user, the lookup fails silently, and the user lands on the plain Dashboard with nothing opened.
-
-### Summary of Root Causes
-
-| Issue | Root Cause |
-|---|---|
-| Missing details in popup | `notificationItems` doesn't extract `kpiName`, `kraName`, `fromUser` from `metadata` or `related_user_id` |
-| Navigation goes to plain Dashboard | Dashboard deep-link only searches the user's own KPIs; it has no mechanism to auto-select an employee and open their KPI in the reviewer view |
+## Problem 2: No status information in the notification detail sheet
+The `InboxDetailSheet.tsx` only renders status badges for query items (open/responded/resolved). For notifications, there is no workflow status display, even though the notification `metadata` contains `from_status` and `to_status` fields describing the workflow transition.
 
 ---
 
-## Corrective and Preventive Action (CAPA)
+## Fix 1: Always open detail sheet on row click
 
-### Fix 1: Enrich notification items with metadata
+**File: `src/components/inbox/InboxRowItem.tsx`**
 
-**File: `src/pages/QueryInbox.tsx`** (lines 185-200)
+Change `handleRowClick` to always call `onView(item)` for both notifications and queries. Remove the direct navigation block (lines 62-69). Users will navigate via the existing "Open in App" button inside the detail sheet.
 
-Update the `notificationItems` mapping to extract `kpiName` and `kraName` from the notification's `metadata` JSON. Also look up `related_user_id` from the already-fetched profiles to populate the `fromUser` field.
+Before:
+```text
+handleRowClick:
+  mark as read
+  if notification -> navigate directly (skips detail sheet)
+  fallback: onView(item)
+```
 
-Changes:
-- Fetch profiles for all `related_user_id` values from notifications (batch query)
-- Map `metadata.kra_name` to `kraName`
-- Extract the KPI name from the notification `title` or `metadata`
-- Populate `fromUser` using the `related_user_id` profile lookup
+After:
+```text
+handleRowClick:
+  mark as read
+  always call onView(item) -> opens detail sheet
+```
 
-### Fix 2: Add employee deep-link to navigation paths
+## Fix 2: Add workflow status transition to notification detail sheet
 
 **File: `src/lib/inboxUtils.ts`**
 
-Update `getNotificationNavigationPath` to include an `employee` query parameter using the notification's `metadata` for employee-related notification types:
+Add a new helper function `getStatusLabel()` that converts internal status codes to human-readable labels:
+
+| Code | Label |
+|---|---|
+| kra_set | KRA Set |
+| self_review | Self Review |
+| manager_check | Manager Review |
+| skip_level_check | Skip-Level Review |
+| hr_pms_check | HR PMS Review |
+| audit | Audit |
+| management_review | Management Review |
+| approved | Approved |
+
+**File: `src/components/inbox/InboxDetailSheet.tsx`**
+
+Add a status transition section for notification items. When `metadata.from_status` and `metadata.to_status` are present, display them as a visual transition using badges and an arrow icon:
 
 ```text
-/dashboard?view=team&employee={related_user_id}&kpi={kpiId}
+[Self Review]  -->  [Manager Review]
 ```
 
-This requires passing `metadata` and building the URL with the employee context. The function signature will accept the full `InboxItem` (which it already does).
+When only the notification type is available (no status transition metadata), the existing notification type badge continues to display as-is.
 
-### Fix 3: Dashboard handles `employee` query parameter
-
-**File: `src/pages/Dashboard.tsx`**
-
-Add a new `useEffect` that reads `employee` from URL params. When present:
-1. Switch to the appropriate view mode (from `view` param, defaulting to `team`)
-2. Fetch the employee's profile
-3. Call `setSelectedEmployee()` with the profile
-4. Set `autoOpenKpiId` from the `kpi` param
-
-This leverages the existing `UnifiedScorecard` component which already accepts `autoOpenKpiId` and will auto-open the correct KPI.
-
-### Files to Modify
+## Files to Modify
 
 | File | Change |
 |---|---|
-| `src/pages/QueryInbox.tsx` | Enrich `notificationItems` mapping with `kpiName`, `kraName`, `fromUser` from metadata and profile lookups |
-| `src/lib/inboxUtils.ts` | Update `getNotificationNavigationPath` to include `employee` param for reviewer-targeted notifications |
-| `src/pages/Dashboard.tsx` | Add `useEffect` to handle `employee` query param for auto-selecting employee and opening their KPI |
-| `DOCUMENTATION.md` | Document the enhanced deep-link format and enriched notification detail sheet |
+| `src/components/inbox/InboxRowItem.tsx` | Remove direct navigation from `handleRowClick`; always open detail sheet |
+| `src/components/inbox/InboxDetailSheet.tsx` | Add workflow status transition display for notifications using `from_status` / `to_status` from metadata |
+| `src/lib/inboxUtils.ts` | Add `getStatusLabel()` helper for human-readable status labels |
+| `DOCUMENTATION.md` | Document updated click behavior and status display |
 
-### Technical Detail
+## Risk
 
-Navigation URL format will change from:
-```text
-/dashboard?kpi={kpiId}
-```
-to:
-```text
-/dashboard?view=team&employee={relatedUserId}&kpi={kpiId}
-```
-
-The Dashboard will handle this by:
-1. Reading `employee` param
-2. Fetching that employee's profile from the `profiles` table
-3. Calling `handleSelectEmployee(profile, kpiId)` which triggers `UnifiedScorecard` with `autoOpenKpiId`
-
-For the user's own notifications (e.g., `kpi_approved`, `manager_rejected`), the existing self-view deep-link will continue to work since the KPI belongs to the current user.
-
-### Risk
-
-Low -- enrichment uses existing metadata fields. Dashboard changes add a new entry point to existing employee selection logic. No changes to data or workflow.
-
+Very Low -- the "Open in App" button inside the detail sheet already handles navigation correctly with employee deep-linking. This change only alters the entry point (click row -> see details first -> then navigate) without removing any functionality.
