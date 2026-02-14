@@ -433,6 +433,7 @@ export function UnifiedScorecard({
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       toast({ 
         title: variables.approve 
@@ -493,9 +494,11 @@ export function UnifiedScorecard({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       toast({ title: 'KPI sent back successfully' });
       setSendBackDialogOpen(false);
+      setReviewSheetOpen(false);
     },
     onError: (error: Error) => {
       toast({ title: 'Failed to send back', description: error.message, variant: 'destructive' });
@@ -590,6 +593,7 @@ export function UnifiedScorecard({
       }
       
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       toast({ title: 'KPI marked as N/A and forwarded' });
       setReviewSheetOpen(false);
@@ -622,6 +626,7 @@ export function UnifiedScorecard({
       }
       
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       toast({ title: approve ? 'N/A KPI approved' : 'N/A KPI confirmed' });
       setReviewSheetOpen(false);
