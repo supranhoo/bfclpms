@@ -19,6 +19,7 @@ export interface AdminDataEntryParams {
   score?: number | null;
   remarks?: string | null;
   evidence_url?: string | null;
+  is_na?: boolean; // Explicit N/A toggle
   reason: string; // Mandatory for audit
   kpi_name: string; // For notification message
 }
@@ -104,6 +105,7 @@ export function useAdminSubmitReviewData() {
       score,
       remarks,
       evidence_url,
+      is_na,
       reason,
       kpi_name,
     }: AdminDataEntryParams) => {
@@ -124,6 +126,14 @@ export function useAdminSubmitReviewData() {
         remarks,
         evidence_url,
       });
+
+      // 2b. Handle is_na flag: explicit toggle takes priority,
+      // otherwise auto-clear when achieved_value is provided
+      if (is_na !== undefined) {
+        updateFields.is_na = is_na;
+      } else if (achieved_value !== undefined && achieved_value !== null) {
+        updateFields.is_na = false;
+      }
 
       // 3. Upsert submission
       const { data: newSubmission, error } = await supabase

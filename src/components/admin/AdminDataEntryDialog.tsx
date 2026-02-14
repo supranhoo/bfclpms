@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { AlertTriangle, Loader2, ShieldAlert } from 'lucide-react';
 import { useAdminSubmitReviewData, AdminRoleLevel } from '@/hooks/useAdminDataEntry';
 import type { KPI } from '@/hooks/useKpis';
@@ -69,7 +70,7 @@ export function AdminDataEntryDialog({
   const [score, setScore] = useState<string>('');
   const [remarks, setRemarks] = useState<string>('');
   const [reason, setReason] = useState<string>('');
-
+  const [isNa, setIsNa] = useState<boolean>(false);
   // Fetch existing submission
   const { data: existingSubmission, isLoading: loadingSubmission } = useQuery({
     queryKey: ['review-submission-admin', kpi?.id],
@@ -93,8 +94,11 @@ export function AdminDataEntryDialog({
       setRating('');
       setScore('');
       setRemarks('');
+      setIsNa(false);
       return;
     }
+
+    setIsNa(existingSubmission.is_na === true);
 
     // Get values based on role level
     switch (roleLevel) {
@@ -143,6 +147,7 @@ export function AdminDataEntryDialog({
       setScore('');
       setRemarks('');
       setReason('');
+      setIsNa(false);
     }
   }, [isOpen]);
 
@@ -157,6 +162,7 @@ export function AdminDataEntryDialog({
       rating: rating || null,
       score: score ? parseFloat(score) : null,
       remarks: remarks || null,
+      is_na: isNa,
       reason: reason.trim(),
       kpi_name: kpi.kpi_name,
     });
@@ -241,6 +247,21 @@ export function AdminDataEntryDialog({
                 })()}
               </div>
             )}
+
+            {/* N/A Toggle */}
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="na-toggle" className="text-sm font-medium">Mark as Not Applicable</Label>
+                <p className="text-xs text-muted-foreground">
+                  {existingSubmission?.is_na ? 'Currently marked N/A — toggle off to include in scoring' : 'Toggle on to exclude from scoring'}
+                </p>
+              </div>
+              <Switch
+                id="na-toggle"
+                checked={isNa}
+                onCheckedChange={setIsNa}
+              />
+            </div>
 
             {/* Data Entry Fields */}
             <div className="grid gap-4">
