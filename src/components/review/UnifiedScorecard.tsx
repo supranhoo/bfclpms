@@ -40,7 +40,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
-  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays, UserCheck, ClipboardCheck
+  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays, UserCheck, ClipboardCheck, AlertTriangle
 } from 'lucide-react';
 import { 
   kpiStatusColors, 
@@ -51,6 +51,9 @@ import {
 } from '@/lib/reviewConstants';
 import { MobileKpiCard } from '@/components/review/MobileKpiCard';
 import { NaConfirmationCard } from '@/components/review/NaConfirmationCard';
+import { RollbackRequestBanner } from '@/components/review/RollbackRequestBanner';
+import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog';
+import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { 
   resolveForwardStatus, 
@@ -252,6 +255,10 @@ export function UnifiedScorecard({
   // Org KPI send-back dialog state (for management)
   const [orgKpiSendBackOpen, setOrgKpiSendBackOpen] = useState(false);
   const [selectedOrgKpiForSendBack, setSelectedOrgKpiForSendBack] = useState<KPI | null>(null);
+
+  // Rollback state
+  const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false);
+  const { data: pendingRollback } = usePendingRollbackRequest(selectedKpi?.id);
 
   const approveKpi = useApproveKpi();
   const raiseQuery = useRaiseQuery();
@@ -1054,6 +1061,11 @@ export function UnifiedScorecard({
             </div>
           )}
 
+          {/* Rollback Request Banner - shown to reviewers when a pending request exists */}
+          {selectedKpi && pendingRollback && isReviewable(selectedKpi) && (
+            <RollbackRequestBanner request={pendingRollback} />
+          )}
+
           <SheetFooter className="flex-col sm:flex-row gap-2 sm:justify-between mt-4 pb-4">
             {selectedKpi && isReviewable(selectedKpi) ? (
               <>
@@ -1120,9 +1132,29 @@ export function UnifiedScorecard({
                 </div>
               </>
             ) : (
-              <Button variant="outline" className="w-full sm:w-auto" onClick={() => setReviewSheetOpen(false)}>
-                Close
-              </Button>
+              <div className="flex items-center gap-2 w-full justify-between">
+                <Button variant="outline" className="w-full sm:w-auto" onClick={() => setReviewSheetOpen(false)}>
+                  Close
+                </Button>
+                {/* Request Rollback button in read-only mode */}
+                {selectedKpi && selectedKpi.status !== 'approved' && !pendingRollback && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950"
+                    onClick={() => setRollbackDialogOpen(true)}
+                  >
+                    <Undo2 className="h-4 w-4 mr-1" />
+                    Request Rollback
+                  </Button>
+                )}
+                {selectedKpi && pendingRollback && (
+                  <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    Rollback requested
+                  </span>
+                )}
+              </div>
             )}
           </SheetFooter>
         </SheetContent>
@@ -1243,6 +1275,18 @@ export function UnifiedScorecard({
       />
 
       {/* Org KPI Send Back Dialog handled in KpiReviewPanel */}
+
+      {/* Rollback Request Dialog - for read-only mode */}
+      {selectedKpi && (
+        <RollbackRequestDialog
+          open={rollbackDialogOpen}
+          onOpenChange={setRollbackDialogOpen}
+          kpiId={selectedKpi.id}
+          kpiName={selectedKpi.kpi_name}
+          currentStatus={selectedKpi.status}
+          workflowStages={effectiveStages}
+        />
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-02-13  
-> **Version:** 1.20.0
+> **Last Updated:** 2026-02-14  
+> **Version:** 1.21.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -213,6 +213,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | `performance_reviews` | Aggregate review per employee/period | `employee_id`, `review_period`, `review_year`, `overall_score`, `status` |
 | `workflow_templates` | Configurable review stages | `id`, `name`, `stages` (JSONB), `is_default` |
 | `workflow_config` | Template assignments | `workflow_template_id`, `config_type`, `config_value` |
+| `kpi_rollback_requests` | User-initiated rollback requests | `kpi_id`, `requested_by`, `requested_from_status`, `target_status`, `reason`, `status` (pending/approved/rejected/expired), `actioned_by` |
 
 #### Templates & Bundles
 
@@ -834,6 +835,23 @@ Footer Layout:
 ```
 [ ↩ Send Back ]  ───────────  [ Cancel ]  [ Save Draft ]  [ ✓ Approve ]
 ```
+
+### 4.6.5 Rollback Request Feature (v1.21.0)
+
+**Purpose:** Allows any workflow participant to request a rollback of a KPI they have already submitted/forwarded, enabling corrections before the next level processes it.
+
+**How it works:**
+1. After submitting, the user opens "View KPI Details" and clicks **"Request Rollback"**
+2. A dialog prompts for a mandatory reason
+3. A `kpi_rollback_requests` record is created (only one pending request per KPI allowed via unique partial index)
+4. The next-level reviewer sees a **red banner** with the request reason and "Roll Back" / "Dismiss" buttons
+5. **Roll Back**: Reverts KPI status to the previous stage using `resolvePreviousStatus()`, notifies the requester
+6. **Dismiss**: Rejects the request, notifies the requester
+
+**Components:** `RollbackRequestDialog`, `RollbackRequestBanner`
+**Hook:** `useKpiRollbackRequests` — `usePendingRollbackRequest`, `useCreateRollbackRequest`, `useApproveRollbackRequest`, `useRejectRollbackRequest`
+
+**Edge cases:** Auto-expire trigger on KPI status change, unique partial index prevents duplicates, approved KPIs excluded.
 
 ### 4.7 Self Review Workflow
 

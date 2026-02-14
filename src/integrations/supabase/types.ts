@@ -770,6 +770,81 @@ export type Database = {
           },
         ]
       }
+      kpi_rollback_requests: {
+        Row: {
+          actioned_at: string | null
+          actioned_by: string | null
+          created_at: string
+          id: string
+          kpi_id: string
+          reason: string
+          requested_by: string
+          requested_from_status: string
+          status: string
+          target_status: string
+        }
+        Insert: {
+          actioned_at?: string | null
+          actioned_by?: string | null
+          created_at?: string
+          id?: string
+          kpi_id: string
+          reason: string
+          requested_by: string
+          requested_from_status: string
+          status?: string
+          target_status: string
+        }
+        Update: {
+          actioned_at?: string | null
+          actioned_by?: string | null
+          created_at?: string
+          id?: string
+          kpi_id?: string
+          reason?: string
+          requested_by?: string
+          requested_from_status?: string
+          status?: string
+          target_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_rollback_requests_actioned_by_fkey"
+            columns: ["actioned_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_rollback_requests_actioned_by_fkey"
+            columns: ["actioned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_rollback_requests_kpi_id_fkey"
+            columns: ["kpi_id"]
+            isOneToOne: false
+            referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_rollback_requests_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_rollback_requests_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpi_templates: {
         Row: {
           applicable_roles: string[] | null
