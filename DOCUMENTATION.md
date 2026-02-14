@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-14  
-> **Version:** 1.28.1
+> **Version:** 1.28.2
 > **Maintainer:** Lovable AI
 
 ---
@@ -332,6 +332,7 @@ has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'management')
 **Profiles Table RLS:**
 - Users can view their own profile (`authenticated` only)
 - Managers can view direct reports (`authenticated` only)
+- Managers can view skip-level reports — employees whose `reporting_manager_id` is one of the manager's direct reports (`authenticated` only, v1.28.2)
 - Admins, Auditors, and Management can view all profiles (`authenticated` only)
 
 **Audit/System Log INSERT Policies:**
