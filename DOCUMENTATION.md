@@ -1934,6 +1934,7 @@ Clicking a notification row in the Inbox navigates directly to the relevant page
 | `observation_raised` / `observation_reply` / `observation_resolved` | `/my-kpis?kpi={kpiId}` |
 | `pip_initiated` / `pip_completed` / `pip_milestone_reminder` | `/admin/pip` |
 | `password_rollout` | `/` (home) |
+| `rollback_requested` / `rollback_approved` / `rollback_rejected` | `/dashboard?kpi={kpiId}` |
 
 - **Notification rows**: Click navigates to the target page (marks as read automatically)
 - **Query rows**: Click opens the detail sheet (queries need inline respond/accept actions)
