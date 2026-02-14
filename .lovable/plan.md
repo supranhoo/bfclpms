@@ -1,98 +1,122 @@
 
 
-# RCA and CAPA: Admin Corrections Not Visible for Anil Pathak
+# Reviewer-Initiated N/A Marking at Any Review Stage
 
-## Root Cause Analysis
+## Current Behavior
 
-### The Data Trail
+Today, only the **employee** can mark a KPI as "Not Applicable" during self-review (via a checkbox in `SelfReviewSheet`). At later stages (Manager, Auditor, Management), reviewers can only **confirm** an already-set N/A flag -- they cannot initiate it themselves.
 
-| Field | Before Admin Edit | After Admin Edit |
-|---|---|---|
-| achieved_value | null | 0 |
-| self_rating | null | blue (Outstanding) |
-| self_score | null | 5 |
-| self_remarks | No | No |
-| **is_na** | **true** | **true (UNCHANGED)** |
-| KPI status | approved | approved |
+## What Changes
 
-Admin Jaspal entered valid self-review data at 05:45 UTC today with reason "As per boss". The data was saved correctly to `review_submissions`. However, the `is_na` (Not Applicable) flag was never cleared.
+Any reviewer (Manager, Skip-Level, HR PMS, Auditor, Management) will be able to mark a KPI as N/A even if the employee scored it normally. When a reviewer marks N/A:
 
-### Why the Dashboard Hides It
+- The `is_na` flag on `review_submissions` is set to `true`
+- The reviewer must provide a mandatory reason (stored as their level's remarks)
+- The KPI is forwarded to the next stage with N/A status
+- Dashboard scoring excludes the KPI (existing behavior for `is_na = true`)
+- An audit log records who marked it N/A, at what stage, and why
+- A new `na_marked_by_role` column tracks which role initiated the N/A
 
-The Dashboard score calculation in `Dashboard.tsx` (line 283) explicitly skips any KPI where `is_na === true`:
+## Implementation
 
-```text
-data.forEach(kpi => {
-  const submission = submissionMap.get(kpi.id);
-  if (submission?.is_na) return;  // <-- This KPI is skipped entirely
-  ...
-});
+### 1. Database: Add `na_marked_by_role` column
+
+Add a nullable text column to `review_submissions` to track which role marked the N/A:
+
+```sql
+ALTER TABLE review_submissions
+  ADD COLUMN na_marked_by_role text;
 ```
 
-The same skip logic exists in `EmployeePerformanceSummary.tsx` (line 154) and `KpiTrackerModal.tsx` (line 57). So the corrected scores (self_score=5) exist in the database but are invisible across all views.
+This allows the system to show "Marked N/A by Auditor" vs "Marked N/A by Employee" in the review trail.
 
-### Root Cause
+### 2. Update `NaConfirmationCard` component
 
-The Admin Data Entry system (`useAdminDataEntry.ts` -> `buildUpdateFields`) only handles 5 fields:
-1. achieved_value
-2. rating
-3. score
-4. remarks
-5. evidence_url
+Transform this component from a read-only confirmation card into a dual-purpose card:
 
-It has **no awareness of the `is_na` flag**. The Admin Data Entry Dialog UI also provides **no toggle to clear N/A status**. This means:
-- When an admin enters valid data for a KPI that was previously marked N/A, the N/A flag persists
-- The dashboard treats it as still not applicable and excludes it from all score calculations and displays
+- **When N/A was set by a previous stage:** Show existing confirmation UI (checkbox + optional remarks) -- no change
+- **New: "Mark as N/A" action:** Add a new variant/section with a Switch/button that allows the reviewer to initiate N/A marking, with a mandatory reason textarea
 
-## CAPA: Auto-Clear is_na + Add Manual Toggle
+The component will accept a new prop `canMarkNa: boolean` and `onMarkNa: (remarks: string) => void`.
 
-### Fix 1: Auto-clear `is_na` when admin enters achieved value (Backend Logic)
+### 3. Update `UnifiedScorecard.tsx` (primary scorecard)
 
-**File: `src/hooks/useAdminDataEntry.ts`**
+This is the main component used across all reviewer views.
 
-In the `useAdminSubmitReviewData` mutation, after building update fields, if `achieved_value` is provided (not null/undefined), automatically add `is_na: false` to the upsert payload. This ensures that entering actual data always overrides the N/A flag.
+- Add a `reviewerMarkNa` state (boolean) and a `markNaRemarks` state (string)
+- When reviewer toggles "Mark as N/A":
+  - Hide the score/achieved-value input fields (they become irrelevant)
+  - Show a mandatory remarks field for justification
+  - Change the action button to "Mark N/A and Forward"
+- On submit with N/A:
+  - Set `is_na = true` and `na_marked_by_role = viewLevel` on `review_submissions`
+  - Store the reason in the reviewer's remarks field (e.g., `manager_remarks`)
+  - Advance the KPI status to the next workflow stage
+  - Log audit entry: `{viewLevel}_MARKED_NA`
+  - Notify the employee
 
-```text
-if achieved_value is provided and not null:
-  add is_na = false to updateFields
-```
+### 4. Update legacy scorecards (EmployeeScorecard, AuditScorecard, ManagementScorecard)
 
-### Fix 2: Add N/A toggle to Admin Data Entry Dialog (UI)
+Apply the same pattern for consistency, since these components still handle some flows independently:
 
-**File: `src/components/admin/AdminDataEntryDialog.tsx`**
+- Add the "Mark as N/A" toggle in the review sheet
+- Update the approve handler to support reviewer-initiated N/A
+- Each creates an audit log with the specific action (e.g., `AUDITOR_MARKED_NA`)
 
-Add a Switch/Checkbox labeled "Mark as N/A" that:
-- Shows the current `is_na` status from the existing submission
-- When toggled OFF (unchecked), includes `is_na: false` in the save payload
-- When toggled ON (checked), includes `is_na: true` and optionally clears score fields
-- This gives admins explicit control over the N/A flag
+### 5. Update `KpiDetailsTable` to show N/A initiator
 
-### Fix 3: Immediate data fix for Anil Pathak's KPI
+Currently the table just checks `is_na` to disable the review button. Enhance it to show a badge indicating which role marked it N/A (using the new `na_marked_by_role` field).
 
-Run a one-time update to clear the `is_na` flag on the affected submission so the correction becomes visible immediately:
+### 6. Update scoring and display logic
 
-```text
-UPDATE review_submissions
-SET is_na = false
-WHERE kpi_id = '526153d6-0542-4c9a-bca3-835bd98b147b'
-```
+No changes needed to scoring -- the existing `if (submission?.is_na) return` skip logic already handles this correctly across Dashboard, EmployeePerformanceSummary, and KpiTrackerModal. The new column is purely informational.
 
-### Fix 4: Update DOCUMENTATION.md
+### 7. Update DOCUMENTATION.md
 
-Record the N/A flag handling in admin data entry.
+Record the new reviewer-initiated N/A capability.
 
 ## Files Modified
 
 | File | Change |
 |---|---|
-| `src/hooks/useAdminDataEntry.ts` | Auto-clear `is_na` when achieved_value is provided; accept `is_na` parameter |
-| `src/components/admin/AdminDataEntryDialog.tsx` | Add N/A toggle switch; pass `is_na` to mutation |
-| `DOCUMENTATION.md` | Document N/A handling in admin data entry |
-| Database migration | One-time fix for Anil Pathak's submission |
+| Database migration | Add `na_marked_by_role` column to `review_submissions` |
+| `src/components/review/NaConfirmationCard.tsx` | Add "Mark as N/A" variant with Switch + mandatory remarks |
+| `src/components/review/UnifiedScorecard.tsx` | Add reviewer N/A toggle, update submit handler |
+| `src/components/review/EmployeeScorecard.tsx` | Add reviewer N/A toggle for manager view |
+| `src/components/review/AuditScorecard.tsx` | Add reviewer N/A toggle for auditor view |
+| `src/components/review/ManagementScorecard.tsx` | Add reviewer N/A toggle for management view |
+| `src/components/review/KpiDetailsTable.tsx` | Show "Marked N/A by [Role]" badge |
+| `DOCUMENTATION.md` | Document reviewer N/A marking |
+
+## User Flow
+
+```text
+Reviewer opens KPI review sheet
+  |
+  +--> KPI already marked N/A by employee?
+  |      YES --> Existing confirmation flow (checkbox + forward)
+  |      NO  --> New "Mark as N/A" switch appears above score fields
+  |                |
+  |                +--> Reviewer toggles ON
+  |                |      Score fields hide
+  |                |      Mandatory reason textarea appears
+  |                |      Action button changes to "Mark N/A & Forward"
+  |                |
+  |                +--> Reviewer toggles OFF
+  |                       Normal scoring flow resumes
+  |
+  +--> On submit:
+         is_na = true
+         na_marked_by_role = 'auditor' (or manager/management)
+         {level}_remarks = reason
+         KPI advances to next stage
+         Audit log + employee notification created
+```
 
 ## Risk: Low
 
-- The auto-clear logic is intuitive: if an admin enters an actual value, the KPI is no longer "not applicable"
-- The manual toggle gives admins explicit override control
-- Existing N/A KPIs without admin edits are unaffected
+- Scoring logic is unaffected (N/A exclusion already works)
+- Existing employee-initiated N/A flow is unchanged
+- The new column is nullable, so no migration issues with existing data
+- All views already handle `is_na = true` for display purposes
 
