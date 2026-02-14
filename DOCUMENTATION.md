@@ -1940,12 +1940,11 @@ Clicking a notification row in the Inbox navigates directly to the relevant page
 
 **Dashboard Employee Deep-Link Handler:** When the Dashboard receives `?employee={id}&kpi={kpiId}`, it fetches the employee's profile, switches to the appropriate view mode, and calls `handleSelectEmployee()` to open `UnifiedScorecard` with `autoOpenKpiId` set — navigating directly to the exact KPI.
 
-**Enriched Notification Detail Sheet:** The `InboxDetailSheet` now displays KPI name, KRA name, and the "From" user for notifications. These fields are extracted from the notification's `metadata` JSON (`kra_name`, `kpi_name`, `employee_name`) and resolved via a batch profile lookup on `related_user_id`.
+**Enriched Notification Detail Sheet:** The `InboxDetailSheet` now displays KPI name, KRA name, and the "From" user for notifications. These fields are extracted from the notification's `metadata` JSON (`kra_name`, `kpi_name`, `employee_name`) and resolved via a batch profile lookup on `related_user_id`. When `metadata.from_status` and `metadata.to_status` are present, a visual workflow status transition is displayed (e.g., `[Self Review] → [Manager Review]`) using styled badges and an arrow icon. The `getStatusLabel()` helper in `inboxUtils.ts` converts internal status codes to human-readable labels.
 
-- **Notification rows**: Click navigates to the target page (marks as read automatically)
-- **Query rows**: Click opens the detail sheet (queries need inline respond/accept actions)
+- **All rows (notification & query)**: Click always opens the detail sheet first (marks as read automatically). Navigation to the target page happens via the "Open in App" button inside the detail sheet.
 - **Eye icon**: Always opens the detail sheet for all item types
-- **Fallback**: If no deep-link exists, the detail sheet opens instead
+- **"Open in App" button**: Inside the detail sheet, navigates to the deep-linked dashboard page with employee context
 
 ### 4.13 Frequency & Sub-Frequency Logic
 
