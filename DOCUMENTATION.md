@@ -1339,6 +1339,7 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - Status changes require reason and trigger notifications to employee/manager
 - **Admin Data Entry on Behalf of Users:**
   - **Enter Review Data:** Admins can enter or modify review submission data (achieved value, rating, score, remarks) for any role level (Self, Manager, Auditor, Management) via the "Enter Data" button (pen icon) on expanded KPI rows
+  - **Auto-Calculated Rating & Score:** When an admin enters an achieved value, the dialog automatically runs `calculateRating()` from `ratingCalculation.ts` using the KPI's thresholds (R5-R1), criteria (Higher/Lower is Better), UOM type, and threshold mode. The resulting rating level and weighted score are pre-filled into the Rating dropdown and Score field. An "Auto" badge indicates calculated values. Admins can manually override both fields if needed — doing so clears the auto badge. This prevents incorrect manual entries (e.g., confusing weightage with rating).
   - **Enter Daily/Weekly Data:** For KPIs with Daily or Weekly frequency, admins can enter sub-period submissions for any day or week via the "Daily Data" button (calendar icon) - **NO DATE RESTRICTIONS** apply to admins
   - Admins can override locked entries (e.g., entries marked as "Final" with `is_resubmitted: true`)
   - **Mandatory reason field** for all admin entries to ensure audit compliance

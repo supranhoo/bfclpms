@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -17,8 +17,9 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { AlertTriangle, Loader2, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Calculator, Loader2, ShieldAlert } from 'lucide-react';
 import { useAdminSubmitReviewData, AdminRoleLevel } from '@/hooks/useAdminDataEntry';
+import { calculateRating, ratingToLevel, type RatingThresholds } from '@/lib/ratingCalculation';
 import type { KPI } from '@/hooks/useKpis';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -71,6 +72,46 @@ export function AdminDataEntryDialog({
   const [remarks, setRemarks] = useState<string>('');
   const [reason, setReason] = useState<string>('');
   const [isNa, setIsNa] = useState<boolean>(false);
+  const [isAutoCalculated, setIsAutoCalculated] = useState<boolean>(false);
+
+  // Auto-calculate rating/score from achieved value using the same engine as self-review
+  const autoCalculateFromAchieved = useCallback((value: string) => {
+    if (!kpi || value === '') {
+      setIsAutoCalculated(false);
+      return;
+    }
+
+    const thresholds: RatingThresholds = {
+      r5: kpi.r5, r4: kpi.r4, r3: kpi.r3, r2: kpi.r2, r1: kpi.r1, r0: null,
+    };
+
+    const result = calculateRating(
+      parseFloat(value),
+      kpi.target_value,
+      thresholds,
+      kpi.criteria || 'Higher is Better',
+      kpi.weightage || 0,
+      (kpi.uom_type as 'numeric' | 'binary' | 'tiered') || 'numeric',
+      kpi.qualitative_options as any,
+      kpi.uom,
+      (kpi.threshold_mode as 'absolute' | 'ratio') || 'absolute'
+    );
+
+    // Map numeric rating to RatingLevel color
+    const level = ratingToLevel(result.rating);
+    // Map ratingToLevel output to DB enum
+    const levelToDbRating: Record<string, RatingLevel> = {
+      blue: 'blue', green: 'green', yellow: 'yellow', red: 'red',
+    };
+    const dbRating = levelToDbRating[level] || '';
+
+    setRating(dbRating);
+    // Score = (rating / 5) * weightage, matching the existing formula
+    const calculatedScore = (result.rating / 5) * (kpi.weightage || 0);
+    setScore(calculatedScore.toFixed(2));
+    setIsAutoCalculated(true);
+  }, [kpi]);
+
   // Fetch existing submission
   const { data: existingSubmission, isLoading: loadingSubmission } = useQuery({
     queryKey: ['review-submission-admin', kpi?.id],
@@ -129,12 +170,16 @@ export function AdminDataEntryDialog({
     }
   }, [roleLevel, existingSubmission]);
 
-  // Auto-calculate score when rating changes
+  // Auto-calculate score when rating changes (manual override)
   useEffect(() => {
     if (rating && kpi?.weightage) {
       const ratingScore = getRatingScore(rating as RatingLevel);
       const calculatedScore = (ratingScore / 5) * kpi.weightage;
       setScore(calculatedScore.toFixed(2));
+      // If user manually changed rating, mark as not auto-calculated
+      if (!isAutoCalculated) {
+        setIsAutoCalculated(false);
+      }
     }
   }, [rating, kpi?.weightage]);
 
@@ -273,15 +318,18 @@ export function AdminDataEntryDialog({
                   type="number"
                   step="any"
                   value={achievedValue}
-                  onChange={(e) => setAchievedValue(e.target.value)}
-                  placeholder={`Target: ${kpi?.target_value || 'N/A'}`}
+                  onChange={(e) => {
+                    setAchievedValue(e.target.value);
+                    autoCalculateFromAchieved(e.target.value);
+                  }}
+                  placeholder={`Target: ${kpi?.target_value ?? 'N/A'}`}
                 />
               </div>
 
               {/* Rating */}
               <div className="space-y-2">
-                <Label>Rating</Label>
-                <Select value={rating} onValueChange={(v) => setRating(v as RatingLevel)}>
+                <Label>Rating {isAutoCalculated && <Badge variant="secondary" className="ml-2 text-xs"><Calculator className="h-3 w-3 mr-1 inline" />Auto</Badge>}</Label>
+                <Select value={rating} onValueChange={(v) => { setRating(v as RatingLevel); setIsAutoCalculated(false); }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select rating" />
                   </SelectTrigger>
@@ -300,17 +348,17 @@ export function AdminDataEntryDialog({
 
               {/* Score */}
               <div className="space-y-2">
-                <Label htmlFor="score">Score (Auto-calculated)</Label>
+                <Label htmlFor="score">Score {isAutoCalculated && <Badge variant="secondary" className="ml-2 text-xs"><Calculator className="h-3 w-3 mr-1 inline" />Auto</Badge>}</Label>
                 <Input
                   id="score"
                   type="number"
                   step="0.01"
                   value={score}
-                  onChange={(e) => setScore(e.target.value)}
-                  placeholder="Calculated from rating"
+                  onChange={(e) => { setScore(e.target.value); setIsAutoCalculated(false); }}
+                  placeholder="Calculated from achieved value"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Auto-calculated based on rating and weightage. You can override if needed.
+                  Auto-calculated from achieved value using KPI thresholds. Override manually if needed.
                 </p>
               </div>
 
