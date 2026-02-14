@@ -1,36 +1,39 @@
 
-# Fix: Add Deep-Link Navigation for Rollback Notifications
 
-## Problem
-
-The "Rollback Requested" notification (and related rollback_approved / rollback_rejected types) does not navigate to the KPI when clicked. The screenshot shows the detail sheet with only a "Close" button and no way to jump to the KPI.
+# RCA and CAPA: Duplicate Rating Scale in Self Review Sheet
 
 ## Root Cause
 
-The `getNotificationNavigationPath()` function in `src/lib/inboxUtils.ts` has no `case` entries for rollback notification types, so it falls through to `default: return null`, which means no navigation link is generated.
+In `SelfReviewSheet.tsx` (lines 467-472), a standalone `<RatingScaleDisplay>` component is rendered directly below the `<KpiReviewPanel>`. However, `KpiReviewPanel` already includes `<KpiMetricsSection>`, which displays the exact same rating scale (R5 through R1) inside the "Metrics and Scale" card.
+
+This results in the rating scale appearing twice on screen -- once compactly inside the panel's left column, and again as a full-width card below the panel.
 
 ## Fix
 
-**File: `src/lib/inboxUtils.ts`** (around line 225)
+**File: `src/components/review/SelfReviewSheet.tsx`** (lines 467-472)
 
-Add three new cases to the switch statement:
+Remove the standalone `<RatingScaleDisplay>` block:
 
 ```text
-case 'rollback_requested':
-case 'rollback_approved':
-case 'rollback_rejected':
-  return item.kpiId ? `/dashboard?kpi=${item.kpiId}` : '/dashboard';
+{/* Rating Scale */}
+{selectedKpi && (
+  <RatingScaleDisplay kpi={selectedKpi} />
+)}
 ```
 
-This will make clicking any rollback notification navigate the user directly to the KPI detail view on the dashboard.
+This section is fully redundant since `KpiMetricsSection` (rendered inside `KpiReviewPanel`) already displays the same R5-R1 values with tooltips.
 
-Additionally, add human-readable labels for these types in the `getNotificationTypeLabel()` function (if not already present) so they display cleanly in the Inbox.
+Also clean up the unused import for `RatingScaleDisplay` if it is no longer used elsewhere in the file.
 
-**File: `DOCUMENTATION.md`** -- Update the notification event mapping to include rollback types in the deep-link table.
+**File: `DOCUMENTATION.md`** -- Note the removal of the duplicate rating scale from the self-review sheet.
 
 ## Files to Modify
 
 | File | Change |
 |---|---|
-| `src/lib/inboxUtils.ts` | Add rollback cases to `getNotificationNavigationPath` and `getNotificationTypeLabel` |
-| `DOCUMENTATION.md` | Document the new deep-link mappings |
+| `src/components/review/SelfReviewSheet.tsx` | Remove duplicate `RatingScaleDisplay` block and its import |
+| `DOCUMENTATION.md` | Update to reflect the fix |
+
+## Risk
+
+Very Low -- purely removing a redundant UI element. No logic, data, or workflow changes.
