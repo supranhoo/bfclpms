@@ -175,12 +175,32 @@ export function getNotificationNavigationPath(item: InboxItem): string | null {
     return null;
   }
 
-  const kpiParam = item.kpiId ? `?kpi=${item.kpiId}` : '';
+  const meta = item.metadata || {};
+  const employeeId = meta.employee_id || (item.fromUser?.id) || null;
+
+  // Helper to build dashboard URL with employee context for reviewer-targeted notifications
+  const buildEmployeeDeepLink = (view: string, kpiId?: string | null, extraParams?: string) => {
+    const params = new URLSearchParams();
+    params.set('view', view);
+    if (employeeId) params.set('employee', employeeId);
+    if (kpiId) params.set('kpi', kpiId);
+    if (extraParams) {
+      const extra = new URLSearchParams(extraParams);
+      extra.forEach((v, k) => params.set(k, v));
+    }
+    return `/dashboard?${params.toString()}`;
+  };
 
   switch (item.notificationType) {
-    // KPI workflow transitions
+    // KPI workflow transitions — reviewer receives these about another employee
     case 'kpi_submitted':
-      return `/dashboard?view=team${kpiParam ? `&kpi=${item.kpiId}` : ''}`;
+      return buildEmployeeDeepLink('team', item.kpiId);
+    case 'kpi_ready_for_audit':
+      return buildEmployeeDeepLink('audit', item.kpiId);
+    case 'kpi_ready_for_management':
+      return buildEmployeeDeepLink('management', item.kpiId);
+
+    // These are sent TO the employee about their own KPI — no employee param needed
     case 'kpi_approved':
     case 'kpi_finalized':
     case 'manager_rejected':
@@ -188,12 +208,8 @@ export function getNotificationNavigationPath(item: InboxItem): string | null {
     case 'admin_status_change':
     case 'admin_data_entry':
       return item.kpiId ? `/dashboard?kpi=${item.kpiId}` : '/dashboard';
-    case 'kpi_ready_for_audit':
-      return `/dashboard?view=audit${kpiParam ? `&kpi=${item.kpiId}` : ''}`;
-    case 'kpi_ready_for_management':
-      return `/dashboard?view=management${kpiParam ? `&kpi=${item.kpiId}` : ''}`;
 
-    // KRA assignment
+    // KRA assignment — sent to the employee
     case 'kra_assigned':
     case 'kra_batch_assigned':
       return '/dashboard';
@@ -206,11 +222,13 @@ export function getNotificationNavigationPath(item: InboxItem): string | null {
     case 'query_resolved_fyi':
       return item.kpiId ? `/dashboard?kpi=${item.kpiId}&panel=queryHistory` : '/dashboard';
 
-    // Observations
+    // Observations — reviewer receives these, need employee context
     case 'observation_raised':
     case 'observation_reply':
     case 'observation_resolved':
-      return item.kpiId ? `/dashboard?kpi=${item.kpiId}` : '/dashboard';
+      return item.kpiId && employeeId
+        ? buildEmployeeDeepLink('team', item.kpiId)
+        : (item.kpiId ? `/dashboard?kpi=${item.kpiId}` : '/dashboard');
 
     // Period events
     case 'period_locked':
@@ -226,8 +244,11 @@ export function getNotificationNavigationPath(item: InboxItem): string | null {
     case 'password_rollout':
       return '/';
 
-    // Rollback requests
+    // Rollback requests — reviewer receives these
     case 'rollback_requested':
+      return item.kpiId && employeeId
+        ? buildEmployeeDeepLink('team', item.kpiId)
+        : (item.kpiId ? `/dashboard?kpi=${item.kpiId}` : '/dashboard');
     case 'rollback_approved':
     case 'rollback_rejected':
       return item.kpiId ? `/dashboard?kpi=${item.kpiId}` : '/dashboard';

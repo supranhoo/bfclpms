@@ -1922,20 +1922,25 @@ The database trigger `send_email_on_notification()` maps internal notification t
 
 **Smart Notification Navigation (Deep-Link):**
 
-Clicking a notification row in the Inbox navigates directly to the relevant page. The centralized `getNotificationNavigationPath()` utility in `src/lib/inboxUtils.ts` maps each notification type to a target route:
+Clicking a notification row in the Inbox navigates directly to the relevant page. The centralized `getNotificationNavigationPath()` utility in `src/lib/inboxUtils.ts` maps each notification type to a target route. For reviewer-targeted notifications (e.g., `kpi_submitted`, `kpi_ready_for_audit`), the URL includes an `employee` query parameter so the Dashboard auto-selects the correct employee and opens their KPI in the reviewer scorecard.
 
 | Notification Type | Target Route |
 |---|---|
-| `kpi_submitted` | `/dashboard?view=team&kpi={kpiId}` |
-| `kpi_approved` / `kpi_finalized` / `manager_rejected` / `admin_status_step_back` / `admin_status_change` / `admin_data_entry` | `/my-kpis?kpi={kpiId}` |
-| `kpi_ready_for_audit` | `/dashboard?view=audit&kpi={kpiId}` |
-| `kpi_ready_for_management` | `/dashboard?view=management&kpi={kpiId}` |
-| `kra_assigned` / `kra_batch_assigned` / `period_locked` | `/my-kpis` |
-| `query_raised` / `query_resolved` / `query_responded` / `query_response_submitted` / `query_resolved_fyi` | `/my-kpis?kpi={kpiId}&panel=queryHistory` (deep-links to KPI detail sheet with Query History dialog auto-opened) |
-| `observation_raised` / `observation_reply` / `observation_resolved` | `/my-kpis?kpi={kpiId}` |
+| `kpi_submitted` | `/dashboard?view=team&employee={relatedUserId}&kpi={kpiId}` |
+| `kpi_approved` / `kpi_finalized` / `manager_rejected` / `admin_status_step_back` / `admin_status_change` / `admin_data_entry` | `/dashboard?kpi={kpiId}` (employee's own KPI) |
+| `kpi_ready_for_audit` | `/dashboard?view=audit&employee={relatedUserId}&kpi={kpiId}` |
+| `kpi_ready_for_management` | `/dashboard?view=management&employee={relatedUserId}&kpi={kpiId}` |
+| `kra_assigned` / `kra_batch_assigned` / `period_locked` | `/dashboard` |
+| `query_raised` / `query_resolved` / `query_responded` / `query_response_submitted` / `query_resolved_fyi` | `/dashboard?kpi={kpiId}&panel=queryHistory` |
+| `observation_raised` / `observation_reply` / `observation_resolved` | `/dashboard?view=team&employee={relatedUserId}&kpi={kpiId}` (if employee context available) |
 | `pip_initiated` / `pip_completed` / `pip_milestone_reminder` | `/admin/pip` |
 | `password_rollout` | `/` (home) |
-| `rollback_requested` / `rollback_approved` / `rollback_rejected` | `/dashboard?kpi={kpiId}` |
+| `rollback_requested` | `/dashboard?view=team&employee={relatedUserId}&kpi={kpiId}` |
+| `rollback_approved` / `rollback_rejected` | `/dashboard?kpi={kpiId}` |
+
+**Dashboard Employee Deep-Link Handler:** When the Dashboard receives `?employee={id}&kpi={kpiId}`, it fetches the employee's profile, switches to the appropriate view mode, and calls `handleSelectEmployee()` to open `UnifiedScorecard` with `autoOpenKpiId` set — navigating directly to the exact KPI.
+
+**Enriched Notification Detail Sheet:** The `InboxDetailSheet` now displays KPI name, KRA name, and the "From" user for notifications. These fields are extracted from the notification's `metadata` JSON (`kra_name`, `kpi_name`, `employee_name`) and resolved via a batch profile lookup on `related_user_id`.
 
 - **Notification rows**: Click navigates to the target page (marks as read automatically)
 - **Query rows**: Click opens the detail sheet (queries need inline respond/accept actions)
