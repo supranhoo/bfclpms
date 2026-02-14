@@ -24,7 +24,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { KpiReviewPanel } from './KpiReviewPanel';
 import { QueryHistoryDialog } from './QueryHistoryDialog';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
-import { RatingScaleDisplay } from './RatingScaleDisplay';
+
 import { SubPeriodSelector } from './SubPeriodSelector';
 import { FrequencyLockedOverlay, FrequencyLockBadge } from './FrequencyLockedOverlay';
 import { QualitativeValueInput } from './QualitativeValueInput';
@@ -464,12 +464,6 @@ export function SelfReviewSheet({
               onOpenTimeline={() => setTimelineOpen(true)}
             />
 
-            {/* Rating Scale */}
-            {selectedKpi && (
-              <RatingScaleDisplay
-                kpi={selectedKpi}
-              />
-            )}
 
             {/* Daily Submission Summary */}
             {selectedKpi?.frequency === 'Daily' && selectedKpiSubPeriods.length > 0 && (
