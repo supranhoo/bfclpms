@@ -1193,6 +1193,28 @@ export default function ImportData() {
           .eq('id', existingEmployee.id);
 
         if (error) throw error;
+
+        // Update role for existing employee if provided in import
+        if (row.role) {
+          const newRole = normalizeRole(row.role);
+          const { data: existingRole } = await supabase
+            .from('user_roles')
+            .select('id, role')
+            .eq('user_id', existingEmployee.id)
+            .maybeSingle();
+
+          if (existingRole) {
+            if (existingRole.role !== newRole) {
+              await supabase.from('user_roles')
+                .update({ role: newRole })
+                .eq('id', existingRole.id);
+            }
+          } else {
+            await supabase.from('user_roles')
+              .insert({ user_id: existingEmployee.id, role: newRole });
+          }
+        }
+
         return { success: true, userId: existingEmployee.id };
       } else if (row.email) {
         // Create new user via edge function

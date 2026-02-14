@@ -2757,6 +2757,7 @@ The application implements several performance optimizations:
 - **Progress Indicator**: Real-time progress bar shows "Processing X of Y employees..." during import.
 - **Reliable Auth User Lookup**: The `create-employee` edge function uses a try-create-catch approach instead of the unreliable `listUsers` filter, preventing admin profile corruption during bulk imports.
 - **Admin Profile Protection**: The primary admin account (`535d9a14-...`) is explicitly guarded in the `create-employee` edge function. If an employee_code lookup matches the admin profile, the function skips the update and creates a new user instead. Duplicate-email fallback queries the `profiles` table directly (excluding admin) rather than paginating through `auth.admin.listUsers`.
+- **Role Updates on Re-Import**: When re-importing the Employee Master, role changes in the `role` column are now applied to existing employees. If the role column contains a valid role (admin, manager, employee, auditor, management), the system updates the `user_roles` table accordingly — inserting a new role if none exists, or updating the existing role if it differs. Leaving the role column blank will NOT downgrade an existing employee's role (the update is skipped when `row.role` is falsy).
 
 ---
 
