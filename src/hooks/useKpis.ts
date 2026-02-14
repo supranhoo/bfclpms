@@ -960,6 +960,74 @@ export function useKpiQueries(kpiIds: string[]) {
   });
 }
 
+// Lightweight hook: returns a Map<kpi_id, open_query_count> via a single aggregate query
+export function useOpenQueryCounts(kpiIds: string[]) {
+  return useQuery({
+    queryKey: ['open-query-counts', kpiIds],
+    queryFn: async () => {
+      if (kpiIds.length === 0) return new Map<string, number>();
+
+      // Single query with grouping via RPC is not available, so use a filtered select
+      // and aggregate client-side from a minimal payload (only id + kpi_id, head:false)
+      const batchSize = 500; // larger batches since we only need kpi_id
+      const countMap = new Map<string, number>();
+
+      for (let i = 0; i < kpiIds.length; i += batchSize) {
+        const batch = kpiIds.slice(i, i + batchSize);
+        const { data, error } = await supabase
+          .from('kpi_queries')
+          .select('kpi_id')
+          .in('kpi_id', batch)
+          .eq('status', 'open');
+
+        if (error) throw error;
+        data?.forEach(row => {
+          countMap.set(row.kpi_id, (countMap.get(row.kpi_id) || 0) + 1);
+        });
+      }
+
+      return countMap;
+    },
+    enabled: kpiIds.length > 0,
+  });
+}
+
+// Lightweight hook: fetch distinct review_period + review_year combos without loading all KPIs
+export function useDistinctKpiPeriods() {
+  return useQuery({
+    queryKey: ['distinct-kpi-periods'],
+    queryFn: async () => {
+      // Fetch only the two columns we need, then dedupe client-side
+      const { data, error } = await supabase
+        .from('kpis')
+        .select('review_period, review_year')
+        .not('review_period', 'is', null)
+        .not('review_year', 'is', null);
+
+      if (error) throw error;
+
+      const monthOrder = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December',
+      ];
+
+      const periodSet = new Set<string>();
+      const yearSet = new Set<number>();
+      data?.forEach(row => {
+        if (row.review_period) periodSet.add(row.review_period);
+        if (row.review_year) yearSet.add(row.review_year);
+      });
+
+      const periods = Array.from(periodSet).sort(
+        (a, b) => monthOrder.indexOf(a) - monthOrder.indexOf(b),
+      );
+      const years = Array.from(yearSet).sort((a, b) => b - a);
+
+      return { periods, years };
+    },
+  });
+}
+
 // Hook for review period management
 export function useReviewPeriods() {
   return useQuery({

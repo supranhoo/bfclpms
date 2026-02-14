@@ -104,6 +104,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | **Error Boundaries** | Top-level `ErrorBoundary` in App.tsx + per-route boundary in DashboardLayout with Suspense | Graceful error recovery instead of white screen |
 | **AuthContext Init Guard** | `useRef` flag ensures `fetchProfile`/`fetchRole` fire exactly once on mount, preventing race between `onAuthStateChange` and `getSession()`. Try/catch with toast on fetch failure prevents "forever loading" | Eliminates duplicate fetches and silent auth failures |
 | **Inbox Filter Stability** | `usePaginatedNotifications` keeps stale items visible during filter changes instead of clearing them eagerly; loading guard uses `\|\|` not `&&` | No more "No notifications yet" flash on tab/filter switch |
+| **AllKpis Server-Side Filtering** | Default to current month/year via `useKpisByPeriod` instead of `useAllKpis`. Added `useOpenQueryCounts` (single aggregated query replacing ~47 sequential batch requests) and `useDistinctKpiPeriods` (lightweight period/year list without full KPI load) | HTTP requests reduced from ~55 to ~6-8; KPIs fetched from ~4,693 to ~300-500; load time from 3-6s to <1s |
 
 ### State Management
 

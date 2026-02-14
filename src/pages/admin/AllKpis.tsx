@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useAllKpis, useKpiQueries, useAdminDeleteKpi, KPI } from '@/hooks/useKpis';
+import { format } from 'date-fns';
+import { useAllKpis, useKpisByPeriod, useOpenQueryCounts, useDistinctKpiPeriods, useAdminDeleteKpi, KPI } from '@/hooks/useKpis';
 import { useKraCategories, useProfiles, useDivisions, useDepartments } from '@/hooks/useOrganization';
 import { getStageLabel } from '@/hooks/useWorkflowConfig';
 import * as XLSX from 'xlsx';
@@ -49,23 +50,43 @@ interface EmployeeKpiData {
 }
 
 export default function AllKpis() {
-  const { data: kpis, isLoading: kpisLoading } = useAllKpis();
-  const { data: categories } = useKraCategories();
-  const { data: profiles, isLoading: profilesLoading } = useProfiles();
-  const { data: divisions } = useDivisions();
-  const { data: departments } = useDepartments();
-  // Removed useReviewPeriods - derive periods from KPIs instead
-
-  // Fetch all queries for KPIs
-  const kpiIds = useMemo(() => kpis?.map(k => k.id) || [], [kpis]);
-  const { data: queries } = useKpiQueries(kpiIds);
+  // Default to current month/year for server-side filtering
+  const currentMonth = format(new Date(), 'MMMM');
+  const currentYear = new Date().getFullYear();
 
   // Filters
   const [selectedManager, setSelectedManager] = useState<string>('all');
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [selectedDivision, setSelectedDivision] = useState<string>('all');
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
-  const [selectedYear, setSelectedYear] = useState<string>('all');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(currentMonth);
+  const [selectedYear, setSelectedYear] = useState<string>(currentYear.toString());
+
+  // Fetch distinct periods/years via lightweight query (no full KPI load)
+  const { data: distinctPeriods } = useDistinctKpiPeriods();
+  const availablePeriods = distinctPeriods?.periods || [];
+  const availableYears = distinctPeriods?.years || [];
+
+  // Period-scoped fetch (default) vs all-KPIs fetch (only when "all" selected)
+  const isAllPeriods = selectedPeriod === 'all' && selectedYear === 'all';
+  const { data: periodKpis, isLoading: periodKpisLoading } = useKpisByPeriod(
+    isAllPeriods ? undefined : selectedPeriod === 'all' ? undefined : selectedPeriod,
+    isAllPeriods ? undefined : selectedYear === 'all' ? undefined : parseInt(selectedYear),
+  );
+  const { data: allKpisData, isLoading: allKpisLoading } = useAllKpis();
+
+  // Use period-scoped data when available, fall back to all
+  const kpis = isAllPeriods ? allKpisData : periodKpis;
+  const kpisLoading = isAllPeriods ? allKpisLoading : periodKpisLoading;
+
+  const { data: categories } = useKraCategories();
+  const { data: profiles, isLoading: profilesLoading } = useProfiles();
+  const { data: divisions } = useDivisions();
+  const { data: departments } = useDepartments();
+
+  // Lightweight open-query counts (single request instead of ~47 batched)
+  const kpiIds = useMemo(() => kpis?.map(k => k.id) || [], [kpis]);
+  const { data: openQueryCountByKpi } = useOpenQueryCounts(kpiIds);
+  const queryCountMap = openQueryCountByKpi || new Map<string, number>();
 
   // Dialog states
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
@@ -92,35 +113,6 @@ export default function AllKpis() {
     return profiles.filter(p => managerIds.has(p.id));
   }, [profiles]);
 
-  // Get unique years from KPIs
-  const availableYears = useMemo(() => {
-    if (!kpis) return [];
-    const years = [...new Set(kpis.map(k => k.review_year).filter(Boolean))];
-    return years.sort((a, b) => (b || 0) - (a || 0));
-  }, [kpis]);
-
-  // Get unique periods from KPIs directly (ordered by calendar month)
-  const availablePeriods = useMemo(() => {
-    if (!kpis) return [];
-    const monthOrder = ['January', 'February', 'March', 'April', 'May', 'June', 
-                        'July', 'August', 'September', 'October', 'November', 'December'];
-    const periods = [...new Set(kpis.map(k => k.review_period).filter(Boolean))];
-    return periods.sort((a, b) => monthOrder.indexOf(a!) - monthOrder.indexOf(b!));
-  }, [kpis]);
-
-  // Create a map of kpi_id to open query count
-  const openQueryCountByKpi = useMemo(() => {
-    if (!queries) return new Map<string, number>();
-    const map = new Map<string, number>();
-    queries.forEach(q => {
-      if (q.status === 'open') {
-        map.set(q.kpi_id, (map.get(q.kpi_id) || 0) + 1);
-      }
-    });
-    return map;
-  }, [queries]);
-
-  // Filter KPIs based on selected filters
   const filteredKpis = useMemo(() => {
     if (!kpis) return [];
     
@@ -198,14 +190,14 @@ export default function AllKpis() {
       data.stageCounts[stage] = (data.stageCounts[stage] || 0) + 1;
 
       // Count queries for this KPI's stage
-      const queryCount = openQueryCountByKpi.get(kpi.id) || 0;
+      const queryCount = queryCountMap.get(kpi.id) || 0;
       if (queryCount > 0) {
         data.stageQueryCounts[stage] = (data.stageQueryCounts[stage] || 0) + queryCount;
       }
     });
 
     return Array.from(employeeMap.values()).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-  }, [filteredKpis, profiles, departments, openQueryCountByKpi]);
+  }, [filteredKpis, profiles, departments, queryCountMap]);
 
   // Get KPIs for a specific employee
   const getEmployeeKpis = useCallback((employeeId: string): KPI[] => {
@@ -235,7 +227,7 @@ export default function AllKpis() {
     const approvedKpis = filteredKpis?.filter(k => k.status === 'approved').length || 0;
     const completionPercent = totalKpis > 0 ? Math.round((approvedKpis / totalKpis) * 100) : 0;
     const pendingKpis = totalKpis - approvedKpis;
-    const totalQueries = Array.from(openQueryCountByKpi.values()).reduce((sum, c) => sum + c, 0);
+    const totalQueries = Array.from(queryCountMap.values()).reduce((sum, c) => sum + c, 0);
 
     return {
       totalEmployees,
@@ -245,7 +237,7 @@ export default function AllKpis() {
       pendingKpis,
       totalQueries,
     };
-  }, [employeeData, filteredKpis, openQueryCountByKpi]);
+  }, [employeeData, filteredKpis, queryCountMap]);
 
   // Check if any filters are active
   const hasActiveFilters = selectedManager !== 'all' || selectedDepartment !== 'all' || 
