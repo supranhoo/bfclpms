@@ -93,6 +93,7 @@ Deno.serve(async (req) => {
         const cronExpr = buildCron(frequency, hour, day, dayOfMonth);
 
         // Schedule the new cron job that calls create-backup via net.http_post
+        const cronSecretValue = Deno.env.get('CRON_SECRET') || '';
         await sql.unsafe(`
           SELECT cron.schedule(
             'weekly-database-backup',
@@ -100,7 +101,7 @@ Deno.serve(async (req) => {
             $$
             SELECT net.http_post(
               url := '${supabaseUrl}/functions/v1/create-backup',
-              headers := '{"Content-Type": "application/json", "Authorization": "Bearer ${anonKey}"}'::jsonb,
+              headers := '{"Content-Type": "application/json", "Authorization": "Bearer ${anonKey}", "X-Cron-Secret": "${cronSecretValue}"}'::jsonb,
               body := '{"backup_type": "scheduled"}'::jsonb
             ) AS request_id;
             $$

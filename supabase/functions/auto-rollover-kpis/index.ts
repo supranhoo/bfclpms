@@ -45,6 +45,38 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // --- Auth gate: require Bearer JWT (admin) OR X-Cron-Secret ---
+    const cronSecret = Deno.env.get('CRON_SECRET');
+    const cronHeader = req.headers.get('X-Cron-Secret');
+    const authHeader = req.headers.get('Authorization');
+    let isAuthorized = false;
+
+    if (cronSecret && cronHeader && cronHeader === cronSecret) {
+      // Cron / system caller authenticated via shared secret
+      isAuthorized = true;
+    } else if (authHeader?.startsWith('Bearer ')) {
+      // Frontend / admin caller authenticated via JWT
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (!authError && user) {
+        const { data: roles } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('role', 'admin');
+        if (roles && roles.length > 0) {
+          isAuthorized = true;
+        }
+      }
+    }
+
+    if (!isAuthorized) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: admin JWT or valid CRON_SECRET required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     let params: RolloverRequest = {};
     try {
       params = await req.json();

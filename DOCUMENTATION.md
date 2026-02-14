@@ -2163,8 +2163,29 @@ supabase/
     ├── reset-password/
     ├── auto-rollover-kpis/
     ├── import-kpis/
+    ├── create-backup/
+    ├── restore-backup/
+    ├── update-backup-schedule/
+    ├── update-smtp-password/
+    ├── password-rollout/
     └── generate-pip-letter/
 ```
+
+### Edge Function Authentication Patterns
+
+All edge functions use `verify_jwt = false` in `config.toml` and implement their own authorization in code. There are three auth patterns:
+
+| Pattern | Functions | How It Works |
+|---------|-----------|-------------|
+| **Bearer JWT + Admin Role** | `create-employee`, `password-rollout`, `update-smtp-password`, `update-backup-schedule`, `import-kpis` | Validates the `Authorization: Bearer <jwt>` header via `supabase.auth.getUser()`, then checks `user_roles` for admin role. Used by frontend calls via `supabase.functions.invoke()`. |
+| **Dual Auth (JWT OR CRON_SECRET)** | `auto-rollover-kpis`, `create-backup` (manual=JWT, scheduled=CRON_SECRET) | Accepts either a valid admin JWT **or** an `X-Cron-Secret` header matching the `CRON_SECRET` environment variable. This allows both frontend admin calls and pg_cron scheduled jobs to authorize. |
+| **Service-Role or User JWT** | `send-email-notification` | Accepts either the `SUPABASE_SERVICE_ROLE_KEY` as the Bearer token (used by DB triggers via `net.http_post` and by other edge functions like `password-rollout`) **or** a valid user JWT (used by admin test-email calls from the frontend). |
+
+**Secrets Required:**
+- `CRON_SECRET` — Random string shared between cron SQL jobs and edge functions. Must be set as a Cloud secret. When backup schedules are saved via the admin UI, the `update-backup-schedule` function automatically includes this secret in the cron job SQL headers.
+- `SUPABASE_SERVICE_ROLE_KEY` — Auto-provisioned by Supabase. Used by `send-email-notification` to validate DB trigger callers.
+
+**Important:** After adding or changing the `CRON_SECRET`, admins must re-save the backup schedule from the Backup Settings UI so the cron job picks up the new secret value.
 
 ---
 
