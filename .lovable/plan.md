@@ -1,107 +1,92 @@
 
+# RCA and CAPA: Email Flow Broken for Trigger-Based Notifications (including KPI Submission)
 
-# RCA and CAPA: Admin Data Entry -- Rating Dropdown Gaps, Score Limits, and Auto-Calculation
+## Root Cause Analysis
 
-## Root Cause Analysis (RCA)
+### Finding
+The `kpi_submitted` in-app notifications ARE being created correctly (confirmed: recent entries exist in the `notifications` table). However, the database trigger `send_email_on_notification` that fires on notification INSERT to call the edge function is **silently failing**.
 
-### Issue 1: Rating not driven by Achieved Value reliably
-The auto-calculation engine (`autoCalculateFromAchieved`) exists but has a flaw: when `calculateRating()` returns a rating of **0** or **1**, the `ratingToLevel()` function maps both to `'red'`. The dropdown then shows "Below (2)" as the selected value -- which is wrong. The `calculateRating` engine correctly returns 0 or 1, but the UI cannot represent these values because the Rating dropdown only has 4 options (scores 2-5).
+### Root Cause: Wrong schema and function signature for HTTP call
 
-**Evidence from code** (line 29-34):
+The trigger function `send_email_on_notification()` calls:
 ```text
-RATING_OPTIONS = [
-  { value: 'blue',   label: 'Outstanding (5)', score: 5 },
-  { value: 'green',  label: 'Exceeds (4)',     score: 4 },
-  { value: 'yellow', label: 'Meets (3)',       score: 3 },
-  { value: 'red',    label: 'Below (2)',       score: 2 },
-]
+extensions.http_post(url, body::text, headers::jsonb)
 ```
-Ratings 1 ("Needs Improvement") and 0 ("Not Achieved") are absent.
 
-### Issue 2: Rating dropdown missing 0 and 1
-The `RATING_OPTIONS` array only defines 4 levels (2-5). The scoring engine supports a full 0-5 range. When auto-calculation returns rating=1 or rating=0, the `ratingToLevel` maps both to `'red'`, so the dropdown shows "Below (2)" -- displaying the wrong rating and computing the wrong score.
+But the actual installed function is:
+```text
+net.http_post(url text, body jsonb, params jsonb, headers jsonb)
+```
 
-### Issue 3: Score can exceed the maximum allowed value
-The Score field is a plain `<Input type="number">` with no upper bound validation. The maximum valid score for a KPI is `(5/5) * weightage = weightage`. For example, a KPI with weightage 1.5% should never have a score above 1.50. Currently an admin can type any number (e.g., 10, 100), which corrupts the scoring totals.
-
-| Issue | Root Cause |
+| Issue | Detail |
 |---|---|
-| Auto-calc shows wrong rating for 0/1 | `RATING_OPTIONS` only has 4 entries (2-5); ratings 0 and 1 have no dropdown option |
-| Dropdown missing options | `RATING_OPTIONS` array is incomplete |
-| Score exceeds maximum | No `max` attribute or validation on the score input field |
+| Wrong schema | Trigger calls `extensions.http_post` but the function lives in `net.http_post` |
+| Wrong body type | Trigger casts body to `::text`, but `net.http_post` expects `::jsonb` |
+| Missing params argument | `net.http_post` requires a `params` argument (can be `'{}'::jsonb`) |
+| Silent failure | The `EXCEPTION WHEN OTHERS` block catches the error and only raises a WARNING, so no visible error occurs |
+
+This is why **all trigger-based emails** fail silently -- not just `kpi_submitted`, but also `manager_approved`, `manager_rejected`, `query_raised`, `kpi_ready_for_audit`, etc.
+
+The only emails that work (`kra_batch_assigned`) are sent directly from the frontend via `supabase.functions.invoke()`, which bypasses the broken trigger entirely.
+
+### Evidence
+- `pg_extension` shows only `pg_net` is installed (no `http` extension)
+- `pg_proc` confirms `http_post` exists only in the `net` schema
+- `email_logs` table has zero entries for `kpi_submitted` despite many notifications existing
+- The last email logs are for `kra_batch_assigned` (sent from frontend code, not the trigger)
 
 ---
 
-## Corrective and Preventive Action (CAPA)
+## CAPA: Fix the trigger function to use the correct schema and signature
 
-### Fix 1: Expand RATING_OPTIONS to include all 6 ratings (0-5)
+### Database Migration
 
-**File: `src/components/admin/AdminDataEntryDialog.tsx`**
+Recreate `send_email_on_notification()` with the correct call:
 
-Add two new entries to `RATING_OPTIONS`:
+Replace:
+```text
+PERFORM extensions.http_post(
+  url := supabase_url || '/functions/v1/send-email-notification',
+  body := jsonb_build_object(...)::text,
+  headers := jsonb_build_object(...)::jsonb
+);
+```
 
-| Value | Label | Score | Color |
-|---|---|---|---|
-| `orange` | Needs Improvement (1) | 1 | orange-500 |
-| `gray` | Not Achieved (0) | 0 | gray-400 |
+With:
+```text
+PERFORM net.http_post(
+  url := supabase_url || '/functions/v1/send-email-notification',
+  body := jsonb_build_object(...),
+  params := '{}'::jsonb,
+  headers := jsonb_build_object(...)
+);
+```
 
-Since the database `rating_level` enum only supports `blue | green | yellow | red`, the new dropdown entries will still map to the `red` DB enum value but display distinct labels. The auto-calculate logic will use the **numeric score** (0-5) as the source of truth, with the rating dropdown serving as a visual aid only.
-
-Updated approach:
-- Change the Rating state from storing a `RatingLevel` color to storing the **numeric score** (0-5) internally
-- The dropdown displays all 6 options with distinct labels and colors
-- On submit, the numeric score is mapped to the closest DB-compatible `RatingLevel` via `ratingToLevel()`
-
-### Fix 2: Cap the Score field at maximum allowed value
-
-**File: `src/components/admin/AdminDataEntryDialog.tsx`**
-
-Add validation to the Score input:
-- Set `max` attribute to `(5/5) * weightage = weightage`
-- On blur or change, clamp the value: `Math.min(parseFloat(value), maxScore)`
-- Display the maximum allowed score as helper text below the field
-
-Formula: `maxScore = kpi.weightage` (since max rating is 5, and score = (rating/5) * weightage)
-
-### Fix 3: Ensure auto-calculate correctly populates all rating levels
-
-**File: `src/components/admin/AdminDataEntryDialog.tsx`**
-
-Update `autoCalculateFromAchieved` to:
-1. Store the raw numeric rating (0-5) from `calculateRating()` result
-2. Map it to the expanded dropdown option
-3. Calculate score as `(result.rating / 5) * weightage`, clamped to max
+Key changes:
+1. Schema: `extensions` changed to `net`
+2. Body: Remove `::text` cast -- pass as native `jsonb`
+3. Add `params := '{}'::jsonb` argument
+4. Keep all existing event type mappings and metadata extraction unchanged
 
 ### Files to Modify
 
 | File | Change |
 |---|---|
-| `src/components/admin/AdminDataEntryDialog.tsx` | Expand `RATING_OPTIONS` to 6 levels (0-5). Add score max validation with `max` attribute and clamping logic. Update auto-calculate to correctly populate all rating levels. Add helper text showing max score. |
-| `DOCUMENTATION.md` | Document the expanded rating scale and score capping behavior in Admin Data Entry |
+| Database migration (SQL) | Recreate `send_email_on_notification()` using `net.http_post()` with correct signature |
+| `DOCUMENTATION.md` | Document the fix and correct HTTP function reference |
 
-### Technical Detail
+### Scope of Impact
 
-**Expanded RATING_OPTIONS:**
-```text
-Score 5 -> blue   -> "Outstanding (5)"
-Score 4 -> green  -> "Exceeds (4)"
-Score 3 -> yellow -> "Meets (3)"
-Score 2 -> red    -> "Below (2)"
-Score 1 -> red    -> "Needs Improvement (1)"
-Score 0 -> red    -> "Not Achieved (0)"
-```
-
-**Score clamping logic:**
-```text
-maxScore = kpi.weightage  // e.g., 1.5 for 1.5% weightage
-score = Math.min(enteredScore, maxScore)
-score = Math.max(score, 0)  // floor at 0
-```
-
-**Rating state change:**
-Instead of storing `RatingLevel` (color string), the Rating select will use string-encoded numeric scores ("5", "4", "3", "2", "1", "0") as values. On submit, the numeric score maps to a `RatingLevel` via `ratingToLevel()` for DB storage.
+This fix will restore email delivery for ALL trigger-based notification events:
+- `kpi_submitted` (the reported issue)
+- `manager_approved` / `manager_rejected`
+- `kpi_ready_for_audit` / `kpi_ready_for_management`
+- `final_approved`
+- `query_raised` / `query_resolved` / `query_response_received`
+- `admin_status_change` / `admin_data_entry` / `admin_data_override`
+- `org_kpi_sent_back`
+- `observation_raised` / `observation_reply` / `observation_resolved`
 
 ### Risk
 
-Low -- the scoring engine already supports 0-5 ratings. This change only updates the Admin UI to expose the full range. The `ratingToLevel()` function already handles the 0-1 range by mapping to `'red'`, so DB compatibility is maintained. The score clamping prevents data corruption without breaking any existing valid entries.
-
+Low -- this is a direct fix to the function call signature. No business logic changes. The trigger, event mappings, and edge function all remain identical.
