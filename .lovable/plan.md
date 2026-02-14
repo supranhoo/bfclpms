@@ -1,90 +1,69 @@
 
 
-# RCA: Page Load Time Regression on /admin/kpis
+# RCA and CAPA: January Month KRAs Not Visible for Jitendra Bharti
 
-## Root Cause
+## Root Cause Analysis
 
-The AllKpis page fetches **all 4,693 KPIs across all periods and years** upfront, then fires **~47 sequential HTTP requests** to fetch queries for those KPIs (batched 100 IDs per request). The page only displays one period at a time via client-side filtering, but downloads the entire dataset on mount.
+### Finding: Not a Data Issue -- It's a Default Period Problem
 
-### Request Waterfall (current state)
+Jitendra Bharti (101715) has **13 KPIs for January 2026**, all at **self_review** status (pending action). The data is fully present in the database.
+
+The issue is that the **My Dashboard defaults to February 2026** (current month). When the user lands on the dashboard, they see only February KPIs. January KPIs require manually switching the month dropdown from "Feb" to "Jan."
+
+### Data Summary for Jitendra Bharti
 
 ```text
-1. useAllKpis()        --> 5 paginated requests (1000 KPIs each)
-2. useKpiQueries()     --> 47 sequential requests (100 IDs each, all returning empty [])
-3. useProfiles()       --> 1 request
-4. useDepartments()    --> 1 request
-5. useDivisions()      --> 1 request
-6. useKraCategories()  --> 1 request
-                       --------
-Total:                    ~55 HTTP requests on page load
+Period           Status          Count
+-----------      -----------     -----
+January 2026     self_review     13     <-- Pending action, but hidden by default
+February 2026    kra_set         9      <-- What the user sees on load
+February 2026    self_review     4
+December 2025    approved        13
+November 2025    approved        13
 ```
 
-The 47 kpi_queries requests alone add ~2-5 seconds of sequential latency (each waits for the previous to complete).
+### Why It Happens
 
-## Fix: Server-Side Filtering + Query Count via Database View
+1. `useDefaultPeriodSelection()` returns the current calendar month (February 2026)
+2. `useMyKpis()` fetches all KPIs for the employee (correct)
+3. `periodFilteredKpis` filters by `selectedPeriod === 'February'` -- so January KPIs are loaded but not displayed
+4. The "smart period detection" feature only works for **reviewer views** (Team Review, Audit, Management), not the employee's own self-dashboard
 
-### Change 1: Replace `useAllKpis()` with period-scoped fetch
+### Impact
 
-The page already has period/year filter state. Instead of fetching all KPIs then filtering client-side, fetch only the selected period's KPIs from the database.
+Any employee with pending KPIs from a previous month will not see them unless they manually switch the period dropdown. This causes confusion and missed deadlines.
 
-**File**: `src/pages/admin/AllKpis.tsx`
+## CAPA: Add Pending Period Alert to Self Dashboard
 
-- Default `selectedPeriod` and `selectedYear` to the current month/year (instead of "all")
-- Replace `useAllKpis()` with `useKpisByPeriod(selectedPeriod, selectedYear)` which already exists in `useKpis.ts`
-- When "all" is selected, fall back to `useAllKpis()` but this becomes the exception, not the default
+### The Fix
 
-This alone reduces KPI count from ~4,693 to ~300-500 per period.
+Add a small alert banner at the top of the self-dashboard when the employee has **KPIs in earlier periods that are still at actionable statuses** (self_review, kra_set). The banner will say something like:
 
-### Change 2: Replace kpi_queries batch fetch with a lightweight count query
+> "You have 13 pending KPIs for January 2026. [Switch to January]"
 
-The page only needs **open query counts per KPI** (for badge display). It does not render query details. Instead of fetching full query objects for all KPIs:
+This reuses the same `useMyKpis()` data already loaded -- zero additional API calls.
 
-**File**: `src/hooks/useKpis.ts` (new hook)
+### Implementation Details
 
-Create a `useOpenQueryCounts(kpiIds)` hook that runs a single aggregated query:
+**File: `src/pages/Dashboard.tsx`**
 
-```sql
-SELECT kpi_id, COUNT(*) as count
-FROM kpi_queries
-WHERE kpi_id = ANY(kpiIds) AND status = 'open'
-GROUP BY kpi_id
-```
+1. Add a `pendingPeriods` memo that scans all loaded KPIs for periods earlier than the selected one where `status` is `kra_set` or `self_review`
+2. Render a dismissible alert banner above the scorecard when pending periods are found
+3. The "Switch" button sets `periodSelection` to the pending period
+4. Only show for `viewMode === 'self'` (employee's own dashboard)
 
-This replaces 47 sequential requests with **1 request** returning only the KPIs that have open queries.
+**File: `DOCUMENTATION.md`**
 
-### Change 3: Update AllKpis.tsx to use new hooks
+Record the pending period alert feature.
 
-- Use period-scoped KPI fetch as default
-- Use the lightweight count hook instead of `useKpiQueries`
-- Keep the "All Periods" option but warn that it may be slower
-- Remove the `openQueryCountByKpi` derived memo (the new hook returns it directly)
+### What Does NOT Change
 
-### Change 4: Derive available periods/years from a lightweight query
+- No new API calls or hooks
+- No database changes
+- No changes to the period selector itself
+- Reviewer views (Team, Audit, Management) are unaffected -- they already have smart period detection
 
-Instead of fetching all KPIs just to extract unique periods, add a small hook that queries distinct `review_period` and `review_year` values from the KPIs table.
+### Risk: None
 
-### Change 5: Update DOCUMENTATION.md
-
-Record the performance fix and the new query patterns.
-
-## Files Modified
-
-| File | Change |
-|---|---|
-| `src/hooks/useKpis.ts` | Add `useOpenQueryCounts` hook and `useDistinctPeriods` hook |
-| `src/pages/admin/AllKpis.tsx` | Default to current period, use scoped fetch, use count hook |
-| `DOCUMENTATION.md` | Record performance optimization |
-
-## Expected Impact
-
-| Metric | Before | After |
-|---|---|---|
-| HTTP requests on load | ~55 | ~6-8 |
-| KPIs fetched | 4,693 | ~300-500 |
-| Query data fetched | 47 batch requests | 1 aggregate query |
-| Estimated load time | 3-6 seconds | < 1 second |
-
-## Risk
-
-Low. The page behavior is identical -- same filters, same display. Only the data fetching strategy changes from "fetch everything, filter client-side" to "fetch what you need."
+The alert is purely informational, derived from already-fetched data. It adds a convenience shortcut without modifying any existing logic.
 
