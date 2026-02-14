@@ -2405,6 +2405,16 @@ The `allSubmissions` prop and the `submissions` passed to `KpiTrackerModal` must
 **N/A Month Handling:**
 Both `KpiTrackerModal` and `KpiHistoryCard` check the `is_na` flag on each submission. When a month is marked Not Applicable: the Tracker Modal table shows an amber "N/A" badge in both the Achieved and Rating columns (instead of "-"), and nulls out `achieved`/`target` so the trend chart skips that month. The History Card shows "N/A" text instead of the numeric ratio and excludes N/A entries from the sparkline trend line. This is consistent with the existing `KpiDetailsTable` N/A badge behavior.
 
+**Reviewer-Initiated N/A Marking:**
+Any reviewer (Manager, Skip-Level, HR PMS, Auditor, Management) can mark a KPI as "Not Applicable" at their review stage, even if the employee submitted a normal score. This is available via a "Mark as N/A" toggle switch in the review sheet (powered by `NaConfirmationCard` with `canMarkNa` prop). When toggled on:
+- Score/achieved-value input fields are hidden (irrelevant for N/A KPIs)
+- A mandatory justification textarea appears
+- The action button changes to "Mark N/A & Forward" (or "Mark N/A & Approve" for Management)
+- On submit: `is_na = true` and `na_marked_by_role = '{role}'` are set on `review_submissions`, the reason is stored in the level's remarks field, the KPI advances to the next workflow stage, and an audit log entry (e.g., `MANAGER_MARKED_NA`, `AUDITOR_MARKED_NA`) is created
+- The `na_marked_by_role` column (nullable text on `review_submissions`) tracks which role initiated the N/A, displayed as a badge in `KpiDetailsTable` (e.g., "N/A (Auditor)")
+- Dashboard scoring automatically excludes the KPI since it checks `is_na = true`
+- Components: `UnifiedScorecard`, `EmployeeScorecard`, `AuditScorecard`, `ManagementScorecard` all support this flow
+
 #### `EmployeeScorecard`
 Comprehensive employee performance view with:
 - **KpiReviewPanel** for unified KPI details
