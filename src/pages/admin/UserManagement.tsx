@@ -366,8 +366,27 @@ export default function UserManagement() {
     setEditDialogOpen(true);
   };
 
-  const handleSaveUser = () => {
+  const handleSaveUser = async () => {
     if (!selectedUser) return;
+
+    // If email changed, update via edge function first
+    const emailChanged = editEmail.trim().toLowerCase() !== selectedUser.email.trim().toLowerCase();
+    if (emailChanged) {
+      try {
+        const response = await supabase.functions.invoke('update-user-email', {
+          body: { userId: selectedUser.id, newEmail: editEmail.trim() },
+        });
+        if (response.error) throw new Error(response.error.message);
+        if (response.data?.error) throw new Error(response.data.error);
+        if (response.data?.warning) {
+          toast({ title: 'Email updated with warning', description: response.data.warning, variant: 'destructive' });
+        }
+      } catch (err: any) {
+        toast({ title: 'Failed to update email', description: err.message, variant: 'destructive' });
+        return; // Don't proceed with other updates if email change failed
+      }
+    }
+
     updateUser.mutate({
       userId: selectedUser.id,
       role: editRole,
@@ -764,9 +783,8 @@ export default function UserManagement() {
               <Label>Email</Label>
               <Input
                 value={editEmail}
-                readOnly
-                disabled
-                className="opacity-60"
+                onChange={(e) => setEditEmail(e.target.value)}
+                placeholder="e.g. user@example.com"
               />
             </div>
 
