@@ -86,6 +86,16 @@ export interface ReviewSubmission {
   management_score: number | null;
   management_remarks: string | null;
   management_evidence_url: string | null;
+  // Skip-level review fields
+  skip_level_rating: RatingLevel | null;
+  skip_level_score: number | null;
+  skip_level_remarks: string | null;
+  skip_level_evidence_url: string | null;
+  // HR PMS review fields
+  hr_pms_rating: RatingLevel | null;
+  hr_pms_score: number | null;
+  hr_pms_remarks: string | null;
+  hr_pms_evidence_url: string | null;
   final_rating: RatingLevel | null;
   final_score: number | null;
   kpi_status: KpiStatus;

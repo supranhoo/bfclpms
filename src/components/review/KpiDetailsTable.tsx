@@ -20,14 +20,27 @@ import {
   Building2, Users, User, FileCheck
 } from 'lucide-react';
 
-// Fixed score columns — always visible
-const SCORE_COLUMNS = [
-  { key: 'self_score', label: 'Self' },
-  { key: 'manager_score', label: 'Manager' },
-  { key: 'auditor_score', label: 'Auditor' },
-  { key: 'management_score', label: 'Mgmt' },
-  { key: 'final_score', label: 'Final' },
-];
+// Stage-to-column mapping: workflow stage name -> score column definition
+const STAGE_COLUMN_MAP: Record<string, { key: string; label: string }> = {
+  self_review: { key: 'self_score', label: 'Self' },
+  manager_check: { key: 'manager_score', label: 'Manager' },
+  skip_level_check: { key: 'skip_level_score', label: 'Skip-Level' },
+  hr_pms_review: { key: 'hr_pms_score', label: 'HR PMS' },
+  audit: { key: 'auditor_score', label: 'Auditor' },
+  management_review: { key: 'management_score', label: 'Mgmt' },
+};
+
+/** Build dynamic score columns from workflow stages. Final is always appended. */
+function buildScoreColumns(stages: string[]): { key: string; label: string }[] {
+  const cols: { key: string; label: string }[] = [];
+  for (const stage of stages) {
+    const col = STAGE_COLUMN_MAP[stage];
+    if (col) cols.push(col);
+  }
+  // Always append Final
+  cols.push({ key: 'final_score', label: 'Final' });
+  return cols;
+}
 
 export type KpiTableViewType = 'my-kpis' | 'team-review' | 'audit' | 'management' | 'skip-level-review' | 'hr-pms-review';
 
@@ -71,10 +84,13 @@ function getScoreForColumn(
   
   switch (columnKey) {
     case 'self_score':
-      // Use self_score (1-5 rating), NOT achieved_value
       return submission.self_score ?? null;
     case 'manager_score':
       return submission.manager_score ?? null;
+    case 'skip_level_score':
+      return submission.skip_level_score ?? null;
+    case 'hr_pms_score':
+      return submission.hr_pms_score ?? null;
     case 'auditor_score':
       return submission.auditor_score ?? null;
     case 'management_score':
@@ -105,7 +121,8 @@ export function KpiDetailsTable({
   workflowStages,
 }: KpiDetailsTableProps) {
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
-  const totalColumns = 12; // Category, KRA/KPI, Target, Weightage, 5 scores, Status, Actions
+  const scoreColumns = buildScoreColumns(effectiveStages);
+  const totalColumns = 4 + scoreColumns.length + 2; // Category, KRA/KPI, Target, Weightage + scores + Status, Actions
   
   const canReviewKpiCheck = (kpi: KPI): boolean => {
     const submission = submissionMap.get(kpi.id);
@@ -238,7 +255,7 @@ export function KpiDetailsTable({
           <TableHead>KRA / KPI</TableHead>
           <TableHead>Target</TableHead>
           <TableHead>Weightage</TableHead>
-          {SCORE_COLUMNS.map(col => (
+          {scoreColumns.map(col => (
             <TableHead key={col.key} className="text-center">{col.label}</TableHead>
           ))}
           <TableHead>Status</TableHead>
@@ -327,7 +344,7 @@ export function KpiDetailsTable({
                   <span className="text-sm">{kpi.weightage ?? 0}%</span>
                 </TableCell>
                 {/* Dynamic Score Columns */}
-                {SCORE_COLUMNS.map(col => {
+                {scoreColumns.map(col => {
                   const score = getScoreForColumn(submission, col.key);
                   return (
               <TableCell key={col.key} className="text-center">

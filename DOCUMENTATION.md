@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-15  
-> **Version:** 1.31.0
+> **Version:** 1.32.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -2339,12 +2339,12 @@ Role-based route guard component:
 Unified, reusable KPI details table component used across all review views (My KPIs, Team Review, Audit, Management):
 
 **Key Features:**
-- **Fixed Score Columns**: All 5 score columns (Self, Manager, Auditor, Mgmt, Final) are always visible regardless of KPI status. Empty scores display a dash (—) for layout consistency.
+- **Dynamic Workflow-Mapped Score Columns**: Score columns are built dynamically from the `workflowStages` prop. Each workflow stage maps to its corresponding score column (e.g., `skip_level_check` → "Skip-Level", `hr_pms_review` → "HR PMS", `audit` → "Auditor"). The "Final" column is always appended. If no `workflowStages` prop is provided, falls back to the default 6-stage pipeline columns (Self, Manager, Auditor, Mgmt, Final). This ensures employees with custom workflows (e.g., Self → Manager → Skip-Level → HR PMS → Approved) see only the relevant score columns.
 - **Simplified Score Display**: Scores shown as single digit (1-5) without denominator or rating labels
 - **Self Column**: Displays the employee's calculated **score** (1-5) from `review_submissions.self_score`, NOT the raw `achieved_value`
 - **Final Column**: Displays the final approved score from `review_submissions.final_score`
 - **Weightage Column**: Displays each KPI's weightage percentage after the Target column (e.g., "10%"), defaults to 0% if unset
-- **Consistent Columns**: Same structure across all views for cross-stage visibility
+- **Consistent Columns**: Same structure across all views for cross-stage visibility (columns adapt per employee workflow)
 - **KPI Text Layout**: The KPI name cell uses `whitespace-pre-wrap` without `flex` layout, ensuring Description/Formula/Scoring Logic sections stack vertically as lines rather than spreading horizontally. The Info icon is absolutely positioned to avoid interfering with text flow.
 - **View-Type Actions**: Action buttons adapt based on `viewType` prop ('my-kpis', 'team-review', 'audit', 'management', 'skip-level-review', 'hr-pms-review')
 - **Universal View Access**: All review levels (Manager, Auditor, Management) can access the "View KPI Details" button for non-reviewable KPIs, providing full transparency into the review journey regardless of KPI status
@@ -3113,7 +3113,7 @@ The workflow engine provides pure utility functions that resolve status transiti
 - `useKpis.ts` (`useApproveKpi`) — Accepts optional `forwardStatus` parameter
 - `WorkflowProgressTracker.tsx` — Accepts optional `workflowStages` prop to filter displayed stages
 - `KpiJourneySection.tsx` — Accepts optional `workflowStages` prop to filter journey cards
-- `KpiDetailsTable.tsx` — Accepts optional `workflowStages` prop for workflow-aware reviewability (`canReviewKpi`)
+- `KpiDetailsTable.tsx` — Accepts optional `workflowStages` prop; dynamically builds score columns mapped to workflow stages (Self, Manager, Skip-Level, HR PMS, Auditor, Mgmt) + Final. Also uses stages for `canReviewKpi` checks.
 - `EmployeeSelectorGrid.tsx` — Uses `useBulkEmployeeWorkflows` hook to batch-fetch per-employee workflow stages, then calls `resolveReviewableStatuses()` for dynamic pending/reviewed filtering and stats. Eliminates all hardcoded status checks.
 
 **⚠️ Critical:** Every component rendering `KpiDetailsTable`, `WorkflowProgressTracker`, or `KpiReviewPanel` MUST pass the `workflowStages` prop. Omitting it causes fallback to the default 6-stage pipeline, which breaks skip-manager workflows.
