@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-15  
-> **Version:** 1.29.0
+> **Version:** 1.30.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -1933,6 +1933,12 @@ The database trigger `send_email_on_notification()` maps internal notification t
 
 **Trigger HTTP Call:**
 The `send_email_on_notification()` trigger uses `net.http_post()` (from the `pg_net` extension) to call the `send-email-notification` edge function. The call signature is `net.http_post(url, body::jsonb, params::jsonb, headers::jsonb)`. The body is passed as native `jsonb` (not cast to `text`), and an empty `params := '{}'::jsonb` argument is required. Earlier versions incorrectly used `extensions.http_post()` with a `::text` body cast, which caused silent failures for all trigger-based emails.
+
+**Trigger Auth & RLS Requirements:**
+The DB trigger sends the **publishable JWT** (~208 chars) as both `apikey` and `Authorization` headers. The edge function's `SUPABASE_ANON_KEY` env var is a shorter internal key (~46 chars) that will never match. To resolve this, the `validateCaller` helper in the edge function falls back to reading the stored publishable key from `system_settings.supabase_anon_key`. This requires:
+1. An RLS policy allowing the `anon` role to SELECT from `system_settings` (safe — contains only config keys, not secrets).
+2. The fallback `createClient` call uses `serviceRoleKey` first (bypasses RLS as belt-and-suspenders).
+Test emails from the UI work because they carry a real user JWT validated via `supabase.auth.getUser()`.
 
 **Delivery:**
 - In-app notifications (real-time via Supabase Realtime)

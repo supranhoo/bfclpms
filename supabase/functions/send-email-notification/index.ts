@@ -44,7 +44,7 @@ const validateCaller = async (req: Request): Promise<{ authorized: boolean; erro
     if (apiKeyHeader) {
       try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-        const supabase = createClient(supabaseUrl, anonKey || serviceRoleKey!);
+        const supabase = createClient(supabaseUrl, serviceRoleKey || anonKey!);
         const { data } = await supabase
           .from("system_settings")
           .select("setting_value")
@@ -78,7 +78,7 @@ const validateCaller = async (req: Request): Promise<{ authorized: boolean; erro
   // Check token against stored key in system_settings (handles JWT vs raw key mismatch)
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabase = createClient(supabaseUrl, anonKey || serviceRoleKey!);
+    const supabase = createClient(supabaseUrl, serviceRoleKey || anonKey!);
     const { data } = await supabase
       .from("system_settings")
       .select("setting_value")
