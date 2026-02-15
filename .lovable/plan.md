@@ -1,63 +1,84 @@
 
+# Fix: KPI Details Table Not Showing Workflow-Mapped Columns
 
-# Fix: Trigger Emails Failing — Final Root Cause and Solution
+## Problem
 
-## Root Cause (Definitive)
+The KPI Details table in the scorecard view always shows the same 5 hardcoded score columns (Self, Manager, Auditor, Mgmt, Final) regardless of the employee's actual workflow stages. From the screenshot:
 
-The DB trigger sends the **208-character publishable JWT** as both the `apikey` and `Authorization` headers. The edge function's environment only has **short internal keys** (46-char anon, 41-char service role). These will never match the 208-char JWT.
+- The employee's workflow is: KRA SET -> SELF REVIEW -> MANAGER CHECK -> SKIP-LEVEL -> HR PMS -> APPROVED
+- But the table shows **Auditor** and **Mgmt** columns (which are not in this workflow) with dashes
+- The table is **missing Skip-Level and HR PMS** score columns (which ARE in this workflow)
 
-The fallback code that reads the stored key from `system_settings` **silently fails** because the `catch` block at line 96 has no error logging. The `createClient` call with the 41-char internal service role key likely cannot complete the DB query in this context, and the error is swallowed.
+This means reviewers see irrelevant columns and cannot see the scores from stages that actually exist in the employee's pipeline.
 
-All previous fix attempts added layers of complexity but missed the core issue: the publishable JWT is simply not available as an env var in the edge function runtime.
+## Root Cause (3 Issues)
 
-## Solution: Add Publishable Key as Edge Function Secret
+| Issue | File | Detail |
+|---|---|---|
+| 1. Hardcoded columns | `KpiDetailsTable.tsx` line 24-30 | `SCORE_COLUMNS` is a static array of 5 columns, never filtered by workflow |
+| 2. Missing TS fields | `useKpis.ts` line 65-93 | `ReviewSubmission` interface lacks `skip_level_score`, `skip_level_rating`, `hr_pms_score`, `hr_pms_rating` |
+| 3. Missing score resolver | `KpiDetailsTable.tsx` line 66-87 | `getScoreForColumn()` has no cases for skip-level or HR PMS scores |
 
-Store the 208-char publishable JWT as a secret named `SUPABASE_PUBLISHABLE_KEY`. The existing code at lines 20-26 already checks for this env var and adds it to the `validKeys` set. Once it exists, the apikey match at line 34 will succeed immediately on the first check — no DB fallback needed.
+## Solution
 
-### Step 1: Add the secret
+### 1. Update `ReviewSubmission` interface (useKpis.ts)
 
-Use the secrets tool to add `SUPABASE_PUBLISHABLE_KEY` with the value of the project's anon JWT (the 208-char key that the trigger already sends).
+Add the missing fields that already exist in the database:
+- `skip_level_score`, `skip_level_rating`, `skip_level_remarks`, `skip_level_evidence_url`
+- `hr_pms_score`, `hr_pms_rating`, `hr_pms_remarks`, `hr_pms_evidence_url`
 
-### Step 2: Add error logging to catch blocks
+### 2. Make score columns dynamic in KpiDetailsTable.tsx
 
-Update the silent `catch` blocks at lines 96 and 62 to log errors, so future issues are visible in logs instead of silently swallowed.
+Replace the hardcoded `SCORE_COLUMNS` with a function that builds columns based on `workflowStages`:
 
-### Step 3: Redeploy the edge function
+```text
+Workflow Stage          ->  Score Column
+self_review             ->  Self (self_score)
+manager_check           ->  Manager (manager_score)
+skip_level_check        ->  Skip-Level (skip_level_score)
+hr_pms_review           ->  HR PMS (hr_pms_score)
+audit                   ->  Auditor (auditor_score)
+management_review       ->  Mgmt (management_score)
+(always last)           ->  Final (final_score)
+```
 
-Force redeploy to pick up the new secret.
+Only columns whose stage exists in `workflowStages` will render, plus Final is always shown.
 
-### Step 4: Update documentation
+### 3. Update `getScoreForColumn` function
 
-Note the required secret in DOCUMENTATION.md.
+Add switch cases for `skip_level_score` and `hr_pms_score`.
 
-## Why This Will Work
+### 4. Fix `totalColumns` calculation
 
-- The trigger sends `apikey: eyJhbGci...eut4` (208 chars)
-- The edge function code at line 20 reads `SUPABASE_PUBLISHABLE_KEY` from env
-- Line 26 adds it to `validKeys`
-- Line 34 checks `validKeys.has(apiKeyHeader)` — this will now match
-- Auth succeeds on the very first check, no DB fallback needed
+Change from hardcoded `12` to dynamic based on the number of visible score columns.
 
-## Why Previous Fixes Failed
+### 5. Update the `review_submissions` select query
 
-| Attempt | Why it failed |
-|---|---|
-| RLS policy for anon | The createClient itself fails with the 41-char internal key, so the query never executes |
-| Swap key priority (serviceRoleKey first) | Same issue — the 41-char key cannot create a working client for this query |
-| Silent catch blocks | Errors were swallowed, making diagnosis impossible |
+Ensure the `useReviewSubmissions` hook fetches the skip-level and HR PMS fields from the database.
+
+### 6. Update DOCUMENTATION.md
+
+Document the dynamic column behavior.
 
 ## Files to Modify
 
 | File | Change |
 |---|---|
-| Edge function secrets | Add `SUPABASE_PUBLISHABLE_KEY` = the 208-char anon JWT |
-| `supabase/functions/send-email-notification/index.ts` | Add error logging to catch blocks (lines 62, 96) |
-| `DOCUMENTATION.md` | Document the required secret |
+| `src/hooks/useKpis.ts` | Add skip_level and hr_pms fields to `ReviewSubmission` interface |
+| `src/components/review/KpiDetailsTable.tsx` | Dynamic columns based on workflow, add score resolvers, fix colSpan |
+| `DOCUMENTATION.md` | Note dynamic column mapping |
+
+## Expected Result
+
+For the employee in the screenshot (workflow: Self -> Manager -> Skip-Level -> HR PMS -> Approved):
+- Columns shown: **Category, KRA/KPI, Target, Weightage, Self, Manager, Skip-Level, HR PMS, Final, Status, Actions**
+- Columns NOT shown: Auditor, Mgmt (not in this workflow)
+
+For the default 6-stage workflow (Self -> Manager -> Audit -> Management -> Approved):
+- Columns shown: **Category, KRA/KPI, Target, Weightage, Self, Manager, Auditor, Mgmt, Final, Status, Actions** (same as current behavior)
 
 ## Risk Assessment
 
-- Minimal risk — only adds an env var that the code already reads
-- No database changes, no schema changes
-- The publishable/anon key is public by design (it is the same key used in every frontend request), so storing it as a secret is safe
-- Existing test email flow is completely unaffected
-
+- Low risk -- only changes column visibility logic in one table component
+- Backward compatible -- default workflow produces identical output to current behavior
+- No database changes required -- fields already exist, just not read by the frontend
