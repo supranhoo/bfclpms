@@ -1,85 +1,88 @@
 
 
-# Fix: N/A Still Showing on All Columns and All Journey Stages
+# Fix: Show "N/A" for Completed Stages That Submitted Without a Score
 
 ## Problem
 
-For employee 200679's "HRMS implementation" KPI (January 2026), despite the per-stage N/A fix already deployed:
-- The KPI table shows "N/A" in ALL score columns (Self, Manager, Skip-Level, HR PMS, Auditor, Mgmt, Final)
-- The Review Journey shows "N/A" in Manager, Skip-Level, and HR PMS stages -- which should show "Pending" since they haven't been reached yet
+When an employee marks a KPI as N/A during self-review and a reviewer later overrides it (e.g., manager gives a score of 5), the global `is_na` flag flips to `false`. This causes:
 
-## Root Cause (2 remaining bugs)
+- **KPI Table**: Self column shows "--" (dash) instead of "N/A"
+- **Review Journey**: Self stage shows "Not Set" instead of "N/A"
 
-| # | File | Line | Bug |
-|---|---|---|---|
-| 1 | `KpiDetailsTable.tsx` | 348 | Score columns use `isNaKpi` (the global `submission.is_na` flag) to blanket-show "N/A" for EVERY column. Even if a reviewer later provides a score in their column, it gets hidden behind the N/A badge. |
-| 2 | `KpiJourneySection.tsx` | 169 | The per-stage check `globalIsNA && data.score === null` correctly excludes scored stages, but it ALSO marks **pending** stages (not yet reached in the workflow) as N/A. Pending stages should show "Pending", not "N/A". |
+The user expects: if a reviewer at any level submitted N/A (no score), that level should always display "N/A" -- even after a later reviewer overrides the global flag.
 
-## Fix
+## Root Cause
 
-### 1. KpiDetailsTable.tsx -- Per-column N/A display (line 348)
+Both the table and journey only check the global `is_na` flag. Once a downstream reviewer overrides N/A (sets `is_na = false`), every stage loses its N/A indication -- even stages that genuinely submitted without a score.
 
-**Before:**
-```typescript
-{isNaKpi ? (
-  <Badge>N/A</Badge>
-) : (
-  renderScoreCell(score)
-)}
+## Data Evidence (Employee 200679, January 2026)
+
+| KPI | is_na | self_score | manager_score | skip_level_score | Status |
+|-----|-------|------------|---------------|------------------|--------|
+| HRMS | false (overridden) | null | 5 | 5 | skip_level_check |
+| CLMS | false (overridden) | null | null | 5 | skip_level_check |
+
+Both KPIs were originally N/A from self-review, then overridden by downstream reviewers. Self column should show "N/A", not "--".
+
+## Solution
+
+### 1. KPI Table -- Show "N/A" for completed stages with no score (`KpiDetailsTable.tsx`)
+
+Add a reverse mapping from column key to workflow stage. For each score column, determine if the KPI's current status has progressed past that column's stage. If yes and score is null, show "N/A" instead of "--".
+
+**Logic:**
+```
+Column key -> stage name (e.g., 'self_score' -> 'self_review')
+If KPI status index > stage index (stage is completed) AND score is null:
+   Show "N/A" badge
+Else:
+   Show score or "--"
 ```
 
-**After:**
-```typescript
-{isNaKpi && score === null ? (
-  <Badge>N/A</Badge>
-) : (
-  renderScoreCell(score)
-)}
-```
+This means:
+- Self column: status is `skip_level_check` (past `self_review`), self_score=null -> shows "N/A"
+- Manager column: status is `skip_level_check` (past `manager_check`), manager_score=null -> shows "N/A"  
+- Manager column: manager_score=5 -> shows "5" (score visible even if override happened)
 
-Only show N/A badge when the KPI is globally N/A **and** that specific column has no score. If a reviewer provided a score (after override), show the score.
+### 2. Review Journey -- Show "N/A" for completed stages with no score (`ReviewStageCard.tsx`)
 
-### 2. KpiJourneySection.tsx -- Exclude pending stages from N/A (line 169)
+Change the "Not Set" label (line 108) to "N/A" for completed stages. A completed stage that has no score means the reviewer at that stage submitted N/A.
 
-**Before:**
-```typescript
-const stageIsNA = globalIsNA && data.score === null;
-```
+**Before:** `{isPending ? 'Pending' : 'Not Set'}`  
+**After:** `{isPending ? 'Pending' : 'N/A'}`
 
-**After:**
-```typescript
-const stageIsNA = globalIsNA && data.score === null && status !== 'pending';
-```
+This single change handles all cases:
+- Completed + no score = "N/A" (correct -- reviewer said N/A)
+- Pending + no score = "Pending" (correct -- hasn't been reviewed yet)
+- Has score = shows the score badge (unchanged)
 
-Pending stages (not yet reached in the workflow) should display "Pending" -- not "N/A". Only completed or current stages that lack a score should show N/A.
+### 3. Documentation update
 
-### 3. DOCUMENTATION.md -- Update
-
-Document the refined per-column and per-stage N/A display logic.
-
-## Expected Result After Fix
-
-**KPI Table (image-97 scenario):**
-- Self column: "N/A" (is_na=true, self_score=null) -- correct
-- Manager/Skip-Level/HR PMS/Auditor/Mgmt/Final columns: "-" (no score yet, rendered by `renderScoreCell(null)`) -- correct
-
-**Review Journey (image-98 scenario):**
-- Self (Current): "N/A" badge with remarks -- correct
-- Manager (Pending): "Pending" badge -- correct (was incorrectly showing "N/A")
-- Skip-Level (Pending): "Pending" badge -- correct
-- HR PMS (Pending): "Pending" badge -- correct
+Update DOCUMENTATION.md to version 1.33.2 reflecting the implicit N/A display for completed stages.
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/review/KpiDetailsTable.tsx` | Line 348: Add `&& score === null` to N/A condition |
-| `src/components/review/KpiJourneySection.tsx` | Line 169: Add `&& status !== 'pending'` to stageIsNA |
-| `DOCUMENTATION.md` | Update N/A display documentation |
+| `src/components/review/KpiDetailsTable.tsx` | Add column-to-stage mapping; show "N/A" for completed stages with null scores |
+| `src/components/review/ReviewStageCard.tsx` | Change "Not Set" to "N/A" for non-pending stages |
+| `DOCUMENTATION.md` | Update version and N/A display documentation |
+
+## Expected Result
+
+**KPI Table (image-99 scenario):**
+- Self: "N/A" (completed stage, no score)
+- Manager: "N/A" for CLMS (no score), "5" for HRMS (has score)
+- Skip-Level: "5" (has score)
+
+**Review Journey (image-100 scenario):**
+- Self: "N/A" badge instead of "Not Set"
+- Manager: Rating 5 badge (unchanged -- has score)
+- Skip-Level: Rating 5 badge (unchanged -- has score)
+- HR PMS: "Pending" (unchanged -- not yet reached)
 
 ## Risk
 
-- Minimal -- two single-line condition changes
-- No database changes needed
-- Backward compatible: scored columns/stages already work; only null+pending behavior changes
+- Minimal -- affects only display logic, no database changes
+- Any completed stage without a score was necessarily an N/A submission, so "N/A" is always the correct label
 
