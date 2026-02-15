@@ -10,7 +10,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
-  const { role, loading } = useAuth();
+  const { effectiveRole, loading } = useAuth();
 
   if (loading) {
     return (
@@ -20,7 +20,7 @@ export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) 
     );
   }
 
-  if (!role || !allowedRoles.includes(role)) {
+  if (!effectiveRole || !allowedRoles.includes(effectiveRole)) {
     return <Navigate to="/dashboard" replace />;
   }
 

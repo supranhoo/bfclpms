@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-15  
-> **Version:** 1.33.3
+> **Version:** 1.34.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -64,6 +64,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 - Comprehensive reporting suite with PDF/Excel exports
 - Real-time notifications and query system
 - Role-based access control with RLS policies
+- **Admin Role Switch ("View as My Role")**: Admin users see a toggle switch in the sidebar footer labeled "Admin View" (on by default). Turning it off makes the UI behave as if the admin were their natural hierarchical role (Manager or Employee, determined by checking if they have direct reports). This affects sidebar section visibility, route guarding via `ProtectedRoute`, Dashboard `availableModes`, `EmployeeSelectorGrid` full-access behavior, KPI filter admin checks, KPI edit permissions, PMS Policy admin controls, and PIP management HR checks. The actual database `user_roles` record remains `admin` — no RLS or workflow engine changes. The preference is persisted in `localStorage` (key: `pms_admin_mode`). The `AuthContext` exposes `effectiveRole`, `naturalRole`, `isAdminMode`, and `toggleAdminMode`. Components use `effectiveRole` for UI decisions and the raw `role` for audit/logging purposes.
 
 ---
 

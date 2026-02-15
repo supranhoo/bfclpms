@@ -23,11 +23,21 @@ interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   role: AppRole | null;
+  /** The UI-effective role: when admin mode is off, returns the natural hierarchy role */
+  effectiveRole: AppRole | null;
+  /** The admin's natural role based on org hierarchy (manager or employee) */
+  naturalRole: AppRole | null;
+  /** Whether admin mode is active (full admin access) */
+  isAdminMode: boolean;
+  /** Toggle admin mode on/off (only relevant for admin users) */
+  toggleAdminMode: () => void;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
+
+const ADMIN_MODE_KEY = 'pms_admin_mode';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -36,10 +46,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [naturalRole, setNaturalRole] = useState<AppRole | null>(null);
+  const [isAdminMode, setIsAdminMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem(ADMIN_MODE_KEY);
+    return saved !== null ? saved === 'true' : true; // default ON
+  });
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const initializedRef = useRef(false);
+
+  // Derive effectiveRole
+  const effectiveRole: AppRole | null = role === 'admin' && !isAdminMode && naturalRole
+    ? naturalRole
+    : role;
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -71,7 +91,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
       
       if (roleData) {
-        setRole(roleData.role as AppRole);
+        const fetchedRole = roleData.role as AppRole;
+        setRole(fetchedRole);
+        
+        // If admin, detect natural role
+        if (fetchedRole === 'admin') {
+          fetchNaturalRole(userId);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch role:', error);
@@ -83,11 +109,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const fetchNaturalRole = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('reporting_manager_id', userId)
+        .limit(1);
+      
+      if (error) {
+        console.error('Failed to detect natural role:', error);
+        setNaturalRole('employee');
+        return;
+      }
+      
+      setNaturalRole(data && data.length > 0 ? 'manager' : 'employee');
+    } catch {
+      setNaturalRole('employee');
+    }
+  };
+
+  const toggleAdminMode = () => {
+    setIsAdminMode(prev => {
+      const next = !prev;
+      localStorage.setItem(ADMIN_MODE_KEY, String(next));
+      return next;
+    });
+  };
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (!initializedRef.current && session?.user) {
-          // First auth event on mount — initialize
           initializedRef.current = true;
           setSession(session);
           setUser(session.user);
@@ -96,7 +149,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           fetchRole(session.user.id);
           setLoading(false);
         } else if (initializedRef.current) {
-          // Subsequent events (login, logout, token refresh)
           setSession(session);
           setUser(session?.user ?? null);
           if (session?.user) {
@@ -106,10 +158,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else {
             setProfile(null);
             setRole(null);
+            setNaturalRole(null);
           }
           setLoading(false);
         } else if (!session) {
-          // No session on first event (user not logged in)
           initializedRef.current = true;
           setLoading(false);
         }
@@ -117,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (initializedRef.current) return; // Already handled by onAuthStateChange
+      if (initializedRef.current) return;
       
       initializedRef.current = true;
       setSession(session);
@@ -183,10 +235,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
     setProfile(null);
     setRole(null);
+    setNaturalRole(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, role, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{
+      user, session, profile, role, effectiveRole, naturalRole,
+      isAdminMode, toggleAdminMode, loading, signIn, signUp, signOut,
+    }}>
       {children}
     </AuthContext.Provider>
   );

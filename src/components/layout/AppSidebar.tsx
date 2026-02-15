@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import {
   BarChart3,
@@ -46,6 +47,7 @@ import {
   Mail,
   UserCheck,
   ClipboardCheck,
+  ShieldCheck,
 } from 'lucide-react';
 import { CollapsibleSidebarGroup } from './CollapsibleSidebarGroup';
 
@@ -114,7 +116,7 @@ const getSectionForPath = (pathname: string, search: string = ''): string => {
 };
 
 export function AppSidebar() {
-  const { profile, role, signOut } = useAuth();
+  const { profile, role, effectiveRole, isAdminMode, toggleAdminMode, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { setOpenMobile, isMobile } = useSidebar();
@@ -154,8 +156,8 @@ export function AppSidebar() {
   const displayOrgName = appSettings?.organization_name || 'Performance Management';
 
   const filterByRole = useCallback((items: typeof menuItems.main) => {
-    return items.filter(item => role && item.roles.includes(role));
-  }, [role]);
+    return items.filter(item => effectiveRole && item.roles.includes(effectiveRole));
+  }, [effectiveRole]);
 
   const toggleSection = useCallback((section: string) => {
     setOpenSections(prev => {
@@ -223,7 +225,7 @@ export function AppSidebar() {
         />
 
         {/* Manager Section */}
-        {(role === 'manager' || role === 'management' || role === 'admin') && (
+        {(effectiveRole === 'manager' || effectiveRole === 'management' || effectiveRole === 'admin') && (
           <CollapsibleSidebarGroup
             label="Manager"
             items={menuItems.manager}
@@ -237,7 +239,7 @@ export function AppSidebar() {
         )}
 
         {/* Management Section */}
-        {(role === 'management' || role === 'admin') && (
+        {(effectiveRole === 'management' || effectiveRole === 'admin') && (
           <CollapsibleSidebarGroup
             label="Management"
             items={menuItems.management}
@@ -251,7 +253,7 @@ export function AppSidebar() {
         )}
 
         {/* HR PMS Section */}
-        {(role === 'hr_pms' || role === 'admin') && (
+        {(effectiveRole === 'hr_pms' || effectiveRole === 'admin') && (
           <CollapsibleSidebarGroup
             label="HR PMS"
             items={menuItems.hr_pms}
@@ -265,7 +267,7 @@ export function AppSidebar() {
         )}
 
         {/* Audit Section */}
-        {(role === 'auditor' || role === 'admin') && (
+        {(effectiveRole === 'auditor' || effectiveRole === 'admin') && (
           <CollapsibleSidebarGroup
             label="Audit"
             items={menuItems.audit}
@@ -279,7 +281,7 @@ export function AppSidebar() {
         )}
 
         {/* Data Entry section for data owners (non-admins) */}
-        {role !== 'admin' && isDataOwner && (
+        {effectiveRole !== 'admin' && isDataOwner && (
           <CollapsibleSidebarGroup
             label="Data Entry"
             items={menuItems.dataEntry}
@@ -293,7 +295,7 @@ export function AppSidebar() {
         )}
 
         {/* Administration Section */}
-        {role === 'admin' && (
+        {effectiveRole === 'admin' && (
           <CollapsibleSidebarGroup
             label="Administration"
             items={menuItems.admin}
@@ -307,7 +309,7 @@ export function AppSidebar() {
         )}
 
         {/* Reports Section */}
-        {(role === 'admin' || role === 'manager' || role === 'auditor' || role === 'management') && (
+        {(effectiveRole === 'admin' || effectiveRole === 'manager' || effectiveRole === 'auditor' || effectiveRole === 'management') && (
           <CollapsibleSidebarGroup
             label="Reports"
             items={menuItems.reports}
@@ -322,6 +324,21 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-4 space-y-3">
+        {/* Admin View Toggle (only for admin users) */}
+        {role === 'admin' && (
+          <div className="flex items-center justify-between p-2.5 rounded-lg bg-sidebar-accent/5 border border-sidebar-border/30">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium text-sidebar-foreground">Admin View</span>
+            </div>
+            <Switch
+              checked={isAdminMode}
+              onCheckedChange={toggleAdminMode}
+              aria-label="Toggle admin view"
+            />
+          </div>
+        )}
+
         {/* Back to Hub + Theme Toggle row */}
         <div className="flex items-center justify-between">
           <button 
@@ -346,7 +363,7 @@ export function AppSidebar() {
             <p className="text-sm font-medium text-sidebar-foreground truncate">
               {profile?.full_name || 'User'}
             </p>
-            <p className="text-xs text-sidebar-foreground/60 capitalize">{role}</p>
+            <p className="text-xs text-sidebar-foreground/60 capitalize">{effectiveRole}</p>
           </div>
           <Button
             variant="ghost"

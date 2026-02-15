@@ -8,13 +8,13 @@ import { useToast } from '@/hooks/use-toast';
  * Used for route access control
  */
 export function useIsAnyOrgKpiDataOwner() {
-  const { user, role } = useAuth();
+  const { user, effectiveRole } = useAuth();
 
   return useQuery({
     queryKey: ['is-any-org-kpi-owner', user?.id],
     queryFn: async () => {
-      // Admins always have access
-      if (role === 'admin') {
+      // Admins always have access (only in admin mode)
+      if (effectiveRole === 'admin') {
         return true;
       }
 
@@ -77,13 +77,13 @@ export function useOrgKpiDataOwners() {
  * Check if current user can edit a specific org-level KPI
  */
 export function useIsOrgKpiDataOwner(categoryId: string, kraName: string, kpiName: string) {
-  const { user, role } = useAuth();
+  const { user, effectiveRole } = useAuth();
 
   return useQuery({
     queryKey: ['org-kpi-owner-check', categoryId, kraName, kpiName, user?.id],
     queryFn: async () => {
       // Admins always have access
-      if (role === 'admin') {
+      if (effectiveRole === 'admin') {
         return { canEdit: true, isOwner: false, isAdmin: true };
       }
 
@@ -137,14 +137,14 @@ export function useOrgKpiOwners(categoryId: string, kraName: string, kpiName: st
  */
 export function useOrgKpiOwnershipMap() {
   const { data: owners } = useOrgKpiDataOwners();
-  const { user, role } = useAuth();
+  const { user, effectiveRole } = useAuth();
 
   const ownershipMap = new Map<string, { owners: OrgKpiDataOwner[]; canEdit: boolean }>();
   
   if (owners) {
     owners.forEach(owner => {
       const key = `${owner.category_id}||${owner.kra_name}||${owner.kpi_name}`;
-      const existing = ownershipMap.get(key) || { owners: [], canEdit: role === 'admin' };
+      const existing = ownershipMap.get(key) || { owners: [], canEdit: effectiveRole === 'admin' };
       existing.owners.push(owner);
       if (owner.owner_id === user?.id) {
         existing.canEdit = true;
@@ -153,7 +153,7 @@ export function useOrgKpiOwnershipMap() {
     });
   }
 
-  return { ownershipMap, isAdmin: role === 'admin' };
+  return { ownershipMap, isAdmin: effectiveRole === 'admin' };
 }
 
 /**

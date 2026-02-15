@@ -106,7 +106,7 @@ export function EmployeeSelectorGrid({
   onPeriodSelectionChange,
   onSelectEmployee,
 }: EmployeeSelectorGridProps) {
-  const { user, role } = useAuth();
+  const { user, effectiveRole: role } = useAuth();
   const { data: teamMembers, isLoading: teamLoading } = useTeamMembers(user?.id);
   const { data: allProfiles, isLoading: profilesLoading } = useProfiles();
   // Fetch skip-level members for team view (merged) or standalone skip_level view

@@ -24,7 +24,7 @@ interface KpiLogicModalProps {
 }
 
 export function KpiLogicModal({ isOpen, onClose, kpi }: KpiLogicModalProps) {
-  const { role } = useAuth();
+  const { effectiveRole: role } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   

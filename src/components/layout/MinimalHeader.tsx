@@ -15,7 +15,7 @@ import { BarChart3, LogOut, ChevronDown } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 export function MinimalHeader() {
-  const { profile, role, signOut } = useAuth();
+  const { profile, effectiveRole, signOut } = useAuth();
   const { data: appSettings } = useAppSettings();
   const navigate = useNavigate();
 
@@ -69,7 +69,7 @@ export function MinimalHeader() {
                   </Avatar>
                   <div className="hidden sm:block text-left">
                     <p className="text-sm font-medium">{profile?.full_name || 'User'}</p>
-                    <p className="text-xs text-muted-foreground capitalize">{role}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{effectiveRole}</p>
                   </div>
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </Button>
