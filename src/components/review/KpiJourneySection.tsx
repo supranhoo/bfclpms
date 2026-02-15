@@ -71,7 +71,7 @@ export function KpiJourneySection({
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const kpiStatus = kpi.status || 'kra_set';
   const visibleStages = getVisibleStagesForLevel(viewLevel, effectiveStages);
-  const isNA = submission?.is_na || false;
+  const globalIsNA = submission?.is_na || false;
 
   const openQueries = queries.filter(q => q.status === 'open').length;
   const resolvedQueries = queries.filter(q => q.status === 'resolved').length;
@@ -162,9 +162,11 @@ export function KpiJourneySection({
       <CardContent className="space-y-4">
         {/* Review Stages Grid */}
         <div className={`grid ${gridCols} gap-2 lg:gap-3`}>
-          {visibleStages.map(stage => {
+        {visibleStages.map(stage => {
             const data = stageData[stage];
             const status = getStageStatus(stage, kpiStatus, viewLevel, effectiveStages);
+            // Per-stage N/A: only show N/A if globally marked AND this stage has no score
+            const stageIsNA = globalIsNA && data.score === null;
             return (
               <ReviewStageCard
                 key={stage}
@@ -176,7 +178,7 @@ export function KpiJourneySection({
                 remarks={data.remarks}
                 evidenceUrl={data.evidenceUrl}
                 status={status}
-                isNA={isNA}
+                isNA={stageIsNA}
                 achievedValue={data.achievedValue}
               />
             );
