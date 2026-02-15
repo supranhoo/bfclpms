@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-15  
-> **Version:** 1.32.0
+> **Version:** 1.33.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -2471,6 +2471,18 @@ Any reviewer (Manager, Skip-Level, HR PMS, Auditor, Management) can mark a KPI a
 - Dashboard scoring automatically excludes the KPI since it checks `is_na = true`
 - Components: `UnifiedScorecard`, `EmployeeScorecard`, `AuditScorecard`, `ManagementScorecard` all support this flow
 - **N/A Remarks Resolution:** When displaying the N/A reason in the confirmation card, the system resolves the correct remarks field based on `na_marked_by_role` (e.g., `skip_level` → `skip_level_remarks`, `auditor` → `auditor_remarks`). Falls back to `self_remarks` when `na_marked_by_role` is null or `employee`.
+
+**N/A Override at Any Review Stage:**
+When a KPI has been marked as N/A (by any prior stage), subsequent reviewers are NOT forced to accept it. Each reviewer independently decides whether the KPI is truly N/A or deserves a score:
+- The `NaConfirmationCard` displays an "Override: This KPI is applicable" toggle switch alongside the existing "Confirm N/A" checkbox
+- When the override toggle is activated: the confirm checkbox is hidden, a mandatory justification textarea appears, and standard score input fields (AchievedValueScoreInput, remarks, evidence) become visible in the review sheet
+- On submit with override: `is_na` is set to `false`, `na_marked_by_role` is cleared to `null`, the reviewer's score/rating/remarks are submitted normally, and an audit log entry (`{ROLE}_NA_OVERRIDDEN`) is created
+- The KPI is immediately re-included in weighted score calculations since the scoring engine checks `submission?.is_na` dynamically
+- If the reviewer instead confirms N/A (default), the existing behavior is preserved — the KPI stays excluded from scoring
+- Any later stage can also re-mark it as N/A using the existing "Mark as N/A" toggle, or override a previous N/A again — the LAST stage's decision is final
+- `KpiDetailsTable` no longer blocks the Review button for N/A KPIs; reviewers can always open the review sheet to choose confirm or override
+- Components: `UnifiedScorecard`, `EmployeeScorecard`, `AuditScorecard`, `ManagementScorecard` all support this override flow
+- No database schema changes required — `is_na` (boolean) and `na_marked_by_role` (nullable text) columns already exist and are simply toggled
 
 #### `EmployeeScorecard`
 Comprehensive employee performance view with:
