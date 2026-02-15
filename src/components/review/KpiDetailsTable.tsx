@@ -345,7 +345,7 @@ export function KpiDetailsTable({
                   const score = getScoreForColumn(submission, col.key);
                   return (
               <TableCell key={col.key} className="text-center">
-                      {isNaKpi ? (
+                      {isNaKpi && score === null ? (
                         <Badge variant="outline" className="bg-muted/50 text-muted-foreground text-xs">N/A</Badge>
                       ) : (
                         renderScoreCell(score)
