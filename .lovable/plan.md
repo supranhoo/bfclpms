@@ -1,66 +1,63 @@
 
-# Add Ctrl+V Paste-to-Upload Support
 
-## Overview
+# Fix Paste-to-Upload in Dialogs
 
-Add clipboard paste support (Ctrl+V / Cmd+V) to all three file upload components so users can paste screenshots or copied images directly. This is a non-breaking, additive change -- existing click and drag-and-drop flows remain untouched.
+## Problem
 
-## Important Limitation
+The `onPaste` handler is attached to the drop zone `div` element inside `MultiFileUpload`. This only works when that specific `div` has keyboard focus. Inside a Dialog (like Add Observation), focus is on input fields or the dialog container -- so the paste event never reaches the drop zone.
 
-Clipboard paste primarily works for **images** (screenshots, copied images). Browsers do not support pasting arbitrary files (PDFs, Excel) from the file explorer via Ctrl+V. The implementation will handle this gracefully by showing a toast if the pasted content has no valid files.
+## Solution
 
-## Components to Update
+Replace the element-level `onPaste` with a **document-level `paste` event listener** using `useEffect`. This way, pressing Ctrl+V anywhere inside the dialog (or page) while the component is mounted and able to accept files will trigger the upload.
 
-### 1. MultiFileUpload.tsx
-- Add an `onPaste` handler on the drop zone `div`
-- Extract files from `e.clipboardData.files`
-- Feed them into the existing `handleFilesSelected` function (reuses all validation and upload logic)
-- Update the help text from "Drop or click" to "Drop, click, or paste"
-- Make the drop zone focusable (`tabIndex={0}`) so it can receive paste events
+A guard ensures the listener only acts when:
+- The component is not disabled
+- There are remaining upload slots (`canUploadMore`)
+- The pasted clipboard actually contains files
 
-### 2. EvidenceUpload.tsx
-- Add an `onPaste` handler on the upload button wrapper `div`
-- Extract the first file from `e.clipboardData.files`
-- Feed it into the existing `handleFileSelect` logic (reuses validation and upload)
-- Add a wrapper div with `tabIndex={0}` to capture paste events
-- Update the help text to mention paste support
+## Changes
 
-### 3. OrgKpiFileUpload.tsx
-- Add an `onPaste` handler on the outer `div`
-- Extract the first file from `e.clipboardData.files`
-- Feed it into the existing upload logic (reuses validation and upload)
-- Make the container focusable to receive paste events
+### 1. `src/components/ui/MultiFileUpload.tsx`
 
-## Technical Approach
-
-All three components will use the same pattern:
+- Remove the `onPaste` prop from the drop zone `div`
+- Add a `useEffect` that attaches a `paste` event listener to `document`
+- The listener calls `handleFilesSelected` with clipboard files
+- Cleanup removes the listener on unmount or when upload is disabled/full
 
 ```text
-const handlePaste = (e: React.ClipboardEvent) => {
-  const files = e.clipboardData?.files;
-  if (!files || files.length === 0) return;
-  e.preventDefault();
-  // Route to existing file handling logic
-  handleFilesSelected(files);  // or handleFileSelect for single-file components
-};
+useEffect(() => {
+  if (disabled || !canUploadMore) return;
+
+  const handler = (e: ClipboardEvent) => {
+    const files = e.clipboardData?.files;
+    if (!files || files.length === 0) return;
+    e.preventDefault();
+    handleFilesSelected(files);
+  };
+
+  document.addEventListener('paste', handler);
+  return () => document.removeEventListener('paste', handler);
+}, [disabled, canUploadMore, handleFilesSelected]);
 ```
 
-For single-file components (EvidenceUpload, OrgKpiFileUpload), only the first pasted file is used.
+- Keep the `tabIndex={0}` and hint text as-is (no visual changes)
 
-## No Impact on Existing Functionality
+### 2. `src/components/ui/EvidenceUpload.tsx`
 
-- Click upload: unchanged
-- Drag-and-drop: unchanged (MultiFileUpload only)
-- File validation (type, size): reused as-is
-- Upload logic and storage paths: unchanged
-- No database or schema changes
-- No new dependencies
+- Apply the same document-level listener pattern for consistency
 
-## Files Changed
+### 3. `src/components/admin/OrgKpiFileUpload.tsx`
 
-| File | Change |
-|---|---|
-| `src/components/ui/MultiFileUpload.tsx` | Add `onPaste` handler on drop zone, update hint text, add `tabIndex` |
-| `src/components/ui/EvidenceUpload.tsx` | Add paste handler wrapper, update hint text |
-| `src/components/admin/OrgKpiFileUpload.tsx` | Add paste handler on outer div |
-| `DOCUMENTATION.md` | Document paste-to-upload support |
+- Apply the same document-level listener pattern for consistency
+
+### 4. `DOCUMENTATION.md`
+
+- Note that paste works globally when the upload component is mounted (not just when the drop zone is focused)
+
+## Why This Is Safe
+
+- The listener is only active while the component is mounted and can accept files
+- If multiple upload components are on screen simultaneously, each listener fires independently -- but since they all call their own `handleFilesSelected`, the file goes to whichever component is active
+- Cleanup on unmount prevents stale listeners
+- No database, schema, or RLS changes
+
