@@ -3268,4 +3268,24 @@ The PMS Policy page was converted from an external iframe-based viewer to a full
 
 ---
 
+### DB Trigger Email 401 Fix (2026-02-15)
+
+**Problem:** All trigger-based emails (KPI review actions) were failing with HTTP 401. The `send_email_on_notification` trigger constructed an Authorization header using `app.settings.service_role_key`, which was NULL in the database, resulting in `Bearer null`.
+
+**Root Cause:** `current_setting('app.settings.service_role_key', true)` returns NULL in a trigger context, and `request.jwt.claim.sub` is also NULL. The edge function rejected the request.
+
+**Fix:**
+1. Updated `send_email_on_notification()` trigger to use the **anon key** (publishable, safe to store) instead of the service role key
+2. Stored the anon key in `system_settings` table (key: `supabase_anon_key`) with a hardcoded fallback
+3. Updated `send-email-notification` edge function's `validateCaller` to accept the anon key as a valid authorization token (in addition to service role key and user JWTs)
+
+**Important:** The `supabase_anon_key` row in `system_settings` must contain the correct publishable key for trigger-based emails to work. This is a public key and poses no security risk.
+
+| File | Change |
+|---|---|
+| DB migration | Updated `send_email_on_notification()` to read anon key from `system_settings` and use it in Authorization header |
+| `supabase/functions/send-email-notification/index.ts` | Added anon key acceptance in `validateCaller` |
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
