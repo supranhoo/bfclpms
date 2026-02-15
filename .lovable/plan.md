@@ -1,94 +1,75 @@
 
 
-# Fix "Done" Badge Showing Instead of "Draft" for Management-Drafted KPIs
+# Fix Mobile KPI Card Text Formatting
 
 ## Problem
 
-When a user (e.g., Gaurav Budhiya) serves as both **Manager** and **Management Reviewer**, the Team Reviews mode shows a green **"Done"** badge on KPIs that are at `management_review` status with a saved draft score. This misleads the user into thinking the KPI is fully complete, when in reality the management review was only drafted (Save Draft) and not formally approved (Final Approve).
+The mobile KPI cards display raw structured KPI text (with "- Description:", "- Formula:", "- Scoring Logic:" markers) as a single unformatted block. On the web/desktop view, the same text is properly formatted with bold markers and line breaks via `renderBoldKpiText` and `whitespace-pre-wrap`.
 
-## Root Cause
+Two issues cause this:
 
-In `MobileKpiCard.tsx`, the `isTeamReviewPastStage` check treats any KPI past `self_review` (including `management_review`) as "Done" for the team-review view. This is technically correct from the manager perspective -- their work IS done. But for dual-role users, it hides the fact that their management-level action is still pending.
+1. **CSS conflict in Review MobileKpiCard** (`src/components/review/MobileKpiCard.tsx`): The KPI name paragraph has both `line-clamp-2` and `flex items-center gap-1` on the same element. `line-clamp` needs `display: -webkit-box`, but `flex` overrides it to `display: flex`, so the text is never truncated and all structured content spills out.
 
-Similarly, in `KpiDetailsTable.tsx` and `EmployeeSelectorGrid.tsx`, there is no distinction between "forwarded past my stage" and "drafted at a later stage where I'm also a reviewer."
+2. **Missing formatting in Dashboard MobileKpiCard** (`src/components/dashboard/MobileKpiCard.tsx`): This component renders raw `kpi.kra_name` and `kpi.kpi_name` strings without using `renderBoldKpiText` or `whitespace-pre-wrap`, so section markers appear as plain inline text.
 
 ## Solution
 
-Introduce a **"Draft (Mgmt)"** badge that appears instead of "Done" when:
-- The view is `team-review` (or any non-management view)
-- The KPI status is `management_review` (not yet `approved`)
-- The submission has a `management_score` saved (meaning someone drafted it)
+### 1. Fix Review MobileKpiCard (`src/components/review/MobileKpiCard.tsx`)
 
-This gives dual-role users a clear signal that their management-level action is still pending.
-
-## Changes
-
-### 1. `src/components/review/MobileKpiCard.tsx`
-
-In the `getActionContent` function, before the `isTeamReviewPastStage` check (line 158), add a condition:
+Separate the `flex` container from the `line-clamp` text element. Wrap the KPI name text in its own `<span>` with `line-clamp-2`, and keep the Info icon outside:
 
 ```text
-// Before showing "Done" for team-review past stage, check if KPI is drafted at management
-const isMgmtDrafted = viewType === 'team-review' && 
-  kpi.status === 'management_review' && 
-  submission?.management_score !== null && submission?.management_score !== undefined;
+<!-- Before (broken) -->
+<p className="text-[10px] text-muted-foreground line-clamp-2 flex items-center gap-1">
+  {renderBoldKpiText(kpi.kpi_name)}
+  <Info ... />
+</p>
 
-if (isMgmtDrafted) {
-  return (
-    <div className="flex items-center gap-2">
-      <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-300 text-xs">
-        <Clock className="h-3 w-3 mr-1" />
-        Draft (Mgmt)
-      </Badge>
-      {onView && (
-        <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => onView(kpi)}>
-          <Eye className="h-4 w-4" />
-        </Button>
-      )}
-    </div>
-  );
-}
+<!-- After (fixed) -->
+<div className="flex items-start gap-1">
+  <p className="text-[10px] text-muted-foreground line-clamp-2 whitespace-pre-wrap flex-1 min-w-0">
+    {renderBoldKpiText(kpi.kpi_name)}
+  </p>
+  <Info className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
+</div>
 ```
 
-- Add `Clock` to the lucide-react imports
+Also add `whitespace-pre-wrap` to the KRA name line so normalized newlines render correctly within the clamp.
 
-### 2. `src/components/review/EmployeeSelectorGrid.tsx`
+### 2. Fix Dashboard MobileKpiCard (`src/components/dashboard/MobileKpiCard.tsx`)
 
-For the **management view** (lines 446-452), split the `badge1` count to distinguish between "pending" (no score yet) and "drafted" (score saved but not approved):
+Import and apply `renderBoldKpiText` for both KRA and KPI name fields, and add `whitespace-pre-wrap`:
 
 ```text
-// Management view
-badge1: empKpis.filter(k => 
-  k.status === 'management_review'
-).length,
-badge2: empKpis.filter(k => k.status === 'approved').length,
+import { renderBoldKpiText } from '@/components/ui/FormattedText';
+
+<!-- KRA name -->
+<p className="font-medium text-sm mb-1 line-clamp-1 whitespace-pre-wrap">
+  {renderBoldKpiText(kpi.kra_name)}
+</p>
+
+<!-- KPI name -->
+<p className="text-xs text-muted-foreground mb-3 line-clamp-2 whitespace-pre-wrap">
+  {renderBoldKpiText(kpi.kpi_name)}
+</p>
 ```
 
-This part is already correct -- `badge1` shows "pending" and `badge2` shows "approved". No change needed here.
+### 3. Update DOCUMENTATION.md
 
-For the **team view** (lines 411-416), the "reviewed" badge already correctly counts KPIs past `self_review`. However, we should add a third badge for KPIs that are at `management_review` with a drafted score. This requires access to submission data.
+Add a note under the mobile UI section about the `line-clamp` and `flex` incompatibility pattern to prevent future regressions.
 
-Since the `EmployeeSelectorGrid` does not currently have submission data, and adding it would increase complexity, we will instead:
+## Files Changed
 
-- Add a helper function that checks submission data when available
-- For now, keep the team-view badges as-is (they correctly show the manager's completed work)
-
-The primary fix is the `MobileKpiCard` badge label change, which is where the user sees the confusing "Done."
-
-### 3. `src/components/review/KpiDetailsTable.tsx`
-
-Check if there is an action column that shows "Done" status for team-review. If so, apply the same draft detection logic.
-
-### 4. `DOCUMENTATION.md`
-
-Update the workflow documentation to note:
-- KPIs at `management_review` with a saved score show "Draft (Mgmt)" in non-management views
-- This helps dual-role users identify pending management approvals
+| File | Change |
+|---|---|
+| `src/components/review/MobileKpiCard.tsx` | Separate flex and line-clamp into distinct elements; add `whitespace-pre-wrap` |
+| `src/components/dashboard/MobileKpiCard.tsx` | Import and use `renderBoldKpiText`; add `whitespace-pre-wrap` |
+| `DOCUMENTATION.md` | Add mobile text formatting note |
 
 ## Impact
 
-- **Visual only** -- no database, schema, or workflow logic changes
-- Only affects the badge label displayed in `MobileKpiCard` for dual-role users
-- "Done" still appears for KPIs that are genuinely `approved`
-- No changes to the actual approval/forwarding workflow
+- Visual fix only -- no database, schema, or logic changes
+- Desktop/web view is unaffected
+- Properly formatted text with bold section markers and line breaks on mobile
+- Text still truncated via `line-clamp` to keep cards compact
 
