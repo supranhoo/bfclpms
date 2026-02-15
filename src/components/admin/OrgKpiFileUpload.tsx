@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -66,6 +66,37 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
     onUploadComplete(null);
   };
 
+  useEffect(() => {
+    if (isUploading || disabled || existingUrl) return;
+    const handler = (e: ClipboardEvent) => {
+      const files = e.clipboardData?.files;
+      if (!files || files.length === 0) return;
+      e.preventDefault();
+      const file = files[0];
+      if (file.size > maxFileSizeBytes) {
+        toast({ title: 'File too large', description: `Maximum file size is ${maxFileSizeMb}MB`, variant: 'destructive' });
+        return;
+      }
+      setIsUploading(true);
+      const fileExt = file.name.split('.').pop() || 'png';
+      const fileName = `org-kpi-${Date.now()}.${fileExt}`;
+      const filePath = `org-kpi-evidence/${fileName}`;
+      supabase.storage.from('review-evidence').upload(filePath, file).then(({ error: uploadError }) => {
+        if (uploadError) {
+          toast({ title: 'Upload failed', description: uploadError.message, variant: 'destructive' });
+          setIsUploading(false);
+          return;
+        }
+        const { data: { publicUrl } } = supabase.storage.from('review-evidence').getPublicUrl(filePath);
+        onUploadComplete(publicUrl);
+        toast({ title: 'File uploaded successfully' });
+        setIsUploading(false);
+      });
+    };
+    document.addEventListener('paste', handler);
+    return () => document.removeEventListener('paste', handler);
+  }, [isUploading, disabled, existingUrl, maxFileSizeBytes, maxFileSizeMb, onUploadComplete, toast]);
+
   if (existingUrl) {
     return (
       <div className="flex items-center gap-1">
@@ -93,34 +124,8 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
     );
   }
 
-  const handlePaste = async (e: React.ClipboardEvent) => {
-    const files = e.clipboardData?.files;
-    if (!files || files.length === 0 || isUploading || disabled) return;
-    e.preventDefault();
-    const file = files[0];
-    if (file.size > maxFileSizeBytes) {
-      toast({ title: 'File too large', description: `Maximum file size is ${maxFileSizeMb}MB`, variant: 'destructive' });
-      return;
-    }
-    setIsUploading(true);
-    try {
-      const fileExt = file.name.split('.').pop() || 'png';
-      const fileName = `org-kpi-${Date.now()}.${fileExt}`;
-      const filePath = `org-kpi-evidence/${fileName}`;
-      const { error: uploadError } = await supabase.storage.from('review-evidence').upload(filePath, file);
-      if (uploadError) throw uploadError;
-      const { data: { publicUrl } } = supabase.storage.from('review-evidence').getPublicUrl(filePath);
-      onUploadComplete(publicUrl);
-      toast({ title: 'File uploaded successfully' });
-    } catch (error: any) {
-      toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
   return (
-    <div onPaste={handlePaste} tabIndex={0}>
+    <div>
       <input
         ref={fileInputRef}
         type="file"
