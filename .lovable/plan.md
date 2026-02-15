@@ -1,84 +1,92 @@
 
-# Fix: KPI Details Table Not Showing Workflow-Mapped Columns
+
+# Fix: N/A Override at Any Review Stage
 
 ## Problem
 
-The KPI Details table in the scorecard view always shows the same 5 hardcoded score columns (Self, Manager, Auditor, Mgmt, Final) regardless of the employee's actual workflow stages. From the screenshot:
+When a KPI is marked as "Not Applicable" (N/A) at any stage (e.g., Self Review), all subsequent reviewers are forced to only "Confirm N/A" -- they cannot override it and provide an actual score. The current behavior treats N/A as a permanent, irreversible state once set.
 
-- The employee's workflow is: KRA SET -> SELF REVIEW -> MANAGER CHECK -> SKIP-LEVEL -> HR PMS -> APPROVED
-- But the table shows **Auditor** and **Mgmt** columns (which are not in this workflow) with dashes
-- The table is **missing Skip-Level and HR PMS** score columns (which ARE in this workflow)
+**What the user expects:**
+- N/A marked at one stage should NOT force N/A at all subsequent stages
+- Each reviewer should independently decide whether the KPI is truly N/A or deserves a score
+- The last stage's decision (N/A or scored) should be final
 
-This means reviewers see irrelevant columns and cannot see the scores from stages that actually exist in the employee's pipeline.
+## Root Cause (4 blocking points)
 
-## Root Cause (3 Issues)
-
-| Issue | File | Detail |
+| # | Location | Issue |
 |---|---|---|
-| 1. Hardcoded columns | `KpiDetailsTable.tsx` line 24-30 | `SCORE_COLUMNS` is a static array of 5 columns, never filtered by workflow |
-| 2. Missing TS fields | `useKpis.ts` line 65-93 | `ReviewSubmission` interface lacks `skip_level_score`, `skip_level_rating`, `hr_pms_score`, `hr_pms_rating` |
-| 3. Missing score resolver | `KpiDetailsTable.tsx` line 66-87 | `getScoreForColumn()` has no cases for skip-level or HR PMS scores |
+| 1 | `KpiDetailsTable.tsx` line 129-130 | `canReviewKpiCheck` returns `false` for N/A KPIs, hiding the Review button entirely |
+| 2 | `UnifiedScorecard.tsx` line 1008 | When `is_na === true`, only the "Confirm N/A" card is shown -- no score input, no override option |
+| 3 | `UnifiedScorecard.tsx` line 664 | `handleSubmitReview` short-circuits for N/A KPIs: only allows confirmation, no score submission path |
+| 4 | `NaConfirmationCard.tsx` | The "confirm existing N/A" variant has no toggle to override/reverse the N/A decision |
 
 ## Solution
 
-### 1. Update `ReviewSubmission` interface (useKpis.ts)
+### 1. Allow reviewers to review N/A KPIs (KpiDetailsTable)
 
-Add the missing fields that already exist in the database:
-- `skip_level_score`, `skip_level_rating`, `skip_level_remarks`, `skip_level_evidence_url`
-- `hr_pms_score`, `hr_pms_rating`, `hr_pms_remarks`, `hr_pms_evidence_url`
+Remove the `if (isNaKpi) return false` guard from `canReviewKpiCheck`. N/A KPIs should still be reviewable -- the reviewer decides whether to confirm or override.
 
-### 2. Make score columns dynamic in KpiDetailsTable.tsx
+### 2. Add "Override N/A" option to NaConfirmationCard
 
-Replace the hardcoded `SCORE_COLUMNS` with a function that builds columns based on `workflowStages`:
+Enhance the existing N/A confirmation card with a new toggle: **"Override: This KPI is applicable"**. When toggled on:
+- The confirmation checkbox is hidden
+- A mandatory justification field appears
+- The parent component is notified via a new `onOverrideNa` callback
+- Score input fields become visible in the review sheet
 
-```text
-Workflow Stage          ->  Score Column
-self_review             ->  Self (self_score)
-manager_check           ->  Manager (manager_score)
-skip_level_check        ->  Skip-Level (skip_level_score)
-hr_pms_review           ->  HR PMS (hr_pms_score)
-audit                   ->  Auditor (auditor_score)
-management_review       ->  Mgmt (management_score)
-(always last)           ->  Final (final_score)
-```
+### 3. Update review sheet rendering (UnifiedScorecard)
 
-Only columns whose stage exists in `workflowStages` will render, plus Final is always shown.
+When a KPI has `is_na === true` and the reviewer is at a reviewable stage:
+- Show the enhanced NaConfirmationCard (with override option)
+- If the reviewer chooses to override, show the standard score input (AchievedValueScoreInput, remarks, evidence)
+- If the reviewer confirms N/A, keep current behavior
 
-### 3. Update `getScoreForColumn` function
+### 4. Update submit logic (handleSubmitReview)
 
-Add switch cases for `skip_level_score` and `hr_pms_score`.
+Add a new code path for N/A override:
+- Set `is_na = false` and `na_marked_by_role = null` on the submission
+- Submit the reviewer's score, rating, and remarks normally
+- Log an audit entry (`{ROLE}_NA_OVERRIDDEN`)
+- Advance status as usual
 
-### 4. Fix `totalColumns` calculation
+### 5. Update score calculations
 
-Change from hardcoded `12` to dynamic based on the number of visible score columns.
+In `scoreData` calculation (line 323), N/A exclusion already uses `submission?.is_na` which will be `false` after override -- no change needed here.
 
-### 5. Update the `review_submissions` select query
+### 6. Update legacy scorecards (EmployeeScorecard, AuditScorecard, ManagementScorecard)
 
-Ensure the `useReviewSubmissions` hook fetches the skip-level and HR PMS fields from the database.
+Apply the same override logic to legacy scorecard components that also have N/A confirmation flows, ensuring consistency across all review paths.
 
-### 6. Update DOCUMENTATION.md
-
-Document the dynamic column behavior.
-
-## Files to Modify
+## Detailed File Changes
 
 | File | Change |
 |---|---|
-| `src/hooks/useKpis.ts` | Add skip_level and hr_pms fields to `ReviewSubmission` interface |
-| `src/components/review/KpiDetailsTable.tsx` | Dynamic columns based on workflow, add score resolvers, fix colSpan |
-| `DOCUMENTATION.md` | Note dynamic column mapping |
+| `src/components/review/NaConfirmationCard.tsx` | Add `onOverrideNa` callback prop, add "Override N/A" toggle with mandatory justification, add `naOverridden` / `overrideRemarks` state props |
+| `src/components/review/KpiDetailsTable.tsx` | Remove `if (isNaKpi) return false` from `canReviewKpiCheck` (line 130) |
+| `src/components/review/UnifiedScorecard.tsx` | (a) Add `naOverridden` + `overrideNaRemarks` state variables; (b) Show score inputs when `naOverridden === true`; (c) Add override submit path in `handleSubmitReview` that clears `is_na` and submits score; (d) Reset override state in `openReviewSheet` |
+| `src/components/review/EmployeeScorecard.tsx` | Apply same override logic as UnifiedScorecard |
+| `src/components/review/AuditScorecard.tsx` | Apply same override logic as UnifiedScorecard |
+| `src/components/review/ManagementScorecard.tsx` | Apply same override logic as UnifiedScorecard |
+| `DOCUMENTATION.md` | Document the N/A override behavior and per-stage independence |
 
-## Expected Result
+## Expected Behavior After Fix
 
-For the employee in the screenshot (workflow: Self -> Manager -> Skip-Level -> HR PMS -> Approved):
-- Columns shown: **Category, KRA/KPI, Target, Weightage, Self, Manager, Skip-Level, HR PMS, Final, Status, Actions**
-- Columns NOT shown: Auditor, Mgmt (not in this workflow)
-
-For the default 6-stage workflow (Self -> Manager -> Audit -> Management -> Approved):
-- Columns shown: **Category, KRA/KPI, Target, Weightage, Self, Manager, Auditor, Mgmt, Final, Status, Actions** (same as current behavior)
+```text
+Stage Flow Example:
+1. Employee marks KPI as N/A (is_na = true, na_marked_by_role = 'employee')
+2. Manager opens KPI -- sees "This KPI was marked as N/A (by Self)"
+   Option A: Confirm N/A --> forwards with is_na = true (current behavior)
+   Option B: Toggle "Override: This KPI is applicable" --> provide score --> forwards with is_na = false
+3. Next reviewer (Skip-Level/Auditor/etc.) sees it as a scored KPI (if overridden) or N/A (if confirmed)
+4. Any later stage can also re-mark it as N/A using the existing "Mark as N/A" toggle
+5. The LAST stage's decision is what sticks as final
+```
 
 ## Risk Assessment
 
-- Low risk -- only changes column visibility logic in one table component
-- Backward compatible -- default workflow produces identical output to current behavior
-- No database changes required -- fields already exist, just not read by the frontend
+- Low risk -- no database schema changes required
+- `is_na` and `na_marked_by_role` columns already exist and are nullable
+- Backward compatible -- default behavior (confirm N/A) remains unchanged; override is opt-in
+- Score calculation engine already handles the `is_na` flag dynamically, so overriding it immediately includes the KPI in weighted calculations
+- Audit trail captures every N/A mark and override for compliance
+
