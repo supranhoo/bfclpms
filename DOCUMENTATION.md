@@ -3281,10 +3281,17 @@ The PMS Policy page was converted from an external iframe-based viewer to a full
 
 **Important:** The `supabase_anon_key` row in `system_settings` must contain the correct publishable key for trigger-based emails to work. This is a public key and poses no security risk.
 
+**Dual-Header Auth Pattern (v1.30.0):** The `validateCaller` function now checks authentication via multiple paths:
+1. **`apikey` header** — checked first against env vars (`SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_PUBLISHABLE_KEY`) and then against the stored key in `system_settings.supabase_anon_key`
+2. **`Authorization: Bearer` header** — same check order as above, plus falls back to `supabase.auth.getUser()` for user JWT validation
+3. **System settings fallback** — critical for DB triggers where `SUPABASE_ANON_KEY` env var (raw 46-char key) differs from the publishable JWT (208-char token) stored in `system_settings`
+
+This ensures DB triggers using `net.http_post` (which send the 208-char JWT) can authenticate even when edge function env vars contain a shorter raw key format.
+
 | File | Change |
 |---|---|
 | DB migration | Updated `send_email_on_notification()` to read anon key from `system_settings` and use it in Authorization header |
-| `supabase/functions/send-email-notification/index.ts` | Added anon key acceptance in `validateCaller` |
+| `supabase/functions/send-email-notification/index.ts` | Multi-path auth: apikey header + Bearer token + system_settings fallback + user JWT |
 
 ---
 
