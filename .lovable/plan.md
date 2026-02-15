@@ -1,69 +1,44 @@
 
 
-# Fix: Complete Email Logging Coverage
+# Email Notification Audit: Findings and Fix
 
-## Problem
+## Audit Result
 
-The Email Logs page shows only 2 records because **test emails are not logged**. The edge function has a `logEmail()` helper but skips calling it for two code paths:
+After tracing every notification event end-to-end (DB trigger to edge function to email_logs table to Email Logs UI), the system is **fully wired for all 29 events**. Every event type has:
 
-1. **Test emails** (`test: true`) -- lines 750-865: all 3 providers (Resend, SMTP, Microsoft Graph) return without logging
-2. **SMTP connection tests** (`smtp_test: true`) -- lines 691-747: returns without logging
+1. A DB trigger mapping (or direct edge function call) that fires the email
+2. A template in the edge function with subject + body
+3. Logging via `logEmail()` for sent, failed, and skipped outcomes
 
-This means every time you send a test email from System Settings, it never appears in Email Logs. Additionally, if very few real notification events have triggered (only 2 KRA batch assignments on Feb 13), the page appears empty.
+The reason the Email Logs page appears empty is that **only 2 real notification events have ever triggered** (two KRA batch assignments on Feb 13). No other workflow actions (self-review submissions, manager approvals, queries, etc.) have occurred yet in the system with email notifications enabled, so there is nothing to log.
+
+## One Small Gap Found
+
+The Email Logs page is missing **4 friendly labels** for newer event types. When these events do fire, their logs will display raw strings like `admin_status_step_back` instead of "Admin Step Back".
+
+| Missing Event Type | Should Display As |
+|---|---|
+| `admin_status_step_back` | Admin Step Back |
+| `rollback_requested` | Rollback Requested |
+| `rollback_approved` | Rollback Approved |
+| `rollback_rejected` | Rollback Dismissed |
 
 ## Fix
 
-Add `logEmail()` calls to both the test email and SMTP test code paths in the edge function so every email attempt is recorded.
+### File: `src/pages/admin/EmailLogs.tsx`
+Add the 4 missing entries to the `EVENT_LABELS` map (around line 51, before the closing brace).
 
-### Changes in `supabase/functions/send-email-notification/index.ts`
+### File: `DOCUMENTATION.md`
+Note that all 29 email event types are fully covered with logging.
 
-**SMTP Test Path (around line 736-746):**
-- On success: log with `event_type: 'test'`, `status: 'sent'`, `provider: 'smtp'`
-- On failure: log with `status: 'failed'` and `error_message`
+## No Other Changes Needed
 
-**Test Email Path (around line 838-864):**
-- After successful SMTP send: add `logEmail()` call with `event_type: 'test'`, `status: 'sent'`, `provider: 'smtp'`
-- After successful Graph send: add `logEmail()` call with `provider: 'microsoft_graph'`
-- After successful Resend send: add `logEmail()` call with `provider: 'resend'`
-- Wrap each in try/catch to also log failures
+- All 29 events have templates in the edge function
+- The DB trigger `send_email_on_notification` correctly maps all notification types to email event types
+- The `logEmail()` helper is called on every code path (sent/failed/skipped)
+- Test emails and SMTP tests are also logged (fixed in previous session)
+- Password rollout emails go through the same edge function and get logged
+- KRA batch assignment emails are sent directly via `kraNotifications.ts` and also get logged
 
-### Changes in `src/pages/admin/EmailLogs.tsx`
-
-- Add `'test'` to the `EVENT_LABELS` map so test emails display as "Test Email" in the table
-
-### Documentation
-
-- Update `DOCUMENTATION.md` to note that all email sends (including tests) are now logged
-
-## Files to Modify
-
-| File | Change |
-|---|---|
-| `supabase/functions/send-email-notification/index.ts` | Add `logEmail()` calls to SMTP test and test email code paths (6 insertion points) |
-| `src/pages/admin/EmailLogs.tsx` | Already has `test: 'Test Email'` in EVENT_LABELS -- no change needed |
-| `DOCUMENTATION.md` | Document complete email logging coverage |
-
-## Technical Details
-
-For each test email success/failure, insert a log entry like:
-
-```text
-await logEmail({
-  event_type: 'test',
-  recipient_email: recipient_email,
-  recipient_name: 'Test',
-  subject: '[PMS] Test Email - Configuration Successful',
-  status: 'sent',   // or 'failed'
-  provider: 'smtp',  // or 'resend' or 'microsoft_graph'
-  error_message: null, // or error.message on failure
-  metadata: { test: true }
-});
-```
-
-This ensures every email sent from the system -- whether triggered by a workflow event or manually from the admin settings -- appears in the Email Logs page.
-
-## Risk Assessment
-- No breaking changes; only adding log inserts to existing code paths
-- The `logEmail` helper already uses try/catch internally so logging failures won't affect email delivery
-- No database schema changes needed (email_logs table already exists with correct RLS)
+To see more logs, simply use the system -- submit self-reviews, approve KPIs, raise queries, etc. Each action will generate both an in-app notification and a logged email (if that event type is enabled in settings).
 
