@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Info, BarChart3, ClipboardEdit } from 'lucide-react';
 import { KPI } from '@/hooks/useKpis';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
+import { renderBoldKpiText } from '@/components/ui/FormattedText';
 
 interface MobileKpiCardProps {
   kpi: KPI;
@@ -53,8 +54,8 @@ export function MobileKpiCard({
       </div>
 
       {/* KRA/KPI names */}
-      <p className="font-medium text-sm mb-1 line-clamp-1">{kpi.kra_name}</p>
-      <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{kpi.kpi_name}</p>
+      <p className="font-medium text-sm mb-1 line-clamp-1 whitespace-pre-wrap">{renderBoldKpiText(kpi.kra_name)}</p>
+      <p className="text-xs text-muted-foreground mb-3 line-clamp-2 whitespace-pre-wrap">{renderBoldKpiText(kpi.kpi_name)}</p>
 
       {/* Metrics row */}
       <div className="flex items-center justify-between">
