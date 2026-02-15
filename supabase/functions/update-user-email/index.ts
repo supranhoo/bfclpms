@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const emailRegex = /^[^\\s@]+@[^\\s@]+\.[^\\s@]+$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(newEmail) || newEmail.length > 255) {
       return new Response(
         JSON.stringify({ error: 'Invalid email format' }),
