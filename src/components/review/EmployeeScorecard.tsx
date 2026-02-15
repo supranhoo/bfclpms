@@ -286,14 +286,14 @@ export function EmployeeScorecard({
   const openReviewSheet = (kpi: KPI) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
-    setManagerScore(existing?.manager_score || null);
+    setManagerScore(existing?.manager_score ?? null);
     setManagerRemarks(existing?.manager_remarks || '');
     // Support both new array and legacy single URL
     const existingUrls = (existing as any)?.manager_evidence_urls;
     setManagerEvidenceUrls(Array.isArray(existingUrls) && existingUrls.length > 0 
       ? existingUrls 
       : existing?.manager_evidence_url ? [existing.manager_evidence_url] : []);
-    setManagerAchievedValue((existing as any)?.manager_achieved_value || existing?.achieved_value || null);
+    setManagerAchievedValue((existing as any)?.manager_achieved_value ?? existing?.achieved_value ?? null);
     // Reset manager override state
     setManagerAgrees(null);
     setDailyOverrides(new Map());

@@ -372,7 +372,7 @@ export function ManagementScorecard({
   const openReviewSheet = (kpi: KPI) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
-    setManagementScore(existing?.management_score || existing?.auditor_score || null);
+    setManagementScore(existing?.management_score ?? existing?.auditor_score ?? null);
     setManagementRemarks(existing?.management_remarks || '');
     // Support both new array and legacy single URL
     const existingUrls = (existing as any)?.management_evidence_urls;
@@ -1107,8 +1107,8 @@ function DailySubmissionWithOverrideWrapper({
   const existingSubmission = submissionMap.get(kpi.id);
   
   const previousLevelScore = React.useMemo(() => {
-    if (reviewLevel === 'management') return existingSubmission?.auditor_score || existingSubmission?.manager_score || null;
-    return existingSubmission?.manager_score || null;
+    if (reviewLevel === 'management') return existingSubmission?.auditor_score ?? existingSubmission?.manager_score ?? null;
+    return existingSubmission?.manager_score ?? null;
   }, [reviewLevel, existingSubmission]);
   
   const previousLevelRemarks = React.useMemo(() => {

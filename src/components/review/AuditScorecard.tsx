@@ -353,7 +353,7 @@ export function AuditScorecard({
   const openReviewSheet = (kpi: KPI) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
-    setAuditorScore(existing?.auditor_score || existing?.manager_score || null);
+    setAuditorScore(existing?.auditor_score ?? existing?.manager_score ?? null);
     setAuditorRemarks(existing?.auditor_remarks || '');
     // Support both new array and legacy single URL
     const existingUrls = (existing as any)?.auditor_evidence_urls;
@@ -1082,9 +1082,9 @@ function DailySubmissionWithOverrideWrapper({
   
   // Get the previous level's score based on review level
   const previousLevelScore = React.useMemo(() => {
-    if (reviewLevel === 'auditor') return existingSubmission?.manager_score || null;
-    if (reviewLevel === 'management') return existingSubmission?.auditor_score || existingSubmission?.manager_score || null;
-    return existingSubmission?.self_score || null;
+    if (reviewLevel === 'auditor') return existingSubmission?.manager_score ?? null;
+    if (reviewLevel === 'management') return existingSubmission?.auditor_score ?? existingSubmission?.manager_score ?? null;
+    return existingSubmission?.self_score ?? null;
   }, [reviewLevel, existingSubmission]);
   
   const previousLevelRemarks = React.useMemo(() => {
