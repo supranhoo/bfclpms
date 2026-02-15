@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -107,55 +107,47 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
     }
   };
 
-  const handlePaste = async (e: React.ClipboardEvent) => {
-    const files = e.clipboardData?.files;
-    if (!files || files.length === 0 || uploading || uploadedUrl) return;
-    e.preventDefault();
-    const file = files[0];
-    // Create a synthetic change event-like flow by calling upload logic directly
-    if (!Object.keys(ACCEPTED_TYPES).includes(file.type)) {
-      toast({
-        title: 'Invalid file type',
-        description: 'Please upload a JPEG, PNG, PDF, or Excel file.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    if (file.size > maxFileSizeBytes) {
-      toast({
-        title: 'File too large',
-        description: `Maximum file size is ${maxFileSizeMb}MB.`,
-        variant: 'destructive',
-      });
-      return;
-    }
-    setUploading(true);
-    setFileName(file.name);
-    try {
+  useEffect(() => {
+    if (uploading || uploadedUrl) return;
+    const handler = (e: ClipboardEvent) => {
+      const files = e.clipboardData?.files;
+      if (!files || files.length === 0) return;
+      const file = files[0];
+      if (!Object.keys(ACCEPTED_TYPES).includes(file.type)) {
+        toast({ title: 'Invalid file type', description: 'Please upload a JPEG, PNG, PDF, or Excel file.', variant: 'destructive' });
+        return;
+      }
+      if (file.size > maxFileSizeBytes) {
+        toast({ title: 'File too large', description: `Maximum file size is ${maxFileSizeMb}MB.`, variant: 'destructive' });
+        return;
+      }
+      e.preventDefault();
+      setUploading(true);
+      setFileName(file.name);
       const fileExt = ACCEPTED_TYPES[file.type as keyof typeof ACCEPTED_TYPES]?.ext || 'file';
       const filePath = `${userId}/${kpiId}/${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from('review-evidence')
-        .upload(filePath, file, { upsert: true });
-      if (uploadError) throw uploadError;
-      const { data: { publicUrl } } = supabase.storage
-        .from('review-evidence')
-        .getPublicUrl(filePath);
-      setUploadedUrl(publicUrl);
-      onUploadComplete(publicUrl);
-      toast({ title: 'File uploaded', description: 'Evidence file uploaded successfully.' });
-    } catch (error: any) {
-      toast({ title: 'Upload failed', description: error.message || 'Failed to upload file.', variant: 'destructive' });
-      setFileName(null);
-    } finally {
-      setUploading(false);
-    }
-  };
+      supabase.storage.from('review-evidence').upload(filePath, file, { upsert: true }).then(({ error: uploadError }) => {
+        if (uploadError) {
+          toast({ title: 'Upload failed', description: uploadError.message, variant: 'destructive' });
+          setFileName(null);
+          setUploading(false);
+          return;
+        }
+        const { data: { publicUrl } } = supabase.storage.from('review-evidence').getPublicUrl(filePath);
+        setUploadedUrl(publicUrl);
+        onUploadComplete(publicUrl);
+        toast({ title: 'File uploaded', description: 'Evidence file uploaded successfully.' });
+        setUploading(false);
+      });
+    };
+    document.addEventListener('paste', handler);
+    return () => document.removeEventListener('paste', handler);
+  }, [uploading, uploadedUrl, maxFileSizeBytes, maxFileSizeMb, userId, kpiId, onUploadComplete, toast]);
 
   const FileIcon = uploadedUrl ? getFileIcon(uploadedUrl) : Upload;
 
   return (
-    <div className="space-y-2" onPaste={handlePaste} tabIndex={0}>
+    <div className="space-y-2">
       <Label>Evidence Attachment (Optional)</Label>
       <p className="text-xs text-muted-foreground mb-2">
         Supported: JPEG, PNG, PDF, Excel (max {maxFileSizeMb}MB). You can also paste images.

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -203,14 +203,17 @@ export function MultiFileUpload({
     }
   }, [disabled, canUploadMore]);
 
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    const files = e.clipboardData?.files;
-    if (!files || files.length === 0) return;
-    e.preventDefault();
-    if (!disabled && canUploadMore) {
+  useEffect(() => {
+    if (disabled || !canUploadMore) return;
+    const handler = (e: ClipboardEvent) => {
+      const files = e.clipboardData?.files;
+      if (!files || files.length === 0) return;
+      e.preventDefault();
       handleFilesSelected(files);
-    }
-  }, [disabled, canUploadMore]);
+    };
+    document.addEventListener('paste', handler);
+    return () => document.removeEventListener('paste', handler);
+  }, [disabled, canUploadMore, handleFilesSelected]);
 
   const isUploading = uploadingFiles.length > 0;
 
@@ -285,7 +288,7 @@ export function MultiFileUpload({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            onPaste={handlePaste}
+            
             onClick={() => fileInputRef.current?.click()}
             tabIndex={0}
             className={cn(
