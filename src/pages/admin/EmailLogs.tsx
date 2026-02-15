@@ -49,6 +49,10 @@ const EVENT_LABELS: Record<string, string> = {
   observation_reply: 'Observation Reply',
   observation_resolved: 'Observation Resolved',
   test: 'Test Email',
+  admin_status_step_back: 'Admin Step Back',
+  rollback_requested: 'Rollback Requested',
+  rollback_approved: 'Rollback Approved',
+  rollback_rejected: 'Rollback Dismissed',
 };
 
 function StatusBadge({ status }: { status: string }) {
