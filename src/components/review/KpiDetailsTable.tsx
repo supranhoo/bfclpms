@@ -30,6 +30,26 @@ const STAGE_COLUMN_MAP: Record<string, { key: string; label: string }> = {
   management_review: { key: 'management_score', label: 'Mgmt' },
 };
 
+// Reverse mapping: column key -> workflow stage name
+const COLUMN_TO_STAGE: Record<string, string> = {
+  self_score: 'self_review',
+  manager_score: 'manager_check',
+  skip_level_score: 'skip_level_check',
+  hr_pms_score: 'hr_pms_review',
+  auditor_score: 'audit',
+  management_score: 'management_review',
+};
+
+/** Check if a stage has been completed (KPI status has progressed past it) */
+function isStageCompleted(columnKey: string, kpiStatus: string, stages: string[]): boolean {
+  const stageName = COLUMN_TO_STAGE[columnKey];
+  if (!stageName) return false;
+  const stageIdx = stages.indexOf(stageName);
+  const statusIdx = stages.indexOf(kpiStatus);
+  if (stageIdx === -1 || statusIdx === -1) return false;
+  return statusIdx > stageIdx;
+}
+
 /** Build dynamic score columns from workflow stages. Final is always appended. */
 function buildScoreColumns(stages: string[]): { key: string; label: string }[] {
   const cols: { key: string; label: string }[] = [];
@@ -343,9 +363,11 @@ export function KpiDetailsTable({
                 {/* Dynamic Score Columns */}
                 {scoreColumns.map(col => {
                   const score = getScoreForColumn(submission, col.key);
+                  const stageCompleted = isStageCompleted(col.key, kpi.status || 'kra_set', effectiveStages);
+                  const showNA = score === null && stageCompleted;
                   return (
               <TableCell key={col.key} className="text-center">
-                      {isNaKpi && score === null ? (
+                      {showNA ? (
                         <Badge variant="outline" className="bg-muted/50 text-muted-foreground text-xs">N/A</Badge>
                       ) : (
                         renderScoreCell(score)
