@@ -1,63 +1,74 @@
 
 
-# Fix Paste-to-Upload in Dialogs
+# Fix Paste-to-Upload Conflict Between Multiple Upload Components
 
 ## Problem
 
-The `onPaste` handler is attached to the drop zone `div` element inside `MultiFileUpload`. This only works when that specific `div` has keyboard focus. Inside a Dialog (like Add Observation), focus is on input fields or the dialog container -- so the paste event never reaches the drop zone.
+When the "Add Observation" dialog opens inside the SelfReviewSheet, **two** `MultiFileUpload` components are mounted simultaneously:
+
+1. Self-evidence uploader (in the SelfReviewSheet background)
+2. Observation evidence uploader (in the AddObservationDialog)
+
+Both register document-level `paste` event listeners. When the user presses Ctrl+V, the **self-evidence listener fires first** and consumes the event, so the observation uploader never receives it. This is why paste appears "not working" in the dialog.
 
 ## Solution
 
-Replace the element-level `onPaste` with a **document-level `paste` event listener** using `useEffect`. This way, pressing Ctrl+V anywhere inside the dialog (or page) while the component is mounted and able to accept files will trigger the upload.
+Scope the paste listener to the component's **nearest dialog/sheet container** instead of the entire document. Each upload component will:
 
-A guard ensures the listener only acts when:
-- The component is not disabled
-- There are remaining upload slots (`canUploadMore`)
-- The pasted clipboard actually contains files
+1. Use a `ref` on its root `div`
+2. On mount, walk up the DOM to find the closest `[role="dialog"]` ancestor (used by both Dialog and Sheet)
+3. Attach the `paste` listener to that container instead of `document`
+4. Fall back to `document` if no dialog ancestor is found (for upload components not inside dialogs)
 
-## Changes
+This way, when the AddObservation dialog is focused (which it is, since Radix traps focus), only its upload component receives the paste event.
 
-### 1. `src/components/ui/MultiFileUpload.tsx`
+## Technical Details
 
-- Remove the `onPaste` prop from the drop zone `div`
-- Add a `useEffect` that attaches a `paste` event listener to `document`
-- The listener calls `handleFilesSelected` with clipboard files
-- Cleanup removes the listener on unmount or when upload is disabled/full
+### Pattern (applied to all three upload components)
 
 ```text
+const containerRef = useRef<HTMLDivElement>(null);
+
 useEffect(() => {
   if (disabled || !canUploadMore) return;
 
-  const handler = (e: ClipboardEvent) => {
-    const files = e.clipboardData?.files;
+  // Find the closest dialog/sheet container, or fall back to document
+  const dialogContainer = containerRef.current?.closest('[role="dialog"]');
+  const target = dialogContainer || document;
+
+  const handler = (e: Event) => {
+    const ce = e as ClipboardEvent;
+    const files = ce.clipboardData?.files;
     if (!files || files.length === 0) return;
     e.preventDefault();
     handleFilesSelected(files);
   };
 
-  document.addEventListener('paste', handler);
-  return () => document.removeEventListener('paste', handler);
+  target.addEventListener('paste', handler);
+  return () => target.removeEventListener('paste', handler);
 }, [disabled, canUploadMore, handleFilesSelected]);
 ```
 
-- Keep the `tabIndex={0}` and hint text as-is (no visual changes)
+### Files Changed
 
-### 2. `src/components/ui/EvidenceUpload.tsx`
+| File | Change |
+|---|---|
+| `src/components/ui/MultiFileUpload.tsx` | Add containerRef, scope paste listener to nearest `[role="dialog"]` or document |
+| `src/components/ui/EvidenceUpload.tsx` | Same scoping pattern |
+| `src/components/admin/OrgKpiFileUpload.tsx` | Same scoping pattern |
+| `DOCUMENTATION.md` | Update paste-to-upload notes |
 
-- Apply the same document-level listener pattern for consistency
+## Why This Works
 
-### 3. `src/components/admin/OrgKpiFileUpload.tsx`
+- Radix Dialog/Sheet renders content with `role="dialog"` and traps focus inside it
+- Paste events bubble up to the dialog container, where the scoped listener catches them
+- The SelfReviewSheet's upload listener is scoped to the Sheet's `[role="dialog"]`, so it does not intercept paste events meant for the AddObservation dialog
+- When no dialog ancestor exists (e.g., upload on a regular page), the fallback to `document` ensures paste still works everywhere
 
-- Apply the same document-level listener pattern for consistency
+## No Breaking Changes
 
-### 4. `DOCUMENTATION.md`
-
-- Note that paste works globally when the upload component is mounted (not just when the drop zone is focused)
-
-## Why This Is Safe
-
-- The listener is only active while the component is mounted and can accept files
-- If multiple upload components are on screen simultaneously, each listener fires independently -- but since they all call their own `handleFilesSelected`, the file goes to whichever component is active
-- Cleanup on unmount prevents stale listeners
-- No database, schema, or RLS changes
+- Click upload: unchanged
+- Drag-and-drop: unchanged
+- Existing paste behavior on non-dialog pages: unchanged (falls back to document listener)
+- No database or schema changes
 
