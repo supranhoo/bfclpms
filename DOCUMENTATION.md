@@ -3014,12 +3014,17 @@ All React Query hooks fetching RLS-protected data **must** include an `enabled: 
 
 ### Email Logs
 
-The system logs every email sent by the `send-email-notification` edge function into the `email_logs` table. This provides admins with full visibility into what emails were sent, to whom, when, and with what outcome. **All email sends are logged**, including:
+The system logs every email sent by the `send-email-notification` edge function into the `email_logs` table. This provides admins with full visibility into what emails were sent, to whom, when, and with what outcome. **All 29 email event types are fully covered with logging**, including:
 - Workflow notification emails (KPI submitted, manager approved, query raised, etc.)
 - Test emails sent from System Settings (event_type: `test`)
 - SMTP connection test emails (event_type: `test`, metadata includes `smtp_test: true`)
+- Password rollout emails
+- KRA batch assignment emails (sent via `kraNotifications.ts`)
+- Observation lifecycle emails (raised, reply, resolved)
+- Rollback workflow emails (requested, approved, dismissed)
+- Admin step-back emails
 
-Both successful sends and failures are logged for test emails, ensuring complete audit coverage.
+Both successful sends and failures are logged for all email types, ensuring complete audit coverage.
 
 **Log Statuses:**
 - `sent` — Email delivered successfully
