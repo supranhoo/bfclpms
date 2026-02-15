@@ -166,7 +166,7 @@ export function KpiJourneySection({
             const data = stageData[stage];
             const status = getStageStatus(stage, kpiStatus, viewLevel, effectiveStages);
             // Per-stage N/A: only show N/A if globally marked AND this stage has no score
-            const stageIsNA = globalIsNA && data.score === null;
+            const stageIsNA = globalIsNA && data.score === null && status !== 'pending';
             return (
               <ReviewStageCard
                 key={stage}
