@@ -47,7 +47,7 @@ function isStageCompleted(columnKey: string, kpiStatus: string, stages: string[]
   const stageIdx = stages.indexOf(stageName);
   const statusIdx = stages.indexOf(kpiStatus);
   if (stageIdx === -1 || statusIdx === -1) return false;
-  return statusIdx > stageIdx;
+  return statusIdx >= stageIdx;
 }
 
 /** Build dynamic score columns from workflow stages. Final is always appended. */
