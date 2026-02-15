@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-15  
-> **Version:** 1.33.2
+> **Version:** 1.33.3
 > **Maintainer:** Lovable AI
 
 ---
@@ -458,7 +458,26 @@ The `kpis` table has specific UPDATE policies for workflow progression:
 **Edge Cases:**
 - Auto-confirm enabled (no email verification in dev)
 - Password reset via `reset-password` edge function
+- Email change via `update-user-email` edge function
 - Session persistence via Supabase tokens
+
+#### Admin Change Email
+
+**Purpose:** Admins can change any user's email address directly from the Edit User dialog in User Management.
+
+**How It Works:**
+1. Admin opens Edit dialog for a user and modifies the Email field (previously read-only, now editable).
+2. On save, if the email has changed, the frontend calls the `update-user-email` edge function.
+3. The edge function validates admin JWT, checks admin role, validates email format, then:
+   - Updates the auth record via `auth.admin.updateUserById(userId, { email, email_confirm: true })` (instant, no confirmation email)
+   - Updates `profiles.email` to keep the database in sync
+4. If the email update succeeds, the remaining profile fields are saved normally.
+5. If the email update fails, the save is aborted and an error toast is shown.
+
+**Key Details:**
+- No confirmation email sent — admin-controlled by design
+- User's password and `user_id` remain unchanged; all relational data is preserved
+- The `email_confirm: true` flag ensures the new email is immediately verified in auth
 
 ### 4.2 Global Branding
 
