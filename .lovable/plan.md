@@ -1,74 +1,94 @@
 
 
-# Fix Paste-to-Upload Conflict Between Multiple Upload Components
+# Fix "Done" Badge Showing Instead of "Draft" for Management-Drafted KPIs
 
 ## Problem
 
-When the "Add Observation" dialog opens inside the SelfReviewSheet, **two** `MultiFileUpload` components are mounted simultaneously:
+When a user (e.g., Gaurav Budhiya) serves as both **Manager** and **Management Reviewer**, the Team Reviews mode shows a green **"Done"** badge on KPIs that are at `management_review` status with a saved draft score. This misleads the user into thinking the KPI is fully complete, when in reality the management review was only drafted (Save Draft) and not formally approved (Final Approve).
 
-1. Self-evidence uploader (in the SelfReviewSheet background)
-2. Observation evidence uploader (in the AddObservationDialog)
+## Root Cause
 
-Both register document-level `paste` event listeners. When the user presses Ctrl+V, the **self-evidence listener fires first** and consumes the event, so the observation uploader never receives it. This is why paste appears "not working" in the dialog.
+In `MobileKpiCard.tsx`, the `isTeamReviewPastStage` check treats any KPI past `self_review` (including `management_review`) as "Done" for the team-review view. This is technically correct from the manager perspective -- their work IS done. But for dual-role users, it hides the fact that their management-level action is still pending.
+
+Similarly, in `KpiDetailsTable.tsx` and `EmployeeSelectorGrid.tsx`, there is no distinction between "forwarded past my stage" and "drafted at a later stage where I'm also a reviewer."
 
 ## Solution
 
-Scope the paste listener to the component's **nearest dialog/sheet container** instead of the entire document. Each upload component will:
+Introduce a **"Draft (Mgmt)"** badge that appears instead of "Done" when:
+- The view is `team-review` (or any non-management view)
+- The KPI status is `management_review` (not yet `approved`)
+- The submission has a `management_score` saved (meaning someone drafted it)
 
-1. Use a `ref` on its root `div`
-2. On mount, walk up the DOM to find the closest `[role="dialog"]` ancestor (used by both Dialog and Sheet)
-3. Attach the `paste` listener to that container instead of `document`
-4. Fall back to `document` if no dialog ancestor is found (for upload components not inside dialogs)
+This gives dual-role users a clear signal that their management-level action is still pending.
 
-This way, when the AddObservation dialog is focused (which it is, since Radix traps focus), only its upload component receives the paste event.
+## Changes
 
-## Technical Details
+### 1. `src/components/review/MobileKpiCard.tsx`
 
-### Pattern (applied to all three upload components)
+In the `getActionContent` function, before the `isTeamReviewPastStage` check (line 158), add a condition:
 
 ```text
-const containerRef = useRef<HTMLDivElement>(null);
+// Before showing "Done" for team-review past stage, check if KPI is drafted at management
+const isMgmtDrafted = viewType === 'team-review' && 
+  kpi.status === 'management_review' && 
+  submission?.management_score !== null && submission?.management_score !== undefined;
 
-useEffect(() => {
-  if (disabled || !canUploadMore) return;
-
-  // Find the closest dialog/sheet container, or fall back to document
-  const dialogContainer = containerRef.current?.closest('[role="dialog"]');
-  const target = dialogContainer || document;
-
-  const handler = (e: Event) => {
-    const ce = e as ClipboardEvent;
-    const files = ce.clipboardData?.files;
-    if (!files || files.length === 0) return;
-    e.preventDefault();
-    handleFilesSelected(files);
-  };
-
-  target.addEventListener('paste', handler);
-  return () => target.removeEventListener('paste', handler);
-}, [disabled, canUploadMore, handleFilesSelected]);
+if (isMgmtDrafted) {
+  return (
+    <div className="flex items-center gap-2">
+      <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-300 text-xs">
+        <Clock className="h-3 w-3 mr-1" />
+        Draft (Mgmt)
+      </Badge>
+      {onView && (
+        <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => onView(kpi)}>
+          <Eye className="h-4 w-4" />
+        </Button>
+      )}
+    </div>
+  );
+}
 ```
 
-### Files Changed
+- Add `Clock` to the lucide-react imports
 
-| File | Change |
-|---|---|
-| `src/components/ui/MultiFileUpload.tsx` | Add containerRef, scope paste listener to nearest `[role="dialog"]` or document |
-| `src/components/ui/EvidenceUpload.tsx` | Same scoping pattern |
-| `src/components/admin/OrgKpiFileUpload.tsx` | Same scoping pattern |
-| `DOCUMENTATION.md` | Update paste-to-upload notes |
+### 2. `src/components/review/EmployeeSelectorGrid.tsx`
 
-## Why This Works
+For the **management view** (lines 446-452), split the `badge1` count to distinguish between "pending" (no score yet) and "drafted" (score saved but not approved):
 
-- Radix Dialog/Sheet renders content with `role="dialog"` and traps focus inside it
-- Paste events bubble up to the dialog container, where the scoped listener catches them
-- The SelfReviewSheet's upload listener is scoped to the Sheet's `[role="dialog"]`, so it does not intercept paste events meant for the AddObservation dialog
-- When no dialog ancestor exists (e.g., upload on a regular page), the fallback to `document` ensures paste still works everywhere
+```text
+// Management view
+badge1: empKpis.filter(k => 
+  k.status === 'management_review'
+).length,
+badge2: empKpis.filter(k => k.status === 'approved').length,
+```
 
-## No Breaking Changes
+This part is already correct -- `badge1` shows "pending" and `badge2` shows "approved". No change needed here.
 
-- Click upload: unchanged
-- Drag-and-drop: unchanged
-- Existing paste behavior on non-dialog pages: unchanged (falls back to document listener)
-- No database or schema changes
+For the **team view** (lines 411-416), the "reviewed" badge already correctly counts KPIs past `self_review`. However, we should add a third badge for KPIs that are at `management_review` with a drafted score. This requires access to submission data.
+
+Since the `EmployeeSelectorGrid` does not currently have submission data, and adding it would increase complexity, we will instead:
+
+- Add a helper function that checks submission data when available
+- For now, keep the team-view badges as-is (they correctly show the manager's completed work)
+
+The primary fix is the `MobileKpiCard` badge label change, which is where the user sees the confusing "Done."
+
+### 3. `src/components/review/KpiDetailsTable.tsx`
+
+Check if there is an action column that shows "Done" status for team-review. If so, apply the same draft detection logic.
+
+### 4. `DOCUMENTATION.md`
+
+Update the workflow documentation to note:
+- KPIs at `management_review` with a saved score show "Draft (Mgmt)" in non-management views
+- This helps dual-role users identify pending management approvals
+
+## Impact
+
+- **Visual only** -- no database, schema, or workflow logic changes
+- Only affects the badge label displayed in `MobileKpiCard` for dual-role users
+- "Done" still appears for KPIs that are genuinely `approved`
+- No changes to the actual approval/forwarding workflow
 
