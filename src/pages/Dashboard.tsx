@@ -52,6 +52,7 @@ interface EmployeeProfile {
   avatar_url: string | null;
   department_id: string | null;
   reporting_manager_id: string | null;
+  relationship?: 'direct' | 'indirect';
 }
 
 import { statusColors, statusLabels, getScoreBadgeClass } from '@/lib/reviewConstants';
@@ -189,11 +190,11 @@ export default function Dashboard() {
   const { data: skipLevelMembers } = useSkipLevelTeamMembers(profile?.id);
   const hasSkipLevelSubordinates = (skipLevelMembers?.length || 0) > 0;
 
-  // Calculate available modes based on role
+  // Calculate available modes based on role (skip_level merged into team)
   const availableModes = useMemo(() => {
     const modes: ViewMode[] = ['self'];
-    if (['manager', 'admin', 'management'].includes(role || '')) modes.push('team');
-    if (hasSkipLevelSubordinates) modes.push('skip_level');
+    if (['manager', 'admin', 'management'].includes(role || '') || hasSkipLevelSubordinates) modes.push('team');
+    // skip_level no longer shown in toggle - merged into team
     if (role === 'hr_pms' || role === 'admin') modes.push('hr_pms');
     if (['auditor', 'admin'].includes(role || '')) modes.push('audit');
     if (['management', 'admin'].includes(role || '')) modes.push('management');
@@ -203,8 +204,12 @@ export default function Dashboard() {
   // Initialize from URL query param
   useEffect(() => {
     const viewFromUrl = searchParams.get('view') as ViewMode | null;
-    if (viewFromUrl && availableModes.includes(viewFromUrl)) {
-      setViewMode(viewFromUrl);
+    if (viewFromUrl) {
+      // Map skip_level URL to team mode (merged)
+      const mappedMode = viewFromUrl === 'skip_level' ? 'team' : viewFromUrl;
+      if (availableModes.includes(mappedMode)) {
+        setViewMode(mappedMode);
+      }
     }
   }, [searchParams, availableModes]);
 
@@ -403,8 +408,14 @@ export default function Dashboard() {
   // Render reviewer views (team, audit, management)
   if (viewMode !== 'self') {
     if (selectedEmployee) {
-      const viewLevelMap: Record<string, string> = { team: 'manager', audit: 'auditor', skip_level: 'skip_level', hr_pms: 'hr_pms', management: 'management' };
-      const viewLevelForScorecard = viewLevelMap[viewMode] || viewMode;
+      // Determine viewLevel based on employee relationship tag (for merged team view)
+      let viewLevelForScorecard: string;
+      if (viewMode === 'team' && selectedEmployee.relationship === 'indirect') {
+        viewLevelForScorecard = 'skip_level';
+      } else {
+        const viewLevelMap: Record<string, string> = { team: 'manager', audit: 'auditor', skip_level: 'skip_level', hr_pms: 'hr_pms', management: 'management' };
+        viewLevelForScorecard = viewLevelMap[viewMode] || viewMode;
+      }
       return (
         <div className="space-y-4">
           {availableModes.length > 1 && (

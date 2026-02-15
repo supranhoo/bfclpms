@@ -24,6 +24,8 @@ interface EmployeeProfile {
   avatar_url: string | null;
   department_id: string | null;
   reporting_manager_id: string | null;
+  pms_grade?: string | null;
+  relationship?: 'direct' | 'indirect';
 }
 
 interface EmployeeSelectorGridProps {
@@ -37,7 +39,8 @@ interface EmployeeSelectorGridProps {
 const STATUS_OPTIONS_BY_LEVEL: Record<Exclude<ViewMode, 'self'>, Array<{ value: string; label: string }>> = {
   team: [
     { value: 'all', label: 'All Employees' },
-    { value: 'pending', label: 'With Pending Reviews' },
+    { value: 'pending_direct', label: 'Pending (Direct)' },
+    { value: 'pending_skip', label: 'Pending (Skip-Level)' },
     { value: 'reviewed', label: 'Reviewed' },
   ],
   skip_level: [
@@ -67,13 +70,13 @@ const STATUS_OPTIONS_BY_LEVEL: Record<Exclude<ViewMode, 'self'>, Array<{ value: 
 const HEADER_CONFIG: Record<Exclude<ViewMode, 'self'>, { icon: React.ElementType; title: string; description: string; gradient: string }> = {
   team: { 
     icon: Users, 
-    title: 'Team Review', 
-    description: "Review and manage your team's performance",
+    title: 'Team Reviews', 
+    description: "Review direct & indirect reports' performance",
     gradient: 'from-blue-500 to-indigo-600'
   },
   skip_level: { 
     icon: UserCheck, 
-    title: 'Skip-Level Review', 
+    title: 'Team Reviews', 
     description: 'Review as skip-level reporting manager',
     gradient: 'from-teal-500 to-cyan-600'
   },
@@ -106,8 +109,9 @@ export function EmployeeSelectorGrid({
   const { user, role } = useAuth();
   const { data: teamMembers, isLoading: teamLoading } = useTeamMembers(user?.id);
   const { data: allProfiles, isLoading: profilesLoading } = useProfiles();
+  // Fetch skip-level members for team view (merged) or standalone skip_level view
   const { data: skipLevelMembers, isLoading: skipLevelLoading } = useSkipLevelTeamMembers(
-    viewLevel === 'skip_level' ? user?.id : undefined
+    (viewLevel === 'team' || viewLevel === 'skip_level') ? user?.id : undefined
   );
   const { departments, designations, grades, managers } = useEmployeeFilterOptions();
   const [searchParams] = useSearchParams();
@@ -140,7 +144,9 @@ export function EmployeeSelectorGrid({
   };
 
   // Helper: map viewLevel to workflow engine's viewLevel format
-  const getEngineViewLevel = (): 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' => {
+  const getEngineViewLevel = (forRelationship?: 'direct' | 'indirect'): 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' => {
+    // In merged team view, indirect reports use skip_level engine level
+    if (viewLevel === 'team' && forRelationship === 'indirect') return 'skip_level';
     const map: Record<string, 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms'> = {
       team: 'manager',
       skip_level: 'skip_level',
@@ -153,11 +159,33 @@ export function EmployeeSelectorGrid({
 
   // Determine which employees to show based on view level and role
   const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
-  const isLoading = viewLevel === 'skip_level' ? skipLevelLoading : (isFullAccess ? profilesLoading : teamLoading);
-  const baseMembers = viewLevel === 'skip_level' ? skipLevelMembers
-    : viewLevel === 'hr_pms' ? allProfiles
-    : isFullAccess ? allProfiles
-    : teamMembers;
+  const isLoading = viewLevel === 'skip_level' ? skipLevelLoading 
+    : viewLevel === 'team' ? (isFullAccess ? profilesLoading : (teamLoading || skipLevelLoading))
+    : (isFullAccess ? profilesLoading : teamLoading);
+
+  // Build merged base members with relationship tags for team view
+  const baseMembers: EmployeeProfile[] | undefined = useMemo(() => {
+    if (viewLevel === 'team') {
+      if (isFullAccess) {
+        // Admin/auditor/management see all profiles; tag based on reporting chain
+        const skipIds = new Set(skipLevelMembers?.map(m => m.id) || []);
+        const directIds = new Set(teamMembers?.map(m => m.id) || []);
+        return allProfiles?.map(p => ({
+          ...p,
+          relationship: (skipIds.has(p.id) ? 'indirect' : directIds.has(p.id) ? 'direct' : undefined) as 'direct' | 'indirect' | undefined,
+        }));
+      }
+      // Manager: merge direct + indirect
+      const directSet = new Set(teamMembers?.map(m => m.id) || []);
+      const directTagged = (teamMembers || []).map(m => ({ ...m, relationship: 'direct' as const }));
+      const indirectTagged = (skipLevelMembers || []).filter(m => !directSet.has(m.id)).map(m => ({ ...m, relationship: 'indirect' as const }));
+      return [...directTagged, ...indirectTagged];
+    }
+    if (viewLevel === 'skip_level') return skipLevelMembers;
+    if (viewLevel === 'hr_pms') return allProfiles;
+    if (isFullAccess) return allProfiles;
+    return teamMembers;
+  }, [viewLevel, teamMembers, skipLevelMembers, allProfiles, isFullAccess]);
 
   // Auto-open KPI from URL
   useEffect(() => {
@@ -212,18 +240,29 @@ export function EmployeeSelectorGrid({
     // Status-based filtering using per-employee workflow resolution
     if (statusFilter !== 'all' && periodKpis) {
       const employeeIds = new Set<string>();
-      const engineLevel = getEngineViewLevel();
+      // For merged team view, build skip-level member set for relationship detection
+      const skipIds = viewLevel === 'team' ? new Set(skipLevelMembers?.map(m => m.id) || []) : new Set<string>();
       
       periodKpis.forEach(kpi => {
         const stages = getStages(kpi.employee_id);
-        const pendingStatuses = resolvePendingStatuses(engineLevel, stages);
+        const isIndirect = skipIds.has(kpi.employee_id);
+        const engineLevel = viewLevel === 'team' && isIndirect ? 'skip_level' as const : getEngineViewLevel();
         const reviewableStatuses = resolveReviewableStatuses(engineLevel, stages);
         
         if (viewLevel === 'team') {
-          if (statusFilter === 'pending' && kpi.status === 'self_review') {
+          if (statusFilter === 'pending_direct' && !isIndirect && kpi.status === 'self_review') {
             employeeIds.add(kpi.employee_id);
-          } else if (statusFilter === 'reviewed' && !['kra_set', 'self_review'].includes(kpi.status || '')) {
+          } else if (statusFilter === 'pending_skip' && isIndirect && reviewableStatuses.includes(kpi.status || '')) {
             employeeIds.add(kpi.employee_id);
+          } else if (statusFilter === 'reviewed') {
+            if (!isIndirect && !['kra_set', 'self_review'].includes(kpi.status || '')) {
+              employeeIds.add(kpi.employee_id);
+            } else if (isIndirect) {
+              const slIdx = stages.indexOf('skip_level_check');
+              if (slIdx >= 0 && stages.slice(slIdx).includes(kpi.status || '')) {
+                employeeIds.add(kpi.employee_id);
+              }
+            }
           }
         } else if (viewLevel === 'audit') {
           if (statusFilter === 'pending' && reviewableStatuses.includes(kpi.status || '')) {
@@ -237,7 +276,6 @@ export function EmployeeSelectorGrid({
           if (statusFilter === 'pending' && reviewableStatuses.includes(kpi.status || '')) {
             employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'reviewed') {
-            // Everything past the skip_level_check stage
             const slIdx = stages.indexOf('skip_level_check');
             if (slIdx >= 0) {
               const doneStatuses = stages.slice(slIdx);
@@ -267,24 +305,42 @@ export function EmployeeSelectorGrid({
     }
 
     return filtered;
-  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, statusFilter, periodKpis, viewLevel, workflowMap]);
+  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers]);
 
   // Calculate stats using per-employee workflow-aware resolution
   const stats = useMemo(() => {
     if (!periodKpis || !baseMembers) {
-      return { totalEmployees: 0, stat1: 0, stat2: 0, stat3: 0, totalKpis: 0 };
+      return { totalEmployees: 0, stat1: 0, stat2: 0, stat3: 0, stat4: 0, totalKpis: 0 };
     }
 
     const memberIds = new Set(baseMembers.map(m => m.id));
     const relevantKpis = periodKpis.filter(k => memberIds.has(k.employee_id));
-    const engineLevel = getEngineViewLevel();
+    const skipIds = new Set(skipLevelMembers?.map(m => m.id) || []);
 
     if (viewLevel === 'team') {
+      // Merged view: separate direct pending, skip-level pending, and reviewed counts
+      let directPending = 0, skipPending = 0, reviewed = 0;
+      relevantKpis.forEach(k => {
+        const isIndirect = skipIds.has(k.employee_id);
+        if (isIndirect) {
+          const stages = getStages(k.employee_id);
+          const reviewable = resolveReviewableStatuses('skip_level', stages);
+          if (reviewable.includes(k.status || '')) skipPending++;
+          else {
+            const slIdx = stages.indexOf('skip_level_check');
+            if (slIdx >= 0 && stages.slice(slIdx).includes(k.status || '')) reviewed++;
+          }
+        } else {
+          if (k.status === 'self_review') directPending++;
+          else if (!['kra_set', 'self_review'].includes(k.status || '')) reviewed++;
+        }
+      });
       return {
         totalEmployees: baseMembers.length,
-        stat1: relevantKpis.filter(k => k.status === 'kra_set').length,
-        stat2: relevantKpis.filter(k => k.status === 'self_review').length,
-        stat3: relevantKpis.filter(k => !['kra_set', 'self_review'].includes(k.status || '')).length,
+        stat1: directPending,
+        stat2: skipPending,
+        stat3: reviewed,
+        stat4: relevantKpis.length,
         totalKpis: relevantKpis.length,
       };
     } else if (viewLevel === 'audit') {
@@ -296,7 +352,7 @@ export function EmployeeSelectorGrid({
         else if (k.status === 'audit') inAudit++;
         else if (['management_review', 'approved'].includes(k.status || '')) forwarded++;
       });
-      return { totalEmployees: baseMembers.length, stat1: pending, stat2: inAudit, stat3: forwarded, totalKpis: relevantKpis.length };
+      return { totalEmployees: baseMembers.length, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'skip_level') {
       let pending = 0, reviewed = 0;
       relevantKpis.forEach(k => {
@@ -308,7 +364,7 @@ export function EmployeeSelectorGrid({
           if (slIdx >= 0 && stages.slice(slIdx).includes(k.status || '')) reviewed++;
         }
       });
-      return { totalEmployees: baseMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, totalKpis: relevantKpis.length };
+      return { totalEmployees: baseMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'hr_pms') {
       let pending = 0, reviewed = 0;
       relevantKpis.forEach(k => {
@@ -320,25 +376,38 @@ export function EmployeeSelectorGrid({
           if (hrIdx >= 0 && stages.slice(hrIdx).includes(k.status || '')) reviewed++;
         }
       });
-      return { totalEmployees: baseMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, totalKpis: relevantKpis.length };
+      return { totalEmployees: baseMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, totalKpis: relevantKpis.length };
     } else {
       return {
         totalEmployees: baseMembers.length,
         stat1: relevantKpis.filter(k => k.status === 'management_review').length,
         stat2: relevantKpis.filter(k => k.status === 'approved').length,
         stat3: relevantKpis.length,
+        stat4: 0,
         totalKpis: relevantKpis.length,
       };
     }
-  }, [periodKpis, baseMembers, viewLevel, workflowMap]);
+  }, [periodKpis, baseMembers, viewLevel, workflowMap, skipLevelMembers]);
 
   // Get employee KPI stats using workflow-aware resolution
-  const getEmployeeKpiStats = (employeeId: string) => {
+  const getEmployeeKpiStats = (employeeId: string, relationship?: 'direct' | 'indirect') => {
     if (!periodKpis) return { badge1: 0, badge2: 0, badge3: 0, total: 0 };
     const empKpis = periodKpis.filter(k => k.employee_id === employeeId);
     const stages = getStages(employeeId);
 
     if (viewLevel === 'team') {
+      const isIndirect = relationship === 'indirect';
+      if (isIndirect) {
+        const reviewable = resolveReviewableStatuses('skip_level', stages);
+        const slIdx = stages.indexOf('skip_level_check');
+        const doneStatuses = slIdx >= 0 ? stages.slice(slIdx) : [];
+        return {
+          badge1: empKpis.filter(k => reviewable.includes(k.status || '')).length,
+          badge2: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
+          badge3: 0,
+          total: empKpis.length,
+        };
+      }
       return {
         badge1: empKpis.filter(k => k.status === 'self_review').length,
         badge2: empKpis.filter(k => !['kra_set', 'self_review'].includes(k.status || '')).length,
@@ -440,8 +509,8 @@ export function EmployeeSelectorGrid({
       return (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
           <StatCard icon={Users} label={isFullAccess ? 'Total Employees' : 'Team Size'} value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-          <StatCard icon={Target} label="Open KPIs" value={stats.stat1} color="purple" subtitle="Not yet submitted" />
-          <StatCard icon={Clock} label="Pending Review" value={stats.stat2} color="yellow" subtitle="Awaiting manager" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
+          <StatCard icon={Clock} label="Direct Pending" value={stats.stat1} color="yellow" subtitle="Awaiting manager review" onClick={() => toggleStatusFilter('pending_direct')} active={statusFilter === 'pending_direct'} />
+          <StatCard icon={UserCheck} label="Skip-Level Pending" value={stats.stat2} color="amber" subtitle="Awaiting skip-level review" onClick={() => toggleStatusFilter('pending_skip')} active={statusFilter === 'pending_skip'} />
           <StatCard icon={CheckCircle2} label="Reviewed" value={stats.stat3} color="green" subtitle="KPIs completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} />
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" className="col-span-2 md:col-span-1" />
         </div>
@@ -486,8 +555,8 @@ export function EmployeeSelectorGrid({
   };
 
   // Render badge based on view level
-  const renderEmployeeBadges = (employeeId: string) => {
-    const kpiStats = getEmployeeKpiStats(employeeId);
+  const renderEmployeeBadges = (member: EmployeeProfile) => {
+    const kpiStats = getEmployeeKpiStats(member.id, member.relationship);
     
     if (kpiStats.total === 0) {
       return (
@@ -500,6 +569,17 @@ export function EmployeeSelectorGrid({
     if (viewLevel === 'team') {
       return (
         <>
+          {/* Relationship badge */}
+          {member.relationship === 'indirect' && (
+            <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200 text-xs dark:bg-teal-900/20 dark:text-teal-400 dark:border-teal-800">
+              Indirect
+            </Badge>
+          )}
+          {member.relationship === 'direct' && (
+            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+              Direct
+            </Badge>
+          )}
           {kpiStats.badge1 > 0 && (
             <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800">
               {kpiStats.badge1} pending
@@ -691,7 +771,7 @@ export function EmployeeSelectorGrid({
                             </p>
                           )}
                           <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            {renderEmployeeBadges(member.id)}
+                            {renderEmployeeBadges(member)}
                           </div>
                         </div>
                       </div>
