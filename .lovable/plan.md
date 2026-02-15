@@ -1,84 +1,69 @@
 
 
-# Plan: Add Auditors to Eligible Login Users
+# Merge Team Review + Skip-Level Review into "Team Reviews"
 
-## Problem
+## Workflow Impact Assessment
 
-The `eligible_login_users` database view only includes users who have KRAs assigned or are reporting managers of employees with KRAs. Users with the **Auditor** role are excluded, meaning they cannot receive login credentials via the Password Rollout feature.
+**No workflow logic is impacted.** The merge is purely a UI-level change -- combining two toggle buttons into one and showing both employee lists together. Here is why:
 
-## Solution
+- The **score fields** remain separate: Team Review writes to `manager_score`, Skip-Level writes to `skip_level_score`. This does not change.
+- The **status transitions** remain the same: Team reviews KPIs at `self_review` status; Skip-Level reviews KPIs at `manager_check` status. The workflow engine (`workflowEngine.ts`) is untouched.
+- The **UnifiedScorecard** already determines which score field and action to use based on the `viewLevel` prop (`manager` vs `skip_level`). This stays the same -- only the routing into it changes.
+- **RLS policies** and **database schema** are completely unaffected.
 
-Update the `eligible_login_users` view to include a third eligibility source: users with the `auditor` role in the `user_roles` table. Also update the UI filter to include the new eligibility type.
+## What Changes (UI Only)
 
-## Changes
+### 1. ViewModeToggle -- Remove `skip_level`, rename `team` to "Team Reviews"
 
-### 1. Database Migration -- Recreate the View
+Replace two buttons ("Team Review" + "Skip-Level") with a single "Team Reviews" button. The `skip_level` ViewMode value is removed from the toggle but kept internally for scorecard routing.
 
-Add a new CTE `is_auditor` that selects user IDs from `user_roles` where `role = 'auditor'`. Extend the CASE expression and WHERE clause accordingly.
+### 2. EmployeeSelectorGrid -- Merge employee lists with relationship tags
 
-```text
-New eligibility_type values:
-- "has_kras"          -- has KRAs assigned
-- "reporting_manager" -- manages employees with KRAs
-- "auditor"           -- has auditor role
-- "both"              -- has KRAs AND is a manager (existing)
-```
+When `viewLevel === 'team'`:
+- Fetch **both** direct reports (existing `useTeamMembers`) and indirect reports (`useSkipLevelTeamMembers`)
+- Deduplicate by employee ID (a direct report is never also a skip-level report)
+- Tag each employee card with a **"Direct"** or **"Indirect"** badge so the manager knows the relationship
+- Combine stat cards: show Direct Pending, Skip-Level Pending, and Reviewed counts
+- Status filter options updated: "Pending (Direct)", "Pending (Skip-Level)", "Reviewed"
 
-The updated view logic:
+### 3. Dashboard -- Route to correct scorecard viewLevel
 
-```text
-WITH has_kras AS (
-  SELECT DISTINCT employee_id AS id FROM kpis
-),
-is_manager AS (
-  SELECT DISTINCT p.reporting_manager_id AS id
-  FROM profiles p
-  WHERE p.reporting_manager_id IS NOT NULL
-    AND p.id IN (SELECT employee_id FROM kpis)
-),
-is_auditor AS (
-  SELECT DISTINCT user_id AS id
-  FROM user_roles
-  WHERE role = 'auditor'
-)
-SELECT pr.id, pr.full_name, pr.email, pr.employee_code,
-       pr.designation, pr.department_id,
-       CASE
-         WHEN hk.id IS NOT NULL AND im.id IS NOT NULL THEN 'both'
-         WHEN hk.id IS NOT NULL THEN 'has_kras'
-         WHEN im.id IS NOT NULL THEN 'reporting_manager'
-         ELSE 'auditor'
-       END AS eligibility_type
-FROM profiles pr
-LEFT JOIN has_kras hk ON hk.id = pr.id
-LEFT JOIN is_manager im ON im.id = pr.id
-LEFT JOIN is_auditor ia ON ia.id = pr.id
-WHERE hk.id IS NOT NULL OR im.id IS NOT NULL OR ia.id IS NOT NULL;
-```
+When a manager clicks an employee tagged as "Indirect", the `UnifiedScorecard` receives `viewLevel="skip_level"` instead of `"manager"`. This ensures the correct score field (`skip_level_score`) and workflow status checks are used -- **preserving all existing workflow behavior**.
 
-### 2. UI Update -- `PasswordPolicyTab.tsx`
+### 4. Deep-link URLs
 
-Add "Auditor" as a filter option in the eligibility dropdown and add a badge variant for the `auditor` type.
+Update URL handling: `?view=skip_level` still works for backward compatibility (notifications, bookmarks) but now opens the merged "Team Reviews" mode and selects the employee.
 
-| Change | Detail |
-|---|---|
-| SelectItem | Add `<SelectItem value="auditor">Auditor</SelectItem>` |
-| `eligibilityBadge` | Add case for `'auditor'` returning a badge |
+### 5. Sidebar navigation
 
-### 3. Hook Update -- `usePasswordRollout.ts`
-
-Add `'auditor'` to the `EligibleUser.eligibility_type` union type.
-
-### 4. Documentation
-
-Update `DOCUMENTATION.md` with the change.
+Remove the separate "Skip-Level Review" sidebar entry if one exists; the single "Team Reviews" entry covers both.
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| Migration SQL | Recreate `eligible_login_users` view with auditor CTE |
-| `src/components/admin/PasswordPolicyTab.tsx` | Add auditor filter option and badge |
-| `src/hooks/usePasswordRollout.ts` | Extend eligibility type union |
-| `DOCUMENTATION.md` | Document the change |
+| `src/components/review/ViewModeToggle.tsx` | Remove `skip_level` from visible modes, rename `team` label to "Team Reviews" |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Merge direct + indirect reports, add relationship badge, combine stats |
+| `src/pages/Dashboard.tsx` | Map merged mode to correct `viewLevel` based on employee relationship tag |
+| `src/components/layout/AppSidebar.tsx` | Remove skip-level nav item (if present) |
+| `DOCUMENTATION.md` | Update documentation |
+
+## Technical Detail: Relationship Detection
+
+Each employee in the merged list will carry a `relationship` field:
+
+```text
+type EmployeeWithRelation = EmployeeProfile & {
+  relationship: 'direct' | 'indirect';
+};
+```
+
+- `direct`: employee's `reporting_manager_id === currentUserId`
+- `indirect`: employee is in the `skipLevelMembers` list
+
+When an employee is selected, the Dashboard checks this tag:
+- `direct` -> passes `viewLevel="manager"` to UnifiedScorecard
+- `indirect` -> passes `viewLevel="skip_level"` to UnifiedScorecard
+
+This ensures the correct score column, workflow status, and action buttons are used without any workflow engine changes.
 
