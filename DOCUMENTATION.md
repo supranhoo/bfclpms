@@ -2382,6 +2382,7 @@ Unified, reusable KPI details table component used across all review views (My K
 
 **Status Badges with View Access:**
 - **Team Review**: KPIs past `self_review` show "Reviewed" badge + View icon button
+- **Team Review (Draft Detection)**: KPIs at `management_review` with a saved `management_score` show an amber **"Draft (Mgmt)"** badge instead of "Reviewed". This helps dual-role users (who are both Manager and Management Reviewer) identify that their management-level approval is still pending — they only saved a draft, not a final approval. The same logic applies to `skip-level-review` and `hr-pms-review` views.
 - **Audit Panel**: KPIs forwarded to management show "Forwarded" badge + View icon button  
 - **Management Review**: Approved KPIs show "Completed" badge + View icon button
 - All badges preserve access to the full KPI review panel for audit trail transparency

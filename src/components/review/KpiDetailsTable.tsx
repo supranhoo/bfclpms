@@ -17,7 +17,7 @@ import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { canReviewKpi as workflowCanReview, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { 
   Info, Lock, CheckCircle2, Calendar, ChevronDown, ChevronUp, Undo2, Eye, 
-  Building2, Users, User, FileCheck
+  Building2, Users, User, FileCheck, Clock
 } from 'lucide-react';
 
 // Stage-to-column mapping: workflow stage name -> score column definition
@@ -201,6 +201,23 @@ export function KpiDetailsTable({
             <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400">
               <CheckCircle2 className="h-3 w-3 mr-1" />
               Forwarded
+            </Badge>
+            {onView && (
+              <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View KPI Details">
+                <Eye className="h-4 w-4" />
+              </Button>
+            )}
+          </>
+        ) : (
+          // Check if KPI is drafted at management level before showing "Reviewed"
+          (viewType === 'team-review' || viewType === 'skip-level-review' || viewType === 'hr-pms-review') && 
+          kpi.status === 'management_review' && 
+          submission?.management_score !== null && submission?.management_score !== undefined
+        ) ? (
+          <>
+            <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-300">
+              <Clock className="h-3 w-3 mr-1" />
+              Draft (Mgmt)
             </Badge>
             {onView && (
               <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View KPI Details">

@@ -13,7 +13,7 @@ import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { cn } from '@/lib/utils';
 import { 
   Lock, Info, Building2, Users, User, CheckCircle2, Eye, Calendar, 
-  Undo2, ChevronDown, ChevronUp 
+  Undo2, ChevronDown, ChevronUp, Clock 
 } from 'lucide-react';
 
 export type MobileKpiViewType = 'my-kpis' | 'dashboard' | 'team-review' | 'audit' | 'management' | 'skip-level-review' | 'hr-pms-review';
@@ -152,6 +152,27 @@ export function MobileKpiCard({
           <CheckCircle2 className="h-3 w-3 mr-1" />
           Fwd
         </Badge>
+      );
+    }
+
+    // Check if KPI is drafted at management level (score saved but not approved)
+    const isMgmtDrafted = (viewType === 'team-review' || viewType === 'skip-level-review' || viewType === 'hr-pms-review') && 
+      kpi.status === 'management_review' && 
+      submission?.management_score !== null && submission?.management_score !== undefined;
+
+    if (isMgmtDrafted) {
+      return (
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-300 text-xs">
+            <Clock className="h-3 w-3 mr-1" />
+            Draft (Mgmt)
+          </Badge>
+          {onView && (
+            <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => onView(kpi)}>
+              <Eye className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       );
     }
 
