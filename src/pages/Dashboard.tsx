@@ -58,7 +58,7 @@ interface EmployeeProfile {
 import { statusColors, statusLabels, getScoreBadgeClass } from '@/lib/reviewConstants';
 
 export default function Dashboard() {
-  const { profile, role } = useAuth();
+  const { profile, effectiveRole: role } = useAuth();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();

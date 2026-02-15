@@ -62,7 +62,7 @@ interface PIPDetailSheetProps {
 }
 
 export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProps) {
-  const { user, role } = useAuth();
+  const { user, effectiveRole: role } = useAuth();
   const { data: pip, isLoading } = usePIPDetails(pipId || undefined);
   const { data: auditLogs } = usePIPAuditLogs(pipId || undefined);
   

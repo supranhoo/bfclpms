@@ -11,7 +11,7 @@ interface DataOwnerRouteProps {
  * Route guard that allows access to admins and users assigned as data owners
  */
 export function DataOwnerRoute({ children }: DataOwnerRouteProps) {
-  const { role, loading: authLoading } = useAuth();
+  const { effectiveRole, loading: authLoading } = useAuth();
   const { data: isDataOwner, isLoading: ownerLoading } = useIsAnyOrgKpiDataOwner();
 
   if (authLoading || ownerLoading) {
@@ -22,8 +22,8 @@ export function DataOwnerRoute({ children }: DataOwnerRouteProps) {
     );
   }
 
-  // Admin always has access
-  if (role === 'admin') {
+  // Admin always has access (only when in admin mode)
+  if (effectiveRole === 'admin') {
     return <>{children}</>;
   }
 

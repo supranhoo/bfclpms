@@ -94,8 +94,8 @@ export function useManagers() {
 
 // Main hook for cascading KPI filters
 export function useKpiFilters() {
-  const { role } = useAuth();
-  const isAdmin = role === 'admin' || role === 'auditor';
+  const { effectiveRole } = useAuth();
+  const isAdmin = effectiveRole === 'admin' || effectiveRole === 'auditor';
   
   const [filters, setFilters] = useState<KpiFilterState>({
     divisionId: null,

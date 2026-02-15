@@ -23,7 +23,7 @@ const ALL_ROLES = [
 
 export default function PMSPolicy() {
   const { data: appSettings, isLoading } = useAppSettings();
-  const { role } = useAuth();
+  const { effectiveRole: role } = useAuth();
   const [editorOpen, setEditorOpen] = useState(false);
   const updateSettings = useUpdateAppSettings();
 
