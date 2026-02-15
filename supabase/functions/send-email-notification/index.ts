@@ -10,7 +10,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// --- Auth helper: validate service-role key or valid user JWT ---
+// --- Auth helper: validate service-role key, anon key, or valid user JWT ---
 const validateCaller = async (req: Request): Promise<{ authorized: boolean; error?: string }> => {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
@@ -19,9 +19,15 @@ const validateCaller = async (req: Request): Promise<{ authorized: boolean; erro
 
   const token = authHeader.replace("Bearer ", "");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
 
   // Allow service-role callers (DB triggers, other edge functions)
   if (serviceRoleKey && token === serviceRoleKey) {
+    return { authorized: true };
+  }
+
+  // Allow anon-key callers (DB triggers using the publishable key)
+  if (anonKey && token === anonKey) {
     return { authorized: true };
   }
 
