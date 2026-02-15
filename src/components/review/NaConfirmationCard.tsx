@@ -3,7 +3,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { AlertTriangle, Ban } from 'lucide-react';
+import { AlertTriangle, Ban, RefreshCw } from 'lucide-react';
 
 interface NaConfirmationCardProps {
   selfRemarks: string | null;
@@ -24,6 +24,14 @@ interface NaConfirmationCardProps {
   onMarkNaRemarksChange?: (remarks: string) => void;
   /** Which role originally marked this N/A (for display) */
   naMarkedByRole?: string | null;
+  /** Whether the reviewer has overridden N/A (making KPI applicable again) */
+  naOverridden?: boolean;
+  /** Callback when reviewer toggles override */
+  onOverrideNa?: (overridden: boolean) => void;
+  /** Remarks for overriding N/A (mandatory) */
+  overrideRemarks?: string;
+  /** Callback for override remarks */
+  onOverrideRemarksChange?: (remarks: string) => void;
 }
 
 export function NaConfirmationCard({
@@ -39,6 +47,10 @@ export function NaConfirmationCard({
   markNaRemarks,
   onMarkNaRemarksChange,
   naMarkedByRole,
+  naOverridden,
+  onOverrideNa,
+  overrideRemarks,
+  onOverrideRemarksChange,
 }: NaConfirmationCardProps) {
   // If this is the "reviewer wants to mark N/A" variant (KPI is NOT already N/A)
   if (canMarkNa && onReviewerMarkNa) {
@@ -87,12 +99,16 @@ export function NaConfirmationCard({
     );
   }
 
-  // Original "confirm existing N/A" variant
+  // Original "confirm existing N/A" variant — now with override option
   return (
-    <Card className="border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20">
+    <Card className={`border-amber-500/50 ${naOverridden ? 'bg-green-50/50 dark:bg-green-950/20 border-green-500/50' : 'bg-amber-50/50 dark:bg-amber-950/20'}`}>
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+          {naOverridden ? (
+            <RefreshCw className="h-5 w-5 text-green-600 dark:text-green-500 shrink-0 mt-0.5" />
+          ) : (
+            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+          )}
           <div className="flex-1 space-y-4">
             <div>
               <p className="font-medium text-foreground">
@@ -115,29 +131,74 @@ export function NaConfirmationCard({
               )}
             </div>
 
-            <div className="space-y-3 pt-2 border-t border-amber-200/50 dark:border-amber-800/50">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="confirm-na"
-                  checked={confirmed}
-                  onCheckedChange={(checked) => onConfirmChange(checked === true)}
-                />
-                <Label htmlFor="confirm-na" className="text-sm cursor-pointer">
-                  I confirm this KPI is correctly marked as N/A
-                </Label>
-              </div>
+            {/* Override N/A toggle — only shown if callbacks provided */}
+            {onOverrideNa && (
+              <div className="space-y-3 pt-2 border-t border-amber-200/50 dark:border-amber-800/50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-foreground text-sm">
+                      Override: This KPI is applicable
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Reverse the N/A decision and provide your own score
+                    </p>
+                  </div>
+                  <Switch
+                    checked={naOverridden || false}
+                    onCheckedChange={(checked) => {
+                      onOverrideNa(checked);
+                      // Clear confirm when overriding
+                      if (checked) onConfirmChange(false);
+                    }}
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label className="text-sm">{reviewerLevel} Remarks (Optional)</Label>
-                <Textarea
-                  value={remarks}
-                  onChange={(e) => onRemarksChange(e.target.value)}
-                  placeholder="Add any notes about this N/A classification..."
-                  rows={2}
-                  className="bg-background"
-                />
+                {naOverridden && (
+                  <div className="space-y-2">
+                    <Label className="text-sm">
+                      {reviewerLevel} Override Justification <span className="text-destructive">*</span>
+                    </Label>
+                    <Textarea
+                      value={overrideRemarks || ''}
+                      onChange={(e) => onOverrideRemarksChange?.(e.target.value)}
+                      placeholder="Provide a mandatory reason for overriding the N/A decision..."
+                      rows={3}
+                      className="bg-background"
+                    />
+                    {overrideRemarks !== undefined && overrideRemarks.trim() === '' && (
+                      <p className="text-xs text-destructive">A reason is required to override N/A</p>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
+            )}
+
+            {/* Confirm N/A — hidden when overriding */}
+            {!naOverridden && (
+              <div className="space-y-3 pt-2 border-t border-amber-200/50 dark:border-amber-800/50">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="confirm-na"
+                    checked={confirmed}
+                    onCheckedChange={(checked) => onConfirmChange(checked === true)}
+                  />
+                  <Label htmlFor="confirm-na" className="text-sm cursor-pointer">
+                    I confirm this KPI is correctly marked as N/A
+                  </Label>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm">{reviewerLevel} Remarks (Optional)</Label>
+                  <Textarea
+                    value={remarks}
+                    onChange={(e) => onRemarksChange(e.target.value)}
+                    placeholder="Add any notes about this N/A classification..."
+                    rows={2}
+                    className="bg-background"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </CardContent>

@@ -253,6 +253,10 @@ export function UnifiedScorecard({
   // Reviewer-initiated N/A state
   const [reviewerMarkNa, setReviewerMarkNa] = useState(false);
   const [markNaRemarks, setMarkNaRemarks] = useState('');
+  
+  // N/A override state (reviewer overrides existing N/A to make KPI applicable)
+  const [naOverridden, setNaOverridden] = useState(false);
+  const [overrideNaRemarks, setOverrideNaRemarks] = useState('');
 
   // Org KPI send-back dialog state (for management)
   const [orgKpiSendBackOpen, setOrgKpiSendBackOpen] = useState(false);
@@ -597,6 +601,8 @@ export function UnifiedScorecard({
     setNaRemarks('');
     setReviewerMarkNa(false);
     setMarkNaRemarks('');
+    setNaOverridden(false);
+    setOverrideNaRemarks('');
     setReviewSheetOpen(true);
   };
 
@@ -660,8 +666,73 @@ export function UnifiedScorecard({
       return;
     }
     
-    // For existing N/A KPIs (confirmation flow)
+    // For existing N/A KPIs — override or confirm
     if (isNaKpi) {
+      // N/A Override: reviewer decides KPI IS applicable
+      if (naOverridden) {
+        if (!overrideNaRemarks.trim()) return;
+        if (reviewerScore === null) return;
+        
+        // Clear is_na and submit score
+        const prefix = config.scoreFieldPrefix;
+        const updateData: any = {
+          is_na: false,
+          na_marked_by_role: null,
+          [`${prefix}_rating`]: scoreToRating(reviewerScore),
+          [`${prefix}_score`]: reviewerScore,
+          [`${prefix}_remarks`]: overrideNaRemarks,
+          [`${prefix}_evidence_url`]: reviewerEvidenceUrl,
+        };
+        if (reviewerAchievedValue !== undefined && reviewerAchievedValue !== null) {
+          updateData[`${prefix}_achieved_value`] = typeof reviewerAchievedValue === 'number' 
+            ? reviewerAchievedValue 
+            : parseFloat(reviewerAchievedValue as string) || null;
+        }
+        if (viewLevel === 'management') {
+          updateData.final_rating = scoreToRating(reviewerScore);
+          updateData.final_score = reviewerScore;
+        }
+        
+        const { error: submissionError } = await supabase
+          .from('review_submissions')
+          .update(updateData)
+          .eq('kpi_id', selectedKpi.id);
+        
+        if (submissionError) {
+          toast({ title: 'Failed to override N/A', description: submissionError.message, variant: 'destructive' });
+          return;
+        }
+        
+        const newStatus = approve ? config.forwardStatus : config.pendingStatus;
+        const { error: kpiError } = await supabase
+          .from('kpis')
+          .update({ status: newStatus as any })
+          .eq('id', selectedKpi.id);
+        
+        if (kpiError) {
+          toast({ title: 'Failed to update status', description: kpiError.message, variant: 'destructive' });
+          return;
+        }
+        
+        if (user?.id) {
+          await supabase.from('kpi_audit_logs').insert({
+            kpi_id: selectedKpi.id,
+            action: `${viewLevel.toUpperCase()}_NA_OVERRIDDEN`,
+            performed_by: user.id,
+            new_value: { override_remarks: overrideNaRemarks, score: reviewerScore },
+            metadata: { overridden_at: new Date().toISOString() },
+          });
+        }
+        
+        queryClient.invalidateQueries({ queryKey: ['kpis'] });
+        queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
+        queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+        toast({ title: 'N/A overridden — KPI scored and forwarded' });
+        setReviewSheetOpen(false);
+        return;
+      }
+      
+      // N/A Confirmation (original flow)
       if (!naConfirmed) return;
       
       if (user?.id) {
@@ -1004,7 +1075,7 @@ export function UnifiedScorecard({
                 workflowStages={effectiveStages}
               />
               
-              {/* N/A Confirmation Card - existing N/A */}
+              {/* N/A Confirmation Card - existing N/A (with override option) */}
               {submissionMap.get(selectedKpi.id)?.is_na && isReviewable(selectedKpi) && (
                 <NaConfirmationCard
                   selfRemarks={(() => {
@@ -1024,6 +1095,10 @@ export function UnifiedScorecard({
                   onRemarksChange={setNaRemarks}
                   reviewerLevel={viewLevel === 'manager' ? 'Manager' : viewLevel === 'auditor' ? 'Auditor' : 'Management'}
                   naMarkedByRole={(submissionMap.get(selectedKpi.id) as any)?.na_marked_by_role || null}
+                  naOverridden={naOverridden}
+                  onOverrideNa={setNaOverridden}
+                  overrideRemarks={overrideNaRemarks}
+                  onOverrideRemarksChange={setOverrideNaRemarks}
                 />
               )}
               
@@ -1044,8 +1119,8 @@ export function UnifiedScorecard({
                 />
               )}
               
-              {/* Daily Submission Summary + Override - hidden when reviewer marks N/A */}
-              {!reviewerMarkNa && (
+              {/* Daily Submission Summary + Override - hidden when reviewer marks N/A or when N/A not overridden */}
+              {!reviewerMarkNa && (!submissionMap.get(selectedKpi.id)?.is_na || naOverridden) && (
                 <DailySubmissionSummaryWithOverride 
                   kpi={selectedKpi} 
                   selectedPeriod={selectedPeriod} 
@@ -1065,8 +1140,8 @@ export function UnifiedScorecard({
                 />
               )}
 
-              {/* Score Input - hidden when reviewer marks N/A */}
-              {!reviewerMarkNa && isReviewable(selectedKpi) && !(selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary') && (
+              {/* Score Input - hidden when reviewer marks N/A or when N/A not overridden */}
+              {!reviewerMarkNa && (!submissionMap.get(selectedKpi.id)?.is_na || naOverridden) && isReviewable(selectedKpi) && !(selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary') && (
                 <>
                   <AchievedValueScoreInput
                     kpi={selectedKpi}
@@ -1100,8 +1175,8 @@ export function UnifiedScorecard({
                 </>
               )}
               
-              {/* Remarks for Daily Binary - hidden when reviewer marks N/A */}
-              {!reviewerMarkNa && isReviewable(selectedKpi) && selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary' && reviewerAgrees !== null && (
+              {/* Remarks for Daily Binary - hidden when reviewer marks N/A or N/A not overridden */}
+              {!reviewerMarkNa && (!submissionMap.get(selectedKpi.id)?.is_na || naOverridden) && isReviewable(selectedKpi) && selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary' && reviewerAgrees !== null && (
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>{viewLevel.charAt(0).toUpperCase() + viewLevel.slice(1)} Remarks</Label>
@@ -1163,7 +1238,7 @@ export function UnifiedScorecard({
                   )}
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                  {!submissionMap.get(selectedKpi?.id || '')?.is_na && !reviewerMarkNa && (
+                  {(!submissionMap.get(selectedKpi?.id || '')?.is_na || naOverridden) && !reviewerMarkNa && (
                     <Button
                       variant="secondary"
                       className="w-full sm:w-auto"
@@ -1179,6 +1254,7 @@ export function UnifiedScorecard({
                     onClick={() => handleSubmitReview(true)}
                     disabled={
                       reviewerMarkNa ? !markNaRemarks.trim() :
+                      (submissionMap.get(selectedKpi?.id || '')?.is_na && naOverridden) ? (!overrideNaRemarks.trim() || reviewerScore === null) :
                       submissionMap.get(selectedKpi?.id || '')?.is_na ? !naConfirmed :
                       (reviewerScore === null || 
                        submitReview.isPending || 
@@ -1190,9 +1266,11 @@ export function UnifiedScorecard({
                     <Check className="h-4 w-4 mr-2" />
                     {reviewerMarkNa 
                       ? 'Mark N/A & Forward'
-                      : submissionMap.get(selectedKpi?.id || '')?.is_na 
-                        ? 'Confirm N/A' 
-                        : isSavingOverrides ? 'Saving...' : submitReview.isPending ? 'Processing...' : config.actionLabel}
+                      : (submissionMap.get(selectedKpi?.id || '')?.is_na && naOverridden)
+                        ? 'Override N/A & Forward'
+                        : submissionMap.get(selectedKpi?.id || '')?.is_na 
+                          ? 'Confirm N/A' 
+                          : isSavingOverrides ? 'Saving...' : submitReview.isPending ? 'Processing...' : config.actionLabel}
                   </Button>
                 </div>
               </>

@@ -125,10 +125,7 @@ export function KpiDetailsTable({
   const totalColumns = 4 + scoreColumns.length + 2; // Category, KRA/KPI, Target, Weightage + scores + Status, Actions
   
   const canReviewKpiCheck = (kpi: KPI): boolean => {
-    const submission = submissionMap.get(kpi.id);
-    const isNaKpi = submission?.is_na || false;
-    if (isNaKpi) return false;
-    
+    // N/A KPIs are still reviewable — the reviewer decides whether to confirm or override N/A
     return workflowCanReview(kpi.status || 'kra_set', viewType, effectiveStages);
   };
 
