@@ -105,7 +105,7 @@ export function ReviewStageCard({
           </Badge>
         ) : (
           <Badge variant="outline" className="text-xs text-muted-foreground">
-            {isPending ? 'Pending' : 'Not Set'}
+            {isPending ? 'Pending' : 'N/A'}
           </Badge>
         )}
       </div>
