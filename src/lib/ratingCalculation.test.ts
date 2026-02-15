@@ -110,25 +110,26 @@ describe("parseThreshold", () => {
 });
 
 describe("ratingToLevel", () => {
-  it("returns blue for ratings >= 4", () => {
+  it("returns blue for rating 5", () => {
     expect(ratingToLevel(5)).toBe("blue");
-    expect(ratingToLevel(4)).toBe("blue");
-    expect(ratingToLevel(4.5)).toBe("blue");
   });
 
-  it("returns green for ratings 3-3.99", () => {
-    expect(ratingToLevel(3)).toBe("green");
-    expect(ratingToLevel(3.5)).toBe("green");
-    expect(ratingToLevel(3.99)).toBe("green");
+  it("returns green for ratings 4-4.99", () => {
+    expect(ratingToLevel(4)).toBe("green");
+    expect(ratingToLevel(4.5)).toBe("green");
+    expect(ratingToLevel(4.99)).toBe("green");
   });
 
-  it("returns yellow for ratings 2-2.99", () => {
-    expect(ratingToLevel(2)).toBe("yellow");
-    expect(ratingToLevel(2.5)).toBe("yellow");
-    expect(ratingToLevel(2.99)).toBe("yellow");
+  it("returns yellow for ratings 3-3.99", () => {
+    expect(ratingToLevel(3)).toBe("yellow");
+    expect(ratingToLevel(3.5)).toBe("yellow");
+    expect(ratingToLevel(3.99)).toBe("yellow");
   });
 
-  it("returns red for ratings < 2", () => {
+  it("returns red for ratings < 3", () => {
+    expect(ratingToLevel(2)).toBe("red");
+    expect(ratingToLevel(2.5)).toBe("red");
+    expect(ratingToLevel(2.99)).toBe("red");
     expect(ratingToLevel(1)).toBe("red");
     expect(ratingToLevel(0)).toBe("red");
     expect(ratingToLevel(1.99)).toBe("red");
@@ -137,10 +138,10 @@ describe("ratingToLevel", () => {
 
 describe("levelToText", () => {
   it("returns correct text for each level", () => {
-    expect(levelToText("blue")).toBe("Exceptional");
-    expect(levelToText("green")).toBe("Meets Expectations");
-    expect(levelToText("yellow")).toBe("Below Expectations");
-    expect(levelToText("red")).toBe("Needs Improvement");
+    expect(levelToText("blue")).toBe("Outstanding");
+    expect(levelToText("green")).toBe("Exceeds Expectations");
+    expect(levelToText("yellow")).toBe("Meets Expectations");
+    expect(levelToText("red")).toBe("Below Expectations");
   });
 });
 
@@ -165,19 +166,19 @@ describe("calculateRating", () => {
     it("returns rating 4 when achieved is 95-99% of target", () => {
       const result = calculateRating(97, 100, defaultThresholds, "Higher is Better", 10, 'numeric', null, null, 'ratio');
       expect(result.rating).toBe(4);
-      expect(result.ratingLevel).toBe("blue");
+      expect(result.ratingLevel).toBe("green");
     });
 
     it("returns rating 3 when achieved is 90-94% of target", () => {
       const result = calculateRating(92, 100, defaultThresholds, "Higher is Better", 10, 'numeric', null, null, 'ratio');
       expect(result.rating).toBe(3);
-      expect(result.ratingLevel).toBe("green");
+      expect(result.ratingLevel).toBe("yellow");
     });
 
     it("returns rating 2 when achieved is 80-89% of target", () => {
       const result = calculateRating(85, 100, defaultThresholds, "Higher is Better", 10, 'numeric', null, null, 'ratio');
       expect(result.rating).toBe(2);
-      expect(result.ratingLevel).toBe("yellow");
+      expect(result.ratingLevel).toBe("red");
     });
 
     it("returns rating 1 when achieved is 70-79% of target", () => {
@@ -479,7 +480,7 @@ describe("calculateOverallScore", () => {
     const result = calculateOverallScore(kpiResults);
     // (5*30 + 4*40 + 3*30) / 100 = (150 + 160 + 90) / 100 = 4.0
     expect(result.overallRating).toBe(4);
-    expect(result.overallLevel).toBe("blue");
+    expect(result.overallLevel).toBe("green");
   });
 
   it("returns zero for empty results", () => {
@@ -501,7 +502,7 @@ describe("calculateOverallScore", () => {
     const kpiResults = [{ rating: 4, weightage: 100 }];
     const result = calculateOverallScore(kpiResults);
     expect(result.overallRating).toBe(4);
-    expect(result.overallLevel).toBe("blue");
+    expect(result.overallLevel).toBe("green");
   });
 
   it("rounds to 2 decimal places", () => {
@@ -598,19 +599,19 @@ describe("calculateRating with Date UOM", () => {
   it("returns rating 4 for day between R5 and R4", () => {
     const result = calculateRating(8, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date");
     expect(result.rating).toBe(4);
-    expect(result.ratingLevel).toBe("blue");
+    expect(result.ratingLevel).toBe("green");
   });
 
   it("returns rating 3 for day between R4 and R3", () => {
     const result = calculateRating(12, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date");
     expect(result.rating).toBe(3);
-    expect(result.ratingLevel).toBe("green");
+    expect(result.ratingLevel).toBe("yellow");
   });
 
   it("returns rating 2 for day between R3 and R2", () => {
     const result = calculateRating(18, null, dateThresholds, "Higher is Better", 10, "numeric", null, "Date");
     expect(result.rating).toBe(2);
-    expect(result.ratingLevel).toBe("yellow");
+    expect(result.ratingLevel).toBe("red");
   });
 
   it("returns rating 1 for day between R2 and R1", () => {
@@ -683,20 +684,20 @@ describe("calculateRating with Percentage (%) UOM", () => {
     it("returns rating 4 when achieved between R5 and R4", () => {
       const result = calculateRating(99.3, 100, thresholds, "Lower is Better", 10, "numeric", null, "%");
       expect(result.rating).toBe(4);
-      expect(result.ratingLevel).toBe("blue");
+      expect(result.ratingLevel).toBe("green");
     });
 
     it("returns rating 3 when achieved between R4 and R3", () => {
       const result = calculateRating(99.8, 100, thresholds, "Lower is Better", 10, "numeric", null, "%");
       expect(result.rating).toBe(3);
-      expect(result.ratingLevel).toBe("green");
+      expect(result.ratingLevel).toBe("yellow");
     });
 
     it("returns rating 2 when achieved between R3 and R2", () => {
       // Target (95) is passed but should be IGNORED - only achieved value matters
       const result = calculateRating(100.4, 95, thresholds, "Lower is Better", 10, "numeric", null, "%");
       expect(result.rating).toBe(2);
-      expect(result.ratingLevel).toBe("yellow");
+      expect(result.ratingLevel).toBe("red");
     });
 
     it("returns rating 1 when achieved between R2 and R1", () => {
@@ -741,19 +742,19 @@ describe("calculateRating with Percentage (%) UOM", () => {
     it("returns rating 4 when achieved between R5 and R4", () => {
       const result = calculateRating(100.7, 100, thresholds, "Higher is Better", 10, "numeric", null, "%");
       expect(result.rating).toBe(4);
-      expect(result.ratingLevel).toBe("blue");
+      expect(result.ratingLevel).toBe("green");
     });
 
     it("returns rating 3 when achieved between R4 and R3", () => {
       const result = calculateRating(100.2, 100, thresholds, "Higher is Better", 10, "numeric", null, "%");
       expect(result.rating).toBe(3);
-      expect(result.ratingLevel).toBe("green");
+      expect(result.ratingLevel).toBe("yellow");
     });
 
     it("returns rating 2 when achieved between R3 and R2", () => {
       const result = calculateRating(99.7, 100, thresholds, "Higher is Better", 10, "numeric", null, "%");
       expect(result.rating).toBe(2);
-      expect(result.ratingLevel).toBe("yellow");
+      expect(result.ratingLevel).toBe("red");
     });
 
     it("returns rating 1 when achieved between R2 and R1", () => {

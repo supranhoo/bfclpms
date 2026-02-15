@@ -60,17 +60,21 @@ export function ScoringSimulatorPopover({ kpi }: ScoringSimulatorPopoverProps) {
   }, [testValue, kpi]);
 
   const getRatingColor = (rating: number) => {
-    if (rating >= 4) return 'bg-blue-500 text-white';
-    if (rating >= 3) return 'bg-green-500 text-white';
-    if (rating >= 2) return 'bg-yellow-500 text-white';
-    return 'bg-red-500 text-white';
+    if (rating >= 5) return 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200';
+    if (rating >= 4) return 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200';
+    if (rating >= 3) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200';
+    if (rating >= 2) return 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300';
+    if (rating >= 1) return 'bg-red-400 text-white dark:bg-red-600 dark:text-white';
+    return 'bg-red-900 text-red-100 dark:bg-red-950 dark:text-red-200';
   };
 
   const getBgColor = (rating: number) => {
-    if (rating >= 4) return 'bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800';
-    if (rating >= 3) return 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800';
-    if (rating >= 2) return 'bg-yellow-50 border-yellow-200 dark:bg-yellow-950 dark:border-yellow-800';
-    return 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800';
+    if (rating >= 5) return 'bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800';
+    if (rating >= 4) return 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800';
+    if (rating >= 3) return 'bg-yellow-50 border-yellow-200 dark:bg-yellow-950 dark:border-yellow-800';
+    if (rating >= 2) return 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800';
+    if (rating >= 1) return 'bg-red-50 border-red-300 dark:bg-red-950 dark:border-red-700';
+    return 'bg-red-100 border-red-400 dark:bg-red-950 dark:border-red-600';
   };
 
   return (

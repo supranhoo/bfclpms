@@ -77,10 +77,12 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
   if (!kpi) return null;
 
   const getRatingColor = (score: number) => {
-    if (score >= 4) return 'text-blue-600 bg-blue-100 dark:bg-blue-900 dark:text-blue-200';
-    if (score >= 3) return 'text-green-600 bg-green-100 dark:bg-green-900 dark:text-green-200';
-    if (score >= 2) return 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-200';
-    return 'text-red-600 bg-red-100 dark:bg-red-900 dark:text-red-200';
+    if (score >= 5) return 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200';
+    if (score >= 4) return 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200';
+    if (score >= 3) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200';
+    if (score >= 2) return 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300';
+    if (score >= 1) return 'bg-red-400 text-white dark:bg-red-600 dark:text-white';
+    return 'bg-red-900 text-red-100 dark:bg-red-950 dark:text-red-200';
   };
 
   return (

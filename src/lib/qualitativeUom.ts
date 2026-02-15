@@ -62,14 +62,14 @@ export const BINARY_OPTIONS: QualitativeOption[] = [
   { label: 'No', rating: 0, definition: 'No' },
 ];
 
-// Rating score labels
+// Rating score labels — aligned with canonical scale
 export const RATING_LABELS: Record<number, string> = {
   5: 'Outstanding (R5)',
-  4: 'Exceeds (R4)',
-  3: 'Meets (R3)',
-  2: 'Below (R2)',
-  1: 'Needs Improvement (R1)',
-  0: 'Unacceptable (R0)',
+  4: 'Exceeds Expectations (R4)',
+  3: 'Meets Expectations (R3)',
+  2: 'Needs Improvement (R2)',
+  1: 'Below Expectations (R1)',
+  0: 'Not Achieved (R0)',
 };
 
 // Get rating level from score for qualitative

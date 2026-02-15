@@ -73,10 +73,10 @@ export function parseThreshold(value: string | number | null | undefined, asRati
  * Convert numeric rating (0-5) to color-based rating level
  */
 export function ratingToLevel(rating: number): RatingLevel {
-  if (rating >= 4) return 'blue';    // Exceptional (4-5)
-  if (rating >= 3) return 'green';   // Meets/Exceeds (3-3.99)
-  if (rating >= 2) return 'yellow';  // Below Expectations (2-2.99)
-  return 'red';                       // Needs Improvement (0-1.99)
+  if (rating >= 5) return 'blue';    // Outstanding (5)
+  if (rating >= 4) return 'green';   // Exceeds Expectations (4-4.99)
+  if (rating >= 3) return 'yellow';  // Meets Expectations (3-3.99)
+  return 'red';                       // Below / Needs Improvement / Not Achieved (0-2.99)
 }
 
 /**
@@ -84,10 +84,10 @@ export function ratingToLevel(rating: number): RatingLevel {
  */
 export function levelToText(level: RatingLevel): string {
   switch (level) {
-    case 'blue': return 'Exceptional';
-    case 'green': return 'Meets Expectations';
-    case 'yellow': return 'Below Expectations';
-    case 'red': return 'Needs Improvement';
+    case 'blue': return 'Outstanding';
+    case 'green': return 'Exceeds Expectations';
+    case 'yellow': return 'Meets Expectations';
+    case 'red': return 'Below Expectations';
   }
 }
 

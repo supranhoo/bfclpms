@@ -54,28 +54,7 @@ interface EmployeeProfile {
   reporting_manager_id: string | null;
 }
 
-const statusColors: Record<string, string> = {
-  kra_set: 'bg-muted text-muted-foreground',
-  self_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  manager_check: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-  audit: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-};
-
-const statusLabels: Record<string, string> = {
-  kra_set: 'KRA Set',
-  self_review: 'Self Review',
-  manager_check: 'Manager Check',
-  audit: 'Audit',
-  approved: 'Approved',
-};
-
-const ratingColors: Record<string, string> = {
-  red: '#EF4444',
-  yellow: '#F59E0B',
-  green: '#10B981',
-  blue: '#3B82F6',
-};
+import { statusColors, statusLabels, ratingColors } from '@/lib/reviewConstants';
 
 export default function Dashboard() {
   const { profile, role } = useAuth();

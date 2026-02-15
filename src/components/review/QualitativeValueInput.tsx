@@ -21,6 +21,8 @@ interface QualitativeValueInputProps {
   label?: string;
 }
 
+import { getRatingLevelColor, ratingLevelToLabel } from '@/lib/reviewConstants';
+
 const ratingColors: Record<string, string> = {
   blue: 'bg-blue-500 hover:bg-blue-600',
   green: 'bg-green-500 hover:bg-green-600',

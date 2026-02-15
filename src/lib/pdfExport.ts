@@ -89,8 +89,10 @@ const COLORS = {
   successLight: [220, 252, 231] as [number, number, number], // Green-100
   warning: [234, 179, 8] as [number, number, number],       // Yellow-500
   warningLight: [254, 249, 195] as [number, number, number], // Yellow-100
-  danger: [239, 68, 68] as [number, number, number],        // Red-500
+  danger: [239, 68, 68] as [number, number, number],        // Red-500 (score 1)
   dangerLight: [254, 226, 226] as [number, number, number], // Red-100
+  dangerSoft: [254, 202, 202] as [number, number, number],  // Pink (score 2 - Needs Improvement)
+  dangerDeep: [127, 29, 29] as [number, number, number],    // Deep Maroon (score 0 - Not Achieved)
   gray: [156, 163, 175] as [number, number, number],        // Gray-400
   grayLight: [243, 244, 246] as [number, number, number],   // Gray-100
   grayMedium: [107, 114, 128] as [number, number, number],  // Gray-500
@@ -118,12 +120,14 @@ const getCategoryColor = (category: string): [number, number, number] => {
 const getRatingColor = (rating: string | number | null): [number, number, number] => {
   if (rating === null || rating === undefined) return COLORS.gray;
   
-  // Handle numeric ratings
+  // Handle numeric ratings with severity gradient
   if (typeof rating === 'number') {
-    if (rating >= 4) return COLORS.primary;
-    if (rating >= 3) return COLORS.success;
-    if (rating >= 2) return COLORS.warning;
-    return COLORS.danger;
+    if (rating >= 5) return COLORS.primary;
+    if (rating >= 4) return COLORS.success;
+    if (rating >= 3) return COLORS.warning;
+    if (rating >= 2) return COLORS.dangerSoft;  // Light pink for "Needs Improvement"
+    if (rating >= 1) return COLORS.danger;       // Bright red for "Below Expectations"
+    return COLORS.dangerDeep;                    // Deep maroon for "Not Achieved"
   }
   
   // Handle string ratings (blue, green, yellow, red)
@@ -140,9 +144,9 @@ const getRatingLightColor = (rating: string | number | null): [number, number, n
   if (rating === null || rating === undefined) return COLORS.grayLight;
   
   if (typeof rating === 'number') {
-    if (rating >= 4) return COLORS.primaryLight;
-    if (rating >= 3) return COLORS.successLight;
-    if (rating >= 2) return COLORS.warningLight;
+    if (rating >= 5) return COLORS.primaryLight;
+    if (rating >= 4) return COLORS.successLight;
+    if (rating >= 3) return COLORS.warningLight;
     return COLORS.dangerLight;
   }
   
@@ -157,10 +161,12 @@ const getRatingLightColor = (rating: string | number | null): [number, number, n
 
 const getScoreColor = (score: number | null): [number, number, number] => {
   if (score === null) return COLORS.gray;
-  if (score >= 4) return COLORS.primary;
-  if (score >= 3) return COLORS.success;
-  if (score >= 2) return COLORS.warning;
-  return COLORS.danger;
+  if (score >= 5) return COLORS.primary;
+  if (score >= 4) return COLORS.success;
+  if (score >= 3) return COLORS.warning;
+  if (score >= 2) return COLORS.dangerSoft;
+  if (score >= 1) return COLORS.danger;
+  return COLORS.dangerDeep;
 };
 
 const getRatingLabel = (score: number | null): string => {
