@@ -54,7 +54,7 @@ interface EmployeeProfile {
   reporting_manager_id: string | null;
 }
 
-import { statusColors, statusLabels, ratingColors } from '@/lib/reviewConstants';
+import { statusColors, statusLabels, getScoreBadgeClass } from '@/lib/reviewConstants';
 
 export default function Dashboard() {
   const { profile, role } = useAuth();
@@ -640,7 +640,7 @@ export default function Dashboard() {
                   submission={submissionMap.get(kpi.id)}
                   statusColors={statusColors}
                   statusLabels={statusLabels}
-                  ratingColors={ratingColors}
+                  
                   onViewLogic={setSelectedKpiLogic}
                   onViewTracker={setSelectedKpiTracker}
                   onReview={(kpi) => {
@@ -672,7 +672,7 @@ export default function Dashboard() {
               <TableBody>
                 {sortedKpis.map(kpi => {
                   const submission = submissionMap.get(kpi.id);
-                  const rating = submission?.final_rating ?? submission?.management_rating ?? submission?.auditor_rating ?? submission?.manager_rating ?? submission?.self_rating ?? null;
+                  
                   const score = submission?.final_score ?? submission?.management_score ?? submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? null;
                   
                   return (
@@ -701,12 +701,9 @@ export default function Dashboard() {
                         {submission?.achieved_value != null ? submission.achieved_value : '-'}
                       </TableCell>
                       <TableCell className="text-center">
-                        {rating ? (
-                          <Badge
-                            style={{ backgroundColor: ratingColors[rating] }}
-                            className="text-white"
-                          >
-                            {score?.toFixed(1) || rating}
+                        {score != null ? (
+                          <Badge className={getScoreBadgeClass(score)}>
+                            {score.toFixed(1)}
                           </Badge>
                         ) : '-'}
                       </TableCell>
