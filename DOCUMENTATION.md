@@ -2977,12 +2977,13 @@ The `exportKpiData()` function in `ImportData.tsx` now exports **all columns** t
 **Eligibility Criteria (computed via `eligible_login_users` SQL view):**
 - **has_kras** — Users with at least one KPI in the `kpis` table
 - **reporting_manager** — Users who are `reporting_manager_id` of employees with KPIs
-- **both** — Users matching both criteria
+- **auditor** — Users with the `auditor` role in `user_roles`
+- **both** — Users matching both has_kras and reporting_manager criteria
 
 **Database:**
 | Table/View | Purpose |
 |---|---|
-| `eligible_login_users` (view) | Auto-computes eligible users from `profiles` + `kpis` |
+| `eligible_login_users` (view) | Auto-computes eligible users from `profiles` + `kpis` + `user_roles` |
 | `password_rollout_logs` | Audit trail for every password generation event |
 
 **Edge Function:** `password-rollout`
