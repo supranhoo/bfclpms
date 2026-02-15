@@ -12,8 +12,8 @@ interface ViewModeToggleProps {
 
 const modeConfig: Record<ViewMode, { label: string; icon: React.ElementType; description: string }> = {
   self: { label: 'My Dashboard', icon: Home, description: 'View your own KPIs' },
-  team: { label: 'Team Review', icon: Users, description: 'Review team KPIs' },
-  skip_level: { label: 'Skip-Level', icon: UserCheck, description: 'Skip-level review' },
+  team: { label: 'Team Reviews', icon: Users, description: 'Review direct & indirect reports' },
+  skip_level: { label: 'Team Reviews', icon: UserCheck, description: 'Skip-level review' }, // hidden from toggle, kept for internal use
   hr_pms: { label: 'HR PMS', icon: ClipboardCheck, description: 'HR PMS team review' },
   audit: { label: 'Audit', icon: Shield, description: 'Audit performance evaluations' },
   management: { label: 'Management', icon: Briefcase, description: 'Final management review' },
@@ -23,9 +23,12 @@ export function ViewModeToggle({ currentMode, availableModes, onModeChange }: Vi
   // Only show if user has multiple modes available
   if (availableModes.length <= 1) return null;
 
+  // Filter out skip_level from visible modes (merged into team)
+  const visibleModes = availableModes.filter(m => m !== 'skip_level');
+
   return (
     <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 border">
-      {availableModes.map(mode => {
+      {visibleModes.map(mode => {
         const config = modeConfig[mode];
         const Icon = config.icon;
         const isActive = mode === currentMode;
