@@ -1,67 +1,68 @@
 
 
-# RCA: Trigger-Based Emails Failing with 401
+# RCA: Trigger Emails Still Returning 401
 
-## Root Cause Analysis
+## Root Cause (Confirmed with Logs)
 
-### What Works
-- In-app notifications are created correctly (26 notifications found today)
-- Test emails from UI work (user JWT auth, latest log at 05:42)
-- The DB trigger fires and calls `net.http_post` successfully
-- The anon key is correctly stored in `system_settings` and extracted by the trigger
+The edge function logs reveal the exact failure chain:
 
-### What Fails
-- Every `net.http_post` call from the trigger returns **HTTP 401**
-- Two error variants: "Authorization required" (before migration) and "Invalid authorization" (after migration)
-- The `net._http_response` table shows 10+ consecutive 401s with zero successes
-
-### Why It Fails
-The `validateCaller` function checks the `Authorization` Bearer token against `SUPABASE_ANON_KEY` env var. Despite the code being correct in the repo, the deployed edge function is not recognizing the anon key. Possible causes:
-
-1. **Deployment timing**: The edge function may not have been fully redeployed after the anon key check was added
-2. **Env var availability**: `SUPABASE_ANON_KEY` may be null or have a slightly different value in the edge runtime
-3. **Single validation path**: Only checking the Bearer token in `Authorization` header, not the `apikey` header that the trigger also sends
-
-## Fix
-
-Make the auth check more robust by also checking the `apikey` header (which the trigger sends), add debug logging, and force a fresh deployment.
-
-### Changes in `supabase/functions/send-email-notification/index.ts`
-
-Update `validateCaller` to:
-
-1. Also read the `apikey` header from the request
-2. Compare the `apikey` header value against both `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`
-3. Add console.log debug lines showing token length and env var availability so future 401s can be diagnosed from logs
-4. This gives the trigger TWO ways to authenticate instead of just one
-
-```text
-// Enhanced validateCaller pseudo-code
-const apiKeyHeader = req.headers.get("apikey");
-
-// Check apikey header (used by DB triggers via net.http_post)
-if (apiKeyHeader) {
-  if (anonKey && apiKeyHeader === anonKey) return authorized;
-  if (serviceRoleKey && apiKeyHeader === serviceRoleKey) return authorized;
-}
+```
+[validateCaller] SUPABASE_ANON_KEY len: 46  SERVICE_ROLE_KEY len: 41  PUBLISHABLE_KEY len: 0
+[validateCaller] apikey header present but no match. apikey length: 208
+[validateCaller] All auth checks failed. Bearer token length: 208
 ```
 
-### Force Redeploy
+The DB trigger sends the **208-character publishable JWT** as both `apikey` and `Authorization` headers. The edge function has only **short internal keys** (46 and 41 chars) in its env vars -- they will never match.
+
+The fallback code tries to read the stored 208-char key from `system_settings`, but that table has an RLS policy restricting SELECT to the `authenticated` role only. The edge function's internal client authenticates as `anon`, so the query silently returns zero rows. Auth fails.
+
+## Fix (Two Changes)
+
+### 1. Database Migration: Allow anon role to read system_settings
+
+Add an RLS policy so the edge function's internal anon-role client can read the stored key:
+
+```sql
+CREATE POLICY "Allow anon to read settings"
+  ON system_settings FOR SELECT TO anon USING (true);
+```
+
+This is safe because system_settings contains only configuration keys (score mode, working days, the public anon key), not sensitive secrets.
+
+### 2. Edge Function: Use service role key for fallback client
+
+Change the fallback `createClient` calls in `validateCaller` to prioritize `serviceRoleKey` over `anonKey`, so the client bypasses RLS automatically (belt-and-suspenders):
+
+```text
+// Line 47 and 81: change from
+createClient(supabaseUrl, anonKey || serviceRoleKey!)
+// to
+createClient(supabaseUrl, serviceRoleKey || anonKey!)
+```
+
+### 3. Force Redeploy
 
 Redeploy the edge function to ensure the latest code is live.
 
-### Documentation
+### 4. Documentation
 
-Update `DOCUMENTATION.md` to document the dual-header auth pattern for trigger calls.
+Update DOCUMENTATION.md to note the anon-read RLS requirement for system_settings.
 
 ## Files to Modify
 
 | File | Change |
 |---|---|
-| `supabase/functions/send-email-notification/index.ts` | Add `apikey` header check in `validateCaller` + debug logging |
-| `DOCUMENTATION.md` | Document dual-auth pattern |
+| Database migration | Add `anon` SELECT policy on `system_settings` |
+| `supabase/functions/send-email-notification/index.ts` | Swap key priority in fallback `createClient` calls (2 lines) |
+| `DOCUMENTATION.md` | Note the RLS requirement |
+
+## Why Test Emails Work
+
+Test emails are sent from the frontend with the **user's JWT** (a real authenticated session token). The edge function validates this via `supabase.auth.getUser(token)` which succeeds. Only trigger-originated calls (which use the publishable key, not a user JWT) fail.
 
 ## Risk Assessment
-- Very low risk: only adds an additional auth check path, does not remove existing checks
-- Debug logging helps diagnose any future auth issues
-- No database or frontend changes needed
+
+- Very low risk -- only adds a read-only RLS policy on a config table
+- No schema changes, no data changes
+- Existing test email flow is unaffected
+
