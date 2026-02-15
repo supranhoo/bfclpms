@@ -168,6 +168,10 @@ export function ManagementScorecard({
   const [reviewerMarkNa, setReviewerMarkNa] = useState(false);
   const [markNaRemarks, setMarkNaRemarks] = useState('');
   
+  // N/A override state
+  const [naOverridden, setNaOverridden] = useState(false);
+  const [overrideNaRemarks, setOverrideNaRemarks] = useState('');
+  
   const { saveOverrides, acceptPreviousLevel, isLoading: isSavingOverrides } = useReviewerSubPeriodOverride();
 
   const submissionMap = useMemo(() => new Map(submissions?.map(s => [s.kpi_id, s])), [submissions]);
@@ -391,6 +395,8 @@ export function ManagementScorecard({
     setNaRemarks('');
     setReviewerMarkNa(false);
     setMarkNaRemarks('');
+    setNaOverridden(false);
+    setOverrideNaRemarks('');
     setReviewSheetOpen(true);
   };
 
@@ -400,38 +406,35 @@ export function ManagementScorecard({
     const submission = submissionMap.get(selectedKpi.id);
     const isNaKpi = submission?.is_na || false;
     
-    // For N/A KPIs, handle confirmation and logging
+    // For N/A KPIs — override or confirm
     if (isNaKpi) {
+      if (naOverridden) {
+        if (!overrideNaRemarks.trim()) return;
+        if (managementScore === null) return;
+        const rating = scoreToRating(managementScore);
+        const { error: submissionError } = await supabase.from('review_submissions').update({
+          is_na: false, na_marked_by_role: null,
+          management_rating: rating, management_score: managementScore, management_remarks: overrideNaRemarks,
+          management_evidence_url: managementEvidenceUrls.length > 0 ? managementEvidenceUrls[0] : null,
+          final_rating: rating, final_score: managementScore,
+        }).eq('kpi_id', selectedKpi.id);
+        if (submissionError) { toast({ title: 'Failed to override N/A', description: submissionError.message, variant: 'destructive' }); return; }
+        const newStatus = approve ? 'approved' : 'management_review';
+        const { error: kpiError } = await supabase.from('kpis').update({ status: newStatus as any }).eq('id', selectedKpi.id);
+        if (kpiError) { toast({ title: 'Failed to update status', description: kpiError.message, variant: 'destructive' }); return; }
+        if (user?.id) { await supabase.from('kpi_audit_logs').insert({ kpi_id: selectedKpi.id, action: 'MANAGEMENT_NA_OVERRIDDEN', performed_by: user.id, new_value: { override_remarks: overrideNaRemarks, score: managementScore }, metadata: { overridden_at: new Date().toISOString() } }); }
+        queryClient.invalidateQueries({ queryKey: ['kpis'] }); queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+        toast({ title: 'N/A overridden — KPI scored and approved' }); setReviewSheetOpen(false); return;
+      }
       if (!naConfirmed) return;
-      
-      // Log N/A confirmation
       if (user?.id) {
-        await supabase.from('kpi_audit_logs').insert({
-          kpi_id: selectedKpi.id,
-          action: 'MANAGEMENT_NA_CONFIRMED',
-          performed_by: user.id,
-          new_value: { na_remarks: naRemarks },
-          metadata: { confirmed_at: new Date().toISOString() },
-        });
+        await supabase.from('kpi_audit_logs').insert({ kpi_id: selectedKpi.id, action: 'MANAGEMENT_NA_CONFIRMED', performed_by: user.id, new_value: { na_remarks: naRemarks }, metadata: { confirmed_at: new Date().toISOString() } });
       }
-      
-      // Advance status to approved if approve is true
       const newStatus = approve ? 'approved' : 'management_review';
-      const { error: kpiError } = await supabase
-        .from('kpis')
-        .update({ status: newStatus as any })
-        .eq('id', selectedKpi.id);
-      
-      if (kpiError) {
-        toast({ title: 'Failed to process N/A KPI', description: kpiError.message, variant: 'destructive' });
-        return;
-      }
-      
-      queryClient.invalidateQueries({ queryKey: ['kpis'] });
-      queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
-      toast({ title: approve ? 'N/A KPI approved' : 'N/A KPI confirmed' });
-      setReviewSheetOpen(false);
-      return;
+      const { error: kpiError } = await supabase.from('kpis').update({ status: newStatus as any }).eq('id', selectedKpi.id);
+      if (kpiError) { toast({ title: 'Failed to process N/A KPI', description: kpiError.message, variant: 'destructive' }); return; }
+      queryClient.invalidateQueries({ queryKey: ['kpis'] }); queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      toast({ title: approve ? 'N/A KPI approved' : 'N/A KPI confirmed' }); setReviewSheetOpen(false); return;
     }
     
     // Reviewer-initiated N/A flow
@@ -805,6 +808,10 @@ export function ManagementScorecard({
                 onRemarksChange={setNaRemarks}
                 reviewerLevel="Management"
                 naMarkedByRole={(submissionMap.get(selectedKpi.id) as any)?.na_marked_by_role || null}
+                naOverridden={naOverridden}
+                onOverrideNa={setNaOverridden}
+                overrideRemarks={overrideNaRemarks}
+                onOverrideRemarksChange={setOverrideNaRemarks}
               />
             )}
             {/* Reviewer-initiated Mark as N/A */}
@@ -825,7 +832,7 @@ export function ManagementScorecard({
             )}
             
             {/* Daily Submission Summary with Override - for Daily Binary KPIs */}
-            {selectedKpi && !reviewerMarkNa && (
+            {selectedKpi && !reviewerMarkNa && (!submissionMap.get(selectedKpi.id)?.is_na || naOverridden) && (
               <DailySubmissionWithOverrideWrapper 
                 kpi={selectedKpi} 
                 selectedPeriod={selectedPeriod} 
@@ -845,7 +852,7 @@ export function ManagementScorecard({
             )}
 
             {/* Management Assessment - Only show for non-daily-binary or when agrees, and not when reviewer marked N/A */}
-            {selectedKpi && !reviewerMarkNa && !(selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary') && (
+            {selectedKpi && !reviewerMarkNa && (!submissionMap.get(selectedKpi.id)?.is_na || naOverridden) && !(selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary') && (
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm flex items-center gap-2">
@@ -889,7 +896,7 @@ export function ManagementScorecard({
             )}
             
             {/* Remarks for Daily Binary - shown separately */}
-            {selectedKpi && !reviewerMarkNa && selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary' && managementAgrees !== null && (
+            {selectedKpi && !reviewerMarkNa && (!submissionMap.get(selectedKpi.id)?.is_na || naOverridden) && selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary' && managementAgrees !== null && (
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm flex items-center gap-2">
@@ -946,33 +953,22 @@ export function ManagementScorecard({
             <Button variant="outline" className="w-full sm:w-auto" onClick={() => setReviewSheetOpen(false)}>
               Cancel
             </Button>
-            {!submissionMap.get(selectedKpi?.id || '')?.is_na && !reviewerMarkNa && (
-              <Button
-                variant="secondary"
-                className="w-full sm:w-auto"
-                onClick={() => handleSubmitReview(false)}
-                disabled={managementScore === null || submitManagementReview.isPending}
-              >
-                Save Draft
-              </Button>
+            {(!submissionMap.get(selectedKpi?.id || '')?.is_na || naOverridden) && !reviewerMarkNa && (
+              <Button variant="secondary" className="w-full sm:w-auto" onClick={() => handleSubmitReview(false)} disabled={managementScore === null || submitManagementReview.isPending}>Save Draft</Button>
             )}
-            <Button
-              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700"
-              onClick={() => handleSubmitReview(true)}
+            <Button className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700" onClick={() => handleSubmitReview(true)}
               disabled={
-                reviewerMarkNa
-                  ? !markNaRemarks.trim()
-                  : submissionMap.get(selectedKpi?.id || '')?.is_na 
-                    ? !naConfirmed 
-                    : (managementScore === null || submitManagementReview.isPending)
+                reviewerMarkNa ? !markNaRemarks.trim() :
+                (submissionMap.get(selectedKpi?.id || '')?.is_na && naOverridden) ? (!overrideNaRemarks.trim() || managementScore === null) :
+                submissionMap.get(selectedKpi?.id || '')?.is_na ? !naConfirmed :
+                (managementScore === null || submitManagementReview.isPending)
               }
             >
               <Check className="h-4 w-4 mr-2" />
-              {reviewerMarkNa 
-                ? 'Mark N/A & Approve'
-                : submissionMap.get(selectedKpi?.id || '')?.is_na 
-                  ? 'Confirm N/A & Approve' 
-                  : 'Approve'}
+              {reviewerMarkNa ? 'Mark N/A & Approve'
+                : (submissionMap.get(selectedKpi?.id || '')?.is_na && naOverridden) ? 'Override N/A & Approve'
+                : submissionMap.get(selectedKpi?.id || '')?.is_na ? 'Confirm N/A & Approve'
+                : 'Approve'}
             </Button>
           </SheetFooter>
         </SheetContent>

@@ -169,6 +169,10 @@ export function EmployeeScorecard({
   // Reviewer-initiated N/A state
   const [reviewerMarkNa, setReviewerMarkNa] = useState(false);
   const [markNaRemarks, setMarkNaRemarks] = useState('');
+  
+  // N/A override state
+  const [naOverridden, setNaOverridden] = useState(false);
+  const [overrideNaRemarks, setOverrideNaRemarks] = useState('');
 
   const approveKpi = useApproveKpi();
   const raiseQuery = useRaiseQuery();
@@ -305,6 +309,8 @@ export function EmployeeScorecard({
     setNaRemarks('');
     setReviewerMarkNa(false);
     setMarkNaRemarks('');
+    setNaOverridden(false);
+    setOverrideNaRemarks('');
     setReviewSheetOpen(true);
   };
 
@@ -371,8 +377,59 @@ export function EmployeeScorecard({
       return;
     }
     
-    // For existing N/A KPIs, handle confirmation and logging
+    // For existing N/A KPIs — override or confirm
     if (isNaKpi) {
+      // N/A Override: manager decides KPI IS applicable
+      if (naOverridden) {
+        if (!overrideNaRemarks.trim()) return;
+        if (managerScore === null) return;
+        
+        const rating = scoreToRating(managerScore);
+        const { error: submissionError } = await supabase
+          .from('review_submissions')
+          .update({
+            is_na: false,
+            na_marked_by_role: null,
+            manager_rating: rating,
+            manager_score: managerScore,
+            manager_remarks: overrideNaRemarks,
+            manager_evidence_url: managerEvidenceUrls.length > 0 ? managerEvidenceUrls[0] : null,
+          })
+          .eq('kpi_id', selectedKpi.id);
+        
+        if (submissionError) {
+          toast({ title: 'Failed to override N/A', description: submissionError.message, variant: 'destructive' });
+          return;
+        }
+        
+        const { error: kpiError } = await supabase
+          .from('kpis')
+          .update({ status: managerForwardStatus as any })
+          .eq('id', selectedKpi.id);
+        
+        if (kpiError) {
+          toast({ title: 'Failed to update status', description: kpiError.message, variant: 'destructive' });
+          return;
+        }
+        
+        if (user?.id) {
+          await supabase.from('kpi_audit_logs').insert({
+            kpi_id: selectedKpi.id,
+            action: 'MANAGER_NA_OVERRIDDEN',
+            performed_by: user.id,
+            new_value: { override_remarks: overrideNaRemarks, score: managerScore },
+            metadata: { overridden_at: new Date().toISOString() },
+          });
+        }
+        
+        queryClient.invalidateQueries({ queryKey: ['kpis'] });
+        queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+        toast({ title: 'N/A overridden — KPI scored and approved' });
+        setReviewSheetOpen(false);
+        return;
+      }
+      
+      // N/A Confirmation (original)
       if (!naConfirmed) return;
       
       if (user?.id) {
@@ -727,7 +784,7 @@ export function EmployeeScorecard({
                 workflowStages={effectiveStages}
               />
               
-              {/* N/A Confirmation Card - Show when KPI is marked as N/A */}
+              {/* N/A Confirmation Card - Show when KPI is marked as N/A (with override option) */}
               {submissionMap.get(selectedKpi.id)?.is_na && selectedKpi.status === 'self_review' && (
                 <NaConfirmationCard
                   selfRemarks={(() => {
@@ -747,6 +804,10 @@ export function EmployeeScorecard({
                   onRemarksChange={setNaRemarks}
                   reviewerLevel="Manager"
                   naMarkedByRole={(submissionMap.get(selectedKpi.id) as any)?.na_marked_by_role || null}
+                  naOverridden={naOverridden}
+                  onOverrideNa={setNaOverridden}
+                  overrideRemarks={overrideNaRemarks}
+                  onOverrideRemarksChange={setOverrideNaRemarks}
                 />
               )}
               
@@ -767,7 +828,7 @@ export function EmployeeScorecard({
                 />
               )}
               {/* Daily Submission Summary + Manager Override - hidden when reviewer marks N/A */}
-              {!reviewerMarkNa && (
+              {!reviewerMarkNa && (!submissionMap.get(selectedKpi.id)?.is_na || naOverridden) && (
                 <DailySubmissionSummaryWithOverride 
                   kpi={selectedKpi} 
                   selectedPeriod={selectedPeriod} 
@@ -786,7 +847,7 @@ export function EmployeeScorecard({
               )}
 
               {/* Score Input - hidden when reviewer marks N/A */}
-              {!reviewerMarkNa && selectedKpi.status === 'self_review' && !(selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary') && (
+              {!reviewerMarkNa && (!submissionMap.get(selectedKpi.id)?.is_na || naOverridden) && selectedKpi.status === 'self_review' && !(selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary') && (
                 <>
                   <AchievedValueScoreInput
                     kpi={selectedKpi}
@@ -825,7 +886,7 @@ export function EmployeeScorecard({
               )}
               
               {/* Remarks for Daily Binary (shown separately after agreement toggle) */}
-              {!reviewerMarkNa && selectedKpi.status === 'self_review' && selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary' && managerAgrees !== null && (
+              {!reviewerMarkNa && (!submissionMap.get(selectedKpi.id)?.is_na || naOverridden) && selectedKpi.status === 'self_review' && selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary' && managerAgrees !== null && (
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Manager Remarks</Label>
@@ -886,7 +947,7 @@ export function EmployeeScorecard({
                   </Button>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                  {!submissionMap.get(selectedKpi?.id || '')?.is_na && !reviewerMarkNa && (
+                  {(!submissionMap.get(selectedKpi?.id || '')?.is_na || naOverridden) && !reviewerMarkNa && (
                     <Button
                       variant="secondary"
                       className="w-full sm:w-auto"
@@ -902,6 +963,7 @@ export function EmployeeScorecard({
                     onClick={handleApprove}
                     disabled={
                       reviewerMarkNa ? !markNaRemarks.trim() :
+                      (submissionMap.get(selectedKpi?.id || '')?.is_na && naOverridden) ? (!overrideNaRemarks.trim() || managerScore === null) :
                       submissionMap.get(selectedKpi?.id || '')?.is_na ? !naConfirmed :
                       (managerScore === null || 
                        approveKpi.isPending || 
@@ -913,9 +975,11 @@ export function EmployeeScorecard({
                     <Check className="h-4 w-4 mr-2" />
                     {reviewerMarkNa 
                       ? 'Mark N/A & Approve'
-                      : submissionMap.get(selectedKpi?.id || '')?.is_na 
-                        ? 'Confirm N/A' 
-                        : isSavingOverrides ? 'Saving...' : approveKpi.isPending ? 'Approving...' : 'Approve'}
+                      : (submissionMap.get(selectedKpi?.id || '')?.is_na && naOverridden)
+                        ? 'Override N/A & Approve'
+                        : submissionMap.get(selectedKpi?.id || '')?.is_na 
+                          ? 'Confirm N/A' 
+                          : isSavingOverrides ? 'Saving...' : approveKpi.isPending ? 'Approving...' : 'Approve'}
                   </Button>
                 </div>
               </>
