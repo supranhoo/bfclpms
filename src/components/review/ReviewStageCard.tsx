@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { RatingLevel } from '@/hooks/useKpis';
-import { ratingOptions } from '@/lib/reviewConstants';
+import { getRatingLevelColor, ratingLevelToLabel } from '@/lib/reviewConstants';
 
 export type StageStatus = 'completed' | 'current' | 'pending';
 
@@ -39,11 +39,13 @@ const borderColorClasses = {
 };
 
 function getRatingLabel(rating: RatingLevel | null | undefined): string {
-  return ratingOptions.find(r => r.value === rating)?.label || 'N/A';
+  if (!rating) return 'N/A';
+  return ratingLevelToLabel(rating);
 }
 
 function getRatingColor(rating: RatingLevel | null | undefined): string {
-  return ratingOptions.find(r => r.value === rating)?.color || '#6B7280';
+  if (!rating) return '#6B7280';
+  return getRatingLevelColor(rating);
 }
 
 export function ReviewStageCard({

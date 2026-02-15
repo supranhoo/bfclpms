@@ -1,13 +1,10 @@
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { RatingLevel } from '@/hooks/useKpis';
+import { ratingOptions as canonicalRatingOptions } from '@/lib/reviewConstants';
 
-const ratingOptions: { value: RatingLevel; label: string; color: string; score: number }[] = [
-  { value: 'blue', label: 'Outstanding', color: '#3B82F6', score: 5 },
-  { value: 'green', label: 'Exceeds', color: '#10B981', score: 4 },
-  { value: 'yellow', label: 'Meets', color: '#F59E0B', score: 3 },
-  { value: 'red', label: 'Below', color: '#EF4444', score: 2 },
-];
+// Use only scores 2-5 for the selector buttons (the original 4-button UI)
+const selectorOptions = canonicalRatingOptions.filter(o => o.score >= 2);
 
 interface RatingSelectorProps {
   value: RatingLevel | '';
@@ -21,9 +18,9 @@ export function RatingSelector({ value, onChange, label = 'Rating', disabled = f
     <div className="space-y-2">
       <Label>{label}</Label>
       <div className="grid grid-cols-4 gap-2">
-        {ratingOptions.map(opt => (
+        {selectorOptions.map(opt => (
           <Button
-            key={opt.value}
+            key={opt.score}
             type="button"
             variant={value === opt.value ? 'default' : 'outline'}
             className="h-auto py-3 flex flex-col gap-1"
@@ -45,7 +42,7 @@ export function RatingSelector({ value, onChange, label = 'Rating', disabled = f
 }
 
 export function getRatingScore(rating: RatingLevel): number {
-  return ratingOptions.find(r => r.value === rating)?.score || 0;
+  return canonicalRatingOptions.find(r => r.value === rating)?.score || 0;
 }
 
-export { ratingOptions };
+export { canonicalRatingOptions as ratingOptions };

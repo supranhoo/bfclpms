@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { User, Briefcase, Shield, FileText, ExternalLink, MessageSquare } from 'lucide-react';
 import { ReviewSubmission } from '@/hooks/useKpis';
+import { getScoreBadgeClass, getScoreLabel } from '@/lib/reviewConstants';
 
 interface PreviousLevelRemarksProps {
   submission: ReviewSubmission | null | undefined;
@@ -10,26 +11,7 @@ interface PreviousLevelRemarksProps {
   showAuditor?: boolean;
 }
 
-const scoreToLabel = (score: number | null | undefined): string => {
-  if (score === null || score === undefined) return 'Not Set';
-  switch (score) {
-    case 5: return 'Outstanding';
-    case 4: return 'Exceeds Expectations';
-    case 3: return 'Meets Expectations';
-    case 2: return 'Below Expectations';
-    case 1: return 'Needs Improvement';
-    case 0: return 'Not Achieved';
-    default: return `${score}`;
-  }
-};
-
-const getScoreBadgeClass = (score: number | null | undefined): string => {
-  if (score === null || score === undefined) return 'bg-muted text-muted-foreground';
-  if (score >= 4) return 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200';
-  if (score >= 3) return 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200';
-  if (score >= 2) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200';
-  return 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200';
-};
+const scoreToLabel = (score: number | null | undefined): string => getScoreLabel(score);
 
 interface RemarkItemProps {
   icon: typeof User;

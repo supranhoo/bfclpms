@@ -3,19 +3,16 @@ import { Button } from '@/components/ui/button';
 import { User, Shield, Briefcase, FileText, ExternalLink, AlertCircle } from 'lucide-react';
 import { RatingLevel, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
 
-const ratingOptions: { value: RatingLevel; label: string; color: string; score: number }[] = [
-  { value: 'blue', label: 'Outstanding', color: '#3B82F6', score: 5 },
-  { value: 'green', label: 'Exceeds', color: '#10B981', score: 4 },
-  { value: 'yellow', label: 'Meets', color: '#F59E0B', score: 3 },
-  { value: 'red', label: 'Below', color: '#EF4444', score: 2 },
-];
+import { getRatingLevelColor, ratingLevelToLabel } from '@/lib/reviewConstants';
 
 const getRatingLabel = (rating: RatingLevel | null | undefined) => {
-  return ratingOptions.find(r => r.value === rating)?.label || 'N/A';
+  if (!rating) return 'N/A';
+  return ratingLevelToLabel(rating);
 };
 
 const getRatingColor = (rating: RatingLevel | null | undefined) => {
-  return ratingOptions.find(r => r.value === rating)?.color || '#6B7280';
+  if (!rating) return '#6B7280';
+  return getRatingLevelColor(rating);
 };
 
 interface ReviewTrailCardCompactProps {

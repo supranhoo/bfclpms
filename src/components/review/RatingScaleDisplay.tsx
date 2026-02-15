@@ -47,11 +47,11 @@ function getCalculationLogic(kpi: KPI, rating: string, threshold: string): strin
   const isAbsoluteMode = target === 0 || target === null;
   
   const ratingLabels: Record<string, { score: number; level: string }> = {
-    R5: { score: 5, level: 'Exceptional (Blue)' },
+    R5: { score: 5, level: 'Outstanding (Blue)' },
     R4: { score: 4, level: 'Exceeds Expectations (Green)' },
     R3: { score: 3, level: 'Meets Expectations (Yellow)' },
-    R2: { score: 2, level: 'Below Expectations (Orange)' },
-    R1: { score: 1, level: 'Needs Improvement (Red)' },
+    R2: { score: 2, level: 'Needs Improvement (Pink)' },
+    R1: { score: 1, level: 'Below Expectations (Red)' },
   };
 
   const { score, level } = ratingLabels[rating] || { score: 0, level: 'Unknown' };

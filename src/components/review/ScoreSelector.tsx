@@ -1,12 +1,13 @@
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { RatingLevel } from '@/hooks/useKpis';
+import { RATING_SCALE, scoreToRatingLevel } from '@/lib/reviewConstants';
 
 const scoreOptions: { score: number; label: string; color: string; level: RatingLevel }[] = [
-  { score: 5, label: 'Outstanding', color: '#3B82F6', level: 'blue' },
-  { score: 4, label: 'Exceeds', color: '#10B981', level: 'green' },
-  { score: 3, label: 'Meets', color: '#F59E0B', level: 'yellow' },
-  { score: 2, label: 'Below', color: '#EF4444', level: 'red' },
+  { score: 5, label: RATING_SCALE[5].shortLabel, color: RATING_SCALE[5].dotColor, level: 'blue' },
+  { score: 4, label: RATING_SCALE[4].shortLabel, color: RATING_SCALE[4].dotColor, level: 'green' },
+  { score: 3, label: RATING_SCALE[3].shortLabel, color: RATING_SCALE[3].dotColor, level: 'yellow' },
+  { score: 2, label: RATING_SCALE[2].shortLabel, color: RATING_SCALE[2].dotColor, level: 'red' },
 ];
 
 interface ScoreSelectorProps {
@@ -45,10 +46,7 @@ export function ScoreSelector({ value, onChange, label = 'Score', disabled = fal
 }
 
 export function scoreToRating(score: number): RatingLevel {
-  if (score >= 5) return 'blue';
-  if (score >= 4) return 'green';
-  if (score >= 3) return 'yellow';
-  return 'red';
+  return scoreToRatingLevel(score);
 }
 
 export function ratingToScore(rating: RatingLevel): number {

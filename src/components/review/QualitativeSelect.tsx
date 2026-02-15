@@ -12,6 +12,8 @@ interface QualitativeSelectProps {
   className?: string;
 }
 
+import { ratingColors as _rc } from '@/lib/reviewConstants';
+
 const ratingColors: Record<string, string> = {
   blue: 'bg-blue-500',
   green: 'bg-green-500',

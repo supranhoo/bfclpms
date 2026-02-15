@@ -35,26 +35,8 @@ interface DayEntry {
   isMissing: boolean;
 }
 
-// Score to rating label mapping
-const getScoreLabel = (score: number): string => {
-  switch (score) {
-    case 5: return 'Outstanding';
-    case 4: return 'Exceeds Expectations';
-    case 3: return 'Meets Expectations';
-    case 2: return 'Below Expectations';
-    case 1: return 'Needs Improvement';
-    case 0: return 'Not Achieved';
-    default: return 'Unknown';
-  }
-};
-
-// Score badge color
-const getScoreBadgeClass = (score: number): string => {
-  if (score >= 4) return 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200';
-  if (score >= 3) return 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200';
-  if (score >= 2) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200';
-  return 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200';
-};
+// Centralized rating utilities
+import { getScoreLabel, getScoreBadgeClass } from '@/lib/reviewConstants';
 
 export function ManagerDailyOverrideEditor({
   kpiId,

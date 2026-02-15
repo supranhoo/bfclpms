@@ -39,19 +39,8 @@ interface AchievedValueScoreInputProps {
   reviewYear?: number;
 }
 
-const ratingColors: Record<RatingLevel, string> = {
-  blue: 'bg-blue-500',
-  green: 'bg-green-500',
-  yellow: 'bg-yellow-500',
-  red: 'bg-red-500',
-};
-
-const ratingLabels: Record<RatingLevel, string> = {
-  blue: 'Outstanding',
-  green: 'Exceeds',
-  yellow: 'Meets',
-  red: 'Below',
-};
+// Rating display uses centralized getScoreBadgeClass/getScoreLabel from reviewConstants
+import { getScoreBadgeClass as _getScoreBadgeClass, getScoreLabel as _getScoreLabel } from '@/lib/reviewConstants';
 
 export function AchievedValueScoreInput({
   kpi,
@@ -158,8 +147,8 @@ export function AchievedValueScoreInput({
                 <span className="text-sm font-medium">Calculated Score</span>
               </div>
               <div className="flex items-center gap-2">
-                <Badge className={`${ratingColors[dateResult.ratingLevel]} text-white`}>
-                  {dateResult.rating} - {ratingLabels[dateResult.ratingLevel]}
+                <Badge className={_getScoreBadgeClass(dateResult.rating)}>
+                  {dateResult.rating} - {_getScoreLabel(dateResult.rating)}
                 </Badge>
               </div>
             </div>
@@ -265,8 +254,8 @@ export function AchievedValueScoreInput({
                 <span className="text-sm font-medium">Calculated Score</span>
               </div>
               <div className="flex items-center gap-2">
-                <Badge className={`${ratingColors[calculatedResult.ratingLevel]} text-white`}>
-                  {calculatedResult.rating} - {ratingLabels[calculatedResult.ratingLevel]}
+                <Badge className={_getScoreBadgeClass(calculatedResult.rating)}>
+                  {calculatedResult.rating} - {_getScoreLabel(calculatedResult.rating)}
                 </Badge>
               </div>
             </div>
@@ -313,8 +302,8 @@ export function AchievedValueScoreInput({
                 <Calculator className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium">Suggested Score</span>
               </div>
-              <Badge className={`${ratingColors[calculatedResult.ratingLevel]} text-white`}>
-                {calculatedResult.rating} - {ratingLabels[calculatedResult.ratingLevel]}
+              <Badge className={_getScoreBadgeClass(calculatedResult.rating)}>
+                {calculatedResult.rating} - {_getScoreLabel(calculatedResult.rating)}
               </Badge>
             </div>
             {kpi.uom !== '%' && kpi.uom?.toLowerCase() !== 'percentage' && (
