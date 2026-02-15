@@ -733,12 +733,35 @@ From Address: ${smtp_from_address}`, { logoUrl: smtpTestLogoUrl, footerText: '' 
           testHtml
         );
 
+        await logEmail({
+          event_type: 'test',
+          recipient_email,
+          recipient_name: 'Test',
+          subject: '[PMS] SMTP Test - Configuration Successful',
+          status: 'sent',
+          provider: 'smtp',
+          error_message: null,
+          metadata: { test: true, smtp_test: true, smtp_host },
+        });
+
         return new Response(JSON.stringify({ success: true, message: "SMTP test email sent successfully" }), {
           status: 200,
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
       } catch (smtpError: any) {
         console.error("SMTP test failed:", smtpError);
+
+        await logEmail({
+          event_type: 'test',
+          recipient_email,
+          recipient_name: 'Test',
+          subject: '[PMS] SMTP Test - Configuration Successful',
+          status: 'failed',
+          provider: 'smtp',
+          error_message: smtpError.message || 'SMTP connection failed',
+          metadata: { test: true, smtp_test: true, smtp_host },
+        });
+
         return new Response(JSON.stringify({ success: false, error: smtpError.message || "SMTP connection failed" }), {
           status: 400,
           headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -822,45 +845,52 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
           });
         }
 
-        await sendViaSmtp(
-          parseValue(settingsMap.smtp_host),
-          parseInt(parseValue(settingsMap.smtp_port)) || 587,
-          (parseValue(settingsMap.smtp_security) || 'tls') as 'tls' | 'starttls' | 'none',
-          parseValue(settingsMap.smtp_username),
-          smtpPassword,
-          senderEmail,
-          senderName,
-          recipient_email,
-          "[PMS] Test Email - Configuration Successful",
-          testHtml
-        );
-
-        return new Response(JSON.stringify({ success: true, message: "Test email sent via SMTP" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        try {
+          await sendViaSmtp(
+            parseValue(settingsMap.smtp_host),
+            parseInt(parseValue(settingsMap.smtp_port)) || 587,
+            (parseValue(settingsMap.smtp_security) || 'tls') as 'tls' | 'starttls' | 'none',
+            parseValue(settingsMap.smtp_username),
+            smtpPassword,
+            senderEmail,
+            senderName,
+            recipient_email,
+            "[PMS] Test Email - Configuration Successful",
+            testHtml
+          );
+          await logEmail({ event_type: 'test', recipient_email, recipient_name: 'Test', subject: '[PMS] Test Email - Configuration Successful', status: 'sent', provider: 'smtp', error_message: null, metadata: { test: true } });
+          return new Response(JSON.stringify({ success: true, message: "Test email sent via SMTP" }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
+        } catch (err: any) {
+          await logEmail({ event_type: 'test', recipient_email, recipient_name: 'Test', subject: '[PMS] Test Email - Configuration Successful', status: 'failed', provider: 'smtp', error_message: err.message, metadata: { test: true } });
+          throw err;
+        }
       } else if (provider === 'microsoft_graph') {
-        await sendViaMicrosoftGraph(
-          supabase,
-          parseValue(settingsMap.graph_tenant_id),
-          parseValue(settingsMap.graph_client_id),
-          senderEmail,
-          senderName,
-          recipient_email,
-          "[PMS] Test Email - Configuration Successful",
-          testHtml
-        );
-
-        return new Response(JSON.stringify({ success: true, message: "Test email sent via Microsoft Graph" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        try {
+          await sendViaMicrosoftGraph(
+            supabase,
+            parseValue(settingsMap.graph_tenant_id),
+            parseValue(settingsMap.graph_client_id),
+            senderEmail,
+            senderName,
+            recipient_email,
+            "[PMS] Test Email - Configuration Successful",
+            testHtml
+          );
+          await logEmail({ event_type: 'test', recipient_email, recipient_name: 'Test', subject: '[PMS] Test Email - Configuration Successful', status: 'sent', provider: 'microsoft_graph', error_message: null, metadata: { test: true } });
+          return new Response(JSON.stringify({ success: true, message: "Test email sent via Microsoft Graph" }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
+        } catch (err: any) {
+          await logEmail({ event_type: 'test', recipient_email, recipient_name: 'Test', subject: '[PMS] Test Email - Configuration Successful', status: 'failed', provider: 'microsoft_graph', error_message: err.message, metadata: { test: true } });
+          throw err;
+        }
       } else {
-        const emailResponse = await sendViaResend(senderEmail, senderName, recipient_email, "[PMS] Test Email - Configuration Successful", testHtml);
-        return new Response(JSON.stringify({ success: true, data: emailResponse }), {
-          status: 200,
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        try {
+          const emailResponse = await sendViaResend(senderEmail, senderName, recipient_email, "[PMS] Test Email - Configuration Successful", testHtml);
+          await logEmail({ event_type: 'test', recipient_email, recipient_name: 'Test', subject: '[PMS] Test Email - Configuration Successful', status: 'sent', provider: 'resend', error_message: null, metadata: { test: true } });
+          return new Response(JSON.stringify({ success: true, data: emailResponse }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
+        } catch (err: any) {
+          await logEmail({ event_type: 'test', recipient_email, recipient_name: 'Test', subject: '[PMS] Test Email - Configuration Successful', status: 'failed', provider: 'resend', error_message: err.message, metadata: { test: true } });
+          throw err;
+        }
       }
     }
 
