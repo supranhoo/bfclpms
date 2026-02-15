@@ -93,8 +93,8 @@ const validateCaller = async (req: Request): Promise<{ authorized: boolean; erro
         return { authorized: true };
       }
     }
-  } catch {
-    // fall through
+  } catch (e) {
+    console.error("[validateCaller] Failed to read stored key for Bearer match:", e);
   }
 
   // Allow authenticated user callers (admin test emails from frontend)
@@ -106,8 +106,8 @@ const validateCaller = async (req: Request): Promise<{ authorized: boolean; erro
       console.log("[validateCaller] Authorized via user JWT for:", user.email);
       return { authorized: true };
     }
-  } catch {
-    // fall through
+  } catch (e) {
+    console.error("[validateCaller] Failed to verify user JWT:", e);
   }
 
   console.log("[validateCaller] All auth checks failed. Bearer token length:", token.length);
