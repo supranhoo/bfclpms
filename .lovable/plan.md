@@ -1,69 +1,91 @@
 
 
-# Merge Team Review + Skip-Level Review into "Team Reviews"
+# Admin Role Switch -- "View as My Role"
 
-## Workflow Impact Assessment
+## Overview
 
-**No workflow logic is impacted.** The merge is purely a UI-level change -- combining two toggle buttons into one and showing both employee lists together. Here is why:
+Add a toggle in the sidebar footer that allows admin users to switch between their **Admin view** (full access) and their **natural hierarchical role** (Manager or Employee, based on org structure). This is a UI-level lens change -- the database role stays `admin`, preserving all RLS permissions.
 
-- The **score fields** remain separate: Team Review writes to `manager_score`, Skip-Level writes to `skip_level_score`. This does not change.
-- The **status transitions** remain the same: Team reviews KPIs at `self_review` status; Skip-Level reviews KPIs at `manager_check` status. The workflow engine (`workflowEngine.ts`) is untouched.
-- The **UnifiedScorecard** already determines which score field and action to use based on the `viewLevel` prop (`manager` vs `skip_level`). This stays the same -- only the routing into it changes.
-- **RLS policies** and **database schema** are completely unaffected.
+## How It Works
 
-## What Changes (UI Only)
+1. Admin sees a small switch in the sidebar footer: **"Admin View"** (on by default)
+2. Turning it **off** makes the app behave as if they are a Manager or Employee:
+   - Sidebar hides admin-only sections (Administration, Audit, Management, HR PMS)
+   - Dashboard only shows modes relevant to their natural role
+   - ProtectedRoute blocks admin-only pages
+   - They experience the exact same UI a manager/employee would see
+3. Turning it **on** restores full admin capabilities
+4. Preference is saved in localStorage so it survives page refresh
 
-### 1. ViewModeToggle -- Remove `skip_level`, rename `team` to "Team Reviews"
+## Natural Role Detection
 
-Replace two buttons ("Team Review" + "Skip-Level") with a single "Team Reviews" button. The `skip_level` ViewMode value is removed from the toggle but kept internally for scorecard routing.
+The system determines the admin's "natural" role by checking if they have direct reports:
 
-### 2. EmployeeSelectorGrid -- Merge employee lists with relationship tags
+- Query `profiles` where `reporting_manager_id = currentUserId`
+- If any direct reports exist --> natural role = `manager`
+- If no direct reports --> natural role = `employee`
 
-When `viewLevel === 'team'`:
-- Fetch **both** direct reports (existing `useTeamMembers`) and indirect reports (`useSkipLevelTeamMembers`)
-- Deduplicate by employee ID (a direct report is never also a skip-level report)
-- Tag each employee card with a **"Direct"** or **"Indirect"** badge so the manager knows the relationship
-- Combine stat cards: show Direct Pending, Skip-Level Pending, and Reviewed counts
-- Status filter options updated: "Pending (Direct)", "Pending (Skip-Level)", "Reviewed"
+This query runs once on login and is cached.
 
-### 3. Dashboard -- Route to correct scorecard viewLevel
+## Impact on Existing Flows
 
-When a manager clicks an employee tagged as "Indirect", the `UnifiedScorecard` receives `viewLevel="skip_level"` instead of `"manager"`. This ensures the correct score field (`skip_level_score`) and workflow status checks are used -- **preserving all existing workflow behavior**.
-
-### 4. Deep-link URLs
-
-Update URL handling: `?view=skip_level` still works for backward compatibility (notifications, bookmarks) but now opens the merged "Team Reviews" mode and selects the employee.
-
-### 5. Sidebar navigation
-
-Remove the separate "Skip-Level Review" sidebar entry if one exists; the single "Team Reviews" entry covers both.
+- **No database changes** -- the actual `user_roles` table stays as `admin`
+- **No RLS impact** -- database permissions remain unchanged; the admin can still technically query anything
+- **No workflow engine changes** -- score fields and status transitions are untouched
+- **Team Reviews merge** works correctly: when admin switches to "manager" lens, they only see their direct/indirect reports (not all employees), and the relationship tagging routes them to the correct scorecard viewLevel
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/review/ViewModeToggle.tsx` | Remove `skip_level` from visible modes, rename `team` label to "Team Reviews" |
-| `src/components/review/EmployeeSelectorGrid.tsx` | Merge direct + indirect reports, add relationship badge, combine stats |
-| `src/pages/Dashboard.tsx` | Map merged mode to correct `viewLevel` based on employee relationship tag |
-| `src/components/layout/AppSidebar.tsx` | Remove skip-level nav item (if present) |
-| `DOCUMENTATION.md` | Update documentation |
+| `src/contexts/AuthContext.tsx` | Add `effectiveRole`, `isAdminMode`, `toggleAdminMode`, `naturalRole` to context. Fetch direct reports count to derive natural role. |
+| `src/components/layout/AppSidebar.tsx` | Use `effectiveRole` instead of `role` for section visibility. Add Admin View toggle switch in the footer. |
+| `src/components/layout/MinimalHeader.tsx` | Display `effectiveRole` label instead of raw `role`. |
+| `src/components/layout/ProtectedRoute.tsx` | Use `effectiveRole` for route guarding (but still allow admin to access admin routes when admin mode is on). |
+| `src/pages/Dashboard.tsx` | Use `effectiveRole` for `availableModes` calculation. |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Use `effectiveRole` to determine `isFullAccess` (only true when admin mode is on). |
+| `src/components/layout/DataOwnerRoute.tsx` | Use `effectiveRole` for access check. |
+| `src/hooks/useOrgKpiDataOwner.ts` | Use `effectiveRole` for admin bypass check. |
+| `src/hooks/useKpiFilters.ts` | Use `effectiveRole` for admin filter check. |
+| `src/components/dashboard/KpiLogicModal.tsx` | Use `effectiveRole` for edit permission. |
+| `src/pages/PMSPolicy.tsx` | Use `effectiveRole` for admin controls. |
+| `src/components/pip/PIPDetailSheet.tsx` | Use `effectiveRole` for HR check. |
+| `DOCUMENTATION.md` | Document the Admin Role Switch feature. |
 
-## Technical Detail: Relationship Detection
+## Technical Details
 
-Each employee in the merged list will carry a `relationship` field:
+### AuthContext Changes
 
 ```text
-type EmployeeWithRelation = EmployeeProfile & {
-  relationship: 'direct' | 'indirect';
-};
+// New state
+naturalRole: AppRole | null     // 'manager' or 'employee' based on org hierarchy
+isAdminMode: boolean            // true = full admin, false = natural role
+effectiveRole: AppRole | null   // isAdminMode ? role : naturalRole
+toggleAdminMode: () => void     // flip the switch
+
+// On login (after profile fetch), if role === 'admin':
+//   1. Check localStorage for saved preference
+//   2. Query profiles where reporting_manager_id = user.id (LIMIT 1)
+//   3. If count > 0 -> naturalRole = 'manager', else 'employee'
+//   4. Set effectiveRole accordingly
 ```
 
-- `direct`: employee's `reporting_manager_id === currentUserId`
-- `indirect`: employee is in the `skipLevelMembers` list
+### Sidebar Toggle UI
 
-When an employee is selected, the Dashboard checks this tag:
-- `direct` -> passes `viewLevel="manager"` to UnifiedScorecard
-- `indirect` -> passes `viewLevel="skip_level"` to UnifiedScorecard
+A compact switch row added above the profile card in the sidebar footer:
 
-This ensures the correct score column, workflow status, and action buttons are used without any workflow engine changes.
+```text
++----------------------------------+
+| [Admin icon]  Admin View   [ON ] |
++----------------------------------+
+| [Avatar] Admin Name              |
+|          admin -> manager        |
++----------------------------------+
+```
+
+When toggled off, the role label changes to show the natural role (e.g., "manager") and admin-only sidebar sections collapse away.
+
+### Consumer Migration
+
+All components that currently destructure `role` from `useAuth()` and use it for UI decisions will be updated to also pull `effectiveRole` and use that for visibility/access checks. The raw `role` remains available for the rare cases where the true database role matters (e.g., audit log entries that tag "performed by admin").
 
