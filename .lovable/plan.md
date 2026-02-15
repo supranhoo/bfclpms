@@ -1,68 +1,63 @@
 
 
-# RCA: Trigger Emails Still Returning 401
+# Fix: Trigger Emails Failing — Final Root Cause and Solution
 
-## Root Cause (Confirmed with Logs)
+## Root Cause (Definitive)
 
-The edge function logs reveal the exact failure chain:
+The DB trigger sends the **208-character publishable JWT** as both the `apikey` and `Authorization` headers. The edge function's environment only has **short internal keys** (46-char anon, 41-char service role). These will never match the 208-char JWT.
 
-```
-[validateCaller] SUPABASE_ANON_KEY len: 46  SERVICE_ROLE_KEY len: 41  PUBLISHABLE_KEY len: 0
-[validateCaller] apikey header present but no match. apikey length: 208
-[validateCaller] All auth checks failed. Bearer token length: 208
-```
+The fallback code that reads the stored key from `system_settings` **silently fails** because the `catch` block at line 96 has no error logging. The `createClient` call with the 41-char internal service role key likely cannot complete the DB query in this context, and the error is swallowed.
 
-The DB trigger sends the **208-character publishable JWT** as both `apikey` and `Authorization` headers. The edge function has only **short internal keys** (46 and 41 chars) in its env vars -- they will never match.
+All previous fix attempts added layers of complexity but missed the core issue: the publishable JWT is simply not available as an env var in the edge function runtime.
 
-The fallback code tries to read the stored 208-char key from `system_settings`, but that table has an RLS policy restricting SELECT to the `authenticated` role only. The edge function's internal client authenticates as `anon`, so the query silently returns zero rows. Auth fails.
+## Solution: Add Publishable Key as Edge Function Secret
 
-## Fix (Two Changes)
+Store the 208-char publishable JWT as a secret named `SUPABASE_PUBLISHABLE_KEY`. The existing code at lines 20-26 already checks for this env var and adds it to the `validKeys` set. Once it exists, the apikey match at line 34 will succeed immediately on the first check — no DB fallback needed.
 
-### 1. Database Migration: Allow anon role to read system_settings
+### Step 1: Add the secret
 
-Add an RLS policy so the edge function's internal anon-role client can read the stored key:
+Use the secrets tool to add `SUPABASE_PUBLISHABLE_KEY` with the value of the project's anon JWT (the 208-char key that the trigger already sends).
 
-```sql
-CREATE POLICY "Allow anon to read settings"
-  ON system_settings FOR SELECT TO anon USING (true);
-```
+### Step 2: Add error logging to catch blocks
 
-This is safe because system_settings contains only configuration keys (score mode, working days, the public anon key), not sensitive secrets.
+Update the silent `catch` blocks at lines 96 and 62 to log errors, so future issues are visible in logs instead of silently swallowed.
 
-### 2. Edge Function: Use service role key for fallback client
+### Step 3: Redeploy the edge function
 
-Change the fallback `createClient` calls in `validateCaller` to prioritize `serviceRoleKey` over `anonKey`, so the client bypasses RLS automatically (belt-and-suspenders):
+Force redeploy to pick up the new secret.
 
-```text
-// Line 47 and 81: change from
-createClient(supabaseUrl, anonKey || serviceRoleKey!)
-// to
-createClient(supabaseUrl, serviceRoleKey || anonKey!)
-```
+### Step 4: Update documentation
 
-### 3. Force Redeploy
+Note the required secret in DOCUMENTATION.md.
 
-Redeploy the edge function to ensure the latest code is live.
+## Why This Will Work
 
-### 4. Documentation
+- The trigger sends `apikey: eyJhbGci...eut4` (208 chars)
+- The edge function code at line 20 reads `SUPABASE_PUBLISHABLE_KEY` from env
+- Line 26 adds it to `validKeys`
+- Line 34 checks `validKeys.has(apiKeyHeader)` — this will now match
+- Auth succeeds on the very first check, no DB fallback needed
 
-Update DOCUMENTATION.md to note the anon-read RLS requirement for system_settings.
+## Why Previous Fixes Failed
+
+| Attempt | Why it failed |
+|---|---|
+| RLS policy for anon | The createClient itself fails with the 41-char internal key, so the query never executes |
+| Swap key priority (serviceRoleKey first) | Same issue — the 41-char key cannot create a working client for this query |
+| Silent catch blocks | Errors were swallowed, making diagnosis impossible |
 
 ## Files to Modify
 
 | File | Change |
 |---|---|
-| Database migration | Add `anon` SELECT policy on `system_settings` |
-| `supabase/functions/send-email-notification/index.ts` | Swap key priority in fallback `createClient` calls (2 lines) |
-| `DOCUMENTATION.md` | Note the RLS requirement |
-
-## Why Test Emails Work
-
-Test emails are sent from the frontend with the **user's JWT** (a real authenticated session token). The edge function validates this via `supabase.auth.getUser(token)` which succeeds. Only trigger-originated calls (which use the publishable key, not a user JWT) fail.
+| Edge function secrets | Add `SUPABASE_PUBLISHABLE_KEY` = the 208-char anon JWT |
+| `supabase/functions/send-email-notification/index.ts` | Add error logging to catch blocks (lines 62, 96) |
+| `DOCUMENTATION.md` | Document the required secret |
 
 ## Risk Assessment
 
-- Very low risk -- only adds a read-only RLS policy on a config table
-- No schema changes, no data changes
-- Existing test email flow is unaffected
+- Minimal risk — only adds an env var that the code already reads
+- No database changes, no schema changes
+- The publishable/anon key is public by design (it is the same key used in every frontend request), so storing it as a secret is safe
+- Existing test email flow is completely unaffected
 
