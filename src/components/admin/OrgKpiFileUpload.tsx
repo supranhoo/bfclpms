@@ -66,10 +66,15 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
     onUploadComplete(null);
   };
 
+  const containerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (isUploading || disabled || existingUrl) return;
-    const handler = (e: ClipboardEvent) => {
-      const files = e.clipboardData?.files;
+    const dialogContainer = containerRef.current?.closest('[role="dialog"]');
+    const target = dialogContainer || document;
+    const handler = (e: Event) => {
+      const ce = e as ClipboardEvent;
+      const files = ce.clipboardData?.files;
       if (!files || files.length === 0) return;
       e.preventDefault();
       const file = files[0];
@@ -93,8 +98,8 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
         setIsUploading(false);
       });
     };
-    document.addEventListener('paste', handler);
-    return () => document.removeEventListener('paste', handler);
+    target.addEventListener('paste', handler);
+    return () => target.removeEventListener('paste', handler);
   }, [isUploading, disabled, existingUrl, maxFileSizeBytes, maxFileSizeMb, onUploadComplete, toast]);
 
   if (existingUrl) {
@@ -125,7 +130,7 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
   }
 
   return (
-    <div>
+    <div ref={containerRef}>
       <input
         ref={fileInputRef}
         type="file"

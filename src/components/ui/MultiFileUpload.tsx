@@ -203,22 +203,27 @@ export function MultiFileUpload({
     }
   }, [disabled, canUploadMore]);
 
+  const containerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (disabled || !canUploadMore) return;
-    const handler = (e: ClipboardEvent) => {
-      const files = e.clipboardData?.files;
+    const dialogContainer = containerRef.current?.closest('[role="dialog"]');
+    const target = dialogContainer || document;
+    const handler = (e: Event) => {
+      const ce = e as ClipboardEvent;
+      const files = ce.clipboardData?.files;
       if (!files || files.length === 0) return;
       e.preventDefault();
       handleFilesSelected(files);
     };
-    document.addEventListener('paste', handler);
-    return () => document.removeEventListener('paste', handler);
+    target.addEventListener('paste', handler);
+    return () => target.removeEventListener('paste', handler);
   }, [disabled, canUploadMore, handleFilesSelected]);
 
   const isUploading = uploadingFiles.length > 0;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" ref={containerRef}>
       <div className="flex items-center justify-between">
         <Label>{label} ({currentCount}/{maxFiles})</Label>
       </div>

@@ -107,10 +107,15 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
     }
   };
 
+  const containerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (uploading || uploadedUrl) return;
-    const handler = (e: ClipboardEvent) => {
-      const files = e.clipboardData?.files;
+    const dialogContainer = containerRef.current?.closest('[role="dialog"]');
+    const target = dialogContainer || document;
+    const handler = (e: Event) => {
+      const ce = e as ClipboardEvent;
+      const files = ce.clipboardData?.files;
       if (!files || files.length === 0) return;
       const file = files[0];
       if (!Object.keys(ACCEPTED_TYPES).includes(file.type)) {
@@ -140,14 +145,14 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
         setUploading(false);
       });
     };
-    document.addEventListener('paste', handler);
-    return () => document.removeEventListener('paste', handler);
+    target.addEventListener('paste', handler);
+    return () => target.removeEventListener('paste', handler);
   }, [uploading, uploadedUrl, maxFileSizeBytes, maxFileSizeMb, userId, kpiId, onUploadComplete, toast]);
 
   const FileIcon = uploadedUrl ? getFileIcon(uploadedUrl) : Upload;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" ref={containerRef}>
       <Label>Evidence Attachment (Optional)</Label>
       <p className="text-xs text-muted-foreground mb-2">
         Supported: JPEG, PNG, PDF, Excel (max {maxFileSizeMb}MB). You can also paste images.
