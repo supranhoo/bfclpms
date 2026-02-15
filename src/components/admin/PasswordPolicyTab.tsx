@@ -90,6 +90,8 @@ export function PasswordPolicyTab() {
         return <Badge variant="secondary">Has KRAs</Badge>;
       case 'reporting_manager':
         return <Badge variant="outline">Manager</Badge>;
+      case 'auditor':
+        return <Badge variant="outline" className="border-primary text-primary">Auditor</Badge>;
       case 'both':
         return <Badge>Both</Badge>;
       default:
@@ -140,6 +142,7 @@ export function PasswordPolicyTab() {
                 <SelectItem value="has_kras">Has KRAs</SelectItem>
                 <SelectItem value="reporting_manager">Reporting Manager</SelectItem>
                 <SelectItem value="both">Both</SelectItem>
+                <SelectItem value="auditor">Auditor</SelectItem>
               </SelectContent>
             </Select>
           </div>
