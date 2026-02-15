@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Info, BarChart3, ClipboardEdit } from 'lucide-react';
 import { KPI } from '@/hooks/useKpis';
+import { getScoreBadgeClass } from '@/lib/reviewConstants';
 
 interface MobileKpiCardProps {
   kpi: KPI;
@@ -15,7 +16,7 @@ interface MobileKpiCardProps {
   };
   statusColors: Record<string, string>;
   statusLabels: Record<string, string>;
-  ratingColors: Record<string, string>;
+  score?: number | null;
   onViewLogic: (kpi: KPI) => void;
   onViewTracker: (kpi: KPI) => void;
   onReview?: (kpi: KPI) => void;
@@ -26,13 +27,12 @@ export function MobileKpiCard({
   submission,
   statusColors,
   statusLabels,
-  ratingColors,
+  score: scoreProp,
   onViewLogic,
   onViewTracker,
   onReview,
 }: MobileKpiCardProps) {
-  const rating = submission?.final_rating ?? submission?.self_rating ?? null;
-  const score = submission?.final_score ?? submission?.self_score ?? null;
+  const score = scoreProp ?? submission?.final_score ?? submission?.self_score ?? null;
 
   return (
     <Card className="p-4">
@@ -70,12 +70,9 @@ export function MobileKpiCard({
           <div>
             <span className="text-muted-foreground block">Score</span>
             <p className="font-medium">
-              {rating ? (
-                <Badge
-                  style={{ backgroundColor: ratingColors[rating] }}
-                  className="text-white text-xs px-1.5 py-0"
-                >
-                  {score?.toFixed(1) || rating}
+              {score != null ? (
+                <Badge className={`${getScoreBadgeClass(score)} text-xs px-1.5 py-0`}>
+                  {score.toFixed(1)}
                 </Badge>
               ) : (
                 '-'

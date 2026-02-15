@@ -3243,4 +3243,19 @@ The PMS Policy page was converted from an external iframe-based viewer to a full
 
 ---
 
+### Dashboard Score Badge Fix (2026-02-15)
+
+**Problem:** Dashboard and MobileKpiCard rendered score badge colors using the DB-stored `rating_level` string (`ratingColors[rating]`). Historical submissions had `rating_level = 'blue'` for score 4 (a bug in the old `ratingToLevel()` function), causing scores 4 and 5 to display identically as blue.
+
+**Fix:**
+1. Replaced `ratingColors[rating]` with `getScoreBadgeClass(score)` in both `Dashboard.tsx` and `MobileKpiCard.tsx` so colors are always derived from the numeric score, not the stored rating level.
+2. Corrected historical DB records: updated all `review_submissions` rows where score ≥ 4 and < 5 had `rating = 'blue'` to `'green'` (for self, manager, auditor, management, final, hr_pms, skip_level columns).
+
+| File | Change |
+|---|---|
+| `src/pages/Dashboard.tsx` | Use `getScoreBadgeClass(score)` instead of `ratingColors[rating]` |
+| `src/components/dashboard/MobileKpiCard.tsx` | Same; replaced `ratingColors` prop with internal score derivation |
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
