@@ -2803,6 +2803,8 @@ Located at `src/components/inbox/MobileInboxList.tsx`, renders notifications and
 2. **Prefer CSS breakpoints** - For simple styling adjustments use Tailwind responsive prefixes
 3. **Test at 320px** - Ensure layouts work on smallest phones (iPhone SE)
 4. **Touch targets** - Minimum 44x44px for interactive elements on mobile
+5. **Never combine `line-clamp` with `flex` on the same element** - `line-clamp` requires `display: -webkit-box`, but `flex` overrides it to `display: flex`, breaking truncation. Instead, wrap the clamped text in its own element and keep `flex` on a parent container.
+6. **Always use `renderBoldKpiText()` and `whitespace-pre-wrap`** for KRA/KPI name fields in mobile cards so that section markers (e.g., "- Description:", "- Formula:") render with bold formatting and proper line breaks.
 
 ---
 

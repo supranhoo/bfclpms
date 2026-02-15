@@ -245,13 +245,15 @@ export function MobileKpiCard({
         onClick={() => onShowLogic?.(kpi)}
         className="text-left w-full mb-2 group"
       >
-        <p className="font-medium text-xs line-clamp-1 group-hover:text-primary transition-colors">
+        <p className="font-medium text-xs line-clamp-1 whitespace-pre-wrap group-hover:text-primary transition-colors">
           {renderBoldKpiText(kpi.kra_name)}
         </p>
-        <p className="text-[10px] text-muted-foreground line-clamp-2 flex items-center gap-1">
-          {renderBoldKpiText(kpi.kpi_name)}
-          <Info className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-        </p>
+        <div className="flex items-start gap-1">
+          <p className="text-[10px] text-muted-foreground line-clamp-2 whitespace-pre-wrap flex-1 min-w-0">
+            {renderBoldKpiText(kpi.kpi_name)}
+          </p>
+          <Info className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
+        </div>
       </button>
 
       {/* Row 3: Metrics + Actions */}
