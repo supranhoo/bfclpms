@@ -2471,6 +2471,7 @@ Any reviewer (Manager, Skip-Level, HR PMS, Auditor, Management) can mark a KPI a
 - Dashboard scoring automatically excludes the KPI since it checks `is_na = true`
 - Components: `UnifiedScorecard`, `EmployeeScorecard`, `AuditScorecard`, `ManagementScorecard` all support this flow
 - **N/A Remarks Resolution:** When displaying the N/A reason in the confirmation card, the system resolves the correct remarks field based on `na_marked_by_role` (e.g., `skip_level` → `skip_level_remarks`, `auditor` → `auditor_remarks`). Falls back to `self_remarks` when `na_marked_by_role` is null or `employee`.
+- **Per-Stage N/A Display (Review Journey):** The `KpiJourneySection` computes `isNA` per stage rather than using the global `submission.is_na` flag. A stage shows "N/A" only if the KPI is globally marked N/A AND that stage has no score (`stageIsNA = globalIsNA && stageScore === null`). This ensures that if a manager (or any reviewer) overrides N/A and provides a score, their stage correctly displays the score while the self stage still shows "N/A". The `useSubmitSelfReview` hook always sets `na_marked_by_role: 'employee'` when `is_na` is true, both in the database upsert and the optimistic cache update.
 
 **N/A Override at Any Review Stage:**
 When a KPI has been marked as N/A (by any prior stage), subsequent reviewers are NOT forced to accept it. Each reviewer independently decides whether the KPI is truly N/A or deserves a score:

@@ -489,6 +489,7 @@ export function useSubmitSelfReview() {
           self_evidence_url,
           self_evidence_urls: self_evidence_urls || [],
           is_na,
+          na_marked_by_role: is_na ? 'employee' : null,
           kpi_status: 'submitted' as const,
         }, {
           onConflict: 'kpi_id',
@@ -532,6 +533,7 @@ export function useSubmitSelfReview() {
                   self_remarks: variables.self_remarks,
                   self_evidence_url: variables.self_evidence_url,
                   is_na: variables.is_na,
+                  na_marked_by_role: variables.is_na ? 'employee' : null,
                   kpi_status: 'submitted' as KpiStatus,
                 }
               : sub
