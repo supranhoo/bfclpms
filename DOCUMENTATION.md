@@ -3334,4 +3334,18 @@ This ensures DB triggers using `net.http_post` (which send the 208-char JWT) can
 
 ---
 
+### N/A Display Fix in KPI Details Table (2026-02-15)
+
+**Problem:** When a reviewer (e.g., skip-level) marked a KPI as N/A, the corresponding score column in the KPI Details Table showed "—" instead of "N/A".
+
+**Root Cause:** `isStageCompleted()` used `statusIdx > stageIdx`. Per workflow convention, a status like `skip_level_check` means that stage is **already completed**. Since `statusIdx === stageIdx`, the strict `>` returned false, preventing the N/A badge from rendering.
+
+**Fix:** Changed to `statusIdx >= stageIdx` in `KpiDetailsTable.tsx` (line 50).
+
+| File | Change |
+|---|---|
+| `src/components/review/KpiDetailsTable.tsx` | `isStageCompleted`: `>` → `>=` |
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
