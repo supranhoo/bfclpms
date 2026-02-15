@@ -107,13 +107,58 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
     }
   };
 
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const files = e.clipboardData?.files;
+    if (!files || files.length === 0 || uploading || uploadedUrl) return;
+    e.preventDefault();
+    const file = files[0];
+    // Create a synthetic change event-like flow by calling upload logic directly
+    if (!Object.keys(ACCEPTED_TYPES).includes(file.type)) {
+      toast({
+        title: 'Invalid file type',
+        description: 'Please upload a JPEG, PNG, PDF, or Excel file.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (file.size > maxFileSizeBytes) {
+      toast({
+        title: 'File too large',
+        description: `Maximum file size is ${maxFileSizeMb}MB.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+    setUploading(true);
+    setFileName(file.name);
+    try {
+      const fileExt = ACCEPTED_TYPES[file.type as keyof typeof ACCEPTED_TYPES]?.ext || 'file';
+      const filePath = `${userId}/${kpiId}/${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('review-evidence')
+        .upload(filePath, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage
+        .from('review-evidence')
+        .getPublicUrl(filePath);
+      setUploadedUrl(publicUrl);
+      onUploadComplete(publicUrl);
+      toast({ title: 'File uploaded', description: 'Evidence file uploaded successfully.' });
+    } catch (error: any) {
+      toast({ title: 'Upload failed', description: error.message || 'Failed to upload file.', variant: 'destructive' });
+      setFileName(null);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const FileIcon = uploadedUrl ? getFileIcon(uploadedUrl) : Upload;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" onPaste={handlePaste} tabIndex={0}>
       <Label>Evidence Attachment (Optional)</Label>
       <p className="text-xs text-muted-foreground mb-2">
-        Supported: JPEG, PNG, PDF, Excel (max {maxFileSizeMb}MB)
+        Supported: JPEG, PNG, PDF, Excel (max {maxFileSizeMb}MB). You can also paste images.
       </p>
       
       <input

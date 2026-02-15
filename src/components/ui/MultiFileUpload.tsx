@@ -203,6 +203,15 @@ export function MultiFileUpload({
     }
   }, [disabled, canUploadMore]);
 
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const files = e.clipboardData?.files;
+    if (!files || files.length === 0) return;
+    e.preventDefault();
+    if (!disabled && canUploadMore) {
+      handleFilesSelected(files);
+    }
+  }, [disabled, canUploadMore]);
+
   const isUploading = uploadingFiles.length > 0;
 
   return (
@@ -276,7 +285,9 @@ export function MultiFileUpload({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
+            onPaste={handlePaste}
             onClick={() => fileInputRef.current?.click()}
+            tabIndex={0}
             className={cn(
               'flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors min-w-[140px]',
               isDragOver
@@ -290,7 +301,7 @@ export function MultiFileUpload({
               {isUploading ? 'Uploading...' : 'Add files'}
             </span>
             <span className="text-[10px] text-muted-foreground/70 text-center mt-0.5">
-              Drop or click
+              Drop, click, or paste
             </span>
           </div>
         )}

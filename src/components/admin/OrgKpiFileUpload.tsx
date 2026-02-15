@@ -93,8 +93,34 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
     );
   }
 
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const files = e.clipboardData?.files;
+    if (!files || files.length === 0 || isUploading || disabled) return;
+    e.preventDefault();
+    const file = files[0];
+    if (file.size > maxFileSizeBytes) {
+      toast({ title: 'File too large', description: `Maximum file size is ${maxFileSizeMb}MB`, variant: 'destructive' });
+      return;
+    }
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop() || 'png';
+      const fileName = `org-kpi-${Date.now()}.${fileExt}`;
+      const filePath = `org-kpi-evidence/${fileName}`;
+      const { error: uploadError } = await supabase.storage.from('review-evidence').upload(filePath, file);
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage.from('review-evidence').getPublicUrl(filePath);
+      onUploadComplete(publicUrl);
+      toast({ title: 'File uploaded successfully' });
+    } catch (error: any) {
+      toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
-    <div>
+    <div onPaste={handlePaste} tabIndex={0}>
       <input
         ref={fileInputRef}
         type="file"
