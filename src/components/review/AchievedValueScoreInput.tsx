@@ -78,6 +78,20 @@ export function AchievedValueScoreInput({
     setLocalAchievedValue(achievedValue?.toString() || '');
   }, [achievedValue]);
 
+  // Auto-calculate score on mount when achievedValue is pre-populated but score is null
+  useEffect(() => {
+    if (mode === 'auto_calculate' && score === null && achievedValue !== null && achievedValue !== '') {
+      const numValue = typeof achievedValue === 'number' ? achievedValue : parseFloat(String(achievedValue));
+      if (!isNaN(numValue)) {
+        const result = calculateScoreFromValue(numValue);
+        if (result) {
+          onScoreChange(result.rating, result.ratingLevel);
+        }
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [achievedValue, score, mode]);
+
   // Calculate score from achieved value using thresholds
   // NOTE: Must be defined before any conditional returns that use it
   const calculateScoreFromValue = (value: number | null) => {

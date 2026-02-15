@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-02-14  
-> **Version:** 1.28.2
+> **Last Updated:** 2026-02-15  
+> **Version:** 1.28.3
 > **Maintainer:** Lovable AI
 
 ---
@@ -3216,6 +3216,30 @@ The PMS Policy page was converted from an external iframe-based viewer to a full
 1. Manual SQL data correction: set KPI status to `self_review`, cleared `manager_score`, `manager_rating`, `manager_remarks`, `manager_evidence_url`, `manager_achieved_value`, and all `skip_level_*` fields
 2. Confirmed audit log ordering is already correct (insert occurs after both KPI and submission updates succeed)
 3. **Action required:** Publish latest code to live site so the v1.28.0 logic fix takes effect for all users
+
+---
+
+### v1.28.3 — Approve Button Auto-Activation Fix (RCA/CAPA)
+
+**Problem:** When a reviewer opened a KPI for assessment, the Approve/Forward button stayed disabled even though the Achieved Value was pre-populated from the previous stage. The user had to re-enter the value to activate the button. Additionally, a score of `0` ("Not Achieved") was silently dropped due to falsy coercion.
+
+**Root Cause:**
+1. `AchievedValueScoreInput` only calculated scores inside `onChange` — no calculation ran on mount with pre-populated values
+2. Score initialization used `||` operator which treats `0` as falsy, discarding legitimate zero scores
+
+**Fix:**
+1. Added `useEffect` in `AchievedValueScoreInput.tsx` to auto-calculate score on mount when `achievedValue` is pre-populated but `score` is `null`
+2. Replaced `||` with `??` (nullish coalescing) for all score/achievedValue initialization across all scorecards
+
+**Files Modified:**
+| File | Change |
+|---|---|
+| `src/components/review/AchievedValueScoreInput.tsx` | Added auto-calculate `useEffect` on mount |
+| `src/components/review/EmployeeScorecard.tsx` | `||` → `??` for `managerScore` and `managerAchievedValue` init |
+| `src/components/review/AuditScorecard.tsx` | `||` → `??` for `auditorScore` init and `previousLevelScore` |
+| `src/components/review/ManagementScorecard.tsx` | `||` → `??` for `managementScore` init and `previousLevelScore` |
+| `src/components/review/UnifiedScorecard.tsx` | `||` → `??` for `prevScore` init |
+| `src/hooks/useReviewPageState.ts` | `||` → `??` for `initialScore` init |
 
 ---
 

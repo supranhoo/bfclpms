@@ -571,9 +571,9 @@ export function UnifiedScorecard({
     // Get the appropriate previous score based on view level
     let prevScore = null;
     if (viewLevel === 'manager') {
-      prevScore = existing?.manager_score || null;
+      prevScore = existing?.manager_score ?? null;
     } else if (viewLevel === 'auditor') {
-      prevScore = existing?.auditor_score || existing?.manager_score || null;
+      prevScore = existing?.auditor_score ?? existing?.manager_score ?? null;
     } else {
       prevScore = existing?.management_score ?? existing?.auditor_score ?? null;
     }

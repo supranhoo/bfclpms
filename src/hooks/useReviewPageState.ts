@@ -135,7 +135,7 @@ export function useReviewPageState(options: UseReviewPageStateOptions) {
       initialRating = existing?.[fallbackRatingField] as RatingLevel | null;
     }
 
-    setScore(initialScore || null);
+    setScore(initialScore ?? null);
     setRating(initialRating || '');
     setRemarks((existing?.[remarksField] as string) || '');
     setEvidenceUrl((existing?.[evidenceField] as string) || null);
