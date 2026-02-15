@@ -1,68 +1,109 @@
 
-# Fix: Infinite Recursion in Skip-Level Profiles RLS Policy
 
-## Root Cause
+# RCA and CAPA: Approve Button Requires Re-entering Value
 
-The skip-level RLS policy added minutes ago is causing **infinite recursion** on the `profiles` table. The database error logs show continuous `"infinite recursion detected in policy for relation 'profiles'"` errors, which is why Jaspal (and likely other managers) cannot load their profile -- the query fails silently, `profile` stays `null`, and the sidebar falls back to showing "User".
+## Root Cause Analysis (RCA)
 
-The problematic policy:
+### Problem Statement
+When a reviewer opens a KPI for assessment, the Approve/Forward button stays disabled even though the Achieved Value is pre-populated from the previous review stage. The button only activates after the user manually re-enters the value.
 
-```text
-CREATE POLICY "Managers can view skip-level reports"
-  ON public.profiles FOR SELECT
-  USING (
-    ...
-    AND reporting_manager_id IN (
-      SELECT id FROM public.profiles       <-- self-referencing query!
-      WHERE reporting_manager_id = auth.uid()
-    )
-  );
-```
+### Root Cause: Two Defects Working Together
 
-This subquery reads `profiles` from inside a policy on `profiles`, which Postgres cannot evaluate without entering an infinite loop.
+**Defect 1 -- Score not auto-calculated on mount (Primary Cause)**
 
-## Fix
+The `AchievedValueScoreInput` component only triggers score calculation inside its `onChange` handler (`handleAchievedValueChange`). When the sheet opens with a pre-populated achieved value, no `onChange` event fires, so:
 
-1. **Drop the broken policy** immediately to restore profile loading for all managers.
-2. **Create a SECURITY DEFINER function** (`get_direct_report_ids`) that fetches direct report IDs while bypassing RLS (same pattern used by `has_role` and `is_data_owner_for_employee`).
-3. **Re-create the policy** using the safe function instead of the self-referencing subquery.
+1. Sheet opens -> `achievedValue` is set to (e.g.) `85` from previous stage
+2. `score` remains `null` because no calculation runs on initial render
+3. Approve button checks `reviewerScore === null` -> stays **disabled**
+4. User re-types the value -> `onChange` fires -> score is calculated -> button activates
 
-### New Function
+This affects ALL review levels in `auto_calculate` mode (the most common scoring configuration).
+
+**Defect 2 -- Falsy zero bug (Secondary)**
+
+Score initialization uses the `||` operator which treats `0` as falsy:
 
 ```text
-CREATE OR REPLACE FUNCTION public.get_direct_report_ids(_manager_id uuid)
-RETURNS SETOF uuid
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT id FROM public.profiles
-  WHERE reporting_manager_id = _manager_id;
-$$;
+setManagerScore(existing?.manager_score || null);     // score=0 becomes null
+setAuditorScore(existing?.auditor_score || null);     // score=0 becomes null
+setManagementScore(existing?.management_score || null); // score=0 becomes null
 ```
 
-### Corrected Policy
+A legitimate score of `0` ("Not Achieved") is silently discarded, making the Approve button disabled for the worst-performing KPIs.
+
+### Affected Components (All 4 Scorecards)
+
+| Component | Score Variable | Line |
+|---|---|---|
+| `EmployeeScorecard.tsx` | `managerScore` | Line 289 |
+| `AuditScorecard.tsx` | `auditorScore` | Line 356 |
+| `ManagementScorecard.tsx` | `managementScore` | Line 375 |
+| `UnifiedScorecard.tsx` | `reviewerScore` | Line 574 |
+
+### Impact
+- Every reviewer at every level must re-enter the achieved value before they can approve
+- Score of 0 is silently dropped, forcing re-entry for "Not Achieved" KPIs
+- Significant friction in the review workflow across the entire organization
+
+---
+
+## Corrective and Preventive Actions (CAPA)
+
+### Fix 1: Auto-calculate score on mount (AchievedValueScoreInput.tsx)
+
+Add a `useEffect` that runs when the component mounts with a pre-populated achieved value but no score. This triggers the same calculation that `onChange` does, ensuring the Approve button is immediately enabled.
 
 ```text
-CREATE POLICY "Managers can view skip-level reports"
-  ON public.profiles FOR SELECT TO authenticated
-  USING (
-    has_role(auth.uid(), 'manager'::app_role)
-    AND reporting_manager_id IN (
-      SELECT get_direct_report_ids(auth.uid())
-    )
-  );
+// New useEffect in AchievedValueScoreInput.tsx
+useEffect(() => {
+  if (mode === 'auto_calculate' && score === null && achievedValue !== null && achievedValue !== '') {
+    const numValue = typeof achievedValue === 'number' ? achievedValue : parseFloat(String(achievedValue));
+    if (!isNaN(numValue)) {
+      const result = calculateScoreFromValue(numValue);
+      if (result) {
+        onScoreChange(result.rating, result.ratingLevel);
+      }
+    }
+  }
+}, [achievedValue, score, mode]);
 ```
+
+### Fix 2: Replace `||` with nullish coalescing `??` (All 4 Scorecards)
+
+Change all score initialization from `|| null` to `?? null` to preserve zero values:
+
+```text
+// Before (broken for score=0):
+setManagerScore(existing?.manager_score || null);
+
+// After (correct):
+setManagerScore(existing?.manager_score ?? null);
+```
+
+Apply to all 4 scorecard files and also fix `achievedValue` initializations that use the same pattern.
+
+### Fix 3: Same fix for previousLevelScore in shared review components
+
+```text
+// AuditScorecard.tsx line 1085-1087 and ManagementScorecard.tsx line 1109-1111
+// Change || to ?? for previousLevelScore calculation
+```
+
+---
 
 ## Files to Modify
 
 | File | Change |
 |---|---|
-| Database migration | Drop broken policy, create function, re-create safe policy |
-| `DOCUMENTATION.md` | Update v1.28.2 entry to note the SECURITY DEFINER pattern |
+| `src/components/review/AchievedValueScoreInput.tsx` | Add useEffect to auto-calculate score on mount |
+| `src/components/review/EmployeeScorecard.tsx` | Fix `\|\|` to `??` for score/achievedValue init |
+| `src/components/review/AuditScorecard.tsx` | Fix `\|\|` to `??` for score/achievedValue init |
+| `src/components/review/ManagementScorecard.tsx` | Fix `\|\|` to `??` for score/achievedValue init |
+| `src/components/review/UnifiedScorecard.tsx` | Fix `\|\|` to `??` for score/achievedValue init |
+| `DOCUMENTATION.md` | Document the fix and preventive measures |
 
-## Risk Assessment
-- **Urgent**: The broken policy is actively preventing all manager-role users from loading profiles
-- **Safe fix**: Uses the same proven SECURITY DEFINER pattern already in use for `has_role` and `is_data_owner_for_employee`
-- **No code changes**: Only database objects are modified
+## Preventive Measures
+- The auto-calculation useEffect ensures this class of bug cannot recur regardless of how score state is initialized
+- Switching to `??` across all scorecards prevents any future zero-value suppression
+- Both fixes are backward-compatible and require no database changes
