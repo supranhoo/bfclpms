@@ -10,39 +10,107 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// --- Auth helper: validate service-role key, anon key, or valid user JWT ---
+// --- Auth helper: validate service-role key, anon key, apikey header, or valid user JWT ---
 const validateCaller = async (req: Request): Promise<{ authorized: boolean; error?: string }> => {
   const authHeader = req.headers.get("Authorization");
+  const apiKeyHeader = req.headers.get("apikey");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  // The publishable key (JWT format, ~208 chars) may differ from SUPABASE_ANON_KEY (raw, ~46 chars)
+  const publishableKey = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || Deno.env.get("VITE_SUPABASE_PUBLISHABLE_KEY");
+
+  // Collect all valid keys for comparison
+  const validKeys = new Set<string>();
+  if (anonKey) validKeys.add(anonKey);
+  if (serviceRoleKey) validKeys.add(serviceRoleKey);
+  if (publishableKey) validKeys.add(publishableKey);
+
+  // Debug logging for trigger auth diagnosis
+  console.log("[validateCaller] authHeader present:", !!authHeader, "apikey header present:", !!apiKeyHeader);
+  console.log("[validateCaller] SUPABASE_ANON_KEY len:", anonKey?.length ?? 0, "SERVICE_ROLE_KEY len:", serviceRoleKey?.length ?? 0, "PUBLISHABLE_KEY len:", publishableKey?.length ?? 0);
+
+  // Check apikey header first (used by DB triggers via net.http_post)
+  if (apiKeyHeader) {
+    if (validKeys.has(apiKeyHeader)) {
+      console.log("[validateCaller] Authorized via apikey header match");
+      return { authorized: true };
+    }
+    console.log("[validateCaller] apikey header present but no match. apikey length:", apiKeyHeader.length);
+  }
+
+  // Check Authorization Bearer token
   if (!authHeader) {
+    // Last resort: read the stored publishable JWT from system_settings and compare
+    if (apiKeyHeader) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const supabase = createClient(supabaseUrl, anonKey || serviceRoleKey!);
+        const { data } = await supabase
+          .from("system_settings")
+          .select("setting_value")
+          .eq("setting_key", "supabase_anon_key")
+          .single();
+        if (data?.setting_value) {
+          const storedKey = typeof data.setting_value === "string"
+            ? data.setting_value.replace(/^"|"$/g, "")
+            : String(data.setting_value);
+          if (apiKeyHeader === storedKey) {
+            console.log("[validateCaller] Authorized via apikey matching system_settings stored key");
+            return { authorized: true };
+          }
+        }
+      } catch (e) {
+        console.error("[validateCaller] Failed to read stored anon key:", e);
+      }
+    }
+    console.log("[validateCaller] No Authorization header and apikey did not match");
     return { authorized: false, error: "Authorization required" };
   }
 
   const token = authHeader.replace("Bearer ", "");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
 
-  // Allow service-role callers (DB triggers, other edge functions)
-  if (serviceRoleKey && token === serviceRoleKey) {
+  // Check token against all known valid keys
+  if (validKeys.has(token)) {
+    console.log("[validateCaller] Authorized via Bearer token match");
     return { authorized: true };
   }
 
-  // Allow anon-key callers (DB triggers using the publishable key)
-  if (anonKey && token === anonKey) {
-    return { authorized: true };
+  // Check token against stored key in system_settings (handles JWT vs raw key mismatch)
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabase = createClient(supabaseUrl, anonKey || serviceRoleKey!);
+    const { data } = await supabase
+      .from("system_settings")
+      .select("setting_value")
+      .eq("setting_key", "supabase_anon_key")
+      .single();
+    if (data?.setting_value) {
+      const storedKey = typeof data.setting_value === "string"
+        ? data.setting_value.replace(/^"|"$/g, "")
+        : String(data.setting_value);
+      if (token === storedKey) {
+        console.log("[validateCaller] Authorized via Bearer matching system_settings stored key");
+        return { authorized: true };
+      }
+    }
+  } catch {
+    // fall through
   }
 
   // Allow authenticated user callers (admin test emails from frontend)
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabase = createClient(supabaseUrl, serviceRoleKey!);
+    const supabase = createClient(supabaseUrl, serviceRoleKey || anonKey!);
     const { data: { user }, error } = await supabase.auth.getUser(token);
     if (!error && user) {
+      console.log("[validateCaller] Authorized via user JWT for:", user.email);
       return { authorized: true };
     }
   } catch {
     // fall through
   }
 
+  console.log("[validateCaller] All auth checks failed. Bearer token length:", token.length);
   return { authorized: false, error: "Invalid authorization" };
 };
 
