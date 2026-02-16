@@ -174,7 +174,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, onSave, onSave
   const ScopeIcon = scopeIcons[data.scope];
 
   return (
-    <Card className={`transition-all ${isDirtyRef.current ? 'ring-1 ring-primary/30' : ''}`}>
+    <Card className={`transition-all min-w-0 overflow-hidden ${isDirtyRef.current ? 'ring-1 ring-primary/30' : ''}`}>
       <CardContent className="p-4 space-y-3">
         {/* Header */}
         <div className="flex items-start justify-between gap-2">
@@ -211,7 +211,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, onSave, onSave
 
         {/* Input area - org scope */}
         {data.scope === 'organization' && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 min-w-0">
             <div>
               <Input
                 type="number"

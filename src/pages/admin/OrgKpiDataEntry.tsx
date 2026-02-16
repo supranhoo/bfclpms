@@ -481,7 +481,7 @@ export default function OrgKpiDataEntry() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 overflow-hidden">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">Organization KPI Data Entry</h1>
@@ -544,7 +544,7 @@ export default function OrgKpiDataEntry() {
 
           {/* Category pills */}
           {orgLevelCategories.length > 1 && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 min-w-0">
               <Badge
                 variant={selectedCategoryId === 'all' ? 'default' : 'outline'}
                 className="cursor-pointer"
