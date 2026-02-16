@@ -3375,4 +3375,53 @@ This ensures DB triggers using `net.http_post` (which send the 208-char JWT) can
 
 ---
 
+### Org KPI Data Entry Overhaul (v1.37.0)
+
+**Problem:** The Org KPI data entry page was a dense flat table with 11 columns, making it overwhelming for designated data entry users. No progress tracking, no bulk import, no audit trail, and per-KPI owner assignment only.
+
+**Solution:** Complete 5-phase overhaul:
+
+**Phase 1 — Card-Based UI + Progress Tracking:**
+- Replaced flat table with KPI-focused cards grouped by category
+- Each card shows KPI metadata, inline inputs (achieved value, remark, evidence), previous period reference, and status badge (Pending/Entered/Propagated)
+- Progress bar at top showing X/Y KPIs entered with per-category breakdown
+- Category pill tabs for quick filtering + search bar
+- Department/employee-scoped KPIs render as collapsible mini-tables inside cards
+
+**Phase 2 — Copy from Last Period + Auto-Save:**
+- "Copy from Last Period" button pre-fills current period with previous period values (only where current is null)
+- 2-second debounced auto-save per card with "Saving..."/"Saved" indicators
+- Individual "Save" and "Save & Propagate" buttons per card
+
+**Phase 3 — Bulk Excel Import/Export:**
+- Export Template: Downloads pre-filled Excel with Category, KRA, KPI, Target, UOM columns
+- Import: Upload Excel, validate against known KPIs, preview with valid/error indicators, import valid rows
+- Uses existing `xlsx` library
+
+**Phase 4 — Audit Trail:**
+- New `org_kpi_data_entry_logs` table tracks every save action (created, updated, imported, copied_from_previous)
+- "History" popover on each card shows timeline of value changes with performer names
+- RLS: admins, performers, and data owners can view; authenticated users can insert own logs
+
+**Phase 5 — Enhanced Owner Management:**
+- New "Data Owners" tab (admin only) on the data entry page
+- Bulk assign: assign a user to ALL KPIs in a category at once
+- Per-category collapsible panels showing owner avatars and assignment counts
+- Uses existing `org_kpi_data_owners` table (no new tables)
+
+| File | Action |
+|---|---|
+| `src/pages/admin/OrgKpiDataEntry.tsx` | REWRITE: Card layout, progress, copy, import/export, owner tab |
+| `src/components/admin/OrgKpiEntryCard.tsx` | NEW: Individual KPI entry card with auto-save |
+| `src/components/admin/OrgKpiProgressBar.tsx` | NEW: Progress bar with category breakdown |
+| `src/components/admin/OrgKpiScopedEntryTable.tsx` | NEW: Collapsible mini-table for dept/employee scope |
+| `src/components/admin/OrgKpiAuditLog.tsx` | NEW: History popover timeline |
+| `src/components/admin/OrgKpiBulkImport.tsx` | NEW: Excel import dialog with validation |
+| `src/components/admin/OrgKpiBulkExport.tsx` | NEW: Excel template export |
+| `src/components/admin/OrgKpiOwnerManagement.tsx` | NEW: Bulk owner assignment panel |
+| `src/hooks/useOrgKpiAuditLog.ts` | NEW: Hooks for audit log CRUD |
+| DB migration | NEW TABLE: `org_kpi_data_entry_logs` with RLS |
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*

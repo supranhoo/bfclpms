@@ -1273,6 +1273,62 @@ export type Database = {
           },
         ]
       }
+      org_kpi_data_entry_logs: {
+        Row: {
+          action: string
+          category_id: string
+          created_at: string
+          id: string
+          kpi_name: string
+          kra_name: string
+          new_value: number | null
+          old_value: number | null
+          org_kpi_value_id: string | null
+          performed_by: string | null
+          remarks: string | null
+          review_period: string
+          review_year: number
+        }
+        Insert: {
+          action: string
+          category_id: string
+          created_at?: string
+          id?: string
+          kpi_name: string
+          kra_name: string
+          new_value?: number | null
+          old_value?: number | null
+          org_kpi_value_id?: string | null
+          performed_by?: string | null
+          remarks?: string | null
+          review_period: string
+          review_year: number
+        }
+        Update: {
+          action?: string
+          category_id?: string
+          created_at?: string
+          id?: string
+          kpi_name?: string
+          kra_name?: string
+          new_value?: number | null
+          old_value?: number | null
+          org_kpi_value_id?: string | null
+          performed_by?: string | null
+          remarks?: string | null
+          review_period?: string
+          review_year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_kpi_data_entry_logs_org_kpi_value_id_fkey"
+            columns: ["org_kpi_value_id"]
+            isOneToOne: false
+            referencedRelation: "org_kpi_values"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_kpi_data_owners: {
         Row: {
           assigned_by: string | null
