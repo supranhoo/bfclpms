@@ -9,6 +9,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 export interface ScopedRow {
   scopeId: string; // departmentId or employeeId
   scopeName: string;
+  scopeSubText?: string; // e.g. comma-separated employee names under a department
   achievedValue: number | null;
   remarks: string;
   evidenceUrl: string | null;
@@ -47,7 +48,14 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel }: OrgK
             <TableBody>
               {rows.map(row => (
                 <TableRow key={row.scopeId}>
-                  <TableCell className="text-sm py-2">{row.scopeName}</TableCell>
+                  <TableCell className="text-sm py-2">
+                    <div className="flex flex-col">
+                      <span>{row.scopeName}</span>
+                      {row.scopeSubText && (
+                        <span className="text-xs text-muted-foreground">{row.scopeSubText}</span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="py-2">
                     <Input
                       type="number"
