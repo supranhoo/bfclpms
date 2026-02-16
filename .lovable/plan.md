@@ -1,75 +1,64 @@
 
 
-# Fix Mobile KPI Card Text Formatting
+# Fix Clipboard Paste Upload in Team Review (UnifiedScorecard)
 
 ## Problem
 
-The mobile KPI cards display raw structured KPI text (with "- Description:", "- Formula:", "- Scoring Logic:" markers) as a single unformatted block. On the web/desktop view, the same text is properly formatted with bold markers and line breaks via `renderBoldKpiText` and `whitespace-pre-wrap`.
+In the Team Review view, Jaspal (and all users) cannot paste attachments via clipboard (Ctrl+V / Cmd+V). The upload works fine in other review views (Self Review, Audit, Management).
 
-Two issues cause this:
+## Root Cause
 
-1. **CSS conflict in Review MobileKpiCard** (`src/components/review/MobileKpiCard.tsx`): The KPI name paragraph has both `line-clamp-2` and `flex items-center gap-1` on the same element. `line-clamp` needs `display: -webkit-box`, but `flex` overrides it to `display: flex`, so the text is never truncated and all structured content spills out.
+`UnifiedScorecard.tsx` -- the component used for Team Review -- still uses the **old single-file `EvidenceUpload`** component, while all other scorecard components (`EmployeeScorecard`, `AuditScorecard`, `ManagementScorecard`, `SelfReviewSheet`) have already been upgraded to the newer **`MultiFileUpload`** component.
 
-2. **Missing formatting in Dashboard MobileKpiCard** (`src/components/dashboard/MobileKpiCard.tsx`): This component renders raw `kpi.kra_name` and `kpi.kpi_name` strings without using `renderBoldKpiText` or `whitespace-pre-wrap`, so section markers appear as plain inline text.
+The `EvidenceUpload` paste handler has a subtle bug: it disables itself when `uploadedUrl` is truthy (line 113: `if (uploading || uploadedUrl) return`), and its scoping to `[role="dialog"]` may not match the Sheet container used in the UnifiedScorecard review panel.
+
+Additionally, upgrading to `MultiFileUpload` will give team reviewers the same multi-file (up to 5) upload capability already available elsewhere.
 
 ## Solution
 
-### 1. Fix Review MobileKpiCard (`src/components/review/MobileKpiCard.tsx`)
+Replace `EvidenceUpload` with `MultiFileUpload` in `UnifiedScorecard.tsx` at both evidence upload locations (normal KPI review and daily binary review).
 
-Separate the `flex` container from the `line-clamp` text element. Wrap the KPI name text in its own `<span>` with `line-clamp-2`, and keep the Info icon outside:
+## Changes
 
+### 1. `src/components/review/UnifiedScorecard.tsx`
+
+**Import change:**
+- Remove: `import { EvidenceUpload } from '@/components/ui/EvidenceUpload';`
+- Add: `import { MultiFileUpload } from '@/components/ui/MultiFileUpload';`
+
+**Two replacements (lines ~1167-1173 and ~1191-1197):**
+
+Replace each `EvidenceUpload` instance:
 ```text
-<!-- Before (broken) -->
-<p className="text-[10px] text-muted-foreground line-clamp-2 flex items-center gap-1">
-  {renderBoldKpiText(kpi.kpi_name)}
-  <Info ... />
-</p>
-
-<!-- After (fixed) -->
-<div className="flex items-start gap-1">
-  <p className="text-[10px] text-muted-foreground line-clamp-2 whitespace-pre-wrap flex-1 min-w-0">
-    {renderBoldKpiText(kpi.kpi_name)}
-  </p>
-  <Info className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
-</div>
+<EvidenceUpload
+  userId={user.id}
+  kpiId={selectedKpi.id}
+  onUploadComplete={setReviewerEvidenceUrl}
+  existingUrl={reviewerEvidenceUrl}
+/>
 ```
 
-Also add `whitespace-pre-wrap` to the KRA name line so normalized newlines render correctly within the clamp.
-
-### 2. Fix Dashboard MobileKpiCard (`src/components/dashboard/MobileKpiCard.tsx`)
-
-Import and apply `renderBoldKpiText` for both KRA and KPI name fields, and add `whitespace-pre-wrap`:
-
+With `MultiFileUpload`:
 ```text
-import { renderBoldKpiText } from '@/components/ui/FormattedText';
-
-<!-- KRA name -->
-<p className="font-medium text-sm mb-1 line-clamp-1 whitespace-pre-wrap">
-  {renderBoldKpiText(kpi.kra_name)}
-</p>
-
-<!-- KPI name -->
-<p className="text-xs text-muted-foreground mb-3 line-clamp-2 whitespace-pre-wrap">
-  {renderBoldKpiText(kpi.kpi_name)}
-</p>
+<MultiFileUpload
+  userId={user.id}
+  contextId={selectedKpi.id}
+  bucketFolder="review-evidence"
+  existingUrls={reviewerEvidenceUrl ? [reviewerEvidenceUrl] : []}
+  onUploadComplete={(urls) => setReviewerEvidenceUrl(urls[urls.length - 1] || '')}
+  maxFiles={5}
+/>
 ```
 
-### 3. Update DOCUMENTATION.md
+The `onUploadComplete` adapter ensures backward compatibility -- it stores the last uploaded URL in `reviewerEvidenceUrl` (existing state variable), maintaining compatibility with the save/approve logic.
 
-Add a note under the mobile UI section about the `line-clamp` and `flex` incompatibility pattern to prevent future regressions.
+### 2. `DOCUMENTATION.md`
 
-## Files Changed
-
-| File | Change |
-|---|---|
-| `src/components/review/MobileKpiCard.tsx` | Separate flex and line-clamp into distinct elements; add `whitespace-pre-wrap` |
-| `src/components/dashboard/MobileKpiCard.tsx` | Import and use `renderBoldKpiText`; add `whitespace-pre-wrap` |
-| `DOCUMENTATION.md` | Add mobile text formatting note |
+Add a note that all scorecard components now use `MultiFileUpload` for consistent paste-to-upload and multi-file support.
 
 ## Impact
 
-- Visual fix only -- no database, schema, or logic changes
-- Desktop/web view is unaffected
-- Properly formatted text with bold section markers and line breaks on mobile
-- Text still truncated via `line-clamp` to keep cards compact
-
+- Fixes paste-to-upload in Team Review
+- Adds multi-file upload capability (up to 5 files) for team reviewers
+- Consistent UX across all review levels
+- No database or schema changes required
