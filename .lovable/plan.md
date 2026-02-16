@@ -1,337 +1,116 @@
 
+# Test Results & Fix Plan: Org KPI Data Entry (Phases 1-5)
 
-# Org KPI Data Entry Overhaul - Full Implementation Plan (Phases 1-5)
+## Test Summary
 
-## Current State
+| Feature | Phase | Status | Notes |
+|---|---|---|---|
+| Card-based UI layout | 1 | Working | Cards render with KPI name, KRA, target, UOM, scope |
+| Category pill tabs | 1 | Working | All 12 categories shown with counts |
+| Category grouping | 1 | Working | KPIs grouped under category headers with "X/Y entered" |
+| Progress bar | 1 | Bug | Always shows 0 for department/employee-scoped KPIs |
+| Per-card Save/Propagate buttons | 1 | Working | Visible on each card |
+| History button (Audit popover) | 4 | Working | Opens popover with "Value History" title |
+| Impact button | 1 | Working | Visible on each card |
+| Search bar | 1 | Working | Renders, filters KPIs |
+| Period/Year selector | 1 | Working | Renders and functions |
+| Auto-save (2s debounce) | 2 | Bug | Saves null instead of typed value (stale closure) |
+| Save status indicator | 2 | Partial | Not visible because auto-save fires and resets before user can see it |
+| Copy from Last Period button | 2 | Working | Button visible in header |
+| Export Template button | 3 | Working | Button visible in header |
+| Import Excel button | 3 | Working | Button visible in header |
+| Audit log table | 4 | Working | Table exists in database, RLS enabled |
+| Data Owners tab | 5 | Working | Shows categories with owner counts, bulk assign UI |
+| Bulk assign to category | 5 | Working | "Assign owner to ALL X KPIs" with user selector |
 
-The existing data entry page (`/admin/org-kpi-data`) is a single flat table with 11 columns showing every Org KPI in one scrollable list. There is 1 data owner assigned and only 1 value entered. The system supports ownership filtering, evidence upload, impact analysis, and propagation -- but the UI makes it hard for a non-admin data entry person to use efficiently.
+## Critical Bugs Found
 
----
+### Bug 1: Auto-Save Stale Closure (Phase 2) -- HIGH PRIORITY
 
-## Phase 1: Card-Based Data Entry UI + Progress Tracking
+**Problem**: When a user types a value (e.g., "85") and the 2-second auto-save fires, it saves `null` instead of the typed value.
 
-### Before
+**Root Cause**: Classic React stale closure. In `OrgKpiEntryCard.tsx`:
+1. `onChange` calls `setAchievedValue(e.target.value)` then `triggerAutoSave()`
+2. `triggerAutoSave` creates a `setTimeout` that calls `getValues()`
+3. But `getValues` is a `useCallback` that captured the OLD `achievedValue` (before `setState` re-rendered)
+4. The setTimeout fires 2 seconds later, but it still holds the old `getValues` reference
 
-```text
-+-----------------------------------------------------------------------+
-| Filters: Period | Category | Dept | Designation | KRA | Search        |
-+-----------------------------------------------------------------------+
-| Table Header: Category | KRA | KPI | Employee | Dept | Desig |       |
-|                Achieved | Remark | File | Impact | Actions            |
-+-----------------------------------------------------------------------+
-| Row 1: Compliance | Statutory | ... | All Employees | -- | -- | ___  |
-| Row 2: Compliance | Closure   | ... | All Employees | -- | -- | ___  |
-| Row 3: Safety     | Fire      | ... | All Employees | -- | -- | ___  |
-| ... (flat list of all rows, no grouping, no progress)                 |
-+-----------------------------------------------------------------------+
-| [Save All]                                                            |
-+-----------------------------------------------------------------------+
+**Fix**: Use a ref to always access the latest values:
+- Store `achievedValue`, `remarks`, `evidenceUrl`, `scopedValues` in refs
+- Have `getValues` read from refs instead of state
+- This ensures the setTimeout always reads the current values
+
+### Bug 2: Progress Bar Ignores Scoped Values (Phase 1) -- MEDIUM PRIORITY
+
+**Problem**: Progress bar shows "0 of 33 KPIs Entered" even when department-scoped KPIs have values entered.
+
+**Root Cause**: In `OrgKpiDataEntry.tsx` line 144, the progress lookup key always uses `||null||null`, which only matches org-wide records. Department-scoped records have a department_id in the key.
+
+**Fix**: For department/employee-scoped KPIs, check if ANY scoped row for that KPI has a non-null achieved_value, rather than only checking the org-wide key.
+
+## Fixes Required
+
+### File: `src/components/admin/OrgKpiEntryCard.tsx`
+
+Add refs to track current values and fix the stale closure:
+
+```typescript
+// Add refs alongside state
+const achievedValueRef = useRef(achievedValue);
+const remarksRef = useRef(remarks);
+const evidenceUrlRef = useRef(evidenceUrl);
+const scopedValuesRef = useRef(scopedValues);
+
+// Keep refs in sync with state
+useEffect(() => { achievedValueRef.current = achievedValue; }, [achievedValue]);
+useEffect(() => { remarksRef.current = remarks; }, [remarks]);
+useEffect(() => { evidenceUrlRef.current = evidenceUrl; }, [evidenceUrl]);
+useEffect(() => { scopedValuesRef.current = scopedValues; }, [scopedValues]);
+
+// getValues reads from refs (always current)
+const getValues = useCallback(() => {
+  const parsed = achievedValueRef.current === '' ? null : parseFloat(achievedValueRef.current);
+  return {
+    achievedValue: isNaN(parsed as number) ? null : parsed,
+    remarks: remarksRef.current,
+    evidenceUrl: evidenceUrlRef.current,
+    scopedValues: data.scope !== 'organization'
+      ? scopedValuesRef.current.map(s => ({ ... }))
+      : undefined,
+  };
+}, [data.scope]); // no longer depends on state values
 ```
 
-### After
+### File: `src/pages/admin/OrgKpiDataEntry.tsx`
 
-```text
-+-----------------------------------------------------------------------+
-| Organization KPI Data Entry                                           |
-| Period: [February 2026]  Year: [2026]                                 |
-| Category: [All] [Compliance] [Safety] [Quality] ...   [Search: ___]  |
-+-----------------------------------------------------------------------+
-| Progress: [===========---------] 15/43 KPIs Entered                  |
-+-----------------------------------------------------------------------+
-|                                                                       |
-| -- Compliance (5 KPIs) -- 2/5 entered ------------------------------ |
-|                                                                       |
-| +--- Annual Medical Examination --------------------------------+    |
-| | KRA: Statutory Compliance                                      |    |
-| | Target: 0  |  UOM: Number  |  Scope: Organization             |    |
-| |                                                                |    |
-| | Achieved: [______]   Remark: [______________]   [Upload File]  |    |
-| | Previous Period: -- (no data)                                  |    |
-| |                                                    Status: Pending  |
-| | [Save]  [Save & Propagate]                                     |    |
-| +----------------------------------------------------------------+    |
-|                                                                       |
-| +--- Closure of Audit Points -----------------------------------+    |
-| | KRA: Audit Compliance                                          |    |
-| | Target: 0  |  UOM: Number  |  Scope: Organization             |    |
-| |                                                                |    |
-| | Achieved: [__0__]   Remark: [All closed]   [View File]         |    |
-| | Previous Period: 0 (Jan 2026)                                  |    |
-| |                                                    Status: Entered  |
-| | [Save]  [Save & Propagate]                                     |    |
-| +----------------------------------------------------------------+    |
-|                                                                       |
-| -- Safety (8 KPIs) -- 5/8 entered ------------------------------- -- |
-| ...                                                                   |
-|                                                                       |
-| +--- OEE (Department-scoped) -----------------------------------+    |
-| | KRA: Production Efficiency                                     |    |
-| | Target: 85%  |  UOM: %  |  Scope: Department                  |    |
-| |                                                                |    |
-| | [v Expand 6 departments]                                       |    |
-| |  +--------------------------------------------------+         |    |
-| |  | Department    | Achieved | Remark        | File  |         |    |
-| |  | Production    | [90___]  | [Good______]  | [Up]  |         |    |
-| |  | Maintenance   | [80___]  | [__________]  | [Up]  |         |    |
-| |  | Quality       | [______] | [__________]  | [Up]  |         |    |
-| |  +--------------------------------------------------+         |    |
-| |                                                                |    |
-| | [Save All Departments]  [Save & Propagate All]                 |    |
-| +----------------------------------------------------------------+    |
-+-----------------------------------------------------------------------+
+Fix progress calculation to handle scoped KPIs:
+
+```typescript
+ownershipFilteredKpis.forEach(kpi => {
+  const scope = (kpi as any).org_level_scope || 'organization';
+  cat.total++;
+
+  if (scope === 'organization') {
+    // Check org-wide key
+    const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+    const val = existingValuesMap.get(key);
+    if (val?.achieved_value != null) { enteredKpis++; cat.entered++; }
+  } else {
+    // Check if ANY scoped row has a value
+    const hasAnyValue = Array.from(existingValuesMap.entries()).some(([k, v]) =>
+      k.startsWith(`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||`) &&
+      v.achieved_value != null
+    );
+    if (hasAnyValue) { enteredKpis++; cat.entered++; }
+  }
+});
 ```
 
-### Changes
+### File: `DOCUMENTATION.md`
 
-| File | Action | Details |
-|---|---|---|
-| `src/components/admin/OrgKpiEntryCard.tsx` | CREATE | Single KPI card with inline inputs, save/propagate buttons, previous period value |
-| `src/components/admin/OrgKpiProgressBar.tsx` | CREATE | Progress bar showing X/Y KPIs entered, per-category mini-progress |
-| `src/components/admin/OrgKpiScopedEntryTable.tsx` | CREATE | Collapsible mini-table for department/employee-scoped KPIs inside a card |
-| `src/pages/admin/OrgKpiDataEntry.tsx` | REWRITE | Replace flat table with card layout grouped by category, category pill tabs, simplified filters |
-| `src/hooks/useOrgKpiValues.ts` | ADD | New hook `useOrgKpiPreviousPeriodValues` to fetch last period's data for reference |
-| `DOCUMENTATION.md` | UPDATE | Document new card-based UI |
+Update to document the ref-based auto-save pattern.
 
-### Technical Details
+## Test Data Cleanup
 
-- Each `OrgKpiEntryCard` manages its own local state (dirty tracking per card)
-- Individual "Save" calls existing `useBulkUpsertOrgKpiValues` with just that card's data
-- "Save & Propagate" calls upsert then `usePropagateOrgKpiValue` sequentially
-- Progress = count of `org_kpi_values` with non-null `achieved_value` / total unique org KPIs
-- Category tabs use existing `kra_categories` data with color dots
-- For department-scoped KPIs, `OrgKpiScopedEntryTable` renders a compact table inside the card with collapsible expand
-- Ownership filtering stays the same (non-admins only see their assigned KPIs)
-- No database changes required
-
----
-
-## Phase 2: Copy from Last Period + Auto-Save
-
-### Before (Phase 1 state)
-
-- User must manually enter every value each period
-- No save indicator -- user clicks "Save" and waits
-
-### After
-
-```text
-+-----------------------------------------------------------------------+
-| [Copy from Last Period]  [Import Excel]  [Export Template]             |
-+-----------------------------------------------------------------------+
-|                                                                       |
-| +--- Annual Medical Examination --------------------------------+    |
-| | ...                                                            |    |
-| | Achieved: [__0__]  (Copied from Jan 2026)     Saved 2s ago    |    |
-| +----------------------------------------------------------------+    |
-```
-
-### Changes
-
-| File | Action | Details |
-|---|---|---|
-| `src/pages/admin/OrgKpiDataEntry.tsx` | ADD | "Copy from Last Period" button in header |
-| `src/components/admin/OrgKpiEntryCard.tsx` | ADD | Auto-save with 2s debounce, "Saving..." / "Saved" indicator |
-| `src/hooks/useOrgKpiValues.ts` | ADD | `useCopyFromPreviousPeriod` mutation that bulk-copies values |
-
-### Technical Details
-
-- "Copy from Last Period" fetches previous period's `org_kpi_values` and pre-fills current period cards
-- Only copies where current value is null (does not overwrite existing entries)
-- Auto-save uses `useRef` + `setTimeout` debounce (2000ms after last keystroke)
-- Save indicator shows "Saving...", then "Saved" with checkmark for 3s
-- `beforeunload` handler warns if any cards have unsaved edits
-- No database changes required
-
----
-
-## Phase 3: Bulk Excel Import/Export
-
-### Before
-
-- No way to enter data offline or in bulk
-
-### After
-
-```text
-+--- Import from Excel -------------------------------------------+
-| Step 1: Download template with KPI names + targets pre-filled    |
-| Step 2: Fill "Achieved" and "Remark" columns in Excel            |
-| Step 3: Upload and validate                                      |
-|                                                                  |
-| Preview:                                                         |
-| +------------------------------------------------------+        |
-| | KPI Name         | Target | Achieved | Status        |        |
-| | Medical Exam     | 0      | 0        | Valid         |        |
-| | Audit Closure    | 0      | 2        | Valid         |        |
-| | Fire Safety      | 100%   | abc      | Invalid Value |        |
-| +------------------------------------------------------+        |
-|                                                                  |
-| [Import 2 Valid KPIs]  [Cancel]                                  |
-+------------------------------------------------------------------+
-```
-
-### Changes
-
-| File | Action | Details |
-|---|---|---|
-| `src/components/admin/OrgKpiBulkImport.tsx` | CREATE | Dialog with upload, validation preview, and import button |
-| `src/components/admin/OrgKpiBulkExport.tsx` | CREATE | Button that generates Excel template with KPI names, targets, UOM pre-filled |
-| `src/pages/admin/OrgKpiDataEntry.tsx` | ADD | Import/Export buttons in header area |
-| `DOCUMENTATION.md` | UPDATE | Document bulk import/export |
-
-### Technical Details
-
-- Uses existing `xlsx` library (already installed)
-- Template columns: Category, KRA, KPI Name, Target, UOM, Achieved Value (blank), Remark (blank)
-- Validation: match by category+KRA+KPI name exactly, check numeric for numeric UOM types
-- Preview table shows green/red status per row
-- Import calls existing `useBulkUpsertOrgKpiValues`
-- No database changes required
-
----
-
-## Phase 4: Audit Trail for Data Entry
-
-### Before
-
-- No record of who entered what value or when it changed
-
-### After
-
-- Every save (manual, auto-save, import, copy) creates a log entry
-- "View History" button on each card shows a timeline of changes
-
-```text
-+--- Value History: Annual Medical Examination --------------------+
-| Feb 16, 2026 14:30  |  Jaspal Singh  |  Set to 0  |  Manual     |
-| Feb 16, 2026 14:25  |  Jaspal Singh  |  Copied from Jan 2026    |
-| Jan 31, 2026 17:00  |  Admin         |  Set to 0  |  Manual     |
-+------------------------------------------------------------------+
-```
-
-### Changes
-
-| File | Action | Details |
-|---|---|---|
-| Database migration | CREATE TABLE | `org_kpi_data_entry_logs` with columns: id, org_kpi_value_id, category_id, kra_name, kpi_name, review_period, review_year, action, performed_by, old_value, new_value, remarks, created_at |
-| `src/hooks/useOrgKpiAuditLog.ts` | CREATE | Hook to fetch and insert audit log entries |
-| `src/components/admin/OrgKpiAuditLog.tsx` | CREATE | Timeline component showing change history per KPI |
-| `src/components/admin/OrgKpiEntryCard.tsx` | ADD | "View History" button that opens audit log popover |
-| `src/hooks/useOrgKpiValues.ts` | ADD | Insert audit log entry on every save |
-| `DOCUMENTATION.md` | UPDATE | Document audit trail |
-
-### Database Migration
-
-```sql
-CREATE TABLE org_kpi_data_entry_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_kpi_value_id UUID REFERENCES org_kpi_values(id) ON DELETE SET NULL,
-  category_id UUID NOT NULL,
-  kra_name TEXT NOT NULL,
-  kpi_name TEXT NOT NULL,
-  review_period TEXT NOT NULL,
-  review_year INTEGER NOT NULL,
-  action TEXT NOT NULL,
-  performed_by UUID REFERENCES auth.users(id),
-  old_value NUMERIC,
-  new_value NUMERIC,
-  remarks TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
-ALTER TABLE org_kpi_data_entry_logs ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Admins and data owners can view audit logs"
-  ON org_kpi_data_entry_logs FOR SELECT
-  USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
-    OR performed_by = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM org_kpi_data_owners
-      WHERE owner_id = auth.uid()
-        AND category_id = org_kpi_data_entry_logs.category_id
-        AND kra_name = org_kpi_data_entry_logs.kra_name
-        AND kpi_name = org_kpi_data_entry_logs.kpi_name
-    )
-  );
-
-CREATE POLICY "Authenticated users can insert audit logs"
-  ON org_kpi_data_entry_logs FOR INSERT
-  WITH CHECK (auth.uid() = performed_by);
-```
-
----
-
-## Phase 5: Enhanced Data Owner Management
-
-### Before
-
-- Owner assignment is per-KPI only (must assign one at a time via the per-row button)
-- No overview of all assignments
-
-### After
-
-```text
-+--- Data Owner Management ----------------------------------------+
-|                                                                   |
-| Category: Compliance (5 KPIs)                                     |
-| +---------------------------------------------------------------+|
-| | Owner: Jaspal Singh  |  Assigned to: 3/5 KPIs  |  [Manage]   ||
-| | Owner: --            |  2 KPIs unassigned        |  [Assign]  ||
-| +---------------------------------------------------------------+|
-|                                                                   |
-| [Assign Jaspal to ALL 5 KPIs in Compliance]                      |
-|                                                                   |
-| Category: Safety (8 KPIs)                                         |
-| +---------------------------------------------------------------+|
-| | No owners assigned   |  [Bulk Assign]                          ||
-| +---------------------------------------------------------------+|
-+-------------------------------------------------------------------+
-```
-
-### Changes
-
-| File | Action | Details |
-|---|---|---|
-| `src/components/admin/OrgKpiOwnerDialog.tsx` | ENHANCE | Add "Assign to all KPIs in this category" checkbox/button |
-| `src/components/admin/OrgKpiOwnerManagement.tsx` | CREATE | Full admin panel showing all categories with owner counts, bulk assign/remove |
-| `src/hooks/useOrgKpiDataOwner.ts` | ADD | `useBulkAssignOrgKpiOwner` mutation that inserts owner for all KPIs in a category |
-| `src/pages/admin/OrgKpiDataEntry.tsx` | ADD | Link/tab to owner management panel (admin only) |
-| `DOCUMENTATION.md` | UPDATE | Document bulk owner assignment |
-
-### Technical Details
-
-- Bulk assign finds all unique KPI definitions in a category and inserts `org_kpi_data_owners` rows for each
-- Uses existing `org_kpi_data_owners` table -- no new tables needed
-- Owner management panel groups by category, shows assigned count vs total
-- No database changes required (uses existing table)
-
----
-
-## Implementation Order and Dependencies
-
-```text
-Phase 1 (Card UI + Progress)
-    |
-    v
-Phase 2 (Copy + Auto-save)  -- depends on Phase 1 card components
-    |
-    v
-Phase 3 (Excel Import/Export)  -- independent, uses same save hooks
-    |
-Phase 4 (Audit Trail)  -- independent, adds logging to save hooks
-    |
-Phase 5 (Owner Management)  -- independent, enhances existing dialog
-```
-
-Phases 1 and 2 should be done together. Phases 3, 4, 5 are independent and can be done in any order after Phase 2.
-
-## What Is NOT Included (and Why)
-
-| Skipped Feature | Reason |
-|---|---|
-| New `org_kpi_data_entry` role | Existing `org_kpi_data_owners` + `DataOwnerRoute` already handles access control. Adding a new role would require RLS changes across dozens of tables. |
-| Approval workflow (draft/pending/approved) | The `org_kpi_values` table already has status + send-back workflow. Adding another layer would conflict with propagation flow. |
-| Auto-notification reminders | Requires CRON edge function infrastructure. Better as a separate future initiative. |
-| Data entry templates | With "Copy from Last Period" covering 90% of use cases, templates add complexity with little benefit for 43 KPIs. |
-
+The test created one record with null achieved_value that should be cleaned up:
+- `org_kpi_values` ID: `82a09304-cca8-4b2c-b46e-6d30d8c1ff70` (Adherence to Manning Norms with null value)
