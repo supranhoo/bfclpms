@@ -3412,7 +3412,7 @@ This ensures DB triggers using `net.http_post` (which send the 208-char JWT) can
 | File | Action |
 |---|---|
 | `src/pages/admin/OrgKpiDataEntry.tsx` | REWRITE: Card layout, progress, copy, import/export, owner tab |
-| `src/components/admin/OrgKpiEntryCard.tsx` | NEW: Individual KPI entry card with ref-based auto-save (uses `useRef` to avoid stale closures in debounced saves) |
+| `src/components/admin/OrgKpiEntryCard.tsx` | NEW: Individual KPI entry card with ref-based auto-save (uses `useRef` to avoid stale closures in debounced saves). Uses a two-column `grid grid-cols-1 md:grid-cols-5` layout (2:3 ratio like KpiReviewPanel): left column shows KPI info (name, KRA, scope, target, UOM, previous value, status badge), right column contains input fields and action buttons. Scoped entry tables span full width below. |
 | `src/components/admin/OrgKpiProgressBar.tsx` | NEW: Progress bar with category breakdown |
 | `src/components/admin/OrgKpiScopedEntryTable.tsx` | NEW: Collapsible mini-table for dept/employee scope |
 | `src/components/admin/OrgKpiAuditLog.tsx` | NEW: History popover timeline |

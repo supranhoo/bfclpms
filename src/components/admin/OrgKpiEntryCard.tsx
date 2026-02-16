@@ -176,69 +176,103 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, onSave, onSave
   return (
     <Card className={`transition-all min-w-0 overflow-hidden ${isDirtyRef.current ? 'ring-1 ring-primary/30' : ''}`}>
       <CardContent className="p-4 space-y-3">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold truncate">{data.kpiName}</h3>
-            <p className="text-xs text-muted-foreground truncate">KRA: {data.kraName}</p>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Two-column layout: Info (left) | Inputs+Actions (right) */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          {/* LEFT COLUMN (40%) - KPI Info */}
+          <div className="md:col-span-2 space-y-2 min-w-0">
+            <h3 className="text-sm font-semibold whitespace-pre-wrap break-words">{data.kpiName}</h3>
+            <p className="text-xs text-muted-foreground break-words">KRA: {data.kraName}</p>
+
+            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <ScopeIcon className="h-3.5 w-3.5" />
+                {data.scope === 'organization' ? 'Org-wide' : data.scope === 'department' ? 'Per Department' : 'Per Employee'}
+              </span>
+              {data.targetValue !== null && (
+                <span>Target: <span className="font-medium text-foreground">{data.targetValue}</span></span>
+              )}
+              {data.uom && (
+                <span>UOM: <span className="font-medium text-foreground">{data.uom}</span></span>
+              )}
+            </div>
+
+            {data.previousValue !== null && data.previousPeriodLabel && (
+              <p className="text-xs text-muted-foreground">
+                Prev ({data.previousPeriodLabel}): <span className="font-medium text-foreground">{data.previousValue}</span>
+              </p>
+            )}
+
             <Badge variant={statusInfo.variant} className={`gap-1 text-xs ${statusInfo.className}`}>
               <StatusIcon className="h-3 w-3" />
               {statusInfo.label}
             </Badge>
           </div>
-        </div>
 
-        {/* Meta row */}
-        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <ScopeIcon className="h-3.5 w-3.5" />
-            {data.scope === 'organization' ? 'Org-wide' : data.scope === 'department' ? 'Per Department' : 'Per Employee'}
-          </span>
-          {data.targetValue !== null && (
-            <span>Target: <span className="font-medium text-foreground">{data.targetValue}</span></span>
-          )}
-          {data.uom && (
-            <span>UOM: <span className="font-medium text-foreground">{data.uom}</span></span>
-          )}
-          {data.previousValue !== null && data.previousPeriodLabel && (
-            <span>
-              Prev ({data.previousPeriodLabel}): <span className="font-medium text-foreground">{data.previousValue}</span>
-            </span>
-          )}
-        </div>
+          {/* RIGHT COLUMN (60%) - Inputs & Actions */}
+          <div className="md:col-span-3 space-y-3 min-w-0">
+            {/* Input area - org scope */}
+            {data.scope === 'organization' && (
+              <div className="space-y-2">
+                <Input
+                  type="number"
+                  value={achievedValue}
+                  onChange={(e) => { setAchievedValue(e.target.value); triggerAutoSave(); }}
+                  placeholder="Achieved value"
+                  className="h-9"
+                />
+                <Input
+                  value={remarks}
+                  onChange={(e) => { setRemarks(e.target.value); triggerAutoSave(); }}
+                  placeholder="Remark"
+                  className="h-9"
+                />
+                <OrgKpiFileUpload
+                  existingUrl={evidenceUrl}
+                  onUploadComplete={(url) => { setEvidenceUrl(url); triggerAutoSave(); }}
+                />
+              </div>
+            )}
 
-        {/* Input area - org scope */}
-        {data.scope === 'organization' && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 min-w-0">
-            <div>
-              <Input
-                type="number"
-                value={achievedValue}
-                onChange={(e) => { setAchievedValue(e.target.value); triggerAutoSave(); }}
-                placeholder="Achieved value"
-                className="h-9"
-              />
-            </div>
-            <div>
-              <Input
-                value={remarks}
-                onChange={(e) => { setRemarks(e.target.value); triggerAutoSave(); }}
-                placeholder="Remark"
-                className="h-9"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <OrgKpiFileUpload
-                existingUrl={evidenceUrl}
-                onUploadComplete={(url) => { setEvidenceUrl(url); triggerAutoSave(); }}
-              />
+            {/* Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t">
+              <div className="flex items-center gap-2">
+                <OrgKpiAuditLog
+                  categoryId={data.categoryId}
+                  kraName={data.kraName}
+                  kpiName={data.kpiName}
+                  reviewPeriod={reviewPeriod}
+                  reviewYear={reviewYear}
+                />
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" onClick={onOpenImpact}>
+                  <BarChart3 className="h-3.5 w-3.5" />
+                  Impact
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                {saveStatus === 'saving' && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" />Saving...
+                  </span>
+                )}
+                {saveStatus === 'saved' && (
+                  <span className="text-xs text-primary flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />Saved
+                  </span>
+                )}
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleManualSave} disabled={isSaving}>
+                  {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+                  Save
+                </Button>
+                <Button size="sm" className="h-7 text-xs" onClick={handleSaveAndPropagate} disabled={isPropagating}>
+                  {isPropagating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5 mr-1" />}
+                  Save & Propagate
+                </Button>
+              </div>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* Scoped entry table for dept/employee */}
+        {/* Scoped entry table for dept/employee - full width below both columns */}
         {data.scope !== 'organization' && data.scopeLabel && (
           <OrgKpiScopedEntryTable
             rows={scopedValues}
@@ -246,43 +280,6 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, onSave, onSave
             scopeLabel={data.scopeLabel}
           />
         )}
-
-        {/* Actions */}
-        <div className="flex items-center justify-between pt-1 border-t">
-          <div className="flex items-center gap-2">
-            <OrgKpiAuditLog
-              categoryId={data.categoryId}
-              kraName={data.kraName}
-              kpiName={data.kpiName}
-              reviewPeriod={reviewPeriod}
-              reviewYear={reviewYear}
-            />
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" onClick={onOpenImpact}>
-              <BarChart3 className="h-3.5 w-3.5" />
-              Impact
-            </Button>
-          </div>
-          <div className="flex items-center gap-2">
-            {saveStatus === 'saving' && (
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Loader2 className="h-3 w-3 animate-spin" />Saving...
-              </span>
-            )}
-            {saveStatus === 'saved' && (
-              <span className="text-xs text-primary flex items-center gap-1">
-                <CheckCircle2 className="h-3 w-3" />Saved
-              </span>
-            )}
-            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleManualSave} disabled={isSaving}>
-              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
-              Save
-            </Button>
-            <Button size="sm" className="h-7 text-xs" onClick={handleSaveAndPropagate} disabled={isPropagating}>
-              {isPropagating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5 mr-1" />}
-              Save & Propagate
-            </Button>
-          </div>
-        </div>
       </CardContent>
     </Card>
   );

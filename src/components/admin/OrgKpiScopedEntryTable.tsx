@@ -34,7 +34,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel }: OrgK
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="border rounded-lg mt-2 overflow-hidden">
+        <div className="border rounded-lg mt-2 min-w-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30">
