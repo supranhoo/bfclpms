@@ -7,7 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from '@/components/ui/table';
-import { Search, Eye, MessageCircle, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
+import { Search, Eye, MessageCircle, CheckCircle2, AlertCircle, Clock, Download } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 
 type ObservationStatus = 'open' | 'acknowledged' | 'resolved';
@@ -117,6 +119,34 @@ export default function ObservationsOverview() {
     });
   }, [observations, statusFilter, search]);
 
+  const handleExportExcel = () => {
+    const rows = filtered.map(obs => ({
+      'Ticket #': (obs as any).ticket_number || '',
+      'Title': obs.title,
+      'Description': obs.description || '',
+      'Employee': obs.employee_profile?.full_name || '',
+      'Employee Code': obs.employee_profile?.employee_code || '',
+      'KRA': obs.kpi?.kra_name || '',
+      'KPI': obs.kpi?.kpi_name || '',
+      'Type': typeConfig[obs.observation_type]?.label || obs.observation_type,
+      'Observer': obs.created_by_profile?.full_name || '',
+      'Observer Role': obs.observer_role,
+      'Status': statusConfig[obs.status]?.label || obs.status,
+      'Created': format(new Date(obs.created_at), 'dd MMM yyyy'),
+      'Last Updated': format(new Date(obs.updated_at), 'dd MMM yyyy'),
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 12 }, { wch: 30 }, { wch: 40 }, { wch: 20 }, { wch: 14 },
+      { wch: 25 }, { wch: 30 }, { wch: 10 }, { wch: 20 }, { wch: 14 },
+      { wch: 14 }, { wch: 14 }, { wch: 14 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Observations');
+    XLSX.writeFile(wb, `Observations_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   const tabs = [
     { value: 'all', label: 'All', icon: Eye, count: counts.all },
     { value: 'open', label: 'Open', icon: Clock, count: counts.open },
@@ -141,6 +171,10 @@ export default function ObservationsOverview() {
                 className="pl-9"
               />
             </div>
+            <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={filtered.length === 0} className="gap-1.5">
+              <Download className="h-4 w-4" />
+              Download Report
+            </Button>
             <Tabs value={statusFilter} onValueChange={setStatusFilter} className="flex-1">
               <TabsList className="grid w-full grid-cols-4 max-w-md">
                 {tabs.map(tab => {
