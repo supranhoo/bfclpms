@@ -9,7 +9,8 @@ import { OrgKpiAuditLog } from '@/components/admin/OrgKpiAuditLog';
 import { OrgKpiScopedEntryTable, ScopedRow } from '@/components/admin/OrgKpiScopedEntryTable';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
-import { Save, Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Save, Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw } from 'lucide-react';
 
 export interface OrgKpiCardData {
   categoryId: string;
@@ -59,6 +60,7 @@ interface OrgKpiEntryCardProps {
     scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null }>;
   }) => Promise<void>;
   onUnlock?: () => Promise<void>;
+  onRollback?: (reason: string) => Promise<void>;
   onOpenImpact: () => void;
 }
 
@@ -74,10 +76,12 @@ const scopeIcons = {
   employee: User,
 };
 
-export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSave, onSaveAndPropagate, onUnlock, onOpenImpact }: OrgKpiEntryCardProps) {
+export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSave, onSaveAndPropagate, onUnlock, onRollback, onOpenImpact }: OrgKpiEntryCardProps) {
   const isLocked = data.status === 'propagated' && !isAdmin;
   const isPropagated = data.status === 'propagated';
   const [isUnlocking, setIsUnlocking] = useState(false);
+  const [isRollingBack, setIsRollingBack] = useState(false);
+  const [rollbackReason, setRollbackReason] = useState('');
   const [achievedValue, setAchievedValue] = useState<string>(data.achievedValue?.toString() ?? '');
   const [remarks, setRemarks] = useState(data.remarks);
   const [evidenceUrl, setEvidenceUrl] = useState(data.evidenceUrl);
@@ -311,6 +315,63 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
                     {isUnlocking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlock className="h-3.5 w-3.5" />}
                     Unlock
                   </Button>
+                )}
+                {isPropagated && isAdmin && onRollback && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs gap-1 border-destructive/50 text-destructive hover:bg-destructive/10"
+                        disabled={isRollingBack}
+                      >
+                        {isRollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                        Rollback
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Rollback to Data Entry</AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                          <div className="space-y-3">
+                            <p>
+                              This will <strong>clear propagated values</strong> from {data.employeeCount || 0} employee scorecard{(data.employeeCount || 0) !== 1 ? 's' : ''} and reset this KPI for fresh data entry.
+                            </p>
+                            <p className="text-destructive font-medium">
+                              This action cannot be undone. Employee self-review scores will be removed.
+                            </p>
+                            <Textarea
+                              placeholder="Reason for rollback (required)"
+                              value={rollbackReason}
+                              onChange={(e) => setRollbackReason(e.target.value)}
+                              className="mt-2"
+                              rows={2}
+                            />
+                          </div>
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setRollbackReason('')}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          disabled={!rollbackReason.trim() || isRollingBack}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            setIsRollingBack(true);
+                            try {
+                              await onRollback(rollbackReason.trim());
+                              setRollbackReason('');
+                            } finally {
+                              setIsRollingBack(false);
+                            }
+                          }}
+                        >
+                          {isRollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                          Confirm Rollback
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 )}
               </div>
               {!isLocked && (

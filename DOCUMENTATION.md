@@ -3544,4 +3544,51 @@ Data Owner clicks "Save & Propagate"
 
 ---
 
+### Admin Rollback to Data Entry (v1.40.0)
+
+**Problem:** The existing "Unlock" action only re-enabled editing on the org KPI card but kept the old propagated values in employee scorecards. Admins needed a way to fully reverse propagation — clearing all pushed values from employee scorecards and resetting the org KPI for fresh data entry.
+
+**Solution:**
+
+1. **New Hook: `useRollbackOrgKpiPropagation`** (`src/hooks/useRollbackOrgKpiPropagation.ts`):
+   - Finds all employee KPIs matching the org KPI identity (category, KRA, KPI, period, year, `is_org_level = true`)
+   - Clears `achieved_value`, `self_score`, `self_rating` from their `review_submissions`
+   - Resets KPI status back to `kra_set` (only if currently at `self_review` — won't touch KPIs that have progressed further)
+   - Resets `org_kpi_values` status to `pending` and clears achieved value, remarks, and evidence
+   - Logs the rollback in `org_kpi_data_entry_logs` with the admin's identity and mandatory reason
+   - Notifies data owners via the notifications table
+
+2. **UI: Rollback Button on `OrgKpiEntryCard`**:
+   - Visible only to admins when status is `propagated`, alongside the existing "Unlock" button
+   - Uses `RotateCcw` icon with destructive styling to distinguish from Unlock
+   - Confirmation dialog warns: "This will clear propagated values from X employee scorecards and reset this KPI for fresh data entry. This action cannot be undone."
+   - **Mandatory reason field** (textarea) — the Confirm button is disabled until a reason is entered
+
+| Comparison | Unlock | Rollback to Data Entry |
+|---|---|---|
+| Org KPI status | → `entered` | → `pending` |
+| Org KPI values | Kept | Cleared (value, remarks, evidence) |
+| Employee review_submissions | Kept | Cleared (achieved_value, self_score, self_rating) |
+| Employee KPI status | Unchanged | Reset to `kra_set` (if at `self_review`) |
+| Use case | Minor correction | Full re-entry from scratch |
+
+**User Experience Flow:**
+```
+Admin clicks "Rollback" on propagated card
+  → Confirmation dialog shows affected employee count + warning
+  → Admin enters mandatory reason
+  → [Confirm Rollback]
+  → Employee submissions cleared → KPI statuses reset → org values cleared
+  → Card resets to "Pending" state → data owner can re-enter from scratch
+  → Data owners receive notification about the rollback
+```
+
+| File | Action |
+|---|---|
+| `src/hooks/useRollbackOrgKpiPropagation.ts` | CREATED: New mutation hook for full rollback |
+| `src/components/admin/OrgKpiEntryCard.tsx` | MODIFIED: Added `onRollback` prop; rollback button with confirmation dialog and mandatory reason |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | MODIFIED: Imported rollback hook; wired `onRollback` handler to each card |
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
