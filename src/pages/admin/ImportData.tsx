@@ -1103,7 +1103,9 @@ export default function ImportData() {
             });
 
           if (submissionError) {
-            console.error('Failed to create review submission:', submissionError);
+            // Rollback: delete the orphaned KPI since its review submission failed
+            await supabase.from('kpis').delete().eq('id', newKpi.id);
+            throw new Error(`Review submission failed: ${submissionError.message}`);
           }
         }
 
