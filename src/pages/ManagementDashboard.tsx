@@ -187,7 +187,7 @@ export default function ManagementDashboard() {
           department_id,
           departments (name)
         `),
-        supabase.from('kpi_queries').select('*', { count: 'exact', head: true }).eq('status', 'open'),
+        supabase.from('kpi_queries').select('*', { count: 'exact', head: true }).eq('status', 'open').eq('query_type', 'query'),
         previousPeriod 
           ? supabase.from('kpi_queries').select('*', { count: 'exact', head: true }).eq('status', 'resolved')
           : Promise.resolve({ count: 0 }),

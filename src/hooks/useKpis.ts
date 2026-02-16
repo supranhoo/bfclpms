@@ -915,7 +915,9 @@ export function useSendBackKpi() {
           raised_to: employee_id,
           reason: `[SENT BACK] ${reason}`,
           entity_type: 'kpi',
-          status: 'open',
+          status: 'resolved',
+          resolved_at: new Date().toISOString(),
+          query_type: 'send_back',
         })
         .select()
         .single();
@@ -1000,7 +1002,8 @@ export function useOpenQueryCounts(kpiIds: string[]) {
           .from('kpi_queries')
           .select('kpi_id')
           .in('kpi_id', batch)
-          .eq('status', 'open');
+          .eq('status', 'open')
+          .eq('query_type', 'query');
 
         if (error) throw error;
         data?.forEach(row => {

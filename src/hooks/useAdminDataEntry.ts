@@ -454,7 +454,9 @@ export function useAdminStatusStepBack() {
         raised_to: employee_id,
         reason: `[ADMIN SENT BACK] ${reason}`,
         entity_type: 'kpi' as const,
-        status: 'open' as const,
+        status: 'resolved' as const,
+        resolved_at: new Date().toISOString(),
+        query_type: 'send_back',
       });
 
       if (queryError) {

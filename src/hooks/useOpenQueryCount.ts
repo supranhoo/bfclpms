@@ -14,7 +14,8 @@ export function useOpenQueryCount() {
         .from('kpi_queries')
         .select('*', { count: 'exact', head: true })
         .eq('raised_to', user.id)
-        .eq('status', 'open');
+        .eq('status', 'open')
+        .eq('query_type', 'query');
 
       if (error) throw error;
       return count || 0;

@@ -135,6 +135,7 @@ export default function QueryInbox() {
           kpi:kpi_id(id, kra_name, kpi_name, target_value, uom, review_period, review_year)
         `)
         .or(`raised_to.eq.${user.id},raised_by.eq.${user.id}`)
+        .eq('query_type', 'query')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
