@@ -3476,4 +3476,37 @@ Data Owner clicks "Save & Propagate"
 
 ---
 
+### Org KPI + Data Owner Badge for Reviewers (v1.39.0)
+
+**Problem:** Org-level KPIs were only indicated by a tiny scope icon with a tooltip. Reviewers had no clear, at-a-glance indicator that a KPI's data was entered by a designated Data Owner, nor who that person was.
+
+**Solution:** Added visible, colored badges on org-level KPIs across the KPI table, review panels, and mobile cards:
+
+1. **KPI Details Table** (`KpiDetailsTable.tsx`): Below the KRA/KPI name column, org-level KPIs now display:
+   - A `secondary` badge: `[Building2 icon] Org KPI — Organization` (or Department/Individual based on scope)
+   - An `outline` badge: `Data by: [Owner Name]` when the `entered_by` profile name is available
+
+2. **Review Panel Header** (`KpiHeaderSection.tsx`): When a reviewer opens a KPI for detailed review, a prominent badge row appears below the existing status badges showing the organization KPI scope and data owner name.
+
+3. **Mobile KPI Card** (`MobileKpiCard.tsx`): Compact badge row below the category/status row for org-level KPIs.
+
+4. **Data Source**: The `entered_by` field on `org_kpi_values` (a FK to `profiles`) is joined to retrieve the data owner's `full_name`. The `useOrgKpiValues` hook now includes `entered_by_name` in its return type via a profile join.
+
+5. **Scorecard Integration**: All five scorecard components (`Dashboard.tsx`, `EmployeeScorecard.tsx`, `UnifiedScorecard.tsx`, `AuditScorecard.tsx`, `ManagementScorecard.tsx`) include `entered_by_name` in their `orgKpiValuesMap` and pass it through `getOrgKpiValue` → `KpiReviewPanel` → `KpiHeaderSection`.
+
+| File | Action |
+|---|---|
+| `src/hooks/useOrgKpiValues.ts` | MODIFIED: Added `entered_by_name` field; joined profiles for entered_by name |
+| `src/pages/Dashboard.tsx` | MODIFIED: Include `entered_by_name` in orgKpiValuesMap |
+| `src/components/review/EmployeeScorecard.tsx` | MODIFIED: Include `entered_by_name` in orgKpiValuesMap; pass to KpiReviewPanel |
+| `src/components/review/UnifiedScorecard.tsx` | MODIFIED: Include `entered_by_name` in orgKpiValuesMap; pass to KpiReviewPanel |
+| `src/components/review/AuditScorecard.tsx` | MODIFIED: Include `entered_by_name` in orgKpiValuesMap; pass to KpiReviewPanel |
+| `src/components/review/ManagementScorecard.tsx` | MODIFIED: Include `entered_by_name` in orgKpiValuesMap; pass to KpiReviewPanel |
+| `src/components/review/KpiReviewPanel.tsx` | MODIFIED: Added `orgKpiEnteredByName` prop, passed to KpiHeaderSection |
+| `src/components/review/KpiHeaderSection.tsx` | MODIFIED: Added org KPI badge row with scope and data owner name |
+| `src/components/review/KpiDetailsTable.tsx` | MODIFIED: Updated prop type; added org KPI + data owner badges in KRA/KPI column |
+| `src/components/review/MobileKpiCard.tsx` | MODIFIED: Updated prop type; added org KPI badge row |
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*

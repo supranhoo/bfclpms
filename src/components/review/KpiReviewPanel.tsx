@@ -29,6 +29,7 @@ interface KpiReviewPanelProps {
   onOpenFullHistory?: () => void;
   onOpenTimeline?: () => void;
   workflowStages?: string[];
+  orgKpiEnteredByName?: string | null;
 }
 
 export function KpiReviewPanel({
@@ -45,6 +46,7 @@ export function KpiReviewPanel({
   onOpenFullHistory,
   onOpenTimeline,
   workflowStages,
+  orgKpiEnteredByName,
 }: KpiReviewPanelProps) {
   const isOwnKpi = currentUserId ? kpi.employee_id === currentUserId : false;
   return (
@@ -55,6 +57,7 @@ export function KpiReviewPanel({
         selectedPeriod={selectedPeriod}
         selectedYear={selectedYear}
         onOpenTimeline={onOpenTimeline}
+        orgKpiEnteredByName={orgKpiEnteredByName}
       />
 
       {/* Two-Column Layout - collapses at md breakpoint for mobile sheets */}

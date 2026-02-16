@@ -104,12 +104,12 @@ export function AuditScorecard({
 
   // Create org KPI values lookup map
   const orgKpiValuesMap = useMemo(() => {
-    const map = new Map<string, { achieved_value: number | null; data_source: string | null }>();
+    const map = new Map<string, { achieved_value: number | null; data_source: string | null; entered_by_name: string | null }>();
     orgKpiValues?.forEach(v => {
       const deptPart = v.department_id || 'null';
       const empPart = v.employee_id || 'null';
       const key = `${v.category_id}||${v.kra_name}||${v.kpi_name}||${deptPart}||${empPart}`;
-      map.set(key, { achieved_value: v.achieved_value, data_source: v.data_source });
+      map.set(key, { achieved_value: v.achieved_value, data_source: v.data_source, entered_by_name: v.entered_by_name });
     });
     return map;
   }, [orgKpiValues]);
@@ -760,6 +760,7 @@ export function AuditScorecard({
                 onOpenQueryHistory={() => setHistoryDialogOpen(true)}
                 onOpenFullHistory={() => setTrackerModalOpen(true)}
                 onOpenTimeline={() => setTimelineOpen(true)}
+                orgKpiEnteredByName={getOrgKpiValue(selectedKpi)?.entered_by_name}
               />
             )}
             

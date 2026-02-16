@@ -3,20 +3,22 @@ import { Button } from '@/components/ui/button';
 import { KPI } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
-import { Clock } from 'lucide-react';
+import { Clock, Building2, Users, User } from 'lucide-react';
 
 interface KpiHeaderSectionProps {
   kpi: KPI;
   selectedPeriod: string;
   selectedYear: number;
   onOpenTimeline?: () => void;
+  orgKpiEnteredByName?: string | null;
 }
 
-export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTimeline }: KpiHeaderSectionProps) {
+export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTimeline, orgKpiEnteredByName }: KpiHeaderSectionProps) {
   const categoryName = kpi.kra_categories?.name || 'Uncategorized';
   const categoryColor = kpi.kra_categories?.color || '#6B7280';
   const status = kpi.status || 'kra_set';
   const weightage = kpi.weightage || 0;
+  const scope = kpi.org_level_scope || 'organization';
 
   return (
     <div className="p-3 sm:p-4 bg-muted/30 rounded-lg border">
@@ -55,6 +57,27 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
           )}
         </div>
       </div>
+
+      {/* Org KPI Badge Row */}
+      {kpi.is_org_level && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+          <Badge variant="secondary" className="text-xs gap-1">
+            {scope === 'organization' ? (
+              <Building2 className="h-3 w-3" />
+            ) : scope === 'department' ? (
+              <Users className="h-3 w-3" />
+            ) : (
+              <User className="h-3 w-3" />
+            )}
+            Organization KPI — {scope.charAt(0).toUpperCase() + scope.slice(1)}
+          </Badge>
+          {orgKpiEnteredByName && (
+            <Badge variant="outline" className="text-xs">
+              Data entered by: {orgKpiEnteredByName}
+            </Badge>
+          )}
+        </div>
+      )}
 
       {/* KRA & KPI Names - Full text, no truncation */}
       <h3 className="font-semibold text-sm sm:text-lg text-primary leading-tight whitespace-pre-wrap">
