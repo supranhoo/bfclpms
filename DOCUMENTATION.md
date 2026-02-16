@@ -3191,16 +3191,19 @@ Admins can create, edit, and delete custom workflow templates from the **Templat
 - At least one optional stage must be selected.
 - Template names must be unique.
 
-**Edit / Delete / Set as Default:**
+**Edit / Archive / Set as Default:**
 - All templates (including the current default) show an Edit (pencil) icon.
-- Non-default templates show a **Set as Default** (star) button and a Delete (trash) icon.
+- Non-default templates show a **Set as Default** (star) button and an **Archive** (archive) icon.
 - Clicking "Set as Default" swaps the `is_default` flag. This **only affects the inherit/fallback cascade** (Employee > Department > PMS Grade > Default). Explicitly assigned workflows are never touched.
-- Templates currently assigned to employees, departments, or PMS grades cannot be deleted.
+- **Archiving** sets `is_active = false` instead of hard-deleting. Archived templates are hidden from assignment dropdowns but preserved for audit history. A collapsible "Archived Templates" section shows them with **Restore** and **Permanently Delete** options.
+- **Active KPI safety check**: Before archiving or deleting, the system calls `check_template_has_active_kpis(template_uuid)` — an RPC that checks if any employee whose workflow resolves to this template has non-approved KPIs. If so, the action is blocked with a descriptive error.
+- **Permanent deletion** is only available for archived templates that have no active KPIs and no `workflow_config` references.
+- The `get_employee_workflow`, `get_employee_workflow_info`, and `get_bulk_employee_workflows` functions all filter by `is_active = true`, so archived templates are automatically excluded from workflow resolution.
 
 **Files:**
 - `src/components/admin/CustomWorkflowDialog.tsx` — Dialog component with stage selector
-- `src/hooks/useWorkflowConfig.ts` — `useCreateWorkflowTemplate`, `useUpdateWorkflowTemplate`, `useDeleteWorkflowTemplate`, `useSetDefaultWorkflowTemplate` mutations
-- `src/pages/admin/WorkflowConfig.tsx` — Templates tab with create/edit/delete/set-default actions
+- `src/hooks/useWorkflowConfig.ts` — `useCreateWorkflowTemplate`, `useUpdateWorkflowTemplate`, `useDeleteWorkflowTemplate`, `useSetDefaultWorkflowTemplate`, `useArchiveWorkflowTemplate`, `useRestoreWorkflowTemplate` mutations
+- `src/pages/admin/WorkflowConfig.tsx` — Templates tab with create/edit/archive/restore/delete/set-default actions
 
 ---
 

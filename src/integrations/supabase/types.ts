@@ -2754,6 +2754,7 @@ export type Database = {
           description: string | null
           display_name: string
           id: string
+          is_active: boolean
           is_default: boolean | null
           name: string
           stages: Json
@@ -2763,6 +2764,7 @@ export type Database = {
           description?: string | null
           display_name: string
           id?: string
+          is_active?: boolean
           is_default?: boolean | null
           name: string
           stages: Json
@@ -2772,6 +2774,7 @@ export type Database = {
           description?: string | null
           display_name?: string
           id?: string
+          is_active?: boolean
           is_default?: boolean | null
           name?: string
           stages?: Json
@@ -2805,6 +2808,10 @@ export type Database = {
       aggregate_sub_period_scores: {
         Args: { p_kpi_id: string; p_month: string; p_year: number }
         Returns: number
+      }
+      check_template_has_active_kpis: {
+        Args: { template_uuid: string }
+        Returns: boolean
       }
       detect_training_needs_for_period: {
         Args: {

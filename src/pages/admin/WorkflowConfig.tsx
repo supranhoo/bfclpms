@@ -16,15 +16,17 @@ import {
   useDeleteWorkflowConfig,
   useDeleteWorkflowTemplate,
   useSetDefaultWorkflowTemplate,
+  useArchiveWorkflowTemplate,
+  useRestoreWorkflowTemplate,
   getStageLabel,
   type WorkflowTemplate,
 } from '@/hooks/useWorkflowConfig';
 import { useDepartments } from '@/hooks/useOrganization';
-import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil, Star } from 'lucide-react';
+import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil, Star, Archive, RotateCcw, ChevronDown } from 'lucide-react';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import CustomWorkflowDialog from '@/components/admin/CustomWorkflowDialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 // Stage color mapping
 const stageColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -60,14 +62,22 @@ export default function WorkflowConfig() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<WorkflowTemplate | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WorkflowTemplate | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<WorkflowTemplate | null>(null);
+  const [archivedOpen, setArchivedOpen] = useState(false);
   
-  const { data: templates, isLoading: templatesLoading } = useWorkflowTemplates();
+  const { data: allTemplates, isLoading: templatesLoading } = useWorkflowTemplates(true);
   const { data: configs, isLoading: configsLoading } = useWorkflowConfigs();
   const { data: departments } = useDepartments();
   const upsertConfig = useUpsertWorkflowConfig();
   const deleteConfig = useDeleteWorkflowConfig();
   const deleteTemplate = useDeleteWorkflowTemplate();
   const setDefaultTemplate = useSetDefaultWorkflowTemplate();
+  const archiveTemplate = useArchiveWorkflowTemplate();
+  const restoreTemplate = useRestoreWorkflowTemplate();
+  
+  // Split templates into active and archived
+  const templates = useMemo(() => allTemplates?.filter(t => t.is_active) || [], [allTemplates]);
+  const archivedTemplates = useMemo(() => allTemplates?.filter(t => !t.is_active) || [], [allTemplates]);
   
   // Fetch all profiles for employee tab
   const { data: profiles } = useQuery({
@@ -265,9 +275,10 @@ export default function WorkflowConfig() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => setDeleteTarget(template)}
+                                title="Archive template"
+                                onClick={() => setArchiveTarget(template)}
                               >
-                                <Trash2 className="h-4 w-4 text-destructive" />
+                                <Archive className="h-4 w-4 text-muted-foreground" />
                               </Button>
                             </>
                           )}
@@ -277,6 +288,63 @@ export default function WorkflowConfig() {
                     </CardContent>
                   </Card>
                 ))}
+
+                {/* Archived Templates Section */}
+                {archivedTemplates.length > 0 && (
+                  <Collapsible open={archivedOpen} onOpenChange={setArchivedOpen}>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" className="w-full justify-between mt-4">
+                        <span className="text-sm text-muted-foreground">
+                          Archived Templates ({archivedTemplates.length})
+                        </span>
+                        <ChevronDown className={`h-4 w-4 transition-transform ${archivedOpen ? 'rotate-180' : ''}`} />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="space-y-4 mt-2">
+                      {archivedTemplates.map(template => (
+                        <Card key={template.id} className="opacity-70 border-dashed">
+                          <CardContent className="pt-4">
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h3 className="font-semibold">{template.display_name}</h3>
+                                  <Badge variant="outline">Archived</Badge>
+                                </div>
+                                <p className="text-sm text-muted-foreground">{template.description}</p>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Restore template"
+                                  onClick={async () => {
+                                    try {
+                                      await restoreTemplate.mutateAsync(template.id);
+                                      toast({ title: 'Template restored' });
+                                    } catch (err: any) {
+                                      toast({ title: 'Error', description: err?.message || 'Failed to restore.', variant: 'destructive' });
+                                    }
+                                  }}
+                                >
+                                  <RotateCcw className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Permanently delete"
+                                  onClick={() => setDeleteTarget(template)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
+                            <WorkflowStagesPreview stages={template.stages} />
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -535,9 +603,9 @@ export default function WorkflowConfig() {
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Template</AlertDialogTitle>
+            <AlertDialogTitle>Permanently Delete Template</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{deleteTarget?.display_name}"? This cannot be undone.
+              Are you sure you want to permanently delete "{deleteTarget?.display_name}"? This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -547,7 +615,7 @@ export default function WorkflowConfig() {
                 if (!deleteTarget) return;
                 try {
                   await deleteTemplate.mutateAsync(deleteTarget.id);
-                  toast({ title: 'Template deleted' });
+                  toast({ title: 'Template deleted permanently' });
                 } catch (err: any) {
                   toast({
                     title: 'Cannot delete',
@@ -558,7 +626,40 @@ export default function WorkflowConfig() {
                 setDeleteTarget(null);
               }}
             >
-              Delete
+              Delete Permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Archive Confirmation */}
+      <AlertDialog open={!!archiveTarget} onOpenChange={(o) => !o && setArchiveTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive Template</AlertDialogTitle>
+            <AlertDialogDescription>
+              Archive "{archiveTarget?.display_name}"? It will be hidden from assignment dropdowns but preserved for audit history. You can restore it later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!archiveTarget) return;
+                try {
+                  await archiveTemplate.mutateAsync(archiveTarget.id);
+                  toast({ title: 'Template archived' });
+                } catch (err: any) {
+                  toast({
+                    title: 'Cannot archive',
+                    description: err?.message || 'Failed to archive template.',
+                    variant: 'destructive',
+                  });
+                }
+                setArchiveTarget(null);
+              }}
+            >
+              Archive
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

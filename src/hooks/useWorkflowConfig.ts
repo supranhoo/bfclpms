@@ -8,6 +8,7 @@ export interface WorkflowTemplate {
   description: string | null;
   stages: string[];
   is_default: boolean;
+  is_active: boolean;
 }
 
 export interface WorkflowConfig {
@@ -28,16 +29,21 @@ export interface EmployeeWorkflowInfo {
   config_source: 'employee' | 'department' | 'pms_grade' | 'default';
 }
 
-// Fetch all workflow templates
-export function useWorkflowTemplates() {
+// Fetch all workflow templates (optionally include archived)
+export function useWorkflowTemplates(includeArchived = false) {
   return useQuery({
-    queryKey: ['workflow-templates'],
+    queryKey: ['workflow-templates', includeArchived],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('workflow_templates')
         .select('*')
         .order('name');
       
+      if (!includeArchived) {
+        query = query.eq('is_active', true);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data as WorkflowTemplate[];
     },
@@ -244,7 +250,7 @@ export function useSetDefaultWorkflowTemplate() {
   });
 }
 
-// Delete a workflow template (only if not in use)
+// Delete a workflow template (only if not in use and no active KPIs)
 export function useDeleteWorkflowTemplate() {
   const queryClient = useQueryClient();
   
@@ -262,9 +268,67 @@ export function useDeleteWorkflowTemplate() {
         throw new Error('Cannot delete: this template is currently assigned to employees, departments, or PMS grades.');
       }
       
+      // Check for active KPIs using this template
+      const { data: hasActiveKpis, error: kpiCheckError } = await supabase
+        .rpc('check_template_has_active_kpis', { template_uuid: templateId });
+      
+      if (kpiCheckError) throw kpiCheckError;
+      if (hasActiveKpis) {
+        throw new Error('Cannot delete: employees using this template have in-progress KPIs. Archive it instead.');
+      }
+      
       const { error } = await supabase
         .from('workflow_templates')
         .delete()
+        .eq('id', templateId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflow-templates'] });
+    },
+  });
+}
+
+// Archive a workflow template (soft delete)
+export function useArchiveWorkflowTemplate() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (templateId: string) => {
+      // Check for active KPIs before archiving
+      const { data: hasActiveKpis, error: kpiCheckError } = await supabase
+        .rpc('check_template_has_active_kpis', { template_uuid: templateId });
+      
+      if (kpiCheckError) throw kpiCheckError;
+      if (hasActiveKpis) {
+        throw new Error('Cannot archive: employees using this template have in-progress KPIs.');
+      }
+      
+      const { error } = await supabase
+        .from('workflow_templates')
+        .update({ is_active: false } as any)
+        .eq('id', templateId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflow-templates'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-workflow'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-workflow-stages'] });
+    },
+  });
+}
+
+// Restore an archived workflow template
+export function useRestoreWorkflowTemplate() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (templateId: string) => {
+      const { error } = await supabase
+        .from('workflow_templates')
+        .update({ is_active: true } as any)
         .eq('id', templateId);
       
       if (error) throw error;
