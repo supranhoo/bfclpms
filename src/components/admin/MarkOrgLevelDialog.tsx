@@ -28,13 +28,15 @@ interface SimilarGroup {
 export function MarkOrgLevelDialog({ open, onOpenChange, suggestion, reviewPeriod, reviewYear }: MarkOrgLevelDialogProps) {
   const { toast } = useToast();
   const { markSingle } = useMarkAsOrgLevel();
-  const [scope, setScope] = useState('organization');
+  const isEdit = suggestion?.already_org_level ?? false;
+  const [scope, setScope] = useState(suggestion?.org_level_scope || 'organization');
   const [similarGroups, setSimilarGroups] = useState<SimilarGroup[]>([]);
   const [includeSimilar, setIncludeSimilar] = useState(true);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!open || !suggestion) return;
+    setScope(suggestion.org_level_scope || 'organization');
     // Find similar KPIs (same kra_name + kpi_name in OTHER categories)
     const fetchSimilar = async () => {
       const { data } = await supabase
@@ -97,9 +99,9 @@ export function MarkOrgLevelDialog({ open, onOpenChange, suggestion, reviewPerio
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Mark as Organization-Level KPI</DialogTitle>
+          <DialogTitle>{isEdit ? 'Update Organization-Level KPI' : 'Mark as Organization-Level KPI'}</DialogTitle>
           <DialogDescription>
-            This will mark all matching KPI records as org-level.
+            {isEdit ? 'Update the scope for this org-level KPI.' : 'This will mark all matching KPI records as org-level.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -162,7 +164,7 @@ export function MarkOrgLevelDialog({ open, onOpenChange, suggestion, reviewPerio
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleConfirm} disabled={loading}>
             {loading && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-            Confirm
+            {isEdit ? 'Update' : 'Confirm'}
           </Button>
         </DialogFooter>
       </DialogContent>
