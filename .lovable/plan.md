@@ -1,49 +1,63 @@
 
 
-# Fix: Review Submission Creation Errors During KPI Import
+# Workflow Template Deletion Safety Improvements
 
-## Problem
-When importing KPIs with review data, if the `review_submissions` insert fails (line 1105-1107 in `ImportData.tsx`), the error is only logged to console. The KPI is still counted as "success", resulting in:
-- KPIs that exist but have no review submission record
-- Broken workflow (KPI can't be reviewed or scored)
-- No user visibility into the failure
+## Analysis
+
+After investigating, the concern about orphaning in-progress reviews is **less severe than initially described** because:
+
+1. **KPIs don't store a workflow template reference** -- workflows are resolved dynamically at query time via `get_employee_workflow()`, which cascades through employee, department, PMS grade, and default template
+2. **The default template is already protected** -- the UI hides the delete button for it (line 244 of WorkflowConfig.tsx)
+3. **The existing check** catches templates assigned via `workflow_config` rows
+
+However, there are **two real gaps**:
+
+**Gap A**: An admin could remove a `workflow_config` assignment first, then delete the template. Employees whose workflow was resolved through that assignment would silently fall back to a different cascade level (department, grade, or default), potentially changing their active workflow mid-review cycle.
+
+**Gap B**: No "soft delete" or archive option exists. Once deleted, the template is gone permanently -- there's no way to restore it or review historical workflow paths for auditing.
 
 ## Solution
-Instead of silently logging the error, treat a failed review submission as a **partial failure**: mark the row as "failed", roll back the orphaned KPI, and surface the error in the import results.
+
+Add two safety checks and an archive capability:
+
+### 1. Check for in-progress KPIs using the template (`useWorkflowConfig.ts`)
+Before deletion, query employees whose effective workflow resolves to this template (via `workflow_config` entries) and check if any of them have KPIs in non-terminal statuses (`kra_set` through the last review stage, excluding `approved`). Block deletion if any active KPIs exist.
+
+### 2. Add `is_active` column for soft-delete / archiving
+Instead of hard-deleting, offer an "Archive" option that sets `is_active = false`. Archived templates are hidden from assignment dropdowns but preserved for audit history.
+
+### 3. UI updates (`WorkflowConfig.tsx`)
+- Replace the "Delete" action with "Archive" for templates that have ever been used
+- Show archived templates in a collapsible section with a "Restore" option
+- Keep hard delete only for templates that have never been assigned
 
 ## Changes
 
-### 1. `src/pages/admin/ImportData.tsx` (lines 1105-1107)
-Replace the silent `console.error` with:
-- **Rollback the KPI**: Delete the just-inserted KPI row to avoid orphaned data
-- **Throw an error** so it's caught by the existing `catch` block on line 1116, which already handles failures correctly (adds to `importErrors`, marks the row as "failed" in results)
+### 1. Database migration
+- Add `is_active BOOLEAN DEFAULT true` column to `workflow_templates`
+- Update `get_employee_workflow` and `get_employee_workflow_info` functions to filter by `is_active = true`
+- Create a helper function `check_template_has_active_kpis(template_uuid)` that returns true if any employee whose workflow resolves to this template has non-approved KPIs
 
-```tsx
-// BEFORE (silent failure):
-if (submissionError) {
-  console.error('Failed to create review submission:', submissionError);
-}
+### 2. `src/hooks/useWorkflowConfig.ts`
+- Update `useDeleteWorkflowTemplate` to call `check_template_has_active_kpis` before deletion
+- Add new `useArchiveWorkflowTemplate` mutation that sets `is_active = false`
+- Add `useRestoreWorkflowTemplate` mutation that sets `is_active = true`
+- Update `useWorkflowTemplates` to accept an optional `includeArchived` parameter
 
-// AFTER (proper error handling):
-if (submissionError) {
-  // Rollback: delete the orphaned KPI since its review submission failed
-  await supabase.from('kpis').delete().eq('id', newKpi.id);
-  throw new Error(`Review submission failed: ${submissionError.message}`);
-}
-```
+### 3. `src/pages/admin/WorkflowConfig.tsx`
+- Replace the delete action with "Archive" for non-default templates
+- Show archived templates in a collapsible "Archived" section with restore/delete options
+- Hard delete only allowed for archived templates with no active KPIs and no config references
 
-This leverages the existing error-handling infrastructure (the `catch` block, `importErrors` array, and `ImportResultsSummary` component) so users see the specific failure in the error report with no additional UI work needed.
-
-### 2. `DOCUMENTATION.md`
-Update the import error-handling section to document this fix.
+### 4. `DOCUMENTATION.md`
+- Document archive vs delete behavior and the active-KPI safety check
 
 ## Technical Details
 
 | File | Change |
 |---|---|
-| `src/pages/admin/ImportData.tsx` | Replace console.error with KPI rollback + throw on review submission failure |
-| `DOCUMENTATION.md` | Document the fix |
-
-## Why Not a Retry Mechanism?
-A retry adds complexity with minimal benefit here. The most common causes of submission insert failure (schema mismatch, RLS denial, constraint violation) won't resolve on retry. The rollback-and-report approach gives the user clear feedback so they can fix the data and re-import.
+| Database migration | Add `is_active` column, update workflow resolution functions, add `check_template_has_active_kpis` RPC |
+| `src/hooks/useWorkflowConfig.ts` | Add archive/restore mutations, enhance delete with active-KPI check |
+| `src/pages/admin/WorkflowConfig.tsx` | Archive UI, archived section with restore, conditional hard delete |
+| `DOCUMENTATION.md` | Document template lifecycle (active/archived/deleted) |
 
