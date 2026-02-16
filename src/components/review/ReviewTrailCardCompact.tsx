@@ -47,6 +47,7 @@ export function ReviewTrailCardCompact({
     rating, 
     remarks, 
     evidenceUrl,
+    evidenceUrls,
     isNa
   }: {
     icon: typeof User;
@@ -57,6 +58,7 @@ export function ReviewTrailCardCompact({
     rating: RatingLevel | null | undefined;
     remarks: string | null | undefined;
     evidenceUrl: string | null | undefined;
+    evidenceUrls?: any;
     isNa?: boolean;
   }) => (
     <div className={`p-3 border rounded-lg ${borderColor}`}>
@@ -79,18 +81,29 @@ export function ReviewTrailCardCompact({
         )}
       </div>
       <p className="text-xs text-muted-foreground line-clamp-2">{remarks || 'No remarks'}</p>
-      {evidenceUrl && (
-        <a 
-          href={evidenceUrl} 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
-        >
-          <FileText className="h-3 w-3" />
-          Evidence
-          <ExternalLink className="h-2.5 w-2.5" />
-        </a>
-      )}
+      {(() => {
+        const urls: string[] = Array.isArray(evidenceUrls) && evidenceUrls.length > 0
+          ? evidenceUrls
+          : evidenceUrl ? [evidenceUrl] : [];
+        if (urls.length === 0) return null;
+        return (
+          <div className="space-y-0.5 mt-1">
+            {urls.map((url: string, idx: number) => (
+              <a 
+                key={idx}
+                href={url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                <FileText className="h-3 w-3" />
+                Evidence{urls.length > 1 ? ` ${idx + 1}` : ''}
+                <ExternalLink className="h-2.5 w-2.5" />
+              </a>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 
@@ -134,6 +147,7 @@ export function ReviewTrailCardCompact({
             rating={submission?.self_rating}
             remarks={submission?.self_remarks}
             evidenceUrl={submission?.self_evidence_url}
+            evidenceUrls={(submission as any)?.self_evidence_urls}
             isNa={submission?.is_na}
           />
         )}
@@ -147,6 +161,7 @@ export function ReviewTrailCardCompact({
             rating={submission?.manager_rating}
             remarks={submission?.manager_remarks}
             evidenceUrl={submission?.manager_evidence_url}
+            evidenceUrls={(submission as any)?.manager_evidence_urls}
             isNa={submission?.is_na}
           />
         )}
@@ -160,6 +175,7 @@ export function ReviewTrailCardCompact({
             rating={submission?.auditor_rating}
             remarks={submission?.auditor_remarks}
             evidenceUrl={submission?.auditor_evidence_url}
+            evidenceUrls={(submission as any)?.auditor_evidence_urls}
             isNa={submission?.is_na}
           />
         )}
@@ -173,6 +189,7 @@ export function ReviewTrailCardCompact({
             rating={submission?.management_rating}
             remarks={submission?.management_remarks}
             evidenceUrl={submission?.management_evidence_url}
+            evidenceUrls={(submission as any)?.management_evidence_urls}
             isNa={submission?.is_na}
           />
         )}
