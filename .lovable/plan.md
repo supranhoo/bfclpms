@@ -1,63 +1,68 @@
 
 
-# Fix Multi-Evidence Visibility Across All Review Stages
+# Fix: Multi-Evidence Still Showing Only 1 File
 
-## Problem
+## Root Cause
 
-Jitendra uploaded 5 evidence files for the "Statutory Compliance" KPI, but downstream reviewers (Manager, HR PMS) see only 1 file. The screenshot confirms only a single "Evidence" link appears in the Review Journey section.
+Two issues are causing this:
 
-There are **three layers** of breakage:
+1. **Database has empty arrays**: Every `review_submissions` record has `self_evidence_urls: []` because submissions were made before the recent code fix was deployed. The 5 files Jitendra uploaded are in storage but only 1 URL was saved (to the old `self_evidence_url` single-string column).
 
-1. **Saving**: The `UnifiedScorecard` (used by Manager, HR PMS, Auditor, Management) only saves to the single-string `*_evidence_url` column, never to the `*_evidence_urls` JSONB array. Additionally, the `MultiFileUpload` callback discards all but the last uploaded URL.
+2. **Missing TypeScript fields**: The `ReviewSubmission` interface in `useKpis.ts` does not include any of the `*_evidence_urls` array fields. All access to these fields relies on unsafe `(submission as any)` casts, which is error-prone and prevents proper type checking.
 
-2. **Data Passing**: `KpiJourneySection` (the Review Journey component) only reads the single `*_evidence_url` field and never checks `*_evidence_urls` arrays.
+## Solution
 
-3. **Rendering**: `ReviewStageCard` (each card in the Review Journey) only accepts a single `evidenceUrl` prop and renders one link.
+### 1. Database Migration: Sync existing single URLs into array columns
 
-## Changes
+Run a one-time migration that copies the single-string `*_evidence_url` value into the corresponding `*_evidence_urls` JSONB array for all rows where the array is empty but the single string exists. This immediately makes all existing evidence visible without requiring re-submission.
 
-### 1. `src/components/review/ReviewStageCard.tsx`
-- Change the `evidenceUrl` prop from `string | null` to `evidenceUrls: string[]`
-- Render multiple evidence links with numbered labels when more than one exists
-- Show "Evidence 1", "Evidence 2", etc. for multiple files; just "Evidence" for a single file
+```sql
+UPDATE review_submissions
+SET self_evidence_urls = jsonb_build_array(self_evidence_url)
+WHERE self_evidence_url IS NOT NULL
+  AND (self_evidence_urls IS NULL OR self_evidence_urls = '[]'::jsonb);
 
-### 2. `src/components/review/KpiJourneySection.tsx`
-- For each stage (self, manager, skip_level, hr_pms, auditor, management), read the `*_evidence_urls` JSONB array first, falling back to the single `*_evidence_url` string
-- Pass the result as `evidenceUrls: string[]` to `ReviewStageCard`
+-- Same for manager, auditor, management, skip_level, hr_pms
+UPDATE review_submissions
+SET manager_evidence_urls = jsonb_build_array(manager_evidence_url)
+WHERE manager_evidence_url IS NOT NULL
+  AND (manager_evidence_urls IS NULL OR manager_evidence_urls = '[]'::jsonb);
 
-### 3. `src/components/review/UnifiedScorecard.tsx`
-- Change `reviewerEvidenceUrl` state from `string | null` to `reviewerEvidenceUrls: string[]`
-- Update `MultiFileUpload` `onUploadComplete` to store the full URL array (not just the last one)
-- When saving (both `submitReview` mutation and N/A override path), write to **both** `*_evidence_url` (first URL for backward compat) and `*_evidence_urls` (full array)
-- When loading existing data, read from `*_evidence_urls` first with fallback to `*_evidence_url`
+-- (repeat for all 6 reviewer levels)
+```
 
-### 4. `DOCUMENTATION.md`
-- Update the multi-file evidence section to note that all review stages (including the Review Journey display) now support multi-file evidence
+### 2. Update ReviewSubmission TypeScript Interface (`src/hooks/useKpis.ts`)
 
-## Technical Detail
+Add the missing `*_evidence_urls` array fields so all components can access them without `as any` casts:
 
 ```text
-// KpiJourneySection - building the URL array per stage
-const selfUrls = Array.isArray(submission?.self_evidence_urls) && submission.self_evidence_urls.length > 0
-  ? submission.self_evidence_urls
-  : submission?.self_evidence_url ? [submission.self_evidence_url] : [];
-
-// ReviewStageCard - rendering multiple links
-{evidenceUrls.map((url, idx) => (
-  <a key={idx} href={url} target="_blank">
-    Evidence {evidenceUrls.length > 1 ? idx + 1 : ''}
-  </a>
-))}
-
-// UnifiedScorecard - saving both columns
-updateData[`${prefix}_evidence_url`] = reviewerEvidenceUrls[0] || null;
-updateData[`${prefix}_evidence_urls`] = reviewerEvidenceUrls;
+self_evidence_urls: string[] | null;
+manager_evidence_urls: string[] | null;
+auditor_evidence_urls: string[] | null;
+management_evidence_urls: string[] | null;
+skip_level_evidence_urls: string[] | null;
+hr_pms_evidence_urls: string[] | null;
 ```
+
+### 3. Remove `as any` Casts (`src/components/review/KpiJourneySection.tsx`)
+
+Replace all `(submission as any)?.self_evidence_urls` style casts with direct property access now that the type includes them.
+
+### 4. Update DOCUMENTATION.md
+
+Note the data migration and type update.
+
+## Files Changed
+
+| File | Change |
+|---|---|
+| Database migration | Sync single-URL data into JSONB arrays for all 6 review levels |
+| `src/hooks/useKpis.ts` | Add `*_evidence_urls` fields to `ReviewSubmission` interface |
+| `src/components/review/KpiJourneySection.tsx` | Remove unsafe `as any` casts |
+| `DOCUMENTATION.md` | Document migration and type update |
 
 ## Impact
 
-- All 5 evidence files will be visible to all downstream reviewers
-- Backward compatible: falls back to single-URL column for old data
-- No database or schema changes needed (columns already exist)
-- Consistent behavior across Self Review, Team Review, and all reviewer stages
-
+- Jitendra's existing evidence (and all other users') will immediately appear without re-submission
+- Type-safe access to multi-evidence arrays across all components
+- No UI or logic changes needed -- the display components already handle arrays correctly
