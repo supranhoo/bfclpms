@@ -579,14 +579,14 @@ export function UnifiedScorecard({
     const existing = submissionMap.get(kpi.id);
     
     // Get the appropriate previous score based on view level
-    let prevScore = null;
-    if (viewLevel === 'manager') {
-      prevScore = existing?.manager_score ?? null;
-    } else if (viewLevel === 'auditor') {
-      prevScore = existing?.auditor_score ?? existing?.manager_score ?? null;
-    } else {
-      prevScore = existing?.management_score ?? existing?.auditor_score ?? null;
-    }
+    const scoreFieldMap: Record<string, () => number | null> = {
+      manager: () => existing?.manager_score ?? null,
+      skip_level: () => (existing as any)?.skip_level_score ?? existing?.manager_score ?? null,
+      hr_pms: () => (existing as any)?.hr_pms_score ?? (existing as any)?.skip_level_score ?? null,
+      auditor: () => existing?.auditor_score ?? existing?.manager_score ?? null,
+      management: () => existing?.management_score ?? existing?.auditor_score ?? null,
+    };
+    const prevScore = (scoreFieldMap[viewLevel] || (() => null))();
     
     setReviewerScore(prevScore);
     setReviewerRemarks((existing as any)?.[`${config.scoreFieldPrefix}_remarks`] || '');

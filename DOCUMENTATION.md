@@ -3621,4 +3621,19 @@ Admin clicks "Rollback" on propagated card
 
 ---
 
+### Bug Fix: Forward Button Not Activating for Daily KPI at Reviewer Level
+
+**Problem:** At skip-level and HR PMS review stages, the Forward/Submit button remained disabled until the reviewer deleted and re-entered the achieved value. This was caused by incorrect score initialization in `openReviewSheet` — the fallback branch read `management_score ?? auditor_score`, which are always `null` at those stages.
+
+**Fix:**
+1. Replaced hardcoded if/else score initialization with a per-level lookup map (`scoreFieldMap`) that correctly resolves: `skip_level` → `skip_level_score ?? manager_score`, `hr_pms` → `hr_pms_score ?? skip_level_score`.
+2. Made auto-calculate-on-mount in `AchievedValueScoreInput` more robust by deferring the calculation via microtask to avoid React state batching timing issues.
+
+| File | Change |
+|---|---|
+| `src/components/review/UnifiedScorecard.tsx` | Per-level score initialization via `scoreFieldMap` |
+| `src/components/review/AchievedValueScoreInput.tsx` | Microtask-deferred auto-calculate on mount |
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
