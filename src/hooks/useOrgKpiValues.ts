@@ -12,6 +12,7 @@ export interface OrgKpiValue {
   achieved_value: number | null;
   data_source: string | null;
   entered_by: string | null;
+  entered_by_name: string | null;
   remarks: string | null;
   created_at: string;
   updated_at: string;
@@ -43,7 +44,7 @@ export function useOrgKpiValues(categoryId?: string, reviewPeriod?: string, revi
     queryFn: async () => {
       let query = supabase
         .from('org_kpi_values')
-        .select('*')
+        .select('*, entered_by_profile:profiles!org_kpi_values_entered_by_fkey(full_name)')
         .order('kra_name')
         .order('kpi_name');
 
@@ -59,7 +60,10 @@ export function useOrgKpiValues(categoryId?: string, reviewPeriod?: string, revi
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as OrgKpiValue[];
+      return (data as any[]).map(row => ({
+        ...row,
+        entered_by_name: row.entered_by_profile?.full_name || null,
+      })) as OrgKpiValue[];
     },
     enabled: !!categoryId || !!reviewPeriod || !!reviewYear,
   });
@@ -80,7 +84,7 @@ export function useOrgKpiValueByKpi(categoryId: string, kraName: string, kpiName
         .maybeSingle();
 
       if (error) throw error;
-      return data as OrgKpiValue | null;
+      return data ? { ...data, entered_by_name: null } as OrgKpiValue : null;
     },
     enabled: !!categoryId && !!kraName && !!kpiName && !!reviewPeriod && !!reviewYear,
   });

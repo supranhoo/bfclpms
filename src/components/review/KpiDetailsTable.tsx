@@ -77,7 +77,7 @@ interface KpiDetailsTableProps {
   onShowLogic?: (kpi: KPI) => void;
   expandedKpis?: Set<string>;
   onToggleExpand?: (kpiId: string) => void;
-  getOrgKpiValue?: (kpi: KPI) => { achieved_value: number | null; data_source: string | null } | null;
+  getOrgKpiValue?: (kpi: KPI) => { achieved_value: number | null; data_source: string | null; entered_by_name: string | null } | null;
   getDailyAggregatedScore?: (kpi: KPI) => number | null;
   isKpiLocked?: (kpi: KPI) => boolean;
   workflowStages?: string[];
@@ -363,6 +363,25 @@ export function KpiDetailsTable({
                       <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity absolute top-0 right-0" />
                     </div>
                   </button>
+                  {kpi.is_org_level && (
+                    <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-1">
+                        {scope === 'organization' ? (
+                          <Building2 className="h-2.5 w-2.5" />
+                        ) : scope === 'department' ? (
+                          <Users className="h-2.5 w-2.5" />
+                        ) : (
+                          <User className="h-2.5 w-2.5" />
+                        )}
+                        Org KPI — {scope.charAt(0).toUpperCase() + scope.slice(1)}
+                      </Badge>
+                      {orgValue?.entered_by_name && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                          Data by: {orgValue.entered_by_name}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                 </TableCell>
                 
                 {/* Target */}

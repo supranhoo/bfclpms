@@ -29,7 +29,7 @@ interface MobileKpiCardProps {
   onToggleExpand?: (kpiId: string) => void;
   isExpanded?: boolean;
   isLocked?: boolean;
-  getOrgKpiValue?: (kpi: KPI) => { achieved_value: number | null; data_source: string | null } | null;
+  getOrgKpiValue?: (kpi: KPI) => { achieved_value: number | null; data_source: string | null; entered_by_name: string | null } | null;
 }
 
 export function MobileKpiCard({
@@ -239,6 +239,27 @@ export function MobileKpiCard({
           {statusLabels[kpi.status || 'kra_set']}
         </Badge>
       </div>
+
+      {/* Org KPI Badge Row */}
+      {kpi.is_org_level && (
+        <div className="flex flex-wrap items-center gap-1 mb-1.5">
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-0.5">
+            {scope === 'organization' ? (
+              <Building2 className="h-2.5 w-2.5" />
+            ) : scope === 'department' ? (
+              <Users className="h-2.5 w-2.5" />
+            ) : (
+              <User className="h-2.5 w-2.5" />
+            )}
+            Org KPI
+          </Badge>
+          {orgValue?.entered_by_name && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              Data by: {orgValue.entered_by_name}
+            </Badge>
+          )}
+        </div>
+      )}
 
       {/* Row 2: KRA/KPI Names - Clickable for logic */}
       <button
