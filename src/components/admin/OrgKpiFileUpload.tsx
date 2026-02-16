@@ -158,6 +158,7 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
           </>
         )}
       </Button>
+      <span className="text-[10px] text-muted-foreground">or Ctrl+V</span>
     </div>
   );
 }
