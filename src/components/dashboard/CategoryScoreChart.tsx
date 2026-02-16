@@ -1,5 +1,8 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip, CartesianGrid } from 'recharts';
+import { Button } from '@/components/ui/button';
+
+export type CategorySortBy = 'weightage' | 'score';
 
 interface CategoryData {
   name: string;
@@ -10,6 +13,8 @@ interface CategoryData {
 
 interface CategoryScoreChartProps {
   data: CategoryData[];
+  sortBy?: CategorySortBy;
+  onSortChange?: (sortBy: CategorySortBy) => void;
 }
 
 interface CustomTickProps {
@@ -18,7 +23,7 @@ interface CustomTickProps {
   payload?: { value: string; index: number };
 }
 
-export function CategoryScoreChart({ data }: CategoryScoreChartProps) {
+export function CategoryScoreChart({ data, sortBy = 'score', onSortChange }: CategoryScoreChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [yAxisWidth, setYAxisWidth] = useState(210);
 
@@ -33,6 +38,13 @@ export function CategoryScoreChart({ data }: CategoryScoreChartProps) {
     return () => observer.disconnect();
   }, []);
 
+  const sortedData = useMemo(() => {
+    return [...data].sort((a, b) => {
+      if (sortBy === 'weightage') return (b.weightage || 0) - (a.weightage || 0);
+      return b.percentage - a.percentage;
+    });
+  }, [data, sortBy]);
+
   if (data.length === 0) {
     return (
       <div className="h-full flex items-center justify-center text-muted-foreground">
@@ -43,7 +55,7 @@ export function CategoryScoreChart({ data }: CategoryScoreChartProps) {
 
   const CustomYAxisTick = ({ x, y, payload }: CustomTickProps) => {
     if (!payload || x == null || y == null) return null;
-    const entry = data[payload.index];
+    const entry = sortedData[payload.index];
     const weightage = entry?.weightage != null ? ` (${entry.weightage}%)` : '';
     return (
       <g transform={`translate(${x},${y})`}>
@@ -57,9 +69,29 @@ export function CategoryScoreChart({ data }: CategoryScoreChartProps) {
 
   return (
     <div ref={containerRef} className="h-full w-full">
-      <ResponsiveContainer width="100%" height="100%">
+      {onSortChange && (
+        <div className="flex justify-end gap-1 mb-2">
+          <Button
+            variant={sortBy === 'weightage' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-6 px-2 text-[11px]"
+            onClick={() => onSortChange('weightage')}
+          >
+            Weightage
+          </Button>
+          <Button
+            variant={sortBy === 'score' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-6 px-2 text-[11px]"
+            onClick={() => onSortChange('score')}
+          >
+            Score
+          </Button>
+        </div>
+      )}
+      <ResponsiveContainer width="100%" height={onSortChange ? "90%" : "100%"}>
         <BarChart
-          data={data}
+          data={sortedData}
           layout="vertical"
           margin={{ top: 4, right: 30, left: 0, bottom: 4 }}
           barCategoryGap="2%"
@@ -93,7 +125,7 @@ export function CategoryScoreChart({ data }: CategoryScoreChartProps) {
             }}
           />
           <Bar dataKey="percentage" radius={[0, 4, 4, 0]} barSize={12}>
-            {data.map((entry, index) => (
+            {sortedData.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
                 fill={entry.color || 'hsl(var(--primary))'}

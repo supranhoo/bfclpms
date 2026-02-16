@@ -21,7 +21,7 @@ import { QualitativeOption } from '@/lib/qualitativeUom';
 import { useAuth } from '@/contexts/AuthContext';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
-import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
+import { CategoryScoreChart, type CategorySortBy } from '@/components/dashboard/CategoryScoreChart';
 import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
 import { WorkflowProgressTracker } from '@/components/review/WorkflowProgressTracker';
 import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
@@ -147,6 +147,7 @@ export function ManagementScorecard({
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   const [expandedDailyKpis, setExpandedDailyKpis] = useState<Set<string>>(new Set());
+  const [categorySortBy, setCategorySortBy] = useState<CategorySortBy>('score');
   
   const [managementScore, setManagementScore] = useState<number | null>(null);
   const [managementRemarks, setManagementRemarks] = useState('');
@@ -637,7 +638,7 @@ export function ManagementScorecard({
           </CardHeader>
           <CardContent>
             <div style={{ height: Math.max(180, scoreData.categoryScores.length * 36) }}>
-              <CategoryScoreChart data={scoreData.categoryScores} />
+              <CategoryScoreChart data={scoreData.categoryScores} sortBy={categorySortBy} onSortChange={setCategorySortBy} />
             </div>
           </CardContent>
         </Card>
