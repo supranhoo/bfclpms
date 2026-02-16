@@ -231,7 +231,7 @@ export function UnifiedScorecard({
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   const [expandedDailyKpis, setExpandedDailyKpis] = useState<Set<string>>(new Set());
-  const [categorySortBy, setCategorySortBy] = useState<CategorySortBy>('score');
+  const [categorySortBy, setCategorySortBy] = useState<CategorySortBy>('score-desc');
   
   // Review state
   const [reviewerScore, setReviewerScore] = useState<number | null>(null);
