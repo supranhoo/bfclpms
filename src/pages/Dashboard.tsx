@@ -75,7 +75,7 @@ export default function Dashboard() {
   const [autoOpenQueryHistory, setAutoOpenQueryHistory] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [categorySortBy, setCategorySortBy] = useState<CategorySortBy>('score');
+  const [categorySortBy, setCategorySortBy] = useState<CategorySortBy>('score-desc');
   
   // Enhanced period selection with cumulative mode support
   const defaultPeriodSelection = useDefaultPeriodSelection();

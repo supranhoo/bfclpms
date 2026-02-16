@@ -18,7 +18,7 @@ const ratingColors = {
 };
 
 export default function PerformanceReport() {
-  const [categorySortBy, setCategorySortBy] = useState<'weightage' | 'score'>('score');
+  const [categorySortBy, setCategorySortBy] = useState<'weightage-desc' | 'weightage-asc' | 'score-desc' | 'score-asc'>('score-desc');
   const { data: allKpis, isLoading: kpisLoading } = useAllKpis();
   const { data: profiles } = useProfiles();
   const { data: categories } = useKraCategories();
@@ -157,22 +157,39 @@ export default function PerformanceReport() {
           <CardHeader><CardTitle>Performance by Category</CardTitle></CardHeader>
           <CardContent>
             <div style={{ height: Math.max(180, categoryPerformance.length * 36) }}>
-              <div className="flex justify-end gap-1 mb-2">
+              <div className="flex justify-end gap-1 mb-2 flex-wrap">
                 <button
-                  className={`h-6 px-2 text-[11px] rounded-md font-medium transition-colors ${categorySortBy === 'weightage' ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
-                  onClick={() => setCategorySortBy('weightage')}
+                  className={`h-6 px-2 text-[11px] rounded-md font-medium transition-colors ${categorySortBy === 'weightage-desc' ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+                  onClick={() => setCategorySortBy('weightage-desc')}
                 >
-                  Weightage
+                  Wt. High-Low
                 </button>
                 <button
-                  className={`h-6 px-2 text-[11px] rounded-md font-medium transition-colors ${categorySortBy === 'score' ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
-                  onClick={() => setCategorySortBy('score')}
+                  className={`h-6 px-2 text-[11px] rounded-md font-medium transition-colors ${categorySortBy === 'weightage-asc' ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+                  onClick={() => setCategorySortBy('weightage-asc')}
                 >
-                  Score
+                  Wt. Low-High
+                </button>
+                <button
+                  className={`h-6 px-2 text-[11px] rounded-md font-medium transition-colors ${categorySortBy === 'score-desc' ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+                  onClick={() => setCategorySortBy('score-desc')}
+                >
+                  Score High-Low
+                </button>
+                <button
+                  className={`h-6 px-2 text-[11px] rounded-md font-medium transition-colors ${categorySortBy === 'score-asc' ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+                  onClick={() => setCategorySortBy('score-asc')}
+                >
+                  Score Low-High
                 </button>
               </div>
               <ResponsiveContainer width="100%" height="90%">
-                <BarChart data={[...categoryPerformance].sort((a, b) => categorySortBy === 'weightage' ? (b.weightage || 0) - (a.weightage || 0) : b.avgScore - a.avgScore)} layout="vertical">
+                <BarChart data={[...categoryPerformance].sort((a, b) => {
+                  if (categorySortBy === 'weightage-desc') return (b.weightage || 0) - (a.weightage || 0);
+                  if (categorySortBy === 'weightage-asc') return (a.weightage || 0) - (b.weightage || 0);
+                  if (categorySortBy === 'score-asc') return a.avgScore - b.avgScore;
+                  return b.avgScore - a.avgScore;
+                })} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" domain={[0, 100]} />
                   <YAxis 
@@ -181,7 +198,12 @@ export default function PerformanceReport() {
                     width={160}
                     interval={0}
                     tickFormatter={(value: string, index: number) => {
-                      const sorted = [...categoryPerformance].sort((a, b) => categorySortBy === 'weightage' ? (b.weightage || 0) - (a.weightage || 0) : b.avgScore - a.avgScore);
+                      const sorted = [...categoryPerformance].sort((a, b) => {
+                        if (categorySortBy === 'weightage-desc') return (b.weightage || 0) - (a.weightage || 0);
+                        if (categorySortBy === 'weightage-asc') return (a.weightage || 0) - (b.weightage || 0);
+                        if (categorySortBy === 'score-asc') return a.avgScore - b.avgScore;
+                        return b.avgScore - a.avgScore;
+                      });
                       const cat = sorted[index];
                       return cat?.weightage ? `${value} (${cat.weightage}%)` : value;
                     }}

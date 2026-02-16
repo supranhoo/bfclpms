@@ -588,7 +588,7 @@ login_hero_description text  -- Configurable description text
 - Overall score chart (compact radial donut - 1/6 width)
 - Category-wise score chart (horizontal bar - 5/6 width with 280px Y-axis for long category names)
   - **Category labels include dynamic weightage**: Each category displays its weightage percentage (e.g., "HR Operations (30%)") calculated by summing the individual KPI weightages assigned to that category for the specific employee. This ensures the displayed weightage accurately reflects the employee's unique scorecard composition rather than a static table value.
-  - **Sort toggle**: Compact [Weightage] / [Score] buttons allow toggling the sort order of the category bar chart. Default is by Score (descending). Sorting by Weightage orders categories from highest to lowest total weightage. This toggle is available across all views: Dashboard, UnifiedScorecard, EmployeeScorecard, AuditScorecard, ManagementScorecard, and the Performance Report.
+  - **Sort toggle**: Four compact directional buttons — [Wt. High-Low] / [Wt. Low-High] / [Score High-Low] / [Score Low-High] — allow toggling the sort order and direction of the category bar chart. Default is "Score High-Low" (descending by score). Each option sorts categories by the selected metric in the chosen direction. This toggle is available across all views: Dashboard, UnifiedScorecard, EmployeeScorecard, AuditScorecard, ManagementScorecard, and the Performance Report.
   - **All categories with mapped KPIs are shown**: Categories appear if the employee has at least one KPI assigned to that category, even if no scores have been submitted yet (displays 0% score bar)
 - Review status distribution with progress bars
 - KPI details table with status badges and action buttons

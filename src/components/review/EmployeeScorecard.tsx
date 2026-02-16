@@ -149,7 +149,7 @@ export function EmployeeScorecard({
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   const [expandedDailyKpis, setExpandedDailyKpis] = useState<Set<string>>(new Set());
-  const [categorySortBy, setCategorySortBy] = useState<CategorySortBy>('score');
+  const [categorySortBy, setCategorySortBy] = useState<CategorySortBy>('score-desc');
   
   const [managerScore, setManagerScore] = useState<number | null>(null);
   const [managerRemarks, setManagerRemarks] = useState('');

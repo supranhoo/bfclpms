@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip, CartesianGrid } from 'recharts';
 import { Button } from '@/components/ui/button';
 
-export type CategorySortBy = 'weightage' | 'score';
+export type CategorySortBy = 'weightage-desc' | 'weightage-asc' | 'score-desc' | 'score-asc';
 
 interface CategoryData {
   name: string;
@@ -23,7 +23,7 @@ interface CustomTickProps {
   payload?: { value: string; index: number };
 }
 
-export function CategoryScoreChart({ data, sortBy = 'score', onSortChange }: CategoryScoreChartProps) {
+export function CategoryScoreChart({ data, sortBy = 'score-desc', onSortChange }: CategoryScoreChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [yAxisWidth, setYAxisWidth] = useState(210);
 
@@ -40,8 +40,10 @@ export function CategoryScoreChart({ data, sortBy = 'score', onSortChange }: Cat
 
   const sortedData = useMemo(() => {
     return [...data].sort((a, b) => {
-      if (sortBy === 'weightage') return (b.weightage || 0) - (a.weightage || 0);
-      return b.percentage - a.percentage;
+      if (sortBy === 'weightage-desc') return (b.weightage || 0) - (a.weightage || 0);
+      if (sortBy === 'weightage-asc') return (a.weightage || 0) - (b.weightage || 0);
+      if (sortBy === 'score-asc') return a.percentage - b.percentage;
+      return b.percentage - a.percentage; // score-desc default
     });
   }, [data, sortBy]);
 
@@ -70,22 +72,38 @@ export function CategoryScoreChart({ data, sortBy = 'score', onSortChange }: Cat
   return (
     <div ref={containerRef} className="h-full w-full">
       {onSortChange && (
-        <div className="flex justify-end gap-1 mb-2">
+        <div className="flex justify-end gap-1 mb-2 flex-wrap">
           <Button
-            variant={sortBy === 'weightage' ? 'secondary' : 'ghost'}
+            variant={sortBy === 'weightage-desc' ? 'secondary' : 'ghost'}
             size="sm"
             className="h-6 px-2 text-[11px]"
-            onClick={() => onSortChange('weightage')}
+            onClick={() => onSortChange('weightage-desc')}
           >
-            Weightage
+            Wt. High-Low
           </Button>
           <Button
-            variant={sortBy === 'score' ? 'secondary' : 'ghost'}
+            variant={sortBy === 'weightage-asc' ? 'secondary' : 'ghost'}
             size="sm"
             className="h-6 px-2 text-[11px]"
-            onClick={() => onSortChange('score')}
+            onClick={() => onSortChange('weightage-asc')}
           >
-            Score
+            Wt. Low-High
+          </Button>
+          <Button
+            variant={sortBy === 'score-desc' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-6 px-2 text-[11px]"
+            onClick={() => onSortChange('score-desc')}
+          >
+            Score High-Low
+          </Button>
+          <Button
+            variant={sortBy === 'score-asc' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-6 px-2 text-[11px]"
+            onClick={() => onSortChange('score-asc')}
+          >
+            Score Low-High
           </Button>
         </div>
       )}
