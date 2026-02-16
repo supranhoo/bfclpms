@@ -1,55 +1,31 @@
 
 
-# Fix: Show All Org-Level KPIs in Data Owners Tab
+# Fix: Show All KPIs in Data Owners Category List
 
 ## Problem
 
-The "Data Owners" tab only shows org-level KPIs that have at least 1 employee mapped in the selected review period. KPIs marked as org-level but not yet assigned to any employees are hidden, preventing admins from assigning data owners to them.
-
-## Root Cause
-
-`kpiDefinitions` is built from `ownershipFilteredKpis`, which derives from `useOrgLevelKpisWithEmployees` -- a hook that intentionally filters out unmapped KPIs (for the Data Entry tab, this makes sense). But the Data Owners tab needs all org-level KPIs.
+In the Data Owners tab, the KPI list within each category is wrapped in a `ScrollArea` with `max-h-[300px]`. Because the KPI names in this project are very long (multi-line descriptions with formulas and scoring logic), only about 3 KPIs fit in 300px. The remaining KPIs are hidden behind a scroll that isn't visually obvious, making it appear as if KPIs are missing.
 
 ## Solution
 
-Use the existing `useOrgLevelKpis` hook (which returns ALL org-level KPIs without employee filtering) to build a separate `allKpiDefinitions` list specifically for the Data Owners tab.
+Remove the fixed height constraint so all KPIs in a category are fully visible without scrolling. Since each category is already inside a collapsible section, there's no need for a nested scroll area -- users expand only the category they want to work with.
 
-### File: `src/pages/admin/OrgKpiDataEntry.tsx`
+## Changes
 
-1. Import and call `useOrgLevelKpis` (already exists in `useOrgLevelKpis.ts`)
-2. Create `allKpiDefinitions` memo from this unfiltered data
-3. Pass `allKpiDefinitions` to `OrgKpiOwnerManagement` instead of `kpiDefinitions`
+### File: `src/components/admin/OrgKpiOwnerManagement.tsx`
 
-```typescript
-// Add to existing data queries
-const { data: allOrgLevelKpis } = useOrgLevelKpis(selectedPeriod, selectedYear);
-
-// Build definitions for owner management (ALL org-level KPIs, no employee filter)
-const allKpiDefinitions = useMemo(() => {
-  if (!allOrgLevelKpis) return [];
-  return allOrgLevelKpis.map(kpi => ({
-    categoryId: kpi.category_id,
-    categoryName: kpi.kra_categories?.name || '',
-    categoryColor: kpi.kra_categories?.color || '#6B7280',
-    kraName: kpi.kra_name,
-    kpiName: kpi.kpi_name,
-  }));
-}, [allOrgLevelKpis]);
-
-// Then pass to component:
-<OrgKpiOwnerManagement kpiDefinitions={allKpiDefinitions} />
-```
+- Remove the `ScrollArea` wrapper (line 163) and its `max-h-[300px]` constraint
+- Replace with a simple `div` so all KPIs render fully visible when the category is expanded
 
 ### File: `DOCUMENTATION.md`
 
-Update to note that the Data Owners tab shows all org-level KPIs regardless of employee mapping.
+- Update to note that the Data Owners tab shows all KPIs without scroll constraints
 
 ## Technical Details
 
 | File | Change |
 |---|---|
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Import `useOrgLevelKpis`, create `allKpiDefinitions`, pass to `OrgKpiOwnerManagement` |
-| `DOCUMENTATION.md` | Document the behavior |
+| `src/components/admin/OrgKpiOwnerManagement.tsx` | Replace `ScrollArea className="max-h-[300px]"` with a plain `div` |
+| `DOCUMENTATION.md` | Minor doc update |
 
-No database or schema changes needed. The `useOrgLevelKpis` hook already exists and fetches all org-level KPIs without the employee mapping filter.
-
+This is a one-line fix: changing the `ScrollArea` element to a `div` and removing the height cap. Since each category is already collapsible, the user controls visibility by expanding/collapsing sections.
