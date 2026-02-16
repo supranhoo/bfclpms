@@ -1,114 +1,95 @@
 
 
-# RCA and CAPA: Incorrect Scoring for Percentage UOM KPIs
+# Admin Rollback for Org-Level KPI to Data Entry
 
-## Root Cause Analysis (RCA)
+## What This Does
 
-### What Happened
-The KPI "Achieve 3*100 TPD Power Generation target" for January 2026 has:
-- **UOM**: % (Percentage)
-- **Target**: 20%
-- **Thresholds**: R5: 20%, R4: 15%, R3: 10%, R2: 5%, R1: 1%
-- **Achieved Value Propagated**: **37,560** (raw production quantity in MW)
-- **Resulting Self Score**: **Rating 5** (incorrect)
+Adds a "Rollback to Data Entry" action for admins on propagated Org KPIs. Unlike the existing "Unlock" (which only allows editing), this fully reverses propagation -- clearing all pushed values from employee scorecards and resetting the org KPI back to a clean data entry state.
 
-### Why It Happened
-The data owner entered **37,560** (a raw power generation number) into a field that expects a **percentage value** (0-20% incentive range). The scoring engine's `calculatePercentageRating` function correctly compared the value against thresholds: `37,560 >= 20` evaluates to `true`, producing Rating 5.
+## Current Behavior vs. Requested
 
-The scoring engine is working as designed -- this is a **garbage-in, garbage-out** problem. There is **no validation** at the data entry or propagation stage to catch values that are wildly out of range relative to the KPI's thresholds.
+| Action | Current "Unlock" | New "Rollback to Data Entry" |
+|--------|-----------------|------------------------------|
+| Org KPI status | Changed to 'entered' | Reset to 'pending' |
+| Employee review_submissions | Kept (old scores remain) | Cleared (achieved_value, self_score, self_rating nulled) |
+| Employee KPI status | Unchanged | Reset to 'kra_set' (if still at 'self_review') |
+| Data owner can re-enter | Yes | Yes (from scratch) |
 
-### Scope of Impact
-A database audit found:
-- **1,053** total % UOM KPIs with submissions
-- **105** have achieved values exceeding 100 (with targets at or below 100) -- potentially suspicious
-- **1** extreme outlier: the 37,560 value (1,878x the target)
+## Changes
 
-Many of the 105 may be legitimate (e.g., 215% training completion), but some are clearly wrong-domain values being scored incorrectly.
+### 1. New Hook: `useRollbackOrgKpiPropagation` (new file)
 
-## Corrective and Preventive Action (CAPA)
+A mutation hook that:
+- Finds all employee KPIs matching the org KPI identity (category, KRA, KPI, period, year)
+- Clears `achieved_value`, `self_score`, `self_rating` from their `review_submissions`
+- Resets those KPIs' status back to `kra_set` (only if currently at `self_review`, to avoid overwriting downstream progress)
+- Resets the `org_kpi_values` status to `pending` and clears the achieved value
+- Logs the rollback in `org_kpi_data_entry_logs` with the admin's identity
+- Notifies data owners via the notifications table
 
-### Fix 1: Add Threshold-Aware Validation Warning on Org KPI Data Entry
+### 2. UI: Add "Rollback" Button to `OrgKpiEntryCard`
 
-Add a visual warning on the `OrgKpiEntryCard` when the entered value appears unreasonable relative to the KPI's thresholds:
+- Visible only to admins when status is `propagated`
+- Sits alongside the existing "Unlock" button
+- Uses a confirmation dialog warning: "This will clear propagated values from X employee scorecards and reset the KPI for fresh data entry."
+- Requires a mandatory reason/justification (text input in the dialog)
 
-- For % UOM: warn if the value exceeds 2x the R5 threshold (e.g., R5=20% means warn if value > 40)
-- For all UOMs: warn if the value exceeds 10x the target value
-- Display an orange warning banner: "This value seems unusually high/low for this KPI. Please verify before saving."
-- The warning is **non-blocking** -- it does not prevent saving, only alerts the user
+### 3. Update `OrgKpiEntryCard` Props and Interface
 
-### Fix 2: Show Simulated Rating in Propagation Confirmation Dialog
+- Add new `onRollback` callback prop: `(reason: string) => Promise<void>`
+- Add rollback button with `RotateCcw` icon from lucide-react
+- Add `sent_back` to the status config for the card's badge display
 
-Before propagating, the confirmation dialog should display the **computed rating** so the data owner can verify:
+### 4. Wire Up in `OrgKpiDataEntry.tsx`
 
-- Show: "Value: 37,560 will result in Rating 5 for all X employees"
-- If the rating is 0 or 5, highlight it in a different color to draw attention
-- This gives the data owner a chance to catch errors before they affect scorecards
+- Import and use the new rollback hook
+- Pass the `onRollback` handler to each `OrgKpiEntryCard`
 
-### Fix 3: Add Validation Warning on Self-Review Achieved Value Input
+### 5. Update Documentation
 
-Apply the same threshold-aware warning to the `AchievedValueScoreInput` component used during self-review, so employees also see warnings for out-of-range values.
+- Update `DOCUMENTATION.md` with the new rollback capability
 
 ## Technical Details
 
-### Files to Change
+### Rollback Hook Logic (pseudo-code)
 
-| File | Change |
+```
+1. Find all employee KPIs:
+   SELECT id FROM kpis 
+   WHERE category_id, kra_name, kpi_name, review_period, review_year, is_org_level = true
+
+2. Clear their submissions:
+   UPDATE review_submissions 
+   SET achieved_value = null, self_score = null, self_rating = null 
+   WHERE kpi_id IN (found KPI IDs)
+
+3. Reset KPI status (only if at self_review):
+   UPDATE kpis SET status = 'kra_set' 
+   WHERE id IN (found KPI IDs) AND status = 'self_review'
+
+4. Reset org_kpi_values:
+   UPDATE org_kpi_values 
+   SET status = 'pending', achieved_value = null, remarks = null, evidence_url = null
+   WHERE category_id, kra_name, kpi_name, review_period, review_year
+
+5. Log audit entry with reason
+
+6. Notify data owners
+```
+
+### Files to Create/Modify
+
+| File | Action |
 |---|---|
-| `src/components/admin/OrgKpiEntryCard.tsx` | Add threshold-aware validation warning when entered value is far outside expected range |
-| `src/components/admin/OrgKpiScopedEntryTable.tsx` | Same validation warning for department/employee-scoped entry rows |
-| `src/components/review/AchievedValueScoreInput.tsx` | Add out-of-range warning for self-review numeric inputs |
-| `src/lib/ratingCalculation.ts` | Export a new `isValueOutOfRange()` utility that checks if a value is unreasonable relative to thresholds and target |
-| `DOCUMENTATION.md` | Document the new validation warnings |
+| `src/hooks/useRollbackOrgKpiPropagation.ts` | **Create** -- new mutation hook |
+| `src/components/admin/OrgKpiEntryCard.tsx` | **Modify** -- add Rollback button with confirmation dialog |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | **Modify** -- wire rollback handler |
+| `DOCUMENTATION.md` | **Modify** -- document the feature |
 
-### Validation Logic (new utility in `ratingCalculation.ts`)
+### Safety Guardrails
 
-```typescript
-export function isValueOutOfRange(
-  value: number,
-  target: number | null,
-  thresholds: RatingThresholds,
-  uom: string | null
-): { outOfRange: boolean; message: string | null } {
-  // For % UOM: warn if value > 2x the highest threshold
-  if (uom === '%' || uom?.toLowerCase() === 'percentage') {
-    const maxThreshold = Math.max(
-      parseThreshold(thresholds.r5, false) ?? 0,
-      parseThreshold(thresholds.r4, false) ?? 0,
-      parseThreshold(thresholds.r3, false) ?? 0,
-    );
-    if (maxThreshold > 0 && value > maxThreshold * 2) {
-      return {
-        outOfRange: true,
-        message: `Value ${value} is significantly higher than the R5 threshold (${maxThreshold}). Please verify this is the correct percentage value.`
-      };
-    }
-  }
-  // For any UOM: warn if value > 10x target
-  if (target && target > 0 && value > target * 10) {
-    return {
-      outOfRange: true,
-      message: `Value ${value} is more than 10x the target (${target}). Please verify.`
-    };
-  }
-  return { outOfRange: false, message: null };
-}
-```
-
-### Warning UI (in OrgKpiEntryCard)
-
-An inline alert below the input field:
-```
-[Warning icon] This value (37,560) is significantly higher than the 
-R5 threshold (20). Please verify this is the correct percentage value, 
-not a raw production number.
-```
-
-### Note on Existing Data
-
-The 37,560 value for January 2026 is already propagated. After the fix is deployed, the admin should:
-1. Unlock the KPI
-2. Enter the correct incentive percentage
-3. Re-propagate
-
-This plan does not include automatic data correction -- it adds guardrails to prevent future occurrences.
+- Only resets KPIs still at `self_review` stage (won't touch KPIs that have progressed further through the workflow)
+- Mandatory reason field prevents accidental rollbacks
+- Full audit trail logged for accountability
+- Data owners receive notification about the rollback
 
