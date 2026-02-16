@@ -81,7 +81,9 @@
 | Skip-level managers can update reports submissions | UPDATE | public | `get_skip_level_manager(employee) = auth.uid()` |
 | Employees can view their own submissions | SELECT | authenticated | `kpi.employee_id = auth.uid()` |
 | Employees can create/update their own submissions | INSERT | authenticated | `kpi.employee_id = auth.uid()` |
+| Data owners can insert org-level submissions | INSERT | authenticated | `kpi.is_org_level = true AND owner matches in org_kpi_data_owners` |
 | Employees can update self review fields | UPDATE | authenticated | `kpi.employee_id = auth.uid()` |
+| Data owners can update org-level submissions | UPDATE | authenticated | `kpi.is_org_level = true AND owner matches in org_kpi_data_owners` |
 
 ### `sub_period_submissions`
 | Policy | Cmd | Roles | Condition |
