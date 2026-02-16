@@ -123,21 +123,30 @@ export function ReviewTrailCard({
                     {submission?.self_remarks || 'No remarks'}
                   </p>
                 </div>
-                {/* Evidence Link */}
-                {submission?.self_evidence_url && (
-                  <div className="pt-2 border-t">
-                    <a 
-                      href={submission.self_evidence_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-                    >
-                      <FileText className="h-3 w-3" />
-                      View Evidence
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                )}
+                {/* Evidence Links */}
+                {(() => {
+                  const urls: string[] = Array.isArray((submission as any)?.self_evidence_urls) && (submission as any).self_evidence_urls.length > 0
+                    ? (submission as any).self_evidence_urls
+                    : submission?.self_evidence_url ? [submission.self_evidence_url] : [];
+                  if (urls.length === 0) return null;
+                  return (
+                    <div className="pt-2 border-t space-y-1">
+                      {urls.map((url: string, idx: number) => (
+                        <a 
+                          key={idx}
+                          href={url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                        >
+                          <FileText className="h-3 w-3" />
+                          View Evidence{urls.length > 1 ? ` ${idx + 1}` : ''}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </CardContent>
           </Card>
@@ -175,21 +184,30 @@ export function ReviewTrailCard({
                     {submission?.manager_remarks || 'No remarks'}
                   </p>
                 </div>
-                {/* Evidence Link */}
-                {submission?.manager_evidence_url && (
-                  <div className="pt-2 border-t">
-                    <a 
-                      href={submission.manager_evidence_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-                    >
-                      <FileText className="h-3 w-3" />
-                      View Evidence
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                )}
+                {/* Evidence Links */}
+                {(() => {
+                  const urls: string[] = Array.isArray((submission as any)?.manager_evidence_urls) && (submission as any).manager_evidence_urls.length > 0
+                    ? (submission as any).manager_evidence_urls
+                    : submission?.manager_evidence_url ? [submission.manager_evidence_url] : [];
+                  if (urls.length === 0) return null;
+                  return (
+                    <div className="pt-2 border-t space-y-1">
+                      {urls.map((url: string, idx: number) => (
+                        <a 
+                          key={idx}
+                          href={url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                        >
+                          <FileText className="h-3 w-3" />
+                          View Evidence{urls.length > 1 ? ` ${idx + 1}` : ''}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </CardContent>
           </Card>
@@ -230,21 +248,30 @@ export function ReviewTrailCard({
                       {submission?.auditor_remarks || 'No remarks'}
                     </p>
                   </div>
-                  {/* Evidence Link */}
-                  {submission?.auditor_evidence_url && (
-                    <div className="pt-2 border-t">
-                      <a 
-                        href={submission.auditor_evidence_url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-                      >
-                        <FileText className="h-3 w-3" />
-                        View Evidence
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </div>
-                  )}
+                  {/* Evidence Links */}
+                  {(() => {
+                    const urls: string[] = Array.isArray((submission as any)?.auditor_evidence_urls) && (submission as any).auditor_evidence_urls.length > 0
+                      ? (submission as any).auditor_evidence_urls
+                      : submission?.auditor_evidence_url ? [submission.auditor_evidence_url] : [];
+                    if (urls.length === 0) return null;
+                    return (
+                      <div className="pt-2 border-t space-y-1">
+                        {urls.map((url: string, idx: number) => (
+                          <a 
+                            key={idx}
+                            href={url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                          >
+                            <FileText className="h-3 w-3" />
+                            View Evidence{urls.length > 1 ? ` ${idx + 1}` : ''}
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               </CardContent>
             </Card>
@@ -281,21 +308,30 @@ export function ReviewTrailCard({
                       {submission?.management_remarks || 'No remarks'}
                     </p>
                   </div>
-                  {/* Evidence Link */}
-                  {submission?.management_evidence_url && (
-                    <div className="pt-2 border-t">
-                      <a 
-                        href={submission.management_evidence_url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-                      >
-                        <FileText className="h-3 w-3" />
-                        View Evidence
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </div>
-                  )}
+                  {/* Evidence Links */}
+                  {(() => {
+                    const urls: string[] = Array.isArray((submission as any)?.management_evidence_urls) && (submission as any).management_evidence_urls.length > 0
+                      ? (submission as any).management_evidence_urls
+                      : submission?.management_evidence_url ? [submission.management_evidence_url] : [];
+                    if (urls.length === 0) return null;
+                    return (
+                      <div className="pt-2 border-t space-y-1">
+                        {urls.map((url: string, idx: number) => (
+                          <a 
+                            key={idx}
+                            href={url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                          >
+                            <FileText className="h-3 w-3" />
+                            View Evidence{urls.length > 1 ? ` ${idx + 1}` : ''}
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               </CardContent>
             </Card>

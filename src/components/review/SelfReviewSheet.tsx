@@ -332,6 +332,7 @@ export function SelfReviewSheet({
         self_score: result.rating,
         self_remarks: selfRemarks || defaultRemarks,
         self_evidence_url: selfEvidenceUrls.length > 0 ? selfEvidenceUrls[0] : null,
+        self_evidence_urls: selfEvidenceUrls,
         is_na: false,
       });
 
@@ -398,6 +399,7 @@ export function SelfReviewSheet({
       self_score: isNa ? null : calculatedScore,
       self_remarks: selfRemarks,
       self_evidence_url: selfEvidenceUrls.length > 0 ? selfEvidenceUrls[0] : null,
+      self_evidence_urls: selfEvidenceUrls,
       is_na: isNa,
     });
     onOpenChange(false);
