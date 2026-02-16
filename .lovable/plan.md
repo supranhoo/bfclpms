@@ -1,95 +1,106 @@
 
 
-# Admin Rollback for Org-Level KPI to Data Entry
+# Fix: Three Issues on Org KPI Data Entry Page
 
-## What This Does
+## Issue 1: "duplicate key value violates unique constraint review_submissions_kpi_id_unique"
 
-Adds a "Rollback to Data Entry" action for admins on propagated Org KPIs. Unlike the existing "Unlock" (which only allows editing), this fully reverses propagation -- clearing all pushed values from employee scorecards and resetting the org KPI back to a clean data entry state.
+### Root Cause
+The propagation code in `usePropagateOrgKpiValue.ts` uses a check-then-insert pattern (lines 123-152): it queries for an existing submission, then either updates or inserts. This is **not atomic** -- if a submission is created between the check and the insert (e.g., by a concurrent propagation or a previous propagation that wasn't fully cleaned up during rollback), the INSERT fails with the unique constraint violation.
 
-## Current Behavior vs. Requested
+### Fix
+Replace the check-then-insert/update pattern with a Supabase **upsert** using `onConflict: 'kpi_id'`. This is atomic and handles both insert and update in a single call. Apply this fix in both `usePropagateOrgKpiValue` (single propagation) and `useBulkPropagateOrgKpiValues`.
 
-| Action | Current "Unlock" | New "Rollback to Data Entry" |
-|--------|-----------------|------------------------------|
-| Org KPI status | Changed to 'entered' | Reset to 'pending' |
-| Employee review_submissions | Kept (old scores remain) | Cleared (achieved_value, self_score, self_rating nulled) |
-| Employee KPI status | Unchanged | Reset to 'kra_set' (if still at 'self_review') |
-| Data owner can re-enter | Yes | Yes (from scratch) |
+---
 
-## Changes
+## Issue 2: Bi-Monthly / Quarterly KPIs should only show for entry in their due month
 
-### 1. New Hook: `useRollbackOrgKpiPropagation` (new file)
+### Root Cause
+The Org KPI Data Entry page does not apply any frequency-based filtering. The `useOrgLevelKpis` hook fetches all org-level KPIs for the selected period without checking their `frequency` field. Meanwhile, the self-review side correctly uses `isKpiLockedForPeriod` from `frequencyUtils.ts`.
 
-A mutation hook that:
-- Finds all employee KPIs matching the org KPI identity (category, KRA, KPI, period, year)
-- Clears `achieved_value`, `self_score`, `self_rating` from their `review_submissions`
-- Resets those KPIs' status back to `kra_set` (only if currently at `self_review`, to avoid overwriting downstream progress)
-- Resets the `org_kpi_values` status to `pending` and clears the achieved value
-- Logs the rollback in `org_kpi_data_entry_logs` with the admin's identity
-- Notifies data owners via the notifications table
+### Fix
+1. Include `frequency` and `frequency_cycle_start` in the KPI data fetched by `useOrgLevelKpisWithEmployees`.
+2. In `OrgKpiDataEntry.tsx`, filter the displayed KPIs using `isKpiLockedForPeriod` -- KPIs that are locked for the selected month should be hidden or shown with a "not due" indicator.
+3. Add a `frequency` and `frequency_cycle_start` field to `OrgKpiCardData` and display a badge showing when the KPI is due (e.g., "Due: Feb" for a Bi-Monthly KPI viewed in January).
 
-### 2. UI: Add "Rollback" Button to `OrgKpiEntryCard`
+---
 
-- Visible only to admins when status is `propagated`
-- Sits alongside the existing "Unlock" button
-- Uses a confirmation dialog warning: "This will clear propagated values from X employee scorecards and reset the KPI for fresh data entry."
-- Requires a mandatory reason/justification (text input in the dialog)
+## Issue 3: Upload should have clipboard paste option
 
-### 3. Update `OrgKpiEntryCard` Props and Interface
+### Current State
+The `OrgKpiFileUpload` component **already has clipboard paste support** (lines 71-103). It listens for the `paste` event on the document and handles file paste. However, it only activates when `existingUrl` is null, `disabled` is false, and `isUploading` is false. There is no visual indicator telling users they can paste.
 
-- Add new `onRollback` callback prop: `(reason: string) => Promise<void>`
-- Add rollback button with `RotateCcw` icon from lucide-react
-- Add `sent_back` to the status config for the card's badge display
+### Fix
+Add a small "or paste" hint text next to the Upload button so users know the feature exists.
 
-### 4. Wire Up in `OrgKpiDataEntry.tsx`
-
-- Import and use the new rollback hook
-- Pass the `onRollback` handler to each `OrgKpiEntryCard`
-
-### 5. Update Documentation
-
-- Update `DOCUMENTATION.md` with the new rollback capability
+---
 
 ## Technical Details
 
-### Rollback Hook Logic (pseudo-code)
+### Files to Change
 
-```
-1. Find all employee KPIs:
-   SELECT id FROM kpis 
-   WHERE category_id, kra_name, kpi_name, review_period, review_year, is_org_level = true
-
-2. Clear their submissions:
-   UPDATE review_submissions 
-   SET achieved_value = null, self_score = null, self_rating = null 
-   WHERE kpi_id IN (found KPI IDs)
-
-3. Reset KPI status (only if at self_review):
-   UPDATE kpis SET status = 'kra_set' 
-   WHERE id IN (found KPI IDs) AND status = 'self_review'
-
-4. Reset org_kpi_values:
-   UPDATE org_kpi_values 
-   SET status = 'pending', achieved_value = null, remarks = null, evidence_url = null
-   WHERE category_id, kra_name, kpi_name, review_period, review_year
-
-5. Log audit entry with reason
-
-6. Notify data owners
-```
-
-### Files to Create/Modify
-
-| File | Action |
+| File | Change |
 |---|---|
-| `src/hooks/useRollbackOrgKpiPropagation.ts` | **Create** -- new mutation hook |
-| `src/components/admin/OrgKpiEntryCard.tsx` | **Modify** -- add Rollback button with confirmation dialog |
-| `src/pages/admin/OrgKpiDataEntry.tsx` | **Modify** -- wire rollback handler |
-| `DOCUMENTATION.md` | **Modify** -- document the feature |
+| `src/hooks/usePropagateOrgKpiValue.ts` | Replace check-then-insert with `.upsert(..., { onConflict: 'kpi_id' })` in both mutation functions |
+| `src/hooks/useOrgLevelKpis.ts` | Already fetches `*` (all columns including `frequency`), so no query change needed |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | Add frequency-based filtering using `isKpiLockedForPeriod`; pass frequency data to card |
+| `src/components/admin/OrgKpiEntryCard.tsx` | Add optional `frequency` prop; show "Due: Month" badge for non-monthly KPIs; show locked overlay for non-due months |
+| `src/components/admin/OrgKpiFileUpload.tsx` | Add "or Ctrl+V to paste" hint text next to Upload button |
+| `DOCUMENTATION.md` | Document the frequency filtering and upsert fix |
 
-### Safety Guardrails
+### Propagation Upsert (Fix 1)
 
-- Only resets KPIs still at `self_review` stage (won't touch KPIs that have progressed further through the workflow)
-- Mandatory reason field prevents accidental rollbacks
-- Full audit trail logged for accountability
-- Data owners receive notification about the rollback
+Before:
+```typescript
+const { data: existing } = await supabase
+  .from('review_submissions')
+  .select('id, self_score')
+  .eq('kpi_id', kpi.id)
+  .maybeSingle();
 
+if (existing) {
+  await supabase.from('review_submissions').update({...}).eq('id', existing.id);
+} else {
+  await supabase.from('review_submissions').insert({...});
+}
+```
+
+After:
+```typescript
+const { data: existing } = await supabase
+  .from('review_submissions')
+  .select('self_score')
+  .eq('kpi_id', kpi.id)
+  .maybeSingle();
+
+const oldScore = existing?.self_score ?? null;
+
+await supabase
+  .from('review_submissions')
+  .upsert({
+    kpi_id: kpi.id,
+    achieved_value: achievedValue,
+    self_score: ratingResult.rating,
+    self_rating: ratingLevel,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'kpi_id' });
+```
+
+### Frequency Filter (Fix 2)
+
+In `OrgKpiDataEntry.tsx`, after the ownership filter:
+```typescript
+const frequencyFilteredKpis = useMemo(() => {
+  return ownershipFilteredKpis.filter(kpi => {
+    const freq = kpi.frequency;
+    if (!freq || freq === 'Monthly') return true;
+    return !isKpiLockedForPeriod(freq, selectedPeriod, selectedYear, kpi.frequency_cycle_start);
+  });
+}, [ownershipFilteredKpis, selectedPeriod, selectedYear]);
+```
+
+### Paste Hint (Fix 3)
+
+Next to the Upload button, add:
+```tsx
+<span className="text-[10px] text-muted-foreground">or Ctrl+V</span>
+```
