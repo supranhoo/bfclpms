@@ -230,12 +230,23 @@ export default function OrgKpiDataEntry() {
       const filteredDepts = mappedDeptIds
         ? departments.filter(dept => mappedDeptIds.has(dept.id))
         : departments;
+      const kpiMappedEmpIds = mappedEmployeesMap.get(kpiKey);
       scopedRows = filteredDepts.map(dept => {
         const scopeKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${dept.id}||null`;
         const val = existingValuesMap.get(scopeKey);
+        // Build employee names sub-text for this department
+        let scopeSubText: string | undefined;
+        if (kpiMappedEmpIds && allProfiles) {
+          const names = allProfiles
+            .filter(p => kpiMappedEmpIds.has(p.id) && p.department_id === dept.id)
+            .map(p => (p.full_name || '').split(' ')[0])
+            .filter(Boolean);
+          if (names.length > 0) scopeSubText = names.join(', ');
+        }
         return {
           scopeId: dept.id,
           scopeName: dept.name,
+          scopeSubText,
           achievedValue: val?.achieved_value ?? null,
           remarks: val?.remarks ?? '',
           evidenceUrl: val?.evidence_url ?? null,
