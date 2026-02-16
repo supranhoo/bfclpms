@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, X, FileText, Image, FileSpreadsheet, Loader2, Plus } from 'lucide-react';
+import { openStorageFile } from '@/lib/storageDownload';
 import { cn } from '@/lib/utils';
 import { useUploadLimits } from '@/hooks/useUploadLimits';
 
@@ -249,15 +250,14 @@ export function MultiFileUpload({
               className="relative group flex items-center gap-2 p-2 pr-8 border rounded-lg bg-muted/50 max-w-[200px]"
             >
               <FileIcon className="h-4 w-4 text-primary flex-shrink-0" />
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-primary hover:underline truncate"
+              <button
+                type="button"
+                onClick={() => openStorageFile(url)}
+                className="text-xs text-primary hover:underline truncate text-left bg-transparent border-none p-0 cursor-pointer"
                 title={getFileName(url)}
               >
                 {getFileName(url)}
-              </a>
+              </button>
               {!disabled && (
                 <Button
                   type="button"

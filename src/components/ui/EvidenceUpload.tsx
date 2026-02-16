@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, X, FileText, Image, FileSpreadsheet, Loader2 } from 'lucide-react';
+import { openStorageFile } from '@/lib/storageDownload';
 import { useUploadLimits } from '@/hooks/useUploadLimits';
 
 interface EvidenceUploadProps {
@@ -170,14 +171,13 @@ export function EvidenceUpload({ userId, kpiId, onUploadComplete, existingUrl }:
       {uploadedUrl ? (
         <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted/50">
           <FileIcon className="h-5 w-5 text-primary flex-shrink-0" />
-          <a 
-            href={uploadedUrl} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:underline truncate flex-1"
+          <button 
+            type="button"
+            onClick={() => openStorageFile(uploadedUrl!)}
+            className="text-sm text-primary hover:underline truncate flex-1 text-left bg-transparent border-none p-0 cursor-pointer"
           >
             {fileName || 'View uploaded file'}
-          </a>
+          </button>
           <Button
             type="button"
             variant="ghost"

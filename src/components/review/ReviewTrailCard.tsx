@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { User, Shield, Briefcase, FileText, ExternalLink, MessageSquare, AlertCircle } from 'lucide-react';
+import { openStorageFile } from '@/lib/storageDownload';
 import { RatingLevel, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
 import { format } from 'date-fns';
 
@@ -132,17 +133,16 @@ export function ReviewTrailCard({
                   return (
                     <div className="pt-2 border-t space-y-1">
                       {urls.map((url: string, idx: number) => (
-                        <a 
+                        <button 
                           key={idx}
-                          href={url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                          type="button"
+                          onClick={() => openStorageFile(url)}
+                          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
                         >
                           <FileText className="h-3 w-3" />
                           View Evidence{urls.length > 1 ? ` ${idx + 1}` : ''}
                           <ExternalLink className="h-3 w-3" />
-                        </a>
+                        </button>
                       ))}
                     </div>
                   );
@@ -193,17 +193,16 @@ export function ReviewTrailCard({
                   return (
                     <div className="pt-2 border-t space-y-1">
                       {urls.map((url: string, idx: number) => (
-                        <a 
+                        <button 
                           key={idx}
-                          href={url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                          type="button"
+                          onClick={() => openStorageFile(url)}
+                          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
                         >
                           <FileText className="h-3 w-3" />
                           View Evidence{urls.length > 1 ? ` ${idx + 1}` : ''}
                           <ExternalLink className="h-3 w-3" />
-                        </a>
+                        </button>
                       ))}
                     </div>
                   );
@@ -257,17 +256,16 @@ export function ReviewTrailCard({
                     return (
                       <div className="pt-2 border-t space-y-1">
                         {urls.map((url: string, idx: number) => (
-                          <a 
+                          <button 
                             key={idx}
-                            href={url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                            type="button"
+                            onClick={() => openStorageFile(url)}
+                            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
                           >
                             <FileText className="h-3 w-3" />
                             View Evidence{urls.length > 1 ? ` ${idx + 1}` : ''}
                             <ExternalLink className="h-3 w-3" />
-                          </a>
+                          </button>
                         ))}
                       </div>
                     );
@@ -317,17 +315,16 @@ export function ReviewTrailCard({
                     return (
                       <div className="pt-2 border-t space-y-1">
                         {urls.map((url: string, idx: number) => (
-                          <a 
+                          <button 
                             key={idx}
-                            href={url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                            type="button"
+                            onClick={() => openStorageFile(url)}
+                            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
                           >
                             <FileText className="h-3 w-3" />
                             View Evidence{urls.length > 1 ? ` ${idx + 1}` : ''}
                             <ExternalLink className="h-3 w-3" />
-                          </a>
+                          </button>
                         ))}
                       </div>
                     );

@@ -3356,4 +3356,23 @@ This ensures DB triggers using `net.http_post` (which send the 208-char JWT) can
 
 ---
 
+### Evidence File Download via Blob URLs (v1.36.0)
+
+**Problem:** Browser extensions (ad blockers, privacy tools) block direct navigation to `*.supabase.co` storage URLs, showing `ERR_BLOCKED_BY_CLIENT`.
+
+**Solution:** Created `src/lib/storageDownload.ts` with `openStorageFile()` that downloads files via the SDK's `fetch`-based `.download()` method (not blocked by extensions) and opens the result as a blob URL. Falls back to direct URL on failure.
+
+**Updated Components:**
+| Component | Change |
+|---|---|
+| `src/lib/storageDownload.ts` | New utility — parses storage URL, downloads via SDK, opens blob |
+| `ReviewStageCard.tsx` | `<a href>` → `<button onClick={openStorageFile}>` |
+| `ReviewTrailCard.tsx` | Same change for all 4 evidence sections |
+| `ReviewTrailCardCompact.tsx` | Same change |
+| `EvidenceUpload.tsx` | Preview link uses blob download |
+| `MultiFileUpload.tsx` | File preview links use blob download |
+| `SelfReviewSheet.tsx` | Read-only evidence links use blob download |
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
