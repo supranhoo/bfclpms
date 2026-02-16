@@ -21,6 +21,7 @@ export interface InboxItem {
   evidenceUrl?: string | null;
   snoozedUntil?: string | null;
   snoozeCount?: number;
+  ticketNumber?: string | null;
 }
 
 export interface GroupedInboxItems {
@@ -326,7 +327,7 @@ export function filterInboxItems(items: InboxItem[], filters: InboxFiltersState)
   return items.filter(item => {
     // Text search
     if (textLower) {
-      const searchable = [item.title, item.message, item.kpiName, item.kraName, item.fromUser?.fullName, item.toUser?.fullName]
+      const searchable = [item.title, item.message, item.kpiName, item.kraName, item.fromUser?.fullName, item.toUser?.fullName, item.ticketNumber]
         .filter(Boolean).join(' ').toLowerCase();
       if (!searchable.includes(textLower)) return false;
     }

@@ -90,9 +90,16 @@ export function InboxRowItem({ item, onView, onMarkRead, onNavigate, onToggleExp
       {/* Title & Message */}
       <TableCell className="max-w-0">
         <div className="flex flex-col gap-0.5">
-          <span className={cn('font-medium truncate', !item.isRead && 'text-foreground', item.isRead && 'text-muted-foreground')}>
-            {item.title}
-          </span>
+          <div className="flex items-center gap-1.5">
+            {item.ticketNumber && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 shrink-0 font-mono">
+                {item.ticketNumber}
+              </Badge>
+            )}
+            <span className={cn('font-medium truncate', !item.isRead && 'text-foreground', item.isRead && 'text-muted-foreground')}>
+              {item.title}
+            </span>
+          </div>
           <span className="text-sm text-muted-foreground truncate">
             {item.message}
           </span>

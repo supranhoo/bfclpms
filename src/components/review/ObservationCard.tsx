@@ -101,6 +101,11 @@ export function ObservationCard({
               <span className="text-xs font-medium uppercase">{config.label}</span>
             </div>
             
+            {(observation as any).ticket_number && (
+              <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0">
+                {(observation as any).ticket_number}
+              </Badge>
+            )}
             <Badge variant="outline" className={cn('text-xs border', statusCfg.className)}>
               {statusCfg.label}
             </Badge>

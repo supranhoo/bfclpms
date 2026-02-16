@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-16  
-> **Version:** 1.36.0
+> **Version:** 1.37.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -238,8 +238,8 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
 | `training_needs` | Identified training gaps | `employee_id`, `kpi_id`, `gap_type`, `priority`, `status` |
-| `kpi_queries` | Review questions/clarifications | `kpi_id`, `raised_by`, `raised_to`, `reason`, `evidence_url`, `resolution_notes`, `resolution_evidence_url`, `status`, `query_type` (`'query'` default, `'send_back'` for send-backs — send-backs are auto-resolved and excluded from active query counts/inbox) |
-| `kpi_observations` | Reviewer feedback with reply threads | `kpi_id`, `created_by`, `observer_role`, `observation_type`, `title`, `status` (open/acknowledged/resolved), `evidence_urls` |
+| `kpi_queries` | Review questions/clarifications | `kpi_id`, `raised_by`, `raised_to`, `reason`, `evidence_url`, `resolution_notes`, `resolution_evidence_url`, `status`, `query_type`, `ticket_number` (auto-generated `Q-XXXXX`) |
+| `kpi_observations` | Reviewer feedback with reply threads | `kpi_id`, `created_by`, `observer_role`, `observation_type`, `title`, `status` (open/acknowledged/resolved), `evidence_urls`, `ticket_number` (auto-generated `OBS-XXXXX`) |
 | `kpi_observation_replies` | Reply thread on observations | `observation_id`, `reply_by`, `reply_text`, `evidence_urls` |
 | `notifications` | User notifications | `user_id`, `type`, `title`, `message`, `is_read` |
 

@@ -161,12 +161,19 @@ export function MobileInboxList({
 
                       {/* Content */}
                       <div className="flex-1 min-w-0">
-                        <p className={cn(
-                          "text-sm line-clamp-2",
-                          !item.isRead && "font-medium"
-                        )}>
-                          {item.title}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          {item.ticketNumber && (
+                            <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 shrink-0 font-mono">
+                              {item.ticketNumber}
+                            </Badge>
+                          )}
+                          <p className={cn(
+                            "text-sm line-clamp-2",
+                            !item.isRead && "font-medium"
+                          )}>
+                            {item.title}
+                          </p>
+                        </div>
                         {item.message && (
                           <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
                             {item.message}

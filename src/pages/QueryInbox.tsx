@@ -304,6 +304,7 @@ export default function QueryInbox() {
     } : null,
     resolutionNotes: query.resolution_notes,
     evidenceUrl: query.evidence_url,
+    ticketNumber: (query as any).ticket_number || null,
   }), []);
 
   const receivedQueryItems: InboxItem[] = useMemo(() =>

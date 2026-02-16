@@ -609,6 +609,7 @@ export type Database = {
           reviewed_by: string | null
           score_impact: number
           status: string
+          ticket_number: string | null
           title: string
           updated_at: string | null
         }
@@ -627,6 +628,7 @@ export type Database = {
           reviewed_by?: string | null
           score_impact?: number
           status?: string
+          ticket_number?: string | null
           title: string
           updated_at?: string | null
         }
@@ -645,6 +647,7 @@ export type Database = {
           reviewed_by?: string | null
           score_impact?: number
           status?: string
+          ticket_number?: string | null
           title?: string
           updated_at?: string | null
         }
@@ -703,6 +706,7 @@ export type Database = {
           resolution_notes: string | null
           resolved_at: string | null
           status: Database["public"]["Enums"]["query_status"]
+          ticket_number: string | null
           updated_at: string
         }
         Insert: {
@@ -721,6 +725,7 @@ export type Database = {
           resolution_notes?: string | null
           resolved_at?: string | null
           status?: Database["public"]["Enums"]["query_status"]
+          ticket_number?: string | null
           updated_at?: string
         }
         Update: {
@@ -739,6 +744,7 @@ export type Database = {
           resolution_notes?: string | null
           resolved_at?: string | null
           status?: Database["public"]["Enums"]["query_status"]
+          ticket_number?: string | null
           updated_at?: string
         }
         Relationships: [
