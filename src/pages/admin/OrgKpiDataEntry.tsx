@@ -58,6 +58,22 @@ export default function OrgKpiDataEntry() {
     });
     return map;
   }, [orgLevelData]);
+  const mappedDepartmentsMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    orgLevelData?.kpis?.forEach(k => {
+      const key = `${k.kpi.category_id}||${k.kpi.kra_name}||${k.kpi.kpi_name}`;
+      map.set(key, new Set(k.departmentIds));
+    });
+    return map;
+  }, [orgLevelData]);
+  const mappedEmployeesMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    orgLevelData?.kpis?.forEach(k => {
+      const key = `${k.kpi.category_id}||${k.kpi.kra_name}||${k.kpi.kpi_name}`;
+      map.set(key, new Set(k.employeeIds));
+    });
+    return map;
+  }, [orgLevelData]);
   const unmappedCount = orgLevelData?.unmappedCount || 0;
 
   const { data: categories } = useKraCategories();
@@ -209,7 +225,12 @@ export default function OrgKpiDataEntry() {
 
     if (scope === 'department' && departments) {
       scopeLabel = 'Department';
-      scopedRows = departments.map(dept => {
+      const kpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+      const mappedDeptIds = mappedDepartmentsMap.get(kpiKey);
+      const filteredDepts = mappedDeptIds
+        ? departments.filter(dept => mappedDeptIds.has(dept.id))
+        : departments;
+      scopedRows = filteredDepts.map(dept => {
         const scopeKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${dept.id}||null`;
         const val = existingValuesMap.get(scopeKey);
         return {
@@ -222,7 +243,12 @@ export default function OrgKpiDataEntry() {
       });
     } else if (scope === 'employee' && allProfiles) {
       scopeLabel = 'Employee';
-      scopedRows = allProfiles.map(emp => {
+      const kpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+      const mappedEmpIds = mappedEmployeesMap.get(kpiKey);
+      const filteredEmps = mappedEmpIds
+        ? allProfiles.filter(emp => mappedEmpIds.has(emp.id))
+        : allProfiles;
+      scopedRows = filteredEmps.map(emp => {
         const scopeKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${emp.id}`;
         const val = existingValuesMap.get(scopeKey);
         return {
@@ -254,7 +280,7 @@ export default function OrgKpiDataEntry() {
       scopeLabel,
       employeeCount: empCount,
     };
-  }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap]);
+  }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap, mappedDepartmentsMap, mappedEmployeesMap]);
 
   // Save handler for a single card
   const handleCardSave = useCallback(async (

@@ -48,6 +48,8 @@ export function useOrgLevelKpis(reviewPeriod?: string, reviewYear?: number) {
 export interface OrgLevelKpiWithEmployees {
   kpi: KPI & { kra_categories: { id: string; name: string; color: string; weightage: number } };
   employeeCount: number;
+  departmentIds: string[];
+  employeeIds: string[];
 }
 
 export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?: number) {
@@ -74,7 +76,7 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
         if (!uniqueMap.has(key)) uniqueMap.set(key, kpi);
       });
 
-      // 2. Count employees per org KPI (all records with matching names, same period)
+      // 2. Count employees per org KPI and collect employee IDs
       const { data: empCounts, error: err2 } = await supabase
         .from('kpis')
         .select('category_id, kra_name, kpi_name, employee_id')
@@ -92,22 +94,51 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
         countMap.set(key, s);
       });
 
-      // 3. Build result - only KPIs with employees, plus count
+      // 3. Fetch department_id for all mapped employees to build dept mapping
+      const allEmployeeIds = new Set<string>();
+      countMap.forEach(empSet => empSet.forEach(id => allEmployeeIds.add(id)));
+      
+      const deptMap = new Map<string, Set<string>>();
+      
+      if (allEmployeeIds.size > 0) {
+        const empArray = Array.from(allEmployeeIds);
+        // Fetch profiles in batches of 500
+        const profiles: Array<{ id: string; department_id: string | null }> = [];
+        for (let i = 0; i < empArray.length; i += 500) {
+          const batch = empArray.slice(i, i + 500);
+          const { data: batchProfiles } = await supabase
+            .from('profiles')
+            .select('id, department_id')
+            .in('id', batch);
+          if (batchProfiles) profiles.push(...batchProfiles);
+        }
+        
+        const profileMap = new Map(profiles.map(p => [p.id, p.department_id]));
+        
+        // Build department mapping per KPI
+        countMap.forEach((empSet, key) => {
+          const deptIds = new Set<string>();
+          empSet.forEach(empId => {
+            const deptId = profileMap.get(empId);
+            if (deptId) deptIds.add(deptId);
+          });
+          if (deptIds.size > 0) deptMap.set(key, deptIds);
+        });
+      }
+
+      // 4. Build result
       const result: OrgLevelKpiWithEmployees[] = [];
       let unmappedCount = 0;
 
       uniqueMap.forEach((kpi, key) => {
         const empSet = countMap.get(key);
-        // Unique definitions count as 1 employee (the template row itself), so real employees = size - 1 OR just use the count
-        // Actually the same employee_id can appear — count distinct
         const count = empSet ? empSet.size : 0;
-        // A KPI is "mapped" if there's more than 1 record (i.e. at least 1 employee besides the org template)
-        // But since we deduped, all records have employee_id — let's count as-is
-        // If count >= 1, there's at least 1 employee with this KPI
         if (count >= 1) {
           result.push({
             kpi: kpi as unknown as OrgLevelKpiWithEmployees['kpi'],
             employeeCount: count,
+            departmentIds: Array.from(deptMap.get(key) || []),
+            employeeIds: Array.from(empSet || []),
           });
         } else {
           unmappedCount++;
