@@ -235,7 +235,7 @@ export function UnifiedScorecard({
   // Review state
   const [reviewerScore, setReviewerScore] = useState<number | null>(null);
   const [reviewerRemarks, setReviewerRemarks] = useState('');
-  const [reviewerEvidenceUrl, setReviewerEvidenceUrl] = useState<string | null>(null);
+  const [reviewerEvidenceUrls, setReviewerEvidenceUrls] = useState<string[]>([]);
   const [reviewerAchievedValue, setReviewerAchievedValue] = useState<number | string | null>(null);
   const [queryReason, setQueryReason] = useState('');
   const [sendBackReason, setSendBackReason] = useState('');
@@ -371,6 +371,7 @@ export function UnifiedScorecard({
       score,
       remarks,
       evidence_url,
+      evidence_urls,
       achieved_value,
       approve,
     }: {
@@ -379,6 +380,7 @@ export function UnifiedScorecard({
       score: number;
       remarks: string;
       evidence_url?: string | null;
+      evidence_urls?: string[];
       achieved_value?: number | null;
       approve: boolean;
     }) => {
@@ -389,6 +391,7 @@ export function UnifiedScorecard({
       updateData[`${prefix}_score`] = score;
       updateData[`${prefix}_remarks`] = remarks;
       updateData[`${prefix}_evidence_url`] = evidence_url;
+      updateData[`${prefix}_evidence_urls`] = evidence_urls;
       if (achieved_value !== undefined) {
         updateData[`${prefix}_achieved_value`] = achieved_value;
       }
@@ -586,7 +589,14 @@ export function UnifiedScorecard({
     
     setReviewerScore(prevScore);
     setReviewerRemarks((existing as any)?.[`${config.scoreFieldPrefix}_remarks`] || '');
-    setReviewerEvidenceUrl((existing as any)?.[`${config.scoreFieldPrefix}_evidence_url`] || null);
+    const existingUrls = (existing as any)?.[`${config.scoreFieldPrefix}_evidence_urls`];
+    setReviewerEvidenceUrls(
+      Array.isArray(existingUrls) && existingUrls.length > 0
+        ? existingUrls
+        : (existing as any)?.[`${config.scoreFieldPrefix}_evidence_url`] 
+          ? [(existing as any)[`${config.scoreFieldPrefix}_evidence_url`]] 
+          : []
+    );
     setReviewerAchievedValue(
       (existing as any)?.[`${config.scoreFieldPrefix}_achieved_value`] ?? 
       existing?.achieved_value ?? 
@@ -681,7 +691,8 @@ export function UnifiedScorecard({
           [`${prefix}_rating`]: scoreToRating(reviewerScore),
           [`${prefix}_score`]: reviewerScore,
           [`${prefix}_remarks`]: overrideNaRemarks,
-          [`${prefix}_evidence_url`]: reviewerEvidenceUrl,
+          [`${prefix}_evidence_url`]: reviewerEvidenceUrls[0] || null,
+          [`${prefix}_evidence_urls`]: reviewerEvidenceUrls,
         };
         if (reviewerAchievedValue !== undefined && reviewerAchievedValue !== null) {
           updateData[`${prefix}_achieved_value`] = typeof reviewerAchievedValue === 'number' 
@@ -829,7 +840,8 @@ export function UnifiedScorecard({
       rating,
       score: reviewerScore,
       remarks: reviewerRemarks,
-      evidence_url: reviewerEvidenceUrl,
+      evidence_url: reviewerEvidenceUrls[0] || null,
+      evidence_urls: reviewerEvidenceUrls,
       achieved_value: typeof reviewerAchievedValue === 'number' 
         ? reviewerAchievedValue 
         : reviewerAchievedValue ? parseFloat(reviewerAchievedValue) : null,
@@ -1169,8 +1181,8 @@ export function UnifiedScorecard({
                       userId={user.id}
                       contextId={selectedKpi.id}
                       folder="reviewer-evidence"
-                      existingUrls={reviewerEvidenceUrl ? [reviewerEvidenceUrl] : []}
-                      onUploadComplete={(urls) => setReviewerEvidenceUrl(urls[urls.length - 1] || '')}
+                      existingUrls={reviewerEvidenceUrls}
+                      onUploadComplete={(urls) => setReviewerEvidenceUrls(urls)}
                       maxFiles={5}
                     />
                   )}
@@ -1195,8 +1207,8 @@ export function UnifiedScorecard({
                       userId={user.id}
                       contextId={selectedKpi.id}
                       folder="reviewer-evidence"
-                      existingUrls={reviewerEvidenceUrl ? [reviewerEvidenceUrl] : []}
-                      onUploadComplete={(urls) => setReviewerEvidenceUrl(urls[urls.length - 1] || '')}
+                      existingUrls={reviewerEvidenceUrls}
+                      onUploadComplete={(urls) => setReviewerEvidenceUrls(urls)}
                       maxFiles={5}
                     />
                   )}
