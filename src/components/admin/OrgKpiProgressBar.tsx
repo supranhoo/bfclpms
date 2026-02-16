@@ -38,7 +38,7 @@ export function OrgKpiProgressBar({ totalKpis, enteredKpis, categoryProgress }: 
       <Progress value={percentage} className="h-2.5" />
       
       {categoryProgress.length > 1 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 min-w-0">
           {categoryProgress.map(cat => (
             <Badge
               key={cat.categoryId}
