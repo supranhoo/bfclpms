@@ -254,10 +254,37 @@ export default function Dashboard() {
     }
 
     // Standard self-view deep-link
-    if (!kpiParam || !periodFilteredKpis || periodFilteredKpis.length === 0) return;
+    if (!kpiParam) return;
 
+    // If KPIs are still loading, wait
+    if (kpisLoading) return;
+
+    // Try to find KPI in current period
     const targetKpi = periodFilteredKpis.find(k => k.id === kpiParam);
-    if (!targetKpi) return;
+    
+    if (!targetKpi) {
+      // KPI not in current period — look it up in all loaded KPIs and auto-switch period
+      const allKpiMatch = kpis?.find(k => k.id === kpiParam);
+      if (allKpiMatch && allKpiMatch.review_period && allKpiMatch.review_year != null) {
+        // Auto-switch to the KPI's period
+        setPeriodSelection(prev => ({
+          ...prev,
+          mode: 'single',
+          selectedMonth: allKpiMatch.review_period!,
+          selectedYear: allKpiMatch.review_year!,
+        }));
+        // Don't clean URL yet — let the effect re-run after period change
+        return;
+      }
+      // KPI not found at all — clean up and bail
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('kpi');
+        next.delete('panel');
+        return next;
+      }, { replace: true });
+      return;
+    }
 
     setSelectedKpiReview(targetKpi);
     if (panelParam === 'queryHistory') {
@@ -271,7 +298,7 @@ export default function Dashboard() {
       next.delete('panel');
       return next;
     }, { replace: true });
-  }, [periodFilteredKpis, searchParams]);
+  }, [periodFilteredKpis, searchParams, kpisLoading, kpis]);
 
   // Step 2: Apply category and status filters on top of period filter
   const fullyFilteredKpis = useMemo(() => {
