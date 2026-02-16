@@ -181,6 +181,7 @@ export function usePropagateOrgKpiValue() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
       if (result.propagatedCount > 0) {
         toast({ 
           title: `Propagated to ${result.propagatedCount} employee KPI(s)`,
@@ -292,6 +293,7 @@ export function useBulkPropagateOrgKpiValues() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
       if (result.propagatedCount > 0) {
         toast({ 
           title: `Propagated to ${result.propagatedCount} employee KPI(s)`,

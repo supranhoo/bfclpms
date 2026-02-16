@@ -3,10 +3,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
 import { OrgKpiAuditLog } from '@/components/admin/OrgKpiAuditLog';
 import { OrgKpiScopedEntryTable, ScopedRow } from '@/components/admin/OrgKpiScopedEntryTable';
-import { Save, Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3 } from 'lucide-react';
+import { Save, Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock } from 'lucide-react';
 
 export interface OrgKpiCardData {
   categoryId: string;
@@ -37,6 +38,7 @@ interface OrgKpiEntryCardProps {
   data: OrgKpiCardData;
   reviewPeriod: string;
   reviewYear: number;
+  isAdmin?: boolean;
   onSave: (values: {
     achievedValue: number | null;
     remarks: string;
@@ -49,6 +51,7 @@ interface OrgKpiEntryCardProps {
     evidenceUrl: string | null;
     scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null }>;
   }) => Promise<void>;
+  onUnlock?: () => Promise<void>;
   onOpenImpact: () => void;
 }
 
@@ -64,7 +67,10 @@ const scopeIcons = {
   employee: User,
 };
 
-export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, onSave, onSaveAndPropagate, onOpenImpact }: OrgKpiEntryCardProps) {
+export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSave, onSaveAndPropagate, onUnlock, onOpenImpact }: OrgKpiEntryCardProps) {
+  const isLocked = data.status === 'propagated' && !isAdmin;
+  const isPropagated = data.status === 'propagated';
+  const [isUnlocking, setIsUnlocking] = useState(false);
   const [achievedValue, setAchievedValue] = useState<string>(data.achievedValue?.toString() ?? '');
   const [remarks, setRemarks] = useState(data.remarks);
   const [evidenceUrl, setEvidenceUrl] = useState(data.evidenceUrl);
@@ -229,17 +235,29 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, onSave, onSave
                   onChange={(e) => { setAchievedValue(e.target.value); triggerAutoSave(); }}
                   placeholder="Achieved value"
                   className="h-9"
+                  disabled={isLocked}
                 />
                 <Input
                   value={remarks}
                   onChange={(e) => { setRemarks(e.target.value); triggerAutoSave(); }}
                   placeholder="Remark"
                   className="h-9"
+                  disabled={isLocked}
                 />
-                <OrgKpiFileUpload
-                  existingUrl={evidenceUrl}
-                  onUploadComplete={(url) => { setEvidenceUrl(url); triggerAutoSave(); }}
-                />
+                {!isLocked && (
+                  <OrgKpiFileUpload
+                    existingUrl={evidenceUrl}
+                    onUploadComplete={(url) => { setEvidenceUrl(url); triggerAutoSave(); }}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Lock banner */}
+            {isLocked && (
+              <div className="flex items-center gap-2 p-2 rounded-md bg-muted text-sm text-muted-foreground">
+                <Lock className="h-4 w-4 shrink-0" />
+                <span>Locked after propagation. Contact admin to unlock.</span>
               </div>
             )}
 
@@ -257,27 +275,63 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, onSave, onSave
                   <BarChart3 className="h-3.5 w-3.5" />
                   Impact
                 </Button>
-              </div>
-              <div className="flex items-center gap-2">
-                {saveStatus === 'saving' && (
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Loader2 className="h-3 w-3 animate-spin" />Saving...
-                  </span>
+                {isPropagated && isAdmin && onUnlock && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1"
+                    disabled={isUnlocking}
+                    onClick={async () => {
+                      setIsUnlocking(true);
+                      try { await onUnlock(); } finally { setIsUnlocking(false); }
+                    }}
+                  >
+                    {isUnlocking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlock className="h-3.5 w-3.5" />}
+                    Unlock
+                  </Button>
                 )}
-                {saveStatus === 'saved' && (
-                  <span className="text-xs text-primary flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3" />Saved
-                  </span>
-                )}
-                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleManualSave} disabled={isSaving}>
-                  {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
-                  Save
-                </Button>
-                <Button size="sm" className="h-7 text-xs" onClick={handleSaveAndPropagate} disabled={isPropagating}>
-                  {isPropagating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5 mr-1" />}
-                  Save & Propagate
-                </Button>
               </div>
+              {!isLocked && (
+                <div className="flex items-center gap-2">
+                  {saveStatus === 'saving' && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" />Saving...
+                    </span>
+                  )}
+                  {saveStatus === 'saved' && (
+                    <span className="text-xs text-primary flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />Saved
+                    </span>
+                  )}
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleManualSave} disabled={isSaving}>
+                    {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+                    Save
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="sm" className="h-7 text-xs" disabled={isPropagating}>
+                        {isPropagating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5 mr-1" />}
+                        Save & Propagate
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Confirm Propagation</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will update scores for {data.employeeCount || 0} employee scorecard{(data.employeeCount || 0) !== 1 ? 's' : ''}. 
+                          The entry will be <strong>locked for editing</strong> afterward. Only an admin can unlock it.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleSaveAndPropagate}>
+                          Confirm & Propagate
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              )}
             </div>
           </div>
         </div>

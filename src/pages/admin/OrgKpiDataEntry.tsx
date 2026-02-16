@@ -7,6 +7,8 @@ import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
 import { usePropagateOrgKpiValue } from '@/hooks/usePropagateOrgKpiValue';
 import { useBatchInsertAuditLogs } from '@/hooks/useOrgKpiAuditLog';
 import { OrgLevelScope } from '@/hooks/useKpis';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +36,7 @@ function getPreviousPeriod(period: string, year: number): { period: string; year
 
 export default function OrgKpiDataEntry() {
   const { profile, role } = useAuth();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
@@ -422,7 +425,19 @@ export default function OrgKpiDataEntry() {
         });
       }
     }
-  }, [handleCardSave, propagate, selectedPeriod, selectedYear]);
+
+    // Set org_kpi_values status to 'propagated' for all matching rows
+    await supabase
+      .from('org_kpi_values')
+      .update({ status: 'propagated', updated_at: new Date().toISOString() })
+      .eq('category_id', kpi.category_id)
+      .eq('kra_name', kpi.kra_name)
+      .eq('kpi_name', kpi.kpi_name)
+      .eq('review_period', selectedPeriod)
+      .eq('review_year', selectedYear);
+    
+    queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
+  }, [handleCardSave, propagate, selectedPeriod, selectedYear, queryClient]);
 
   // Copy from previous period
   const handleCopyFromPrevious = async () => {
@@ -729,8 +744,32 @@ export default function OrgKpiDataEntry() {
                       data={cardData}
                       reviewPeriod={selectedPeriod}
                       reviewYear={selectedYear}
+                      isAdmin={isAdmin}
                       onSave={(values) => handleCardSave(kpi, values)}
                       onSaveAndPropagate={(values) => handleCardSaveAndPropagate(kpi, values)}
+                      onUnlock={async () => {
+                        await supabase
+                          .from('org_kpi_values')
+                          .update({ status: 'entered', updated_at: new Date().toISOString() })
+                          .eq('category_id', kpi.category_id)
+                          .eq('kra_name', kpi.kra_name)
+                          .eq('kpi_name', kpi.kpi_name)
+                          .eq('review_period', selectedPeriod)
+                          .eq('review_year', selectedYear);
+                        try {
+                          await insertAuditLogs.mutateAsync([{
+                            category_id: kpi.category_id,
+                            kra_name: kpi.kra_name,
+                            kpi_name: kpi.kpi_name,
+                            review_period: selectedPeriod,
+                            review_year: selectedYear,
+                            action: 'unlocked',
+                            performed_by: profile?.id || '',
+                          }]);
+                        } catch { /* non-blocking */ }
+                        queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
+                        toast({ title: 'Entry unlocked for editing' });
+                      }}
                       onOpenImpact={() => {
                         const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
                         const val = existingValuesMap.get(key);
