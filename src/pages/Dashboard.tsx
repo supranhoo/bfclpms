@@ -19,7 +19,7 @@ import { WorkflowProgressTracker } from '@/components/review/WorkflowProgressTra
 import { ProfileCard } from '@/components/dashboard/ProfileCard';
 import { KeyStatCard } from '@/components/dashboard/KeyStatCard';
 import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
-import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
+import { CategoryScoreChart, type CategorySortBy } from '@/components/dashboard/CategoryScoreChart';
 import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { MobileKpiCard } from '@/components/dashboard/MobileKpiCard';
@@ -75,6 +75,7 @@ export default function Dashboard() {
   const [autoOpenQueryHistory, setAutoOpenQueryHistory] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [categorySortBy, setCategorySortBy] = useState<CategorySortBy>('score');
   
   // Enhanced period selection with cumulative mode support
   const defaultPeriodSelection = useDefaultPeriodSelection();
@@ -373,7 +374,7 @@ export default function Dashboard() {
         count: catKpis.length,
         weightage: categoryWeightage,
       };
-    }).filter(c => c.count > 0).sort((a, b) => b.percentage - a.percentage);
+    }).filter(c => c.count > 0);
   }, [categories, fullyFilteredKpis, submissionMap]);
 
   // Available categories for filter dropdown
@@ -615,7 +616,7 @@ export default function Dashboard() {
             <CardDescription className="text-xs">Score breakdown across KRA categories</CardDescription>
           </CardHeader>
           <CardContent style={{ height: Math.max(180, categoryMetrics.length * 36) }}>
-            <CategoryScoreChart data={categoryMetrics} />
+            <CategoryScoreChart data={categoryMetrics} sortBy={categorySortBy} onSortChange={setCategorySortBy} />
           </CardContent>
         </Card>
       </div>
