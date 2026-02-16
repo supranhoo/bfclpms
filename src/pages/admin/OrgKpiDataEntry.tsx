@@ -4,6 +4,7 @@ import { useKraCategories, useDepartments, useProfiles } from '@/hooks/useOrgani
 import { useOrgKpiValues, useBulkUpsertOrgKpiValues, OrgKpiValue } from '@/hooks/useOrgKpiValues';
 import { useOrgLevelKpisWithEmployees, useOrgLevelKpis } from '@/hooks/useOrgLevelKpis';
 import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
+import { useUnmarkAsOrgLevel } from '@/hooks/useMarkAsOrgLevel';
 import { usePropagateOrgKpiValue } from '@/hooks/usePropagateOrgKpiValue';
 import { useBatchInsertAuditLogs } from '@/hooks/useOrgKpiAuditLog';
 import { useRollbackOrgKpiPropagation } from '@/hooks/useRollbackOrgKpiPropagation';
@@ -92,6 +93,7 @@ export default function OrgKpiDataEntry() {
   const propagate = usePropagateOrgKpiValue();
   const insertAuditLogs = useBatchInsertAuditLogs();
   const rollbackMutation = useRollbackOrgKpiPropagation();
+  const unmarkMutation = useUnmarkAsOrgLevel();
 
   // Previous period data
   const prev = getPreviousPeriod(selectedPeriod, selectedYear);
@@ -637,17 +639,19 @@ export default function OrgKpiDataEntry() {
                 />
               </div>
             </div>
-            <div className="flex gap-2 flex-wrap">
-              <Button variant="outline" size="sm" onClick={handleCopyFromPrevious} className="gap-1.5">
-                <Copy className="h-4 w-4" />
-                Copy from Last Period
-              </Button>
-              <OrgKpiBulkExport kpis={exportData} reviewPeriod={selectedPeriod} reviewYear={selectedYear} />
-              <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="gap-1.5">
-                <Upload className="h-4 w-4" />
-                Import Excel
-              </Button>
-            </div>
+            {isAdmin && (
+              <div className="flex gap-2 flex-wrap">
+                <Button variant="outline" size="sm" onClick={handleCopyFromPrevious} className="gap-1.5">
+                  <Copy className="h-4 w-4" />
+                  Copy from Last Period
+                </Button>
+                <OrgKpiBulkExport kpis={exportData} reviewPeriod={selectedPeriod} reviewYear={selectedYear} />
+                <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="gap-1.5">
+                  <Upload className="h-4 w-4" />
+                  Import Excel
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Category pills */}
@@ -808,6 +812,16 @@ export default function OrgKpiDataEntry() {
                           reason,
                         });
                       }}
+                      onRemoveFromOrg={isAdmin ? async () => {
+                        await unmarkMutation.mutateAsync({
+                          categoryId: kpi.category_id,
+                          kraName: kpi.kra_name,
+                          kpiName: kpi.kpi_name,
+                          reviewPeriod: selectedPeriod,
+                          reviewYear: selectedYear,
+                        });
+                        toast({ title: `"${kpi.kpi_name}" removed from Org KPIs` });
+                      } : undefined}
                     />
                   );
                 })}

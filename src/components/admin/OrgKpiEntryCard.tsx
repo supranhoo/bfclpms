@@ -10,7 +10,7 @@ import { OrgKpiScopedEntryTable, ScopedRow } from '@/components/admin/OrgKpiScop
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
 import { Textarea } from '@/components/ui/textarea';
-import { Save, Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw } from 'lucide-react';
+import { Save, Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2 } from 'lucide-react';
 
 export interface OrgKpiCardData {
   categoryId: string;
@@ -62,6 +62,7 @@ interface OrgKpiEntryCardProps {
   onUnlock?: () => Promise<void>;
   onRollback?: (reason: string) => Promise<void>;
   onOpenImpact: () => void;
+  onRemoveFromOrg?: () => Promise<void>;
 }
 
 const statusConfig = {
@@ -76,11 +77,12 @@ const scopeIcons = {
   employee: User,
 };
 
-export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSave, onSaveAndPropagate, onUnlock, onRollback, onOpenImpact }: OrgKpiEntryCardProps) {
+export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSave, onSaveAndPropagate, onUnlock, onRollback, onOpenImpact, onRemoveFromOrg }: OrgKpiEntryCardProps) {
   const isLocked = data.status === 'propagated' && !isAdmin;
   const isPropagated = data.status === 'propagated';
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [isRollingBack, setIsRollingBack] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
   const [rollbackReason, setRollbackReason] = useState('');
   const [achievedValue, setAchievedValue] = useState<string>(data.achievedValue?.toString() ?? '');
   const [remarks, setRemarks] = useState(data.remarks);
@@ -368,6 +370,55 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
                         >
                           {isRollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
                           Confirm Rollback
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+                {isAdmin && !isPropagated && onRemoveFromOrg && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs gap-1 border-destructive/50 text-destructive hover:bg-destructive/10"
+                        disabled={isRemoving}
+                      >
+                        {isRemoving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        Remove
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Remove from Organization KPIs</AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                          <div className="space-y-2">
+                            <p>
+                              This will remove <strong>"{data.kpiName}"</strong> from organization-level tracking.
+                            </p>
+                            <p className="text-destructive font-medium">
+                              All entered org-level values and data owner assignments for this KPI will be deleted.
+                            </p>
+                          </div>
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          disabled={isRemoving}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            setIsRemoving(true);
+                            try {
+                              await onRemoveFromOrg();
+                            } finally {
+                              setIsRemoving(false);
+                            }
+                          }}
+                        >
+                          {isRemoving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                          Confirm Remove
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>

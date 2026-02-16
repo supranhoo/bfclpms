@@ -3410,6 +3410,18 @@ This ensures DB triggers using `net.http_post` (which send the 208-char JWT) can
 
 ---
 
+### Admin-Only Org KPI Management Features (v1.38.0)
+
+**Added three admin-only capabilities to the Org KPI Data Entry page:**
+
+1. **Remove KPI from Org KPI** (admin only): Each non-propagated KPI card shows a "Remove" button that unmarks the KPI as organization-level, deletes associated `org_kpi_values` and `org_kpi_data_owners` records. Propagated KPIs must be rolled back first. Uses `useUnmarkAsOrgLevel` hook in `src/hooks/useMarkAsOrgLevel.ts`.
+
+2. **Restrict bulk actions to admin only**: The "Copy from Last Period", "Export Template", and "Import Excel" buttons are now only visible to admin users. Data owners can still perform individual data entry but cannot use bulk management tools.
+
+**Files changed:** `src/hooks/useMarkAsOrgLevel.ts`, `src/components/admin/OrgKpiEntryCard.tsx`, `src/pages/admin/OrgKpiDataEntry.tsx`
+
+---
+
 ### Org KPI Data Entry Overhaul (v1.37.0)
 
 **Problem:** The Org KPI data entry page was a dense flat table with 11 columns, making it overwhelming for designated data entry users. No progress tracking, no bulk import, no audit trail, and per-KPI owner assignment only.
