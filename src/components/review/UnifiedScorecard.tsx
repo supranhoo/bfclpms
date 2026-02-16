@@ -26,7 +26,7 @@ import { CategoryScoreChart } from '@/components/dashboard/CategoryScoreChart';
 import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
 import { WorkflowProgressTracker } from '@/components/review/WorkflowProgressTracker';
 import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
-import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
+import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { QueryHistoryDialog } from '@/components/review/QueryHistoryDialog';
@@ -1165,11 +1165,13 @@ export function UnifiedScorecard({
                   </div>
 
                   {user?.id && (
-                    <EvidenceUpload
+                    <MultiFileUpload
                       userId={user.id}
-                      kpiId={selectedKpi.id}
-                      onUploadComplete={setReviewerEvidenceUrl}
-                      existingUrl={reviewerEvidenceUrl}
+                      contextId={selectedKpi.id}
+                      folder="reviewer-evidence"
+                      existingUrls={reviewerEvidenceUrl ? [reviewerEvidenceUrl] : []}
+                      onUploadComplete={(urls) => setReviewerEvidenceUrl(urls[urls.length - 1] || '')}
+                      maxFiles={5}
                     />
                   )}
                 </>
@@ -1189,11 +1191,13 @@ export function UnifiedScorecard({
                   </div>
 
                   {user?.id && (
-                    <EvidenceUpload
+                    <MultiFileUpload
                       userId={user.id}
-                      kpiId={selectedKpi.id}
-                      onUploadComplete={setReviewerEvidenceUrl}
-                      existingUrl={reviewerEvidenceUrl}
+                      contextId={selectedKpi.id}
+                      folder="reviewer-evidence"
+                      existingUrls={reviewerEvidenceUrl ? [reviewerEvidenceUrl] : []}
+                      onUploadComplete={(urls) => setReviewerEvidenceUrl(urls[urls.length - 1] || '')}
+                      maxFiles={5}
                     />
                   )}
                 </div>
