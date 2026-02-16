@@ -147,7 +147,7 @@ export function ReviewTrailCardCompact({
             rating={submission?.self_rating}
             remarks={submission?.self_remarks}
             evidenceUrl={submission?.self_evidence_url}
-            evidenceUrls={(submission as any)?.self_evidence_urls}
+            evidenceUrls={submission?.self_evidence_urls}
             isNa={submission?.is_na}
           />
         )}
@@ -161,7 +161,7 @@ export function ReviewTrailCardCompact({
             rating={submission?.manager_rating}
             remarks={submission?.manager_remarks}
             evidenceUrl={submission?.manager_evidence_url}
-            evidenceUrls={(submission as any)?.manager_evidence_urls}
+            evidenceUrls={submission?.manager_evidence_urls}
             isNa={submission?.is_na}
           />
         )}
@@ -175,7 +175,7 @@ export function ReviewTrailCardCompact({
             rating={submission?.auditor_rating}
             remarks={submission?.auditor_remarks}
             evidenceUrl={submission?.auditor_evidence_url}
-            evidenceUrls={(submission as any)?.auditor_evidence_urls}
+            evidenceUrls={submission?.auditor_evidence_urls}
             isNa={submission?.is_na}
           />
         )}
@@ -189,7 +189,7 @@ export function ReviewTrailCardCompact({
             rating={submission?.management_rating}
             remarks={submission?.management_remarks}
             evidenceUrl={submission?.management_evidence_url}
-            evidenceUrls={(submission as any)?.management_evidence_urls}
+            evidenceUrls={submission?.management_evidence_urls}
             isNa={submission?.is_na}
           />
         )}

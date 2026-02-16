@@ -74,28 +74,36 @@ export interface ReviewSubmission {
   self_score: number | null;
   self_remarks: string | null;
   self_evidence_url: string | null;
+  self_evidence_urls: string[] | null;
   manager_rating: RatingLevel | null;
   manager_score: number | null;
   manager_remarks: string | null;
   manager_evidence_url: string | null;
+  manager_evidence_urls: string[] | null;
   auditor_rating: RatingLevel | null;
   auditor_score: number | null;
   auditor_remarks: string | null;
   auditor_evidence_url: string | null;
+  auditor_evidence_urls: string[] | null;
   management_rating: RatingLevel | null;
   management_score: number | null;
   management_remarks: string | null;
   management_evidence_url: string | null;
+  management_evidence_urls: string[] | null;
   // Skip-level review fields
   skip_level_rating: RatingLevel | null;
   skip_level_score: number | null;
   skip_level_remarks: string | null;
   skip_level_evidence_url: string | null;
+  skip_level_evidence_urls: string[] | null;
+  skip_level_achieved_value: number | null;
   // HR PMS review fields
   hr_pms_rating: RatingLevel | null;
   hr_pms_score: number | null;
   hr_pms_remarks: string | null;
   hr_pms_evidence_url: string | null;
+  hr_pms_evidence_urls: string[] | null;
+  hr_pms_achieved_value: number | null;
   final_rating: RatingLevel | null;
   final_score: number | null;
   kpi_status: KpiStatus;
