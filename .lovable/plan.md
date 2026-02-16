@@ -1,70 +1,70 @@
 
 
-# Add Excel Export for All Observations
+# Fix: Forward Button Not Activating for Daily KPI at Reviewer Level
 
-## Overview
+## Root Cause
 
-Add a "Download Report" button to the Observations Overview page that exports the currently filtered observations to an Excel file using the existing `xlsx` library.
+The `openReviewSheet` function in `UnifiedScorecard.tsx` has a broken score initialization for the `skip_level` and `hr_pms` view levels. The `else` fallback branch incorrectly reads `management_score ?? auditor_score`, which are always `null` at those stages since those downstream reviewers haven't acted yet.
 
-## Changes
+This means:
+- `reviewerScore` is set to `null` on open
+- The achieved value IS pre-populated correctly
+- The auto-calculate-on-mount effect in `AchievedValueScoreInput` should set the score, but can miss due to React state batching timing (the effect fires before both props have settled)
+- The Forward/Submit button remains disabled (`reviewerScore === null`)
+- Deleting and re-entering the value triggers `handleAchievedValueChange`, which explicitly calls `onScoreChange` -- fixing the score and enabling the button
 
-### File: `src/pages/admin/ObservationsOverview.tsx`
+## Fix
 
-1. **Import** `Button` from `@/components/ui/button`, `Download` from `lucide-react`, and `* as XLSX from 'xlsx'`
-2. **Add an export function** `handleExportExcel` that maps the current `filtered` array to Excel rows with columns:
-   - Ticket #
-   - Title
-   - Description
-   - Employee Name
-   - Employee Code
-   - KRA
-   - KPI
-   - Type (Positive/Concern/Neutral)
-   - Observer Name
-   - Observer Role
-   - Status
-   - Date Created
-   - Date Updated
-3. **Add the Download button** next to the search bar in the filters section, using the same style as other export buttons (`variant="outline" size="sm"`)
-4. The export respects the current filters (status tab + search), so admins can export a subset
-5. File name: `Observations_Report_YYYY-MM-DD.xlsx`
+### File: `src/components/review/UnifiedScorecard.tsx`
+
+**Change 1: Fix score initialization in `openReviewSheet` (lines 582-589)**
+
+Replace the hardcoded if/else with proper per-level lookups:
+
+```text
+Before:
+  if (viewLevel === 'manager')     -> manager_score
+  else if (viewLevel === 'auditor') -> auditor_score ?? manager_score
+  else                              -> management_score ?? auditor_score   <-- BUG
+
+After:
+  manager     -> manager_score
+  skip_level  -> skip_level_score ?? manager_score
+  hr_pms      -> hr_pms_score ?? skip_level_score
+  auditor     -> auditor_score ?? manager_score (unchanged)
+  management  -> management_score ?? auditor_score (unchanged)
+```
+
+**Change 2: Make auto-calculate-on-mount more robust in `AchievedValueScoreInput.tsx`**
+
+Add a small safety mechanism: also trigger auto-calculation when the `achievedValue` prop changes (not just on mount), ensuring the score gets set even if there's a timing issue with initial render.
 
 ### File: `DOCUMENTATION.md`
 
-Update to mention the observation export capability.
+Update changelog with the bug fix.
 
 ## Technical Detail
 
-The export function follows the same pattern as `OrgKpiBulkExport`:
+The fix replaces 3 lines of if/else with a clean per-level lookup:
 
 ```typescript
-const handleExportExcel = () => {
-  const rows = filtered.map(obs => ({
-    'Ticket #': (obs as any).ticket_number || '',
-    'Title': obs.title,
-    'Description': obs.description || '',
-    'Employee': obs.employee_profile?.full_name || '',
-    'Employee Code': obs.employee_profile?.employee_code || '',
-    'KRA': obs.kpi?.kra_name || '',
-    'KPI': obs.kpi?.kpi_name || '',
-    'Type': typeConfig[obs.observation_type]?.label || obs.observation_type,
-    'Observer': obs.created_by_profile?.full_name || '',
-    'Observer Role': obs.observer_role,
-    'Status': statusConfig[obs.status]?.label || obs.status,
-    'Created': format(new Date(obs.created_at), 'dd MMM yyyy'),
-    'Last Updated': format(new Date(obs.updated_at), 'dd MMM yyyy'),
-  }));
-
-  const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [
-    { wch: 12 }, { wch: 30 }, { wch: 40 }, { wch: 20 }, { wch: 14 },
-    { wch: 25 }, { wch: 30 }, { wch: 10 }, { wch: 20 }, { wch: 14 },
-    { wch: 14 }, { wch: 14 }, { wch: 14 },
-  ];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Observations');
-  XLSX.writeFile(wb, `Observations_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+const scoreFieldMap: Record<ScorecardViewLevel, () => number | null> = {
+  manager: () => existing?.manager_score ?? null,
+  skip_level: () => (existing as any)?.skip_level_score ?? existing?.manager_score ?? null,
+  hr_pms: () => (existing as any)?.hr_pms_score ?? (existing as any)?.skip_level_score ?? null,
+  auditor: () => existing?.auditor_score ?? existing?.manager_score ?? null,
+  management: () => existing?.management_score ?? existing?.auditor_score ?? null,
 };
+const prevScore = scoreFieldMap[viewLevel]();
 ```
 
-No database changes are needed.
+For the auto-calculate robustness, the existing effect condition `score === null && achievedValue !== null` is correct but can miss due to batched renders. Adding a secondary check that re-triggers when `achievedValue` changes (even if score was briefly non-null then reset) ensures the score always gets populated.
+
+## Files to Change
+
+| File | Change |
+|---|---|
+| `src/components/review/UnifiedScorecard.tsx` | Fix per-level score initialization in `openReviewSheet` |
+| `src/components/review/AchievedValueScoreInput.tsx` | Make auto-calculate more robust for prop timing |
+| `DOCUMENTATION.md` | Document the bug fix |
+
