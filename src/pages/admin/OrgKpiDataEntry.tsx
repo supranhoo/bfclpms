@@ -6,6 +6,7 @@ import { useOrgLevelKpisWithEmployees, useOrgLevelKpis } from '@/hooks/useOrgLev
 import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
 import { usePropagateOrgKpiValue } from '@/hooks/usePropagateOrgKpiValue';
 import { useBatchInsertAuditLogs } from '@/hooks/useOrgKpiAuditLog';
+import { useRollbackOrgKpiPropagation } from '@/hooks/useRollbackOrgKpiPropagation';
 import { OrgLevelScope } from '@/hooks/useKpis';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
@@ -89,6 +90,7 @@ export default function OrgKpiDataEntry() {
   const bulkUpsert = useBulkUpsertOrgKpiValues();
   const propagate = usePropagateOrgKpiValue();
   const insertAuditLogs = useBatchInsertAuditLogs();
+  const rollbackMutation = useRollbackOrgKpiPropagation();
 
   // Previous period data
   const prev = getPreviousPeriod(selectedPeriod, selectedYear);
@@ -785,6 +787,16 @@ export default function OrgKpiDataEntry() {
                           achievedValue: val?.achieved_value ?? null,
                         });
                         setImpactOpen(true);
+                      }}
+                      onRollback={async (reason: string) => {
+                        await rollbackMutation.mutateAsync({
+                          categoryId: kpi.category_id,
+                          kraName: kpi.kra_name,
+                          kpiName: kpi.kpi_name,
+                          reviewPeriod: selectedPeriod,
+                          reviewYear: selectedYear,
+                          reason,
+                        });
                       }}
                     />
                   );
