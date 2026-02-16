@@ -355,6 +355,16 @@ export function KpiDetailsTable({
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-primary group-hover:underline whitespace-pre-wrap">{renderBoldKpiText(kpi.kra_name)}</p>
                       {isDailyKpi && <DailyBadge />}
+                      {kpi.frequency === 'Bi-Monthly' && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-violet-300 text-violet-700 dark:border-violet-600 dark:text-violet-400">
+                          Bi-Monthly
+                        </Badge>
+                      )}
+                      {kpi.frequency === 'Quarterly' && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-teal-300 text-teal-700 dark:border-teal-600 dark:text-teal-400">
+                          Quarterly
+                        </Badge>
+                      )}
                     </div>
                     <div className="relative">
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap">
