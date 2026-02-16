@@ -3386,7 +3386,7 @@ This ensures DB triggers using `net.http_post` (which send the 208-char JWT) can
 - Each card shows KPI metadata, inline inputs (achieved value, remark, evidence), previous period reference, and status badge (Pending/Entered/Propagated)
 - Progress bar at top showing X/Y KPIs entered with per-category breakdown
 - Category pill tabs for quick filtering + search bar
-- Department/employee-scoped KPIs render as collapsible mini-tables inside cards
+- Department/employee-scoped KPIs render as collapsible mini-tables inside cards, filtered to only show departments/employees that have at least one employee mapped to the KPI in the selected period (not all system departments/employees)
 
 **Phase 2 — Copy from Last Period + Auto-Save:**
 - "Copy from Last Period" button pre-fills current period with previous period values (only where current is null)
