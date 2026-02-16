@@ -1981,7 +1981,7 @@ Test emails from the UI work because they carry a real user JWT validated via `s
 
 **Smart Notification Navigation (Deep-Link):**
 
-Clicking a notification row in the Inbox navigates directly to the relevant page. The centralized `getNotificationNavigationPath(item, currentUserId?)` utility in `src/lib/inboxUtils.ts` maps each notification type to a target route. The optional `currentUserId` parameter enables context-aware routing: if the notification is about the current user's own KPI, it navigates to self-view; if it's about another employee's KPI (detected via `metadata.employee_id`), it builds a reviewer deep-link with the employee context.
+Clicking a notification row in the Inbox navigates directly to the relevant page. The centralized `getNotificationNavigationPath(item, currentUserId?)` utility in `src/lib/inboxUtils.ts` maps each notification type to a target route. The optional `currentUserId` parameter enables context-aware routing: if the notification is about the current user's own KPI, it navigates to self-view; if it's about another employee's KPI, it builds a reviewer deep-link with the employee context. For query-related notifications (`query_resolved`, `query_resolved_fyi`, etc.), the function uses `fromUser.id` (mapped from the notification's `related_user_id` column, which stores the KPI owner / `raised_to`) to determine the correct employee context, bypassing the `isSelfTargeted` check to ensure reviewers are directed to the team-view scorecard rather than their own empty dashboard. The `notify_on_query_resolved` trigger skips `send_back` type queries and fires on any status transition to `resolved` (not just `open` → `resolved`).
 
 | Notification Type | Target Route |
 |---|---|

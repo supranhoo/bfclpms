@@ -262,9 +262,12 @@ export function getNotificationNavigationPath(item: InboxItem, currentUserId?: s
     case 'query_responded':
     case 'query_response_submitted':
     case 'query_resolved_fyi': {
-      // If current user is NOT the employee who owns the KPI, build a reviewer deep-link
+      // For query_resolved/query_resolved_fyi, the notification recipient is the query raiser
+      // and fromUser (mapped from related_user_id / raised_to) is the KPI owner.
+      // Use fromUser.id as the employee context for team-view deep-links.
       const queryEmployeeId = metaEmployeeId || item.fromUser?.id || null;
-      if (queryEmployeeId && !isSelfTargeted) {
+      const isOtherEmployee = queryEmployeeId && currentUserId && queryEmployeeId !== currentUserId;
+      if (isOtherEmployee) {
         return buildEmployeeDeepLink('team', queryEmployeeId, item.kpiId, 'panel=queryHistory');
       }
       return selfKpiLink(item.kpiId, 'queryHistory');
