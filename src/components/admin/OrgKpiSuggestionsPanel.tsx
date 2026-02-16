@@ -147,18 +147,14 @@ export function OrgKpiSuggestionsPanel({ reviewPeriod, reviewYear }: OrgKpiSugge
                         <Badge variant="secondary" className="text-xs">{s.employee_count}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        {s.already_org_level ? (
-                          <Badge variant="outline" className="text-xs text-muted-foreground">Already Org-Level</Badge>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={() => { setDialogTarget(s); setDialogOpen(true); }}
-                          >
-                            Mark Org-Level
-                          </Button>
-                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => { setDialogTarget(s); setDialogOpen(true); }}
+                        >
+                          {s.already_org_level ? 'Edit Scope' : 'Mark Org-Level'}
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );
