@@ -7,7 +7,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
 import { OrgKpiAuditLog } from '@/components/admin/OrgKpiAuditLog';
 import { OrgKpiScopedEntryTable, ScopedRow } from '@/components/admin/OrgKpiScopedEntryTable';
-import { Save, Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
+import { Save, Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle } from 'lucide-react';
 
 export interface OrgKpiCardData {
   categoryId: string;
@@ -17,6 +19,11 @@ export interface OrgKpiCardData {
   kpiName: string;
   targetValue: number | null;
   uom: string | null;
+  r5: string | null;
+  r4: string | null;
+  r3: string | null;
+  r2: string | null;
+  r1: string | null;
   scope: 'organization' | 'department' | 'employee';
   // Current values
   achievedValue: number | null;
@@ -237,6 +244,21 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
                   className="h-9"
                   disabled={isLocked}
                 />
+                {(() => {
+                  const numVal = achievedValue === '' ? null : parseFloat(achievedValue);
+                  if (numVal === null || isNaN(numVal)) return null;
+                  const thresholds: RatingThresholds = { r5: data.r5, r4: data.r4, r3: data.r3, r2: data.r2, r1: data.r1 };
+                  const check = isValueOutOfRange(numVal, data.targetValue, thresholds, data.uom);
+                  if (!check.outOfRange) return null;
+                  return (
+                    <Alert variant="default" className="border-orange-500/50 bg-orange-50 dark:bg-orange-950/30 py-2">
+                      <AlertTriangle className="h-4 w-4 text-orange-600" />
+                      <AlertDescription className="text-xs text-orange-700 dark:text-orange-400">
+                        {check.message}
+                      </AlertDescription>
+                    </Alert>
+                  );
+                })()}
                 <Input
                   value={remarks}
                   onChange={(e) => { setRemarks(e.target.value); triggerAutoSave(); }}

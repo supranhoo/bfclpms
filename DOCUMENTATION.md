@@ -1178,6 +1178,25 @@ threshold_mode text DEFAULT 'absolute'  -- 'absolute' | 'ratio'
 - `calculateAbsoluteRating()` function in `src/lib/ratingCalculation.ts`
 - `thresholdMode` parameter added to `calculateRating()` function
 
+#### 4.9.9 Out-of-Range Value Validation Warnings
+
+To prevent garbage-in/garbage-out scoring (e.g., entering a raw production quantity into a percentage field), the system provides **non-blocking** orange warning banners when entered values appear unreasonable relative to thresholds and targets.
+
+**Validation Rules:**
+| Condition | Trigger | Example |
+|-----------|---------|---------|
+| **% UOM threshold check** | Value > 2× the highest R5–R1 threshold | R5=20%, entered 37,560 → warning |
+| **Target multiplier check** | Value > 10× the target value | Target=100, entered 5,000 → warning |
+
+**Where warnings appear:**
+- **Org KPI Data Entry** (`OrgKpiEntryCard`): Inline alert below the achieved value input for org-wide scope
+- **Self-Review** (`AchievedValueScoreInput`): Inline alert below achieved value input in auto-calculate and suggested-override modes
+
+**Implementation:**
+- `isValueOutOfRange()` utility exported from `src/lib/ratingCalculation.ts`
+- Warnings are advisory only — they do NOT block saving or propagation
+- Designed to catch domain-mismatch errors (e.g., raw MW entered into a % incentive field)
+
 ### 4.10 Frequency and Sub-Frequency System
 
 The PMS supports 7 frequency types, each with specific submission and scoring behavior.

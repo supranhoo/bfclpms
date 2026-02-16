@@ -6,9 +6,10 @@ import { Badge } from '@/components/ui/badge';
 import { ScoreSelector } from './ScoreSelector';
 import { QualitativeValueInput } from './QualitativeValueInput';
 import { useScoreCalculationMode } from '@/hooks/useSystemSettings';
-import { calculateRating, RatingLevel } from '@/lib/ratingCalculation';
+import { calculateRating, RatingLevel, isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
 import { UomType, QualitativeOption } from '@/lib/qualitativeUom';
-import { Calculator, Check, Edit2 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Calculator, Check, Edit2, AlertTriangle } from 'lucide-react';
 import { DateCalendarInput } from './DateCalendarInput';
 
 interface KpiThresholds {
@@ -267,6 +268,22 @@ export function AchievedValueScoreInput({
           </div>
         )}
 
+        {(() => {
+          const numVal = localAchievedValue === '' ? null : parseFloat(localAchievedValue);
+          if (numVal === null || isNaN(numVal)) return null;
+          const th: RatingThresholds = { r5: kpi.r5, r4: kpi.r4, r3: kpi.r3, r2: kpi.r2, r1: kpi.r1 };
+          const check = isValueOutOfRange(numVal, kpi.target_value, th, kpi.uom ?? null);
+          if (!check.outOfRange) return null;
+          return (
+            <Alert variant="default" className="border-orange-500/50 bg-orange-50 dark:bg-orange-950/30 py-2">
+              <AlertTriangle className="h-4 w-4 text-orange-600" />
+              <AlertDescription className="text-xs text-orange-700 dark:text-orange-400">
+                {check.message}
+              </AlertDescription>
+            </Alert>
+          );
+        })()}
+
         {!localAchievedValue && (
           <p className="text-sm text-muted-foreground">
             Enter the achieved value to auto-calculate the score.
@@ -294,6 +311,22 @@ export function AchievedValueScoreInput({
             disabled={disabled}
           />
         </div>
+
+        {(() => {
+          const numVal = localAchievedValue === '' ? null : parseFloat(localAchievedValue);
+          if (numVal === null || isNaN(numVal)) return null;
+          const th: RatingThresholds = { r5: kpi.r5, r4: kpi.r4, r3: kpi.r3, r2: kpi.r2, r1: kpi.r1 };
+          const check = isValueOutOfRange(numVal, kpi.target_value, th, kpi.uom ?? null);
+          if (!check.outOfRange) return null;
+          return (
+            <Alert variant="default" className="border-orange-500/50 bg-orange-50 dark:bg-orange-950/30 py-2">
+              <AlertTriangle className="h-4 w-4 text-orange-600" />
+              <AlertDescription className="text-xs text-orange-700 dark:text-orange-400">
+                {check.message}
+              </AlertDescription>
+            </Alert>
+          );
+        })()}
 
         {showSuggestion && (
           <div className="p-4 rounded-lg border bg-primary/5 border-primary/20">

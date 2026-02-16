@@ -532,3 +532,51 @@ export function getNextStatusForWorkflow(currentStatus: string, workflowStages: 
 export function isStageInWorkflow(stage: string, workflowStages: string[]): boolean {
   return workflowStages.includes(stage);
 }
+
+/**
+ * Check if a value appears unreasonably out of range relative to thresholds and target.
+ * Returns a non-blocking warning message if the value looks suspicious.
+ * 
+ * Rules:
+ * - For % UOM: warn if value > 2x the highest threshold (e.g. R5=20 → warn if >40)
+ * - For any UOM: warn if value > 10x the target
+ */
+export function isValueOutOfRange(
+  value: number,
+  target: number | null,
+  thresholds: RatingThresholds,
+  uom: string | null
+): { outOfRange: boolean; message: string | null } {
+  if (value === 0) return { outOfRange: false, message: null };
+
+  // For % UOM: warn if value > 2x the highest threshold
+  if (uom === '%' || uom?.toLowerCase() === 'percentage') {
+    const thresholdValues = [
+      parseThreshold(thresholds.r5, false),
+      parseThreshold(thresholds.r4, false),
+      parseThreshold(thresholds.r3, false),
+      parseThreshold(thresholds.r2, false),
+      parseThreshold(thresholds.r1, false),
+    ].filter((v): v is number => v !== null);
+
+    if (thresholdValues.length > 0) {
+      const maxThreshold = Math.max(...thresholdValues);
+      if (maxThreshold > 0 && value > maxThreshold * 2) {
+        return {
+          outOfRange: true,
+          message: `Value ${value.toLocaleString()} is significantly higher than the highest threshold (${maxThreshold}). Please verify this is the correct percentage value.`,
+        };
+      }
+    }
+  }
+
+  // For any UOM: warn if value > 10x target
+  if (target && target > 0 && value > target * 10) {
+    return {
+      outOfRange: true,
+      message: `Value ${value.toLocaleString()} is more than 10× the target (${target}). Please verify.`,
+    };
+  }
+
+  return { outOfRange: false, message: null };
+}
