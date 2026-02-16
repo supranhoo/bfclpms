@@ -238,7 +238,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
 | `training_needs` | Identified training gaps | `employee_id`, `kpi_id`, `gap_type`, `priority`, `status` |
-| `kpi_queries` | Review questions/clarifications | `kpi_id`, `raised_by`, `raised_to`, `reason`, `evidence_url`, `resolution_notes`, `resolution_evidence_url`, `status` |
+| `kpi_queries` | Review questions/clarifications | `kpi_id`, `raised_by`, `raised_to`, `reason`, `evidence_url`, `resolution_notes`, `resolution_evidence_url`, `status`, `query_type` (`'query'` default, `'send_back'` for send-backs — send-backs are auto-resolved and excluded from active query counts/inbox) |
 | `kpi_observations` | Reviewer feedback with reply threads | `kpi_id`, `created_by`, `observer_role`, `observation_type`, `title`, `status` (open/acknowledged/resolved), `evidence_urls` |
 | `kpi_observation_replies` | Reply thread on observations | `observation_id`, `reply_by`, `reply_text`, `evidence_urls` |
 | `notifications` | User notifications | `user_id`, `type`, `title`, `message`, `is_read` |
@@ -1401,7 +1401,7 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - The button is only visible when the KPI is not at `kra_set` (the first stage)
   - Opens `AdminStatusStepBackDialog` showing current status, target (previous) status, KPI name, and employee name
   - **Mandatory reason field** required for audit compliance
-  - On submit: updates `kpis.status`, clears downstream review data, inserts `ADMIN_STATUS_STEP_BACK` entry in `kpi_audit_logs`, creates a `kpi_queries` entry with `[ADMIN SENT BACK]` prefix, and notifies the affected employee
+  - On submit: updates `kpis.status`, clears downstream review data, inserts `ADMIN_STATUS_STEP_BACK` entry in `kpi_audit_logs`, creates a `kpi_queries` entry with `[ADMIN SENT BACK]` prefix and `query_type: 'send_back'` (auto-resolved), and notifies the affected employee
   - **Downstream data clearing:** When stepping back, all review submission fields for stages **after** the target status are cleared to prevent stale data:
     - To `kra_set`: Clears self, manager, skip_level, hr_pms, auditor, and management fields; resets `kpi_status` to `open`
     - To `self_review`: Clears manager, skip_level, hr_pms, auditor, and management fields
@@ -1410,7 +1410,7 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
     - To `hr_pms_review`: Clears auditor and management fields
     - To `audit`: Clears management fields
   - **Reviewer Send-Back (v1.28.0):** The same cascading clear logic is used by the `UnifiedScorecard` send-back mutation, ensuring consistency between admin step-back and reviewer send-back operations.
-  - **Visible send-back reason:** A `kpi_queries` row with `[ADMIN SENT BACK] <reason>` is created, making the reason visible in the employee's Review Journey and query trail (matching `useSendBackKpi` behavior)
+  - **Visible send-back reason:** A `kpi_queries` row with `[ADMIN SENT BACK] <reason>` and `query_type: 'send_back'` is created as auto-resolved, making the reason visible in the employee's Review Journey and query trail (matching `useSendBackKpi` behavior) without appearing in the active Query Inbox
   - **Safety-net trigger (`trg_sync_submission_on_kra_set`):** A database trigger on `kpis` automatically resets `review_submissions.kpi_status` to `open` whenever `kpis.status` transitions to `kra_set`, preventing any code path from causing a desync.
   - Status step-back mapping: `approved` → `management_review` → `audit` → `hr_pms_review` → `skip_level_check` → `manager_check` → `self_review` → `kra_set`
 - Audit logging for all changes

@@ -57,7 +57,7 @@ export default function AdminDashboard() {
       ] = await Promise.all([
         supabase.from('profiles').select('*', { count: 'exact', head: true }),
         supabase.from('kpis').select('status'),
-        supabase.from('kpi_queries').select('*', { count: 'exact', head: true }).eq('status', 'open'),
+        supabase.from('kpi_queries').select('*', { count: 'exact', head: true }).eq('status', 'open').eq('query_type', 'query'),
         supabase.from('review_periods').select('is_locked'),
       ]);
 

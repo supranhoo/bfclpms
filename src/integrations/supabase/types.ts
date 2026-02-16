@@ -694,6 +694,7 @@ export type Database = {
           evidence_urls: Json | null
           id: string
           kpi_id: string
+          query_type: string
           raised_by: string
           raised_to: string
           reason: string
@@ -711,6 +712,7 @@ export type Database = {
           evidence_urls?: Json | null
           id?: string
           kpi_id: string
+          query_type?: string
           raised_by: string
           raised_to: string
           reason: string
@@ -728,6 +730,7 @@ export type Database = {
           evidence_urls?: Json | null
           id?: string
           kpi_id?: string
+          query_type?: string
           raised_by?: string
           raised_to?: string
           reason?: string
