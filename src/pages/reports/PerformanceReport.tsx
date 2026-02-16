@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { BarChart3, Users, Target, TrendingUp, Download } from 'lucide-react';
+import { BarChart3, Users, Target, TrendingUp, Download, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 
@@ -157,31 +157,31 @@ export default function PerformanceReport() {
           <CardHeader><CardTitle>Performance by Category</CardTitle></CardHeader>
           <CardContent>
             <div style={{ height: Math.max(180, categoryPerformance.length * 36) }}>
-              <div className="flex justify-end gap-1 mb-2 flex-wrap">
-                <button
-                  className={`h-6 px-2 text-[11px] rounded-md font-medium transition-colors ${categorySortBy === 'weightage-desc' ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
-                  onClick={() => setCategorySortBy('weightage-desc')}
-                >
-                  Wt. High-Low
-                </button>
-                <button
-                  className={`h-6 px-2 text-[11px] rounded-md font-medium transition-colors ${categorySortBy === 'weightage-asc' ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
-                  onClick={() => setCategorySortBy('weightage-asc')}
-                >
-                  Wt. Low-High
-                </button>
-                <button
-                  className={`h-6 px-2 text-[11px] rounded-md font-medium transition-colors ${categorySortBy === 'score-desc' ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
-                  onClick={() => setCategorySortBy('score-desc')}
-                >
-                  Score High-Low
-                </button>
-                <button
-                  className={`h-6 px-2 text-[11px] rounded-md font-medium transition-colors ${categorySortBy === 'score-asc' ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
-                  onClick={() => setCategorySortBy('score-asc')}
-                >
-                  Score Low-High
-                </button>
+              <div className="flex items-center justify-end gap-1 mb-2">
+                <span className="text-xs text-muted-foreground mr-1">Sort:</span>
+                {(['weightage', 'score'] as const).map((field) => {
+                  const isActive = categorySortBy.startsWith(field);
+                  const isDesc = categorySortBy === `${field}-desc`;
+                  const DirectionIcon = isActive ? (isDesc ? ArrowDown : ArrowUp) : ArrowUpDown;
+                  return (
+                    <Button
+                      key={field}
+                      variant={isActive ? 'secondary' : 'ghost'}
+                      size="sm"
+                      className="h-7 px-2 text-xs gap-1"
+                      onClick={() => {
+                        if (isActive) {
+                          setCategorySortBy(`${field}-${isDesc ? 'asc' : 'desc'}` as typeof categorySortBy);
+                        } else {
+                          setCategorySortBy(`${field}-desc`);
+                        }
+                      }}
+                    >
+                      {field === 'weightage' ? 'Weightage' : 'Score'}
+                      <DirectionIcon className="h-3 w-3" />
+                    </Button>
+                  );
+                })}
               </div>
               <ResponsiveContainer width="100%" height="90%">
                 <BarChart data={[...categoryPerformance].sort((a, b) => {

@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip, CartesianGrid } from 'recharts';
 import { Button } from '@/components/ui/button';
+import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 
 export type CategorySortBy = 'weightage-desc' | 'weightage-asc' | 'score-desc' | 'score-asc';
 
@@ -72,39 +73,31 @@ export function CategoryScoreChart({ data, sortBy = 'score-desc', onSortChange }
   return (
     <div ref={containerRef} className="h-full w-full">
       {onSortChange && (
-        <div className="flex justify-end gap-1 mb-2 flex-wrap">
-          <Button
-            variant={sortBy === 'weightage-desc' ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-6 px-2 text-[11px]"
-            onClick={() => onSortChange('weightage-desc')}
-          >
-            Wt. High-Low
-          </Button>
-          <Button
-            variant={sortBy === 'weightage-asc' ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-6 px-2 text-[11px]"
-            onClick={() => onSortChange('weightage-asc')}
-          >
-            Wt. Low-High
-          </Button>
-          <Button
-            variant={sortBy === 'score-desc' ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-6 px-2 text-[11px]"
-            onClick={() => onSortChange('score-desc')}
-          >
-            Score High-Low
-          </Button>
-          <Button
-            variant={sortBy === 'score-asc' ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-6 px-2 text-[11px]"
-            onClick={() => onSortChange('score-asc')}
-          >
-            Score Low-High
-          </Button>
+        <div className="flex items-center justify-end gap-1 mb-2">
+          <span className="text-xs text-muted-foreground mr-1">Sort:</span>
+          {(['weightage', 'score'] as const).map((field) => {
+            const isActive = sortBy.startsWith(field);
+            const isDesc = sortBy === `${field}-desc`;
+            const DirectionIcon = isActive ? (isDesc ? ArrowDown : ArrowUp) : ArrowUpDown;
+            return (
+              <Button
+                key={field}
+                variant={isActive ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 px-2 text-xs gap-1"
+                onClick={() => {
+                  if (isActive) {
+                    onSortChange(`${field}-${isDesc ? 'asc' : 'desc'}` as CategorySortBy);
+                  } else {
+                    onSortChange(`${field}-desc` as CategorySortBy);
+                  }
+                }}
+              >
+                {field === 'weightage' ? 'Weightage' : 'Score'}
+                <DirectionIcon className="h-3 w-3" />
+              </Button>
+            );
+          })}
         </div>
       )}
       <ResponsiveContainer width="100%" height={onSortChange ? "90%" : "100%"}>
