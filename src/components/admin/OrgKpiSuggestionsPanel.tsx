@@ -5,14 +5,41 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table';
 import { Lightbulb, Loader2, CheckCircle2 } from 'lucide-react';
-import { useOrgKpiSuggestions, OrgKpiSuggestion } from '@/hooks/useOrgKpiSuggestions';
+import { useOrgKpiSuggestions, OrgKpiSuggestion, SuggestionReason } from '@/hooks/useOrgKpiSuggestions';
 import { useMarkAsOrgLevel } from '@/hooks/useMarkAsOrgLevel';
 import { MarkOrgLevelDialog } from '@/components/admin/MarkOrgLevelDialog';
 import { useToast } from '@/hooks/use-toast';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface OrgKpiSuggestionsPanelProps {
   reviewPeriod: string;
   reviewYear: number;
+}
+
+function ReasonBadge({ suggestion }: { suggestion: OrgKpiSuggestion }) {
+  switch (suggestion.suggestion_reason) {
+    case 'already_org':
+      return <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 text-xs">Already Org</Badge>;
+    case 'exact_match':
+      return <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800 text-xs">Matches Org KPI</Badge>;
+    case 'similar_name':
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800 text-xs cursor-help">
+              Similar to Org KPI
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p className="text-xs">Similar to: {suggestion.similar_to_kpi_name}</p>
+          </TooltipContent>
+        </Tooltip>
+      );
+    case 'high_count':
+      return <Badge variant="secondary" className="text-xs">3+ Employees</Badge>;
+    default:
+      return null;
+  }
 }
 
 export function OrgKpiSuggestionsPanel({ reviewPeriod, reviewYear }: OrgKpiSuggestionsPanelProps) {
@@ -80,7 +107,7 @@ export function OrgKpiSuggestionsPanel({ reviewPeriod, reviewYear }: OrgKpiSugge
       <Card>
         <CardContent className="py-12 text-center text-muted-foreground">
           <Lightbulb className="h-12 w-12 mx-auto mb-3 opacity-50" />
-          <p>No suggestions found. KPIs shared by 3+ employees will appear here.</p>
+          <p>No suggestions found. KPIs matching existing org KPIs, similar names, or shared by 3+ employees will appear here.</p>
         </CardContent>
       </Card>
     );
@@ -119,6 +146,7 @@ export function OrgKpiSuggestionsPanel({ reviewPeriod, reviewYear }: OrgKpiSugge
                   <TableHead>KRA</TableHead>
                   <TableHead>KPI</TableHead>
                   <TableHead>Category</TableHead>
+                  <TableHead>Reason</TableHead>
                   <TableHead className="text-right">Employees</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
@@ -142,6 +170,9 @@ export function OrgKpiSuggestionsPanel({ reviewPeriod, reviewYear }: OrgKpiSugge
                       <TableCell className="text-sm font-medium">{s.kpi_name}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">{s.category_name}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <ReasonBadge suggestion={s} />
                       </TableCell>
                       <TableCell className="text-right">
                         <Badge variant="secondary" className="text-xs">{s.employee_count}</Badge>
