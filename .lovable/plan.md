@@ -1,72 +1,76 @@
 
 
-# Post-Propagation Edit Lock for Data Owners
+# Prominent Org KPI + Data Owner Badge for Reviewers
 
 ## Problem
-Currently, after a data owner clicks "Save & Propagate", the values are pushed to employee scorecards but the org KPI entry card remains fully editable. There is no lock preventing further edits, and no confirmation before propagation. Additionally, the propagation does not actually set the `status` column to `'propagated'` on the `org_kpi_values` row, so the "Propagated" badge never appears.
+Currently, org-level KPIs are only indicated by a tiny scope icon (Building2/Users/User) with a tooltip in the KPI table. Reviewers at the next level have no clear, at-a-glance indicator that a KPI's data was entered by a designated Data Owner, nor who that person is.
 
 ## Solution
+Add a visible, colored badge on org-level KPIs across the dashboard, review panels, and mobile cards showing:
+- **"Org KPI"** label with scope context
+- **"Data by [Owner Name]"** showing who entered the value
 
-### 1. Fix: Actually set status to 'propagated' after propagation
-Currently, `usePropagateOrgKpiValue` updates `review_submissions` but never updates the `org_kpi_values.status` column. We need to add a status update after successful propagation.
-
-### 2. Lock editing after propagation for data owners
-Once a KPI's status is `'propagated'`, data owners (non-admin users) will see:
-- All input fields (achieved value, remarks, evidence) become disabled/read-only
-- A lock indicator with message: "Locked after propagation. Contact admin to unlock."
-- The "Save" and "Save & Propagate" buttons become disabled
-
-Admins will see an "Unlock" button that resets the status back to `'entered'`, allowing the data owner to edit and re-propagate.
-
-### 3. Add confirmation dialog before propagation
-Before propagating, show an AlertDialog confirming: "This will update scores for X employee scorecards. The entry will be locked for editing afterward. Continue?"
+This information will be sourced from the existing `entered_by` field on `org_kpi_values` (which stores the data owner's name).
 
 ## Changes
 
-### File: `src/hooks/usePropagateOrgKpiValue.ts`
-- After successful propagation, update the corresponding `org_kpi_values` row(s) to set `status = 'propagated'`
-- Invalidate `org-kpi-values` query cache so the UI reflects the new status
+### 1. Expand `orgKpiValuesMap` to include `entered_by`
+**Files**: `src/pages/Dashboard.tsx`, `src/components/review/EmployeeScorecard.tsx`, `src/components/review/UnifiedScorecard.tsx`, `src/components/review/AuditScorecard.tsx`, `src/components/review/ManagementScorecard.tsx`
 
-### File: `src/components/admin/OrgKpiEntryCard.tsx`
-- Accept new props: `isAdmin` (boolean) and `onUnlock` (callback)
-- When `data.status === 'propagated'` and `!isAdmin`: disable all inputs, hide Save/Propagate buttons, show a lock banner
-- When `data.status === 'propagated'` and `isAdmin`: show an "Unlock for Editing" button that calls `onUnlock`
-- Wrap the "Save & Propagate" button with an AlertDialog confirmation showing the employee count that will be affected
+- Update the map type from `{ achieved_value, data_source }` to `{ achieved_value, data_source, entered_by }` 
+- Include the `entered_by` field when building the lookup map
 
-### File: `src/pages/admin/OrgKpiDataEntry.tsx`
-- Pass `isAdmin` prop to each `OrgKpiEntryCard`
-- Add an `onUnlock` handler that updates the `org_kpi_values.status` back to `'entered'` and logs an audit entry
-- Pass `onUnlock` to each card
+### 2. Update `getOrgKpiValue` return type
+**File**: `src/components/review/KpiDetailsTable.tsx`
 
-### File: `DOCUMENTATION.md`
-- Document the post-propagation locking behavior and admin unlock capability
+- Extend the `getOrgKpiValue` prop type to include `entered_by: string | null`
+
+### 3. Add Org KPI badge to `KpiDetailsTable.tsx`
+In the KRA/KPI name column, below the existing content, show a compact badge row for org-level KPIs:
+- A teal/indigo "Org KPI" badge with the scope (Org/Dept/Individual)
+- A secondary badge: "Data by [entered_by name]" when available
+
+### 4. Add Org KPI badge to `KpiHeaderSection.tsx`
+In the review panel header (shown when a reviewer opens a KPI for detailed review):
+- Add a prominent badge row below the existing badges showing "Organization KPI" and "Data entered by [Name]"
+
+### 5. Add Org KPI badge to `MobileKpiCard.tsx`
+- Update the `getOrgKpiValue` prop type to include `entered_by`
+- Show a compact badge below the category pill for org-level KPIs
+
+### 6. Update `DOCUMENTATION.md`
+- Document the org KPI data owner visibility feature
 
 ## Technical Details
 
 | File | Change |
 |---|---|
-| `src/hooks/usePropagateOrgKpiValue.ts` | Add `org_kpi_values` status update to `'propagated'` after successful propagation |
-| `src/components/admin/OrgKpiEntryCard.tsx` | Add locked state UI, admin unlock button, and propagation confirmation dialog |
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Pass `isAdmin` and `onUnlock` to cards; implement unlock handler |
-| `DOCUMENTATION.md` | Document locking behavior |
+| `src/pages/Dashboard.tsx` | Include `entered_by` in orgKpiValuesMap |
+| `src/components/review/EmployeeScorecard.tsx` | Include `entered_by` in orgKpiValuesMap |
+| `src/components/review/UnifiedScorecard.tsx` | Include `entered_by` in orgKpiValuesMap |
+| `src/components/review/AuditScorecard.tsx` | Include `entered_by` in orgKpiValuesMap |
+| `src/components/review/ManagementScorecard.tsx` | Include `entered_by` in orgKpiValuesMap |
+| `src/components/review/KpiDetailsTable.tsx` | Update prop type, add org KPI + data owner badges |
+| `src/components/review/KpiHeaderSection.tsx` | Add org KPI badge with data owner name to review panel |
+| `src/components/dashboard/MobileKpiCard.tsx` | Update prop type, add org KPI badge |
+| `DOCUMENTATION.md` | Document feature |
 
-## User Experience Flow
+## Visual Example
+
+In the KPI table row, the KRA/KPI column will show:
 
 ```text
-Data Owner saves & propagates
-       |
-       v
-Confirmation dialog: "Update X employee scorecards? Entry will be locked."
-       |
-   [Confirm]
-       |
-       v
-Values propagated --> status set to 'propagated' --> inputs locked
-       |
-       v
-Data Owner sees: "Locked after propagation" banner, read-only fields
-       |
-       v
-Admin clicks "Unlock for Editing" --> status reset to 'entered' --> inputs enabled again
+Revenue Growth (KRA name)
+Quarterly revenue target (KPI name)
+[Org KPI - Organization]  [Data by: John Smith]
+```
+
+In the review panel header:
+
+```text
+[Sales] [Approved] [January 2026] [10%] [Timeline]
+[Building icon] Organization KPI  |  Data entered by: John Smith
+Revenue Growth
+Quarterly revenue target
 ```
 
