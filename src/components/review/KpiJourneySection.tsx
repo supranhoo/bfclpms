@@ -76,6 +76,12 @@ export function KpiJourneySection({
   const openQueries = queries.filter(q => q.status === 'open').length;
   const resolvedQueries = queries.filter(q => q.status === 'resolved').length;
 
+  const buildEvidenceUrls = (urlsField: any, urlField: any): string[] => {
+    if (Array.isArray(urlsField) && urlsField.length > 0) return urlsField;
+    if (urlField) return [urlField];
+    return [];
+  };
+
   const stageData: Record<JourneyStage, {
     icon: typeof User;
     iconColor: 'blue' | 'amber' | 'purple' | 'emerald' | 'teal' | 'rose';
@@ -83,7 +89,7 @@ export function KpiJourneySection({
     score: number | null;
     rating: any;
     remarks: string | null;
-    evidenceUrl: string | null;
+    evidenceUrls: string[];
     achievedValue: number | null;
   }> = {
     self: {
@@ -93,7 +99,7 @@ export function KpiJourneySection({
       score: submission?.self_score ?? null,
       rating: submission?.self_rating ?? null,
       remarks: submission?.self_remarks ?? null,
-      evidenceUrl: submission?.self_evidence_url ?? null,
+      evidenceUrls: buildEvidenceUrls((submission as any)?.self_evidence_urls, submission?.self_evidence_url),
       achievedValue: submission?.achieved_value ?? null,
     },
     manager: {
@@ -103,7 +109,7 @@ export function KpiJourneySection({
       score: submission?.manager_score ?? null,
       rating: submission?.manager_rating ?? null,
       remarks: submission?.manager_remarks ?? null,
-      evidenceUrl: submission?.manager_evidence_url ?? null,
+      evidenceUrls: buildEvidenceUrls((submission as any)?.manager_evidence_urls, submission?.manager_evidence_url),
       achievedValue: submission?.manager_achieved_value ?? null,
     },
     skip_level: {
@@ -113,7 +119,7 @@ export function KpiJourneySection({
       score: (submission as any)?.skip_level_score ?? null,
       rating: (submission as any)?.skip_level_rating ?? null,
       remarks: (submission as any)?.skip_level_remarks ?? null,
-      evidenceUrl: (submission as any)?.skip_level_evidence_url ?? null,
+      evidenceUrls: buildEvidenceUrls((submission as any)?.skip_level_evidence_urls, (submission as any)?.skip_level_evidence_url),
       achievedValue: (submission as any)?.skip_level_achieved_value ?? null,
     },
     hr_pms: {
@@ -123,7 +129,7 @@ export function KpiJourneySection({
       score: (submission as any)?.hr_pms_score ?? null,
       rating: (submission as any)?.hr_pms_rating ?? null,
       remarks: (submission as any)?.hr_pms_remarks ?? null,
-      evidenceUrl: (submission as any)?.hr_pms_evidence_url ?? null,
+      evidenceUrls: buildEvidenceUrls((submission as any)?.hr_pms_evidence_urls, (submission as any)?.hr_pms_evidence_url),
       achievedValue: (submission as any)?.hr_pms_achieved_value ?? null,
     },
     auditor: {
@@ -133,7 +139,7 @@ export function KpiJourneySection({
       score: submission?.auditor_score ?? null,
       rating: submission?.auditor_rating ?? null,
       remarks: submission?.auditor_remarks ?? null,
-      evidenceUrl: submission?.auditor_evidence_url ?? null,
+      evidenceUrls: buildEvidenceUrls((submission as any)?.auditor_evidence_urls, submission?.auditor_evidence_url),
       achievedValue: submission?.auditor_achieved_value ?? null,
     },
     management: {
@@ -143,7 +149,7 @@ export function KpiJourneySection({
       score: submission?.management_score ?? null,
       rating: submission?.management_rating ?? null,
       remarks: submission?.management_remarks ?? null,
-      evidenceUrl: submission?.management_evidence_url ?? null,
+      evidenceUrls: buildEvidenceUrls((submission as any)?.management_evidence_urls, submission?.management_evidence_url),
       achievedValue: submission?.management_achieved_value ?? null,
     },
   };
@@ -176,7 +182,7 @@ export function KpiJourneySection({
                 score={data.score}
                 rating={data.rating}
                 remarks={data.remarks}
-                evidenceUrl={data.evidenceUrl}
+                evidenceUrls={data.evidenceUrls}
                 status={status}
                 isNA={stageIsNA}
                 achievedValue={data.achievedValue}

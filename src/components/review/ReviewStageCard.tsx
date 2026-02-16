@@ -14,7 +14,7 @@ interface ReviewStageCardProps {
   score: number | null;
   rating: RatingLevel | null;
   remarks: string | null;
-  evidenceUrl: string | null;
+  evidenceUrls: string[];
   status: StageStatus;
   isNA?: boolean;
   achievedValue?: number | null;
@@ -55,7 +55,7 @@ export function ReviewStageCard({
   score,
   rating,
   remarks,
-  evidenceUrl,
+  evidenceUrls,
   status,
   isNA = false,
   achievedValue,
@@ -130,18 +130,23 @@ export function ReviewStageCard({
         </p>
       )}
 
-      {/* Evidence Link */}
-      {evidenceUrl && (
-        <a
-          href={evidenceUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-2"
-        >
-          <FileText className="h-3 w-3" />
-          Evidence
-          <ExternalLink className="h-3 w-3" />
-        </a>
+      {/* Evidence Links */}
+      {evidenceUrls.length > 0 && (
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2">
+          {evidenceUrls.map((url, idx) => (
+            <a
+              key={idx}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <FileText className="h-3 w-3" />
+              Evidence{evidenceUrls.length > 1 ? ` ${idx + 1}` : ''}
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          ))}
+        </div>
       )}
     </div>
   );
