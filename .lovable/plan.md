@@ -1,47 +1,55 @@
 
 
-# Add Employee Names Next to Department in Scoped Entry Table
+# Fix: Show All Org-Level KPIs in Data Owners Tab
 
 ## Problem
 
-In the "Per Department" scoped entry table on the Org KPI Data Entry page, only the department name is shown. Admins want to see which employees are mapped under each department for context.
+The "Data Owners" tab only shows org-level KPIs that have at least 1 employee mapped in the selected review period. KPIs marked as org-level but not yet assigned to any employees are hidden, preventing admins from assigning data owners to them.
+
+## Root Cause
+
+`kpiDefinitions` is built from `ownershipFilteredKpis`, which derives from `useOrgLevelKpisWithEmployees` -- a hook that intentionally filters out unmapped KPIs (for the Data Entry tab, this makes sense). But the Data Owners tab needs all org-level KPIs.
 
 ## Solution
 
-Add a secondary line below each department name showing the first names of employees mapped to that KPI in that department.
+Use the existing `useOrgLevelKpis` hook (which returns ALL org-level KPIs without employee filtering) to build a separate `allKpiDefinitions` list specifically for the Data Owners tab.
 
-## Changes
+### File: `src/pages/admin/OrgKpiDataEntry.tsx`
 
-### 1. `src/components/admin/OrgKpiScopedEntryTable.tsx`
+1. Import and call `useOrgLevelKpis` (already exists in `useOrgLevelKpis.ts`)
+2. Create `allKpiDefinitions` memo from this unfiltered data
+3. Pass `allKpiDefinitions` to `OrgKpiOwnerManagement` instead of `kpiDefinitions`
 
-- Add optional `scopeSubText` field to the `ScopedRow` interface
-- Render it as a secondary line (smaller, muted text) below the `scopeName` in the table cell
+```typescript
+// Add to existing data queries
+const { data: allOrgLevelKpis } = useOrgLevelKpis(selectedPeriod, selectedYear);
 
-### 2. `src/pages/admin/OrgKpiDataEntry.tsx`
+// Build definitions for owner management (ALL org-level KPIs, no employee filter)
+const allKpiDefinitions = useMemo(() => {
+  if (!allOrgLevelKpis) return [];
+  return allOrgLevelKpis.map(kpi => ({
+    categoryId: kpi.category_id,
+    categoryName: kpi.kra_categories?.name || '',
+    categoryColor: kpi.kra_categories?.color || '#6B7280',
+    kraName: kpi.kra_name,
+    kpiName: kpi.kpi_name,
+  }));
+}, [allOrgLevelKpis]);
 
-- When building department scoped rows, cross-reference `mappedEmployeesMap` with `allProfiles` to find employees in each department
-- Build a comma-separated list of employee first names and pass it as `scopeSubText`
-- Logic: for each department row, filter the KPI's mapped employee IDs to those whose `department_id` matches, then extract their first names
+// Then pass to component:
+<OrgKpiOwnerManagement kpiDefinitions={allKpiDefinitions} />
+```
 
-### 3. `DOCUMENTATION.md`
+### File: `DOCUMENTATION.md`
 
-- Update to note that department scoped rows now show mapped employee names
+Update to note that the Data Owners tab shows all org-level KPIs regardless of employee mapping.
 
 ## Technical Details
 
 | File | Change |
 |---|---|
-| `src/components/admin/OrgKpiScopedEntryTable.tsx` | Add `scopeSubText?: string` to `ScopedRow`; render below scope name |
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Compute employee names per department when building scoped rows |
-| `DOCUMENTATION.md` | Document the enhancement |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | Import `useOrgLevelKpis`, create `allKpiDefinitions`, pass to `OrgKpiOwnerManagement` |
+| `DOCUMENTATION.md` | Document the behavior |
 
-**UI Example:**
-
-```
-| Department                          | Achieved | Remark | File   |
-| 1050 TPD-E And I                    |    —     | Remark | Upload |
-|   Rajesh, Amit, Suresh              |          |        |        |
-```
-
-The employee names appear as a small muted line under the department name within the same table cell -- no extra column needed.
+No database or schema changes needed. The `useOrgLevelKpis` hook already exists and fetches all org-level KPIs without the employee mapping filter.
 
