@@ -1,46 +1,65 @@
 
 
-# Fix: Organization KPI Data Entry Page Width Overflow
+# Restructure OrgKpiEntryCard to Two-Column Layout (like KPI Review Panel)
 
 ## Problem
 
-The page has horizontal overflow caused by multiple elements:
+Currently each OrgKpiEntryCard stacks all content vertically -- header, meta, inputs, actions -- taking up a lot of vertical space and causing width issues with long KPI names. Users must scroll extensively to see all KPIs on the page.
 
-1. **Long KPI names** -- The card title shows the full KPI description (e.g., "Adherence to Manning Norms: - Description: Measures the variance between...") without truncation, pushing the card wider than the viewport.
-2. **Category pills row** -- The row of category badges extends beyond the right edge.
-3. **Progress category badges** -- Same overflow in the progress section.
-4. **Card input grid** -- The 3-column grid (Achieved, Remark, Upload) doesn't constrain properly on the available width.
+## Before
 
-## Root Cause
+```text
++------------------------------------------------------------------+
+| KPI Name (long text, truncated)                    [Status Badge] |
+| Scope: Org | Target: 100 | UOM: % | Prev: 90                    |
+| [Achieved: ____]  [Remark: __________]  [Upload]                 |
+| [History] [Impact]              [Saving...] [Save] [Propagate]   |
++------------------------------------------------------------------+
+```
 
-The main page container (`div className="space-y-6"`) has no `overflow-hidden` or `min-w-0`, so child content with long text or many inline elements breaks out of the layout bounds. Additionally, the `OrgKpiEntryCard` title uses `truncate` but the parent doesn't properly constrain width.
+Each card is full-width, stacked vertically (4 rows). Long KPI names push widths. All info takes lots of vertical space.
 
-## Fixes
+## After
 
-### File: `src/pages/admin/OrgKpiDataEntry.tsx`
+```text
++------------------------------------------------------------------+
+| LEFT (40%)                      | RIGHT (60%)                    |
+| KPI: Annual Medical Exam        | Achieved: [______]             |
+| KRA: Statutory Compliance       | Remark:   [______________]    |
+| Scope: Org | Target: 0 | UOM: # | [Upload File]                 |
+| Prev: 0 (Jan 2026)             |                                |
+| Status: [Pending]               | [History] [Impact]  [Save] [P] |
++---------------------------------+--------------------------------+
+```
 
-1. Add `min-w-0 overflow-hidden` to the root container (line 484)
-2. Wrap category pills in a scrollable container with `overflow-x-auto`
-3. Wrap progress category badges similarly
+Two-column grid (2:3 ratio like KpiReviewPanel) keeps info and inputs side-by-side. On mobile, it collapses to single column. This shows more cards per page and prevents horizontal overflow.
+
+## Changes
 
 ### File: `src/components/admin/OrgKpiEntryCard.tsx`
 
-1. Add `min-w-0 overflow-hidden` to the Card root
-2. Ensure the KPI name `h3` truncates properly by constraining its parent width
-3. Add `min-w-0` to the input grid container
+Restructure the card body from vertical stack to a `grid grid-cols-1 md:grid-cols-5` layout:
 
-### File: `src/components/admin/OrgKpiProgressBar.tsx`
+- **Left column (md:col-span-2)**: KPI name (with `whitespace-pre-wrap` and `break-words` instead of truncate so full name is visible), KRA name, scope/target/UOM meta badges, previous period value, status badge
+- **Right column (md:col-span-3)**: Input fields (achieved, remark, upload) stacked vertically, action buttons row (history, impact, save, propagate) with save status
 
-1. Wrap the category progress badges in `overflow-x-auto` or `flex-wrap` to prevent horizontal overflow
+For department/employee-scoped cards, the scoped entry table spans full width below both columns.
+
+### File: `src/components/admin/OrgKpiScopedEntryTable.tsx`
+
+Add `min-w-0 overflow-x-auto` to the table container to prevent scoped tables from causing overflow.
+
+### File: `DOCUMENTATION.md`
+
+Update to document the two-column card layout pattern.
 
 ## Technical Details
 
 | File | Change |
 |---|---|
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Add `min-w-0 overflow-hidden` to root div; wrap pills in scrollable container |
-| `src/components/admin/OrgKpiEntryCard.tsx` | Add `min-w-0 overflow-hidden` to Card; ensure text truncation works |
-| `src/components/admin/OrgKpiProgressBar.tsx` | Add `flex-wrap` or `overflow-x-auto` to badges row |
-| `DOCUMENTATION.md` | Update if needed |
+| `src/components/admin/OrgKpiEntryCard.tsx` | Restructure to `grid grid-cols-1 md:grid-cols-5` two-column layout; left = info, right = inputs + actions |
+| `src/components/admin/OrgKpiScopedEntryTable.tsx` | Add `overflow-x-auto` to table wrapper |
+| `DOCUMENTATION.md` | Document two-column card pattern |
 
-All changes are CSS-only -- no logic or data changes.
+No logic, data, or database changes -- only layout restructuring following the existing `KpiReviewPanel` pattern.
 
