@@ -2063,6 +2063,7 @@ The selected method affects:
 - `FrequencyLockedOverlay.tsx`: Blur/lock overlay for KPIs in non-active periods
 - `DailySubmissionGrid.tsx`: Grid view for entering daily values
 - `WeeklySubmissionTable.tsx`: Table for entering weekly values
+- **Frequency Indicator Badges**: Bi-Monthly and Quarterly KPIs display colored badge indicators across all views (desktop table, review panel header, mobile cards) similar to the existing "Daily" badge. Bi-Monthly badges use violet styling; Quarterly badges use teal. In the review panel header (`KpiHeaderSection`), the badge also shows the current cycle label (e.g., "Bi-Monthly: Jan-Feb", "Quarterly: Q1 (Jan-Mar)") derived from `getCycleLabel()` in `frequencyUtils.ts`.
 - `DailySubmissionSummary.tsx`: Read-only summary table visible across all roles showing:
   - Statistics cards: Total days, Submitted count (all entries regardless of value), Not Submitted count, "No" count (for binary KPIs)
   - Submission table: Date, Achieved Value (formatted for numeric/binary/tiered, "—" for pending), Submission Timestamp

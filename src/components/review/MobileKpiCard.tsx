@@ -234,6 +234,16 @@ export function MobileKpiCard({
               Daily
             </Badge>
           )}
+          {kpi.frequency === 'Bi-Monthly' && (
+            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0 border-violet-300 text-violet-700 dark:border-violet-600 dark:text-violet-400">
+              Bi-Monthly
+            </Badge>
+          )}
+          {kpi.frequency === 'Quarterly' && (
+            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0 border-teal-300 text-teal-700 dark:border-teal-600 dark:text-teal-400">
+              Quarterly
+            </Badge>
+          )}
         </div>
         <Badge className={cn(statusColors[kpi.status || 'kra_set'], "text-[10px] shrink-0 ml-1.5")}>
           {statusLabels[kpi.status || 'kra_set']}

@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { KPI } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
+import { getCycleLabel } from '@/lib/frequencyUtils';
 import { Clock, Building2, Users, User } from 'lucide-react';
 
 interface KpiHeaderSectionProps {
@@ -44,6 +45,16 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
             {weightage}%
           </Badge>
           
+          {kpi.frequency === 'Bi-Monthly' && (
+            <Badge variant="outline" className="text-xs border-violet-300 text-violet-700 dark:border-violet-600 dark:text-violet-400">
+              Bi-Monthly: {getCycleLabel('Bi-Monthly', selectedPeriod, selectedYear, kpi.frequency_cycle_start)}
+            </Badge>
+          )}
+          {kpi.frequency === 'Quarterly' && (
+            <Badge variant="outline" className="text-xs border-teal-300 text-teal-700 dark:border-teal-600 dark:text-teal-400">
+              Quarterly: {getCycleLabel('Quarterly', selectedPeriod, selectedYear, kpi.frequency_cycle_start)}
+            </Badge>
+          )}
           {onOpenTimeline && (
             <Button
               variant="outline"

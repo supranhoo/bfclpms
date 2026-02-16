@@ -48,9 +48,21 @@ export function MobileKpiCard({
             {kpi.kra_categories?.name}
           </span>
         </div>
-        <Badge className={`text-xs ${statusColors[kpi.status || 'kra_set']}`}>
-          {statusLabels[kpi.status || 'kra_set']}
-        </Badge>
+        <div className="flex items-center gap-1">
+          {kpi.frequency === 'Bi-Monthly' && (
+            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-violet-300 text-violet-700 dark:border-violet-600 dark:text-violet-400">
+              Bi-Monthly
+            </Badge>
+          )}
+          {kpi.frequency === 'Quarterly' && (
+            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-teal-300 text-teal-700 dark:border-teal-600 dark:text-teal-400">
+              Quarterly
+            </Badge>
+          )}
+          <Badge className={`text-xs ${statusColors[kpi.status || 'kra_set']}`}>
+            {statusLabels[kpi.status || 'kra_set']}
+          </Badge>
+        </div>
       </div>
 
       {/* KRA/KPI names */}
