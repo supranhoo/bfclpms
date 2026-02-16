@@ -29,6 +29,8 @@ export interface OrgKpiCardData {
   // Scoped rows for dept/employee scope
   scopedRows?: ScopedRow[];
   scopeLabel?: string;
+  // Employee count (from useOrgLevelKpisWithEmployees)
+  employeeCount?: number;
 }
 
 interface OrgKpiEntryCardProps {
@@ -202,10 +204,18 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, onSave, onSave
               </p>
             )}
 
-            <Badge variant={statusInfo.variant} className={`gap-1 text-xs ${statusInfo.className}`}>
-              <StatusIcon className="h-3 w-3" />
-              {statusInfo.label}
-            </Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={statusInfo.variant} className={`gap-1 text-xs ${statusInfo.className}`}>
+                <StatusIcon className="h-3 w-3" />
+                {statusInfo.label}
+              </Badge>
+              {data.employeeCount !== undefined && data.employeeCount > 0 && (
+                <Badge variant="outline" className="gap-1 text-xs">
+                  <Users className="h-3 w-3" />
+                  {data.employeeCount} employee{data.employeeCount !== 1 ? 's' : ''}
+                </Badge>
+              )}
+            </div>
           </div>
 
           {/* RIGHT COLUMN (60%) - Inputs & Actions */}

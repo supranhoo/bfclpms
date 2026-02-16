@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKraCategories, useDepartments, useProfiles } from '@/hooks/useOrganization';
 import { useOrgKpiValues, useBulkUpsertOrgKpiValues, OrgKpiValue } from '@/hooks/useOrgKpiValues';
-import { useOrgLevelKpis } from '@/hooks/useOrgLevelKpis';
+import { useOrgLevelKpisWithEmployees } from '@/hooks/useOrgLevelKpis';
 import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
 import { usePropagateOrgKpiValue } from '@/hooks/usePropagateOrgKpiValue';
 import { useBatchInsertAuditLogs } from '@/hooks/useOrgKpiAuditLog';
@@ -20,7 +20,8 @@ import { OrgKpiBulkExport } from '@/components/admin/OrgKpiBulkExport';
 import { OrgKpiBulkImport } from '@/components/admin/OrgKpiBulkImport';
 import { OrgKpiOwnerManagement } from '@/components/admin/OrgKpiOwnerManagement';
 import { OrgKpiImpactSheet } from '@/components/admin/OrgKpiImpactSheet';
-import { Building2, AlertTriangle, Search, Copy, Upload, Users as UsersIcon } from 'lucide-react';
+import { OrgKpiSuggestionsPanel } from '@/components/admin/OrgKpiSuggestionsPanel';
+import { Building2, AlertTriangle, Search, Copy, Upload, Users as UsersIcon, Lightbulb, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 // Helper to get previous period
@@ -39,15 +40,26 @@ export default function OrgKpiDataEntry() {
   const [selectedYear, setSelectedYear] = useState(defaultYear);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'entry' | 'owners'>('entry');
+  const [activeTab, setActiveTab] = useState<'entry' | 'suggestions' | 'owners'>('entry');
   const [importOpen, setImportOpen] = useState(false);
 
   // Impact sheet state
   const [impactOpen, setImpactOpen] = useState(false);
   const [impactTarget, setImpactTarget] = useState<{ categoryId: string; kraName: string; kpiName: string; achievedValue: number | null } | null>(null);
 
-  // Data queries
-  const { data: orgLevelKpis, isLoading: kpisLoading } = useOrgLevelKpis(selectedPeriod, selectedYear);
+  // Data queries - use the new hook that filters by employee mapping
+  const { data: orgLevelData, isLoading: kpisLoading } = useOrgLevelKpisWithEmployees(selectedPeriod, selectedYear);
+  const orgLevelKpis = useMemo(() => orgLevelData?.kpis?.map(k => k.kpi) || [], [orgLevelData]);
+  const employeeCountMap = useMemo(() => {
+    const map = new Map<string, number>();
+    orgLevelData?.kpis?.forEach(k => {
+      const key = `${k.kpi.category_id}||${k.kpi.kra_name}||${k.kpi.kpi_name}`;
+      map.set(key, k.employeeCount);
+    });
+    return map;
+  }, [orgLevelData]);
+  const unmappedCount = orgLevelData?.unmappedCount || 0;
+
   const { data: categories } = useKraCategories();
   const { data: departments } = useDepartments();
   const { data: allProfiles } = useProfiles();
@@ -150,7 +162,6 @@ export default function OrgKpiDataEntry() {
         const val = existingValuesMap.get(key);
         isEntered = val?.achieved_value !== null && val?.achieved_value !== undefined;
       } else {
-        // For dept/employee-scoped KPIs, check if ANY scoped row has a value
         const prefix = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||`;
         isEntered = Array.from(existingValuesMap.entries()).some(([k, v]) =>
           k.startsWith(prefix) && v.achieved_value !== null && v.achieved_value !== undefined
@@ -184,6 +195,7 @@ export default function OrgKpiDataEntry() {
     const existing = existingValuesMap.get(key);
     const prevKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
     const previousValue = prevValuesMap.get(prevKey) ?? null;
+    const empCount = employeeCountMap.get(prevKey) ?? 0;
 
     // Determine status
     let status: 'pending' | 'entered' | 'propagated' = 'pending';
@@ -240,8 +252,9 @@ export default function OrgKpiDataEntry() {
       status,
       scopedRows,
       scopeLabel,
+      employeeCount: empCount,
     };
-  }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev]);
+  }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap]);
 
   // Save handler for a single card
   const handleCardSave = useCallback(async (
@@ -474,8 +487,6 @@ export default function OrgKpiDataEntry() {
     });
   }, [ownershipFilteredKpis, existingValuesMap]);
 
-  // Warn on unsaved (beforeunload handled per-card via auto-save)
-
   if (kpisLoading) {
     return <TableSkeleton rows={5} columns={5} />;
   }
@@ -491,7 +502,7 @@ export default function OrgKpiDataEntry() {
       </div>
 
       {/* No KPIs warning */}
-      {(!orgLevelKpis || orgLevelKpis.length === 0) && (
+      {orgLevelData && orgLevelData.totalOrgKpis === 0 && (
         <Card className="border-destructive/50 bg-destructive/5">
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
@@ -499,9 +510,23 @@ export default function OrgKpiDataEntry() {
               <div>
                 <p className="font-medium text-foreground">No Organization-Level KPIs Found</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Mark individual KPIs as "Organization-Level" in the Admin KPI Editor.
+                  Mark individual KPIs as "Organization-Level" in the Admin KPI Editor, or check the Suggestions tab.
                 </p>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Unmapped KPIs info banner */}
+      {unmappedCount > 0 && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="py-3 px-4">
+            <div className="flex items-center gap-2 text-sm">
+              <Info className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-muted-foreground">
+                <span className="font-medium text-foreground">{unmappedCount}</span> org-level KPI{unmappedCount !== 1 ? 's' : ''} have no employees mapped and are hidden from data entry.
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -584,13 +609,17 @@ export default function OrgKpiDataEntry() {
         </Card>
       )}
 
-      {/* Tab Toggle: Entry vs Owner Management (admin only) */}
+      {/* Tab Toggle: Entry vs Suggestions vs Owner Management */}
       {isAdmin && (
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'entry' | 'owners')}>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'entry' | 'suggestions' | 'owners')}>
           <TabsList>
             <TabsTrigger value="entry" className="gap-1.5">
               <Building2 className="h-4 w-4" />
               Data Entry
+            </TabsTrigger>
+            <TabsTrigger value="suggestions" className="gap-1.5">
+              <Lightbulb className="h-4 w-4" />
+              Suggestions
             </TabsTrigger>
             <TabsTrigger value="owners" className="gap-1.5">
               <UsersIcon className="h-4 w-4" />
@@ -603,6 +632,11 @@ export default function OrgKpiDataEntry() {
       {/* Owner Management Tab */}
       {activeTab === 'owners' && isAdmin && (
         <OrgKpiOwnerManagement kpiDefinitions={kpiDefinitions} />
+      )}
+
+      {/* Suggestions Tab */}
+      {activeTab === 'suggestions' && isAdmin && (
+        <OrgKpiSuggestionsPanel reviewPeriod={selectedPeriod} reviewYear={selectedYear} />
       )}
 
       {/* Card-Based Entry */}

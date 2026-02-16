@@ -3424,4 +3424,23 @@ This ensures DB triggers using `net.http_post` (which send the 208-char JWT) can
 
 ---
 
+**Phase 6 — Smart Filtering & Suggestions:**
+- **Employee-Mapped Filtering**: Data Entry tab only shows org-level KPIs that have at least one employee record mapped (matching `category_id + kra_name + kpi_name`). Unmapped KPIs are hidden with an info banner showing how many are excluded.
+- **Employee Count Badge**: Each KPI card displays an "X employees" badge in the left info column showing how many employees have this KPI assigned.
+- **Suggestions Tab**: New admin-only tab that analyzes non-org KPIs shared by 3+ employees and suggests them as org-level candidates. Table shows KRA, KPI, Category, Employee Count, and action buttons.
+- **Mark as Org-Level**: Single-click action opens a confirmation dialog with scope selector (Organization/Department/Employee) and similar KPI detection across categories.
+- **Bulk Mark**: Multi-select checkboxes in the suggestions table with "Bulk Mark Selected" button to convert multiple KPI groups at once.
+
+| File | Action |
+|---|---|
+| `src/hooks/useOrgLevelKpis.ts` | MODIFIED: Added `useOrgLevelKpisWithEmployees` hook that filters by employee mapping and returns counts |
+| `src/hooks/useOrgKpiSuggestions.ts` | NEW: Queries non-org KPIs grouped by name with employee counts (3+ threshold) |
+| `src/hooks/useMarkAsOrgLevel.ts` | NEW: Mutations to bulk-update `is_org_level` flag on matching KPI records |
+| `src/components/admin/OrgKpiSuggestionsPanel.tsx` | NEW: Suggestions table with multi-select and bulk actions |
+| `src/components/admin/MarkOrgLevelDialog.tsx` | NEW: Confirmation dialog with scope selector and cross-category detection |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | MODIFIED: Uses `useOrgLevelKpisWithEmployees`; added Suggestions tab; unmapped KPI info banner |
+| `src/components/admin/OrgKpiEntryCard.tsx` | MODIFIED: Added `employeeCount` to `OrgKpiCardData`; displays employee badge |
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
