@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { safeParseFloat } from '@/lib/utils';
+import { openStorageFile } from '@/lib/storageDownload';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubmitSelfReview, RatingLevel, KPI, OrgLevelScope, ReviewSubmission } from '@/hooks/useKpis';
 import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
@@ -695,10 +696,10 @@ export function SelfReviewSheet({
                     <div>
                       <Label className="text-sm mb-2 block">Evidence</Label>
                       {selfEvidenceUrls.map((url, idx) => (
-                        <a key={idx} href={url} target="_blank" rel="noopener noreferrer"
-                          className="text-sm text-primary underline hover:no-underline block">
+                        <button key={idx} type="button" onClick={() => openStorageFile(url)}
+                          className="text-sm text-primary underline hover:no-underline block bg-transparent border-none p-0 cursor-pointer text-left">
                           View Evidence {selfEvidenceUrls.length > 1 ? idx + 1 : ''}
-                        </a>
+                        </button>
                       ))}
                     </div>
                   )}

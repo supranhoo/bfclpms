@@ -1,4 +1,5 @@
 import { LucideIcon, FileText, ExternalLink } from 'lucide-react';
+import { openStorageFile } from '@/lib/storageDownload';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -134,17 +135,16 @@ export function ReviewStageCard({
       {evidenceUrls.length > 0 && (
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2">
           {evidenceUrls.map((url, idx) => (
-            <a
+            <button
               key={idx}
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              type="button"
+              onClick={() => openStorageFile(url)}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
             >
               <FileText className="h-3 w-3" />
               Evidence{evidenceUrls.length > 1 ? ` ${idx + 1}` : ''}
               <ExternalLink className="h-3 w-3" />
-            </a>
+            </button>
           ))}
         </div>
       )}
