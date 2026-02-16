@@ -67,6 +67,18 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, onSave, onSave
   const [remarks, setRemarks] = useState(data.remarks);
   const [evidenceUrl, setEvidenceUrl] = useState(data.evidenceUrl);
   const [scopedValues, setScopedValues] = useState<ScopedRow[]>(data.scopedRows || []);
+
+  // Refs to always access latest values (fixes stale closure in auto-save)
+  const achievedValueRef = useRef(achievedValue);
+  const remarksRef = useRef(remarks);
+  const evidenceUrlRef = useRef(evidenceUrl);
+  const scopedValuesRef = useRef(scopedValues);
+
+  useEffect(() => { achievedValueRef.current = achievedValue; }, [achievedValue]);
+  useEffect(() => { remarksRef.current = remarks; }, [remarks]);
+  useEffect(() => { evidenceUrlRef.current = evidenceUrl; }, [evidenceUrl]);
+  useEffect(() => { scopedValuesRef.current = scopedValues; }, [scopedValues]);
+
   const [isSaving, setIsSaving] = useState(false);
   const [isPropagating, setIsPropagating] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -83,14 +95,15 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, onSave, onSave
     setSaveStatus('idle');
   }, [data.achievedValue, data.remarks, data.evidenceUrl, data.scopedRows]);
 
+  // getValues reads from refs (always current, no stale closure)
   const getValues = useCallback(() => {
-    const parsed = achievedValue === '' ? null : parseFloat(achievedValue);
+    const parsed = achievedValueRef.current === '' ? null : parseFloat(achievedValueRef.current);
     return {
       achievedValue: isNaN(parsed as number) ? null : parsed,
-      remarks,
-      evidenceUrl,
+      remarks: remarksRef.current,
+      evidenceUrl: evidenceUrlRef.current,
       scopedValues: data.scope !== 'organization'
-        ? scopedValues.map(s => ({
+        ? scopedValuesRef.current.map(s => ({
             scopeId: s.scopeId,
             achievedValue: s.achievedValue,
             remarks: s.remarks,
@@ -98,7 +111,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, onSave, onSave
           }))
         : undefined,
     };
-  }, [achievedValue, remarks, evidenceUrl, scopedValues, data.scope]);
+  }, [data.scope]);
 
   // Auto-save with debounce
   const triggerAutoSave = useCallback(() => {
