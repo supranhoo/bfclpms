@@ -310,7 +310,11 @@ The system includes a full-database backup and restore feature accessible from *
 
 ### Row-Level Security (RLS) Policies
 
-All tables have RLS enabled. Key policy patterns:
+> **Full per-table policy inventory:** [`docs/rls-policies.md`](docs/rls-policies.md)
+> **Live audit script:** [`docs/rls-audit.sql`](docs/rls-audit.sql)
+> **Behavioral tests:** [`src/test/rls-policies.test.ts`](src/test/rls-policies.test.ts)
+
+All 46 public tables have RLS enabled. Key policy patterns:
 
 ```sql
 -- Pattern 1: Users can view own data
