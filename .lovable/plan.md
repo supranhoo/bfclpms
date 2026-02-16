@@ -1,50 +1,76 @@
 
-
-# Allow Editing Already Org-Level KPIs from Suggestions
+# Fix: Show Only Relevant Departments in Scoped Entry Table
 
 ## Problem
 
-In the Suggestions tab, KPIs that are already marked as org-level show a static "Already Org-Level" badge with no action. Admins cannot update the scope (Organization/Department/Employee) from here -- they have to go elsewhere.
+When an Org KPI has scope "Per Department", the data entry card shows **all 84 departments** in the system, even though only 18 of them have employees assigned to this KPI. This creates unnecessary noise and makes data entry tedious.
+
+The same issue applies to "Per Employee" scope -- it shows all employees instead of only those mapped to the KPI.
+
+## Root Cause
+
+In `src/pages/admin/OrgKpiDataEntry.tsx` (line 210-222), the `buildCardData` function maps over ALL departments/employees without filtering by whether they have the KPI assigned.
 
 ## Solution
 
-Replace the static badge with a clickable "Edit Scope" button that opens the same `MarkOrgLevelDialog`, but in an **edit mode** that:
-- Shows the current scope value (pre-populated)
-- Lets the admin change it
-- Updates instead of inserting
+Filter the scoped rows to only include departments (or employees) that actually have at least one employee mapped to the KPI in the selected period.
 
-## Changes
+### File: `src/pages/admin/OrgKpiDataEntry.tsx`
 
-### File: `src/components/admin/OrgKpiSuggestionsPanel.tsx`
+1. **Query mapped departments per KPI**: Use the existing `kpis` table data to build a map of which departments/employees are relevant for each org-level KPI
+2. **Filter scoped rows**: In `buildCardData`, instead of `departments.map(...)`, filter to only departments that have employees with this KPI
 
-Replace the static "Already Org-Level" badge (line 150-151) with an "Edit Scope" button that opens the dialog -- same as the "Mark Org-Level" button does for non-org KPIs.
+**Logic change in `buildCardData`:**
 
-### File: `src/components/admin/MarkOrgLevelDialog.tsx`
+For **department** scope:
+- Query which departments have employees with this specific KPI (by joining `kpis.employee_id` to `profiles.department_id`)
+- Only show those departments in the scoped entry table
 
-- Accept an optional `isEdit` prop (derived from `suggestion.already_org_level`)
-- When in edit mode:
-  - Change dialog title to "Update Organization-Level KPI"
-  - Change description to "Update the scope for this org-level KPI."
-  - Pre-fetch and display the current `org_level_scope` value in the scope selector
-  - Confirm button text changes to "Update"
-- The mutation already works for both cases (it updates matching records regardless of current `is_org_level` state)
+For **employee** scope:
+- Only show employees who actually have this KPI assigned
 
-### File: `src/hooks/useOrgKpiSuggestions.ts`
+### File: `src/hooks/useOrgLevelKpis.ts`
 
-Add `org_level_scope` to the suggestion data for already-org-level KPIs so the dialog can pre-populate the scope selector.
+Extend the `useOrgLevelKpisWithEmployees` hook to also return the list of mapped department IDs and employee IDs per KPI, so the entry page can filter scoped rows.
 
 ### File: `DOCUMENTATION.md`
 
-Update to document the edit capability for already-org-level KPIs in the Suggestions tab.
+Update documentation to note that scoped entry tables only show relevant departments/employees.
 
 ## Technical Details
 
 | File | Change |
 |---|---|
-| `src/components/admin/OrgKpiSuggestionsPanel.tsx` | Replace static badge with "Edit Scope" button for already-org-level rows |
-| `src/components/admin/MarkOrgLevelDialog.tsx` | Add edit mode with pre-populated scope, different title/description/button text |
-| `src/hooks/useOrgKpiSuggestions.ts` | Include `org_level_scope` in suggestion data for already-org-level KPIs |
-| `DOCUMENTATION.md` | Document edit capability |
+| `src/hooks/useOrgLevelKpis.ts` | Return mapped `departmentIds` and `employeeIds` per org-level KPI |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | Filter `scopedRows` in `buildCardData` to only include mapped departments/employees |
+| `DOCUMENTATION.md` | Update docs |
 
-No database or schema changes needed.
+### Data Query
 
+The hook already queries employee KPIs to get counts. We extend it to also collect department IDs:
+
+```typescript
+// Group employee department_ids per KPI
+const deptMap = new Map<string, Set<string>>();
+employeeKpis.forEach(ek => {
+  const key = `${ek.category_id}||${ek.kra_name}||${ek.kpi_name}`;
+  const profile = profileMap.get(ek.employee_id);
+  if (profile?.department_id) {
+    if (!deptMap.has(key)) deptMap.set(key, new Set());
+    deptMap.get(key)!.add(profile.department_id);
+  }
+});
+```
+
+Then in `buildCardData`, filter departments:
+
+```typescript
+if (scope === 'department' && departments) {
+  const mappedDeptIds = mappedDepartmentsMap.get(kpiKey) || new Set();
+  scopedRows = departments
+    .filter(dept => mappedDeptIds.has(dept.id))
+    .map(dept => { ... });
+}
+```
+
+This reduces the "Adherence to Manning Norms" entry from 84 rows to 18 relevant rows.
