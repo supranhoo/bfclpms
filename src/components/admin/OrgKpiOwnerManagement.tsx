@@ -160,8 +160,7 @@ export function OrgKpiOwnerManagement({ kpiDefinitions }: OrgKpiOwnerManagementP
                   </div>
 
                   {/* Per-KPI owners */}
-                  <ScrollArea className="max-h-[300px]">
-                    <div className="space-y-2">
+                  <div className="space-y-2">
                       {cat.kpis.map(kpi => {
                         const key = `${kpi.categoryId}||${kpi.kraName}||${kpi.kpiName}`;
                         const kpiOwners = ownerLookup.get(key) || [];
@@ -205,8 +204,7 @@ export function OrgKpiOwnerManagement({ kpiDefinitions }: OrgKpiOwnerManagementP
                           </div>
                         );
                       })}
-                    </div>
-                  </ScrollArea>
+                  </div>
                 </CardContent>
               </CollapsibleContent>
             </Card>
