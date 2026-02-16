@@ -1,119 +1,110 @@
 
 
-# Add Admin-Only Features to Org KPI Data Entry
+# Add Ticket Numbers to Queries and Observations
 
 ## Overview
 
-Add three admin-only capabilities to the Org KPI Data Entry page:
-1. **Remove KPI from Org KPI** -- unmark a KPI as organization-level directly from the data entry card
-2. **Restrict bulk actions to admin only** -- Copy from Last Period, Export Template, and Import Excel buttons should only be visible to admins (currently visible to all data owners)
+Add auto-generated, human-readable ticket numbers to both Queries and Observations. Queries will use the format `Q-0001`, `Q-0002`, etc. Observations will use `OBS-0001`, `OBS-0002`, etc. These will be generated automatically by the database and displayed across all relevant UI locations.
 
 ---
 
-## Feature 1: Remove KPI from Org KPI
+## Database Changes
 
-Add a "Remove from Org KPI" button on each KPI card (admin-only) that sets `is_org_level = false` on all matching KPI records for that period.
+### 1. Add `ticket_number` columns and sequences
 
-### Implementation
+Create two PostgreSQL sequences and add a `ticket_number` column (with auto-generated default) to both tables:
 
-**New hook: `useUnmarkAsOrgLevel`** in `src/hooks/useMarkAsOrgLevel.ts`
-- Adds a mutation that sets `is_org_level = false` and clears `org_level_scope` on all matching KPI records
-- Also deletes any associated `org_kpi_values` and `org_kpi_data_owners` records for cleanup
-- Requires confirmation dialog with KPI name shown
+- `kpi_queries.ticket_number` -- format: `Q-XXXXX` (zero-padded, e.g., Q-00001)
+- `kpi_observations.ticket_number` -- format: `OBS-XXXXX` (e.g., OBS-00001)
 
-**UI Changes in `src/components/admin/OrgKpiEntryCard.tsx`:**
-- Add an optional `onRemoveFromOrg` callback prop
-- Show a trash/X icon button with "Remove from Org KPI" tooltip (admin only)
-- Wrapped in an AlertDialog for confirmation since this is destructive
+The sequences ensure globally unique, monotonically increasing numbers. A `UNIQUE` constraint prevents duplicates.
 
-**Wire up in `src/pages/admin/OrgKpiDataEntry.tsx`:**
-- Create handler that calls the unmark mutation
-- Pass `onRemoveFromOrg` to each `OrgKpiEntryCard` only when `isAdmin` is true
-- Invalidate relevant queries after removal
+### 2. Backfill existing records
 
-## Feature 2: Admin-Only Bulk Actions
+Assign ticket numbers to all existing queries and observations ordered by `created_at` so historical data is also numbered.
 
-The "Copy from Last Period", "Export Template", and "Import Excel" buttons are currently visible to all users (including data owners). These should be restricted to admins only.
+---
 
-### Implementation
+## UI Changes -- Where Ticket Numbers Will Appear
 
-**In `src/pages/admin/OrgKpiDataEntry.tsx`:**
-- Wrap the three bulk action buttons in a conditional: `{isAdmin && (...)}`
-- Data owners will still see the search bar and period selector but not the bulk tools
+| Location | File | Display |
+|---|---|---|
+| Query Inbox -- row items | `InboxDetailSheet.tsx`, `InboxRowItem.tsx` | Show ticket # as a small badge next to the title |
+| Query Inbox -- detail sheet | `InboxDetailSheet.tsx` | Show ticket # prominently in the header |
+| Query History dialog | `QueryHistoryDialog.tsx` | Replace `Query #1, #2` index labels with actual ticket numbers |
+| Query Report table | `QueryReport.tsx` | Add a "Ticket #" column |
+| Observation cards | `ObservationCard.tsx` | Show ticket # badge in the header row |
+| Observations Overview (admin) | `ObservationsOverview.tsx` | Add a "Ticket #" column to the table |
+| Inbox utils (search) | `inboxUtils.ts` | Include ticket number in search matching |
 
 ---
 
 ## Technical Details
 
-### Files to Change
+### Migration SQL
+
+```sql
+-- Query ticket numbers
+CREATE SEQUENCE public.query_ticket_seq START 1;
+
+ALTER TABLE public.kpi_queries
+ADD COLUMN ticket_number text
+  UNIQUE
+  DEFAULT 'Q-' || lpad(nextval('public.query_ticket_seq')::text, 5, '0');
+
+-- Observation ticket numbers
+CREATE SEQUENCE public.observation_ticket_seq START 1;
+
+ALTER TABLE public.kpi_observations
+ADD COLUMN ticket_number text
+  UNIQUE
+  DEFAULT 'OBS-' || lpad(nextval('public.observation_ticket_seq')::text, 5, '0');
+
+-- Backfill existing queries
+WITH numbered AS (
+  SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn
+  FROM public.kpi_queries WHERE ticket_number IS NULL
+)
+UPDATE public.kpi_queries q
+SET ticket_number = 'Q-' || lpad(n.rn::text, 5, '0')
+FROM numbered n WHERE q.id = n.id;
+
+-- Backfill existing observations
+WITH numbered AS (
+  SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn
+  FROM public.kpi_observations WHERE ticket_number IS NULL
+)
+UPDATE public.kpi_observations o
+SET ticket_number = 'OBS-' || lpad(n.rn::text, 5, '0')
+FROM numbered n WHERE o.id = n.id;
+
+-- Advance sequences past existing records
+SELECT setval('public.query_ticket_seq',
+  COALESCE((SELECT COUNT(*) FROM public.kpi_queries), 0) + 1, false);
+SELECT setval('public.observation_ticket_seq',
+  COALESCE((SELECT COUNT(*) FROM public.kpi_observations), 0) + 1, false);
+```
+
+### Frontend File Changes
 
 | File | Change |
 |---|---|
-| `src/hooks/useMarkAsOrgLevel.ts` | Add `useUnmarkAsOrgLevel` mutation (set `is_org_level = false`, cleanup related data) |
-| `src/components/admin/OrgKpiEntryCard.tsx` | Add `onRemoveFromOrg` prop with confirmation dialog and trash button (admin only) |
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Wire up remove handler; wrap Copy/Export/Import in `isAdmin` guard |
-| `DOCUMENTATION.md` | Document new admin-only features |
+| `src/lib/inboxUtils.ts` | Add `ticketNumber` field to `InboxItem` type; include in search |
+| `src/pages/QueryInbox.tsx` | Map `ticket_number` into query data and inbox items |
+| `src/components/inbox/InboxRowItem.tsx` | Show ticket # badge before title |
+| `src/components/inbox/InboxDetailSheet.tsx` | Show ticket # in header |
+| `src/components/inbox/MobileInboxList.tsx` | Show ticket # in mobile card |
+| `src/components/review/QueryHistoryDialog.tsx` | Use `ticket_number` instead of index-based `Query #N` |
+| `src/components/review/ObservationCard.tsx` | Show ticket # badge in header row |
+| `src/pages/admin/ObservationsOverview.tsx` | Add "Ticket #" column, include in search |
+| `src/pages/reports/QueryReport.tsx` | Add "Ticket #" column |
+| `src/hooks/useKpiObservations.ts` | Ensure `ticket_number` is included in selects |
+| `src/hooks/useQueryWorkflow.ts` | Ensure `ticket_number` is included in selects |
+| `DOCUMENTATION.md` | Document the ticket number feature |
 
-### Unmark Mutation Logic
+### Data Flow
 
-```typescript
-// In useMarkAsOrgLevel.ts
-export function useUnmarkAsOrgLevel() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ categoryId, kraName, kpiName, reviewPeriod, reviewYear }) => {
-      // 1. Set is_org_level = false on all matching KPI records
-      await supabase.from('kpis')
-        .update({ is_org_level: false, org_level_scope: null })
-        .eq('category_id', categoryId)
-        .eq('kra_name', kraName)
-        .eq('kpi_name', kpiName)
-        .eq('review_period', reviewPeriod)
-        .eq('review_year', reviewYear)
-        .eq('is_org_level', true);
-
-      // 2. Delete org_kpi_values for this KPI+period
-      await supabase.from('org_kpi_values')
-        .delete()
-        .eq('category_id', categoryId)
-        .eq('kra_name', kraName)
-        .eq('kpi_name', kpiName)
-        .eq('review_period', reviewPeriod)
-        .eq('review_year', reviewYear);
-
-      // 3. Delete data owner assignments
-      await supabase.from('org_kpi_data_owners')
-        .delete()
-        .eq('category_id', categoryId)
-        .eq('kra_name', kraName)
-        .eq('kpi_name', kpiName);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['org-level-kpis'] });
-      queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
-      queryClient.invalidateQueries({ queryKey: ['org-kpi-data-owners'] });
-    },
-  });
-}
-```
-
-### Entry Card Remove Button (admin only)
-
-A small destructive icon button in the card's action row, wrapped in an AlertDialog:
-- Shows KPI name in confirmation
-- Warns that this removes the KPI from org-level tracking
-- Only visible when `isAdmin && !isPropagated` (propagated KPIs must be rolled back first)
-
-### Admin-Only Bulk Actions
-
-The existing buttons at lines 640-649 will be wrapped:
-```tsx
-{isAdmin && (
-  <div className="flex gap-2 flex-wrap">
-    <Button ...>Copy from Last Period</Button>
-    <OrgKpiBulkExport ... />
-    <Button ...>Import Excel</Button>
-  </div>
-)}
-```
+- Both tables already use `SELECT *` in most hooks, so `ticket_number` will be automatically included in fetched data after the migration
+- The `InboxItem` type in `inboxUtils.ts` will get an optional `ticketNumber` field populated from the query/notification metadata
+- Ticket numbers are immutable once assigned -- no editing or reassignment
 
