@@ -1,68 +1,75 @@
 
 
-# Fix: Multi-Evidence Still Showing Only 1 File
+# Fix: Evidence Links Blocked by Browser Extensions
 
-## Root Cause
+## Problem
 
-Two issues are causing this:
-
-1. **Database has empty arrays**: Every `review_submissions` record has `self_evidence_urls: []` because submissions were made before the recent code fix was deployed. The 5 files Jitendra uploaded are in storage but only 1 URL was saved (to the old `self_evidence_url` single-string column).
-
-2. **Missing TypeScript fields**: The `ReviewSubmission` interface in `useKpis.ts` does not include any of the `*_evidence_urls` array fields. All access to these fields relies on unsafe `(submission as any)` casts, which is error-prone and prevents proper type checking.
+Evidence file links point directly to the Lovable Cloud storage domain (`*.supabase.co`). Some browser extensions (ad blockers, privacy tools) block these requests entirely, showing a "This page has been blocked by Chrome - ERR_BLOCKED_BY_CLIENT" error. The files themselves are correctly stored and accessible -- it's the direct URL navigation that gets intercepted.
 
 ## Solution
 
-### 1. Database Migration: Sync existing single URLs into array columns
+Instead of opening direct storage URLs in a new tab, create a download helper that uses the SDK's `download()` method (which goes through a `fetch` call, not blocked by ad blockers) and then opens the resulting blob in a new window.
 
-Run a one-time migration that copies the single-string `*_evidence_url` value into the corresponding `*_evidence_urls` JSONB array for all rows where the array is empty but the single string exists. This immediately makes all existing evidence visible without requiring re-submission.
+This approach:
+- Bypasses browser extension blocking since it uses `fetch()`, not URL navigation
+- Works for all file types (PDF, images, Excel)
+- Falls back to the direct URL if the blob approach fails
+- Requires no backend or storage configuration changes
 
-```sql
-UPDATE review_submissions
-SET self_evidence_urls = jsonb_build_array(self_evidence_url)
-WHERE self_evidence_url IS NOT NULL
-  AND (self_evidence_urls IS NULL OR self_evidence_urls = '[]'::jsonb);
+## Changes
 
--- Same for manager, auditor, management, skip_level, hr_pms
-UPDATE review_submissions
-SET manager_evidence_urls = jsonb_build_array(manager_evidence_url)
-WHERE manager_evidence_url IS NOT NULL
-  AND (manager_evidence_urls IS NULL OR manager_evidence_urls = '[]'::jsonb);
+### 1. New Utility: `src/lib/storageDownload.ts`
 
--- (repeat for all 6 reviewer levels)
-```
-
-### 2. Update ReviewSubmission TypeScript Interface (`src/hooks/useKpis.ts`)
-
-Add the missing `*_evidence_urls` array fields so all components can access them without `as any` casts:
+Create a helper function that:
+- Extracts the bucket name and file path from a public storage URL
+- Uses `supabase.storage.from(bucket).download(path)` to fetch the file as a blob
+- Opens the blob in a new browser tab using `URL.createObjectURL()`
+- Falls back to `window.open(url)` if anything goes wrong
 
 ```text
-self_evidence_urls: string[] | null;
-manager_evidence_urls: string[] | null;
-auditor_evidence_urls: string[] | null;
-management_evidence_urls: string[] | null;
-skip_level_evidence_urls: string[] | null;
-hr_pms_evidence_urls: string[] | null;
+export async function openStorageFile(publicUrl: string): Promise<void> {
+  // Parse bucket and path from URL
+  // Download via SDK (uses fetch, not blocked)
+  // Create blob URL and open in new tab
+  // Fallback to direct URL on error
+}
 ```
 
-### 3. Remove `as any` Casts (`src/components/review/KpiJourneySection.tsx`)
+### 2. Update Evidence Link Components
 
-Replace all `(submission as any)?.self_evidence_urls` style casts with direct property access now that the type includes them.
+Replace all `<a href={url} target="_blank">` evidence links with `onClick` handlers that call `openStorageFile()`:
 
-### 4. Update DOCUMENTATION.md
-
-Note the data migration and type update.
-
-## Files Changed
-
-| File | Change |
+| Component | What changes |
 |---|---|
-| Database migration | Sync single-URL data into JSONB arrays for all 6 review levels |
-| `src/hooks/useKpis.ts` | Add `*_evidence_urls` fields to `ReviewSubmission` interface |
-| `src/components/review/KpiJourneySection.tsx` | Remove unsafe `as any` casts |
-| `DOCUMENTATION.md` | Document migration and type update |
+| `ReviewStageCard.tsx` | Evidence links in the Review Journey cards |
+| `ReviewTrailCard.tsx` | Evidence links in the audit trail |
+| `ReviewTrailCardCompact.tsx` | Evidence links in compact trail view |
+| `MultiFileUpload.tsx` | Preview links for uploaded files |
+| `EvidenceUpload.tsx` | Preview link for uploaded file |
+
+Each `<a href={url}>` becomes `<button onClick={() => openStorageFile(url)}>` (styled identically).
+
+### 3. Update `DOCUMENTATION.md`
+
+Document the blob-based download approach and the reason for it.
+
+## Technical Detail
+
+The key insight is that `ERR_BLOCKED_BY_CLIENT` only affects direct URL navigation (typing/clicking a link to `*.supabase.co`). JavaScript `fetch()` calls from the app's own domain are not blocked by ad blockers. The Supabase SDK's `.download()` method uses `fetch()` internally, so it bypasses the block.
+
+```text
+// Before (blocked by extensions):
+<a href="https://xxx.supabase.co/storage/..." target="_blank">
+
+// After (uses fetch, not blocked):
+<button onClick={() => openStorageFile(url)}>
+  // internally: supabase.storage.download() -> blob -> URL.createObjectURL()
+```
 
 ## Impact
 
-- Jitendra's existing evidence (and all other users') will immediately appear without re-submission
-- Type-safe access to multi-evidence arrays across all components
-- No UI or logic changes needed -- the display components already handle arrays correctly
+- All evidence links will work regardless of browser extensions
+- No changes to storage configuration or database
+- Backward compatible -- existing URLs remain valid
+- Graceful fallback if blob approach fails
+
