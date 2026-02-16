@@ -84,6 +84,7 @@ export default function QueryReport() {
     }
 
     const exportData = enrichedQueries.map(q => ({
+      'Ticket #': (q as any).ticket_number || '',
       'KPI': q.kpiName,
       'KRA': q.kraName,
       'Employee': q.employeeName,
@@ -200,8 +201,9 @@ export default function QueryReport() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>KPI</TableHead>
+                 <TableRow>
+                   <TableHead className="w-24">Ticket #</TableHead>
+                   <TableHead>KPI</TableHead>
                   <TableHead>Employee</TableHead>
                   <TableHead>Raised By</TableHead>
                   <TableHead>Raised To</TableHead>
@@ -214,6 +216,7 @@ export default function QueryReport() {
               <TableBody>
                 {enrichedQueries.map(q => (
                   <TableRow key={q.id}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{(q as any).ticket_number || '—'}</TableCell>
                     <TableCell>
                       <div className="max-w-[200px]">
                         <div className="font-medium truncate">{q.kpiName}</div>
@@ -249,7 +252,7 @@ export default function QueryReport() {
                 ))}
                 {enrichedQueries.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       No queries found
                     </TableCell>
                   </TableRow>

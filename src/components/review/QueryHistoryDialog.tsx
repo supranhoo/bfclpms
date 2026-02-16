@@ -174,8 +174,8 @@ export function QueryHistoryDialog({ kpiId, kpiName, open, onOpenChange }: Query
         {index > 0 && (
           <div className="flex items-center justify-center py-4">
             <div className="w-full h-px bg-border" />
-            <Badge variant="secondary" className="mx-2 shrink-0 text-xs">
-              Query #{index + 1}
+            <Badge variant="secondary" className="mx-2 shrink-0 text-xs font-mono">
+              {(query as any).ticket_number || `Query #${index + 1}`}
             </Badge>
             <div className="w-full h-px bg-border" />
           </div>

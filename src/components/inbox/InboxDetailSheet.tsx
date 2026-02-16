@@ -77,6 +77,11 @@ export function InboxDetailSheet({
               </div>
             )}
           </div>
+          {item.ticketNumber && (
+            <Badge variant="secondary" className="text-xs font-mono w-fit">
+              {item.ticketNumber}
+            </Badge>
+          )}
           <SheetTitle className="text-left">{item.title}</SheetTitle>
           <SheetDescription className="text-left">
             {item.kpiName && (

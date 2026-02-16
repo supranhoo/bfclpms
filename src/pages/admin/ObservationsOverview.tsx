@@ -34,7 +34,7 @@ function useAllObservations() {
       const { data, error } = await supabase
         .from('kpi_observations')
         .select(`
-          id, kpi_id, title, description, observation_type, observer_role, status, created_at, updated_at,
+          id, kpi_id, title, description, observation_type, observer_role, status, created_at, updated_at, ticket_number,
           created_by_profile:profiles!kpi_observations_created_by_fkey(full_name, email)
         `)
         .order('created_at', { ascending: false });
@@ -109,7 +109,8 @@ export default function ObservationsOverview() {
           obs.kpi?.kpi_name?.toLowerCase().includes(q) ||
           obs.employee_profile?.full_name?.toLowerCase().includes(q) ||
           obs.employee_profile?.employee_code?.toLowerCase().includes(q) ||
-          obs.created_by_profile?.full_name?.toLowerCase().includes(q);
+          obs.created_by_profile?.full_name?.toLowerCase().includes(q) ||
+          (obs as any).ticket_number?.toLowerCase().includes(q);
         if (!match) return false;
       }
       return true;
@@ -172,6 +173,7 @@ export default function ObservationsOverview() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-24">Ticket #</TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Employee</TableHead>
                   <TableHead>KRA / KPI</TableHead>
@@ -188,6 +190,7 @@ export default function ObservationsOverview() {
                   const StIcon = st.icon;
                   return (
                     <TableRow key={obs.id}>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{(obs as any).ticket_number || '—'}</TableCell>
                       <TableCell className="font-medium max-w-[200px] truncate">{obs.title}</TableCell>
                       <TableCell>
                         <div className="text-sm">{obs.employee_profile?.full_name || '—'}</div>
