@@ -1,76 +1,65 @@
 
 
-# Prominent Org KPI + Data Owner Badge for Reviewers
+# Frequency Indicator Badges for Bi-Monthly and Quarterly KPIs
 
 ## Problem
-Currently, org-level KPIs are only indicated by a tiny scope icon (Building2/Users/User) with a tooltip in the KPI table. Reviewers at the next level have no clear, at-a-glance indicator that a KPI's data was entered by a designated Data Owner, nor who that person is.
+Daily KPIs already show a "Daily" badge indicator across all dashboards and review views, but Bi-Monthly and Quarterly KPIs have no visible frequency indicator. Reviewers and employees cannot quickly identify which KPIs follow multi-month cycles without opening the KPI details.
 
 ## Solution
-Add a visible, colored badge on org-level KPIs across the dashboard, review panels, and mobile cards showing:
-- **"Org KPI"** label with scope context
-- **"Data by [Owner Name]"** showing who entered the value
+Add compact frequency badges (similar to the existing "Daily" badge) for Bi-Monthly and Quarterly KPIs across all views:
+- **KPI Details Table** (desktop): Show a frequency badge next to the KRA name (like the existing `DailyBadge`)
+- **KPI Header Section** (review panel): Show the frequency and current cycle label in the badges row
+- **Mobile KPI Card** (review): Show a compact frequency badge next to the category
+- **Dashboard Mobile KPI Card**: Show a compact frequency badge
 
-This information will be sourced from the existing `entered_by` field on `org_kpi_values` (which stores the data owner's name).
+The badges will display:
+- Bi-Monthly: "Bi-Monthly" badge in a distinct color
+- Quarterly: "Quarterly" badge in a distinct color
+- Optionally show the cycle label (e.g., "Jan-Feb", "Q1") for additional context
 
 ## Changes
 
-### 1. Expand `orgKpiValuesMap` to include `entered_by`
-**Files**: `src/pages/Dashboard.tsx`, `src/components/review/EmployeeScorecard.tsx`, `src/components/review/UnifiedScorecard.tsx`, `src/components/review/AuditScorecard.tsx`, `src/components/review/ManagementScorecard.tsx`
+### 1. `src/components/review/KpiDetailsTable.tsx`
+- Add frequency badges for Bi-Monthly and Quarterly KPIs next to the KRA name (alongside the existing `DailyBadge`)
+- Include the cycle label using `getCycleLabel()` from frequencyUtils
 
-- Update the map type from `{ achieved_value, data_source }` to `{ achieved_value, data_source, entered_by }` 
-- Include the `entered_by` field when building the lookup map
+### 2. `src/components/review/KpiHeaderSection.tsx`
+- Add a frequency badge in the badges row for Bi-Monthly and Quarterly KPIs
+- Show the cycle period (e.g., "Bi-Monthly: Jan-Feb" or "Quarterly: Q1")
 
-### 2. Update `getOrgKpiValue` return type
-**File**: `src/components/review/KpiDetailsTable.tsx`
+### 3. `src/components/review/MobileKpiCard.tsx`
+- Add frequency badge next to the existing "Daily" badge for Bi-Monthly and Quarterly KPIs
 
-- Extend the `getOrgKpiValue` prop type to include `entered_by: string | null`
+### 4. `src/components/dashboard/MobileKpiCard.tsx`
+- Add frequency badge in the category/status row for Bi-Monthly and Quarterly KPIs
 
-### 3. Add Org KPI badge to `KpiDetailsTable.tsx`
-In the KRA/KPI name column, below the existing content, show a compact badge row for org-level KPIs:
-- A teal/indigo "Org KPI" badge with the scope (Org/Dept/Individual)
-- A secondary badge: "Data by [entered_by name]" when available
-
-### 4. Add Org KPI badge to `KpiHeaderSection.tsx`
-In the review panel header (shown when a reviewer opens a KPI for detailed review):
-- Add a prominent badge row below the existing badges showing "Organization KPI" and "Data entered by [Name]"
-
-### 5. Add Org KPI badge to `MobileKpiCard.tsx`
-- Update the `getOrgKpiValue` prop type to include `entered_by`
-- Show a compact badge below the category pill for org-level KPIs
-
-### 6. Update `DOCUMENTATION.md`
-- Document the org KPI data owner visibility feature
+### 5. `DOCUMENTATION.md`
+- Document the frequency indicator badges
 
 ## Technical Details
 
 | File | Change |
 |---|---|
-| `src/pages/Dashboard.tsx` | Include `entered_by` in orgKpiValuesMap |
-| `src/components/review/EmployeeScorecard.tsx` | Include `entered_by` in orgKpiValuesMap |
-| `src/components/review/UnifiedScorecard.tsx` | Include `entered_by` in orgKpiValuesMap |
-| `src/components/review/AuditScorecard.tsx` | Include `entered_by` in orgKpiValuesMap |
-| `src/components/review/ManagementScorecard.tsx` | Include `entered_by` in orgKpiValuesMap |
-| `src/components/review/KpiDetailsTable.tsx` | Update prop type, add org KPI + data owner badges |
-| `src/components/review/KpiHeaderSection.tsx` | Add org KPI badge with data owner name to review panel |
-| `src/components/dashboard/MobileKpiCard.tsx` | Update prop type, add org KPI badge |
+| `src/components/review/KpiDetailsTable.tsx` | Add Bi-Monthly/Quarterly badges next to DailyBadge in KRA/KPI column |
+| `src/components/review/KpiHeaderSection.tsx` | Add frequency + cycle label badge in header badges row |
+| `src/components/review/MobileKpiCard.tsx` | Add frequency badge alongside Daily badge |
+| `src/components/dashboard/MobileKpiCard.tsx` | Add frequency badge in category row |
 | `DOCUMENTATION.md` | Document feature |
 
-## Visual Example
+## Visual Examples
 
-In the KPI table row, the KRA/KPI column will show:
-
+**Desktop KPI Table Row:**
 ```text
-Revenue Growth (KRA name)
-Quarterly revenue target (KPI name)
-[Org KPI - Organization]  [Data by: John Smith]
+Revenue Growth [Bi-Monthly]    or    Revenue Growth [Quarterly]
+Quarterly revenue target               Quarterly revenue target
 ```
 
-In the review panel header:
-
+**Review Panel Header:**
 ```text
-[Sales] [Approved] [January 2026] [10%] [Timeline]
-[Building icon] Organization KPI  |  Data entered by: John Smith
-Revenue Growth
-Quarterly revenue target
+[Sales] [Approved] [January 2026] [10%]  [Bi-Monthly: Jan-Feb]  [Timeline]
 ```
 
+**Mobile Card:**
+```text
+[*] Sales  [Bi-Monthly]  [KRA Set]
+```
