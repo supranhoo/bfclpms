@@ -86,6 +86,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'Import Data', icon: Upload, path: '/admin/import', roles: ['admin'] },
     { title: 'System Settings', icon: Settings, path: '/admin/settings', roles: ['admin'] },
     { title: 'Audit Logs', icon: History, path: '/audit-logs', roles: ['admin'] },
+    { title: 'Observations', icon: Eye, path: '/admin/observations', roles: ['admin'] },
     { title: 'Email Logs', icon: Mail, path: '/admin/email-logs', roles: ['admin'] },
   ],
   dataEntry: [
