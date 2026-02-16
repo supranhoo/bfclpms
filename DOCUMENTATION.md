@@ -3444,4 +3444,36 @@ This ensures DB triggers using `net.http_post` (which send the 208-char JWT) can
 
 ---
 
+### Post-Propagation Edit Lock (v1.38.0)
+
+**Problem:** After a data owner clicked "Save & Propagate", values were pushed to employee scorecards but the org KPI entry card remained fully editable. No lock prevented further edits, no confirmation was shown before propagation, and the `org_kpi_values.status` column was never set to `'propagated'`.
+
+**Solution:**
+
+1. **Status Update on Propagation**: After successful propagation, `org_kpi_values.status` is set to `'propagated'` for all matching rows. The `org-kpi-values` query cache is invalidated so the UI reflects the new status immediately.
+
+2. **Post-Propagation Edit Lock**: Once a KPI's status is `'propagated'`:
+   - **Data owners (non-admin)**: All input fields (achieved value, remarks, evidence) become disabled/read-only. A lock banner displays: "Locked after propagation. Contact admin to unlock." Save and Save & Propagate buttons are hidden.
+   - **Admins**: See an "Unlock" button that resets the status to `'entered'`, allowing data owners to edit and re-propagate. Unlock actions are logged in the audit trail.
+
+3. **Confirmation Dialog Before Propagation**: An `AlertDialog` warns: "This will update scores for X employee scorecards. The entry will be locked for editing afterward." Users must click "Confirm & Propagate" to proceed.
+
+**User Experience Flow:**
+```
+Data Owner clicks "Save & Propagate"
+  → Confirmation dialog shows affected employee count + lock warning
+  → [Confirm & Propagate]
+  → Values propagated → status set to 'propagated' → inputs locked
+  → Data Owner sees lock banner with read-only fields
+  → Admin clicks "Unlock" → status reset to 'entered' → inputs enabled
+```
+
+| File | Action |
+|---|---|
+| `src/hooks/usePropagateOrgKpiValue.ts` | MODIFIED: Added `org-kpi-values` cache invalidation |
+| `src/components/admin/OrgKpiEntryCard.tsx` | MODIFIED: Added `isAdmin`, `onUnlock` props; locked state UI; `AlertDialog` confirmation before propagation; admin unlock button |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | MODIFIED: Sets `org_kpi_values.status` to `'propagated'` after propagation; passes `isAdmin` and `onUnlock` handler to cards; unlock resets status to `'entered'` with audit log |
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
