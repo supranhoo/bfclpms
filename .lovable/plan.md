@@ -1,82 +1,44 @@
 
 
-# High-to-Low and Low-to-High Sort for "Performance by Category"
+# Toggle-Style Sort for "Performance by Category"
 
-## Before
-The chart has two simple toggle buttons: **[Weightage]** and **[Score]**. Clicking either always sorts in descending (high-to-low) order. There is no way to reverse the sort direction.
+## Problem
+The current sort controls use four separate buttons ("Wt. High-Low", "Wt. Low-High", "Score High-Low", "Score Low-High"), which takes up space. The user wants a compact toggle pattern matching the KPI sort control (as shown in the screenshot): two buttons -- "Weightage" and "Score" -- where clicking the active one toggles direction, with an arrow indicator showing current direction.
+
+## Solution
+Replace the four buttons with two toggle buttons that show direction arrows, matching the existing `KpiSortControl` pattern:
+- **Weightage** button with up/down arrow
+- **Score** button with up/down arrow
+- Clicking an inactive button activates it (defaults to descending)
+- Clicking the active button toggles the direction
+
+## Visual Result
 
 ```text
-                                    [Weightage] [Score]
-Sales (40%)        ████████████████████  80%
-Operations (30%)   ██████████████       65%
-HR (20%)           ████████             40%
-Finance (10%)      ██████               30%
+Sort:  [Weightage v]   Score ^v
 ```
+
+Active button gets a filled/secondary style with directional arrow. Inactive button shows a neutral double-arrow icon.
 
 ## Changes
 
-### 1. Update `CategorySortBy` type
-**File**: `src/components/dashboard/CategoryScoreChart.tsx`
+### 1. `src/components/dashboard/CategoryScoreChart.tsx`
+- Replace four buttons with two toggle buttons using ArrowUp/ArrowDown/ArrowUpDown icons from lucide-react
+- Add "Sort:" label prefix
+- Clicking toggles direction when already active, or activates with descending default
+- Keep the `CategorySortBy` type and `onSortChange` prop unchanged
 
-Change the type from `'weightage' | 'score'` to `'weightage-desc' | 'weightage-asc' | 'score-desc' | 'score-asc'`, with `'score-desc'` as the default.
+### 2. `src/pages/reports/PerformanceReport.tsx`
+- Update the inline sort buttons in the "Performance by Category" card to match the same two-button toggle pattern
 
-### 2. Update sort toggle buttons
-Replace the two buttons with four compact buttons grouped visually:
-
-```text
-[Weightage ↓] [Weightage ↑] [Score ↓] [Score ↑]
-```
-
-The labels will be concise:
-- "Wt. High-Low" / "Wt. Low-High"
-- "Score High-Low" / "Score Low-High"
-
-### 3. Update internal sorting logic
-The `sortedData` memo will handle all four directions:
-- `weightage-desc`: high to low by weightage
-- `weightage-asc`: low to high by weightage
-- `score-desc`: high to low by score
-- `score-asc`: low to high by score
-
-### 4. Update all consumers
-**Files**: `Dashboard.tsx`, `UnifiedScorecard.tsx`, `EmployeeScorecard.tsx`, `ManagementScorecard.tsx`, `AuditScorecard.tsx`
-
-Update the `categorySortBy` state type from `'weightage' | 'score'` to the new `CategorySortBy` type with default `'score-desc'`.
-
-### 5. Update `PerformanceReport.tsx`
-Update the inline sort buttons and sorting logic to match the same four-option pattern.
-
-### 6. Update `DOCUMENTATION.md`
-
-## After
-
-```text
-                    [Wt. High-Low] [Wt. Low-High] [Score High-Low] [Score Low-High]
-Sales (40%)        ████████████████████  80%
-Operations (30%)   ██████████████       65%
-HR (20%)           ████████             40%
-Finance (10%)      ██████               30%
-```
-
-Clicking "Wt. Low-High" reverses to:
-
-```text
-Finance (10%)      ██████               30%
-HR (20%)           ████████             40%
-Operations (30%)   ██████████████       65%
-Sales (40%)        ████████████████████  80%
-```
+### 3. `DOCUMENTATION.md`
+- Update the sort control description
 
 ## Technical Details
 
 | File | Change |
 |---|---|
-| `src/components/dashboard/CategoryScoreChart.tsx` | Update type to 4 options, update buttons, update sorting logic |
-| `src/pages/Dashboard.tsx` | Update state type and default |
-| `src/components/review/UnifiedScorecard.tsx` | Update state type and default |
-| `src/components/review/EmployeeScorecard.tsx` | Update state type and default |
-| `src/components/review/ManagementScorecard.tsx` | Update state type and default |
-| `src/components/review/AuditScorecard.tsx` | Update state type and default |
-| `src/pages/reports/PerformanceReport.tsx` | Update inline sort buttons and logic |
-| `DOCUMENTATION.md` | Document the directional sort options |
+| `src/components/dashboard/CategoryScoreChart.tsx` | Replace 4 buttons with 2 toggle buttons + direction arrows |
+| `src/pages/reports/PerformanceReport.tsx` | Same toggle pattern for its inline sort buttons |
+| `DOCUMENTATION.md` | Update sort control docs |
 
