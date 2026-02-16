@@ -79,9 +79,9 @@ export function OrgKpiOwnerDialog({
 
         <div className="space-y-4">
           {/* KPI Info */}
-          <div className="bg-muted/50 p-3 rounded-lg text-sm">
-            <p className="font-medium">{kraName}</p>
-            <p className="text-muted-foreground">{kpiName}</p>
+          <div className="bg-muted/50 p-3 rounded-lg text-sm break-words">
+            <p className="font-medium break-words">{kraName}</p>
+            <p className="text-muted-foreground break-words">{kpiName}</p>
           </div>
 
           {/* Current Owners */}
