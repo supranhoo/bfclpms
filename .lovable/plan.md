@@ -1,110 +1,70 @@
 
 
-# Add Ticket Numbers to Queries and Observations
+# Add Excel Export for All Observations
 
 ## Overview
 
-Add auto-generated, human-readable ticket numbers to both Queries and Observations. Queries will use the format `Q-0001`, `Q-0002`, etc. Observations will use `OBS-0001`, `OBS-0002`, etc. These will be generated automatically by the database and displayed across all relevant UI locations.
+Add a "Download Report" button to the Observations Overview page that exports the currently filtered observations to an Excel file using the existing `xlsx` library.
 
----
+## Changes
 
-## Database Changes
+### File: `src/pages/admin/ObservationsOverview.tsx`
 
-### 1. Add `ticket_number` columns and sequences
+1. **Import** `Button` from `@/components/ui/button`, `Download` from `lucide-react`, and `* as XLSX from 'xlsx'`
+2. **Add an export function** `handleExportExcel` that maps the current `filtered` array to Excel rows with columns:
+   - Ticket #
+   - Title
+   - Description
+   - Employee Name
+   - Employee Code
+   - KRA
+   - KPI
+   - Type (Positive/Concern/Neutral)
+   - Observer Name
+   - Observer Role
+   - Status
+   - Date Created
+   - Date Updated
+3. **Add the Download button** next to the search bar in the filters section, using the same style as other export buttons (`variant="outline" size="sm"`)
+4. The export respects the current filters (status tab + search), so admins can export a subset
+5. File name: `Observations_Report_YYYY-MM-DD.xlsx`
 
-Create two PostgreSQL sequences and add a `ticket_number` column (with auto-generated default) to both tables:
+### File: `DOCUMENTATION.md`
 
-- `kpi_queries.ticket_number` -- format: `Q-XXXXX` (zero-padded, e.g., Q-00001)
-- `kpi_observations.ticket_number` -- format: `OBS-XXXXX` (e.g., OBS-00001)
+Update to mention the observation export capability.
 
-The sequences ensure globally unique, monotonically increasing numbers. A `UNIQUE` constraint prevents duplicates.
+## Technical Detail
 
-### 2. Backfill existing records
+The export function follows the same pattern as `OrgKpiBulkExport`:
 
-Assign ticket numbers to all existing queries and observations ordered by `created_at` so historical data is also numbered.
+```typescript
+const handleExportExcel = () => {
+  const rows = filtered.map(obs => ({
+    'Ticket #': (obs as any).ticket_number || '',
+    'Title': obs.title,
+    'Description': obs.description || '',
+    'Employee': obs.employee_profile?.full_name || '',
+    'Employee Code': obs.employee_profile?.employee_code || '',
+    'KRA': obs.kpi?.kra_name || '',
+    'KPI': obs.kpi?.kpi_name || '',
+    'Type': typeConfig[obs.observation_type]?.label || obs.observation_type,
+    'Observer': obs.created_by_profile?.full_name || '',
+    'Observer Role': obs.observer_role,
+    'Status': statusConfig[obs.status]?.label || obs.status,
+    'Created': format(new Date(obs.created_at), 'dd MMM yyyy'),
+    'Last Updated': format(new Date(obs.updated_at), 'dd MMM yyyy'),
+  }));
 
----
-
-## UI Changes -- Where Ticket Numbers Will Appear
-
-| Location | File | Display |
-|---|---|---|
-| Query Inbox -- row items | `InboxDetailSheet.tsx`, `InboxRowItem.tsx` | Show ticket # as a small badge next to the title |
-| Query Inbox -- detail sheet | `InboxDetailSheet.tsx` | Show ticket # prominently in the header |
-| Query History dialog | `QueryHistoryDialog.tsx` | Replace `Query #1, #2` index labels with actual ticket numbers |
-| Query Report table | `QueryReport.tsx` | Add a "Ticket #" column |
-| Observation cards | `ObservationCard.tsx` | Show ticket # badge in the header row |
-| Observations Overview (admin) | `ObservationsOverview.tsx` | Add a "Ticket #" column to the table |
-| Inbox utils (search) | `inboxUtils.ts` | Include ticket number in search matching |
-
----
-
-## Technical Details
-
-### Migration SQL
-
-```sql
--- Query ticket numbers
-CREATE SEQUENCE public.query_ticket_seq START 1;
-
-ALTER TABLE public.kpi_queries
-ADD COLUMN ticket_number text
-  UNIQUE
-  DEFAULT 'Q-' || lpad(nextval('public.query_ticket_seq')::text, 5, '0');
-
--- Observation ticket numbers
-CREATE SEQUENCE public.observation_ticket_seq START 1;
-
-ALTER TABLE public.kpi_observations
-ADD COLUMN ticket_number text
-  UNIQUE
-  DEFAULT 'OBS-' || lpad(nextval('public.observation_ticket_seq')::text, 5, '0');
-
--- Backfill existing queries
-WITH numbered AS (
-  SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn
-  FROM public.kpi_queries WHERE ticket_number IS NULL
-)
-UPDATE public.kpi_queries q
-SET ticket_number = 'Q-' || lpad(n.rn::text, 5, '0')
-FROM numbered n WHERE q.id = n.id;
-
--- Backfill existing observations
-WITH numbered AS (
-  SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn
-  FROM public.kpi_observations WHERE ticket_number IS NULL
-)
-UPDATE public.kpi_observations o
-SET ticket_number = 'OBS-' || lpad(n.rn::text, 5, '0')
-FROM numbered n WHERE o.id = n.id;
-
--- Advance sequences past existing records
-SELECT setval('public.query_ticket_seq',
-  COALESCE((SELECT COUNT(*) FROM public.kpi_queries), 0) + 1, false);
-SELECT setval('public.observation_ticket_seq',
-  COALESCE((SELECT COUNT(*) FROM public.kpi_observations), 0) + 1, false);
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 12 }, { wch: 30 }, { wch: 40 }, { wch: 20 }, { wch: 14 },
+    { wch: 25 }, { wch: 30 }, { wch: 10 }, { wch: 20 }, { wch: 14 },
+    { wch: 14 }, { wch: 14 }, { wch: 14 },
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Observations');
+  XLSX.writeFile(wb, `Observations_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+};
 ```
 
-### Frontend File Changes
-
-| File | Change |
-|---|---|
-| `src/lib/inboxUtils.ts` | Add `ticketNumber` field to `InboxItem` type; include in search |
-| `src/pages/QueryInbox.tsx` | Map `ticket_number` into query data and inbox items |
-| `src/components/inbox/InboxRowItem.tsx` | Show ticket # badge before title |
-| `src/components/inbox/InboxDetailSheet.tsx` | Show ticket # in header |
-| `src/components/inbox/MobileInboxList.tsx` | Show ticket # in mobile card |
-| `src/components/review/QueryHistoryDialog.tsx` | Use `ticket_number` instead of index-based `Query #N` |
-| `src/components/review/ObservationCard.tsx` | Show ticket # badge in header row |
-| `src/pages/admin/ObservationsOverview.tsx` | Add "Ticket #" column, include in search |
-| `src/pages/reports/QueryReport.tsx` | Add "Ticket #" column |
-| `src/hooks/useKpiObservations.ts` | Ensure `ticket_number` is included in selects |
-| `src/hooks/useQueryWorkflow.ts` | Ensure `ticket_number` is included in selects |
-| `DOCUMENTATION.md` | Document the ticket number feature |
-
-### Data Flow
-
-- Both tables already use `SELECT *` in most hooks, so `ticket_number` will be automatically included in fetched data after the migration
-- The `InboxItem` type in `inboxUtils.ts` will get an optional `ticketNumber` field populated from the query/notification metadata
-- Ticket numbers are immutable once assigned -- no editing or reassignment
-
+No database changes are needed.
