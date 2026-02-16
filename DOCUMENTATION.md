@@ -3412,7 +3412,7 @@ This ensures DB triggers using `net.http_post` (which send the 208-char JWT) can
 | File | Action |
 |---|---|
 | `src/pages/admin/OrgKpiDataEntry.tsx` | REWRITE: Card layout, progress, copy, import/export, owner tab |
-| `src/components/admin/OrgKpiEntryCard.tsx` | NEW: Individual KPI entry card with auto-save |
+| `src/components/admin/OrgKpiEntryCard.tsx` | NEW: Individual KPI entry card with ref-based auto-save (uses `useRef` to avoid stale closures in debounced saves) |
 | `src/components/admin/OrgKpiProgressBar.tsx` | NEW: Progress bar with category breakdown |
 | `src/components/admin/OrgKpiScopedEntryTable.tsx` | NEW: Collapsible mini-table for dept/employee scope |
 | `src/components/admin/OrgKpiAuditLog.tsx` | NEW: History popover timeline |

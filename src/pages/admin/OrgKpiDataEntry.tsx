@@ -141,9 +141,23 @@ export default function OrgKpiDataEntry() {
       const catId = kpi.category_id;
       const cat = categoryMap.get(catId) || { total: 0, entered: 0 };
       cat.total++;
-      const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
-      const val = existingValuesMap.get(key);
-      if (val?.achieved_value !== null && val?.achieved_value !== undefined) {
+
+      const scope = (kpi as any).org_level_scope || 'organization';
+      let isEntered = false;
+
+      if (scope === 'organization') {
+        const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+        const val = existingValuesMap.get(key);
+        isEntered = val?.achieved_value !== null && val?.achieved_value !== undefined;
+      } else {
+        // For dept/employee-scoped KPIs, check if ANY scoped row has a value
+        const prefix = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||`;
+        isEntered = Array.from(existingValuesMap.entries()).some(([k, v]) =>
+          k.startsWith(prefix) && v.achieved_value !== null && v.achieved_value !== undefined
+        );
+      }
+
+      if (isEntered) {
         enteredKpis++;
         cat.entered++;
       }
