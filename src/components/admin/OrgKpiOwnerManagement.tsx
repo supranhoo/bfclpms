@@ -115,7 +115,7 @@ export function OrgKpiOwnerManagement({ kpiDefinitions }: OrgKpiOwnerManagementP
             open={expandedCats.has(catId)}
             onOpenChange={() => toggleCat(catId)}
           >
-            <Card>
+            <Card className="min-w-0 overflow-hidden">
               <CollapsibleTrigger asChild>
                 <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors pb-3">
                   <div className="flex items-center justify-between">
@@ -166,10 +166,10 @@ export function OrgKpiOwnerManagement({ kpiDefinitions }: OrgKpiOwnerManagementP
                         const key = `${kpi.categoryId}||${kpi.kraName}||${kpi.kpiName}`;
                         const kpiOwners = ownerLookup.get(key) || [];
                         return (
-                          <div key={key} className="flex items-center justify-between p-2 border rounded-lg">
+                          <div key={key} className="flex items-center justify-between p-2 border rounded-lg min-w-0 overflow-hidden">
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{kpi.kpiName}</p>
-                              <p className="text-xs text-muted-foreground truncate">{kpi.kraName}</p>
+                              <p className="text-sm font-medium whitespace-pre-wrap break-words">{kpi.kpiName}</p>
+                              <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words">{kpi.kraName}</p>
                             </div>
                             <div className="flex items-center gap-2">
                               {kpiOwners.length > 0 ? (
