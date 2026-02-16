@@ -40,6 +40,7 @@ const TemplateBundles = lazy(() => import("./pages/admin/TemplateBundles"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const PIPManagement = lazy(() => import("./pages/admin/PIPManagement"));
 const EmailLogs = lazy(() => import("./pages/admin/EmailLogs"));
+const ObservationsOverview = lazy(() => import("./pages/admin/ObservationsOverview"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -242,6 +243,11 @@ const App = () => (
                 <Route path="/admin/pip" element={
                   <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>
                     <PIPManagement />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/observations" element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <ObservationsOverview />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/email-logs" element={

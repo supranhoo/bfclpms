@@ -2190,7 +2190,8 @@ src/
 │   │   ├── ImportData.tsx
 │   │   ├── SystemSettings.tsx
 │   │   ├── PIPManagement.tsx
-│   │   └── OrgKpiDataEntry.tsx
+│   │   ├── OrgKpiDataEntry.tsx
+│   │   └── ObservationsOverview.tsx  # Admin view of all observations
 │   │
 │   └── reports/               # Report pages
 │       ├── ReportsHub.tsx
