@@ -3405,6 +3405,7 @@ This ensures DB triggers using `net.http_post` (which send the 208-char JWT) can
 
 **Phase 5 — Enhanced Owner Management:**
 - New "Data Owners" tab (admin only) on the data entry page
+- **Shows ALL org-level KPIs** regardless of employee mapping (uses `useOrgLevelKpis` hook instead of the employee-filtered `useOrgLevelKpisWithEmployees`), so admins can assign data owners even before KPIs are assigned to employees
 - Bulk assign: assign a user to ALL KPIs in a category at once
 - Per-category collapsible panels showing owner avatars and assignment counts
 - Uses existing `org_kpi_data_owners` table (no new tables)

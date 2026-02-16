@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKraCategories, useDepartments, useProfiles } from '@/hooks/useOrganization';
 import { useOrgKpiValues, useBulkUpsertOrgKpiValues, OrgKpiValue } from '@/hooks/useOrgKpiValues';
-import { useOrgLevelKpisWithEmployees } from '@/hooks/useOrgLevelKpis';
+import { useOrgLevelKpisWithEmployees, useOrgLevelKpis } from '@/hooks/useOrgLevelKpis';
 import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
 import { usePropagateOrgKpiValue } from '@/hooks/usePropagateOrgKpiValue';
 import { useBatchInsertAuditLogs } from '@/hooks/useOrgKpiAuditLog';
@@ -49,6 +49,8 @@ export default function OrgKpiDataEntry() {
 
   // Data queries - use the new hook that filters by employee mapping
   const { data: orgLevelData, isLoading: kpisLoading } = useOrgLevelKpisWithEmployees(selectedPeriod, selectedYear);
+  // ALL org-level KPIs (unfiltered) for Data Owners tab
+  const { data: allOrgLevelKpis } = useOrgLevelKpis(selectedPeriod, selectedYear);
   const orgLevelKpis = useMemo(() => orgLevelData?.kpis?.map(k => k.kpi) || [], [orgLevelData]);
   const employeeCountMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -494,7 +496,7 @@ export default function OrgKpiDataEntry() {
     try { await insertAuditLogs.mutateAsync(auditEntries); } catch { /* non-blocking */ }
   };
 
-  // KPI definitions for export/import/owner management
+  // KPI definitions for export/import
   const kpiDefinitions = useMemo(() => {
     return ownershipFilteredKpis.map(kpi => ({
       categoryId: kpi.category_id,
@@ -504,6 +506,18 @@ export default function OrgKpiDataEntry() {
       kpiName: kpi.kpi_name,
     }));
   }, [ownershipFilteredKpis]);
+
+  // ALL org-level KPI definitions for owner management (no employee filter)
+  const allKpiDefinitions = useMemo(() => {
+    if (!allOrgLevelKpis) return [];
+    return allOrgLevelKpis.map(kpi => ({
+      categoryId: kpi.category_id,
+      categoryName: kpi.kra_categories?.name || '',
+      categoryColor: kpi.kra_categories?.color || '#6B7280',
+      kraName: kpi.kra_name,
+      kpiName: kpi.kpi_name,
+    }));
+  }, [allOrgLevelKpis]);
 
   // Export data
   const exportData = useMemo(() => {
@@ -668,7 +682,7 @@ export default function OrgKpiDataEntry() {
 
       {/* Owner Management Tab */}
       {activeTab === 'owners' && isAdmin && (
-        <OrgKpiOwnerManagement kpiDefinitions={kpiDefinitions} />
+        <OrgKpiOwnerManagement kpiDefinitions={allKpiDefinitions} />
       )}
 
       {/* Suggestions Tab */}
