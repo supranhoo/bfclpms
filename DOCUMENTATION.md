@@ -1976,23 +1976,26 @@ Test emails from the UI work because they carry a real user JWT validated via `s
 
 **Smart Notification Navigation (Deep-Link):**
 
-Clicking a notification row in the Inbox navigates directly to the relevant page. The centralized `getNotificationNavigationPath()` utility in `src/lib/inboxUtils.ts` maps each notification type to a target route. For reviewer-targeted notifications (e.g., `kpi_submitted`, `kpi_ready_for_audit`), the URL includes an `employee` query parameter so the Dashboard auto-selects the correct employee and opens their KPI in the reviewer scorecard.
+Clicking a notification row in the Inbox navigates directly to the relevant page. The centralized `getNotificationNavigationPath(item, currentUserId?)` utility in `src/lib/inboxUtils.ts` maps each notification type to a target route. The optional `currentUserId` parameter enables context-aware routing: if the notification is about the current user's own KPI, it navigates to self-view; if it's about another employee's KPI (detected via `metadata.employee_id`), it builds a reviewer deep-link with the employee context.
 
 | Notification Type | Target Route |
 |---|---|
-| `kpi_submitted` | `/dashboard?view=team&employee={relatedUserId}&kpi={kpiId}` |
-| `kpi_approved` / `kpi_finalized` / `manager_rejected` / `admin_status_step_back` / `admin_status_change` / `admin_data_entry` | `/dashboard?kpi={kpiId}` (employee's own KPI) |
-| `kpi_ready_for_audit` | `/dashboard?view=audit&employee={relatedUserId}&kpi={kpiId}` |
-| `kpi_ready_for_management` | `/dashboard?view=management&employee={relatedUserId}&kpi={kpiId}` |
+| `kpi_submitted` | `/dashboard?view=team&employee={employeeId}&kpi={kpiId}` |
+| `kpi_approved` / `kpi_finalized` / `manager_rejected` / `admin_status_step_back` | `/dashboard?kpi={kpiId}` (employee's own KPI) |
+| `admin_status_change` / `admin_data_entry` / `admin_data_override` | `/dashboard?kpi={kpiId}` (self) or `/dashboard?view=team&employee={employeeId}&kpi={kpiId}` (if manager-targeted with `metadata.employee_id`) |
+| `kpi_ready_for_audit` | `/dashboard?view=audit&employee={employeeId}&kpi={kpiId}` |
+| `kpi_ready_for_management` | `/dashboard?view=management&employee={employeeId}&kpi={kpiId}` |
 | `kra_assigned` / `kra_batch_assigned` / `period_locked` | `/dashboard` |
-| `query_raised` / `query_resolved` / `query_responded` / `query_response_submitted` / `query_resolved_fyi` | `/dashboard?kpi={kpiId}&panel=queryHistory` |
-| `observation_raised` / `observation_reply` / `observation_resolved` | `/dashboard?view=team&employee={relatedUserId}&kpi={kpiId}` (if employee context available) |
+| `query_raised` / `query_resolved` / `query_responded` / `query_response_submitted` / `query_resolved_fyi` | `/dashboard?kpi={kpiId}&panel=queryHistory` (self) or `/dashboard?view=team&employee={employeeId}&kpi={kpiId}&panel=queryHistory` (reviewer) |
+| `observation_raised` / `observation_reply` / `observation_resolved` | `/dashboard?kpi={kpiId}` (self-targeted) or `/dashboard?view=team&employee={employeeId}&kpi={kpiId}` (reviewer-targeted) |
 | `pip_initiated` / `pip_completed` / `pip_milestone_reminder` | `/admin/pip` |
 | `password_rollout` | `/` (home) |
-| `rollback_requested` | `/dashboard?view=team&employee={relatedUserId}&kpi={kpiId}` |
+| `rollback_requested` | `/dashboard?view=team&employee={employeeId}&kpi={kpiId}` (reviewer) or `/dashboard?kpi={kpiId}` (self) |
 | `rollback_approved` / `rollback_rejected` | `/dashboard?kpi={kpiId}` |
 
-**Dashboard Employee Deep-Link Handler:** When the Dashboard receives `?employee={id}&kpi={kpiId}`, it fetches the employee's profile, switches to the appropriate view mode, and calls `handleSelectEmployee()` to open `UnifiedScorecard` with `autoOpenKpiId` set — navigating directly to the exact KPI.
+**Dashboard Employee Deep-Link Handler:** When the Dashboard receives `?employee={id}&kpi={kpiId}`, it fetches the employee's profile, switches to the appropriate view mode, and calls `handleSelectEmployee()` to open `UnifiedScorecard` with `autoOpenKpiId` set — navigating directly to the exact KPI. **Period Auto-Switch:** When a self-view deep-link KPI isn't found in the currently selected period, the Dashboard automatically looks up the KPI's review period from all loaded KPIs and switches to it, ensuring the deep-link resolves correctly even across period boundaries.
+
+**Snoozed Item Enrichment:** Snoozed notification items receive the same profile/metadata enrichment as regular notifications (fromUser, kpiName, kraName), ensuring navigation paths work correctly when items are unsnoozed.
 
 **Enriched Notification Detail Sheet:** The `InboxDetailSheet` now displays KPI name, KRA name, and the "From" user for notifications. These fields are extracted from the notification's `metadata` JSON (`kra_name`, `kpi_name`, `employee_name`) and resolved via a batch profile lookup on `related_user_id`. When `metadata.from_status` and `metadata.to_status` are present, a visual workflow status transition is displayed (e.g., `[Self Review] → [Manager Review]`) using styled badges and an arrow icon. The `getStatusLabel()` helper in `inboxUtils.ts` converts internal status codes to human-readable labels.
 

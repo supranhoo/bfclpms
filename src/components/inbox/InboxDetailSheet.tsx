@@ -33,7 +33,7 @@ export function InboxDetailSheet({
   const isRecipient = item.toUser?.id === currentUserId;
   const isRaiser = item.fromUser?.id === currentUserId;
 
-  const navigationPath = getNotificationNavigationPath(item);
+  const navigationPath = getNotificationNavigationPath(item, currentUserId);
 
   const handleNavigate = () => {
     if (navigationPath && onNavigate) {

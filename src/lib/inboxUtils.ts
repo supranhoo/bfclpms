@@ -186,20 +186,22 @@ export function getItemSlaStatus(item: InboxItem): SlaStatus | null {
  * Get the navigation path for a notification or query item.
  * Returns null if no meaningful deep-link exists (fallback to detail sheet).
  */
-export function getNotificationNavigationPath(item: InboxItem): string | null {
+export function getNotificationNavigationPath(item: InboxItem, currentUserId?: string): string | null {
   if (item.type === 'query') {
     // Queries open detail sheet — no direct navigation
     return null;
   }
 
   const meta = item.metadata || {};
-  const employeeId = meta.employee_id || (item.fromUser?.id) || null;
+  const metaEmployeeId = meta.employee_id || null;
+  // Determine if this notification is about the current user's own KPI
+  const isSelfTargeted = currentUserId && (!metaEmployeeId || metaEmployeeId === currentUserId);
 
   // Helper to build dashboard URL with employee context for reviewer-targeted notifications
-  const buildEmployeeDeepLink = (view: string, kpiId?: string | null, extraParams?: string) => {
+  const buildEmployeeDeepLink = (view: string, empId: string, kpiId?: string | null, extraParams?: string) => {
     const params = new URLSearchParams();
     params.set('view', view);
-    if (employeeId) params.set('employee', employeeId);
+    params.set('employee', empId);
     if (kpiId) params.set('kpi', kpiId);
     if (extraParams) {
       const extra = new URLSearchParams(extraParams);
@@ -208,23 +210,46 @@ export function getNotificationNavigationPath(item: InboxItem): string | null {
     return `/dashboard?${params.toString()}`;
   };
 
+  // Helper for self-view KPI deep-link
+  const selfKpiLink = (kpiId?: string | null, panel?: string) => {
+    if (!kpiId) return '/dashboard';
+    const params = new URLSearchParams();
+    params.set('kpi', kpiId);
+    if (panel) params.set('panel', panel);
+    return `/dashboard?${params.toString()}`;
+  };
+
   switch (item.notificationType) {
     // KPI workflow transitions — reviewer receives these about another employee
     case 'kpi_submitted':
-      return buildEmployeeDeepLink('team', item.kpiId);
+      return metaEmployeeId
+        ? buildEmployeeDeepLink('team', metaEmployeeId, item.kpiId)
+        : (item.fromUser?.id ? buildEmployeeDeepLink('team', item.fromUser.id, item.kpiId) : selfKpiLink(item.kpiId));
     case 'kpi_ready_for_audit':
-      return buildEmployeeDeepLink('audit', item.kpiId);
+      return metaEmployeeId
+        ? buildEmployeeDeepLink('audit', metaEmployeeId, item.kpiId)
+        : (item.fromUser?.id ? buildEmployeeDeepLink('audit', item.fromUser.id, item.kpiId) : selfKpiLink(item.kpiId));
     case 'kpi_ready_for_management':
-      return buildEmployeeDeepLink('management', item.kpiId);
+      return metaEmployeeId
+        ? buildEmployeeDeepLink('management', metaEmployeeId, item.kpiId)
+        : (item.fromUser?.id ? buildEmployeeDeepLink('management', item.fromUser.id, item.kpiId) : selfKpiLink(item.kpiId));
 
     // These are sent TO the employee about their own KPI — no employee param needed
     case 'kpi_approved':
     case 'kpi_finalized':
     case 'manager_rejected':
     case 'admin_status_step_back':
+      return selfKpiLink(item.kpiId);
+
+    // admin_status_change / admin_data_entry / admin_data_override:
+    // If meta.employee_id is present and differs from current user, it's for a manager viewing another employee's KPI
     case 'admin_status_change':
     case 'admin_data_entry':
-      return item.kpiId ? `/dashboard?kpi=${item.kpiId}` : '/dashboard';
+    case 'admin_data_override':
+      if (metaEmployeeId && !isSelfTargeted) {
+        return buildEmployeeDeepLink('team', metaEmployeeId, item.kpiId);
+      }
+      return selfKpiLink(item.kpiId);
 
     // KRA assignment — sent to the employee
     case 'kra_assigned':
@@ -236,16 +261,29 @@ export function getNotificationNavigationPath(item: InboxItem): string | null {
     case 'query_resolved':
     case 'query_responded':
     case 'query_response_submitted':
-    case 'query_resolved_fyi':
-      return item.kpiId ? `/dashboard?kpi=${item.kpiId}&panel=queryHistory` : '/dashboard';
+    case 'query_resolved_fyi': {
+      // If current user is NOT the employee who owns the KPI, build a reviewer deep-link
+      const queryEmployeeId = metaEmployeeId || item.fromUser?.id || null;
+      if (queryEmployeeId && !isSelfTargeted) {
+        return buildEmployeeDeepLink('team', queryEmployeeId, item.kpiId, 'panel=queryHistory');
+      }
+      return selfKpiLink(item.kpiId, 'queryHistory');
+    }
 
-    // Observations — reviewer receives these, need employee context
+    // Observations — context-aware: if sent TO the employee about their own KPI, use self view
     case 'observation_raised':
     case 'observation_reply':
-    case 'observation_resolved':
-      return item.kpiId && employeeId
-        ? buildEmployeeDeepLink('team', item.kpiId)
-        : (item.kpiId ? `/dashboard?kpi=${item.kpiId}` : '/dashboard');
+    case 'observation_resolved': {
+      if (isSelfTargeted) {
+        return selfKpiLink(item.kpiId);
+      }
+      // Reviewer viewing another employee's observation
+      const obsEmployeeId = metaEmployeeId || item.fromUser?.id || null;
+      if (obsEmployeeId && item.kpiId) {
+        return buildEmployeeDeepLink('team', obsEmployeeId, item.kpiId);
+      }
+      return selfKpiLink(item.kpiId);
+    }
 
     // Period events
     case 'period_locked':
@@ -262,13 +300,16 @@ export function getNotificationNavigationPath(item: InboxItem): string | null {
       return '/';
 
     // Rollback requests — reviewer receives these
-    case 'rollback_requested':
-      return item.kpiId && employeeId
-        ? buildEmployeeDeepLink('team', item.kpiId)
-        : (item.kpiId ? `/dashboard?kpi=${item.kpiId}` : '/dashboard');
+    case 'rollback_requested': {
+      const rbEmployeeId = metaEmployeeId || item.fromUser?.id || null;
+      if (rbEmployeeId && !isSelfTargeted && item.kpiId) {
+        return buildEmployeeDeepLink('team', rbEmployeeId, item.kpiId);
+      }
+      return selfKpiLink(item.kpiId);
+    }
     case 'rollback_approved':
     case 'rollback_rejected':
-      return item.kpiId ? `/dashboard?kpi=${item.kpiId}` : '/dashboard';
+      return selfKpiLink(item.kpiId);
 
     default:
       return null;

@@ -130,7 +130,7 @@ export function MobileInboxList({
                     )}
                     onClick={() => {
                       if (item.type === 'notification' && onNavigate) {
-                        const path = getNotificationNavigationPath(item);
+                        const path = getNotificationNavigationPath(item, currentUserId);
                         if (path) {
                           onNavigate(path);
                           return;

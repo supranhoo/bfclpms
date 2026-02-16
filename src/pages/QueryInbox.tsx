@@ -187,8 +187,11 @@ export default function QueryInbox() {
     notifications.forEach(n => {
       if (n.related_user_id) ids.add(n.related_user_id);
     });
+    snoozedNotifications.forEach(n => {
+      if (n.related_user_id) ids.add(n.related_user_id);
+    });
     return Array.from(ids);
-  }, [notifications]);
+  }, [notifications, snoozedNotifications]);
 
   const { data: relatedProfiles } = useQuery({
     queryKey: ['related-profiles', relatedUserIds],
@@ -242,22 +245,38 @@ export default function QueryInbox() {
     [notifications, relatedProfileMap]
   );
 
-  // Convert snoozed notifications to InboxItems
+  // Convert snoozed notifications to InboxItems (with same enrichment as regular notifications)
   const snoozedItems: InboxItem[] = useMemo(() =>
-    snoozedNotifications.map(n => ({
-      id: n.id,
-      type: 'notification' as const,
-      title: n.title,
-      message: n.message,
-      isRead: n.is_read,
-      createdAt: n.created_at,
-      notificationType: n.type,
-      kpiId: n.kpi_id,
-      metadata: n.metadata,
-      snoozedUntil: n.snoozed_until,
-      snoozeCount: n.snooze_count,
-    })),
-    [snoozedNotifications]
+    snoozedNotifications.map(n => {
+      const meta = (n.metadata && typeof n.metadata === 'object') ? n.metadata as Record<string, any> : {};
+      const relatedProfile = n.related_user_id ? relatedProfileMap.get(n.related_user_id) : null;
+
+      return {
+        id: n.id,
+        type: 'notification' as const,
+        title: n.title,
+        message: n.message,
+        isRead: n.is_read,
+        createdAt: n.created_at,
+        notificationType: n.type,
+        kpiId: n.kpi_id,
+        kpiName: meta.kpi_name || null,
+        kraName: meta.kra_name || null,
+        fromUser: relatedProfile ? {
+          id: relatedProfile.id,
+          fullName: relatedProfile.full_name,
+          email: relatedProfile.email,
+        } : (meta.employee_name ? {
+          id: n.related_user_id || '',
+          fullName: meta.employee_name,
+          email: '',
+        } : null),
+        metadata: meta,
+        snoozedUntil: n.snoozed_until,
+        snoozeCount: n.snooze_count,
+      };
+    }),
+    [snoozedNotifications, relatedProfileMap]
   );
 
   // Convert queries to InboxItems
