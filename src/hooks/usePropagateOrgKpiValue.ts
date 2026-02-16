@@ -119,37 +119,26 @@ export function usePropagateOrgKpiValue() {
 
         const ratingLevel = scoreToRating(ratingResult.rating);
 
-        // Check if submission exists
+        // Get old score for change tracking
         const { data: existingSubmission } = await supabase
           .from('review_submissions')
-          .select('id, self_score')
+          .select('self_score')
           .eq('kpi_id', kpi.id)
           .maybeSingle();
 
         const oldScore = existingSubmission?.self_score ?? null;
 
-        if (existingSubmission) {
-          const { error } = await supabase
-            .from('review_submissions')
-            .update({
-              achieved_value: achievedValue,
-              self_score: ratingResult.rating,
-              self_rating: ratingLevel,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', existingSubmission.id);
-          if (error) throw error;
-        } else {
-          const { error } = await supabase
-            .from('review_submissions')
-            .insert({
-              kpi_id: kpi.id,
-              achieved_value: achievedValue,
-              self_score: ratingResult.rating,
-              self_rating: ratingLevel,
-            });
-          if (error) throw error;
-        }
+        // Atomic upsert to avoid unique constraint violations
+        const { error } = await supabase
+          .from('review_submissions')
+          .upsert({
+            kpi_id: kpi.id,
+            achieved_value: achievedValue,
+            self_score: ratingResult.rating,
+            self_rating: ratingLevel,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'kpi_id' });
+        if (error) throw error;
 
         // Update KPI status to self_review if still at kra_set
         const { error: statusError } = await supabase
@@ -255,23 +244,20 @@ export function useBulkPropagateOrgKpiValues() {
 
           const ratingLevel = scoreToRating(ratingResult.rating);
 
+          // Get old score for change tracking
           const { data: existing } = await supabase
             .from('review_submissions')
-            .select('id, self_score')
+            .select('self_score')
             .eq('kpi_id', kpi.id)
             .maybeSingle();
 
           const oldScore = existing?.self_score ?? null;
 
-          if (existing) {
-            await supabase.from('review_submissions').update({
-              achieved_value: achievedValue, self_score: ratingResult.rating, self_rating: ratingLevel,
-            }).eq('id', existing.id);
-          } else {
-            await supabase.from('review_submissions').insert({
-              kpi_id: kpi.id, achieved_value: achievedValue, self_score: ratingResult.rating, self_rating: ratingLevel,
-            });
-          }
+          // Atomic upsert to avoid unique constraint violations
+          await supabase.from('review_submissions').upsert({
+            kpi_id: kpi.id, achieved_value: achievedValue, self_score: ratingResult.rating, self_rating: ratingLevel,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'kpi_id' });
 
           await supabase.from('kpis').update({ status: 'self_review' }).eq('id', kpi.id).eq('status', 'kra_set');
 

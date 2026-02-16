@@ -25,6 +25,7 @@ import { OrgKpiOwnerManagement } from '@/components/admin/OrgKpiOwnerManagement'
 import { OrgKpiImpactSheet } from '@/components/admin/OrgKpiImpactSheet';
 import { OrgKpiSuggestionsPanel } from '@/components/admin/OrgKpiSuggestionsPanel';
 import { Building2, AlertTriangle, Search, Copy, Upload, Users as UsersIcon, Lightbulb, Info } from 'lucide-react';
+import { isKpiLockedForPeriod, getActiveMonthForCycle } from '@/lib/frequencyUtils';
 import { useToast } from '@/hooks/use-toast';
 
 // Helper to get previous period
@@ -128,16 +129,25 @@ export default function OrgKpiDataEntry() {
     });
   }, [orgLevelKpis, isAdmin, ownershipMap]);
 
+  // Filter by frequency — hide KPIs not due in the selected month
+  const frequencyFilteredKpis = useMemo(() => {
+    return ownershipFilteredKpis.filter(kpi => {
+      const freq = (kpi as any).frequency;
+      if (!freq || freq === 'Monthly' || freq === 'Daily' || freq === 'Weekly') return true;
+      return !isKpiLockedForPeriod(freq, selectedPeriod, selectedYear, (kpi as any).frequency_cycle_start);
+    });
+  }, [ownershipFilteredKpis, selectedPeriod, selectedYear]);
+
   // Get categories
   const orgLevelCategories = useMemo(() => {
-    if (!ownershipFilteredKpis || !categories) return [];
-    const categoryIds = new Set(ownershipFilteredKpis.map(k => k.category_id));
+    if (!frequencyFilteredKpis || !categories) return [];
+    const categoryIds = new Set(frequencyFilteredKpis.map(k => k.category_id));
     return categories.filter(c => categoryIds.has(c.id));
-  }, [ownershipFilteredKpis, categories]);
+  }, [frequencyFilteredKpis, categories]);
 
   // Filter by category and search
   const filteredKpis = useMemo(() => {
-    let result = ownershipFilteredKpis;
+    let result = frequencyFilteredKpis;
     if (selectedCategoryId !== 'all') {
       result = result.filter(k => k.category_id === selectedCategoryId);
     }
@@ -150,7 +160,7 @@ export default function OrgKpiDataEntry() {
       );
     }
     return result;
-  }, [ownershipFilteredKpis, selectedCategoryId, searchQuery]);
+  }, [frequencyFilteredKpis, selectedCategoryId, searchQuery]);
 
   // Group by category
   const groupedKpis = useMemo(() => {
@@ -168,11 +178,11 @@ export default function OrgKpiDataEntry() {
 
   // Progress calculation
   const progressData = useMemo(() => {
-    const totalKpis = ownershipFilteredKpis.length;
+    const totalKpis = frequencyFilteredKpis.length;
     let enteredKpis = 0;
     const categoryMap = new Map<string, { total: number; entered: number }>();
 
-    ownershipFilteredKpis.forEach(kpi => {
+    frequencyFilteredKpis.forEach(kpi => {
       const catId = kpi.category_id;
       const cat = categoryMap.get(catId) || { total: 0, entered: 0 };
       cat.total++;
@@ -207,7 +217,7 @@ export default function OrgKpiDataEntry() {
     }));
 
     return { totalKpis, enteredKpis, categoryProgress };
-  }, [ownershipFilteredKpis, existingValuesMap, orgLevelCategories]);
+  }, [frequencyFilteredKpis, existingValuesMap, orgLevelCategories]);
 
   // Build card data for a KPI
   const buildCardData = useCallback((kpi: typeof filteredKpis[0]): OrgKpiCardData => {
@@ -648,10 +658,10 @@ export default function OrgKpiDataEntry() {
                 className="cursor-pointer"
                 onClick={() => setSelectedCategoryId('all')}
               >
-                All ({ownershipFilteredKpis.length})
+                All ({frequencyFilteredKpis.length})
               </Badge>
               {orgLevelCategories.map(cat => {
-                const count = ownershipFilteredKpis.filter(k => k.category_id === cat.id).length;
+                const count = frequencyFilteredKpis.filter(k => k.category_id === cat.id).length;
                 return (
                   <Badge
                     key={cat.id}
@@ -670,7 +680,7 @@ export default function OrgKpiDataEntry() {
       </Card>
 
       {/* Progress Bar */}
-      {ownershipFilteredKpis.length > 0 && (
+      {frequencyFilteredKpis.length > 0 && (
         <Card>
           <CardContent className="p-4">
             <OrgKpiProgressBar

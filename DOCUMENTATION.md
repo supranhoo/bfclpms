@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-16  
-> **Version:** 1.35.0
+> **Version:** 1.36.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -3588,6 +3588,24 @@ Admin clicks "Rollback" on propagated card
 | `src/hooks/useRollbackOrgKpiPropagation.ts` | CREATED: New mutation hook for full rollback |
 | `src/components/admin/OrgKpiEntryCard.tsx` | MODIFIED: Added `onRollback` prop; rollback button with confirmation dialog and mandatory reason |
 | `src/pages/admin/OrgKpiDataEntry.tsx` | MODIFIED: Imported rollback hook; wired `onRollback` handler to each card |
+
+---
+
+### Org KPI Data Entry Fixes (v1.36.0)
+
+**Three issues fixed:**
+
+1. **Propagation unique constraint error**: Replaced non-atomic check-then-insert pattern in `usePropagateOrgKpiValue.ts` with Supabase `.upsert({ onConflict: 'kpi_id' })`. Prevents "duplicate key value violates unique constraint review_submissions_kpi_id_unique" errors during concurrent or repeated propagations.
+
+2. **Frequency-based filtering**: Bi-Monthly, Quarterly, Half-Yearly, and Yearly KPIs are now hidden from the Org KPI Data Entry page when the selected month is not their active/due month. Uses `isKpiLockedForPeriod` from `frequencyUtils.ts`. Progress counts and category pills also reflect frequency-filtered results.
+
+3. **Clipboard paste hint**: Added "or Ctrl+V" hint text next to the Upload button in `OrgKpiFileUpload` to make the existing clipboard paste feature discoverable.
+
+| File | Change |
+|---|---|
+| `src/hooks/usePropagateOrgKpiValue.ts` | Both single and bulk propagation now use atomic upsert |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | Added `frequencyFilteredKpis` memo; all counts/filters use it |
+| `src/components/admin/OrgKpiFileUpload.tsx` | Added "or Ctrl+V" hint span |
 
 ---
 
