@@ -186,15 +186,21 @@ export function AuditScorecard({
     return map;
   }, [queries]);
 
+  // Filtered KPIs for charts based on status filter
+  const displayKpis = useMemo(() => {
+    if (!kpis) return [];
+    return statusFilter ? kpis.filter(k => k.status === statusFilter) : kpis;
+  }, [kpis, statusFilter]);
+
   // Calculate scores
   const scoreData = useMemo(() => {
-    if (!kpis || !submissions) return { overallScore: 0, rating: 0, categoryScores: [] };
+    if (!displayKpis.length || !submissions) return { overallScore: 0, rating: 0, categoryScores: [] };
     
     let totalWeightedScore = 0;
     let totalWeight = 0;
     const categoryMap = new Map<string, { totalScore: number; totalWeight: number; color: string | null }>();
     
-    kpis.forEach(kpi => {
+    displayKpis.forEach(kpi => {
       const submission = submissionMap.get(kpi.id);
       if (submission?.is_na) return; // Skip NA KPIs
       
@@ -224,7 +230,7 @@ export function AuditScorecard({
     }));
     
     return { overallScore, rating: overallRating, categoryScores };
-  }, [kpis, submissions, submissionMap]);
+  }, [displayKpis, submissions, submissionMap]);
 
   // Stats for audit review - use workflow-aware pending statuses
   const auditPendingStatuses = resolvePendingStatuses('auditor', effectiveStages);
