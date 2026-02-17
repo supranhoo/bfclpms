@@ -51,10 +51,9 @@ function getObserverRole(viewLevel: string, isOwnKpi: boolean): ObserverRole {
   }
 }
 
-function canAddObservation(viewLevel: string, kpiStatus: string, isOwnKpi: boolean): boolean {
-  if (kpiStatus === 'approved') return false;
+function canAddObservation(viewLevel: string, _kpiStatus: string, isOwnKpi: boolean): boolean {
   if (isOwnKpi) return true;
-  return ['manager', 'auditor', 'management'].includes(viewLevel);
+  return ['manager', 'skip_level', 'hr_pms', 'auditor', 'management'].includes(viewLevel);
 }
 
 function isAutoApply(viewLevel: string): boolean {
@@ -78,7 +77,7 @@ export function KpiObservationsSection({
   const updateMutation = useUpdateObservation();
   const deleteMutation = useDeleteObservation();
 
-  const isReadOnly = kpiStatus === 'approved';
+  const isReadOnly = false;
   const observerRole = getObserverRole(viewLevel, isOwnKpi);
   const showAddButton = canAddObservation(viewLevel, kpiStatus, isOwnKpi);
   const autoApply = isAutoApply(viewLevel);

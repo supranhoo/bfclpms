@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-02-16  
-> **Version:** 1.37.0
+> **Last Updated:** 2026-02-17  
+> **Version:** 1.38.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -1977,6 +1977,8 @@ Each KPI gets a dedicated card-style layout similar to the web UI's ReviewTrailC
 | Admin status step-back | Employee | `admin_status_step_back` | `admin_status_step_back` |
 | Org KPI sent back | Data Owner(s) | `org_kpi_sent_back` | `org_kpi_sent_back` |
 
+**Observation Access:** Observations can be raised at **all view levels** (employee, manager, skip-level, HR PMS, auditor, management) and for **all KPI statuses** including approved KPIs. Observations are independent of the KPI review lifecycle — they remain interactive (add, edit, reply, resolve) regardless of whether the KPI is in `kra_set`, `self_review`, or `approved` status. This applies to past, current, and future review periods.
+
 **Observation Notifications:**
 
 | Event | Recipients | Notification Type | Email Event Type |
@@ -3215,7 +3217,7 @@ The workflow engine provides pure utility functions that resolve status transiti
 - `AuditPanel.tsx` — Legacy audit list; includes `self_review` in pending audit counts for skip-manager workflows
 - `EmployeeScorecard.tsx` — Dynamic manager approval target status
 - `useKpis.ts` (`useApproveKpi`) — Accepts optional `forwardStatus` parameter
-- `WorkflowProgressTracker.tsx` — Accepts optional `workflowStages` prop to filter displayed stages
+- `WorkflowProgressTracker.tsx` — Accepts optional `workflowStages` prop to filter displayed stages. Supports clickable stage cards via `activeFilter`/`onFilterChange` props — wired in all scorecards (UnifiedScorecard, AuditScorecard, ManagementScorecard, EmployeeScorecard) and Dashboard to filter KPI lists by status.
 - `KpiJourneySection.tsx` — Accepts optional `workflowStages` prop to filter journey cards
 - `KpiDetailsTable.tsx` — Accepts optional `workflowStages` prop; dynamically builds score columns mapped to workflow stages (Self, Manager, Skip-Level, HR PMS, Auditor, Mgmt) + Final. Also uses stages for `canReviewKpi` checks.
 - `EmployeeSelectorGrid.tsx` — Uses `useBulkEmployeeWorkflows` hook to batch-fetch per-employee workflow stages, then calls `resolveReviewableStatuses()` for dynamic pending/reviewed filtering and stats. Eliminates all hardcoded status checks.

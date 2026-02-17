@@ -232,6 +232,7 @@ export function UnifiedScorecard({
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   const [expandedDailyKpis, setExpandedDailyKpis] = useState<Set<string>>(new Set());
   const [categorySortBy, setCategorySortBy] = useState<CategorySortBy>('score-desc');
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   
   // Review state
   const [reviewerScore, setReviewerScore] = useState<number | null>(null);
@@ -282,7 +283,8 @@ export function UnifiedScorecard({
   const submissionMap = useMemo(() => new Map(submissions?.map(s => [s.kpi_id, s])), [submissions]);
 
   // Sorting with default Weightage (High to Low)
-  const { sortedKpis, sortConfig, setSort } = useKpiSorting(kpis, {}, submissionMap);
+  const { sortedKpis: rawSortedKpis, sortConfig, setSort } = useKpiSorting(kpis, {}, submissionMap);
+  const sortedKpis = statusFilter ? rawSortedKpis.filter(k => k.status === statusFilter) : rawSortedKpis;
 
   const queryMap = useMemo(() => {
     const map = new Map<string, KpiQuery[]>();
@@ -990,7 +992,7 @@ export function UnifiedScorecard({
       </div>
 
       {/* 3. Status Progress - Full Width Workflow Tracker (not compact) */}
-      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} workflowStages={effectiveStages} />
+      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} workflowStages={effectiveStages} activeFilter={statusFilter} onFilterChange={setStatusFilter} />
 
 
       {/* 4. KPI Table */}
