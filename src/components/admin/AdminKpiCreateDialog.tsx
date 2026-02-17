@@ -112,30 +112,30 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
   // Derived template data with fallback to existing KPIs
   const filteredKraNames = useMemo(() => {
     if (!categoryId) return [];
-    // Try templates first
+    // Merge template KRA names with existing KPI KRA names (deduplicated)
     const templateNames = (templates || [])
       .filter(t => t.is_active && t.category_id === categoryId)
       .map(t => t.kra_name);
-    if (templateNames.length > 0) return [...new Set(templateNames)].sort();
-    // Fallback to existing KPIs
     const kpiNames = (allKpis || [])
       .filter(k => k.category_id === categoryId)
       .map(k => k.kra_name);
-    return [...new Set(kpiNames)].sort();
+    return [...new Set([...templateNames, ...kpiNames])].sort();
   }, [templates, allKpis, categoryId]);
 
   const filteredKpiTemplates = useMemo(() => {
     if (!categoryId || !kraName) return [];
-    // Try templates first
+    // Start with matching templates
     const fromTemplates = (templates || []).filter(
       t => t.is_active && t.category_id === categoryId && t.kra_name === kraName
     );
-    if (fromTemplates.length > 0) return fromTemplates;
-    // Fallback to existing KPIs (shape them like templates for the combobox)
-    return (allKpis || [])
+    // Collect template KPI names for dedup (case-insensitive)
+    const templateKpiNamesLower = new Set(fromTemplates.map(t => t.kpi_name.toLowerCase()));
+    // Append unique KPIs from existing assignments (shaped like templates)
+    const fromExisting = (allKpis || [])
       .filter(k => k.category_id === categoryId && k.kra_name === kraName)
       .reduce((acc, k) => {
-        if (!acc.some(item => item.kpi_name === k.kpi_name)) {
+        const lowerName = k.kpi_name.toLowerCase();
+        if (!templateKpiNamesLower.has(lowerName) && !acc.some(item => item.kpi_name.toLowerCase() === lowerName)) {
           acc.push({
             id: k.id,
             kpi_name: k.kpi_name,
@@ -163,6 +163,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
         }
         return acc;
       }, [] as any[]);
+    return [...fromTemplates, ...fromExisting];
   }, [templates, allKpis, categoryId, kraName]);
 
   // Reset KRA/KPI when category changes
