@@ -377,20 +377,25 @@ export function useAdminSubmitSubPeriod() {
 
 // ========== Status Step-Back ==========
 
-const STATUS_ORDER: Array<Database['public']['Enums']['review_status']> = [
+// Full 8-stage order for cascade-clearing. Any employee's workflow is a subset of this.
+const FULL_STATUS_ORDER: Array<Database['public']['Enums']['review_status']> = [
   'kra_set',
   'self_review',
   'manager_check',
+  'skip_level_check',
+  'hr_pms_review',
   'audit',
   'management_review',
   'approved',
 ];
 
 export function getPreviousStatus(
-  current: Database['public']['Enums']['review_status']
+  current: Database['public']['Enums']['review_status'],
+  workflowStages?: string[]
 ): Database['public']['Enums']['review_status'] | null {
-  const idx = STATUS_ORDER.indexOf(current);
-  return idx > 0 ? STATUS_ORDER[idx - 1] : null;
+  const stages = (workflowStages || FULL_STATUS_ORDER) as Array<Database['public']['Enums']['review_status']>;
+  const idx = stages.indexOf(current);
+  return idx > 0 ? stages[idx - 1] : null;
 }
 
 interface AdminStepBackParams {
@@ -432,13 +437,17 @@ export function useAdminStatusStepBack() {
 
       if (error) throw error;
 
-      // 2. Clear downstream review data based on target_status
+      // 2. Clear downstream review data based on target_status using index-based clearing
       const clearFields: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      const targetIdx = FULL_STATUS_ORDER.indexOf(target_status);
 
       // When stepping back to kra_set, also reset kpi_status so employee can resubmit
       if (target_status === 'kra_set') {
         clearFields.kpi_status = 'open';
-        // Clear self-review fields
+      }
+
+      // Clear self fields if target is before self_review
+      if (targetIdx < FULL_STATUS_ORDER.indexOf('self_review')) {
         clearFields.self_rating = null;
         clearFields.self_score = null;
         clearFields.self_remarks = null;
@@ -446,8 +455,8 @@ export function useAdminStatusStepBack() {
         clearFields.achieved_value = null;
       }
 
-      // Clear manager fields when stepping back to kra_set or self_review
-      if (target_status === 'kra_set' || target_status === 'self_review') {
+      // Clear manager fields if target is before manager_check
+      if (targetIdx < FULL_STATUS_ORDER.indexOf('manager_check')) {
         clearFields.manager_rating = null;
         clearFields.manager_score = null;
         clearFields.manager_remarks = null;
@@ -455,8 +464,26 @@ export function useAdminStatusStepBack() {
         clearFields.manager_achieved_value = null;
       }
 
-      // Clear auditor fields when stepping back to kra_set, self_review, or manager_check
-      if (target_status === 'kra_set' || target_status === 'self_review' || target_status === 'manager_check') {
+      // Clear skip-level fields if target is before skip_level_check
+      if (targetIdx < FULL_STATUS_ORDER.indexOf('skip_level_check')) {
+        clearFields.skip_level_rating = null;
+        clearFields.skip_level_score = null;
+        clearFields.skip_level_remarks = null;
+        clearFields.skip_level_evidence_url = null;
+        clearFields.skip_level_achieved_value = null;
+      }
+
+      // Clear HR PMS fields if target is before hr_pms_review
+      if (targetIdx < FULL_STATUS_ORDER.indexOf('hr_pms_review')) {
+        clearFields.hr_pms_rating = null;
+        clearFields.hr_pms_score = null;
+        clearFields.hr_pms_remarks = null;
+        clearFields.hr_pms_evidence_url = null;
+        clearFields.hr_pms_achieved_value = null;
+      }
+
+      // Clear auditor fields if target is before audit
+      if (targetIdx < FULL_STATUS_ORDER.indexOf('audit')) {
         clearFields.auditor_rating = null;
         clearFields.auditor_score = null;
         clearFields.auditor_remarks = null;
@@ -464,13 +491,19 @@ export function useAdminStatusStepBack() {
         clearFields.auditor_achieved_value = null;
       }
 
-      // Clear management fields when stepping back to any stage before management_review
-      if (target_status !== 'management_review' && target_status !== 'approved') {
+      // Clear management fields if target is before management_review
+      if (targetIdx < FULL_STATUS_ORDER.indexOf('management_review')) {
         clearFields.management_rating = null;
         clearFields.management_score = null;
         clearFields.management_remarks = null;
         clearFields.management_evidence_url = null;
         clearFields.management_achieved_value = null;
+      }
+
+      // Always clear final fields when stepping back
+      if (target_status !== 'approved') {
+        clearFields.final_rating = null;
+        clearFields.final_score = null;
       }
 
       const { error: subError } = await supabase

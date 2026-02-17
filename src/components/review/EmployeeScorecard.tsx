@@ -252,7 +252,7 @@ export function EmployeeScorecard({
 
   // Stats
   const pendingReviewCount = kpis?.filter(k => k.status === 'self_review').length || 0;
-  const reviewedCount = kpis?.filter(k => ['manager_check', 'audit', 'management_review', 'approved'].includes(k.status || '')).length || 0;
+  const reviewedCount = kpis?.filter(k => ['manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'].includes(k.status || '')).length || 0;
   const totalKpis = kpis?.length || 0;
 
   const submitManagerReview = useMutation({

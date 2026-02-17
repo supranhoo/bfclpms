@@ -218,16 +218,19 @@ const mapScoreToRating = (score: number | string | null | undefined): RatingLeve
   return 'red';
 };
 
-const REVIEW_STATUS_MAP: Record<string, 'kra_set' | 'self_review' | 'manager_check' | 'audit' | 'approved'> = {
+const REVIEW_STATUS_MAP: Record<string, 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review' | 'approved'> = {
   'approved': 'approved',
+  'management_review': 'management_review',
   'audit': 'audit',
+  'hr_pms_review': 'hr_pms_review',
+  'skip_level_check': 'skip_level_check',
   'manager_check': 'manager_check',
   'manager_review': 'manager_check',
   'self_review': 'self_review',
   'kra_set': 'kra_set',
 };
 
-const determineReviewStatus = (row: KpiImportRow): 'kra_set' | 'self_review' | 'manager_check' | 'audit' | 'approved' => {
+const determineReviewStatus = (row: KpiImportRow): 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review' | 'approved' => {
   // Honor explicit reviewStatus from file first
   if (row.reviewStatus) {
     const normalized = String(row.reviewStatus).toLowerCase().trim().replace(/[\s_-]+/g, '_');
