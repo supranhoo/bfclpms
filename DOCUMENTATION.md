@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-17  
-> **Version:** 1.44.0
+> **Version:** 1.45.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -1458,6 +1458,7 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - **Visible send-back reason:** A `kpi_queries` row with `[ADMIN SENT BACK] <reason>` and `query_type: 'send_back'` is created as auto-resolved, making the reason visible in the employee's Review Journey and query trail (matching `useSendBackKpi` behavior) without appearing in the active Query Inbox
   - **Safety-net trigger (`trg_sync_submission_on_kra_set`):** A database trigger on `kpis` automatically resets `review_submissions.kpi_status` to `open` whenever `kpis.status` transitions to `kra_set`, preventing any code path from causing a desync.
   - Status step-back mapping: `approved` → `management_review` → `audit` → `hr_pms_review` → `skip_level_check` → `manager_check` → `self_review` → `kra_set`
+  - **(v1.45.0)** `getPreviousStatus` now accepts an optional `workflowStages` parameter and uses the full 8-stage `FULL_STATUS_ORDER` as default. Cascade-clear logic uses index-based comparison against the full order instead of hardcoded status strings, correctly handling `skip_level_check` and `hr_pms_review` stages.
 - Audit logging for all changes
 - **Copy KRAs (`CopyKrasDialog`):** Replicate KRAs from one employee to another without re-drafting.
   - **Step 1 – Source:** Select source employee, review period, and year. KRAs auto-load.

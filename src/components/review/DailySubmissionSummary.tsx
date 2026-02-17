@@ -34,8 +34,8 @@ interface ReviewerColumn {
   bgClass: string;
 }
 
-// Status progression order for determining visible columns
-const STATUS_ORDER = ['kra_set', 'self_review', 'manager_check', 'audit', 'management_review', 'approved'];
+// Full 8-stage status progression order for determining visible columns
+const STATUS_ORDER = ['kra_set', 'self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'];
 
 export function DailySubmissionSummary({
   kpiId,
@@ -86,6 +86,28 @@ export function DailySubmissionSummary({
         shortLabel: 'Manager',
         colorClass: 'text-amber-600 dark:text-amber-400', 
         bgClass: 'bg-amber-50 dark:bg-amber-950/30' 
+      });
+    }
+
+    // Show Skip-Level column if KPI has passed skip_level_check or later
+    if (statusIndex >= STATUS_ORDER.indexOf('skip_level_check')) {
+      cols.push({ 
+        key: 'skip_level_achieved_value' as any, 
+        label: 'Skip-Level Approved', 
+        shortLabel: 'Skip-Lvl',
+        colorClass: 'text-cyan-600 dark:text-cyan-400', 
+        bgClass: 'bg-cyan-50 dark:bg-cyan-950/30' 
+      });
+    }
+
+    // Show HR PMS column if KPI has passed hr_pms_review or later
+    if (statusIndex >= STATUS_ORDER.indexOf('hr_pms_review')) {
+      cols.push({ 
+        key: 'hr_pms_achieved_value' as any, 
+        label: 'HR PMS Approved', 
+        shortLabel: 'HR PMS',
+        colorClass: 'text-pink-600 dark:text-pink-400', 
+        bgClass: 'bg-pink-50 dark:bg-pink-950/30' 
       });
     }
     

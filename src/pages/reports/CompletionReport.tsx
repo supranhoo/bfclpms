@@ -63,7 +63,7 @@ export default function CompletionReport() {
         data.approved++;
         data.managerReviewed++;
         data.selfReviewSubmitted++;
-      } else if (['management_review', 'audit'].includes(kpi.status || '')) {
+      } else if (['management_review', 'audit', 'skip_level_check', 'hr_pms_review'].includes(kpi.status || '')) {
         data.managerReviewed++;
         data.selfReviewSubmitted++;
       } else if (kpi.status === 'manager_check') {

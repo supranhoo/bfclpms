@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
-export type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'audit' | 'management_review' | 'approved';
+export type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review' | 'approved';
 export type RatingLevel = 'red' | 'yellow' | 'green' | 'blue';
 export type KpiStatus = 'open' | 'submitted' | 'approved_by_manager' | 'locked' | 'sent_back';
 export type QueryStatus = 'open' | 'resolved';
@@ -867,7 +867,8 @@ export function useResolveQuery() {
   });
 }
 
-// Hook for sending back a KPI to employee (rejection)
+// Hook for sending back a KPI to employee (manager rejection)
+// Uses workflow engine for correct status resolution
 export function useSendBackKpi() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -885,7 +886,8 @@ export function useSendBackKpi() {
     }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
-      // Reset kpi_status back to 'open' so employee can resubmit
+      // Manager sends back to employee = status goes to kra_set
+      // Clear all downstream data from kra_set forward
       const { error: submissionError } = await supabase
         .from('review_submissions')
         .update({
@@ -893,6 +895,30 @@ export function useSendBackKpi() {
           manager_rating: null,
           manager_score: null,
           manager_remarks: null,
+          manager_evidence_url: null,
+          manager_achieved_value: null,
+          skip_level_rating: null,
+          skip_level_score: null,
+          skip_level_remarks: null,
+          skip_level_evidence_url: null,
+          skip_level_achieved_value: null,
+          hr_pms_rating: null,
+          hr_pms_score: null,
+          hr_pms_remarks: null,
+          hr_pms_evidence_url: null,
+          hr_pms_achieved_value: null,
+          auditor_rating: null,
+          auditor_score: null,
+          auditor_remarks: null,
+          auditor_evidence_url: null,
+          auditor_achieved_value: null,
+          management_rating: null,
+          management_score: null,
+          management_remarks: null,
+          management_evidence_url: null,
+          management_achieved_value: null,
+          final_rating: null,
+          final_score: null,
         })
         .eq('kpi_id', kpi_id);
 

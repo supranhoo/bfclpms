@@ -12,19 +12,25 @@ import { FileText, CheckCircle2, Clock, AlertCircle, Download } from 'lucide-rea
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 
-const statusColors = {
+const statusColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
   self_review: 'bg-blue-100 text-blue-800',
   manager_check: 'bg-yellow-100 text-yellow-800',
+  skip_level_check: 'bg-cyan-100 text-cyan-800',
+  hr_pms_review: 'bg-pink-100 text-pink-800',
   audit: 'bg-purple-100 text-purple-800',
+  management_review: 'bg-emerald-100 text-emerald-800',
   approved: 'bg-green-100 text-green-800',
 };
 
-const statusLabels = {
+const statusLabels: Record<string, string> = {
   kra_set: 'KRA Set',
   self_review: 'Self Review',
   manager_check: 'Manager Check',
+  skip_level_check: 'Skip-Level',
+  hr_pms_review: 'HR PMS',
   audit: 'Audit',
+  management_review: 'Management',
   approved: 'Approved',
 };
 
@@ -36,7 +42,10 @@ export default function KRAIssuance() {
     kra_set: allKpis?.filter(k => k.status === 'kra_set').length || 0,
     self_review: allKpis?.filter(k => k.status === 'self_review').length || 0,
     manager_check: allKpis?.filter(k => k.status === 'manager_check').length || 0,
+    skip_level_check: allKpis?.filter(k => k.status === 'skip_level_check').length || 0,
+    hr_pms_review: allKpis?.filter(k => k.status === 'hr_pms_review').length || 0,
     audit: allKpis?.filter(k => k.status === 'audit').length || 0,
+    management_review: allKpis?.filter(k => k.status === 'management_review').length || 0,
     approved: allKpis?.filter(k => k.status === 'approved').length || 0,
   };
 

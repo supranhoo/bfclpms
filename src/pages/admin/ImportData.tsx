@@ -56,8 +56,8 @@ const determineKpiStatus = (row: KpiImportRow): 'open' | 'submitted' | 'approved
   return 'open';
 };
 
-// Determine review status based on review data
-const determineReviewStatus = (row: KpiImportRow): 'kra_set' | 'self_review' | 'manager_check' | 'audit' | 'approved' => {
+// Determine review status based on review data (supports all 8 workflow stages)
+const determineReviewStatus = (row: KpiImportRow): 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review' | 'approved' => {
   if (row.auditRating != null || row.auditTargetAchieved != null) return 'approved';
   if (row.managerRating != null || row.managerTargetAchieved != null) return 'audit';
   if (row.employeeRating != null || row.employeeTargetAchieved != null || row.targetAchieved != null) return 'manager_check';

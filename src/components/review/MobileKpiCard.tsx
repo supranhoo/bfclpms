@@ -11,6 +11,7 @@ import { KPI, ReviewSubmission } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { cn } from '@/lib/utils';
+import { canReviewKpi } from '@/lib/workflowEngine';
 import { 
   Lock, Info, Building2, Users, User, CheckCircle2, Eye, Calendar, 
   Undo2, ChevronDown, ChevronUp, Clock 
@@ -22,6 +23,7 @@ interface MobileKpiCardProps {
   kpi: KPI;
   submission?: ReviewSubmission;
   viewType: MobileKpiViewType;
+  workflowStages?: string[];
   onAction?: (kpi: KPI) => void;
   onView?: (kpi: KPI) => void;
   onShowLogic?: (kpi: KPI) => void;
@@ -36,6 +38,7 @@ export function MobileKpiCard({
   kpi,
   submission,
   viewType,
+  workflowStages,
   onAction,
   onView,
   onShowLogic,
@@ -70,18 +73,8 @@ export function MobileKpiCard({
   // Determine if we can take action
   const canReview = (): boolean => {
     if (isNaKpi || isLocked) return false;
-    switch (viewType) {
-      case 'my-kpis':
-        return kpi.status === 'kra_set';
-      case 'team-review':
-        return kpi.status === 'self_review';
-      case 'audit':
-        return kpi.status === 'manager_check' || kpi.status === 'audit';
-      case 'management':
-        return kpi.status === 'management_review';
-      default:
-        return false;
-    }
+    if (viewType === 'dashboard') return false;
+    return canReviewKpi(kpi.status || 'kra_set', viewType, workflowStages);
   };
 
   // Get action button content

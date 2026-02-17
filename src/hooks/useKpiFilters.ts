@@ -18,7 +18,7 @@ export interface FilteredProfile {
   manager_name?: string | null;
 }
 
-export type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'audit' | 'approved';
+export type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review' | 'approved';
 
 export interface KpiFilterState {
   divisionId: string | null;
