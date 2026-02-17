@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { useKraCategories, useProfiles } from '@/hooks/useOrganization';
+import { useKraCategories, useProfiles, useCreateKraCategory } from '@/hooks/useOrganization';
 import { useCreateKpi, ReviewStatus } from '@/hooks/useKpis';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -43,8 +43,15 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
   // Combobox state
   const [kraOpen, setKraOpen] = useState(false);
   const [kpiOpen, setKpiOpen] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(false);
   const [isCustomKra, setIsCustomKra] = useState(false);
   const [isCustomKpi, setIsCustomKpi] = useState(false);
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState('');
+  const [customCategoryWeightage, setCustomCategoryWeightage] = useState('');
+  const [customCategoryColor, setCustomCategoryColor] = useState('#3B82F6');
+
+  const createCategory = useCreateKraCategory();
 
   // Parse settings data
   const settings = useMemo(() => {
@@ -231,6 +238,10 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
     setThresholdMode('absolute');
     setIsCustomKra(false);
     setIsCustomKpi(false);
+    setIsCustomCategory(false);
+    setCustomCategoryName('');
+    setCustomCategoryWeightage('');
+    setCustomCategoryColor('#3B82F6');
   };
 
   const handleClose = () => {
@@ -319,24 +330,134 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
             {/* Category */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">Category *</Label>
-              <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories?.map(cat => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: cat.color || '#3B82F6' }}
-                        />
-                        {cat.name} ({cat.weightage}%)
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {isCustomCategory ? (
+                <div className="space-y-3 rounded-md border p-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-medium text-muted-foreground">New Category</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => { setIsCustomCategory(false); setCustomCategoryName(''); setCustomCategoryWeightage(''); setCustomCategoryColor('#3B82F6'); }}
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <Input
+                    value={customCategoryName}
+                    onChange={(e) => setCustomCategoryName(e.target.value)}
+                    placeholder="Category name"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="number"
+                      value={customCategoryWeightage}
+                      onChange={(e) => setCustomCategoryWeightage(e.target.value)}
+                      placeholder="Weightage %"
+                      min={0}
+                      max={100}
+                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={customCategoryColor}
+                        onChange={(e) => setCustomCategoryColor(e.target.value)}
+                        className="h-10 w-10 cursor-pointer rounded border border-input p-1"
+                      />
+                      <Input
+                        value={customCategoryColor}
+                        onChange={(e) => setCustomCategoryColor(e.target.value)}
+                        placeholder="#hex"
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full"
+                    disabled={!customCategoryName.trim() || !customCategoryWeightage || createCategory.isPending}
+                    onClick={() => {
+                      createCategory.mutate(
+                        { name: customCategoryName.trim(), weightage: parseFloat(customCategoryWeightage), color: customCategoryColor },
+                        {
+                          onSuccess: (newCat) => {
+                            setCategoryId(newCat.id);
+                            setIsCustomCategory(false);
+                            setCustomCategoryName('');
+                            setCustomCategoryWeightage('');
+                            setCustomCategoryColor('#3B82F6');
+                          },
+                        }
+                      );
+                    }}
+                  >
+                    {createCategory.isPending ? 'Saving...' : 'Save Category'}
+                  </Button>
+                </div>
+              ) : (
+                <Popover open={categoryOpen} onOpenChange={setCategoryOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={categoryOpen}
+                      className="w-full justify-between font-normal"
+                    >
+                      {categoryId ? (
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: categories?.find(c => c.id === categoryId)?.color || '#3B82F6' }}
+                          />
+                          {categories?.find(c => c.id === categoryId)?.name} ({categories?.find(c => c.id === categoryId)?.weightage}%)
+                        </div>
+                      ) : "Select category..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search categories..." />
+                      <CommandList>
+                        <CommandEmpty>No categories found.</CommandEmpty>
+                        <CommandGroup>
+                          {categories?.map((cat) => (
+                            <CommandItem
+                              key={cat.id}
+                              value={cat.name}
+                              onSelect={() => {
+                                setCategoryId(cat.id);
+                                setCategoryOpen(false);
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", categoryId === cat.id ? "opacity-100" : "opacity-0")} />
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="w-3 h-3 rounded-full"
+                                  style={{ backgroundColor: cat.color || '#3B82F6' }}
+                                />
+                                {cat.name} ({cat.weightage}%)
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                        <CommandGroup>
+                          <CommandItem
+                            onSelect={() => {
+                              setIsCustomCategory(true);
+                              setCategoryOpen(false);
+                            }}
+                          >
+                            <span className="text-muted-foreground">+ Create new category</span>
+                          </CommandItem>
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              )}
             </div>
 
             <Separator />
