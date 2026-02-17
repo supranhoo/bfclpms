@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
-import { resolveForwardStatus, resolveSendBackTargets, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
+import { resolveForwardStatus, resolveSendBackTargets, resolveSendBackStatus, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { useKpisByEmployee, useReviewSubmissions, useKpiQueries, RatingLevel, KPI, KpiQuery } from '@/hooks/useKpis';
 import { useSubPeriodSubmissions, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
@@ -155,7 +155,7 @@ export function ManagementScorecard({
   const [managementEvidenceUrls, setManagementEvidenceUrls] = useState<string[]>([]);
   const [managementAchievedValue, setManagementAchievedValue] = useState<number | string | null>(null);
   const [sendBackReason, setSendBackReason] = useState('');
-  const [sendBackTarget, setSendBackTarget] = useState<'auditor' | 'manager' | 'employee'>('auditor');
+  const [sendBackTarget, setSendBackTarget] = useState<string>('auditor');
   
   // Management daily override state
   const [managementAgrees, setManagementAgrees] = useState<boolean | null>(null);
@@ -337,26 +337,78 @@ export function ManagementScorecard({
       target: string;
       reason: string;
     }) => {
-      const statusMap: Record<string, string> = {
-        auditor: 'audit',
-        manager: 'manager_check', 
-        employee: 'kra_set',
-      };
+      // Use workflow engine to resolve the correct pending status
+      const newStatus = resolveSendBackStatus(target, 'management', effectiveStages);
 
       const { error: kpiError } = await supabase
         .from('kpis')
-        .update({ status: statusMap[target] as any })
+        .update({ status: newStatus as any })
         .eq('id', kpi_id);
 
       if (kpiError) throw kpiError;
 
+      // Cascade-clear all downstream review data from target stage forward
+      // Build the clear object based on which stages need clearing
+      const clearFields: Record<string, null> = {};
+      
+      // Determine which levels to clear based on the target
+      // We always clear management data since we're sending back FROM management
+      const levelsToClear: string[] = ['management'];
+      
+      // Map targets to the review levels that come AFTER them
+      const targetLevelOrder = ['employee', 'manager', 'skip_level', 'hr_pms', 'auditor', 'management'];
+      const targetIdx = targetLevelOrder.indexOf(target);
+      if (targetIdx >= 0) {
+        // Clear all levels from target onward (excluding employee which has no submission fields)
+        for (let i = Math.max(targetIdx, 1); i < targetLevelOrder.length; i++) {
+          if (!levelsToClear.includes(targetLevelOrder[i])) {
+            levelsToClear.push(targetLevelOrder[i]);
+          }
+        }
+      }
+
+      // Build clear fields for each level
+      if (levelsToClear.includes('manager')) {
+        clearFields.manager_rating = null;
+        clearFields.manager_score = null;
+        clearFields.manager_remarks = null;
+        clearFields.manager_evidence_url = null;
+        clearFields.manager_achieved_value = null;
+      }
+      if (levelsToClear.includes('skip_level')) {
+        clearFields.skip_level_rating = null;
+        clearFields.skip_level_score = null;
+        clearFields.skip_level_remarks = null;
+        clearFields.skip_level_evidence_url = null;
+        clearFields.skip_level_achieved_value = null;
+      }
+      if (levelsToClear.includes('hr_pms')) {
+        clearFields.hr_pms_rating = null;
+        clearFields.hr_pms_score = null;
+        clearFields.hr_pms_remarks = null;
+        clearFields.hr_pms_evidence_url = null;
+        clearFields.hr_pms_achieved_value = null;
+      }
+      if (levelsToClear.includes('auditor')) {
+        clearFields.auditor_rating = null;
+        clearFields.auditor_score = null;
+        clearFields.auditor_remarks = null;
+        clearFields.auditor_evidence_url = null;
+        clearFields.auditor_achieved_value = null;
+      }
+      if (levelsToClear.includes('management')) {
+        clearFields.management_rating = null;
+        clearFields.management_score = null;
+        clearFields.management_remarks = null;
+        clearFields.management_evidence_url = null;
+        clearFields.management_achieved_value = null;
+        clearFields.final_rating = null;
+        clearFields.final_score = null;
+      }
+
       const { error: submissionError } = await supabase
         .from('review_submissions')
-        .update({
-          management_rating: null,
-          management_score: null,
-          management_remarks: null,
-        })
+        .update(clearFields)
         .eq('kpi_id', kpi_id);
 
       if (submissionError) throw submissionError;
@@ -546,7 +598,7 @@ export function ManagementScorecard({
   const openSendBackDialog = (kpi: KPI) => {
     setSelectedKpi(kpi);
     setSendBackReason('');
-    setSendBackTarget('auditor');
+    setSendBackTarget(sendBackTargets.length > 0 ? sendBackTargets[0].value : 'employee');
     setSendBackDialogOpen(true);
   };
 
@@ -947,7 +999,7 @@ export function ManagementScorecard({
                 setReviewSheetOpen(false);
                 if (selectedKpi) {
                   setSendBackReason('');
-                  setSendBackTarget('auditor');
+                  setSendBackTarget(sendBackTargets.length > 0 ? sendBackTargets[0].value : 'employee');
                   setSendBackDialogOpen(true);
                 }
               }}
@@ -994,19 +1046,17 @@ export function ManagementScorecard({
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Send To</Label>
-              <div className="flex gap-2">
-                {(['auditor', 'manager', 'employee'] as const).map(target => (
+              <div className="flex flex-wrap gap-2">
+                {sendBackTargets.map(target => (
                   <Button
-                    key={target}
-                    variant={sendBackTarget === target ? 'default' : 'outline'}
+                    key={target.value}
+                    variant={sendBackTarget === target.value ? 'default' : 'outline'}
                     size="sm"
-                    onClick={() => setSendBackTarget(target)}
-                    className="capitalize"
+                    onClick={() => setSendBackTarget(target.value)}
                   >
-                    {target === 'auditor' && <Shield className="h-4 w-4 mr-1" />}
-                    {target === 'manager' && <User className="h-4 w-4 mr-1" />}
-                    {target === 'employee' && <User className="h-4 w-4 mr-1" />}
-                    {target}
+                    {(target.value === 'auditor' || target.value === 'hr_pms') && <Shield className="h-4 w-4 mr-1" />}
+                    {(target.value === 'manager' || target.value === 'employee' || target.value === 'skip_level') && <User className="h-4 w-4 mr-1" />}
+                    {target.label}
                   </Button>
                 ))}
               </div>
