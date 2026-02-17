@@ -442,7 +442,8 @@ export function SelfReviewSheet({
   const hasOrgData = isSelectedKpiOrgLevel && selectedKpiOrgValue?.achieved_value != null;
   const isKraSet = selectedKpi?.status === 'kra_set';
   const needsSubPeriodForKpi = selectedKpi ? requiresSubPeriodSelection(selectedKpi.frequency as FrequencyType) : false;
-  const isReadOnly = !isKraSet;
+  const isSelfReview = selectedKpi?.status === 'self_review';
+  const isReadOnly = !isKraSet && !isSelfReview;
 
   return (
     <>
@@ -453,7 +454,7 @@ export function SelfReviewSheet({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <SheetTitle className="text-base sm:text-lg">
-                  {isReadOnly ? 'View KPI Details' : 'Submit Self Review'}
+                  {isReadOnly ? 'View KPI Details' : (isSelfReview ? 'Edit Self Review' : 'Submit Self Review')}
                 </SheetTitle>
                 {isReadOnly && (
                   <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 flex items-center gap-1 text-xs">
@@ -804,7 +805,7 @@ export function SelfReviewSheet({
                           ? 'Saving...'
                           : needsSubPeriodForKpi
                             ? (currentSubPeriodSubmission ? 'Update Entry' : 'Save Entry')
-                            : 'Submit'}
+                            : (isSelfReview ? 'Update' : 'Submit')}
                       </Button>
                     );
                   })()}

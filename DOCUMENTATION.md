@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-17  
-> **Version:** 1.40.0
+> **Version:** 1.41.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -897,19 +897,28 @@ Footer Layout:
 6. Clicks "Submit" → KPI transitions from `kra_set` to `self_review`
 7. Notification sent to manager
 
-**View-Only Mode for Submitted KPIs:**
-After an employee submits a KPI (status changes from `kra_set` to `self_review` or beyond), they can still view their submission in read-only mode:
+**Self-Review Edit Capability:**
+Employees can edit their self-review as long as the KPI is still at `self_review` status (before the manager picks it up). Once the KPI advances to `manager_check` or beyond, it becomes read-only. This allows employees to correct mistakes or update values without requiring a manager rollback.
+
+| KPI Status | Employee Access | Sheet Title | Submit Button |
+|---|---|---|---|
+| `kra_set` | Editable | "Submit Self Review" | "Submit" |
+| `self_review` | Editable (re-submit) | "Edit Self Review" | "Update" |
+| `manager_check`+ | Read-only | "View KPI Details" | Hidden |
+
+**View-Only Mode for Advanced KPIs:**
+After a KPI moves beyond `self_review` (to `manager_check` or later), employees can still view their submission in read-only mode:
 - **Action Column:** Shows status badge + View button (Eye icon) instead of non-interactive badge
-- **Sheet Header:** Displays "View Submission" title with "Read Only" badge
+- **Sheet Header:** Displays "View KPI Details" title with "Read Only" badge
 - **Read-Only Banner:** Informs employee "Viewing submitted data - This KPI is currently at [status] stage"
 - **Input Fields:** Hidden (N/A checkbox, achieved value input, remarks textarea)
 - **Evidence Upload:** Hidden; existing evidence shown as clickable link
 - **Daily Submission Summary:** Remains visible for reviewing historical entries
 - **Footer:** Only shows "Close" button; Save/Submit buttons are hidden
 
-| Element | Edit Mode (`kra_set`) | View Mode (Other statuses) |
+| Element | Edit Mode (`kra_set` / `self_review`) | View Mode (`manager_check`+) |
 |---------|----------------------|---------------------------|
-| Sheet Title | "Submit Self Review" | "View Submission" |
+| Sheet Title | "Submit Self Review" / "Edit Self Review" | "View KPI Details" |
 | Date/Week selector | Enabled | Hidden |
 | Value input | Enabled | Hidden |
 | Remarks input | Enabled | Shows read-only text |
