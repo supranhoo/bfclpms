@@ -1023,6 +1023,18 @@ The **AdminKpiCreateDialog** uses searchable cascading dropdowns for KRA and KPI
 
 **No impact on existing KPIs** — the same `handleSubmit` logic and `createKpi.mutateAsync()` call are used regardless of selection method.
 
+#### 4.9.4b Cascading Filters in "Bulk Assign from Template"
+
+The **BulkTemplateAssignDialog** replaces the former flat dropdown (540+ templates) with a structured cascading filter approach:
+
+1. **Global search bar** — Free-text search across template title, KRA name, and KPI name fields. Filters the KPI options list in real time.
+2. **Category filter** — Narrows templates to a specific KRA category. Shows template count badges per category. Selecting a category resets KRA and KPI selections.
+3. **KRA Name filter** — Populated from unique KRA names within the selected category. Selecting a KRA resets KPI selection.
+4. **KPI Name selector** — Final pick from the filtered list. Selecting a KPI displays an enhanced preview card with all key fields (Target, UOM, Weightage, Frequency, R0-R5 thresholds).
+5. **Duplicate detection** — Before inserting, the system queries existing KPIs for the selected employees + period + KRA name + KPI name. If duplicates are found, a warning lists the affected employees and offers to proceed (skipping duplicates) or cancel.
+
+**Files:** `src/components/admin/BulkTemplateAssignDialog.tsx`
+
 #### 4.9.5 Unit of Measure (UOM) Options
 
 Standard UOM options available in dropdown selectors across all KPI forms:
