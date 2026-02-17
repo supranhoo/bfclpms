@@ -1,65 +1,137 @@
 
 
-# Fix: KPI Name Dropdown Not Showing All Available KPIs
+# Restructure "Bulk Assign from Template" for 540+ Templates
 
-## Root Cause
+## Problem
 
-The "Assign New KRA" dialog uses a cascading dropdown that populates KPI names from two sources:
-1. **`kpi_templates` table** (the KRA Library)
-2. **`kpis` table** (existing assigned KPIs -- fallback)
+The template selector is a flat `<Select>` dropdown listing all 540 active templates. Users cannot search, filter by category, or navigate by KRA name. Finding a specific template requires scrolling through hundreds of items.
 
-The current logic is **either/or**: if ANY templates exist for the selected Category + KRA Name combination, it ONLY shows template KPIs. The fallback to existing KPIs never triggers.
+## Solution
 
-For "Statutory Compliance" under the "Compliance" category:
-- 10 KPI templates exist in the library
-- 60 KPIs exist in actual assignments (many unique ones not in templates)
-- The tarpaulin KPI is in `kpis` but NOT in `kpi_templates`, so it never appears
+Replace the single flat dropdown with a **cascading filter approach** (matching the pattern already used in AdminKpiCreateDialog):
 
-## Fix
+1. **Category filter** -- narrows templates to a specific category (34 options)
+2. **KRA Name filter** -- narrows within category (searchable)
+3. **KPI Name selector** -- final pick from the filtered list (searchable)
+4. **Auto-populated preview card** -- shows full details of the selected template
 
-Merge both sources instead of using either/or. The KPI Name dropdown should show the **union** of template KPIs and existing assigned KPIs (deduplicated by name).
+Additionally:
+- Add a **text search** across all template fields (title, KRA name, KPI name) as a quick-find shortcut
+- Show **template count badges** on each category
+- Add **duplicate detection** -- warn if any selected employee already has this KPI assigned for the current period
 
-## Changes
+## UI Layout (Template Selection Section)
 
-### File: `src/components/admin/AdminKpiCreateDialog.tsx`
-
-**1. `filteredKraNames` (line 113-125)** -- Merge template KRA names with existing KPI KRA names instead of falling back:
-
-```
-Before: if templates exist -> return templates ONLY
-After:  return union of template names + existing KPI names
-```
-
-**2. `filteredKpiTemplates` (line 127-166)** -- Merge template entries with existing KPI entries instead of falling back:
-
-```
-Before: if templates match -> return templates ONLY
-After:  start with templates, then append unique KPIs from allKpis 
-        (skip any whose kpi_name already appears in templates)
+```text
++--------------------------------------------------+
+| Search templates...                    [x]       |
++--------------------------------------------------+
+| Category          | KRA Name          | KPI Name |
+| [All Categories v]| [Select KRA... v] | [Select v]|
++--------------------------------------------------+
+| Selected: "Ensure raw material..."               |
+| KRA: Statutory Compliance | KPI: ... | Target: 0 |
+| Weightage: 7% | UOM: Number | Frequency: Monthly |
++--------------------------------------------------+
 ```
 
-This also handles the case-sensitivity issue (e.g., "Statutory Compliance" vs "Statutory compliance") since both sources are merged.
+## Detailed Changes
+
+### File: `src/components/admin/BulkTemplateAssignDialog.tsx`
+
+**1. New state variables:**
+- `templateSearch` -- free-text search across template title/KRA/KPI names
+- `categoryFilter` -- filter templates by category_id
+- `kraNameFilter` -- filter templates by KRA name within category
+
+**2. Replace single Select with cascading filters:**
+
+- **Category dropdown**: Derived from `templates` -- unique categories with counts. Selecting a category resets KRA and KPI selections.
+- **KRA Name dropdown**: Filtered by selected category. Searchable via `cmdk` Command component (already in project). Selecting a KRA resets KPI selection.
+- **KPI Name dropdown**: Filtered by selected category + KRA name. Selecting a KPI sets `selectedTemplateId`.
+
+**3. Quick search bar:**
+- A text input above the cascading filters that searches across `title`, `kra_name`, and `kpi_name` fields
+- Results shown as a filtered list; selecting one auto-sets the category/KRA/KPI filters
+
+**4. Enhanced preview card:**
+- Show all key fields: KRA, KPI, Target, UOM, Weightage, Frequency, and R0-R5 thresholds
+- Color-coded category badge
+
+**5. Duplicate detection before assignment:**
+- Before inserting, query existing KPIs for the selected employees + period + kra_name + kpi_name
+- Show a warning listing employees who already have this KPI
+- Allow the admin to proceed (skip duplicates) or cancel
+
+**6. Multi-template selection (bonus):**
+- Allow selecting multiple templates before assigning (add a "+" button to queue templates)
+- Show a summary of queued templates with total weightage
 
 ### File: `DOCUMENTATION.md`
-
-Update the cascading dropdown documentation to reflect the merged-source behavior.
+- Update bulk assignment section with new cascading filter and duplicate detection behavior
 
 ## Technical Detail
 
-```text
-Current flow:
-  Category selected
-    -> Check kpi_templates for KRA names
-    -> IF templates found: show ONLY template KRAs
-    -> ELSE: show KRAs from kpis table
+### Cascading Filter Logic
 
-Fixed flow:
-  Category selected
-    -> Collect KRA names from kpi_templates
-    -> Collect KRA names from kpis table
-    -> Show deduplicated union of both
+```typescript
+const categories = useMemo(() => {
+  const cats = new Map();
+  templates?.filter(t => t.is_active).forEach(t => {
+    if (t.kra_categories) {
+      const existing = cats.get(t.kra_categories.id);
+      cats.set(t.kra_categories.id, {
+        ...t.kra_categories,
+        count: (existing?.count || 0) + 1
+      });
+    }
+  });
+  return Array.from(cats.values());
+}, [templates]);
 
-Same logic applies to KPI Name step.
+const kraNames = useMemo(() => {
+  if (!categoryFilter) return [];
+  const names = new Set<string>();
+  templates?.filter(t => t.is_active && t.category_id === categoryFilter)
+    .forEach(t => names.add(t.kra_name));
+  return Array.from(names).sort();
+}, [templates, categoryFilter]);
+
+const kpiOptions = useMemo(() => {
+  return templates?.filter(t =>
+    t.is_active &&
+    (!categoryFilter || t.category_id === categoryFilter) &&
+    (!kraNameFilter || t.kra_name === kraNameFilter) &&
+    (!templateSearch || 
+      t.title.toLowerCase().includes(templateSearch.toLowerCase()) ||
+      t.kra_name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+      t.kpi_name.toLowerCase().includes(templateSearch.toLowerCase()))
+  ) || [];
+}, [templates, categoryFilter, kraNameFilter, templateSearch]);
 ```
 
-The auto-fill behavior is preserved: when a user selects a KPI that came from a template, all fields (UOM, thresholds, etc.) are auto-filled from the template. When selecting a KPI that came from existing assignments, fields are auto-filled from that existing KPI's data.
+### Duplicate Detection
+
+```typescript
+// Before insert, check for existing assignments
+const { data: existing } = await supabase
+  .from('kpis')
+  .select('employee_id, kra_name, kpi_name')
+  .eq('kra_name', selectedTemplate.kra_name)
+  .eq('kpi_name', selectedTemplate.kpi_name)
+  .eq('review_period', currentPeriod)
+  .eq('review_year', currentYear)
+  .in('employee_id', Array.from(selectedEmployeeIds));
+
+const duplicateEmployeeIds = new Set(existing?.map(e => e.employee_id));
+const newEmployeeIds = Array.from(selectedEmployeeIds)
+  .filter(id => !duplicateEmployeeIds.has(id));
+```
+
+## Files to Change
+
+| File | Change |
+|---|---|
+| `src/components/admin/BulkTemplateAssignDialog.tsx` | Replace flat Select with cascading Category > KRA > KPI filters, add search, duplicate detection, enhanced preview |
+| `DOCUMENTATION.md` | Document the improved bulk assignment workflow |
+
