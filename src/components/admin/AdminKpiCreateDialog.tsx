@@ -28,9 +28,11 @@ interface AdminKpiCreateDialogProps {
   isOpen: boolean;
   onClose: () => void;
   defaultEmployeeId?: string;
+  defaultReviewPeriod?: string;
+  defaultReviewYear?: number;
 }
 
-export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: AdminKpiCreateDialogProps) {
+export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defaultReviewPeriod, defaultReviewYear }: AdminKpiCreateDialogProps) {
   const { data: categories } = useKraCategories();
   const { data: profiles } = useProfiles();
   const { data: settingsData } = useSystemSettings();
@@ -88,9 +90,9 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
   const [requireResubmitReason, setRequireResubmitReason] = useState(true);
   const [thresholdMode, setThresholdMode] = useState<'absolute' | 'ratio'>('absolute');
 
-  // Period
-  const [reviewPeriod, setReviewPeriod] = useState(settings.current_review_period);
-  const [reviewYear, setReviewYear] = useState<number>(settings.current_review_year);
+  // Period - prefer explicit defaults from props, then system settings
+  const [reviewPeriod, setReviewPeriod] = useState(defaultReviewPeriod || settings.current_review_period);
+  const [reviewYear, setReviewYear] = useState<number>(defaultReviewYear || settings.current_review_year);
 
   useEffect(() => {
     if (defaultEmployeeId) {
@@ -99,13 +101,13 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
   }, [defaultEmployeeId]);
 
   useEffect(() => {
-    if (settings.current_review_period) {
+    if (!defaultReviewPeriod && settings.current_review_period) {
       setReviewPeriod(settings.current_review_period);
     }
-    if (settings.current_review_year) {
+    if (!defaultReviewYear && settings.current_review_year) {
       setReviewYear(settings.current_review_year);
     }
-  }, [settings]);
+  }, [settings, defaultReviewPeriod, defaultReviewYear]);
 
   // Derived template data with fallback to existing KPIs
   const filteredKraNames = useMemo(() => {
@@ -294,7 +296,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
 
         <ScrollArea className="h-[60vh] pr-4">
           <div className="space-y-6 py-2">
-            {/* Employee Selection */}
+            {/* Employee Selection - hidden when pre-filled from issuance dialog */}
+            {!defaultEmployeeId && (
             <div className="space-y-2">
               <Label className="text-sm font-medium">Assign to Employee *</Label>
               <Select value={employeeId} onValueChange={setEmployeeId}>
@@ -310,6 +313,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId }: Adm
                 </SelectContent>
               </Select>
             </div>
+            )}
 
             {/* Category */}
             <div className="space-y-2">

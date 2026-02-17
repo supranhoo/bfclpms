@@ -3051,13 +3051,20 @@ KRA assignment and notification are now **decoupled**. When KRAs are assigned vi
 3. Clicking "Issue KRAs" opens the **KRA Issuance Confirmation Dialog** (`KraIssuanceConfirmDialog.tsx`)
 4. The dialog displays:
    - A detailed table of ALL assigned KPIs (Category, KRA, KPI, UOM, Target, Weightage, Frequency)
+   - **Checkbox selection column** — each row has a checkbox for multi-select; a "Select All" checkbox in the header. Selected count is shown as a badge in the dialog title.
    - **Inline editable weightage inputs** — each KPI's weightage is shown as a compact number input. Admins can adjust values on-the-fly; the total weightage card updates in real-time. Modified fields show a blue dot indicator. Changed weightages are saved to the database on confirmation.
    - A prominent **total weightage indicator** (green = 100%, amber = under, red = over)
    - An "Allow non-100% weightage" override toggle for intentional exceptions
    - A warning banner if KPIs have already been issued (re-issuance)
-5. Admin clicks **"Confirm & Issue KRAs"** → any modified weightages are batch-saved, all KPIs are marked `is_issued = true`, and a consolidated notification (in-app + email) is sent to the employee and their reporting manager
-6. **Scroll to Top**: After successful issuance, the All KPIs page automatically scrolls to the top for a clean return to the employee list
-7. **Persistent Scroll-to-Top Button**: A floating button (bottom-right corner) appears whenever the user scrolls down past 300px, allowing quick return to the top at any time — not just after issuance
+   - **Action toolbar** with:
+     - **"+ Add KRA"** button — opens the full `AdminKpiCreateDialog` pre-filled with the current employee, review period, and year. Employee selector is hidden when pre-filled. On close, the KPI list auto-refreshes.
+     - **"Remove Selected (N)"** button (destructive, appears when checkboxes are checked) — shows a confirmation dialog listing KPI names, then permanently deletes the selected KPIs from the database.
+5. **Save Draft** — A "Save Draft" button (`variant="secondary"`) in the footer persists weightage overrides to the database **without** issuing or sending notifications. Disabled when no changes are pending. Does not close the dialog.
+6. **Unsaved Changes Guard** — If the admin closes the dialog with pending weightage overrides, an alert dialog asks "Discard changes?" before closing.
+7. Admin clicks **"Confirm & Issue KRAs"** → any modified weightages are batch-saved, all KPIs are marked `is_issued = true`, and a consolidated notification (in-app + email) is sent to the employee and their reporting manager
+8. **Scroll to Top**: After successful issuance, the All KPIs page automatically scrolls to the top for a clean return to the employee list
+9. **Persistent Scroll-to-Top Button**: A floating button (bottom-right corner) appears whenever the user scrolls down past 300px, allowing quick return to the top at any time — not just after issuance
+10. **Empty State**: When no KPIs exist, a helpful message is shown with a direct "Add KRA" call-to-action.
 
 **Database:** `kpis.is_issued` (boolean, default `false`) — separates "assigned" from "officially issued" states.
 
@@ -3069,7 +3076,8 @@ KRA assignment and notification are now **decoupled**. When KRAs are assigned vi
 | File | Purpose |
 |---|---|
 | `src/lib/kraNotifications.ts` | Shared utility: fetches profiles, inserts notifications, triggers emails |
-| `src/components/admin/KraIssuanceConfirmDialog.tsx` | Confirmation dialog with weightage validation and issue button |
+| `src/components/admin/KraIssuanceConfirmDialog.tsx` | Confirmation dialog with Save Draft, Add KRA, Remove KPI, weightage validation and issue button |
+| `src/components/admin/AdminKpiCreateDialog.tsx` | KRA creation dialog; accepts `defaultReviewPeriod` and `defaultReviewYear` props for pre-filling |
 | `src/pages/admin/AllKpis.tsx` | "Issue KRAs" button and issued/not-issued badges in expanded employee rows |
 
 ---
