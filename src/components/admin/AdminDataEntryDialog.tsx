@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
+import { DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import {
   Dialog,
   DialogContent,
@@ -50,11 +52,13 @@ function dbRatingToDropdownValue(dbRating: RatingLevel, numericScore: number | n
   return byColor?.value ?? '';
 }
 
-const ROLE_LEVELS: { value: AdminRoleLevel; label: string }[] = [
-  { value: 'self', label: 'Self Review' },
-  { value: 'manager', label: 'Manager' },
-  { value: 'auditor', label: 'Auditor' },
-  { value: 'management', label: 'Management' },
+const ALL_ROLE_LEVELS: { value: AdminRoleLevel; label: string; stage: string }[] = [
+  { value: 'self', label: 'Self Review', stage: 'self_review' },
+  { value: 'manager', label: 'Manager', stage: 'manager_check' },
+  { value: 'skip_level', label: 'Skip-Level', stage: 'skip_level_check' },
+  { value: 'hr_pms', label: 'HR PMS', stage: 'hr_pms_review' },
+  { value: 'auditor', label: 'Auditor', stage: 'audit' },
+  { value: 'management', label: 'Management', stage: 'management_review' },
 ];
 
 // Helper: determine if a KPI uses qualitative input
@@ -96,6 +100,14 @@ export function AdminDataEntryDialog({
   employeeCode,
 }: AdminDataEntryDialogProps) {
   const submitMutation = useAdminSubmitReviewData();
+
+  // Fetch employee's workflow stages to determine which role levels to show
+  const { data: workflowStages } = useEmployeeWorkflowStages(employeeId);
+  const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
+  const visibleRoleLevels = useMemo(
+    () => ALL_ROLE_LEVELS.filter((r) => effectiveStages.includes(r.stage)),
+    [effectiveStages]
+  );
 
   // Form state
   const [roleLevel, setRoleLevel] = useState<AdminRoleLevel>('self');
@@ -318,6 +330,22 @@ export function AdminDataEntryDialog({
       case 'manager':
         loadLevel(existingSubmission.manager_achieved_value, existingSubmission.manager_rating, existingSubmission.manager_score, existingSubmission.manager_remarks);
         break;
+      case 'skip_level':
+        loadLevel(
+          (existingSubmission as any).skip_level_achieved_value ?? null,
+          (existingSubmission as any).skip_level_rating ?? null,
+          (existingSubmission as any).skip_level_score ?? null,
+          (existingSubmission as any).skip_level_remarks ?? null
+        );
+        break;
+      case 'hr_pms':
+        loadLevel(
+          (existingSubmission as any).hr_pms_achieved_value ?? null,
+          (existingSubmission as any).hr_pms_rating ?? null,
+          (existingSubmission as any).hr_pms_score ?? null,
+          (existingSubmission as any).hr_pms_remarks ?? null
+        );
+        break;
       case 'auditor':
         loadLevel(existingSubmission.auditor_achieved_value, existingSubmission.auditor_rating, existingSubmission.auditor_score, existingSubmission.auditor_remarks);
         break;
@@ -451,9 +479,9 @@ export function AdminDataEntryDialog({
               <RadioGroup
                 value={roleLevel}
                 onValueChange={(v) => setRoleLevel(v as AdminRoleLevel)}
-                className="grid grid-cols-2 sm:grid-cols-4 gap-2"
+                className="grid grid-cols-2 sm:grid-cols-3 gap-2"
               >
-                {ROLE_LEVELS.map((role) => (
+                {visibleRoleLevels.map((role) => (
                   <div key={role.value} className="flex items-center space-x-2">
                     <RadioGroupItem value={role.value} id={role.value} />
                     <Label htmlFor={role.value} className="font-normal cursor-pointer">
