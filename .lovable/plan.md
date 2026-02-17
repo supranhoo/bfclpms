@@ -1,48 +1,47 @@
 
 
-# Add "Create New" Options for Category, KRA, and KPI in "Assign New KRA" Dialog
+# Fix: Custom KRA Name Blocks KPI Name Entry
 
-## Current State
+## Root Cause
 
-- **KRA Name**: Already has a combobox with "+ Enter custom KRA name" option. Working correctly.
-- **KPI Name**: Already has a combobox with "+ Enter custom KPI name" option. Working correctly.
-- **Category**: Uses a plain `<Select>` dropdown with no way to create a new category inline. This is the missing piece.
+In `AdminKpiCreateDialog.tsx`, line 569, the KPI Name combobox has:
 
-## What Will Change
+```typescript
+disabled={!kraName || isCustomKra}
+```
+
+When the admin clicks "+ Enter custom KRA name" and types a custom KRA name, `isCustomKra` is `true`. This **disables the KPI dropdown entirely**, so the user can never proceed to enter a KPI name. Without a KPI name, the form's submit validation on line 253 (`!kpiName`) blocks saving.
+
+The intent was to disable the KPI dropdown when no KRA is selected, but the `isCustomKra` condition incorrectly gates it even when a custom KRA name has been typed.
+
+## Fix
 
 ### File: `src/components/admin/AdminKpiCreateDialog.tsx`
 
-Replace the Category `<Select>` (lines 320-340) with a combobox (Popover + Command) following the same pattern already used for KRA and KPI fields.
+**Line 569**: Change the disabled condition from:
+```typescript
+disabled={!kraName || isCustomKra}
+```
+to:
+```typescript
+disabled={!kraName}
+```
 
-**New state variables:**
-- `categoryOpen` -- controls the combobox popover
-- `isCustomCategory` -- toggles between dropdown and inline creation mode
-- `customCategoryName`, `customCategoryWeightage`, `customCategoryColor` -- form fields for new category
+This way:
+- When using the KRA combobox (dropdown selection), `kraName` is set on selection -- KPI dropdown enables. (No change.)
+- When using custom KRA entry, `kraName` is set as the user types -- KPI dropdown enables once they type something. (Previously broken, now fixed.)
+- If no KRA name is entered yet, the KPI dropdown remains disabled. (Correct.)
 
-**New import:**
-- `useCreateKraCategory` from `useOrganization.ts` (already exported, accepts `{ name, weightage, color }`)
-
-**UI behavior:**
-
-Default mode (combobox):
-- Searchable list of existing categories (same as current, with color dot and weightage %)
-- At the bottom: "+ Create new category" option
-
-Custom mode (inline form):
-- Category Name input
-- Weightage input (number, %)
-- Color picker input (hex color)
-- "Save" button that calls `useCreateKraCategory`, then auto-selects the new category ID
-- Back arrow button to return to dropdown (same pattern as KRA/KPI)
+Additionally, when `isCustomKra` is true and a custom KRA name is entered, the KPI dropdown will show no existing templates (since `filteredKpiTemplates` filters by `kraName` match, which won't match anything for a brand-new KRA). The user will see "No KPI templates found" and can click "+ Enter custom KPI name" to type their own. This is the correct UX flow.
 
 ### File: `DOCUMENTATION.md`
 
-Document the new inline category creation capability.
+Document the bug fix.
 
-## Technical Details
+## Files to Change
 
-- The `useCreateKraCategory` hook (in `useOrganization.ts`) already invalidates the `kra-categories` query cache on success, so the new category will immediately appear in the dropdown
-- After creating a new category, the mutation returns the new category object with its `id`, which will be set as `categoryId` to unlock the KRA Name field
-- No database changes needed
-- No new hooks needed
+| File | Change |
+|---|---|
+| `src/components/admin/AdminKpiCreateDialog.tsx` | Remove `isCustomKra` from KPI disabled condition (line 569) |
+| `DOCUMENTATION.md` | Document fix |
 
