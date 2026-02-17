@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -142,7 +142,7 @@ export function KraIssuanceConfirmDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Send className="h-5 w-5 text-primary" />
@@ -198,7 +198,7 @@ export function KraIssuanceConfirmDialog({
         </Card>
 
         {/* KPI Table */}
-        <ScrollArea className="flex-1 min-h-0 border rounded-lg">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto border rounded-lg">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -222,7 +222,7 @@ export function KraIssuanceConfirmDialog({
                   <TableRow key={kpi.id}>
                     <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-xs">
+                      <Badge variant="outline" className="text-xs max-w-[100px] truncate" title={getCategoryName(kpi.category_id)}>
                         {getCategoryName(kpi.category_id)}
                       </Badge>
                     </TableCell>
@@ -266,7 +266,7 @@ export function KraIssuanceConfirmDialog({
               </TableBody>
             </Table>
           )}
-        </ScrollArea>
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
