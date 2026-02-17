@@ -1,68 +1,70 @@
 
 
-# Fix: Disable "Submit Month" During Active Month with Clear User Messaging
+# Fix: Allow Employee to Edit Self-Review While at "Self Review" Status
 
 ## Problem
 
-The "Submit Month" button for Daily/Weekly KPIs is clickable during the active month. Users accidentally submit incomplete data mid-month, forcing managers to roll back KPIs -- creating unnecessary work.
+When Dippendu clicks on a KPI at "Self Review" status, the panel opens but shows as **read-only** with a "View KPI Details" header. He cannot modify his submitted values even though the manager has not yet reviewed the KPI.
 
-## Solution
+## Root Cause
 
-Add a date-based guard: disable "Submit Month" while the review month is still ongoing, and show a clear countdown-style message so users understand when it will unlock.
-
-## Before / Changes / After
-
-### Before
-```text
-Submit Month Button States:
-1. No entries yet       --> Disabled + tooltip "Enter at least one daily value first"
-2. Already submitted    --> Disabled + "Month Submitted"
-3. Has entries + kra_set --> ENABLED (even mid-month!) <-- BUG
+In `SelfReviewSheet.tsx` (line 445):
+```
+const isReadOnly = !isKraSet;   // isKraSet = status === 'kra_set'
 ```
 
-### Changes
-- Import `endOfMonth` and `getMonthNumber` in SelfReviewSheet
-- Compute `isMonthStillActive` flag comparing current date to end of review month
-- Add a NEW 4th button state: month still active --> disabled with tooltip showing "Available after {Month} {Year} ends"
-- Show an informational banner near the button area: "You can submit the month total once {Month} ends"
+This means **any** status other than `kra_set` makes the sheet read-only, including `self_review`. The employee loses all ability to edit once they click "Submit."
 
-### After
-```text
-Submit Month Button States:
-1. No entries yet            --> Disabled + tooltip "Enter at least one daily value first"
-2. Already submitted         --> Disabled + "Month Submitted"
-3. Month still active        --> Disabled + tooltip "Available after January 2026 ends" (NEW)
-4. Month over + has entries  --> ENABLED
+## Fix
+
+Allow editing when the KPI status is either `kra_set` OR `self_review`. Once it moves to `manager_check` or beyond, it correctly becomes read-only.
+
+### File: `src/components/review/SelfReviewSheet.tsx`
+
+**Change 1 (line 445):** Update the `isReadOnly` logic:
+
+```
+// Before
+const isReadOnly = !isKraSet;
+
+// After
+const isSelfReview = selectedKpi?.status === 'self_review';
+const isReadOnly = !isKraSet && !isSelfReview;
 ```
 
-The button will show a Lock icon and muted styling when the month is active, with a clear tooltip message. Users can still save daily entries normally throughout the month.
+**Change 2 (header label):** Update the title logic (line 456) so it shows "Edit Self Review" when resubmitting at `self_review` status instead of "View KPI Details":
 
-## Technical Detail
-
-### File 1: `src/components/review/SelfReviewSheet.tsx`
-
-1. Add import: `endOfMonth` from `date-fns` (already uses `format` from date-fns)
-2. Add import: `getMonthNumber` from `@/lib/frequencyUtils` (already imports other functions from there)
-3. Compute flag near line 126:
-```typescript
-const isMonthStillActive = useMemo(() => {
-  const monthNum = getMonthNumber(selectedPeriod);
-  const monthEnd = endOfMonth(new Date(selectedYear, monthNum - 1));
-  return new Date() <= monthEnd;
-}, [selectedPeriod, selectedYear]);
 ```
-4. In the Submit Month button section (line 840), insert a new condition before the enabled button case:
-   - When `isMonthStillActive` is true: render disabled button with Lock icon and tooltip "Available after {selectedPeriod} {selectedYear} ends"
-   - When false: render existing enabled button (current behavior)
+// Before
+{isReadOnly ? 'View KPI Details' : 'Submit Self Review'}
 
-### File 2: `DOCUMENTATION.md`
+// After  
+{isReadOnly ? 'View KPI Details' : (isSelfReview ? 'Edit Self Review' : 'Submit Self Review')}
+```
 
-Document the month-end gate for daily KPI month submission.
+**Change 3 (button label):** Update the submit button text in the footer (around line 773+) to say "Update" or "Re-submit" when at `self_review` status, distinguishing it from the initial submission.
+
+### File: `DOCUMENTATION.md`
+
+Document that employees can edit their self-review as long as the KPI is still at `self_review` status (before the manager picks it up).
+
+## What This Enables
+
+| KPI Status | Before (Broken) | After (Fixed) |
+|---|---|---|
+| `kra_set` | Editable | Editable (no change) |
+| `self_review` | Read-only | Editable (can re-submit) |
+| `manager_check` | Read-only | Read-only (no change) |
+| `audit` and beyond | Read-only | Read-only (no change) |
+
+## Backend Impact
+
+None. The `useSubmitSelfReview` hook already uses `upsert` with `onConflict: 'kpi_id'` and sets the status to `self_review` -- it already handles re-submissions correctly at the database level.
 
 ## Files to Change
 
 | File | Change |
 |---|---|
-| `src/components/review/SelfReviewSheet.tsx` | Add `isMonthStillActive` guard; new disabled button state with Lock icon and tooltip |
-| `DOCUMENTATION.md` | Document the restriction |
+| `src/components/review/SelfReviewSheet.tsx` | Update `isReadOnly` to allow editing at `self_review`; update header and button labels |
+| `DOCUMENTATION.md` | Document self-review edit capability |
 
