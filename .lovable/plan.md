@@ -1,123 +1,89 @@
 
 
-# KRA Issuance Confirmation Workflow
+# Inline Weightage Editing + Scroll-to-Top in KRA Issuance Dialog
 
-## Problem
+## Overview
 
-Currently, all KRA assignment methods (Assign KRA, Smart Assign, Bundle Assign, Copy KRAs) insert KPIs directly into the database and fire notification emails immediately -- without any confirmation step. There is no validation that the total weightage equals 100%, no consolidated review of all KPIs before finalizing, and no way for the admin to verify the full picture before the employee receives the issuance email.
+Two enhancements to the "Issue KRAs -- Confirmation" dialog:
 
-## Solution
+1. **Editable Weightage** -- Replace static weightage badges with inline number inputs so admins can adjust weightages on-the-fly to reach 100%.
+2. **Scroll to Top** -- After the admin clicks "Confirm & Issue" and the dialog closes, the All KPIs page automatically scrolls back to the top for a clean return to the employee list.
 
-Add a **KRA Issuance Confirmation Dialog** accessible from the Admin KPI Dashboard (AllKpis page). When an admin clicks a new "Issue KRAs" button on an employee's expanded row, a dialog opens showing:
+---
 
-1. A detailed table of ALL KPIs assigned to that employee for the selected period
-2. Per-KPI details: Category, KRA Name, KPI Name, UOM, Target, Weightage%, Frequency
-3. A prominent **total weightage indicator** with validation (green if 100%, red/warning otherwise)
-4. A "Confirm and Issue" button that sends the consolidated KRA issuance notification email
+## Before
 
-The dialog blocks issuance if total weightage is not 100% (with an override toggle for intentional exceptions).
-
-## Current Notification Flow (Before)
-
-```text
-Admin assigns KPIs --> KPIs inserted --> Email sent immediately (no review)
-```
-
-## New Flow (After)
-
-```text
-Admin assigns KPIs --> KPIs inserted (no email yet)
-Admin clicks "Issue KRAs" on employee row --> Confirmation Dialog opens
-Admin reviews all KPIs + weightage --> Clicks "Confirm & Issue"
---> Email sent to employee + manager
---> KPIs marked as "issued" (new field)
-```
+- Weightage column shows read-only badges (e.g., `15%`). To fix weightage, the admin must close the dialog, edit each KPI individually, then reopen.
+- After issuing, the page stays at whatever scroll position the admin was at (potentially deep in an expanded employee row).
 
 ## Changes
 
-### 1. Database: Add `is_issued` flag to `kpis` table
+### 1. `KraIssuanceConfirmDialog.tsx` -- Inline Weightage Editing
 
-A new boolean column `is_issued` (default `false`) tracks whether the admin has formally confirmed and issued the KRA. This separates "assigned" from "issued" states. The existing `status` field remains unchanged.
+- Add `weightageOverrides` state: `Record<string, number>` keyed by KPI id
+- Replace the static `<Badge>` in the Weightage column with a compact `<Input type="number" />` (w-16, centered)
+- Recalculate `totalWeightage` using overrides: `overrides[id] ?? original`
+- Show a small blue dot next to modified values
+- On "Confirm & Issue":
+  - Batch-update any KPIs whose weightage was changed
+  - Then mark all as `is_issued = true`
+  - Then send notification with the updated weightage values
 
-### 2. New Component: `KraIssuanceConfirmDialog.tsx`
+### 2. `AllKpis.tsx` -- Scroll to Top on Dialog Close
 
-A dialog that:
-- Accepts `employeeId`, `employeeName`, `reviewPeriod`, `reviewYear`
-- Fetches all KPIs for that employee/period
-- Displays a detailed table with columns: #, Category, KRA, KPI, UOM, Target, Weightage, Frequency
-- Shows total weightage with color-coded validation (green = 100%, amber = under, red = over)
-- Has a "Confirm & Issue" button that:
-  - Updates all KPIs to `is_issued = true`
-  - Calls `sendKraAssignmentNotifications()` for the consolidated email
-  - Shows success toast
-- Has a "Allow non-100% weightage" toggle for edge cases
-- Shows a warning banner if KPIs are already issued (re-issuance scenario)
+- Add a callback `onIssuanceComplete` passed to the dialog
+- In the callback (or in the dialog's `onClose` after success), call `window.scrollTo({ top: 0, behavior: 'smooth' })` to scroll the page back to the top
 
-### 3. Update `AllKpis.tsx`: Add "Issue KRAs" button
+### 3. `DOCUMENTATION.md`
 
-- In the expanded employee row, add a prominent "Issue KRAs" button next to the employee name
-- Show a visual indicator (badge) for whether KRAs have been issued or not
-- The button opens the new `KraIssuanceConfirmDialog`
+- Document inline weightage editing and scroll-to-top behavior
 
-### 4. Remove auto-email from existing assignment flows
+## After
 
-- Remove `sendKraAssignmentNotifications()` calls from:
-  - `SmartAssignmentDialog.tsx`
-  - `BundleAssignDialog.tsx`
-  - `CopyKrasDialog.tsx`
-  - `BulkTemplateAssignDialog.tsx`
-- KPIs are still inserted, but email is deferred until issuance confirmation
-
-### 5. Update `DOCUMENTATION.md`
-
-Document the new issuance workflow.
+- The Weightage column in the confirmation dialog shows editable number inputs. As the admin types, the Total Weightage card updates in real-time (green at 100%, amber/red otherwise). Modified fields show a blue dot indicator.
+- After confirming issuance, the page smoothly scrolls to the top of the All KPIs list.
 
 ---
 
 ## Technical Detail
 
-### Database Migration
-
-```sql
-ALTER TABLE public.kpis ADD COLUMN is_issued boolean DEFAULT false;
-```
-
-No RLS changes needed -- the existing admin policies already cover updates.
-
-### KraIssuanceConfirmDialog Component Structure
+### Weightage Override State
 
 ```typescript
-interface KraIssuanceConfirmDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  employeeId: string;
-  employeeName: string;
-  employeeCode?: string;
-  reviewPeriod: string;
-  reviewYear: number;
-}
+const [weightageOverrides, setWeightageOverrides] = useState<Record<string, number>>({});
+
+const getEffectiveWeightage = (kpi) => weightageOverrides[kpi.id] ?? kpi.weightage ?? 0;
+
+const totalWeightage = kpis?.reduce((sum, k) => sum + getEffectiveWeightage(k), 0) || 0;
 ```
 
-Key sections in the dialog:
-- **Header**: Employee name, period, year
-- **Weightage Summary Card**: Large number showing total %, color-coded
-- **KPI Table**: Scrollable table with all assigned KPIs and their details
-- **Footer**: Cancel + "Confirm & Issue KRAs" button (disabled if weightage != 100% and override not toggled)
+### Mutation Update (changed KPIs only)
 
-### Removing Auto-Email from Assignment Dialogs
+```typescript
+// Save changed weightages
+const changed = Object.entries(weightageOverrides);
+for (const [id, newVal] of changed) {
+  await supabase.from('kpis').update({ weightage: newVal }).eq('id', id);
+}
+// Then mark all as issued
+await supabase.from('kpis').update({ is_issued: true }).in('id', kpiIds);
+```
 
-In each of the 4 dialogs, the `sendKraAssignmentNotifications()` call in the `onSuccess` handler will be removed. The toast messages will be updated to say "KPIs assigned. Use 'Issue KRAs' to send notification."
+### Scroll to Top
+
+```typescript
+// In AllKpis.tsx, after dialog closes on success:
+const handleIssuanceComplete = () => {
+  setIssuanceDialogOpen(false);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+```
 
 ### Files to Change
 
 | File | Change |
 |---|---|
-| Database migration | Add `is_issued` column to `kpis` table |
-| `src/components/admin/KraIssuanceConfirmDialog.tsx` | NEW: Confirmation dialog with weightage validation |
-| `src/pages/admin/AllKpis.tsx` | Add "Issue KRAs" button per employee, issued/not-issued badges |
-| `src/components/admin/SmartAssignmentDialog.tsx` | Remove `sendKraAssignmentNotifications` call |
-| `src/components/admin/BundleAssignDialog.tsx` | Remove `sendKraAssignmentNotifications` call |
-| `src/components/admin/CopyKrasDialog.tsx` | Remove `sendKraAssignmentNotifications` call |
-| `src/components/admin/BulkTemplateAssignDialog.tsx` | Remove `sendKraAssignmentNotifications` call |
-| `DOCUMENTATION.md` | Document KRA issuance workflow |
+| `src/components/admin/KraIssuanceConfirmDialog.tsx` | Add weightage override state, editable inputs, batch-save logic |
+| `src/pages/admin/AllKpis.tsx` | Add scroll-to-top on issuance dialog close |
+| `DOCUMENTATION.md` | Document inline editing and scroll behavior |
 
