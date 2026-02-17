@@ -969,6 +969,7 @@ export type Database = {
           frequency_cycle_start: string | null
           id: string
           is_frequency_locked: boolean | null
+          is_issued: boolean | null
           is_org_level: boolean | null
           kpi_name: string
           kra_name: string
@@ -1004,6 +1005,7 @@ export type Database = {
           frequency_cycle_start?: string | null
           id?: string
           is_frequency_locked?: boolean | null
+          is_issued?: boolean | null
           is_org_level?: boolean | null
           kpi_name: string
           kra_name: string
@@ -1039,6 +1041,7 @@ export type Database = {
           frequency_cycle_start?: string | null
           id?: string
           is_frequency_locked?: boolean | null
+          is_issued?: boolean | null
           is_org_level?: boolean | null
           kpi_name?: string
           kra_name?: string

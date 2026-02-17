@@ -14,7 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
-import { sendKraAssignmentNotifications } from '@/lib/kraNotifications';
+
 
 interface BulkTemplateAssignDialogProps {
   isOpen: boolean;
@@ -123,19 +123,7 @@ export function BulkTemplateAssignDialog({ isOpen, onClose }: BulkTemplateAssign
         description: `Assigned "${selectedTemplate?.kra_name}" to ${count} employees`,
       });
 
-      // Send consolidated notifications per employee
-      if (selectedTemplate) {
-        const kraItem = {
-          kra_name: selectedTemplate.kra_name,
-          kpi_name: selectedTemplate.kpi_name,
-          target_value: selectedTemplate.target_value,
-          weightage: selectedTemplate.weightage,
-          uom: selectedTemplate.uom || null,
-        };
-        Array.from(selectedEmployeeIds).forEach(empId => {
-          sendKraAssignmentNotifications(empId, [kraItem], currentPeriod, currentYear);
-        });
-      }
+      // Email deferred to "Issue KRAs" confirmation step
 
       handleClose();
     },
