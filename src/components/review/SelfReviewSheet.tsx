@@ -14,6 +14,7 @@ import {
   requiresSubPeriodSelection,
   isKpiLockedForPeriod,
   hasMultiMonthCycle,
+  getMonthNumber,
 } from '@/lib/frequencyUtils';
 import { useFrequencyConfig } from '@/hooks/useFrequencyConfig';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,7 +41,7 @@ import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
 import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog';
 import { DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
-import { format } from 'date-fns';
+import { format, endOfMonth } from 'date-fns';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -124,6 +125,13 @@ export function SelfReviewSheet({
     selectedKpi.frequency, selectedPeriod, selectedYear,
     selectedKpi.frequency_cycle_start, frequencyConfig
   ) : false;
+
+  // Month-end gate: prevent premature Submit Month for Daily/Weekly KPIs
+  const isMonthStillActive = useMemo(() => {
+    const monthNum = getMonthNumber(selectedPeriod);
+    const monthEnd = endOfMonth(new Date(selectedYear, monthNum - 1));
+    return new Date() <= monthEnd;
+  }, [selectedPeriod, selectedYear]);
 
   // Form state
   const [achievedValue, setAchievedValue] = useState('');
@@ -835,6 +843,20 @@ export function SelfReviewSheet({
                           </TooltipTrigger>
                           <TooltipContent>
                             This KPI has already been submitted for the month
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : isMonthStillActive ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>
+                              <Button size="sm" variant="outline" disabled className="gap-1 opacity-50">
+                                <Lock className="h-3 w-3" />
+                                Submit Month
+                              </Button>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Available after {selectedPeriod} {selectedYear} ends
                           </TooltipContent>
                         </Tooltip>
                       ) : (
