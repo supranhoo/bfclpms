@@ -1,52 +1,60 @@
 
 
-# Add Scroll-to-Top Button on All KPIs Page
+# Fix KRA Issuance Dialog Layout Issues
 
-## Overview
+## Problem
 
-Add a floating "scroll to top" button on the All KPIs page (`/admin/kpis`) that appears when the user scrolls down, allowing them to quickly return to the top of the page at any time -- not just after KRA issuance.
+From the screenshot, the "Issue KRAs -- Confirmation" dialog has three issues:
+1. **Cannot scroll down** -- the KPI table area does not scroll, so rows beyond what fits on screen are inaccessible
+2. **Columns cut off** -- the Weightage column is partially hidden on the right edge, and the Frequency column is completely invisible
+3. **Category text overflows** -- long category names like "Excellence & Process Improvement" break the badge layout
 
-## What Changes
+## Before
 
-### `src/pages/admin/AllKpis.tsx`
+- Dialog width: `max-w-3xl` (48rem / 768px) -- too narrow for 8 columns with editable inputs
+- Table scroll: Uses `ScrollArea` component which can fail in nested flex layouts (per project standard)
+- No horizontal scroll support for the table on smaller screens
+- Category badges have no width constraint, pushing other columns off-screen
 
-- Add a scroll listener (`useEffect` + `useState`) to track whether the page has been scrolled past a threshold (e.g., 300px).
-- Render a floating `<Button>` (bottom-right corner, fixed position) with an `ArrowUp` icon that calls `window.scrollTo({ top: 0, behavior: 'smooth' })`.
-- The button fades in/out based on scroll position using opacity and transition classes.
+## Changes
 
-### `DOCUMENTATION.md`
+### File: `src/components/admin/KraIssuanceConfirmDialog.tsx`
 
-- Note the scroll-to-top button under the All KPIs page section.
+1. **Widen dialog**: Change `max-w-3xl` to `max-w-5xl` to fit all 8 columns comfortably
+2. **Replace ScrollArea with native scroll**: Per the project's `native-scrolling-standard`, switch to `overflow-y-auto` with a fixed `max-h` for reliable scrolling
+3. **Add horizontal overflow**: Wrap the table in `overflow-x-auto` so columns are accessible on smaller screens
+4. **Constrain category badges**: Add `max-w-[100px]` and `truncate` to prevent long category names from consuming too much space
+5. **Tighten cell padding**: Use smaller padding on cells to maximize content space
+
+### File: `DOCUMENTATION.md`
+
+- Update the dialog layout notes
+
+## After
+
+- Dialog is wider (max-w-5xl / 64rem), showing all columns including Weightage and Frequency without cutoff
+- The KPI table scrolls vertically (native `overflow-y-auto`) when there are many rows (e.g., 19 KPIs)
+- On smaller screens, the table scrolls horizontally so no columns are hidden
+- Category names are neatly truncated within badges with tooltips
 
 ## Technical Detail
 
-```typescript
-const [showScrollTop, setShowScrollTop] = useState(false);
-
-useEffect(() => {
-  const handleScroll = () => setShowScrollTop(window.scrollY > 300);
-  window.addEventListener('scroll', handleScroll);
-  return () => window.removeEventListener('scroll', handleScroll);
-}, []);
+Key class changes on `DialogContent`:
+```
+max-w-3xl  -->  max-w-5xl
 ```
 
-Button rendered at the bottom of the component:
+Table container change:
 ```tsx
-{showScrollTop && (
-  <Button
-    size="icon"
-    className="fixed bottom-6 right-6 z-50 rounded-full shadow-lg"
-    onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-  >
-    <ArrowUp className="h-5 w-5" />
-  </Button>
-)}
+// Before: ScrollArea (unreliable in nested flex)
+<ScrollArea className="flex-1 min-h-0 border rounded-lg">
+
+// After: Native scroll with explicit max height
+<div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto border rounded-lg">
 ```
 
-### Files to Change
-
-| File | Change |
-|---|---|
-| `src/pages/admin/AllKpis.tsx` | Add scroll listener state and floating scroll-to-top button |
-| `DOCUMENTATION.md` | Document scroll-to-top feature |
+Category badge constraint:
+```tsx
+<Badge variant="outline" className="text-xs max-w-[100px] truncate">
+```
 
