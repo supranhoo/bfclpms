@@ -1,20 +1,22 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, CheckCircle, AlertTriangle, Send, Info } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Loader2, CheckCircle, AlertTriangle, Send, Info, Plus, Trash2, Save } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { sendKraAssignmentNotifications, KraNotificationItem } from '@/lib/kraNotifications';
+import { AdminKpiCreateDialog } from './AdminKpiCreateDialog';
 
 interface KraIssuanceConfirmDialogProps {
   isOpen: boolean;
@@ -42,6 +44,10 @@ export function KraIssuanceConfirmDialog({
   const { data: categories } = useKraCategories();
   const [allowNon100, setAllowNon100] = useState(false);
   const [weightageOverrides, setWeightageOverrides] = useState<Record<string, number>>({});
+  const [selectedKpiIds, setSelectedKpiIds] = useState<Set<string>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [isAddKraOpen, setIsAddKraOpen] = useState(false);
 
   // Fetch all KPIs for this employee/period
   const { data: kpis, isLoading } = useQuery({
@@ -60,17 +66,18 @@ export function KraIssuanceConfirmDialog({
     enabled: isOpen && !!employeeId,
   });
 
-  const getEffectiveWeightage = (kpi: { id: string; weightage: number | null }) =>
-    weightageOverrides[kpi.id] ?? kpi.weightage ?? 0;
+  const getEffectiveWeightage = useCallback((kpi: { id: string; weightage: number | null }) =>
+    weightageOverrides[kpi.id] ?? kpi.weightage ?? 0, [weightageOverrides]);
 
   const totalWeightage = useMemo(() => {
     return kpis?.reduce((sum, k) => sum + getEffectiveWeightage(k), 0) || 0;
-  }, [kpis, weightageOverrides]);
+  }, [kpis, getEffectiveWeightage]);
 
   const alreadyIssued = useMemo(() => {
     return kpis?.some(k => k.is_issued) || false;
   }, [kpis]);
 
+  const hasUnsavedChanges = Object.keys(weightageOverrides).length > 0;
   const isWeightageValid = totalWeightage === 100;
   const canIssue = (isWeightageValid || allowNon100) && (kpis?.length || 0) > 0;
 
@@ -83,6 +90,54 @@ export function KraIssuanceConfirmDialog({
   const weightageIcon = isWeightageValid
     ? <CheckCircle className="h-5 w-5 text-primary" />
     : <AlertTriangle className="h-5 w-5 text-warning" />;
+
+  // Save Draft mutation
+  const saveDraftMutation = useMutation({
+    mutationFn: async () => {
+      const changed = Object.entries(weightageOverrides);
+      if (changed.length === 0) throw new Error('No changes to save');
+      for (const [id, newVal] of changed) {
+        const { error } = await supabase.from('kpis').update({ weightage: newVal }).eq('id', id);
+        if (error) throw error;
+      }
+      return changed.length;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ['issuance-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      setWeightageOverrides({});
+      toast({ title: 'Draft Saved', description: `${count} weightage(s) updated successfully.` });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Save Failed', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Remove KPIs mutation
+  const removeKpisMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase.from('kpis').delete().in('id', ids);
+      if (error) throw error;
+      return ids.length;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ['issuance-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      setSelectedKpiIds(new Set());
+      // Clear weightage overrides for deleted KPIs
+      setWeightageOverrides(prev => {
+        const next = { ...prev };
+        for (const id of selectedKpiIds) delete next[id];
+        return next;
+      });
+      toast({ title: `${count} KPI(s) Removed`, description: 'The selected KPIs have been deleted.' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Removal Failed', description: error.message, variant: 'destructive' });
+    },
+  });
 
   // Issue mutation
   const issueMutation = useMutation({
@@ -104,7 +159,7 @@ export function KraIssuanceConfirmDialog({
         .in('id', kpiIds);
       if (error) throw error;
 
-      // Send consolidated notification (use updated weightage values)
+      // Send consolidated notification
       const kraItems: KraNotificationItem[] = kpis.map(k => ({
         kra_name: k.kra_name,
         kpi_name: k.kpi_name,
@@ -140,48 +195,125 @@ export function KraIssuanceConfirmDialog({
     return categories?.find(c => c.id === categoryId)?.name || '-';
   };
 
+  const handleClose = () => {
+    if (hasUnsavedChanges) {
+      setShowDiscardConfirm(true);
+    } else {
+      resetAndClose();
+    }
+  };
+
+  const resetAndClose = () => {
+    setWeightageOverrides({});
+    setSelectedKpiIds(new Set());
+    setShowDiscardConfirm(false);
+    onClose();
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked && kpis) {
+      setSelectedKpiIds(new Set(kpis.map(k => k.id)));
+    } else {
+      setSelectedKpiIds(new Set());
+    }
+  };
+
+  const handleSelectOne = (kpiId: string, checked: boolean) => {
+    setSelectedKpiIds(prev => {
+      const next = new Set(prev);
+      if (checked) next.add(kpiId); else next.delete(kpiId);
+      return next;
+    });
+  };
+
+  const handleConfirmRemove = () => {
+    const ids = Array.from(selectedKpiIds);
+    removeKpisMutation.mutate(ids);
+    setShowDeleteConfirm(false);
+  };
+
+  const handleAddKraClose = () => {
+    setIsAddKraOpen(false);
+    queryClient.invalidateQueries({ queryKey: ['issuance-kpis'] });
+  };
+
+  const selectedKpiNames = useMemo(() => {
+    if (!kpis) return [];
+    return kpis.filter(k => selectedKpiIds.has(k.id)).map(k => k.kpi_name);
+  }, [kpis, selectedKpiIds]);
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Send className="h-5 w-5 text-primary" />
-            Issue KRAs — Confirmation
-          </DialogTitle>
-          <DialogDescription>
-            Review all assigned KPIs for <strong>{employeeName}</strong>
-            {employeeCode && <span> ({employeeCode})</span>}
-            {' '}· {reviewPeriod} {reviewYear}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
+        <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="h-5 w-5 text-primary" />
+              Issue KRAs — Confirmation
+              {selectedKpiIds.size > 0 && (
+                <Badge variant="secondary" className="ml-2">{selectedKpiIds.size} selected</Badge>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Review all assigned KPIs for <strong>{employeeName}</strong>
+              {employeeCode && <span> ({employeeCode})</span>}
+              {' '}· {reviewPeriod} {reviewYear}
+            </DialogDescription>
+          </DialogHeader>
 
-        {/* Already issued warning */}
-        {alreadyIssued && (
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription>
-              Some KPIs have already been issued. Confirming will re-issue and send a new notification.
-            </AlertDescription>
-          </Alert>
-        )}
+          {/* Already issued warning */}
+          {alreadyIssued && (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Some KPIs have already been issued. Confirming will re-issue and send a new notification.
+              </AlertDescription>
+            </Alert>
+          )}
 
-        {/* Weightage Summary */}
-        <Card className="border-2">
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {weightageIcon}
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Total Weightage</div>
-                  <div className={`text-3xl font-bold ${weightageColor}`}>
-                    {totalWeightage}%
+          {/* Weightage Summary + Action Buttons */}
+          <Card className="border-2">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  {weightageIcon}
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground">Total Weightage</div>
+                    <div className={`text-3xl font-bold ${weightageColor}`}>
+                      {totalWeightage}%
+                    </div>
                   </div>
                 </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {selectedKpiIds.size > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setShowDeleteConfirm(true)}
+                      disabled={removeKpisMutation.isPending}
+                    >
+                      {removeKpisMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                      ) : (
+                        <Trash2 className="h-4 w-4 mr-1" />
+                      )}
+                      Remove Selected ({selectedKpiIds.size})
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsAddKraOpen(true)}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add KRA
+                  </Button>
+                </div>
               </div>
-              <div className="text-right">
+              <div className="flex items-center justify-between mt-2">
                 <div className="text-sm text-muted-foreground">{kpis?.length || 0} KPIs assigned</div>
                 {!isWeightageValid && (
-                  <div className="flex items-center gap-2 mt-2">
+                  <div className="flex items-center gap-2">
                     <Switch
                       id="allow-override"
                       checked={allowNon100}
@@ -193,103 +325,181 @@ export function KraIssuanceConfirmDialog({
                   </div>
                 )}
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        {/* KPI Table */}
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto border rounded-lg">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10">#</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>KRA</TableHead>
-                  <TableHead>KPI</TableHead>
-                  <TableHead className="text-center">UOM</TableHead>
-                  <TableHead className="text-center">Target</TableHead>
-                  <TableHead className="text-center">Weightage</TableHead>
-                  <TableHead className="text-center">Frequency</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {kpis?.map((kpi, idx) => (
-                  <TableRow key={kpi.id}>
-                    <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs max-w-[100px] truncate" title={getCategoryName(kpi.category_id)}>
-                        {getCategoryName(kpi.category_id)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-medium max-w-[150px] truncate">{kpi.kra_name}</TableCell>
-                    <TableCell className="max-w-[150px] truncate">{kpi.kpi_name}</TableCell>
-                    <TableCell className="text-center text-sm">{kpi.uom || '-'}</TableCell>
-                    <TableCell className="text-center text-sm">{kpi.target_value ?? '-'}</TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <Input
-                          type="number"
-                          className="w-16 h-8 text-center font-mono text-sm px-1"
-                          value={getEffectiveWeightage(kpi)}
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value);
-                            setWeightageOverrides(prev => ({
-                              ...prev,
-                              [kpi.id]: isNaN(val) ? 0 : val,
-                            }));
-                          }}
-                          min={0}
-                          max={100}
-                          step={1}
-                        />
-                        <span className="text-xs text-muted-foreground">%</span>
-                        {weightageOverrides[kpi.id] != null && (
-                          <span className="h-2 w-2 rounded-full bg-primary inline-block" title="Edited" />
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center text-sm">{kpi.frequency || '-'}</TableCell>
-                  </TableRow>
-                ))}
-                {(!kpis || kpis.length === 0) && (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      No KPIs found for this employee and period.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => issueMutation.mutate()}
-            disabled={!canIssue || issueMutation.isPending}
-          >
-            {issueMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Issuing...
-              </>
+          {/* KPI Table */}
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto border rounded-lg">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (kpis?.length || 0) === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <p className="text-muted-foreground">No KPIs found for this employee and period.</p>
+                <Button variant="outline" onClick={() => setIsAddKraOpen(true)}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add KRA
+                </Button>
+              </div>
             ) : (
-              <>
-                <Send className="h-4 w-4 mr-2" />
-                Confirm & Issue KRAs
-              </>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={kpis!.length > 0 && selectedKpiIds.size === kpis!.length}
+                        onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                      />
+                    </TableHead>
+                    <TableHead className="w-10">#</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>KRA</TableHead>
+                    <TableHead>KPI</TableHead>
+                    <TableHead className="text-center">UOM</TableHead>
+                    <TableHead className="text-center">Target</TableHead>
+                    <TableHead className="text-center">Weightage</TableHead>
+                    <TableHead className="text-center">Frequency</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {kpis!.map((kpi, idx) => (
+                    <TableRow key={kpi.id} data-state={selectedKpiIds.has(kpi.id) ? 'selected' : undefined}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedKpiIds.has(kpi.id)}
+                          onCheckedChange={(checked) => handleSelectOne(kpi.id, !!checked)}
+                        />
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs max-w-[100px] truncate" title={getCategoryName(kpi.category_id)}>
+                          {getCategoryName(kpi.category_id)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-medium max-w-[150px] truncate">{kpi.kra_name}</TableCell>
+                      <TableCell className="max-w-[150px] truncate">{kpi.kpi_name}</TableCell>
+                      <TableCell className="text-center text-sm">{kpi.uom || '-'}</TableCell>
+                      <TableCell className="text-center text-sm">{kpi.target_value ?? '-'}</TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Input
+                            type="number"
+                            className="w-16 h-8 text-center font-mono text-sm px-1"
+                            value={getEffectiveWeightage(kpi)}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              setWeightageOverrides(prev => ({
+                                ...prev,
+                                [kpi.id]: isNaN(val) ? 0 : val,
+                              }));
+                            }}
+                            min={0}
+                            max={100}
+                            step={1}
+                          />
+                          <span className="text-xs text-muted-foreground">%</span>
+                          {weightageOverrides[kpi.id] != null && (
+                            <span className="h-2 w-2 rounded-full bg-primary inline-block" title="Edited" />
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center text-sm">{kpi.frequency || '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => saveDraftMutation.mutate()}
+              disabled={!hasUnsavedChanges || saveDraftMutation.isPending}
+            >
+              {saveDraftMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Draft
+                </>
+              )}
+            </Button>
+            <Button
+              onClick={() => issueMutation.mutate()}
+              disabled={!canIssue || issueMutation.isPending}
+            >
+              {issueMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Issuing...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  Confirm & Issue KRAs
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add KRA Dialog */}
+      <AdminKpiCreateDialog
+        isOpen={isAddKraOpen}
+        onClose={handleAddKraClose}
+        defaultEmployeeId={employeeId}
+        defaultReviewPeriod={reviewPeriod}
+        defaultReviewYear={reviewYear}
+      />
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {selectedKpiIds.size} KPI(s)?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The following KPIs will be permanently deleted:
+              <ul className="mt-2 list-disc pl-5 space-y-1 text-sm">
+                {selectedKpiNames.map((name, i) => (
+                  <li key={i}>{name}</li>
+                ))}
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmRemove} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Unsaved Changes Confirmation */}
+      <AlertDialog open={showDiscardConfirm} onOpenChange={setShowDiscardConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved weightage changes. Do you want to discard them?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Editing</AlertDialogCancel>
+            <AlertDialogAction onClick={resetAndClose}>Discard</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
