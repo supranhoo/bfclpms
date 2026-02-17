@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-17  
-> **Version:** 1.39.0
+> **Version:** 1.40.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -288,6 +288,7 @@ The system includes a full-database backup and restore feature accessible from *
 | **submission** | `daily_submission_window_days` | 2 | 1-60 days | Number of past days (including today) employees can submit daily KPI entries. The SubPeriodSelector shows all dates in the review month; only dates within this window are enabled for selection. |
 | **submission** | `resubmission_grace_hours` | 0 | 0-72 hours | Grace period for penalty-free resubmission |
 | **submission** | `working_days_per_month` | 22 | 18-26 days | Standard working days for missed days penalty |
+| **submission** | *Month-end gate* | N/A | automatic | For Daily/Weekly KPIs, the "Submit Month" button is disabled while the review month is still active. It unlocks automatically on the 1st of the following month. This prevents premature aggregation of incomplete data and eliminates unnecessary rollback requests. A Lock icon and tooltip ("Available after {Month} {Year} ends") inform the user. |
 | **sla** | `query_sla_warning_days` | 5 | 1-14 days | Days before query is flagged as high priority |
 | **sla** | `query_sla_critical_days` | 10 | 3-30 days | Days before query is marked critical |
 | **sla** | `stalled_kpi_warning_days` | 14 | 7-30 days | Days at same status before KPI is flagged |
