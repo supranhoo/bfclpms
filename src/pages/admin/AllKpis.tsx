@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
 import { useAllKpis, useKpisByPeriod, useOpenQueryCounts, useDistinctKpiPeriods, useAdminDeleteKpi, KPI } from '@/hooks/useKpis';
 import { useKraCategories, useProfiles, useDivisions, useDepartments } from '@/hooks/useOrganization';
@@ -20,7 +20,7 @@ import { AdminStatusStepBackDialog } from '@/components/admin/AdminStatusStepBac
 import { CopyKrasDialog } from '@/components/admin/CopyKrasDialog';
 import { KraIssuanceConfirmDialog } from '@/components/admin/KraIssuanceConfirmDialog';
 import { getPreviousStatus } from '@/hooks/useAdminDataEntry';
-import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy, Trash2, Undo2, Send, CheckCircle } from 'lucide-react';
+import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy, Trash2, Undo2, Send, CheckCircle, ArrowUp } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,6 +54,14 @@ export default function AllKpis() {
   // Default to current month/year for server-side filtering
   const currentMonth = format(new Date(), 'MMMM');
   const currentYear = new Date().getFullYear();
+
+  // Scroll-to-top visibility
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  useEffect(() => {
+    const handleScroll = () => setShowScrollTop(window.scrollY > 300);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Filters
   const [selectedManager, setSelectedManager] = useState<string>('all');
@@ -900,6 +908,17 @@ export default function AllKpis() {
           reviewPeriod={selectedPeriod === 'all' ? '' : selectedPeriod}
           reviewYear={selectedYear === 'all' ? new Date().getFullYear() : parseInt(selectedYear)}
         />
+      )}
+
+      {/* Floating scroll-to-top button */}
+      {showScrollTop && (
+        <Button
+          size="icon"
+          className="fixed bottom-6 right-6 z-50 rounded-full shadow-lg transition-opacity"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        >
+          <ArrowUp className="h-5 w-5" />
+        </Button>
       )}
     </div>
   );

@@ -3057,6 +3057,7 @@ KRA assignment and notification are now **decoupled**. When KRAs are assigned vi
    - A warning banner if KPIs have already been issued (re-issuance)
 5. Admin clicks **"Confirm & Issue KRAs"** → any modified weightages are batch-saved, all KPIs are marked `is_issued = true`, and a consolidated notification (in-app + email) is sent to the employee and their reporting manager
 6. **Scroll to Top**: After successful issuance, the All KPIs page automatically scrolls to the top for a clean return to the employee list
+7. **Persistent Scroll-to-Top Button**: A floating button (bottom-right corner) appears whenever the user scrolls down past 300px, allowing quick return to the top at any time — not just after issuance
 
 **Database:** `kpis.is_issued` (boolean, default `false`) — separates "assigned" from "officially issued" states.
 
