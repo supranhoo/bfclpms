@@ -566,7 +566,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                         role="combobox"
                         aria-expanded={kpiOpen}
                         className="w-full justify-between font-normal h-auto min-h-10 whitespace-normal text-left"
-                        disabled={!kraName || isCustomKra}
+                        disabled={!kraName}
                       >
                         {kpiName || (kraName ? "Select KPI name..." : "Select a KRA first")}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
