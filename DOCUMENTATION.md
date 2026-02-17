@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-17  
-> **Version:** 1.41.0
+> **Version:** 1.42.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -1411,7 +1411,8 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - Toggle Organization-Level KPI flag and set value scope
   - Status changes require reason and trigger notifications to employee/manager
 - **Admin Data Entry on Behalf of Users:**
-  - **Enter Review Data:** Admins can enter or modify review submission data (achieved value, rating, score, remarks) for any role level (Self, Manager, Auditor, Management) via the "Enter Data" button (pen icon) on expanded KPI rows
+  - **Dynamic Workflow Stage Resolution (v1.42.0):** The Admin Data Entry dialog dynamically fetches the employee's assigned workflow stages via `useEmployeeWorkflowStages` and only displays role levels that exist in the employee's pipeline. For example, if an employee's workflow includes Skip-Level and HR PMS stages, those options appear alongside Self, Manager, Auditor, and Management. The `AdminRoleLevel` type supports all 6 levels: `self`, `manager`, `skip_level`, `hr_pms`, `auditor`, `management`.
+  - **Enter Review Data:** Admins can enter or modify review submission data (achieved value, rating, score, remarks) for any role level present in the employee's workflow via the "Enter Data" button (pen icon) on expanded KPI rows
   - **Scoring Logic Alignment (v1.27.0):** The Admin Data Entry dialog now uses the **exact same scoring logic** as the Self Review Sheet (`SelfReviewSheet.tsx`). This ensures identical results regardless of whether data is entered by the employee or the admin. Key alignments:
     - **Qualitative KPI Input:** Binary/Tiered KPIs now render `QualitativeValueInput` (the same button-based label selector used in Self Review) instead of a plain numeric input. Admin selects "Yes"/"No" or tiered options; the component maps labels to numeric ratings automatically.
     - **Date UOM Input:** KPIs with `uom === 'Date'` now render `DateCalendarInput` (the same calendar picker used in Self Review) instead of a plain numeric input.

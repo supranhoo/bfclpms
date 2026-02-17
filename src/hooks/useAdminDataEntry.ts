@@ -8,7 +8,7 @@ type RatingLevel = Database['public']['Enums']['rating_level'];
 
 // ========== Types ==========
 
-export type AdminRoleLevel = 'self' | 'manager' | 'auditor' | 'management';
+export type AdminRoleLevel = 'self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
 
 export interface AdminDataEntryParams {
   kpi_id: string;
