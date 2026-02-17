@@ -1,72 +1,99 @@
 
 
-# Fix: Enforce Frequency Locking on Self-Review for Quarterly and Bi-Monthly KPIs
+# Fix: Observations Access and Status Filter Buttons Across All Dashboards
 
-## Problem
+## Bug 1: Users Cannot Raise Observations at All Levels / All Statuses
 
-Quarterly and Bi-Monthly KPIs are not locked during non-active months in the Self Review. The `FrequencyLockedOverlay` component is **imported** in `SelfReviewSheet.tsx` but **never rendered** in the JSX. This means users can freely enter and submit values for Quarterly KPIs in January, when entry should only be allowed in March (the active Q1 month).
+### Root Cause Analysis
 
-### How It Should Work
+The `canAddObservation()` function in `KpiObservationsSection.tsx` has two restrictions that block users:
 
-| Frequency | Locked Months (no entry) | Active Months (entry allowed) |
-|---|---|---|
-| Quarterly | Jan, Feb, Apr, May, Jul, Aug, Oct, Nov | Mar, Jun, Sep, Dec |
-| Bi-Monthly (your config) | Feb, Apr, Jun, Aug, Oct, Dec | Mar, May, Jul, Sep, Nov, Jan |
-
-### Where Locking Works Today
-- Org KPI Data Entry page -- correctly hides locked KPIs
-
-### Where Locking is Missing (the bug)
-- Self Review Sheet -- overlay imported but never used
-- My KPIs page -- no frequency lock check at all
-
-## Fix
-
-### 1. `src/components/review/SelfReviewSheet.tsx`
-
-Wrap the "Your Assessment" card content with `FrequencyLockedOverlay` so that when a multi-month KPI is in a locked period, the input form is blurred and a lock message is shown directing the user to the active month.
-
-Add the overlay inside the assessment Card (around line 487), wrapping the form inputs in a `relative` container with `FrequencyLockedOverlay` rendered on top when locked. Also disable the Submit button when the period is locked.
-
-### 2. `src/pages/MyKpis.tsx`
-
-Add a `FrequencyLockBadge` next to each KPI in the list so users get a visual indicator that a KPI is locked for the current month before even opening the review sheet. This provides immediate context without needing to click into each KPI.
-
-### 3. `DOCUMENTATION.md`
-
-Document that frequency locking is enforced at both the Self Review form level and the KPI list level.
-
-## Technical Detail
-
-**SelfReviewSheet changes:**
-
-```text
-<Card> (Your Assessment)
-  <CardContent>
-    <div className="relative">           <-- new wrapper
-      <FrequencyLockedOverlay             <-- new: renders lock overlay when period is locked
-        frequency={selectedKpi.frequency}
-        reviewMonth={selectedPeriod}
-        reviewYear={selectedYear}
-        frequencyCycleStart={selectedKpi.frequency_cycle_start}
-      />
-      ... existing form inputs ...
-    </div>
-  </CardContent>
-</Card>
+```typescript
+function canAddObservation(viewLevel: string, kpiStatus: string, isOwnKpi: boolean): boolean {
+  if (kpiStatus === 'approved') return false;   // BUG: blocks on approved KPIs
+  if (isOwnKpi) return true;
+  return ['manager', 'auditor', 'management'].includes(viewLevel);  // BUG: excludes skip_level, hr_pms
+}
 ```
 
-The Submit button will also check `isKpiLockedForPeriod` and be disabled when locked.
+**Problems:**
+1. **Approved KPIs are blocked** -- users cannot raise observations on completed/approved KPIs (past months are typically approved)
+2. **Skip-Level and HR PMS view levels are excluded** -- these users see the observation section but have no "Add Observation" button
+3. **`isReadOnly` is tied to `kpiStatus === 'approved'`** -- this prevents editing/replying on approved KPIs too
 
-**MyKpis changes:**
+**Requirement:** Observations should be allowed at ALL levels, for ALL KPI statuses (past, current, future months), irrespective of approval status.
 
-Add `FrequencyLockBadge` in each KPI card's metadata area to show "Review in March" etc. for locked KPIs.
-
-## Files to Change
+### Fix
 
 | File | Change |
 |---|---|
-| `src/components/review/SelfReviewSheet.tsx` | Render `FrequencyLockedOverlay` around assessment form; disable submit when locked |
-| `src/pages/MyKpis.tsx` | Add `FrequencyLockBadge` to KPI cards for visual indicator |
-| `DOCUMENTATION.md` | Document the locking enforcement |
+| `src/components/review/KpiObservationsSection.tsx` | Remove the `kpiStatus === 'approved'` block from `canAddObservation()`. Add `skip_level` and `hr_pms` to the allowed view levels. Remove `isReadOnly` flag so observations (and replies) remain interactive regardless of KPI status. |
+
+**Updated logic:**
+```
+canAddObservation(viewLevel, kpiStatus, isOwnKpi):
+  - If isOwnKpi: return true
+  - If viewLevel is manager, skip_level, hr_pms, auditor, or management: return true
+  - Otherwise: return false (employee viewing someone else's KPI)
+
+isReadOnly: always false (observations are independent of KPI approval)
+```
+
+---
+
+## Bug 2: "KRA SET" / "SELF REVIEW" Stage Filter Buttons Not Working in Reviewer Dashboards
+
+### Root Cause Analysis
+
+The `WorkflowProgressTracker` component supports clickable stage cards via `activeFilter` and `onFilterChange` props. However:
+
+| Dashboard | Props Passed | Clickable? |
+|---|---|---|
+| My Dashboard (`Dashboard.tsx`) | `activeFilter={statusFilter}` `onFilterChange={setStatusFilter}` | YES |
+| UnifiedScorecard (Team/Manager) | No filter props | NO |
+| AuditScorecard | No filter props | NO |
+| ManagementScorecard | No filter props | NO |
+| EmployeeScorecard | No filter props | NO |
+
+The stage cards render correctly with counts but clicking them does nothing because no `onFilterChange` callback is passed. The component checks `const isClickable = !!onFilterChange` and skips click handling.
+
+### Fix
+
+Add `statusFilter` state and pass `activeFilter`/`onFilterChange` props to `WorkflowProgressTracker` in all four scorecard components. Then apply the filter to the KPI list before rendering.
+
+| File | Change |
+|---|---|
+| `src/components/review/UnifiedScorecard.tsx` | Add `statusFilter` state, pass `activeFilter`/`onFilterChange` to `WorkflowProgressTracker`, filter `sortedKpis` by status |
+| `src/components/review/AuditScorecard.tsx` | Same pattern |
+| `src/components/review/ManagementScorecard.tsx` | Same pattern |
+| `src/components/review/EmployeeScorecard.tsx` | Same pattern |
+
+**Implementation pattern (same for all 4 files):**
+```
+1. Add state: const [statusFilter, setStatusFilter] = useState<string | null>(null);
+2. Reset on employee change: add statusFilter to useEffect resets
+3. Pass to tracker: <WorkflowProgressTracker ... activeFilter={statusFilter} onFilterChange={setStatusFilter} />
+4. Filter KPIs: if (statusFilter) { sortedKpis = sortedKpis.filter(k => k.status === statusFilter); }
+```
+
+---
+
+## File: `DOCUMENTATION.md`
+
+Update documentation to reflect:
+- Observations are always available regardless of KPI status
+- Stage filter buttons are functional across all review dashboards
+
+---
+
+## Summary of All Files to Change
+
+| File | Bug | Change |
+|---|---|---|
+| `src/components/review/KpiObservationsSection.tsx` | Bug 1 | Remove status restriction, add skip_level/hr_pms, remove isReadOnly |
+| `src/components/review/UnifiedScorecard.tsx` | Bug 2 | Add statusFilter state + wire to WorkflowProgressTracker + filter KPIs |
+| `src/components/review/AuditScorecard.tsx` | Bug 2 | Same |
+| `src/components/review/ManagementScorecard.tsx` | Bug 2 | Same |
+| `src/components/review/EmployeeScorecard.tsx` | Bug 2 | Same |
+| `DOCUMENTATION.md` | Both | Document changes |
 
