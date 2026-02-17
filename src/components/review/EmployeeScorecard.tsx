@@ -137,8 +137,12 @@ export function EmployeeScorecard({
 
   const submissionMap = useMemo(() => new Map(submissions?.map(s => [s.kpi_id, s])), [submissions]);
 
+  // Status filter state
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+
   // Sorting with default Weightage (High to Low)
-  const { sortedKpis, sortConfig, setSort } = useKpiSorting(kpis, {}, submissionMap);
+  const { sortedKpis: rawSortedKpis, sortConfig, setSort } = useKpiSorting(kpis, {}, submissionMap);
+  const sortedKpis = statusFilter ? rawSortedKpis.filter(k => k.status === statusFilter) : rawSortedKpis;
 
   const [reviewSheetOpen, setReviewSheetOpen] = useState(false);
   const [queryDialogOpen, setQueryDialogOpen] = useState(false);
@@ -610,7 +614,7 @@ export function EmployeeScorecard({
       </div>
 
       {/* Workflow Progress Tracker */}
-      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} compact workflowStages={effectiveStages} />
+      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} compact workflowStages={effectiveStages} activeFilter={statusFilter} onFilterChange={setStatusFilter} />
 
       {/* Score Overview */}
       <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-3">

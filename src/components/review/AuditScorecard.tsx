@@ -148,6 +148,7 @@ export function AuditScorecard({
   const [selectedKpi, setSelectedKpi] = useState<KPI | null>(null);
   const [expandedDailyKpis, setExpandedDailyKpis] = useState<Set<string>>(new Set());
   const [categorySortBy, setCategorySortBy] = useState<CategorySortBy>('score-desc');
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   
   const [auditorScore, setAuditorScore] = useState<number | null>(null);
   const [auditorRemarks, setAuditorRemarks] = useState('');
@@ -598,7 +599,7 @@ export function AuditScorecard({
       </div>
 
       {/* Workflow Progress Tracker */}
-      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} compact workflowStages={effectiveStages} />
+      <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} compact workflowStages={effectiveStages} activeFilter={statusFilter} onFilterChange={setStatusFilter} />
 
       {/* Score Overview */}
       <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-3">
@@ -687,7 +688,7 @@ export function AuditScorecard({
         <CardContent className="px-3 sm:px-6">
           {isMobile ? (
             <div className="space-y-3">
-              {(kpis || []).map(kpi => {
+              {(statusFilter ? (kpis || []).filter(k => k.status === statusFilter) : (kpis || [])).map(kpi => {
                 const submission = submissionMap.get(kpi.id);
                 return (
                   <MobileKpiCard
@@ -713,7 +714,7 @@ export function AuditScorecard({
             </div>
           ) : (
             <KpiDetailsTable
-              kpis={kpis || []}
+              kpis={statusFilter ? (kpis || []).filter(k => k.status === statusFilter) : (kpis || [])}
               submissionMap={submissionMap}
               queryMap={queryMap as Map<string, KpiQuery[]>}
               viewType="audit"
