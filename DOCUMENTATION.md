@@ -1251,9 +1251,12 @@ The PMS supports 7 frequency types, each with specific submission and scoring be
 #### 4.10.4 Multi-Month Cycles (Bi-Monthly, Quarterly, Half-Yearly, Yearly)
 
 **Locked Period Behavior:**
-- KPIs show as locked/blurred in non-active months
+- KPIs show as locked/blurred in non-active months via `FrequencyLockedOverlay` component
 - Overlay displays: "Review in {active_month}"
-- Users cannot submit during locked periods
+- Users cannot submit during locked periods — the Submit button is disabled
+- **Self Review Sheet (`SelfReviewSheet.tsx`):** The "Your Assessment" card is wrapped with `FrequencyLockedOverlay`; the overlay blurs inputs and shows a lock message when the current month is not the active month for the KPI's cycle. The Submit button checks `isKpiLockedForPeriod` and is disabled when locked.
+- **Dashboard KPI Table:** Each KPI row displays a `FrequencyLockBadge` (e.g., "Review in March") next to the KPI name when the KPI is in a locked period, providing immediate visual context.
+- **Org KPI Data Entry:** The Data Entry tab filters out KPIs that are not in their active month, so locked KPIs are not shown at all.
 
 **Score Propagation:**
 - Score entered in the active month automatically applies to all locked months in the cycle
