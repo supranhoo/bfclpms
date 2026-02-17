@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-17  
-> **Version:** 1.45.1
+> **Version:** 1.45.2
 > **Maintainer:** Lovable AI
 
 ---
@@ -1024,10 +1024,10 @@ All three review pages share a unified `EmployeeFilters` component with advanced
 
 The **AdminKpiCreateDialog** uses searchable cascading dropdowns for KRA and KPI names, powered by the **union** of the KPI Templates library (`kpi_templates` table via `useKpiTemplates` hook) and existing assigned KPIs (`kpis` table via `useAllKpis` hook):
 
-1. **Category selected** → KRA Name dropdown shows the **deduplicated union** of KRA names from active templates AND existing KPIs matching that category.
+1. **Category selected** → KRA Name dropdown shows the **deduplicated union** of KRA names from active templates AND existing KPIs matching that category. The Category field itself is now a searchable combobox (Popover + Command) with a **"+ Create new category"** option that opens an inline form for name, weightage (%), and color (hex picker). On save, the new category is persisted via `useCreateKraCategory` and auto-selected.
 2. **KRA selected** → KPI Name dropdown shows templates matching category + KRA, **plus** any additional unique KPIs from existing assignments (deduplicated case-insensitively by KPI name).
 3. **KPI selected** → All form fields auto-fill from the template (or existing KPI): UOM type, UOM, criteria, target value, weightage, frequency, source of data, rating thresholds (R5-R0), qualitative options, threshold mode, and resubmit reason setting.
-4. **Custom entry** → A "+ Enter custom" option in each dropdown switches to a free-text input with a back button to return to dropdown mode.
+4. **Custom entry** → A "+ Enter custom" / "+ Create new" option in each dropdown (Category, KRA, KPI) switches to a free-text input (or inline form for Category) with a back button to return to dropdown mode.
 
 **Reset behavior:** Changing the category resets both KRA and KPI. Changing the KRA resets the KPI. This ensures cascading consistency.
 
