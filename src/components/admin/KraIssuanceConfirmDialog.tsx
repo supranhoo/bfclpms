@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, CheckCircle, AlertTriangle, Send, Info } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -18,6 +19,7 @@ import { sendKraAssignmentNotifications, KraNotificationItem } from '@/lib/kraNo
 interface KraIssuanceConfirmDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  onIssuanceComplete?: () => void;
   employeeId: string;
   employeeName: string;
   employeeCode?: string;
@@ -28,6 +30,7 @@ interface KraIssuanceConfirmDialogProps {
 export function KraIssuanceConfirmDialog({
   isOpen,
   onClose,
+  onIssuanceComplete,
   employeeId,
   employeeName,
   employeeCode,
@@ -38,6 +41,7 @@ export function KraIssuanceConfirmDialog({
   const queryClient = useQueryClient();
   const { data: categories } = useKraCategories();
   const [allowNon100, setAllowNon100] = useState(false);
+  const [weightageOverrides, setWeightageOverrides] = useState<Record<string, number>>({});
 
   // Fetch all KPIs for this employee/period
   const { data: kpis, isLoading } = useQuery({
@@ -56,9 +60,12 @@ export function KraIssuanceConfirmDialog({
     enabled: isOpen && !!employeeId,
   });
 
+  const getEffectiveWeightage = (kpi: { id: string; weightage: number | null }) =>
+    weightageOverrides[kpi.id] ?? kpi.weightage ?? 0;
+
   const totalWeightage = useMemo(() => {
-    return kpis?.reduce((sum, k) => sum + (k.weightage || 0), 0) || 0;
-  }, [kpis]);
+    return kpis?.reduce((sum, k) => sum + getEffectiveWeightage(k), 0) || 0;
+  }, [kpis, weightageOverrides]);
 
   const alreadyIssued = useMemo(() => {
     return kpis?.some(k => k.is_issued) || false;
@@ -82,6 +89,13 @@ export function KraIssuanceConfirmDialog({
     mutationFn: async () => {
       if (!kpis || kpis.length === 0) throw new Error('No KPIs to issue');
 
+      // Save changed weightages first
+      const changed = Object.entries(weightageOverrides);
+      for (const [id, newVal] of changed) {
+        const { error } = await supabase.from('kpis').update({ weightage: newVal }).eq('id', id);
+        if (error) throw error;
+      }
+
       // Mark all KPIs as issued
       const kpiIds = kpis.map(k => k.id);
       const { error } = await supabase
@@ -90,12 +104,12 @@ export function KraIssuanceConfirmDialog({
         .in('id', kpiIds);
       if (error) throw error;
 
-      // Send consolidated notification
+      // Send consolidated notification (use updated weightage values)
       const kraItems: KraNotificationItem[] = kpis.map(k => ({
         kra_name: k.kra_name,
         kpi_name: k.kpi_name,
         target_value: k.target_value,
-        weightage: k.weightage,
+        weightage: getEffectiveWeightage(k),
         uom: k.uom,
       }));
       await sendKraAssignmentNotifications(employeeId, kraItems, reviewPeriod, reviewYear);
@@ -111,6 +125,7 @@ export function KraIssuanceConfirmDialog({
         description: `${count} KPIs issued to ${employeeName}. Notification sent.`,
       });
       onClose();
+      onIssuanceComplete?.();
     },
     onError: (error: Error) => {
       toast({
@@ -216,9 +231,27 @@ export function KraIssuanceConfirmDialog({
                     <TableCell className="text-center text-sm">{kpi.uom || '-'}</TableCell>
                     <TableCell className="text-center text-sm">{kpi.target_value ?? '-'}</TableCell>
                     <TableCell className="text-center">
-                      <Badge variant={kpi.weightage ? 'secondary' : 'outline'} className="font-mono">
-                        {kpi.weightage != null ? `${kpi.weightage}%` : '-'}
-                      </Badge>
+                      <div className="flex items-center justify-center gap-1">
+                        <Input
+                          type="number"
+                          className="w-16 h-8 text-center font-mono text-sm px-1"
+                          value={getEffectiveWeightage(kpi)}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            setWeightageOverrides(prev => ({
+                              ...prev,
+                              [kpi.id]: isNaN(val) ? 0 : val,
+                            }));
+                          }}
+                          min={0}
+                          max={100}
+                          step={1}
+                        />
+                        <span className="text-xs text-muted-foreground">%</span>
+                        {weightageOverrides[kpi.id] != null && (
+                          <span className="h-2 w-2 rounded-full bg-primary inline-block" title="Edited" />
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-center text-sm">{kpi.frequency || '-'}</TableCell>
                   </TableRow>
