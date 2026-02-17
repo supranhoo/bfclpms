@@ -189,9 +189,15 @@ export function EmployeeScorecard({
     queryMap.set(q.kpi_id, [...existing, q]);
   });
 
+  // Filtered KPIs for charts based on status filter
+  const displayKpis = useMemo(() => {
+    if (!kpis) return [];
+    return statusFilter ? kpis.filter(k => k.status === statusFilter) : kpis;
+  }, [kpis, statusFilter]);
+
   // Calculate scores - include ALL categories with KPIs (even without scores)
   const scoreData = useMemo(() => {
-    if (!kpis || !submissions) return { overallScore: 0, rating: 0, categoryScores: [] };
+    if (!displayKpis.length || !submissions) return { overallScore: 0, rating: 0, categoryScores: [] };
     
     let totalWeightedScore = 0;
     let totalWeight = 0;
@@ -199,10 +205,10 @@ export function EmployeeScorecard({
       totalScore: number; 
       totalWeight: number; 
       color: string | null;
-      dynamicWeightage: number;  // Sum of KPI weightages
+      dynamicWeightage: number;
     }>();
     
-    kpis.forEach(kpi => {
+    displayKpis.forEach(kpi => {
       const submission = submissionMap.get(kpi.id);
       if (submission?.is_na) return; // Skip NA KPIs
       
@@ -211,7 +217,6 @@ export function EmployeeScorecard({
       const categoryName = kpi.kra_categories?.name || 'Other';
       const categoryColor = kpi.kra_categories?.color || null;
       
-      // Always add to category map (even if score is 0)
       const existing = categoryMap.get(categoryName) || { 
         totalScore: 0, 
         totalWeight: 0, 
@@ -220,7 +225,7 @@ export function EmployeeScorecard({
       };
       
       if (weight > 0) {
-        existing.dynamicWeightage += weight;  // Accumulate KPI weightage
+        existing.dynamicWeightage += weight;
         if (score > 0) {
           totalWeightedScore += score * weight;
           totalWeight += weight;
@@ -239,11 +244,11 @@ export function EmployeeScorecard({
       name,
       percentage: data.totalWeight > 0 ? ((data.totalScore / data.totalWeight) / 5) * 100 : 0,
       color: data.color,
-      weightage: data.dynamicWeightage,  // Use accumulated KPI weightage
+      weightage: data.dynamicWeightage,
     }));
     
     return { overallScore, rating: overallRating, categoryScores };
-  }, [kpis, submissions, submissionMap]);
+  }, [displayKpis, submissions, submissionMap]);
 
   // Stats
   const pendingReviewCount = kpis?.filter(k => k.status === 'self_review').length || 0;

@@ -313,8 +313,14 @@ export function UnifiedScorecard({
   };
 
   // Calculate scores
+  // Filtered KPIs for charts based on status filter
+  const displayKpis = useMemo(() => {
+    if (!kpis) return [];
+    return statusFilter ? kpis.filter(k => k.status === statusFilter) : kpis;
+  }, [kpis, statusFilter]);
+
   const scoreData = useMemo(() => {
-    if (!kpis || !submissions) return { overallScore: 0, rating: 0, categoryScores: [], totalWeightedScore: 0, totalWeight: 0 };
+    if (!displayKpis.length || !submissions) return { overallScore: 0, rating: 0, categoryScores: [], totalWeightedScore: 0, totalWeight: 0 };
     
     let totalWeightedScore = 0;
     let totalWeight = 0;
@@ -325,7 +331,7 @@ export function UnifiedScorecard({
       dynamicWeightage: number;
     }>();
     
-    kpis.forEach(kpi => {
+    displayKpis.forEach(kpi => {
       const submission = submissionMap.get(kpi.id);
       if (submission?.is_na) return;
       
@@ -364,7 +370,7 @@ export function UnifiedScorecard({
     }));
     
     return { overallScore, rating: overallRating, categoryScores, totalWeightedScore, totalWeight };
-  }, [kpis, submissions, submissionMap, viewLevel]);
+  }, [displayKpis, submissions, submissionMap, viewLevel]);
 
   // Submit review mutation
   const submitReview = useMutation({

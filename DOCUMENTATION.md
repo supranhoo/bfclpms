@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-17  
-> **Version:** 1.38.0
+> **Version:** 1.39.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -3667,6 +3667,23 @@ Admin clicks "Rollback" on propagated card
 |---|---|
 | `src/components/review/UnifiedScorecard.tsx` | Per-level score initialization via `scoreFieldMap` |
 | `src/components/review/AchievedValueScoreInput.tsx` | Microtask-deferred auto-calculate on mount |
+
+---
+
+### Bug Fix: Performance by Category Chart Not Updating with Status Filter
+
+**Problem:** In all reviewer dashboards (Team/Manager, Audit, Management, Employee), clicking a workflow stage in the WorkflowProgressTracker (e.g., "KRA Set", "Self Review") correctly filtered the KPI table but did NOT update the Performance by Category chart or Overall Score donut. The charts always showed data for all KPIs regardless of filter state.
+
+**Root Cause:** The `scoreData` useMemo in each scorecard computed category scores from the raw unfiltered `kpis` array. The `statusFilter` was only applied to the KPI table/list rendering, not to the scoring calculations.
+
+**Fix:** Added a `displayKpis` memoized variable in each scorecard that filters KPIs by the active `statusFilter`. Updated `scoreData` to iterate over `displayKpis` instead of raw `kpis`, so both the category chart and overall score donut dynamically reflect the selected workflow stage. The `WorkflowProgressTracker` still receives the full unfiltered `kpis` array to keep stage count badges accurate.
+
+| File | Change |
+|---|---|
+| `src/components/review/UnifiedScorecard.tsx` | Added `displayKpis` memo; `scoreData` uses `displayKpis` |
+| `src/components/review/AuditScorecard.tsx` | Same pattern |
+| `src/components/review/ManagementScorecard.tsx` | Same pattern |
+| `src/components/review/EmployeeScorecard.tsx` | Same pattern |
 
 ---
 
