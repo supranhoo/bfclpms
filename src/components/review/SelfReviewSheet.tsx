@@ -12,7 +12,10 @@ import { QualitativeOption, calculateQualitativeRating, scoreToRatingLevel } fro
 import {
   FrequencyType,
   requiresSubPeriodSelection,
+  isKpiLockedForPeriod,
+  hasMultiMonthCycle,
 } from '@/lib/frequencyUtils';
+import { useFrequencyConfig } from '@/hooks/useFrequencyConfig';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -114,6 +117,13 @@ export function SelfReviewSheet({
   const { data: pendingRollback } = usePendingRollbackRequest(selectedKpi?.id);
   const { data: employeeWorkflowStages } = useEmployeeWorkflowStages(profile?.id);
   const effectiveStages = employeeWorkflowStages || DEFAULT_WORKFLOW_STAGES;
+
+  // Frequency lock state
+  const { config: frequencyConfig } = useFrequencyConfig(selectedKpi?.frequency);
+  const isFrequencyLocked = selectedKpi ? isKpiLockedForPeriod(
+    selectedKpi.frequency, selectedPeriod, selectedYear,
+    selectedKpi.frequency_cycle_start, frequencyConfig
+  ) : false;
 
   // Form state
   const [achievedValue, setAchievedValue] = useState('');
@@ -444,9 +454,17 @@ export function SelfReviewSheet({
                   </Badge>
                 )}
               </div>
-              <Badge className={`${statusColors[selectedKpi?.status || 'kra_set']} text-xs`}>
-                {statusLabels[selectedKpi?.status || 'kra_set']}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <FrequencyLockBadge
+                  frequency={selectedKpi?.frequency}
+                  reviewMonth={selectedPeriod}
+                  reviewYear={selectedYear}
+                  frequencyCycleStart={selectedKpi?.frequency_cycle_start}
+                />
+                <Badge className={`${statusColors[selectedKpi?.status || 'kra_set']} text-xs`}>
+                  {statusLabels[selectedKpi?.status || 'kra_set']}
+                </Badge>
+              </div>
             </div>
           </SheetHeader>
 
@@ -495,7 +513,14 @@ export function SelfReviewSheet({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Sub-Period Selection for Daily/Weekly KPIs */}
+                  {/* Frequency Lock Overlay for multi-month KPIs */}
+                  <div className="relative">
+                  <FrequencyLockedOverlay
+                    frequency={selectedKpi.frequency}
+                    reviewMonth={selectedPeriod}
+                    reviewYear={selectedYear}
+                    frequencyCycleStart={selectedKpi.frequency_cycle_start}
+                  />
                   {needsSubPeriodForKpi && (
                     <div className="p-3 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-lg">
                       <div className="flex items-center justify-between mb-2">
@@ -669,6 +694,7 @@ export function SelfReviewSheet({
                       </p>
                     </div>
                   )}
+                  </div>{/* end relative wrapper for FrequencyLockedOverlay */}
                 </CardContent>
               </Card>
             )}
@@ -703,6 +729,7 @@ export function SelfReviewSheet({
                       ))}
                     </div>
                   )}
+                
                 </CardContent>
               </Card>
             )}
@@ -758,6 +785,7 @@ export function SelfReviewSheet({
                         variant="secondary"
                         onClick={handleSubmitReview}
                         disabled={
+                          isFrequencyLocked ||
                           (needsSubPeriodForKpi && (!selectedSubPeriod || (!isNa && !achievedValue))) ||
                           (!needsSubPeriodForKpi && !isNa && !achievedValue) ||
                           (isNa && selfRemarks.trim().length < 50) ||

@@ -37,6 +37,7 @@ import { Target, TrendingUp, CheckCircle2, Clock, BarChart3, Info, Building2, Cl
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { calculateOverallCumulativeScore, calculateCategoryCumulative, getScoreForPeriod } from '@/lib/cumulativeScoring';
+import { FrequencyLockBadge } from '@/components/review/FrequencyLockedOverlay';
 
 const MONTH_ORDER = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -729,6 +730,12 @@ export default function Dashboard() {
                         <div>
                           <p className="font-semibold text-foreground">{kpi.kra_name}</p>
                           <p className="text-sm text-muted-foreground">{kpi.kpi_name}</p>
+                          <FrequencyLockBadge
+                            frequency={kpi.frequency}
+                            reviewMonth={selectedPeriod}
+                            reviewYear={selectedYear}
+                            frequencyCycleStart={kpi.frequency_cycle_start}
+                          />
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
