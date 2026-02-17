@@ -1,93 +1,67 @@
 
 
-# Fix: Admin Data Entry Should Advance KPI Status
+# RCA and CAPA: Management Send-Back Lands at "Self Review"
 
-## Problem
+## Root Cause Analysis (RCA)
 
-When an admin enters data for a role level via Admin Data Entry, only the `review_submissions` row is updated. The `kpis.status` column is **never advanced**, so the KPI remains stuck at its current stage (e.g., "Self Review") even after the admin has filled in the data.
-
-In contrast, the normal self-review flow updates both `review_submissions` AND calls `kpis.update({ status: 'self_review' })`.
-
-## Root Cause
-
-In `useAdminDataEntry.ts`, the `useAdminSubmitReviewData` mutation:
-1. Upserts `review_submissions` with the correct field values
-2. Creates an audit log
-3. Creates a notification
-4. **Never touches `kpis.status`**
-
-## Solution
-
-After upserting the submission, advance the KPI status to the appropriate next stage based on the role level being entered. Use the existing `resolveForwardStatus` function from the workflow engine for reviewer levels, and set `self_review` for the self level.
-
-Add an **optional toggle** ("Advance workflow status") so the admin can choose whether to also advance the status or just update the data without moving the workflow forward. Default it to **ON** since that matches expectations.
-
-## Changes
-
-### File 1: `src/hooks/useAdminDataEntry.ts`
-
-Add a new optional field to `AdminDataEntryParams`:
+The bug is in `src/components/review/ManagementScorecard.tsx`, lines 340-344. The send-back mutation has a **hardcoded status map** that is **incorrect**:
 
 ```typescript
-advance_status?: boolean; // Default true — advance KPI status after data entry
+const statusMap: Record<string, string> = {
+  auditor: 'audit',
+  manager: 'manager_check',
+  employee: 'kra_set',
+};
 ```
 
-After the submission upsert (step 3), add status advancement logic:
+**Problem 1: Wrong status mapping.** When sending back to "manager", it sets status to `manager_check`. But `manager_check` means the manager has **already reviewed** it. To land in the manager's pending queue, the status should be `self_review` (the stage preceding `manager_check`). Same issue for "auditor" -- it sets `audit`, but audit means auditor has already approved. The correct status depends on the workflow.
 
-```typescript
-// 4. Optionally advance KPI status
-if (advance_status !== false) {
-  let newStatus: string | null = null;
-  
-  if (role_level === 'self') {
-    newStatus = 'self_review';
-  } else {
-    // Use workflow engine to determine forward status
-    const stages = await fetchEmployeeWorkflowStages(employee_id);
-    newStatus = resolveForwardStatus(role_level, stages);
-  }
-  
-  if (newStatus) {
-    await supabase
-      .from('kpis')
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
-      .eq('id', kpi_id);
-  }
-}
+**Problem 2: Hardcoded targets ignore workflow.** The UI shows three hardcoded buttons (`auditor`, `manager`, `employee`) and ignores the dynamic `sendBackTargets` already computed from the workflow engine on line 89. The 8-stage workflow (with Skip-Level and HR PMS) is completely ignored.
+
+**Problem 3: No downstream data clearing.** The mutation only clears `management_*` fields. Per the send-back data integrity rule, it should cascade-clear all review data from the target stage forward.
+
+**Summary:** The send-back from Management sets the KPI to the wrong status because it maps targets to their "completed" stage instead of their "pending" stage. Meanwhile, the workflow engine already has the correct function (`resolveSendBackStatus`) but it is never called.
+
+## Corrective Action Plan (CAPA)
+
+### Fix 1: Use Workflow Engine for Status Resolution (Critical)
+
+Replace the hardcoded `statusMap` with a call to `resolveSendBackStatus(target, 'management', effectiveStages)` from `src/lib/workflowEngine.ts`. This correctly maps each target to the preceding stage so the KPI lands in the right reviewer's queue.
+
+```text
+Before:  target "manager"  -> status "manager_check" (WRONG - means manager already done)
+After:   target "manager"  -> status "self_review"    (CORRECT - pending for manager)
+
+Before:  target "auditor"  -> status "audit"          (WRONG - means auditor already done)
+After:   target "auditor"  -> status "manager_check"  (CORRECT - pending for auditor)
 ```
 
-Also set `kpi_status: 'submitted'` on the review_submissions upsert when advancing, to keep submission status in sync.
+### Fix 2: Use Dynamic Send-Back Targets in UI
 
-Import `resolveForwardStatus` from `@/lib/workflowEngine`.
+Replace the hardcoded `['auditor', 'manager', 'employee']` buttons with the already-computed `sendBackTargets` array (line 89) which respects the employee's actual workflow. This also adds Skip-Level and HR PMS options when applicable.
 
-### File 2: `src/components/admin/AdminDataEntryDialog.tsx`
+### Fix 3: Cascade-Clear Downstream Review Data
 
-Add a "Also advance workflow status" switch/checkbox in the dialog form, defaulting to checked. Pass the value as `advance_status` to the mutation.
+After setting the correct status, clear all review data from the target stage forward (ratings, scores, remarks, evidence). This ensures data integrity when a KPI is sent back.
 
-This gives admins the flexibility to:
-- Enter data AND move the workflow forward (default)
-- Enter/correct data WITHOUT changing the workflow stage (when they just want to fix a value)
+### Fix 4: Update the `sendBackTarget` State Type
 
-### File 3: `DOCUMENTATION.md`
+Change the type from `'auditor' | 'manager' | 'employee'` to `string` to support dynamic targets including `skip_level` and `hr_pms`.
 
-Document that admin data entry now optionally advances the KPI workflow status.
-
-## Technical Detail: Status Mapping by Role Level
-
-| Role Level | KPI Status Set To |
-|---|---|
-| self | `self_review` |
-| manager | `manager_check` |
-| skip_level | `skip_level_check` |
-| hr_pms | `hr_pms_review` |
-| auditor | next stage after audit (from workflow engine) |
-| management | `approved` |
-
-## Files to Change
+### Files to Change
 
 | File | Change |
 |---|---|
-| `src/hooks/useAdminDataEntry.ts` | Add `advance_status` param; advance `kpis.status` after submission upsert |
-| `src/components/admin/AdminDataEntryDialog.tsx` | Add "Advance workflow status" toggle, default ON |
-| `DOCUMENTATION.md` | Document the status advancement behavior |
+| `src/components/review/ManagementScorecard.tsx` | Replace hardcoded statusMap with `resolveSendBackStatus`; use dynamic `sendBackTargets` in UI; cascade-clear downstream data; fix state type |
+| `DOCUMENTATION.md` | Document the corrected send-back behavior |
+
+### Expected Result After Fix
+
+| Send Back Target | Status Set To (6-stage) | Status Set To (8-stage) |
+|---|---|---|
+| Employee | `kra_set` | `kra_set` |
+| Manager | `self_review` | `self_review` |
+| Skip-Level | -- | `manager_check` |
+| HR PMS | -- | `skip_level_check` |
+| Auditor | `manager_check` | `hr_pms_review` |
 
