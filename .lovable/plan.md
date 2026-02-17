@@ -1,70 +1,63 @@
 
 
-# Fix: Allow Employee to Edit Self-Review While at "Self Review" Status
+# Fix: Admin Data Entry Dialog — Show Correct Workflow Stages
 
 ## Problem
 
-When Dippendu clicks on a KPI at "Self Review" status, the panel opens but shows as **read-only** with a "View KPI Details" header. He cannot modify his submitted values even though the manager has not yet reviewed the KPI.
+The Admin Data Entry dialog hardcodes only 4 role levels: **Self Review, Manager, Auditor, Management**. However, the workflow engine supports up to 8 stages, including **Skip-Level** and **HR PMS**. When an employee's workflow includes these stages, the admin cannot enter data for them because they don't appear in the dialog.
 
-## Root Cause
+## Solution
 
-In `SelfReviewSheet.tsx` (line 445):
-```
-const isReadOnly = !isKraSet;   // isKraSet = status === 'kra_set'
-```
+Make the "Data Entry Level" radio buttons **dynamic** — fetch the employee's actual workflow stages and only show the levels that exist in their pipeline.
 
-This means **any** status other than `kra_set` makes the sheet read-only, including `self_review`. The employee loses all ability to edit once they click "Submit."
+## Changes
 
-## Fix
+### File 1: `src/hooks/useAdminDataEntry.ts`
 
-Allow editing when the KPI status is either `kra_set` OR `self_review`. Once it moves to `manager_check` or beyond, it correctly becomes read-only.
-
-### File: `src/components/review/SelfReviewSheet.tsx`
-
-**Change 1 (line 445):** Update the `isReadOnly` logic:
+**Expand `AdminRoleLevel` type** to include skip_level and hr_pms:
 
 ```
 // Before
-const isReadOnly = !isKraSet;
+export type AdminRoleLevel = 'self' | 'manager' | 'auditor' | 'management';
 
 // After
-const isSelfReview = selectedKpi?.status === 'self_review';
-const isReadOnly = !isKraSet && !isSelfReview;
+export type AdminRoleLevel = 'self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
 ```
 
-**Change 2 (header label):** Update the title logic (line 456) so it shows "Edit Self Review" when resubmitting at `self_review` status instead of "View KPI Details":
+**Update `buildUpdateFields`** to handle skip_level and hr_pms prefixes correctly (they already follow the `{prefix}_rating`, `{prefix}_score` pattern in the DB).
 
+### File 2: `src/components/admin/AdminDataEntryDialog.tsx`
+
+**Replace hardcoded `ROLE_LEVELS`** with a full list that includes all 6 levels, plus a stage-to-role mapping:
+
+```text
+ALL_ROLE_LEVELS:
+  self        -> self_review
+  manager     -> manager_check
+  skip_level  -> skip_level_check
+  hr_pms      -> hr_pms_review
+  auditor     -> audit
+  management  -> management_review
 ```
-// Before
-{isReadOnly ? 'View KPI Details' : 'Submit Self Review'}
 
-// After  
-{isReadOnly ? 'View KPI Details' : (isSelfReview ? 'Edit Self Review' : 'Submit Self Review')}
-```
+**Fetch employee's workflow stages** using `useEmployeeWorkflowStages(employeeId)` and filter `ALL_ROLE_LEVELS` to only show roles whose corresponding stage exists in the employee's workflow.
 
-**Change 3 (button label):** Update the submit button text in the footer (around line 773+) to say "Update" or "Re-submit" when at `self_review` status, distinguishing it from the initial submission.
+**Update the existing `useEffect` for loading data** (the switch/case at line 314) to add cases for `skip_level` and `hr_pms`, reading from `existingSubmission.skip_level_*` and `existingSubmission.hr_pms_*` fields.
 
-### File: `DOCUMENTATION.md`
+**Adjust grid layout**: Change from `grid-cols-4` to a responsive layout since there can be up to 6 radio buttons now.
 
-Document that employees can edit their self-review as long as the KPI is still at `self_review` status (before the manager picks it up).
+### File 3: `DOCUMENTATION.md`
 
-## What This Enables
+Document that the Admin Data Entry dialog dynamically resolves workflow stages per employee.
 
-| KPI Status | Before (Broken) | After (Fixed) |
-|---|---|---|
-| `kra_set` | Editable | Editable (no change) |
-| `self_review` | Read-only | Editable (can re-submit) |
-| `manager_check` | Read-only | Read-only (no change) |
-| `audit` and beyond | Read-only | Read-only (no change) |
+## What Changes for the User
 
-## Backend Impact
-
-None. The `useSubmitSelfReview` hook already uses `upsert` with `onConflict: 'kpi_id'` and sets the status to `self_review` -- it already handles re-submissions correctly at the database level.
-
-## Files to Change
-
-| File | Change |
+| Before | After |
 |---|---|
-| `src/components/review/SelfReviewSheet.tsx` | Update `isReadOnly` to allow editing at `self_review`; update header and button labels |
-| `DOCUMENTATION.md` | Document self-review edit capability |
+| Always shows: Self, Manager, Auditor, Management | Shows only stages in the employee's assigned workflow |
+| Cannot enter Skip-Level or HR PMS data | Can enter data for all applicable workflow levels |
+| 4-button fixed layout | Responsive layout adapting to 4-6 buttons |
 
+## No Database Changes Required
+
+The `review_submissions` table already has `skip_level_*` and `hr_pms_*` columns. The `buildUpdateFields` helper just needs to handle the new prefixes.
