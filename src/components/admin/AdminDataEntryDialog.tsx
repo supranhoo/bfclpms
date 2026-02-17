@@ -117,6 +117,7 @@ export function AdminDataEntryDialog({
   const [remarks, setRemarks] = useState<string>('');
   const [reason, setReason] = useState<string>('');
   const [isNa, setIsNa] = useState<boolean>(false);
+  const [advanceStatus, setAdvanceStatus] = useState<boolean>(true);
   const [isAutoCalculated, setIsAutoCalculated] = useState<boolean>(false);
   // Qualitative-specific state (aligned with SelfReviewSheet)
   const [calculatedRatingLevel, setCalculatedRatingLevel] = useState<RatingLevel | null>(null);
@@ -376,6 +377,7 @@ export function AdminDataEntryDialog({
       setRemarks('');
       setReason('');
       setIsNa(false);
+      setAdvanceStatus(true);
       setCalculatedScore(null);
       setCalculatedRatingLevel(null);
       setIsAutoCalculated(false);
@@ -433,6 +435,7 @@ export function AdminDataEntryDialog({
       is_na: isNa,
       reason: reason.trim(),
       kpi_name: kpi.kpi_name,
+      advance_status: advanceStatus,
     });
 
     onClose();
@@ -646,6 +649,23 @@ export function AdminDataEntryDialog({
                   rows={2}
                 />
               </div>
+            </div>
+
+            {/* Advance Workflow Status Toggle */}
+            <div className="flex items-center justify-between border-t pt-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="advance-status" className="text-sm font-medium">
+                  Advance workflow status
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Move the KPI to the next workflow stage after saving
+                </p>
+              </div>
+              <Switch
+                id="advance-status"
+                checked={advanceStatus}
+                onCheckedChange={setAdvanceStatus}
+              />
             </div>
 
             {/* Reason for Admin Entry - MANDATORY */}

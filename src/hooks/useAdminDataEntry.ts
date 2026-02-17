@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { resolveForwardStatus } from '@/lib/workflowEngine';
 import type { Database } from '@/integrations/supabase/types';
 
 type RatingLevel = Database['public']['Enums']['rating_level'];
@@ -22,6 +23,7 @@ export interface AdminDataEntryParams {
   is_na?: boolean; // Explicit N/A toggle
   reason: string; // Mandatory for audit
   kpi_name: string; // For notification message
+  advance_status?: boolean; // Default true — advance KPI workflow status after data entry
 }
 
 export interface AdminSubPeriodParams {
@@ -108,6 +110,7 @@ export function useAdminSubmitReviewData() {
       is_na,
       reason,
       kpi_name,
+      advance_status,
     }: AdminDataEntryParams) => {
       if (!user?.id) throw new Error('User not authenticated');
 
@@ -184,6 +187,38 @@ export function useAdminSubmitReviewData() {
 
       if (notifyError) {
         console.error('Failed to create notification:', notifyError);
+      }
+
+      // 6. Optionally advance KPI workflow status
+      if (advance_status !== false) {
+        let newStatus: string | null = null;
+
+        if (role_level === 'self') {
+          newStatus = 'self_review';
+        } else {
+          // Fetch employee's workflow stages to determine correct forward status
+          const { data: stagesData } = await supabase
+            .rpc('get_employee_workflow', { employee_uuid: employee_id });
+          const stages = (stagesData as string[]) || undefined;
+          newStatus = resolveForwardStatus(role_level, stages);
+        }
+
+        if (newStatus) {
+          const { error: statusError } = await supabase
+            .from('kpis')
+            .update({ status: newStatus as any, updated_at: new Date().toISOString() })
+            .eq('id', kpi_id);
+
+          if (statusError) {
+            console.error('Failed to advance KPI status:', statusError);
+          }
+
+          // Also sync review_submissions.kpi_status to 'submitted'
+          await supabase
+            .from('review_submissions')
+            .update({ kpi_status: 'submitted' as any, updated_at: new Date().toISOString() })
+            .eq('kpi_id', kpi_id);
+        }
       }
 
       return newSubmission;

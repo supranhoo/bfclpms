@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-17  
-> **Version:** 1.42.0
+> **Version:** 1.43.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -1429,6 +1429,7 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - **Mandatory reason field** for all admin entries to ensure audit compliance
   - **N/A Flag Handling:** The Admin Data Entry Dialog includes a "Mark as Not Applicable" toggle switch showing the current `is_na` status. Admins can explicitly set or clear the N/A flag. Additionally, when an admin enters an `achieved_value`, the `is_na` flag is **automatically cleared** (set to `false`) to ensure the KPI is included in dashboard score calculations. This prevents the scenario where admin corrections remain invisible because a stale N/A flag excludes the KPI from scoring.
   - **Zero-Value Preservation:** Achieved values and scores of `0` are valid entries. The dialog uses explicit empty-string checks (`value !== ''`) instead of truthy checks to prevent JavaScript falsy coercion from discarding legitimate zero entries.
+  - **Workflow Status Advancement (v1.43.0):** Admin data entry now optionally advances the KPI's workflow status (`kpis.status`) to match the role level being entered. An "Advance workflow status" toggle (default: ON) controls this behavior. When enabled: Self → `self_review`, Manager → `manager_check`, Skip-Level → `skip_level_check`, HR PMS → `hr_pms_review`, Auditor → next stage via `resolveForwardStatus()`, Management → `approved`. The `review_submissions.kpi_status` is also synced to `submitted`. When the toggle is OFF, only submission data is updated without changing the KPI's workflow stage — useful for correcting values without moving the workflow forward.
   - **Cache Invalidation:** The admin data entry mutation invalidates both `review-submission-admin` (dialog's own fetch key) and `review-submissions` (shared key) to ensure the UI reflects saved data immediately.
   - **Workflow Mutation Cache Invalidation Rule:** All workflow mutations (send-back, approve, submit, N/A forward) MUST invalidate `['kpis']`, `['kpis-by-period']`, and `['review-submissions']` query keys. The `kpis-by-period` key is used by the EmployeeSelectorGrid for pending/reviewed badge counts and will not be invalidated by `['kpis']` alone due to TanStack Query's prefix matching rules. Send-back mutations also close the review sheet (`setReviewSheetOpen(false)`) to provide immediate visual feedback.
   - All admin actions are logged in `kpi_audit_logs` with `on_behalf_of` and `on_behalf_role` tracking
