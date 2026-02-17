@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-17  
-> **Version:** 1.43.0
+> **Version:** 1.44.0
 > **Maintainer:** Lovable AI
 
 ---
@@ -854,10 +854,10 @@ Footer Layout:
 **Send Back from Review Sheet:**
 Management can send a KPI back for revision directly from the review sheet footer without closing the dialog:
 - **Send Back Button:** Orange-styled button at left side of footer opens Send Back dialog
-- **Target Options:** Auditor, HR PMS, Skip-Level, Manager, or Employee (filtered by active workflow stages)
+- **Target Options:** Dynamically computed from `resolveSendBackTargets('management', effectiveStages)` — includes Auditor, HR PMS, Skip-Level, Manager, or Employee filtered by the employee's active workflow stages
 - **Required Reason:** Must provide explanation for sending back
-- **Status Update:** KPI status resets to the stage PRECEDING the target reviewer's stage (e.g., sending to Auditor sets status to the stage before `audit`)
-- **Cascading Data Clear (v1.28.0):** All downstream review fields are cleared from the target stage onward
+- **Status Update (v1.44.0 fix):** Uses `resolveSendBackStatus(target, 'management', stages)` from the workflow engine to set the KPI status to the stage PRECEDING the target reviewer's stage. Previously used a hardcoded map that incorrectly set statuses to the target's "completed" stage (e.g., sending to Manager set `manager_check` instead of `self_review`).
+- **Cascading Data Clear (v1.44.0 fix):** All downstream review fields (ratings, scores, remarks, evidence, achieved values) are cleared from the target stage forward through management, including `final_rating` and `final_score`. Previously only cleared management fields.
 - **Audit Trail:** Action logged in `kpi_audit_logs` table
 
 Footer Layout:
