@@ -3051,10 +3051,12 @@ KRA assignment and notification are now **decoupled**. When KRAs are assigned vi
 3. Clicking "Issue KRAs" opens the **KRA Issuance Confirmation Dialog** (`KraIssuanceConfirmDialog.tsx`)
 4. The dialog displays:
    - A detailed table of ALL assigned KPIs (Category, KRA, KPI, UOM, Target, Weightage, Frequency)
+   - **Inline editable weightage inputs** — each KPI's weightage is shown as a compact number input. Admins can adjust values on-the-fly; the total weightage card updates in real-time. Modified fields show a blue dot indicator. Changed weightages are saved to the database on confirmation.
    - A prominent **total weightage indicator** (green = 100%, amber = under, red = over)
    - An "Allow non-100% weightage" override toggle for intentional exceptions
    - A warning banner if KPIs have already been issued (re-issuance)
-5. Admin clicks **"Confirm & Issue KRAs"** → all KPIs are marked `is_issued = true` and a consolidated notification (in-app + email) is sent to the employee and their reporting manager
+5. Admin clicks **"Confirm & Issue KRAs"** → any modified weightages are batch-saved, all KPIs are marked `is_issued = true`, and a consolidated notification (in-app + email) is sent to the employee and their reporting manager
+6. **Scroll to Top**: After successful issuance, the All KPIs page automatically scrolls to the top for a clean return to the employee list
 
 **Database:** `kpis.is_issued` (boolean, default `false`) — separates "assigned" from "officially issued" states.
 

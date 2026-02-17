@@ -890,6 +890,10 @@ export default function AllKpis() {
         <KraIssuanceConfirmDialog
           isOpen={!!issuanceEmployee}
           onClose={() => setIssuanceEmployee(null)}
+          onIssuanceComplete={() => {
+            setIssuanceEmployee(null);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
           employeeId={issuanceEmployee.id}
           employeeName={issuanceEmployee.name}
           employeeCode={issuanceEmployee.code}
