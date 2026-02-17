@@ -1,137 +1,72 @@
 
 
-# Restructure "Bulk Assign from Template" for 540+ Templates
+# Fix: Enforce Frequency Locking on Self-Review for Quarterly and Bi-Monthly KPIs
 
 ## Problem
 
-The template selector is a flat `<Select>` dropdown listing all 540 active templates. Users cannot search, filter by category, or navigate by KRA name. Finding a specific template requires scrolling through hundreds of items.
+Quarterly and Bi-Monthly KPIs are not locked during non-active months in the Self Review. The `FrequencyLockedOverlay` component is **imported** in `SelfReviewSheet.tsx` but **never rendered** in the JSX. This means users can freely enter and submit values for Quarterly KPIs in January, when entry should only be allowed in March (the active Q1 month).
 
-## Solution
+### How It Should Work
 
-Replace the single flat dropdown with a **cascading filter approach** (matching the pattern already used in AdminKpiCreateDialog):
+| Frequency | Locked Months (no entry) | Active Months (entry allowed) |
+|---|---|---|
+| Quarterly | Jan, Feb, Apr, May, Jul, Aug, Oct, Nov | Mar, Jun, Sep, Dec |
+| Bi-Monthly (your config) | Feb, Apr, Jun, Aug, Oct, Dec | Mar, May, Jul, Sep, Nov, Jan |
 
-1. **Category filter** -- narrows templates to a specific category (34 options)
-2. **KRA Name filter** -- narrows within category (searchable)
-3. **KPI Name selector** -- final pick from the filtered list (searchable)
-4. **Auto-populated preview card** -- shows full details of the selected template
+### Where Locking Works Today
+- Org KPI Data Entry page -- correctly hides locked KPIs
 
-Additionally:
-- Add a **text search** across all template fields (title, KRA name, KPI name) as a quick-find shortcut
-- Show **template count badges** on each category
-- Add **duplicate detection** -- warn if any selected employee already has this KPI assigned for the current period
+### Where Locking is Missing (the bug)
+- Self Review Sheet -- overlay imported but never used
+- My KPIs page -- no frequency lock check at all
 
-## UI Layout (Template Selection Section)
+## Fix
 
-```text
-+--------------------------------------------------+
-| Search templates...                    [x]       |
-+--------------------------------------------------+
-| Category          | KRA Name          | KPI Name |
-| [All Categories v]| [Select KRA... v] | [Select v]|
-+--------------------------------------------------+
-| Selected: "Ensure raw material..."               |
-| KRA: Statutory Compliance | KPI: ... | Target: 0 |
-| Weightage: 7% | UOM: Number | Frequency: Monthly |
-+--------------------------------------------------+
-```
+### 1. `src/components/review/SelfReviewSheet.tsx`
 
-## Detailed Changes
+Wrap the "Your Assessment" card content with `FrequencyLockedOverlay` so that when a multi-month KPI is in a locked period, the input form is blurred and a lock message is shown directing the user to the active month.
 
-### File: `src/components/admin/BulkTemplateAssignDialog.tsx`
+Add the overlay inside the assessment Card (around line 487), wrapping the form inputs in a `relative` container with `FrequencyLockedOverlay` rendered on top when locked. Also disable the Submit button when the period is locked.
 
-**1. New state variables:**
-- `templateSearch` -- free-text search across template title/KRA/KPI names
-- `categoryFilter` -- filter templates by category_id
-- `kraNameFilter` -- filter templates by KRA name within category
+### 2. `src/pages/MyKpis.tsx`
 
-**2. Replace single Select with cascading filters:**
+Add a `FrequencyLockBadge` next to each KPI in the list so users get a visual indicator that a KPI is locked for the current month before even opening the review sheet. This provides immediate context without needing to click into each KPI.
 
-- **Category dropdown**: Derived from `templates` -- unique categories with counts. Selecting a category resets KRA and KPI selections.
-- **KRA Name dropdown**: Filtered by selected category. Searchable via `cmdk` Command component (already in project). Selecting a KRA resets KPI selection.
-- **KPI Name dropdown**: Filtered by selected category + KRA name. Selecting a KPI sets `selectedTemplateId`.
+### 3. `DOCUMENTATION.md`
 
-**3. Quick search bar:**
-- A text input above the cascading filters that searches across `title`, `kra_name`, and `kpi_name` fields
-- Results shown as a filtered list; selecting one auto-sets the category/KRA/KPI filters
-
-**4. Enhanced preview card:**
-- Show all key fields: KRA, KPI, Target, UOM, Weightage, Frequency, and R0-R5 thresholds
-- Color-coded category badge
-
-**5. Duplicate detection before assignment:**
-- Before inserting, query existing KPIs for the selected employees + period + kra_name + kpi_name
-- Show a warning listing employees who already have this KPI
-- Allow the admin to proceed (skip duplicates) or cancel
-
-**6. Multi-template selection (bonus):**
-- Allow selecting multiple templates before assigning (add a "+" button to queue templates)
-- Show a summary of queued templates with total weightage
-
-### File: `DOCUMENTATION.md`
-- Update bulk assignment section with new cascading filter and duplicate detection behavior
+Document that frequency locking is enforced at both the Self Review form level and the KPI list level.
 
 ## Technical Detail
 
-### Cascading Filter Logic
+**SelfReviewSheet changes:**
 
-```typescript
-const categories = useMemo(() => {
-  const cats = new Map();
-  templates?.filter(t => t.is_active).forEach(t => {
-    if (t.kra_categories) {
-      const existing = cats.get(t.kra_categories.id);
-      cats.set(t.kra_categories.id, {
-        ...t.kra_categories,
-        count: (existing?.count || 0) + 1
-      });
-    }
-  });
-  return Array.from(cats.values());
-}, [templates]);
-
-const kraNames = useMemo(() => {
-  if (!categoryFilter) return [];
-  const names = new Set<string>();
-  templates?.filter(t => t.is_active && t.category_id === categoryFilter)
-    .forEach(t => names.add(t.kra_name));
-  return Array.from(names).sort();
-}, [templates, categoryFilter]);
-
-const kpiOptions = useMemo(() => {
-  return templates?.filter(t =>
-    t.is_active &&
-    (!categoryFilter || t.category_id === categoryFilter) &&
-    (!kraNameFilter || t.kra_name === kraNameFilter) &&
-    (!templateSearch || 
-      t.title.toLowerCase().includes(templateSearch.toLowerCase()) ||
-      t.kra_name.toLowerCase().includes(templateSearch.toLowerCase()) ||
-      t.kpi_name.toLowerCase().includes(templateSearch.toLowerCase()))
-  ) || [];
-}, [templates, categoryFilter, kraNameFilter, templateSearch]);
+```text
+<Card> (Your Assessment)
+  <CardContent>
+    <div className="relative">           <-- new wrapper
+      <FrequencyLockedOverlay             <-- new: renders lock overlay when period is locked
+        frequency={selectedKpi.frequency}
+        reviewMonth={selectedPeriod}
+        reviewYear={selectedYear}
+        frequencyCycleStart={selectedKpi.frequency_cycle_start}
+      />
+      ... existing form inputs ...
+    </div>
+  </CardContent>
+</Card>
 ```
 
-### Duplicate Detection
+The Submit button will also check `isKpiLockedForPeriod` and be disabled when locked.
 
-```typescript
-// Before insert, check for existing assignments
-const { data: existing } = await supabase
-  .from('kpis')
-  .select('employee_id, kra_name, kpi_name')
-  .eq('kra_name', selectedTemplate.kra_name)
-  .eq('kpi_name', selectedTemplate.kpi_name)
-  .eq('review_period', currentPeriod)
-  .eq('review_year', currentYear)
-  .in('employee_id', Array.from(selectedEmployeeIds));
+**MyKpis changes:**
 
-const duplicateEmployeeIds = new Set(existing?.map(e => e.employee_id));
-const newEmployeeIds = Array.from(selectedEmployeeIds)
-  .filter(id => !duplicateEmployeeIds.has(id));
-```
+Add `FrequencyLockBadge` in each KPI card's metadata area to show "Review in March" etc. for locked KPIs.
 
 ## Files to Change
 
 | File | Change |
 |---|---|
-| `src/components/admin/BulkTemplateAssignDialog.tsx` | Replace flat Select with cascading Category > KRA > KPI filters, add search, duplicate detection, enhanced preview |
-| `DOCUMENTATION.md` | Document the improved bulk assignment workflow |
+| `src/components/review/SelfReviewSheet.tsx` | Render `FrequencyLockedOverlay` around assessment form; disable submit when locked |
+| `src/pages/MyKpis.tsx` | Add `FrequencyLockBadge` to KPI cards for visual indicator |
+| `DOCUMENTATION.md` | Document the locking enforcement |
 
