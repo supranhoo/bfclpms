@@ -15,7 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Search, Package, Users, FileCheck, Sparkles } from 'lucide-react';
-import { sendKraAssignmentNotifications, KraNotificationItem } from '@/lib/kraNotifications';
+
 
 interface BundleAssignDialogProps {
   isOpen: boolean;
@@ -171,19 +171,7 @@ export function BundleAssignDialog({ isOpen, onClose, preselectedEmployeeId }: B
         description: `${selectedBundle?.template_bundle_items?.length || 0} KPIs assigned to ${selectedEmployeeIds.length} employee(s)`,
       });
 
-      // Send consolidated notifications per employee
-      if (selectedBundle?.template_bundle_items) {
-        const kraItems: KraNotificationItem[] = selectedBundle.template_bundle_items.map(item => ({
-          kra_name: item.kpi_templates.kra_name,
-          kpi_name: item.kpi_templates.kpi_name,
-          target_value: item.kpi_templates.target_value,
-          weightage: item.kpi_templates.weightage,
-          uom: item.kpi_templates.uom || null,
-        }));
-        selectedEmployeeIds.forEach(empId => {
-          sendKraAssignmentNotifications(empId, kraItems, currentPeriod, currentYear);
-        });
-      }
+      // Email deferred to "Issue KRAs" confirmation step
 
       handleClose();
     },

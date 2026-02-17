@@ -1,0 +1,1 @@
+ALTER TABLE public.kpis ADD COLUMN is_issued boolean DEFAULT false;

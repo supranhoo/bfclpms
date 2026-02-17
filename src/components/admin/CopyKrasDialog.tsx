@@ -12,7 +12,7 @@ import { Copy, Search, AlertTriangle, Loader2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { sendKraAssignmentNotifications, KraNotificationItem } from '@/lib/kraNotifications';
+
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -235,23 +235,7 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       toast({ title: `Copied ${count} KRAs to ${targetEmployeeIds.length} employee(s)` });
 
-      // Send consolidated notifications per target employee
-      const selectedKpis = sourceKpis.filter(k => selectedKraIds.has(k.id));
-      targetEmployeeIds.forEach(empId => {
-        const existing = duplicateMap.get(empId) || new Set();
-        const assignedKras: KraNotificationItem[] = selectedKpis
-          .filter(k => !existing.has(`${k.kra_name}|||${k.kpi_name}`))
-          .map(k => ({
-            kra_name: k.kra_name,
-            kpi_name: k.kpi_name,
-            target_value: k.target_value,
-            weightage: k.weightage,
-            uom: k.uom,
-          }));
-        if (assignedKras.length > 0) {
-          sendKraAssignmentNotifications(empId, assignedKras, targetPeriod, targetYear);
-        }
-      });
+      // Email deferred to "Issue KRAs" confirmation step
 
       handleClose();
     },

@@ -18,8 +18,9 @@ import { AdminDataEntryDialog } from '@/components/admin/AdminDataEntryDialog';
 import { AdminDailyEntryDialog } from '@/components/admin/AdminDailyEntryDialog';
 import { AdminStatusStepBackDialog } from '@/components/admin/AdminStatusStepBackDialog';
 import { CopyKrasDialog } from '@/components/admin/CopyKrasDialog';
+import { KraIssuanceConfirmDialog } from '@/components/admin/KraIssuanceConfirmDialog';
 import { getPreviousStatus } from '@/hooks/useAdminDataEntry';
-import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy, Trash2, Undo2 } from 'lucide-react';
+import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy, Trash2, Undo2, Send, CheckCircle } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -103,6 +104,7 @@ export default function AllKpis() {
   const [deletingKpi, setDeletingKpi] = useState<KPI | null>(null);
   const [stepBackKpi, setStepBackKpi] = useState<KPI | null>(null);
   const [stepBackEmployee, setStepBackEmployee] = useState<{ id: string; name: string } | null>(null);
+  const [issuanceEmployee, setIssuanceEmployee] = useState<{ id: string; name: string; code?: string } | null>(null);
 
   const deleteKpiMutation = useAdminDeleteKpi();
 
@@ -599,8 +601,36 @@ export default function AllKpis() {
                         <TableRow className="bg-muted/30">
                           <TableCell colSpan={3 + WORKFLOW_STAGES.length} className="p-0">
                             <div className="p-4 space-y-2">
-                              <div className="text-sm font-medium text-muted-foreground mb-3">
-                                Individual KPIs for {emp.employeeName}
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="text-sm font-medium text-muted-foreground">
+                                  Individual KPIs for {emp.employeeName}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {employeeKpis.some(k => (k as any).is_issued) ? (
+                                    <Badge variant="secondary" className="text-xs">
+                                      <CheckCircle className="h-3 w-3 mr-1" />
+                                      Issued
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-xs">
+                                      Not Issued
+                                    </Badge>
+                                  )}
+                                  <Button
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setIssuanceEmployee({
+                                        id: emp.employeeId,
+                                        name: emp.employeeName,
+                                        code: emp.employeeCode,
+                                      });
+                                    }}
+                                  >
+                                    <Send className="h-4 w-4 mr-1" />
+                                    Issue KRAs
+                                  </Button>
+                                </div>
                               </div>
                               <div className="grid gap-2">
                                 {employeeKpis.map(kpi => {
@@ -854,6 +884,19 @@ export default function AllKpis() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* KRA Issuance Confirmation Dialog */}
+      {issuanceEmployee && (
+        <KraIssuanceConfirmDialog
+          isOpen={!!issuanceEmployee}
+          onClose={() => setIssuanceEmployee(null)}
+          employeeId={issuanceEmployee.id}
+          employeeName={issuanceEmployee.name}
+          employeeCode={issuanceEmployee.code}
+          reviewPeriod={selectedPeriod === 'all' ? '' : selectedPeriod}
+          reviewYear={selectedYear === 'all' ? new Date().getFullYear() : parseInt(selectedYear)}
+        />
+      )}
     </div>
   );
 }

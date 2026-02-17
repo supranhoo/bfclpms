@@ -189,8 +189,7 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 |-------|---------|-------------|
 | `profiles` | User profiles linked to auth.users | `id`, `email`, `full_name`, `employee_code`, `designation`, `department_id`, `reporting_manager_id`, `pms_grade`, `level` |
 | `user_roles` | Role assignments | `user_id`, `role` (admin/manager/employee/auditor/management) |
-| `kpis` | Key Performance Indicators | `id`, `employee_id`, `category_id`, `kra_name`, `kpi_name`, `target_value`, `weightage`, `review_period`, `review_year`, `status`, `r5-r0` (thresholds), `require_resubmit_reason` |
-| `kpis` | Key Performance Indicators | `id`, `employee_id`, `category_id`, `kra_name`, `kpi_name`, `target_value`, `weightage`, `review_period`, `review_year`, `status`, `r5-r0` (thresholds) |
+| `kpis` | Key Performance Indicators | `id`, `employee_id`, `category_id`, `kra_name`, `kpi_name`, `target_value`, `weightage`, `review_period`, `review_year`, `status`, `is_issued`, `r5-r0` (thresholds), `require_resubmit_reason` |
 | `review_submissions` | Review data per KPI | `kpi_id`, `achieved_value`, `manager_achieved_value`, `auditor_achieved_value`, `management_achieved_value`, `self_rating`, `manager_rating`, `auditor_rating`, `final_score`, `kpi_status`, `*_remarks` |
 | `kra_categories` | KRA groupings | `id`, `name`, `weightage`, `color`, `is_org_level`, `org_scoring_mode` |
 
@@ -3043,12 +3042,21 @@ The `exportKpiData()` function in `ImportData.tsx` now exports **all columns** t
 
 **Email Template:** `password_rollout` event type with placeholders: `{{recipient_name}}`, `{{login_email}}`, `{{generated_password}}`, `{{app_name}}`
 
-### 8.11 Batch KRA Assignment Notifications
+### 8.11 KRA Issuance Confirmation Workflow
 
-When KRAs are assigned to employees (via Copy KRAs, Bulk Template Assign, Bundle Assign, or Smart Assignment), the system sends **one consolidated notification** per recipient rather than individual alerts per KRA. Both the employee and their reporting manager receive:
+KRA assignment and notification are now **decoupled**. When KRAs are assigned via any method (Smart Assign, Bundle Assign, Copy KRAs, Bulk Template Assign), the KPIs are inserted into the database but **no notification email is sent**. Instead:
 
-- **1 in-app notification** summarizing all assigned KRAs with total weightage
-- **1 email** with a professional HTML table listing all KRAs (KRA, KPI, Target, Weightage, UOM)
+1. Admin navigates to **Admin KPI Dashboard** (`/admin/all-kpis`)
+2. Expands an employee row → sees an **"Issue KRAs"** button and an **Issued / Not Issued** badge
+3. Clicking "Issue KRAs" opens the **KRA Issuance Confirmation Dialog** (`KraIssuanceConfirmDialog.tsx`)
+4. The dialog displays:
+   - A detailed table of ALL assigned KPIs (Category, KRA, KPI, UOM, Target, Weightage, Frequency)
+   - A prominent **total weightage indicator** (green = 100%, amber = under, red = over)
+   - An "Allow non-100% weightage" override toggle for intentional exceptions
+   - A warning banner if KPIs have already been issued (re-issuance)
+5. Admin clicks **"Confirm & Issue KRAs"** → all KPIs are marked `is_issued = true` and a consolidated notification (in-app + email) is sent to the employee and their reporting manager
+
+**Database:** `kpis.is_issued` (boolean, default `false`) — separates "assigned" from "officially issued" states.
 
 **Event Type:** `kra_batch_assigned`
 
@@ -3058,10 +3066,8 @@ When KRAs are assigned to employees (via Copy KRAs, Bulk Template Assign, Bundle
 | File | Purpose |
 |---|---|
 | `src/lib/kraNotifications.ts` | Shared utility: fetches profiles, inserts notifications, triggers emails |
-| `src/components/admin/CopyKrasDialog.tsx` | Triggers notifications after copy success |
-| `src/components/admin/BulkTemplateAssignDialog.tsx` | Triggers notifications after bulk assign |
-| `src/components/admin/BundleAssignDialog.tsx` | Triggers notifications after bundle assign |
-| `src/components/admin/SmartAssignmentDialog.tsx` | Triggers notifications after smart assign (both bundle and template modes) |
+| `src/components/admin/KraIssuanceConfirmDialog.tsx` | Confirmation dialog with weightage validation and issue button |
+| `src/pages/admin/AllKpis.tsx` | "Issue KRAs" button and issued/not-issued badges in expanded employee rows |
 
 ---
 
