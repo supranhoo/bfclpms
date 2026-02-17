@@ -1,89 +1,68 @@
 
 
-# Fix: Category Performance Chart Not Updating with Status Filter
+# Fix: Disable "Submit Month" During Active Month with Clear User Messaging
 
-## Root Cause
+## Problem
 
-In the **My Dashboard**, the category chart is computed from `fullyFilteredKpis` which incorporates the `statusFilter`. When you click "KRA Set" or "Self Review" in the workflow tracker, the category chart updates accordingly.
+The "Submit Month" button for Daily/Weekly KPIs is clickable during the active month. Users accidentally submit incomplete data mid-month, forcing managers to roll back KPIs -- creating unnecessary work.
 
-In **all four reviewer scorecards** (UnifiedScorecard, AuditScorecard, ManagementScorecard, EmployeeScorecard), the `scoreData.categoryScores` is always computed from the **raw unfiltered `kpis` array**. The `statusFilter` is only applied to the KPI table/list -- the charts completely ignore it.
+## Solution
 
+Add a date-based guard: disable "Submit Month" while the review month is still ongoing, and show a clear countdown-style message so users understand when it will unlock.
+
+## Before / Changes / After
+
+### Before
 ```text
-My Dashboard:
-  statusFilter --> fullyFilteredKpis --> categoryMetrics --> CategoryScoreChart  (WORKS)
-
-All Scorecards:
-  statusFilter --> sortedKpis (table only)
-  kpis (unfiltered) --> scoreData.categoryScores --> CategoryScoreChart  (BROKEN)
+Submit Month Button States:
+1. No entries yet       --> Disabled + tooltip "Enter at least one daily value first"
+2. Already submitted    --> Disabled + "Month Submitted"
+3. Has entries + kra_set --> ENABLED (even mid-month!) <-- BUG
 ```
 
-## Fix Plan
+### Changes
+- Import `endOfMonth` and `getMonthNumber` in SelfReviewSheet
+- Compute `isMonthStillActive` flag comparing current date to end of review month
+- Add a NEW 4th button state: month still active --> disabled with tooltip showing "Available after {Month} {Year} ends"
+- Show an informational banner near the button area: "You can submit the month total once {Month} ends"
 
-For each scorecard, update the `scoreData` useMemo to use filtered KPIs instead of raw KPIs, and similarly update the OverallScoreChart data source.
+### After
+```text
+Submit Month Button States:
+1. No entries yet            --> Disabled + tooltip "Enter at least one daily value first"
+2. Already submitted         --> Disabled + "Month Submitted"
+3. Month still active        --> Disabled + tooltip "Available after January 2026 ends" (NEW)
+4. Month over + has entries  --> ENABLED
+```
 
-### File 1: `src/components/review/UnifiedScorecard.tsx`
-
-- Create a `displayKpis` variable: `statusFilter ? kpis.filter(k => k.status === statusFilter) : kpis`
-- Update `scoreData` useMemo (line 316) to iterate over `displayKpis` instead of `kpis`
-- Add `statusFilter` to the useMemo dependency array
-- Pass `displayKpis` to `WorkflowProgressTracker` count source remains unfiltered (full `kpis`)
-
-### File 2: `src/components/review/AuditScorecard.tsx`
-
-Same pattern:
-- Create `displayKpis` filtered by `statusFilter`
-- Update `scoreData` useMemo (line 189) to use `displayKpis`
-- Add `statusFilter` to dependencies
-
-### File 3: `src/components/review/ManagementScorecard.tsx`
-
-Same pattern:
-- Create `displayKpis` filtered by `statusFilter`
-- Update `scoreData` useMemo (line 189) to use `displayKpis`
-- Add `statusFilter` to dependencies
-
-### File 4: `src/components/review/EmployeeScorecard.tsx`
-
-Same pattern:
-- Create `displayKpis` filtered by `statusFilter`
-- Update `scoreData` useMemo (line 192) to use `displayKpis`
-- Add `statusFilter` to dependencies
-
-### File 5: `DOCUMENTATION.md`
-
-Document that the Performance by Category chart and Overall Score chart now respond to the workflow status filter across all dashboards.
+The button will show a Lock icon and muted styling when the month is active, with a clear tooltip message. Users can still save daily entries normally throughout the month.
 
 ## Technical Detail
 
-The change in each scorecard follows this pattern:
+### File 1: `src/components/review/SelfReviewSheet.tsx`
 
+1. Add import: `endOfMonth` from `date-fns` (already uses `format` from date-fns)
+2. Add import: `getMonthNumber` from `@/lib/frequencyUtils` (already imports other functions from there)
+3. Compute flag near line 126:
 ```typescript
-// NEW: filtered KPIs for charts
-const displayKpis = useMemo(() => {
-  if (!kpis) return [];
-  return statusFilter ? kpis.filter(k => k.status === statusFilter) : kpis;
-}, [kpis, statusFilter]);
-
-// UPDATED: scoreData uses displayKpis instead of kpis
-const scoreData = useMemo(() => {
-  if (!displayKpis.length || !submissions) return { overallScore: 0, rating: 0, categoryScores: [] };
-  
-  displayKpis.forEach(kpi => {
-    // ... existing scoring logic unchanged ...
-  });
-  
-  // ...
-}, [displayKpis, submissions, submissionMap]);  // kpis replaced with displayKpis
+const isMonthStillActive = useMemo(() => {
+  const monthNum = getMonthNumber(selectedPeriod);
+  const monthEnd = endOfMonth(new Date(selectedYear, monthNum - 1));
+  return new Date() <= monthEnd;
+}, [selectedPeriod, selectedYear]);
 ```
+4. In the Submit Month button section (line 840), insert a new condition before the enabled button case:
+   - When `isMonthStillActive` is true: render disabled button with Lock icon and tooltip "Available after {selectedPeriod} {selectedYear} ends"
+   - When false: render existing enabled button (current behavior)
 
-Important: The `WorkflowProgressTracker` must still receive the full unfiltered `kpis` array so the stage count badges remain accurate regardless of filter state.
+### File 2: `DOCUMENTATION.md`
 
-## Summary
+Document the month-end gate for daily KPI month submission.
+
+## Files to Change
 
 | File | Change |
 |---|---|
-| `src/components/review/UnifiedScorecard.tsx` | Add `displayKpis` filtered by statusFilter; use in scoreData |
-| `src/components/review/AuditScorecard.tsx` | Same |
-| `src/components/review/ManagementScorecard.tsx` | Same |
-| `src/components/review/EmployeeScorecard.tsx` | Same |
-| `DOCUMENTATION.md` | Document chart-filter sync behavior |
+| `src/components/review/SelfReviewSheet.tsx` | Add `isMonthStillActive` guard; new disabled button state with Lock icon and tooltip |
+| `DOCUMENTATION.md` | Document the restriction |
+
