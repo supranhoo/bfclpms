@@ -105,18 +105,39 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isDirtyRef = useRef(false);
+  // Tracks the "identity" of the currently-displayed KPI (category + names + period).
+  // When the identity changes (different KPI or period), we always sync from props.
+  // When the identity is the same (background refetch), we skip the sync if the user
+  // is editing OR if the incoming values match what's already on screen.
+  const kpiIdentityRef = useRef('');
 
-  // Sync from props when data changes (e.g. after refetch).
-  // Guard: if the user is actively editing (isDirtyRef = true), skip the sync
-  // so a DB refetch doesn't overwrite what they're currently typing.
   useEffect(() => {
-    if (isDirtyRef.current) return;
+    const newIdentity = `${data.categoryId}||${data.kraName}||${data.kpiName}||${reviewPeriod}||${reviewYear}`;
+    const identityChanged = newIdentity !== kpiIdentityRef.current;
+
+    if (!identityChanged) {
+      // Same KPI — skip if user is actively editing
+      if (isDirtyRef.current) return;
+      // Skip if the incoming DB values match what's already shown (no real change)
+      const currentNumeric = achievedValue === '' ? null : parseFloat(achievedValue);
+      const sameValue =
+        currentNumeric === data.achievedValue ||
+        (currentNumeric === null && data.achievedValue === null) ||
+        (isNaN(currentNumeric as number) && data.achievedValue === null);
+      const sameRemarks = remarks === data.remarks;
+      const sameEvidence = evidenceUrl === data.evidenceUrl;
+      if (sameValue && sameRemarks && sameEvidence) return;
+    }
+
+    kpiIdentityRef.current = newIdentity;
     setAchievedValue(data.achievedValue?.toString() ?? '');
     setRemarks(data.remarks);
     setEvidenceUrl(data.evidenceUrl);
     setScopedValues(data.scopedRows || []);
     setSaveStatus('idle');
-  }, [data.achievedValue, data.remarks, data.evidenceUrl, data.scopedRows]);
+    isDirtyRef.current = false;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.achievedValue, data.remarks, data.evidenceUrl, data.categoryId, data.kraName, data.kpiName, reviewPeriod, reviewYear]);
 
   // getValues reads from refs (always current, no stale closure)
   const getValues = useCallback(() => {
