@@ -1,131 +1,139 @@
 
-# Sync Profile Changes to User Management
+# Fix: Email Confirmation Flow & Mobile Number Update Timing
 
-## What the User Wants
+## Root Cause Analysis
 
-When an employee updates their **Mobile Number** or **Profile Picture** from the `/profile` page, those changes should:
-1. **Persist to the database** (already happening for mobile via edge function, avatar via direct storage upload)
-2. **Be visible in User Management** (Admin table) — the mobile number column is missing from the table
-3. **Be editable by admins** from the Edit User dialog in User Management
-4. **Reflect instantly** (via query invalidation) without page reload
+### Issue 1: Email Confirmation Not Working
+
+**The bug**: In `supabase/functions/update-user-profile/index.ts`, the `update_email` operation uses the **Admin API**:
+```typescript
+await supabaseAdmin.auth.admin.updateUserById(user.id, { email: newEmail, email_confirm: false })
+```
+
+`email_confirm: false` on the **admin API** means "do NOT confirm the email" — it still **immediately replaces** the email without sending any verification email to the user. The admin API bypasses the standard email change flow entirely.
+
+**The fix**: Switch to using the **user's own session token** with the regular `auth.updateUser()` call (anon client scoped to the user's JWT). This triggers Supabase's built-in email change flow which sends verification emails to both the old and new addresses — standard behavior that requires the user to click a link to confirm.
+
+```typescript
+// CORRECT approach — uses user's session to trigger verification flow
+const supabaseUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  global: { headers: { Authorization: authHeader } },
+  auth: { autoRefreshToken: false, persistSession: false }
+});
+
+const { error } = await supabaseUser.auth.updateUser({ email: newEmail });
+```
 
 ---
 
-## Current State Analysis
+### Issue 2: Mobile Number Not Updating in UI on Time
 
-### What already works
-- `mobile_number` column EXISTS on `profiles` table (migration ran)
-- `useProfiles()` does `select('*')` — so `mobile_number` is already fetched
-- Avatar URL is already shown in User Management's User column
-- Profile Settings page correctly saves mobile → DB via edge function and avatar → storage + profiles table
-- `queryClient.invalidateQueries({ queryKey: ['profiles'] })` is called after both saves in ProfileSettings.tsx
+**The bugs** (two compounding problems):
 
-### What is missing
-1. **User Management table**: No "Mobile" column displayed — the table has: User, Employee Code, Department, Designation, PMS Grade, Role, Reporting To, Actions. Mobile is fetched but never shown.
-2. **Admin Edit User dialog**: Has fields for Full Name, Email, Employee Code, Role, Department, Reporting Manager, Designation, PMS Grade — but NO mobile number field. Admin cannot view or edit an employee's mobile from here.
-3. **updateUser mutation** in UserManagement.tsx: Does not include `mobile_number` in the `supabase.from('profiles').update({...})` call.
-4. **`AuthContext.fetchProfile`** in ProfileSettings.tsx: The `refreshProfile` function dispatches a custom event but doesn't actually call `fetchProfile` from context. Should call `fetchProfile(user.id)` to refresh the in-memory auth profile.
-
----
-
-## All Changes Required
-
-### 1. Add "Mobile" column to the User Management table
-
-**Location**: `src/pages/admin/UserManagement.tsx` — the `<TableHeader>` and `<TableBody>` rows
-
-Add a "Mobile" column between "PMS Grade" and "Role":
-
-```
-| User | Code | Department | Designation | PMS Grade | Mobile | Role | Reporting To | Actions |
-```
-
-The mobile value is already available as `profile.mobile_number` (since `useProfiles` does `select('*')`).
-
-Display: if no mobile, show `—`. If present, show as a clickable `tel:` link or plain text.
-
-### 2. Add Mobile field to the Admin Edit User Dialog
-
-**Location**: Same file, the Edit Dialog `<Dialog open={editDialogOpen}>` section (~line 764)
-
-- Add state: `const [editMobile, setEditMobile] = useState('')`
-- In `openEditDialog()`: set `setEditMobile((user as any).mobile_number || '')`
-- In the Edit Dialog JSX: add a Phone input field after PMS Grade
-- In `updateUser` mutation `mutationFn`: add `mobile_number` to the profile update
-
+**Bug A**: In `handleSaveMobile` (ProfileSettings.tsx line 278-279), the call order is:
 ```typescript
-// Mutation params type — add:
-mobileNumber?: string;
-
-// In profile update — add:
-mobile_number: mobileNumber || null,
+queryClient.invalidateQueries({ queryKey: ['profiles'] });
+refreshProfile();   // ← NOT awaited!
 ```
+`refreshProfile()` is not awaited, so the next render may happen before `fetchProfile` completes, showing the old mobile number. By the time `fetchProfile` updates `AuthContext`, the component may have already re-rendered with stale data.
 
-- In `handleSaveUser`: pass `mobileNumber: editMobile`
+**Bug B**: `currentMobile` is derived from `profile?.mobile_number` at render-time. After a successful save, the component closes the edit field (`setEditingMobile(false)`) and re-renders — but since `refreshProfile()` is not awaited, `profile` in AuthContext still has the old value for that render cycle. The user sees the old mobile number until the async refresh completes.
 
-### 3. Fix the ProfileSettings `refreshProfile` to use AuthContext's `fetchProfile`
-
-**Location**: `src/pages/ProfileSettings.tsx` line 128 and 160–166
-
-Currently:
-```typescript
-const { user, profile, fetchProfile: _fetchProfile } = useAuth() as any;
-// ...
-const refreshProfile = useCallback(async () => {
-  if (!user) return;
-  await supabase.from('profiles').select('*').eq('id', user.id).single();
-  queryClient.invalidateQueries({ queryKey: ['profiles'] });
-  window.dispatchEvent(new Event('profile-updated'));
-}, [user, queryClient]);
-```
-
-The `fetchProfile` is aliased as `_fetchProfile` (never used). The profile in AuthContext is never updated with the new mobile number. Fix:
-
-```typescript
-const { user, profile, fetchProfile } = useAuth() as any;
-// ...
-const refreshProfile = useCallback(async () => {
-  if (!user) return;
-  await fetchProfile(user.id);                              // updates AuthContext profile state
-  queryClient.invalidateQueries({ queryKey: ['profiles'] }); // updates User Management list
-}, [user, queryClient, fetchProfile]);
-```
-
-This ensures:
-- The sidebar avatar/name updates instantly
-- The mobile number in AuthContext profile updates so the page shows the new value without reload
-- The User Management `['profiles']` cache is invalidated so the admin sees the new number immediately
-
-### 4. Add `mobile_number` to the `updateUser` mutation type signature
-
-**Location**: `src/pages/admin/UserManagement.tsx` lines 140–189
-
-```typescript
-// ADD to mutation params:
-mobileNumber?: string;
-
-// ADD to profile update object:
-mobile_number: mobileNumber !== undefined ? (mobileNumber || null) : undefined,
-```
+**The fix**:
+1. `await refreshProfile()` before `setEditingMobile(false)` so the profile is fresh when the field closes
+2. Update `refreshProfile` to correctly `await fetchProfile` (it already does this, but the caller must also await it)
+3. After a successful mobile save, also update the local display state optimistically so the UI shows the new value immediately without waiting for the async refresh
 
 ---
 
 ## Files to Modify
 
-| File | What Changes |
+| File | Change |
 |---|---|
-| `src/pages/admin/UserManagement.tsx` | (1) Add `editMobile` state + populate in `openEditDialog`; (2) Add mobile field to Edit Dialog JSX; (3) Update `updateUser` mutation to include `mobile_number`; (4) Add Mobile column header + cell to the table |
-| `src/pages/ProfileSettings.tsx` | Fix `refreshProfile` to call `fetchProfile(user.id)` from AuthContext instead of discarding it |
-| `DOCUMENTATION.md` | Version bump to 1.45.12 + note about admin mobile visibility |
+| `supabase/functions/update-user-profile/index.ts` | Replace admin `updateUserById` email call with user-scoped `auth.updateUser()` to trigger real verification email |
+| `src/pages/ProfileSettings.tsx` | (1) Await `refreshProfile()` in `handleSaveMobile`; (2) Add optimistic local state for mobile display so field shows new value immediately after save |
+| `DOCUMENTATION.md` | Version bump to 1.45.13 |
+
+---
+
+## Detailed Changes
+
+### `supabase/functions/update-user-profile/index.ts` — Email Fix
+
+Replace the current `update_email` block:
+
+```typescript
+// BEFORE (broken — admin API does not trigger verification email)
+const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(
+  user.id,
+  { email: newEmail, email_confirm: false }
+);
+```
+
+With a user-scoped client that triggers the standard verification flow:
+
+```typescript
+// AFTER — user-scoped call sends confirmation email to old+new address
+const supabaseUser = createClient(
+  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+  {
+    global: { headers: { Authorization: authHeader } },
+    auth: { autoRefreshToken: false, persistSession: false }
+  }
+);
+
+const { error: updateAuthError } = await supabaseUser.auth.updateUser(
+  { email: newEmail },
+  { emailRedirectTo: Deno.env.get('SITE_URL') ?? 'https://bfclpms.lovable.app' }
+);
+```
+
+The `authHeader` variable is already captured earlier in the function (line 21), so this is a clean change.
+
+### `src/pages/ProfileSettings.tsx` — Mobile Update Timing Fix
+
+**Change 1**: Await `refreshProfile()` in `handleSaveMobile` and close the editing field only after the profile is fresh:
+
+```typescript
+// BEFORE
+toast({ title: 'Mobile number updated' });
+setEditingMobile(false);
+queryClient.invalidateQueries({ queryKey: ['profiles'] });
+refreshProfile();   // not awaited
+
+// AFTER
+toast({ title: 'Mobile number updated' });
+setEditingMobile(false);
+await refreshProfile();   // awaited — AuthContext profile updated before next render
+```
+
+**Change 2**: Add an optimistic local mobile state so the displayed value updates instantly without waiting for the async DB re-fetch (belt-and-suspenders approach):
+
+```typescript
+// Add local optimistic state
+const [localMobile, setLocalMobile] = useState<string | null>(null);
+const currentMobile = localMobile ?? (profile as any)?.mobile_number ?? '';
+
+// In handleSaveMobile after success:
+setLocalMobile(editMobile || null);
+setEditingMobile(false);
+await refreshProfile(); // then sync with DB
+setLocalMobile(null);   // clear optimistic state once real profile is loaded
+```
+
+This ensures:
+- The field closes immediately showing the new value (optimistic)
+- The AuthContext profile is then refreshed from DB in the background
+- Once fresh, `localMobile` is cleared and the component uses the authoritative `profile.mobile_number`
 
 ---
 
 ## Technical Notes
 
-- No database migration needed — `mobile_number` column already exists
-- No edge function changes needed — admin can update `profiles.mobile_number` directly via Supabase client (RLS policy "Users can update own profile" covers admins too; if not, admin has broader `has_role(auth.uid(), 'admin')` policies)
-- The `useProfiles()` query uses `select('*')` so `mobile_number` is already being fetched — zero query changes needed
-- The Mobile column in the table is optional (not all users will have it) — gracefully show `—` when null
-- The mobile input in the Edit Dialog does NOT go through the `update-user-profile` edge function (that's for self-service with format validation). Admin updates go directly via `supabase.from('profiles').update(...)` — same as all other profile fields the admin edits
-- The column ordering in the table: Mobile fits naturally after PMS Grade before Role. The table currently has 9 columns including checkbox and actions — adding Mobile makes 10. This is acceptable but we can consider making it compact (Phone icon + number) to save space.
-- Format: Display mobile as-is (raw stored format) with a Phone icon prefix for visual clarity
+- No database migrations needed
+- No new secrets required — `SUPABASE_ANON_KEY` and `SUPABASE_URL` are already available in the edge function environment
+- The `authHeader` variable is already captured at line 21 of the edge function, so it can be reused for the user-scoped client without any extra extraction
+- The email change verification flow is entirely handled by the Supabase auth backend — when `auth.updateUser({ email })` is called with a user JWT, it automatically sends a confirmation email to the new address and holds the change pending until confirmed
+- No SMTP configuration changes needed — the verification email goes through Supabase's own email service (separate from the custom SMTP used for PMS notifications)
+- `emailRedirectTo` points to the production URL so users land back on the live app after clicking the email confirmation link
