@@ -54,6 +54,7 @@ const MonthlyScorecardReport = lazy(() => import("./pages/reports/MonthlyScoreca
 const EmployeePerformanceSummary = lazy(() => import("./pages/reports/EmployeePerformanceSummary"));
 const TNIReport = lazy(() => import("./pages/reports/TNIReport"));
 const IssuesReport = lazy(() => import("./pages/reports/IssuesReport"));
+const KpiDetailReport = lazy(() => import("./pages/reports/KpiDetailReport"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -238,6 +239,11 @@ const App = () => (
                 <Route path="/reports/issues" element={
                   <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management']}>
                     <IssuesReport />
+                  </ProtectedRoute>
+                } />
+                <Route path="/reports/kpi-detail" element={
+                  <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management', 'hr_pms']}>
+                    <Suspense fallback={<PageFallback />}><KpiDetailReport /></Suspense>
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/pip" element={
