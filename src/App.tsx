@@ -15,6 +15,7 @@ import { Loader2 } from 'lucide-react';
 // Lazy-loaded page components
 const Auth = lazy(() => import("./pages/Auth"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const ProfileSettings = lazy(() => import("./pages/ProfileSettings"));
 const ModuleHub = lazy(() => import("./pages/ModuleHub"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const MyKpis = lazy(() => import("./pages/MyKpis"));
@@ -94,6 +95,11 @@ const App = () => (
                 <Route path="/my-kpis" element={<Suspense fallback={<PageFallback />}><MyKpis /></Suspense>} /> {/* Redirects to /dashboard */}
                 <Route path="/self-review" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/kra-acceptance" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/profile" element={
+                  <ProtectedRoute allowedRoles={['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms']}>
+                    <Suspense fallback={<PageFallback />}><ProfileSettings /></Suspense>
+                  </ProtectedRoute>
+                } />
                 <Route path="/queries" element={<QueryInbox />} />
                 <Route path="/pms-policy" element={
                   <ProtectedRoute allowedRoles={['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms']}>

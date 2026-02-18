@@ -2043,6 +2043,7 @@ export type Database = {
           full_name: string | null
           id: string
           level: string | null
+          mobile_number: string | null
           pms_grade: string | null
           reporting_manager_id: string | null
           updated_at: string
@@ -2057,6 +2058,7 @@ export type Database = {
           full_name?: string | null
           id: string
           level?: string | null
+          mobile_number?: string | null
           pms_grade?: string | null
           reporting_manager_id?: string | null
           updated_at?: string
@@ -2071,6 +2073,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           level?: string | null
+          mobile_number?: string | null
           pms_grade?: string | null
           reporting_manager_id?: string | null
           updated_at?: string

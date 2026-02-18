@@ -211,7 +211,7 @@ export function useProfiles() {
   return useQuery({
     queryKey: ['profiles'],
     queryFn: async () => {
-      // Fetch profiles with departments
+      // Fetch profiles with departments (mobile_number included via *)
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select(`
@@ -250,7 +250,7 @@ export function useTeamMembers(managerId: string | undefined) {
           *,
           departments (id, name, code)
         `)
-        .eq('reporting_manager_id', managerId)
+        .eq('reporting_manager_id', managerId!)
         .order('full_name');
 
       if (error) throw error;

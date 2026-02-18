@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.password-rollout]
 verify_jwt = false
+
+[functions.update-user-profile]
+verify_jwt = false

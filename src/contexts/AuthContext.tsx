@@ -16,6 +16,7 @@ interface Profile {
   department_id: string | null;
   reporting_manager_id: string | null;
   avatar_url: string | null;
+  mobile_number?: string | null;
 }
 
 interface AuthContextType {
@@ -35,6 +36,8 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  /** Refresh the in-memory profile from DB (e.g. after avatar/mobile update) */
+  fetchProfile: (userId: string) => Promise<void>;
 }
 
 const ADMIN_MODE_KEY = 'pms_admin_mode';
@@ -241,7 +244,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user, session, profile, role, effectiveRole, naturalRole,
-      isAdminMode, toggleAdminMode, loading, signIn, signUp, signOut,
+      isAdminMode, toggleAdminMode, loading, signIn, signUp, signOut, fetchProfile,
     }}>
       {children}
     </AuthContext.Provider>

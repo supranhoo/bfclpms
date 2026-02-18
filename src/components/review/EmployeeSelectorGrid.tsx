@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ReviewPeriodSelectorEnhanced, type PeriodSelection } from '@/components/ui/ReviewPeriodSelectorEnhanced';
 import { EmployeeFilters } from '@/components/review/EmployeeFilters';
+import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { supabase } from '@/integrations/supabase/client';
 import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck } from 'lucide-react';
 import { ViewMode } from './ViewModeToggle';
@@ -25,7 +26,9 @@ interface EmployeeProfile {
   department_id: string | null;
   reporting_manager_id: string | null;
   pms_grade?: string | null;
+  mobile_number?: string | null;
   relationship?: 'direct' | 'indirect';
+  departments?: { id: string; name: string; code: string | null } | null;
 }
 
 interface EmployeeSelectorGridProps {
@@ -757,10 +760,25 @@ export function EmployeeSelectorGrid({
                         </Avatar>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
-                            <p className="font-medium truncate group-hover:text-primary transition-colors">
-                              {member.full_name || member.email}
-                            </p>
-                            <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                            {isFullAccess ? (
+                              <EmployeeContactCard
+                                employee={member}
+                                departmentName={(member as any).departments?.name ?? undefined}
+                                onViewKpis={() => handleEmployeeClick(member)}
+                              >
+                                <span
+                                  className="font-medium truncate group-hover:text-primary transition-colors cursor-pointer hover:underline"
+                                  title="Click to view contact info"
+                                >
+                                  {member.full_name || member.email}
+                                </span>
+                              </EmployeeContactCard>
+                            ) : (
+                              <p className="font-medium truncate group-hover:text-primary transition-colors">
+                                {member.full_name || member.email}
+                              </p>
+                            )}
+                            <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0 ml-2" />
                           </div>
                           <p className="text-sm text-muted-foreground truncate">
                             {member.designation || member.email}

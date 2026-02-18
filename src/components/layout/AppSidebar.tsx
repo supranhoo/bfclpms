@@ -354,23 +354,30 @@ export function AppSidebar() {
         
         {/* Profile card */}
         <div className="flex items-center gap-3 p-2.5 rounded-lg bg-sidebar-accent/5 border border-sidebar-border/30">
-          <Avatar className="h-9 w-9">
-            <AvatarImage src={profile?.avatar_url || undefined} />
-            <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
-              {getInitials(profile?.full_name)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-sidebar-foreground truncate">
-              {profile?.full_name || 'User'}
-            </p>
-            <p className="text-xs text-sidebar-foreground/60 capitalize">{effectiveRole}</p>
-          </div>
+          <button
+            onClick={() => handleNavigation('/profile')}
+            className="flex items-center gap-3 flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
+            aria-label="My Profile Settings"
+          >
+            <Avatar className="h-9 w-9 shrink-0">
+              <AvatarImage src={profile?.avatar_url || undefined} />
+              <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+                {getInitials(profile?.full_name)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-sidebar-foreground truncate">
+                {profile?.full_name || 'User'}
+              </p>
+              <p className="text-xs text-sidebar-foreground/60 capitalize">{effectiveRole}</p>
+            </div>
+          </button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-sidebar-foreground/60 hover:text-destructive transition-colors"
+            className="h-8 w-8 text-sidebar-foreground/60 hover:text-destructive transition-colors shrink-0"
             onClick={handleSignOut}
+            title="Sign out"
           >
             <LogOut className="h-4 w-4" />
           </Button>
