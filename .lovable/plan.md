@@ -1,121 +1,215 @@
 
-# Enhancement: Total Weightage Display on Admin KPI Dashboard
+# New Report: KPI Detail Report — Full Specification (Including N/A KPIs)
 
-## What the User Wants
+## Confirmed: N/A KPI Handling
 
-Below the employee name in the "KPI Status by Employee" table, a small cosmetic line showing **Total Weightage** (e.g. `100856 · Total Weightage: 102%`) must appear — but only when a specific month is selected in the period filter. When "All Periods" is selected, this stays hidden.
+This is the key difference from all existing reports:
 
-## Zero Logic Impact Guarantee
-
-This is a purely additive, display-only change:
-- No queries are added or changed
-- No database calls are added
-- The weightage is already loaded on every KPI object (`kpi.weightage`) — it just needs summing during the existing `employeeData` aggregation pass
-- No existing computed values are modified
-
----
-
-## Changes Required
-
-### File: `src/pages/admin/AllKpis.tsx`
-
-**Change 1 — Add `totalWeightage` to the `EmployeeKpiData` interface (line 41–51)**
-
-```typescript
-// BEFORE
-interface EmployeeKpiData {
-  employeeId: string;
-  employeeName: string;
-  employeeCode: string;
-  departmentName: string;
-  managerName: string;
-  totalKpis: number;
-  orgLevelKpis: number;
-  stageCounts: Record<string, number>;
-  stageQueryCounts: Record<string, number>;
-}
-
-// AFTER — add one field
-interface EmployeeKpiData {
-  ...
-  totalWeightage: number;  // ← new
-}
-```
-
-**Change 2 — Initialise and accumulate `totalWeightage` inside the `employeeData` useMemo (lines 178–206)**
-
-When a new employee entry is created in the map, initialise `totalWeightage: 0`. Then on each KPI loop iteration, add `kpi.weightage ?? 0` to it. This happens inside the **existing single-pass loop** — no extra iteration.
-
-```typescript
-// In the map initialisation:
-totalWeightage: 0,
-
-// In the accumulation loop:
-data.totalWeightage += (kpi.weightage ?? 0);
-```
-
-**Change 3 — Show the badge conditionally in the table cell (lines 550–556)**
-
-Currently the subtitle line reads:
-```tsx
-<div className="text-xs text-muted-foreground">
-  {emp.employeeCode && <span>{emp.employeeCode} · </span>}
-  {emp.departmentName}
-</div>
-```
-
-The updated version:
-```tsx
-<div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
-  {emp.employeeCode && <span>{emp.employeeCode}</span>}
-  {emp.employeeCode && <span>·</span>}
-  <span>{emp.departmentName}</span>
-  {selectedPeriod !== 'all' && (
-    <>
-      <span>·</span>
-      <span className={emp.totalWeightage > 100
-        ? 'text-destructive font-medium'
-        : emp.totalWeightage === 100
-          ? 'text-green-600 font-medium'
-          : 'text-amber-600 font-medium'
-      }>
-        {emp.totalWeightage}% weightage
-      </span>
-    </>
-  )}
-</div>
-```
-
-**Colour coding rationale** (purely cosmetic, no logic impact):
-| Total Weightage | Colour |
+| Report | N/A KPIs |
 |---|---|
-| = 100% | Green — correct |
-| > 100% | Red/destructive — over-allocated |
-| < 100% | Amber — under-allocated |
+| Employee Performance Summary | Skipped entirely — not in output |
+| Monthly Scorecard | Skipped from score calculation |
+| **This new KPI Detail Report** | **Included — all score columns show "N/A", excluded from Total Score / Out of Score / Percentage** |
 
-This gives the admin an instant at-a-glance health check without opening the expanded view.
+For each N/A KPI row:
+- Employee Code, Name, Category, KRA, KPI, Month, Weightage — all show normally
+- Self, Manager, Skip-Level, HR PMS, Auditor, Mgmt, Final — all show a styled **"N/A"** badge
+- Total Score — shows **"—"** (dash, excluded from weighted calculation)
+- Out of Score — shows **"—"**
+- Overall Rating — shows **"N/A"** badge
+- Percentage — shows **"—"**
+
+In the Excel export, N/A rows are included with "N/A" text in all score columns and blank cells for Total Score / Out of Score / Percentage.
 
 ---
 
-## Visibility Rule
+## Report Columns (Exact Order as Requested)
 
-`selectedPeriod !== 'all'` — the weightage segment only renders when a specific month is selected. This matches the user's requirement exactly: hidden when "All Periods" is shown, visible when any month is active.
+| # | Column | Source | Notes |
+|---|---|---|---|
+| 1 | Employee Code | `profiles.employee_code` | |
+| 2 | Employee Name | `profiles.full_name` | |
+| 3 | Category | `kra_categories.name` | |
+| 4 | KRA | `kpis.kra_name` | |
+| 5 | KPI | `kpis.kpi_name` | |
+| 6 | Month | `kpis.review_period` | e.g. "January" |
+| 7 | Weightage | `kpis.weightage` | |
+| 8 | Self | `review_submissions.self_score` | "N/A" if is_na |
+| 9 | Manager | `review_submissions.manager_score` | "N/A" if is_na |
+| 10 | Skip-Level | `review_submissions.skip_level_score` | "N/A" if is_na |
+| 11 | HR PMS | `review_submissions.hr_pms_score` | "N/A" if is_na |
+| 12 | Auditor | `review_submissions.auditor_score` | "N/A" if is_na |
+| 13 | Mgmt | `review_submissions.management_score` | "N/A" if is_na |
+| 14 | Final | `review_submissions.final_score` (with fallback chain) | "N/A" if is_na |
+| 15 | Total Score | `final_score × weightage` | "—" if is_na |
+| 16 | Out of Score | `weightage × 5` | "—" if is_na |
+| 17 | Overall Rating | Label from score (e.g. "Meets Expectations") | "N/A" if is_na |
+| 18 | Percentage | `(Total Score / Out of Score) × 100` | "—" if is_na |
+
+**Final Score fallback chain** (same as all existing reports):
+`final_score → management_score → auditor_score → hr_pms_score → skip_level_score → manager_score → self_score → 0`
+
+**Overall Rating labels** (from `ratingCalculation.ts`):
+- 5 → Outstanding
+- 4 → Exceeds Expectations
+- 3 → Meets Expectations
+- 0–2.99 → Below Expectations
 
 ---
 
-## Files to Change
+## Filters
 
-| File | Section | Change |
+- **Year** — dropdown, defaults to current year
+- **Month** — "All Periods" or specific month (January → December)
+- **Department** — optional dropdown populated from data
+- **Category** — optional dropdown populated from `kra_categories`
+- **Employee search** — text search on name or code
+- **Include N/A KPIs** — toggle switch, ON by default (honours the user's request to show N/A; can be turned off)
+
+---
+
+## Architecture
+
+### New File: `src/pages/reports/KpiDetailReport.tsx`
+
+**Data strategy** — two parallel queries:
+
+1. **KPIs query** (batched, 1,000 rows per page):
+```
+kpis (id, kra_name, kpi_name, weightage, review_period, review_year, employee_id, category_id)
+  → kra_categories (id, name)
+  → review_submissions (self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na)
+  → profiles (employee_code, full_name, departments(name))
+```
+
+2. **Profiles query** (single fetch, for department filter population)
+
+This follows the identical batching pattern used in `EmployeePerformanceSummary.tsx` (while loop with `range(offset, offset + batchSize - 1)`).
+
+**Data interface:**
+```typescript
+interface KpiDetailRow {
+  kpiId: string;
+  employeeCode: string;
+  employeeName: string;
+  department: string;
+  category: string;
+  kraName: string;
+  kpiName: string;
+  reviewPeriod: string;
+  reviewYear: number;
+  weightage: number;
+  selfScore: number | null;
+  managerScore: number | null;
+  skipLevelScore: number | null;
+  hrPmsScore: number | null;
+  auditorScore: number | null;
+  managementScore: number | null;
+  finalScore: number | null;      // resolved via fallback chain
+  totalScore: number | null;      // null when is_na
+  outOfScore: number | null;      // null when is_na
+  percentage: number | null;      // null when is_na
+  overallRating: string | null;   // null when is_na
+  isNa: boolean;
+}
+```
+
+### N/A Row Rendering Logic
+
+```typescript
+// Score cell rendering (one helper used for all 7 score columns):
+function renderScore(score: number | null, isNa: boolean) {
+  if (isNa) return <Badge variant="secondary">N/A</Badge>;
+  if (score === null) return <span className="text-muted-foreground">—</span>;
+  return <span>{score}</span>;
+}
+
+// Calculated columns:
+function renderCalculated(value: number | null, isNa: boolean, format?: 'percent') {
+  if (isNa) return <span className="text-muted-foreground">—</span>;
+  if (value === null) return <span className="text-muted-foreground">—</span>;
+  return <span>{format === 'percent' ? `${value.toFixed(1)}%` : value.toFixed(2)}</span>;
+}
+```
+
+### Table Layout
+
+The table is wide (18 columns). Layout approach:
+- Outer wrapper: `overflow-x-auto`
+- Inner table: `min-w-[1800px]`
+- Score columns (Self → Final, Total Score, Out of Score, Percentage): `w-16 text-center text-xs`
+- Text columns (Category, KRA, KPI): `min-w-[140px] whitespace-normal`
+- Employee columns: `min-w-[120px]`
+- Sticky first 2 columns (Employee Code + Name) using `sticky left-0 bg-background` so they stay visible while scrolling horizontally
+
+### Summary Stats Bar (above table)
+
+Four stat cards:
+- Total KPI rows (including N/A)
+- N/A KPI count
+- Average Final Score (N/A excluded)
+- Average Percentage (N/A excluded)
+
+### Pagination
+
+- Page size options: 25 / 50 / 100 / 200
+- Standard prev/next controls (same pattern as `EmployeePerformanceSummary`)
+
+### Excel Export
+
+Using `xlsx` (already installed). N/A rows are **included** in the export:
+
+```
+Employee Code | Employee Name | Category | KRA | KPI | Month | Weightage | Self | Manager | Skip-Level | HR PMS | Auditor | Mgmt | Final | Total Score | Out of Score | Overall Rating | Percentage
+```
+
+For N/A KPIs in the spreadsheet: score columns show `"N/A"` (text), Total Score / Out of Score / Percentage cells are left blank (empty string).
+
+---
+
+## Integration Changes
+
+### 1. `src/App.tsx`
+Add lazy import and route:
+```typescript
+const KpiDetailReport = lazy(() => import('@/pages/reports/KpiDetailReport'));
+// Route:
+<Route path="/reports/kpi-detail" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'auditor', 'management', 'hr_pms']}><KpiDetailReport /></ProtectedRoute>} />
+```
+
+### 2. `src/pages/reports/ReportsHub.tsx`
+Add a new card to the `reports` array:
+```typescript
+{
+  title: 'KPI Detail Report',
+  description: 'KPI-level drill-down showing all stage scores (Self, Manager, Skip-Level, HR PMS, Auditor, Mgmt, Final) with weighted totals. Includes N/A KPIs.',
+  icon: TableIcon,
+  path: '/reports/kpi-detail',
+  color: 'text-violet-500',
+}
+```
+
+### 3. `DOCUMENTATION.md`
+Version bump to **1.45.7** with description of new report.
+
+---
+
+## Files to Create / Modify
+
+| File | Action | What changes |
 |---|---|---|
-| `src/pages/admin/AllKpis.tsx` | Line 41–51 | Add `totalWeightage: number` to `EmployeeKpiData` interface |
-| `src/pages/admin/AllKpis.tsx` | Lines 178–206 | Initialise and accumulate `totalWeightage` in the useMemo |
-| `src/pages/admin/AllKpis.tsx` | Lines 550–556 | Render conditional weightage pill in the employee subtitle |
-| `DOCUMENTATION.md` | — | Version bump to 1.45.6 + note |
+| `src/pages/reports/KpiDetailReport.tsx` | **Create new** | Full report page (~400 lines) |
+| `src/App.tsx` | **Edit** | Add lazy import + protected route |
+| `src/pages/reports/ReportsHub.tsx` | **Edit** | Add report card entry |
+| `DOCUMENTATION.md` | **Edit** | Version bump + new report section |
 
-## Impact Assessment
+---
 
-- No API calls added
-- No existing computed values changed
-- No existing UI components removed or restructured
-- The `filteredKpis` already restricts data to the selected month, so `totalWeightage` naturally reflects only that month's KPIs
-- Works correctly even when employee has 0 KPIs in the filter (shows 0%)
+## Design Decisions Summary
+
+1. **N/A KPIs are shown** — all score columns render a styled "N/A" badge; calculated columns (Total Score, Out of Score, Percentage) show a dash "—"
+2. **Include N/A toggle** (ON by default) — allows the user to filter them out if needed for a clean score-only view
+3. **Final score uses fallback chain** — consistent with all existing reports
+4. **No new backend code or migrations** — all data already exists in `kpis`, `review_submissions`, `profiles`, `kra_categories`
+5. **Sticky employee columns** — Employee Code and Name stick to the left when scrolling the wide table horizontally
+6. **Excel export includes N/A rows** with "N/A" text in score columns and blank calculated columns
