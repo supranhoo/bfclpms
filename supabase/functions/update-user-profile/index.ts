@@ -104,7 +104,22 @@ Deno.serve(async (req) => {
         );
       }
 
-      const oldEmail = user.email ?? '';
+      // Fetch from profiles table — always authoritative, JWT token may be stale
+      // (e.g. if a previous Admin API email change was made, the JWT still holds the old claim)
+      const { data: currentProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('email')
+        .eq('id', user.id)
+        .single();
+      const oldEmail = currentProfile?.email ?? user.email ?? '';
+
+      // Guard: prevent no-op updates where old and new email are the same
+      if (oldEmail.toLowerCase() === newEmail.toLowerCase()) {
+        return new Response(
+          JSON.stringify({ error: 'This is already your current email address.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
       // Use Admin API to update email instantly without triggering GoTrue's
       // own email delivery (which would send from no-reply@auth.lovable.cloud).

@@ -247,8 +247,12 @@ export default function ProfileSettings() {
       if (res.error) throw new Error(res.error.message);
       if (res.data?.error) throw new Error(res.data.error);
 
-      toast({ title: 'Verification email sent', description: res.data?.message || 'Check your new inbox to confirm the change.' });
+      toast({ title: 'Email updated', description: 'Your email address has been updated successfully.' });
       setEditingEmail(false);
+      // Force-refresh the client session so user?.email reflects the new address immediately
+      await supabase.auth.refreshSession();
+      // Sync AuthContext profile state + admin caches
+      await refreshProfile();
     } catch (err: any) {
       toast({ title: 'Failed to update email', description: err.message, variant: 'destructive' });
     } finally {
@@ -404,7 +408,7 @@ export default function ProfileSettings() {
             onEditValueChange={setEditEmail}
             isSaving={savingEmail}
             type="email"
-            hint={editingEmail ? 'A verification link will be sent to your new email address.' : undefined}
+            hint={editingEmail ? 'Your email will be updated immediately. A confirmation will be sent to your new address.' : undefined}
           />
           <Separator />
           <InlineField
