@@ -1,187 +1,70 @@
 
-# Fix: Workflow Engine — All Levels, All Pipeline Variants
+# Rollback: Jaspal's Org KPI Propagation — "Adherence to Manning Norms" (February 2026)
 
-## What Is Broken
+## What Happened
 
-The workflow engine has **systematic fallback bugs** across 3 functions: `resolvePendingStatuses`, `resolveReviewableStatuses`, and `canReviewKpi`. When a stage does NOT exist in an employee's pipeline, each function falls back to a hardcoded status instead of returning empty (meaning: "this reviewer has no jurisdiction over this employee"). This causes employees to incorrectly appear in review panels that should not apply to them.
+Jaspal (as Data Owner) propagated values for the **"Adherence to Manning Norms"** KPI (under "Adherence to Monthly Budget" category) across **27 different department scopes** for February 2026. Each scope had a different achieved value (ranging from 71 to 112).
 
-The database shows **11 distinct real pipeline variants** in active use. The bugs affect employees on these non-standard pipelines.
+Because this is a department-scoped org KPI, the propagation pushed values to **27 employees × 27 KPIs each** = **729 review_submissions** records. All 729 affected employee KPIs are currently at `self_review` status (meaning no employee has submitted a self review yet — the propagated value is sitting there waiting).
 
----
+## Scope of the Rollback
 
-## Complete Bug Map
+| Item | Count |
+|---|---|
+| Org KPI value records (scoped entries) | 27 |
+| Employee KPIs affected (`review_submissions`) | 729 |
+| Unique employees affected | 27 |
+| Current employee KPI status | All at `self_review` |
 
-### Function 1: `resolvePendingStatuses`
+Since all affected KPIs are still at `self_review` (no employee has reviewed beyond that), the rollback is clean — no downstream data will be lost.
 
-| Case | Current Fallback | Bug |
-|---|---|---|
-| `skip_level` — no `skip_level_check` in stages | Returns `['manager_check']` | Employees at `manager_check` appear in Skip-Level panel even when they have no skip-level stage (e.g. pipeline #4, #7, #9) |
-| `hr_pms` — no `hr_pms_review` in stages | Returns `['skip_level_check']` | Employees appear in HR PMS panel even without that stage (e.g. pipeline #4, #6, #7) |
-| `auditor` — no `audit` in stages | Returns `['<preceding>', 'audit']` | Employees appear in Audit panel without an audit stage (Avinash's bug — pipelines #1, #3, #5, #7, #11) |
-| `management` — no `management_review` in stages | Returns `['management_review']` always | Employees appear in Management panel when pipeline ends at `approved` directly (pipelines #1, #8, #9) |
+## What the Rollback Will Do
 
-### Function 2: `resolveReviewableStatuses`
-
-Exact same four cases — same fallback bugs. This drives what KPIs an auditor/skip-level/etc. can act on (approve/reject).
-
-### Function 3: `canReviewKpi`
-
-| Case | Current Fallback | Bug |
-|---|---|---|
-| `skip-level-review` — no `skip_level_check` | Falls back to `manager_check` | Skip-level reviewer can act on `manager_check` KPIs for employees with no skip-level stage |
-| `hr-pms-review` — no `hr_pms_review` | Falls back to `skip_level_check` | HR PMS reviewer can act on KPIs for wrong employees |
-| `audit` — no `audit` | Falls back to `manager_check` | Auditor can act on KPIs for employees with no audit stage |
-
----
-
-## The Fix: Guard Every Case with Stage Existence Check
-
-The fix for every single case follows the same pattern: **if the stage doesn't exist in the workflow, return empty/false — never fall back to a hardcoded status.**
-
-```
-BEFORE (broken):
-  case 'skip_level': {
-    const idx = workflowStages.indexOf('skip_level_check');
-    return idx > 0 ? [workflowStages[idx - 1]] : ['manager_check']; // fallback bug
-  }
-
-AFTER (fixed):
-  case 'skip_level': {
-    const idx = workflowStages.indexOf('skip_level_check');
-    if (idx === -1) return []; // stage absent — this reviewer has no employees here
-    return [workflowStages[idx - 1]];
-  }
-```
-
-### `management` case fix
-
-`management` currently always returns `['management_review']` with no guard. Pipelines #1, #8, #9 end at `approved` without a `management_review` stage — those employees must not appear in the Management panel.
-
-```
-BEFORE:
-  case 'management':
-    return ['management_review']; // always — no guard
-
-AFTER:
-  case 'management': {
-    if (!workflowStages.includes('management_review')) return [];
-    return ['management_review'];
-  }
-```
-
-### `manager` case
-
-`manager` always returns `['self_review']` — this is correct because every pipeline goes through `self_review` before any reviewer stage. No change needed here.
-
----
-
-## All Changes — `src/lib/workflowEngine.ts`
-
-### 1. `resolvePendingStatuses` — fix all 4 cases
-
-```typescript
-case 'skip_level': {
-  const idx = workflowStages.indexOf('skip_level_check');
-  if (idx === -1) return [];                          // no skip-level stage
-  return [workflowStages[idx - 1]];
-}
-case 'hr_pms': {
-  const idx = workflowStages.indexOf('hr_pms_review');
-  if (idx === -1) return [];                          // no hr_pms stage
-  return [workflowStages[idx - 1]];
-}
-case 'auditor': {
-  const idx = workflowStages.indexOf('audit');
-  if (idx === -1) return [];                          // no audit stage
-  const preceding = idx > 0 ? workflowStages[idx - 1] : 'manager_check';
-  return [preceding, 'audit'];
-}
-case 'management': {
-  if (!workflowStages.includes('management_review')) return [];  // no management stage
-  return ['management_review'];
-}
-```
-
-### 2. `resolveReviewableStatuses` — same fixes
-
-```typescript
-case 'skip_level': {
-  const idx = workflowStages.indexOf('skip_level_check');
-  if (idx === -1) return [];
-  return [workflowStages[idx - 1]];
-}
-case 'hr_pms': {
-  const idx = workflowStages.indexOf('hr_pms_review');
-  if (idx === -1) return [];
-  return [workflowStages[idx - 1]];
-}
-case 'auditor': {
-  const idx = workflowStages.indexOf('audit');
-  if (idx === -1) return [];
-  const preceding = idx > 0 ? workflowStages[idx - 1] : 'manager_check';
-  return [preceding, 'audit'];
-}
-case 'management': {
-  if (!workflowStages.includes('management_review')) return [];
-  return ['management_review'];
-}
-```
-
-### 3. `canReviewKpi` — fix all 3 affected cases
-
-```typescript
-case 'skip-level-review': {
-  const idx = workflowStages.indexOf('skip_level_check');
-  if (idx === -1) return false;
-  return kpiStatus === workflowStages[idx - 1];
-}
-case 'hr-pms-review': {
-  const idx = workflowStages.indexOf('hr_pms_review');
-  if (idx === -1) return false;
-  return kpiStatus === workflowStages[idx - 1];
-}
-case 'audit': {
-  const idx = workflowStages.indexOf('audit');
-  if (idx === -1) return false;
-  const preceding = idx > 0 ? workflowStages[idx - 1] : 'manager_check';
-  return kpiStatus === preceding || kpiStatus === 'audit';
-}
-case 'management':
-  return workflowStages.includes('management_review') && kpiStatus === 'management_review';
-```
-
----
-
-## Test Updates — `src/lib/workflowEngine.test.ts`
-
-New test cases to be added covering all 11 pipeline variants:
-
-- `resolvePendingStatuses('skip_level', stages-without-skip-level)` → `[]`
-- `resolvePendingStatuses('hr_pms', stages-without-hr-pms)` → `[]`
-- `resolvePendingStatuses('auditor', stages-without-audit)` → `[]`
-- `resolvePendingStatuses('management', stages-without-management)` → `[]`
-- Same pattern for `resolveReviewableStatuses`
-- `canReviewKpi` returning `false` for absent stages
-
-Existing tests that relied on the fallback behavior (e.g. `auditor` returning `['self_review', 'audit']` in skip-manager pipeline) are still valid — those pipelines DO include `audit`, so the guard doesn't fire.
-
----
+1. **Clear `review_submissions`** — Set `achieved_value`, `self_score`, `self_rating` to NULL for all 729 records tied to this org KPI's employee KPIs
+2. **Reset employee KPI status** — Revert all 729 KPI records from `self_review` back to `kra_set`
+3. **Reset org KPI value status** — Reset all 27 `org_kpi_values` records from `propagated` back to `pending`, and clear their `achieved_value`, `remarks`, `evidence_url`
+4. **Log the rollback** — Insert an audit entry in `org_kpi_data_entry_logs` for each of the 27 scoped records
+5. **Notify Jaspal** — Send a notification that the propagation has been rolled back
 
 ## Files to Modify
 
-| File | Change |
-|---|---|
-| `src/lib/workflowEngine.ts` | Fix `resolvePendingStatuses`, `resolveReviewableStatuses`, and `canReviewKpi` — add `if (idx === -1) return []` / `return false` guards for all 4 cases in first two functions and 3 cases in the third |
-| `src/lib/workflowEngine.test.ts` | Add test cases for all 11 pipeline variants across all three fixed functions |
-| `DOCUMENTATION.md` | Version bump to 1.45.15 + note about comprehensive workflow engine guard fix |
+No files need to be changed. This is a **data-only rollback** — the admin simply uses the existing "Rollback to Data Entry" button on the Org KPI Data Entry page (`/admin/org-kpi-data-entry`).
 
----
+## Admin Action Steps
+
+The rollback is already built into the system via the `useRollbackOrgKpiPropagation` hook. Here is exactly what the admin (Ankit Choudhary) needs to do:
+
+1. Navigate to **Admin → Org KPI Data Entry**
+2. Select period: **February 2026**
+3. Find the KPI: **"Adherence to Manning Norms"** (under "Adherence to Monthly Budget")
+4. Since there are 27 scoped entries (one per department), each entry card will show a **"Rollback to Data Entry"** button (admin-only)
+5. Click rollback on each department scope that needs to be reversed, entering a reason each time
+
+However, since there are 27 scopes to roll back individually through the UI, and the user is asking for this to be done now, I can also build a **one-click bulk rollback** UI feature or use a database-level fix.
+
+## Recommended Approach: Build a Bulk Admin Rollback Action
+
+Since 27 individual rollbacks through the UI would be tedious, I will add a **"Rollback All Scopes"** action at the category level on the Org KPI Data Entry page. This lets the admin roll back all department-scoped entries for a single KPI name in one click, with a single reason.
+
+### Technical Changes
+
+**`src/hooks/useRollbackOrgKpiPropagation.ts`** — Extend the existing hook to support rolling back all scoped entries for a KRA+KPI combination across all departments/employees in one mutation call. The hook already handles single-category rollbacks; we extend it to loop over all matching `org_kpi_values` records.
+
+**`src/components/admin/OrgKpiEntryCard.tsx`** — Add a "Rollback All Scopes" button at the card level that triggers the bulk rollback when multiple department scopes exist for the same KPI name.
+
+**`DOCUMENTATION.md`** — Version bump to 1.45.16
+
+## Database Impact
+
+All 27 `org_kpi_values` records will go from `propagated` → `pending` (achieved_value cleared).
+All 729 `review_submissions` records will have `achieved_value`, `self_score`, `self_rating` set to NULL.
+All 729 employee `kpis` records will go from `self_review` → `kra_set`.
+
+This is a fully reversible operation — Jaspal can re-enter and re-propagate correct values after the rollback.
 
 ## Technical Notes
 
-- No database changes needed — this is a pure frontend logic fix
-- No component changes needed — every component already passes `workflowStages` from the employee's assigned template; the engine functions just need to respect absence of stages
-- The `manager` case needs no guard — `self_review` exists in every pipeline (it's always stage 2)
-- `resolveSendBackTargets` is already correctly guarded — it uses `requiredStage` filtering with `workflowStages.includes()`, so no change needed there
-- `resolveForwardStatus` does not need guards — it's only called after the reviewer has confirmed they CAN act on the KPI, so by that point the stage is guaranteed to exist
-- After this fix, every reviewer panel will only show employees whose assigned pipeline includes that reviewer's stage — eliminating all phantom appearances across all 11 pipeline variants
+- No migration needed — existing tables and columns handle this
+- The `useRollbackOrgKpiPropagation` hook already handles single-scope rollback correctly; we extend its interface to accept an array of category/kra/kpi combos and loop
+- All 27 org_kpi_values records share the same `kra_name` and `kpi_name` but differ by `department_id` — the rollback query uses `kra_name` + `kpi_name` + `category_id` to target all of them at once
+- No employee has progressed past `self_review` so there is zero risk of data loss
