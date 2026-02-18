@@ -14,7 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package, Calendar } from 'lucide-react';
+import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package, Calendar, Phone } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { SmartAssignmentDialog } from '@/components/admin/SmartAssignmentDialog';
 import { EmployeeWorkingDaysDialog } from '@/components/admin/EmployeeWorkingDaysDialog';
@@ -57,6 +57,7 @@ export default function UserManagement() {
   const [editEmployeeCode, setEditEmployeeCode] = useState('');
   const [editFullName, setEditFullName] = useState('');
   const [editEmail, setEditEmail] = useState('');
+  const [editMobile, setEditMobile] = useState('');
 
   // Create Dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -147,6 +148,7 @@ export default function UserManagement() {
       designation,
       pmsGrade,
       employeeCode,
+      mobileNumber,
     }: {
       userId: string;
       role: AppRole;
@@ -156,6 +158,7 @@ export default function UserManagement() {
       designation: string;
       pmsGrade: string;
       employeeCode: string;
+      mobileNumber?: string;
     }) => {
       const { error: profileError } = await supabase
         .from('profiles')
@@ -166,6 +169,7 @@ export default function UserManagement() {
           designation,
           pms_grade: pmsGrade,
           employee_code: employeeCode || null,
+          mobile_number: mobileNumber !== undefined ? (mobileNumber || null) : undefined,
         })
         .eq('id', userId);
 
@@ -363,6 +367,7 @@ export default function UserManagement() {
     setEditEmployeeCode(user.employee_code || '');
     setEditFullName(user.full_name || '');
     setEditEmail(user.email || '');
+    setEditMobile((user as any).mobile_number || '');
     setEditDialogOpen(true);
   };
 
@@ -396,6 +401,7 @@ export default function UserManagement() {
       designation: editDesignation,
       pmsGrade: editPmsGrade,
       employeeCode: editEmployeeCode,
+      mobileNumber: editMobile,
     });
   };
 
@@ -633,6 +639,7 @@ export default function UserManagement() {
                 <TableHead>Department</TableHead>
                 <TableHead>Designation</TableHead>
                 <TableHead>PMS Grade</TableHead>
+                <TableHead>Mobile</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Reporting To</TableHead>
                 <TableHead>Actions</TableHead>
@@ -666,6 +673,20 @@ export default function UserManagement() {
                     <TableCell>{(profile.departments as any)?.name || '-'}</TableCell>
                     <TableCell>{profile.designation || '-'}</TableCell>
                     <TableCell>{profile.pms_grade || '-'}</TableCell>
+                    <TableCell>
+                      {(profile as any).mobile_number ? (
+                        <a
+                          href={`tel:${(profile as any).mobile_number}`}
+                          className="flex items-center gap-1 text-sm text-foreground hover:text-primary transition-colors"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          {(profile as any).mobile_number}
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge className={roleColors[role as AppRole]}>{role}</Badge>
                     </TableCell>
@@ -860,6 +881,20 @@ export default function UserManagement() {
                 onChange={(e) => setEditPmsGrade(e.target.value)}
                 placeholder="e.g. L4"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Mobile Number</Label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="tel"
+                  value={editMobile}
+                  onChange={(e) => setEditMobile(e.target.value)}
+                  placeholder="+91 98765 43210"
+                  className="pl-9"
+                />
+              </div>
             </div>
           </div>
 

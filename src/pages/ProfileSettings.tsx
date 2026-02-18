@@ -125,7 +125,7 @@ function PasswordInput({ value, onChange, placeholder, id }: {
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 export default function ProfileSettings() {
-  const { user, profile, fetchProfile: _fetchProfile } = useAuth() as any;
+  const { user, profile, fetchProfile } = useAuth() as any;
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -159,11 +159,9 @@ export default function ProfileSettings() {
 
   const refreshProfile = useCallback(async () => {
     if (!user) return;
-    await supabase.from('profiles').select('*').eq('id', user.id).single();
-    queryClient.invalidateQueries({ queryKey: ['profiles'] });
-    // Reload auth profile from DB
-    window.dispatchEvent(new Event('profile-updated'));
-  }, [user, queryClient]);
+    await fetchProfile(user.id);                              // updates AuthContext profile state (sidebar, mobile display)
+    queryClient.invalidateQueries({ queryKey: ['profiles'] }); // updates User Management admin list
+  }, [user, queryClient, fetchProfile]);
 
   // ── Avatar upload ──────────────────────────────────────────────────────────
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
