@@ -48,6 +48,7 @@ interface EmployeeKpiData {
   orgLevelKpis: number;
   stageCounts: Record<string, number>;
   stageQueryCounts: Record<string, number>;
+  totalWeightage: number;
 }
 
 export default function AllKpis() {
@@ -186,11 +187,13 @@ export default function AllKpis() {
           orgLevelKpis: 0,
           stageCounts: {},
           stageQueryCounts: {},
+          totalWeightage: 0,
         });
       }
 
       const data = employeeMap.get(employee.id)!;
       data.totalKpis++;
+      data.totalWeightage += (kpi.weightage ?? 0);
       if (kpi.is_org_level) {
         data.orgLevelKpis++;
       }
@@ -548,9 +551,24 @@ export default function AllKpis() {
                             )}
                             <div>
                               <div className="font-medium">{emp.employeeName}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {emp.employeeCode && <span>{emp.employeeCode} · </span>}
-                                {emp.departmentName}
+                              <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                                {emp.employeeCode && <span>{emp.employeeCode}</span>}
+                                {emp.employeeCode && <span>·</span>}
+                                <span>{emp.departmentName}</span>
+                                {selectedPeriod !== 'all' && (
+                                  <>
+                                    <span>·</span>
+                                    <span className={
+                                      emp.totalWeightage > 100
+                                        ? 'text-destructive font-medium'
+                                        : emp.totalWeightage === 100
+                                          ? 'text-green-600 font-medium'
+                                          : 'text-amber-600 font-medium'
+                                    }>
+                                      {emp.totalWeightage}% weightage
+                                    </span>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>
