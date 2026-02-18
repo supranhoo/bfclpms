@@ -104,26 +104,33 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Use user-scoped client to trigger Supabase's standard email verification flow
-      const supabaseUser = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-        {
-          global: { headers: { Authorization: authHeader } },
-          auth: { autoRefreshToken: false, persistSession: false },
-        }
-      );
+      // Direct REST call to GoTrue — bypasses SDK _useSession() check that fails
+      // in stateless Edge Function environments (no browser session storage).
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+      const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+      const siteUrl = Deno.env.get('SITE_URL') ?? 'https://bfclpms.lovable.app';
 
-      const { error: updateAuthError } = await supabaseUser.auth.updateUser(
-        { email: newEmail },
-        { emailRedirectTo: Deno.env.get('SITE_URL') ?? 'https://bfclpms.lovable.app' }
-      );
+      const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': authHeader,
+          'apikey': anonKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: newEmail,
+          data: {},
+          email_redirect_to: siteUrl,
+        }),
+      });
 
-      if (updateAuthError) {
-        console.error('Error updating email:', updateAuthError);
+      const authResult = await authResponse.json();
+
+      if (!authResponse.ok) {
+        console.error('Error updating email via Auth REST API:', authResult);
         return new Response(
-          JSON.stringify({ error: updateAuthError.message || 'Failed to update email' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ error: authResult.message || authResult.error_description || 'Failed to update email' }),
+          { status: authResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
