@@ -1,215 +1,119 @@
 
-# New Report: KPI Detail Report — Full Specification (Including N/A KPIs)
+# Bug Fix: Values Vanishing in Org KPI Data Entry "Achieved" Input
 
-## Confirmed: N/A KPI Handling
+## Root Cause (Confirmed)
 
-This is the key difference from all existing reports:
-
-| Report | N/A KPIs |
-|---|---|
-| Employee Performance Summary | Skipped entirely — not in output |
-| Monthly Scorecard | Skipped from score calculation |
-| **This new KPI Detail Report** | **Included — all score columns show "N/A", excluded from Total Score / Out of Score / Percentage** |
-
-For each N/A KPI row:
-- Employee Code, Name, Category, KRA, KPI, Month, Weightage — all show normally
-- Self, Manager, Skip-Level, HR PMS, Auditor, Mgmt, Final — all show a styled **"N/A"** badge
-- Total Score — shows **"—"** (dash, excluded from weighted calculation)
-- Out of Score — shows **"—"**
-- Overall Rating — shows **"N/A"** badge
-- Percentage — shows **"—"**
-
-In the Excel export, N/A rows are included with "N/A" text in all score columns and blank cells for Total Score / Out of Score / Percentage.
-
----
-
-## Report Columns (Exact Order as Requested)
-
-| # | Column | Source | Notes |
-|---|---|---|---|
-| 1 | Employee Code | `profiles.employee_code` | |
-| 2 | Employee Name | `profiles.full_name` | |
-| 3 | Category | `kra_categories.name` | |
-| 4 | KRA | `kpis.kra_name` | |
-| 5 | KPI | `kpis.kpi_name` | |
-| 6 | Month | `kpis.review_period` | e.g. "January" |
-| 7 | Weightage | `kpis.weightage` | |
-| 8 | Self | `review_submissions.self_score` | "N/A" if is_na |
-| 9 | Manager | `review_submissions.manager_score` | "N/A" if is_na |
-| 10 | Skip-Level | `review_submissions.skip_level_score` | "N/A" if is_na |
-| 11 | HR PMS | `review_submissions.hr_pms_score` | "N/A" if is_na |
-| 12 | Auditor | `review_submissions.auditor_score` | "N/A" if is_na |
-| 13 | Mgmt | `review_submissions.management_score` | "N/A" if is_na |
-| 14 | Final | `review_submissions.final_score` (with fallback chain) | "N/A" if is_na |
-| 15 | Total Score | `final_score × weightage` | "—" if is_na |
-| 16 | Out of Score | `weightage × 5` | "—" if is_na |
-| 17 | Overall Rating | Label from score (e.g. "Meets Expectations") | "N/A" if is_na |
-| 18 | Percentage | `(Total Score / Out of Score) × 100` | "—" if is_na |
-
-**Final Score fallback chain** (same as all existing reports):
-`final_score → management_score → auditor_score → hr_pms_score → skip_level_score → manager_score → self_score → 0`
-
-**Overall Rating labels** (from `ratingCalculation.ts`):
-- 5 → Outstanding
-- 4 → Exceeds Expectations
-- 3 → Meets Expectations
-- 0–2.99 → Below Expectations
-
----
-
-## Filters
-
-- **Year** — dropdown, defaults to current year
-- **Month** — "All Periods" or specific month (January → December)
-- **Department** — optional dropdown populated from data
-- **Category** — optional dropdown populated from `kra_categories`
-- **Employee search** — text search on name or code
-- **Include N/A KPIs** — toggle switch, ON by default (honours the user's request to show N/A; can be turned off)
-
----
-
-## Architecture
-
-### New File: `src/pages/reports/KpiDetailReport.tsx`
-
-**Data strategy** — two parallel queries:
-
-1. **KPIs query** (batched, 1,000 rows per page):
-```
-kpis (id, kra_name, kpi_name, weightage, review_period, review_year, employee_id, category_id)
-  → kra_categories (id, name)
-  → review_submissions (self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na)
-  → profiles (employee_code, full_name, departments(name))
-```
-
-2. **Profiles query** (single fetch, for department filter population)
-
-This follows the identical batching pattern used in `EmployeePerformanceSummary.tsx` (while loop with `range(offset, offset + batchSize - 1)`).
-
-**Data interface:**
-```typescript
-interface KpiDetailRow {
-  kpiId: string;
-  employeeCode: string;
-  employeeName: string;
-  department: string;
-  category: string;
-  kraName: string;
-  kpiName: string;
-  reviewPeriod: string;
-  reviewYear: number;
-  weightage: number;
-  selfScore: number | null;
-  managerScore: number | null;
-  skipLevelScore: number | null;
-  hrPmsScore: number | null;
-  auditorScore: number | null;
-  managementScore: number | null;
-  finalScore: number | null;      // resolved via fallback chain
-  totalScore: number | null;      // null when is_na
-  outOfScore: number | null;      // null when is_na
-  percentage: number | null;      // null when is_na
-  overallRating: string | null;   // null when is_na
-  isNa: boolean;
-}
-```
-
-### N/A Row Rendering Logic
+In `src/components/admin/OrgKpiEntryCard.tsx`, lines 110–117:
 
 ```typescript
-// Score cell rendering (one helper used for all 7 score columns):
-function renderScore(score: number | null, isNa: boolean) {
-  if (isNa) return <Badge variant="secondary">N/A</Badge>;
-  if (score === null) return <span className="text-muted-foreground">—</span>;
-  return <span>{score}</span>;
-}
-
-// Calculated columns:
-function renderCalculated(value: number | null, isNa: boolean, format?: 'percent') {
-  if (isNa) return <span className="text-muted-foreground">—</span>;
-  if (value === null) return <span className="text-muted-foreground">—</span>;
-  return <span>{format === 'percent' ? `${value.toFixed(1)}%` : value.toFixed(2)}</span>;
-}
+useEffect(() => {
+  setAchievedValue(data.achievedValue?.toString() ?? '');   // ← OVERWRITES user input
+  setRemarks(data.remarks);
+  setEvidenceUrl(data.evidenceUrl);
+  setScopedValues(data.scopedRows || []);
+  isDirtyRef.current = false;  // ← clears dirty flag too
+}, [data.achievedValue, data.remarks, data.evidenceUrl, data.scopedRows]);
 ```
 
-### Table Layout
+**The timeline of the bug:**
 
-The table is wide (18 columns). Layout approach:
-- Outer wrapper: `overflow-x-auto`
-- Inner table: `min-w-[1800px]`
-- Score columns (Self → Final, Total Score, Out of Score, Percentage): `w-16 text-center text-xs`
-- Text columns (Category, KRA, KPI): `min-w-[140px] whitespace-normal`
-- Employee columns: `min-w-[120px]`
-- Sticky first 2 columns (Employee Code + Name) using `sticky left-0 bg-background` so they stay visible while scrolling horizontally
+1. Firoz types a value into the Achieved input (e.g. `"37560"`)
+2. The `triggerAutoSave` debounce fires after 2 seconds — saves to DB
+3. `bulkUpsert.mutateAsync` completes → calls `queryClient.invalidateQueries(['org-kpi-values'])`
+4. React Query refetches `existingOrgValues` → `existingValuesMap` is rebuilt → `buildCardData` returns new `data` prop
+5. The `useEffect` dependency `data.achievedValue` changes (even if the DB returned the same number) OR briefly passes through `null` during the refetch
+6. `setAchievedValue(data.achievedValue?.toString() ?? '')` fires — **resetting the input while Firoz may still be typing**
+7. The input value vanishes (or flickers back to the old value)
 
-### Summary Stats Bar (above table)
-
-Four stat cards:
-- Total KPI rows (including N/A)
-- N/A KPI count
-- Average Final Score (N/A excluded)
-- Average Percentage (N/A excluded)
-
-### Pagination
-
-- Page size options: 25 / 50 / 100 / 200
-- Standard prev/next controls (same pattern as `EmployeePerformanceSummary`)
-
-### Excel Export
-
-Using `xlsx` (already installed). N/A rows are **included** in the export:
-
-```
-Employee Code | Employee Name | Category | KRA | KPI | Month | Weightage | Self | Manager | Skip-Level | HR PMS | Auditor | Mgmt | Final | Total Score | Out of Score | Overall Rating | Percentage
-```
-
-For N/A KPIs in the spreadsheet: score columns show `"N/A"` (text), Total Score / Out of Score / Percentage cells are left blank (empty string).
+The session replay confirms the symptom: blur → immediate refocus cycle on the input, which is React unmounting/remounting the controlled input due to state reset.
 
 ---
 
-## Integration Changes
+## The Fix
 
-### 1. `src/App.tsx`
-Add lazy import and route:
+### Strategy: Guard the sync effect so it only runs when the card is NOT dirty (i.e. user has no unsaved changes in-flight)
+
+The existing `isDirtyRef` already tracks whether local edits are pending — it's set to `true` on every change and `false` only after a successful save. We need to respect this flag in the sync effect.
+
+**Change 1 — `OrgKpiEntryCard.tsx` lines 110–117: Add dirty guard to the sync useEffect**
+
 ```typescript
-const KpiDetailReport = lazy(() => import('@/pages/reports/KpiDetailReport'));
-// Route:
-<Route path="/reports/kpi-detail" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'auditor', 'management', 'hr_pms']}><KpiDetailReport /></ProtectedRoute>} />
+// BEFORE (broken):
+useEffect(() => {
+  setAchievedValue(data.achievedValue?.toString() ?? '');
+  setRemarks(data.remarks);
+  setEvidenceUrl(data.evidenceUrl);
+  setScopedValues(data.scopedRows || []);
+  isDirtyRef.current = false;
+  setSaveStatus('idle');
+}, [data.achievedValue, data.remarks, data.evidenceUrl, data.scopedRows]);
+
+// AFTER (fixed):
+useEffect(() => {
+  // Only sync from props when the card has no local unsaved edits.
+  // If isDirty, the user is actively editing — DO NOT overwrite their input.
+  if (isDirtyRef.current) return;
+  setAchievedValue(data.achievedValue?.toString() ?? '');
+  setRemarks(data.remarks);
+  setEvidenceUrl(data.evidenceUrl);
+  setScopedValues(data.scopedRows || []);
+  setSaveStatus('idle');
+}, [data.achievedValue, data.remarks, data.evidenceUrl, data.scopedRows]);
 ```
 
-### 2. `src/pages/reports/ReportsHub.tsx`
-Add a new card to the `reports` array:
-```typescript
-{
-  title: 'KPI Detail Report',
-  description: 'KPI-level drill-down showing all stage scores (Self, Manager, Skip-Level, HR PMS, Auditor, Mgmt, Final) with weighted totals. Includes N/A KPIs.',
-  icon: TableIcon,
-  path: '/reports/kpi-detail',
-  color: 'text-violet-500',
-}
-```
+This is safe because:
+- When the card is first mounted, `isDirtyRef.current` is `false` → initial population works normally
+- When Firoz types, `isDirtyRef.current` becomes `true` → the effect is skipped on refetch → **input is preserved**
+- After the auto-save succeeds, `isDirtyRef.current` is reset to `false` → the next refetch can sync cleanly from DB
+- The `isDirtyRef.current = false` line inside the effect is removed (it was incorrectly clearing the dirty flag mid-sync)
 
-### 3. `DOCUMENTATION.md`
-Version bump to **1.45.7** with description of new report.
+**Change 2 — Also protect the auto-save from the re-save loop**
+
+There is a secondary risk: after the auto-save sets `isDirtyRef.current = false` and the DB value refetches, the `useEffect` now correctly syncs. But if the DB returned value differs slightly (e.g. float precision), another `setAchievedValue` call could trigger an unintended re-render. The guard already handles this — no additional change needed here.
+
+**Change 3 — `OrgKpiEntryCard.tsx` line 87: Use a stable initial value**
+
+The `achievedValue` state initialises from `data.achievedValue` on mount. This is fine and doesn't need changing. The bug is only the ongoing sync effect.
 
 ---
 
-## Files to Create / Modify
+## Files to Change
 
-| File | Action | What changes |
+| File | Lines | Change |
 |---|---|---|
-| `src/pages/reports/KpiDetailReport.tsx` | **Create new** | Full report page (~400 lines) |
-| `src/App.tsx` | **Edit** | Add lazy import + protected route |
-| `src/pages/reports/ReportsHub.tsx` | **Edit** | Add report card entry |
-| `DOCUMENTATION.md` | **Edit** | Version bump + new report section |
+| `src/components/admin/OrgKpiEntryCard.tsx` | 110–117 | Add `if (isDirtyRef.current) return;` guard at top of sync useEffect; remove `isDirtyRef.current = false` from inside the effect |
+| `DOCUMENTATION.md` | — | Version bump to 1.45.8 + bug fix note |
 
----
+## Before vs After
 
-## Design Decisions Summary
+```text
+BEFORE — Race Condition:
+User types "37560"
+  → isDirtyRef = true
+  → auto-save fires (2s debounce)
+  → DB write succeeds
+  → React Query invalidates → refetch
+  → data.achievedValue changes
+  → useEffect fires → setAchievedValue("37560") [or null if refetch is mid-flight]
+  → isDirtyRef = false  ← RESET TOO EARLY
+  → user is still typing "0" to make it "375600"
+  → next refetch: setAchievedValue("37560") overwrites "375600" ← BUG
 
-1. **N/A KPIs are shown** — all score columns render a styled "N/A" badge; calculated columns (Total Score, Out of Score, Percentage) show a dash "—"
-2. **Include N/A toggle** (ON by default) — allows the user to filter them out if needed for a clean score-only view
-3. **Final score uses fallback chain** — consistent with all existing reports
-4. **No new backend code or migrations** — all data already exists in `kpis`, `review_submissions`, `profiles`, `kra_categories`
-5. **Sticky employee columns** — Employee Code and Name stick to the left when scrolling the wide table horizontally
-6. **Excel export includes N/A rows** with "N/A" text in score columns and blank calculated columns
+AFTER — Guarded:
+User types "37560"
+  → isDirtyRef = true
+  → auto-save fires (2s debounce)
+  → DB write succeeds → isDirtyRef = false
+  → React Query invalidates → refetch
+  → data.achievedValue changes
+  → useEffect fires → isDirtyRef.current is false → sync runs safely
+  → No overwrite during active typing
+```
+
+## Impact Assessment
+
+- Zero logic changes to save/propagate/rollback flows
+- No database changes
+- No API changes
+- The fix only affects when the local state sync runs — it does NOT prevent syncing; it defers it until the user is done editing
+- Works correctly for both org-scope and department/employee-scope cards
