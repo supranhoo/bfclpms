@@ -29,7 +29,8 @@ export type EmailEventType =
   | 'admin_status_step_back'
   | 'rollback_requested'
   | 'rollback_approved'
-  | 'rollback_rejected';
+  | 'rollback_rejected'
+  | 'email_changed';
 
 export type EmailProvider = 'resend' | 'smtp' | 'microsoft_graph';
 export type SmtpSecurity = 'tls' | 'starttls' | 'none';

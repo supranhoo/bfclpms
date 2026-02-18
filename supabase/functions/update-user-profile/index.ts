@@ -104,38 +104,69 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Direct REST call to GoTrue — bypasses SDK _useSession() check that fails
-      // in stateless Edge Function environments (no browser session storage).
-      const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-      const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-      const siteUrl = Deno.env.get('SITE_URL') ?? 'https://bfclpms.lovable.app';
+      const oldEmail = user.email ?? '';
 
-      const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': authHeader,
-          'apikey': anonKey,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: newEmail,
-          data: {},
-          email_redirect_to: siteUrl,
-        }),
-      });
+      // Use Admin API to update email instantly without triggering GoTrue's
+      // own email delivery (which would send from no-reply@auth.lovable.cloud).
+      // email_confirm: true means no confirmation link is needed — change is immediate.
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        user.id,
+        { email: newEmail, email_confirm: true }
+      );
 
-      const authResult = await authResponse.json();
-
-      if (!authResponse.ok) {
-        console.error('Error updating email via Auth REST API:', authResult);
+      if (updateError) {
+        console.error('Error updating email via Admin API:', updateError);
         return new Response(
-          JSON.stringify({ error: authResult.message || authResult.error_description || 'Failed to update email' }),
-          { status: authResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ error: updateError.message || 'Failed to update email' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
+      // Also sync the profiles table
+      await supabaseAdmin
+        .from('profiles')
+        .update({ email: newEmail })
+        .eq('id', user.id);
+
+      console.log(`Email updated for user ${user.id}: ${oldEmail} → ${newEmail}`);
+
+      // Send branded notification email from the org's configured sender
+      // (hrms@bfclalloys.com via Microsoft Graph) to the NEW email address.
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+        const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+
+        // Get recipient name from profiles
+        const { data: profileData } = await supabaseAdmin
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
+
+        const recipientName = profileData?.full_name || newEmail;
+
+        await fetch(`${supabaseUrl}/functions/v1/send-email-notification`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${anonKey}`,
+            'apikey': anonKey,
+          },
+          body: JSON.stringify({
+            event_type: 'email_changed',
+            recipient_email: newEmail,
+            recipient_name: recipientName,
+            old_email: oldEmail,
+            new_email: newEmail,
+          }),
+        });
+      } catch (notifyErr) {
+        // Non-fatal — the email change itself succeeded
+        console.error('Failed to send email_changed notification:', notifyErr);
+      }
+
       return new Response(
-        JSON.stringify({ success: true, message: 'A verification email has been sent to your new address. Your email will be updated after verification.' }),
+        JSON.stringify({ success: true, message: 'Your email address has been updated successfully.' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

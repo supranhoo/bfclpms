@@ -512,6 +512,19 @@ KPI: {{kpi_name}}
 
 The KPI will remain at its current stage. Please contact your reviewer if you have questions.`,
   },
+  email_changed: {
+    subject: '[PMS] Your Email Address Has Been Updated',
+    body: `Hi {{recipient_name}},
+
+Your email address on the Performance Management System has been successfully updated.
+
+Previous Email: {{old_email}}
+New Email: {{new_email}}
+
+You will now use {{new_email}} to log in to the system.
+
+If you did not make this change, please contact your administrator immediately.`,
+  },
 };
 
 const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string }> = {
@@ -539,6 +552,7 @@ const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string
   rollback_requested: { color: '#f59e0b', emoji: '🔙', title: 'Rollback Requested' },
   rollback_approved: { color: '#10b981', emoji: '✅', title: 'Rollback Approved' },
   rollback_rejected: { color: '#64748b', emoji: '🚫', title: 'Rollback Dismissed' },
+  email_changed: { color: '#6366f1', emoji: '✉️', title: 'Email Address Updated' },
 };
 
 // Build KRA table HTML for batch assignment emails
@@ -973,7 +987,8 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       pip_start_date, pip_end_date, pip_reason, pip_outcome, pip_remarks,
       milestone_date, milestone_description, milestone_expected_outcome,
       send_back_reason, generated_password, login_email, employee_code, app_name,
-      kra_list, kra_count, employee_name, total_weightage } = body;
+      kra_list, kra_count, employee_name, total_weightage,
+      old_email, new_email } = body;
 
     // Check if email notifications are enabled
     const { data: enabledSetting } = await supabase
@@ -1114,6 +1129,8 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       kra_count,
       employee_name,
       total_weightage,
+      old_email,
+      new_email,
     };
 
     // For kra_batch_assigned, inject the KRA table HTML into the placeholder
