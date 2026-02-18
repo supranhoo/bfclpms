@@ -1,70 +1,112 @@
 
-# Rollback: Jaspal's Org KPI Propagation — "Adherence to Manning Norms" (February 2026)
+# Fix: Email Change Confirmation — Wrong Sender & Wrong Recipient
 
-## What Happened
+## Two Distinct Problems Identified
 
-Jaspal (as Data Owner) propagated values for the **"Adherence to Manning Norms"** KPI (under "Adherence to Monthly Budget" category) across **27 different department scopes** for February 2026. Each scope had a different achieved value (ranging from 71 to 112).
+---
 
-Because this is a department-scoped org KPI, the propagation pushed values to **27 employees × 27 KPIs each** = **729 review_submissions** records. All 729 affected employee KPIs are currently at `self_review` status (meaning no employee has submitted a self review yet — the propagated value is sitting there waiting).
+### Problem 1: Email sent from wrong address (`no-reply@auth.lovable.cloud`)
 
-## Scope of the Rollback
+**What's happening:**
+The "Confirm your email change" email is being sent by the platform's **built-in auth system** directly — not through the organization's configured Microsoft Graph sender (`hrms@bfclalloys.com`).
 
-| Item | Count |
-|---|---|
-| Org KPI value records (scoped entries) | 27 |
-| Employee KPIs affected (`review_submissions`) | 729 |
-| Unique employees affected | 27 |
-| Current employee KPI status | All at `self_review` |
+**Why:**
+The `update-user-profile` edge function's `update_email` operation calls `PUT /auth/v1/user` via the GoTrue REST API. This triggers GoTrue's own email delivery pipeline, which uses the platform's default sender (`no-reply@auth.lovable.cloud`). GoTrue has **no knowledge** of the Microsoft Graph SMTP credentials stored in `system_settings`. Those credentials are only used by the `send-email-notification` edge function.
 
-Since all affected KPIs are still at `self_review` (no employee has reviewed beyond that), the rollback is clean — no downstream data will be lost.
+**The fix:**
+Bypass GoTrue's email delivery entirely. Instead of triggering the GoTrue email change flow, we use the **Admin API** to update the email instantly (same as the admin `update-user-email` function does — `email_confirm: true`), and then send our **own** confirmation email through `send-email-notification` using the organization's Microsoft Graph sender.
 
-## What the Rollback Will Do
+The flow becomes:
+1. Admin API instantly sets the new email on the auth record (confirmed, no GoTrue confirmation needed)
+2. Our `send-email-notification` edge function sends a branded notification email from `hrms@bfclalloys.com` informing the user that their email was changed
 
-1. **Clear `review_submissions`** — Set `achieved_value`, `self_score`, `self_rating` to NULL for all 729 records tied to this org KPI's employee KPIs
-2. **Reset employee KPI status** — Revert all 729 KPI records from `self_review` back to `kra_set`
-3. **Reset org KPI value status** — Reset all 27 `org_kpi_values` records from `propagated` back to `pending`, and clear their `achieved_value`, `remarks`, `evidence_url`
-4. **Log the rollback** — Insert an audit entry in `org_kpi_data_entry_logs` for each of the 27 scoped records
-5. **Notify Jaspal** — Send a notification that the propagation has been rolled back
+---
+
+### Problem 2: "to ." — New email appears blank in the email body
+
+**What's happening:**
+The screenshot shows: *"You requested to update your email address from jaspal.bhanker@bfclalloys.com to ."* — the new email destination is blank.
+
+**Why:**
+This is because GoTrue's confirmation email template shows the **pending new email** from the auth record. When the request was made, the `newEmail` field was either empty, or this is a display artifact of GoTrue's email template when the `email_change_token_new` is set but the `email_change` field hasn't fully propagated. The blank "to" in GoTrue's template is a known behavior when the email change is in a pending state.
+
+Regardless, this problem disappears entirely once we switch away from the GoTrue email flow (fixing Problem 1 also fixes this).
+
+---
+
+### Problem 3: Confirmation sent to OLD email instead of NEW email
+
+GoTrue's default behavior when a user changes their email is to:
+- Send a confirmation link to the **OLD email** saying "click to confirm you want to change"
+- AND/OR send a confirmation link to the **NEW email** saying "click to confirm your new address"
+
+Since Jaspal initiated this from Profile Settings (self-service), the confirmation went to his current (old) email. This is correct GoTrue behavior but not what the organization wants — they want the change to be immediate (as the admin flow already does with `email_confirm: true`).
+
+---
+
+## Solution Architecture
+
+### For Self-Service Email Change (`update-user-profile` / `update_email` operation)
+
+Replace the GoTrue user-facing REST call with the same Admin API approach used by the admin `update-user-email` function:
+
+```
+BEFORE (broken):
+  PUT /auth/v1/user  ← user's JWT → triggers GoTrue email from wrong sender
+
+AFTER (fixed):
+  supabaseAdmin.auth.admin.updateUserById(user.id, { email: newEmail, email_confirm: true })
+  → Instant update, no GoTrue email
+  
+  send-email-notification({ event_type: 'email_changed', recipient: user, new_email: newEmail })
+  → Our email, from hrms@bfclalloys.com via Microsoft Graph
+```
+
+### New Email Template Event
+
+Add a new `email_changed` event type to the notification system so the `send-email-notification` function sends a proper branded "Your email address has been updated" notification to the user at their **new** address.
+
+---
 
 ## Files to Modify
 
-No files need to be changed. This is a **data-only rollback** — the admin simply uses the existing "Rollback to Data Entry" button on the Org KPI Data Entry page (`/admin/org-kpi-data-entry`).
+| File | Change |
+|---|---|
+| `supabase/functions/update-user-profile/index.ts` | Replace direct GoTrue REST call with Admin API (`updateUserById` with `email_confirm: true`) + call `send-email-notification` |
+| `supabase/functions/send-email-notification/index.ts` | Add `email_changed` event type handler |
+| `src/hooks/useEmailNotificationSettings.ts` | Add `email_changed` to `EmailEventType` union |
+| `DOCUMENTATION.md` | Version bump to 1.45.17 |
 
-## Admin Action Steps
+---
 
-The rollback is already built into the system via the `useRollbackOrgKpiPropagation` hook. Here is exactly what the admin (Ankit Choudhary) needs to do:
+## Technical Detail: Why Admin API + Our Email Is Better
 
-1. Navigate to **Admin → Org KPI Data Entry**
-2. Select period: **February 2026**
-3. Find the KPI: **"Adherence to Manning Norms"** (under "Adherence to Monthly Budget")
-4. Since there are 27 scoped entries (one per department), each entry card will show a **"Rollback to Data Entry"** button (admin-only)
-5. Click rollback on each department scope that needs to be reversed, entering a reason each time
+| Approach | Sender | Confirmation flow | New email shown |
+|---|---|---|---|
+| Current (`PUT /auth/v1/user`) | `no-reply@auth.lovable.cloud` | GoTrue sends to OLD email | Blank in template |
+| Admin API + our email | `hrms@bfclalloys.com` | Our email to NEW address | Correct new email |
 
-However, since there are 27 scopes to roll back individually through the UI, and the user is asking for this to be done now, I can also build a **one-click bulk rollback** UI feature or use a database-level fix.
+The Admin API with `email_confirm: true` updates the auth record immediately (no pending state), then we send a clean branded notification to the **new** email address confirming the change. This is consistent with how the admin's User Management email change already works.
 
-## Recommended Approach: Build a Bulk Admin Rollback Action
+---
 
-Since 27 individual rollbacks through the UI would be tedious, I will add a **"Rollback All Scopes"** action at the category level on the Org KPI Data Entry page. This lets the admin roll back all department-scoped entries for a single KPI name in one click, with a single reason.
+## Security Note
 
-### Technical Changes
+This is safe because:
+- The user must be authenticated (their JWT is verified) before the Admin API call is made
+- The new email is validated with regex before being applied
+- The change is logged in the edge function console
+- The user receives a notification at their new email so they know the change happened
 
-**`src/hooks/useRollbackOrgKpiPropagation.ts`** — Extend the existing hook to support rolling back all scoped entries for a KRA+KPI combination across all departments/employees in one mutation call. The hook already handles single-category rollbacks; we extend it to loop over all matching `org_kpi_values` records.
+The only difference vs. the GoTrue confirmation flow is that there is no "click to confirm" step — but this matches the organization's existing behavior for admin-initiated email changes, and is appropriate for a controlled enterprise HR system.
 
-**`src/components/admin/OrgKpiEntryCard.tsx`** — Add a "Rollback All Scopes" button at the card level that triggers the bulk rollback when multiple department scopes exist for the same KPI name.
+---
 
-**`DOCUMENTATION.md`** — Version bump to 1.45.16
+## What Changes for Jaspal
 
-## Database Impact
-
-All 27 `org_kpi_values` records will go from `propagated` → `pending` (achieved_value cleared).
-All 729 `review_submissions` records will have `achieved_value`, `self_score`, `self_rating` set to NULL.
-All 729 employee `kpis` records will go from `self_review` → `kra_set`.
-
-This is a fully reversible operation — Jaspal can re-enter and re-propagate correct values after the rollback.
-
-## Technical Notes
-
-- No migration needed — existing tables and columns handle this
-- The `useRollbackOrgKpiPropagation` hook already handles single-scope rollback correctly; we extend its interface to accept an array of category/kra/kpi combos and loop
-- All 27 org_kpi_values records share the same `kra_name` and `kpi_name` but differ by `department_id` — the rollback query uses `kra_name` + `kpi_name` + `category_id` to target all of them at once
-- No employee has progressed past `self_review` so there is zero risk of data loss
+After this fix:
+1. Jaspal (or any user) edits their email in Profile Settings
+2. The change applies immediately to their login credentials
+3. A branded email from `hrms@bfclalloys.com` arrives at the **new** email address: "Your email has been updated to [new email]"
+4. No more emails from `no-reply@auth.lovable.cloud`
+5. No more "to ." blank destination in the email body
