@@ -106,13 +106,15 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isDirtyRef = useRef(false);
 
-  // Sync from props when data changes (e.g. after refetch)
+  // Sync from props when data changes (e.g. after refetch).
+  // Guard: if the user is actively editing (isDirtyRef = true), skip the sync
+  // so a DB refetch doesn't overwrite what they're currently typing.
   useEffect(() => {
+    if (isDirtyRef.current) return;
     setAchievedValue(data.achievedValue?.toString() ?? '');
     setRemarks(data.remarks);
     setEvidenceUrl(data.evidenceUrl);
     setScopedValues(data.scopedRows || []);
-    isDirtyRef.current = false;
     setSaveStatus('idle');
   }, [data.achievedValue, data.remarks, data.evidenceUrl, data.scopedRows]);
 
