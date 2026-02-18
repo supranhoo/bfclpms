@@ -61,6 +61,7 @@ interface OrgKpiEntryCardProps {
   }) => Promise<void>;
   onUnlock?: () => Promise<void>;
   onRollback?: (reason: string) => Promise<void>;
+  onBulkRollback?: (reason: string) => Promise<void>;
   onOpenImpact: () => void;
   onRemoveFromOrg?: () => Promise<void>;
 }
@@ -77,13 +78,15 @@ const scopeIcons = {
   employee: User,
 };
 
-export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSave, onSaveAndPropagate, onUnlock, onRollback, onOpenImpact, onRemoveFromOrg }: OrgKpiEntryCardProps) {
+export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg }: OrgKpiEntryCardProps) {
   const isLocked = data.status === 'propagated' && !isAdmin;
   const isPropagated = data.status === 'propagated';
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [isRollingBack, setIsRollingBack] = useState(false);
+  const [isBulkRollingBack, setIsBulkRollingBack] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [rollbackReason, setRollbackReason] = useState('');
+  const [bulkRollbackReason, setBulkRollbackReason] = useState('');
   const [achievedValue, setAchievedValue] = useState<string>(data.achievedValue?.toString() ?? '');
   const [remarks, setRemarks] = useState(data.remarks);
   const [evidenceUrl, setEvidenceUrl] = useState(data.evidenceUrl);
@@ -393,6 +396,64 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
                         >
                           {isRollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
                           Confirm Rollback
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+                {/* Bulk Rollback — only for scoped KPIs with multiple propagated entries */}
+                {isPropagated && isAdmin && onBulkRollback && data.scope !== 'organization' && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs gap-1 border-destructive/50 text-destructive hover:bg-destructive/10"
+                        disabled={isBulkRollingBack}
+                      >
+                        {isBulkRollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                        Rollback All Scopes
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Rollback All Scopes to Data Entry</AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                          <div className="space-y-3">
+                            <p>
+                              This will <strong>clear propagated values across all {data.scopedRows?.length || 'all'} department scopes</strong> of <strong>"{data.kpiName}"</strong> and reset them for fresh data entry.
+                            </p>
+                            <p className="text-destructive font-medium">
+                              All employee self-review scores linked to this KPI will be removed. This cannot be undone.
+                            </p>
+                            <Textarea
+                              placeholder="Reason for bulk rollback (required)"
+                              value={bulkRollbackReason}
+                              onChange={(e) => setBulkRollbackReason(e.target.value)}
+                              className="mt-2"
+                              rows={2}
+                            />
+                          </div>
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setBulkRollbackReason('')}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          disabled={!bulkRollbackReason.trim() || isBulkRollingBack}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            setIsBulkRollingBack(true);
+                            try {
+                              await onBulkRollback(bulkRollbackReason.trim());
+                              setBulkRollbackReason('');
+                            } finally {
+                              setIsBulkRollingBack(false);
+                            }
+                          }}
+                        >
+                          {isBulkRollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                          Confirm Bulk Rollback
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>

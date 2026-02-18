@@ -7,7 +7,7 @@ import { useOrgKpiOwnershipMap } from '@/hooks/useOrgKpiDataOwner';
 import { useUnmarkAsOrgLevel } from '@/hooks/useMarkAsOrgLevel';
 import { usePropagateOrgKpiValue } from '@/hooks/usePropagateOrgKpiValue';
 import { useBatchInsertAuditLogs } from '@/hooks/useOrgKpiAuditLog';
-import { useRollbackOrgKpiPropagation } from '@/hooks/useRollbackOrgKpiPropagation';
+import { useRollbackOrgKpiPropagation, useBulkRollbackOrgKpiPropagation } from '@/hooks/useRollbackOrgKpiPropagation';
 import { OrgLevelScope } from '@/hooks/useKpis';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
@@ -93,6 +93,7 @@ export default function OrgKpiDataEntry() {
   const propagate = usePropagateOrgKpiValue();
   const insertAuditLogs = useBatchInsertAuditLogs();
   const rollbackMutation = useRollbackOrgKpiPropagation();
+  const bulkRollbackMutation = useBulkRollbackOrgKpiPropagation();
   const unmarkMutation = useUnmarkAsOrgLevel();
 
   // Previous period data
@@ -822,6 +823,15 @@ export default function OrgKpiDataEntry() {
                           reason,
                         });
                       }}
+                      onBulkRollback={isAdmin ? async (reason: string) => {
+                        await bulkRollbackMutation.mutateAsync({
+                          kraName: kpi.kra_name,
+                          kpiName: kpi.kpi_name,
+                          reviewPeriod: selectedPeriod,
+                          reviewYear: selectedYear,
+                          reason,
+                        });
+                      } : undefined}
                       onRemoveFromOrg={isAdmin ? async () => {
                         await unmarkMutation.mutateAsync({
                           categoryId: kpi.category_id,
