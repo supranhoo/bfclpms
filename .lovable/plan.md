@@ -1,101 +1,121 @@
 
-# Enhancement: "Issue KRAs — Confirmation" Dialog — Better Column Widths & Readability
+# Enhancement: Total Weightage Display on Admin KPI Dashboard
 
-## What the User Sees (Problem)
+## What the User Wants
 
-From the screenshot, the dialog already uses `max-w-5xl` but the table content is **still heavily truncated**:
+Below the employee name in the "KPI Status by Employee" table, a small cosmetic line showing **Total Weightage** (e.g. `100856 · Total Weightage: 102%`) must appear — but only when a specific month is selected in the period filter. When "All Periods" is selected, this stays hidden.
 
-- **Category** badge: `max-w-[100px]` — "Cost Managem", "Vendor & Contr" — cut off
-- **KRA** column: `max-w-[150px]` truncate — "Adherence to Mo...", "Compliance to C..." — cut off
-- **KPI** column: `max-w-[150px]` truncate — same truncation
-- **Table area height** is short — only ~5-6 rows visible, forcing constant scrolling on 24 KPIs
-- The overall dialog height `max-h-[90vh]` wastes vertical space on the summary card
+## Zero Logic Impact Guarantee
 
-## Root Cause in Code
+This is a purely additive, display-only change:
+- No queries are added or changed
+- No database calls are added
+- The weightage is already loaded on every KPI object (`kpi.weightage`) — it just needs summing during the existing `employeeData` aggregation pass
+- No existing computed values are modified
 
-In `KraIssuanceConfirmDialog.tsx`:
-- Line 248: `max-w-5xl max-h-[90vh]` — width is fine but height could be tighter
-- Line 376: `max-w-[100px] truncate` on Category badge — too narrow
-- Line 380: `max-w-[150px] truncate` on KRA cell — too narrow
-- Line 381: `max-w-[150px] truncate` on KPI cell — too narrow
-- Line 332: The table container is `flex-1 min-h-0 overflow-y-auto` which depends on parent height
+---
 
-## Solution
+## Changes Required
 
-### 1. Increase Dialog Height & Tighten Summary Card
-- Change `max-h-[90vh]` to `max-h-[95vh]` to use more vertical space
-- Shrink the summary card (`py-4` → `py-3`) to give more room to the table
+### File: `src/pages/admin/AllKpis.tsx`
 
-### 2. Expand Table Column Widths for KRA and KPI
-The table has 9 columns: `[ ]`, `#`, `Category`, `KRA`, `KPI`, `UOM`, `Target`, `Weightage`, `Frequency`
+**Change 1 — Add `totalWeightage` to the `EmployeeKpiData` interface (line 41–51)**
 
-The right-side columns (UOM, Target, Weightage, Frequency) are short values and don't need much space. The fix is to give more relative width to KRA and KPI:
+```typescript
+// BEFORE
+interface EmployeeKpiData {
+  employeeId: string;
+  employeeName: string;
+  employeeCode: string;
+  departmentName: string;
+  managerName: string;
+  totalKpis: number;
+  orgLevelKpis: number;
+  stageCounts: Record<string, number>;
+  stageQueryCounts: Record<string, number>;
+}
 
-| Column | Current | Proposed |
-|---|---|---|
-| Checkbox | `w-10` | `w-10` (unchanged) |
-| # | `w-10` | `w-10` (unchanged) |
-| Category | `max-w-[100px]` | `min-w-[120px]` — badge shows full name |
-| KRA | `max-w-[150px] truncate` | `min-w-[200px]` with `whitespace-normal` — wraps gracefully |
-| KPI | `max-w-[150px] truncate` | `min-w-[200px]` with `whitespace-normal` — wraps gracefully |
-| UOM | text-center | `w-20` fixed |
-| Target | text-center | `w-20` fixed |
-| Weightage | text-center | `w-28` fixed |
-| Frequency | text-center | `w-24` fixed |
+// AFTER — add one field
+interface EmployeeKpiData {
+  ...
+  totalWeightage: number;  // ← new
+}
+```
 
-Switching from `max-w + truncate` to `min-w + whitespace-normal` means long KRA/KPI names will **wrap to a second line** rather than being cut off — much better for review.
+**Change 2 — Initialise and accumulate `totalWeightage` inside the `employeeData` useMemo (lines 178–206)**
 
-### 3. Table Rows — Allow Wrapping + Vertical Alignment
-- Add `align-top` to table cells containing wrapped text (KRA, KPI)
-- Add `leading-snug text-sm` for comfortable multi-line reading
+When a new employee entry is created in the map, initialise `totalWeightage: 0`. Then on each KPI loop iteration, add `kpi.weightage ?? 0` to it. This happens inside the **existing single-pass loop** — no extra iteration.
 
-### 4. Category Badge — Remove Truncation
-- Remove `max-w-[100px] truncate` from the badge
-- Allow full category name to show (may wrap within min-w constraint)
+```typescript
+// In the map initialisation:
+totalWeightage: 0,
 
-### 5. Compact Table Header
-- Add `sticky top-0 bg-background z-10` to `<TableHeader>` so column headers stay visible when scrolling through 24+ KPIs
+// In the accumulation loop:
+data.totalWeightage += (kpi.weightage ?? 0);
+```
+
+**Change 3 — Show the badge conditionally in the table cell (lines 550–556)**
+
+Currently the subtitle line reads:
+```tsx
+<div className="text-xs text-muted-foreground">
+  {emp.employeeCode && <span>{emp.employeeCode} · </span>}
+  {emp.departmentName}
+</div>
+```
+
+The updated version:
+```tsx
+<div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+  {emp.employeeCode && <span>{emp.employeeCode}</span>}
+  {emp.employeeCode && <span>·</span>}
+  <span>{emp.departmentName}</span>
+  {selectedPeriod !== 'all' && (
+    <>
+      <span>·</span>
+      <span className={emp.totalWeightage > 100
+        ? 'text-destructive font-medium'
+        : emp.totalWeightage === 100
+          ? 'text-green-600 font-medium'
+          : 'text-amber-600 font-medium'
+      }>
+        {emp.totalWeightage}% weightage
+      </span>
+    </>
+  )}
+</div>
+```
+
+**Colour coding rationale** (purely cosmetic, no logic impact):
+| Total Weightage | Colour |
+|---|---|
+| = 100% | Green — correct |
+| > 100% | Red/destructive — over-allocated |
+| < 100% | Amber — under-allocated |
+
+This gives the admin an instant at-a-glance health check without opening the expanded view.
+
+---
+
+## Visibility Rule
+
+`selectedPeriod !== 'all'` — the weightage segment only renders when a specific month is selected. This matches the user's requirement exactly: hidden when "All Periods" is shown, visible when any month is active.
+
+---
 
 ## Files to Change
 
-| File | Lines | Change |
+| File | Section | Change |
 |---|---|---|
-| `src/components/admin/KraIssuanceConfirmDialog.tsx` | 248 | `max-h-[90vh]` → `max-h-[95vh]` |
-| `src/components/admin/KraIssuanceConfirmDialog.tsx` | 276 | `py-4` → `py-3` on summary card |
-| `src/components/admin/KraIssuanceConfirmDialog.tsx` | 347 (TableHeader) | Add `sticky top-0 bg-background z-10` |
-| `src/components/admin/KraIssuanceConfirmDialog.tsx` | 355 | `<TableHead>` for # — add `w-8` |
-| `src/components/admin/KraIssuanceConfirmDialog.tsx` | 356 | Category `<TableHead>` — add `min-w-[130px]` |
-| `src/components/admin/KraIssuanceConfirmDialog.tsx` | 357 | KRA `<TableHead>` — add `min-w-[200px]` |
-| `src/components/admin/KraIssuanceConfirmDialog.tsx` | 358 | KPI `<TableHead>` — add `min-w-[200px]` |
-| `src/components/admin/KraIssuanceConfirmDialog.tsx` | 359-362 | UOM/Target/Weightage/Frequency heads — add fixed widths |
-| `src/components/admin/KraIssuanceConfirmDialog.tsx` | 376 | Category badge — remove `max-w-[100px] truncate`, use `shrink-0` |
-| `src/components/admin/KraIssuanceConfirmDialog.tsx` | 380 | KRA cell — remove `max-w-[150px] truncate`, add `align-top whitespace-normal leading-snug` |
-| `src/components/admin/KraIssuanceConfirmDialog.tsx` | 381 | KPI cell — remove `max-w-[150px] truncate`, add `align-top whitespace-normal leading-snug text-muted-foreground` |
-| `DOCUMENTATION.md` | — | Version bump + note |
+| `src/pages/admin/AllKpis.tsx` | Line 41–51 | Add `totalWeightage: number` to `EmployeeKpiData` interface |
+| `src/pages/admin/AllKpis.tsx` | Lines 178–206 | Initialise and accumulate `totalWeightage` in the useMemo |
+| `src/pages/admin/AllKpis.tsx` | Lines 550–556 | Render conditional weightage pill in the employee subtitle |
+| `DOCUMENTATION.md` | — | Version bump to 1.45.6 + note |
 
-## Before vs After
+## Impact Assessment
 
-```text
-BEFORE (truncated):
-┌────────────┬────────────────┬────────────────┬──────┬────────┐
-│ Category   │ KRA            │ KPI            │ UOM  │Target  │
-├────────────┼────────────────┼────────────────┼──────┼────────┤
-│ Cost Manag…│ Adherence to… │ Adherence to … │  %   │  90    │
-│ Vendor & C…│ Compliance to…│ Contract work… │ Num  │   0    │
-└────────────┴────────────────┴────────────────┴──────┴────────┘
-
-AFTER (readable, wrapping):
-┌──────────────────┬───────────────────────────┬───────────────────────────┬──────┬────────┐
-│ Category         │ KRA                       │ KPI                       │ UOM  │ Target │
-├──────────────────┼───────────────────────────┼───────────────────────────┼──────┼────────┤
-│ Cost Management  │ Adherence to Monthly      │ Adherence to Material     │  %   │  90    │
-│                  │ Budget                    │ Consumption Targets       │      │        │
-├──────────────────┼───────────────────────────┼───────────────────────────┼──────┼────────┤
-│ Vendor & Contract│ Compliance to Contract    │ Contract work order       │ Num  │   0    │
-└──────────────────┴───────────────────────────┴───────────────────────────┴──────┴────────┘
-```
-
-## Impact
-- No logic changes — purely presentational
-- The table becomes horizontally scrollable when the viewport is narrow (already handled by `overflow-x-auto` on line 332)
-- Sticky header keeps column labels visible while scrolling through all 24+ KPIs
+- No API calls added
+- No existing computed values changed
+- No existing UI components removed or restructured
+- The `filteredKpis` already restricts data to the selected month, so `totalWeightage` naturally reflects only that month's KPIs
+- Works correctly even when employee has 0 KPIs in the filter (shows 0%)
