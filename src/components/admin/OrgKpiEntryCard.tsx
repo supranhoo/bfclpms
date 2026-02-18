@@ -499,6 +499,9 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
             rows={scopedValues}
             onValueChange={handleScopedChange}
             scopeLabel={data.scopeLabel}
+            ratingThresholds={{ r5: data.r5, r4: data.r4, r3: data.r3, r2: data.r2, r1: data.r1 }}
+            targetValue={data.targetValue}
+            uom={data.uom}
           />
         )}
       </CardContent>
