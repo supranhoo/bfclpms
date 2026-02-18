@@ -1,154 +1,229 @@
 
-# Enhancement: OrgKpiScopedEntryTable — Department, Designation, Wider Remarks, Department Sorting & Missing Improvements
+# User Profile Settings & Dashboard Contact Card
 
-## What the User Sees Today (Reference Image)
-The scoped entry table (per-employee scope) shows:
-- **Employee** column (name only, no department or designation)
-- **Achieved** (narrow input)
-- **Remark** (narrow single-line input)
-- **File** (upload)
+## Overview
 
-Rows are listed in raw DB order with no grouping or sorting.
+Two coordinated features:
+1. **My Profile Settings** — A private settings page where any logged-in user can update their profile picture, mobile number, and password. Email updates for non-admins go through a standard email verification flow.
+2. **Dashboard Contact Card** — When a reviewer (manager, admin, HR PMS, auditor, management) clicks an employee's name in the Team/HR/Audit/Management view, a small popover shows that employee's email and mobile number.
 
 ---
 
-## All Changes Planned
+## Database Changes (Migration Required)
 
-### 1. Add Department + Designation columns to the Employee scope table
-For the **Employee** scope: show employee name with department and designation as sub-text below the name (two badge-style chips). This uses data already available in `allProfiles` (which has `designation` and `department_id`).
+### Add `mobile_number` to `profiles` table
 
-For the **Department** scope: add a "Employees" count badge next to the department name (e.g. "3 employees") using the existing `scopeSubText`.
+The `profiles` table currently has no phone/mobile field. We need to add one:
 
-### 2. Wider Remark field
-Change the Remark `Input` to a `Textarea` (2 rows, auto-resize). The column will get more minimum width (`min-w-[200px]`).
+```sql
+ALTER TABLE public.profiles 
+ADD COLUMN mobile_number text;
+```
 
-### 3. Department-wise sorting
-For **Employee** scope: sort rows by `department name` (A→Z), then by `employee name` within department. Group the rows visually by department with a subtle group header row.
+No new table is needed — `mobile_number` belongs on `profiles` alongside `email`.
 
-For **Department** scope: sort rows by `department name` (A→Z).
+### Add a storage bucket for profile avatars
 
-### 4. Missing improvements identified
-- **Sticky header**: The table header should stay visible while scrolling vertically through many employees.
-- **Progress counter improvement**: Show "X / Y entered" in the collapsible trigger with color coding (green when all done).
-- **"Enter all same" quick action**: A small helper to fill all empty Achieved values with a single value (bulk fill). Useful when all employees share the same org KPI value.
-- **Out-of-range warning per row**: For employee-scope rows, show an inline alert if the entered value is outside the rating thresholds (same logic as the org-scope card currently has).
+Currently no dedicated avatar bucket exists (`branding-assets` and `review-evidence` are the existing buckets). A new `avatars` bucket needs to be created:
+
+```sql
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('avatars', 'avatars', true);
+
+-- RLS: users can upload their own avatar
+CREATE POLICY "Users can upload their own avatar"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (bucket_id = 'avatars' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+CREATE POLICY "Users can update their own avatar"
+ON storage.objects FOR UPDATE TO authenticated
+USING (bucket_id = 'avatars' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+CREATE POLICY "Anyone can view avatars"
+ON storage.objects FOR SELECT TO public
+USING (bucket_id = 'avatars');
+
+CREATE POLICY "Users can delete their own avatar"
+ON storage.objects FOR DELETE TO authenticated
+USING (bucket_id = 'avatars' AND (storage.foldername(name))[1] = auth.uid()::text);
+```
+
+### RLS Policy for `mobile_number` on `profiles`
+
+The `profiles` table already has RLS. The existing update policy (if any) should allow users to update their own row. We need to verify and add a targeted policy for users updating their own sensitive fields (mobile, avatar_url):
+
+```sql
+-- Users can update their own profile fields
+CREATE POLICY "Users can update own profile"
+ON public.profiles FOR UPDATE TO authenticated
+USING (id = auth.uid())
+WITH CHECK (id = auth.uid());
+```
 
 ---
 
-## Data Flow Changes
+## New Edge Function: `update-user-profile`
 
-### `ScopedRow` interface (in `OrgKpiScopedEntryTable.tsx`)
-Add two new optional fields:
-```typescript
-export interface ScopedRow {
-  scopeId: string;
-  scopeName: string;
-  scopeSubText?: string;
-  departmentName?: string;   // NEW — for grouping/sorting employee-scope rows
-  designation?: string;       // NEW — for display in employee column
-  achievedValue: number | null;
-  remarks: string;
-  evidenceUrl: string | null;
-}
+A secure server-side edge function to handle:
+- Email change (calls `supabase.auth.admin.updateUserById` with `email_confirm: false` so the new email requires verification — unlike the admin's `update-user-email` function which bypasses verification)
+- Password change (verifies current password by re-authenticating, then calls `updateUser`)
+- Mobile number update (direct profile update)
+
+This follows the same pattern as `supabase/functions/update-user-email/index.ts`.
+
+```
+supabase/functions/update-user-profile/index.ts
 ```
 
-### `OrgKpiDataEntry.tsx` — `buildCardData` employee scope section
-Currently builds `scopedRows` for employee scope like this:
-```typescript
-scopedRows = filteredEmps.map(emp => ({
-  scopeId: emp.id,
-  scopeName: emp.full_name || emp.email,
-  achievedValue: ...,
-  remarks: ...,
-  evidenceUrl: ...,
-}));
-```
-
-Needs to add `departmentName` and `designation` by looking up each employee's data from `allProfiles` and `departments`:
-```typescript
-scopedRows = filteredEmps.map(emp => {
-  const dept = departments?.find(d => d.id === emp.department_id);
-  return {
-    scopeId: emp.id,
-    scopeName: emp.full_name || emp.email,
-    departmentName: dept?.name,         // NEW
-    designation: emp.designation ?? undefined, // NEW
-    achievedValue: ...,
-    remarks: ...,
-    evidenceUrl: ...,
-  };
-});
-```
-
-No schema changes needed. `departments` is already imported in `OrgKpiDataEntry.tsx`.
+Operations supported:
+- `update_mobile` → updates `profiles.mobile_number`
+- `update_email` → calls auth `updateUser` (triggers verification email to new address)
+- `update_password` → verifies current password, then calls `updateUser({ password })`
 
 ---
 
-## UI Changes — `OrgKpiScopedEntryTable.tsx`
+## New Page: `/profile` — My Profile Settings
 
-### Column layout (Employee scope)
+A new protected page accessible to all authenticated roles.
 
-| Column | Width | Content |
+### Route Addition
+In `src/App.tsx`, add:
+```tsx
+<Route path="/profile" element={<ProtectedRoute allowedRoles={['admin','manager','employee','auditor','management','hr_pms']}><ProfileSettings /></ProtectedRoute>} />
+```
+
+### Sidebar Link Addition
+In `src/components/layout/AppSidebar.tsx`, add a "My Profile" link in the footer's profile card area (clicking the avatar/name navigates to `/profile`), or add it to the `main` section menu items under My Dashboard.
+
+### UI Layout of `/profile` Page (`src/pages/ProfileSettings.tsx`)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  My Profile Settings                                    │
+├─────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────┐        │
+│  │  PROFILE PICTURE                            │        │
+│  │  [Avatar circle with camera overlay]        │        │
+│  │  Click to upload · JPG/PNG · Max 5MB        │        │
+│  └─────────────────────────────────────────────┘        │
+│                                                         │
+│  ┌─────────────────────────────────────────────┐        │
+│  │  CONTACT INFORMATION                        │        │
+│  │  Email ID     [firoz@example.com]  [Edit]   │        │
+│  │  Mobile No.   [+91 9876543210  ]  [Edit]    │        │
+│  │                     [Save Changes]          │        │
+│  └─────────────────────────────────────────────┘        │
+│                                                         │
+│  ┌─────────────────────────────────────────────┐        │
+│  │  CHANGE PASSWORD                            │        │
+│  │  Current Password  [................]       │        │
+│  │  New Password      [................]       │        │
+│  │  Confirm Password  [................]       │        │
+│  │                     [Update Password]       │        │
+│  └─────────────────────────────────────────────┘        │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Component Details
+
+**Profile Picture Upload:**
+- Circular `<Avatar>` with a hover overlay showing a `Camera` icon
+- On click → hidden `<input type="file" accept="image/*">` triggers
+- Client-side preview before upload (using `URL.createObjectURL`)
+- On confirm → upload to `avatars/{userId}/{timestamp}.jpg` in the `avatars` bucket
+- Then update `profiles.avatar_url` with the public URL
+- Old avatar is deleted from storage on new upload
+
+**Contact Information Section (Email + Mobile):**
+- Email field: displayed as read-only text with an "Edit" button. On click, an inline input appears with regex validation (`/^[^\s@]+@[^\s@]+\.[^\s@]+$/`). On save, calls `update-user-profile` edge function with `update_email` operation. A toast confirms "A verification email has been sent to your new address."
+- Mobile field: displayed as read-only text with an "Edit" button. On click, an inline input appears with numeric-only validation (`/^\+?[0-9\s\-()]{7,15}$/`). On save, calls `update-user-profile` with `update_mobile`.
+- Single "Save Changes" button saves both mobile + email if either has changed.
+
+**Change Password Section:**
+- Three password inputs: Current Password, New Password, Confirm New Password
+- Validation:
+  - All fields required
+  - New password ≥ 8 characters
+  - New password must contain at least one number or special character
+  - Confirm must match New
+- On submit, calls `update-user-profile` edge function with `update_password` (includes `currentPassword` for server-side re-auth verification)
+- Password strength indicator (weak/medium/strong) shown below New Password field
+
+---
+
+## Dashboard Integration: Employee Contact Card
+
+### Where it appears
+
+In `EmployeeSelectorGrid.tsx`, the employee card already shows `member.full_name` as plain text. We make the name a clickable element that opens a small popover contact card — **without navigating away** and **without opening the full review panel**.
+
+### What the Contact Card shows
+
+```
+┌──────────────────────────────────────────┐
+│  [Avatar]  Jaspal Singh                  │
+│            Senior Manager                │
+│            Finance Department            │
+│  ────────────────────────────────────    │
+│  📧  jaspal.singh@company.com            │
+│  📱  +91 98765 43210                     │
+│  ────────────────────────────────────    │
+│  [Copy Email]  [Copy Mobile]             │
+└──────────────────────────────────────────┘
+```
+
+### Data Source
+
+The `EmployeeSelectorGrid` already fetches full employee profiles via `useProfiles()` / `useTeamMembers()`. We need to add `mobile_number` to those queries so it is available in the contact card without any extra network call.
+
+The `EmployeeProfile` interface gains `mobile_number?: string | null`.
+
+### Access Control
+
+- The contact card popover is **only visible to roles that can view other employees' profiles**: `manager`, `admin`, `hr_pms`, `auditor`, `management`.
+- Employees in `self` view mode do not see clickable names on other employees.
+- The data is protected at the DB level: existing `profiles` RLS already allows managers/admins to read employee profiles.
+
+### Implementation
+
+A new small component `src/components/review/EmployeeContactCard.tsx`:
+- Uses `<Popover>` from Radix (already installed)
+- Triggered by clicking the employee's name text in the `EmployeeSelectorGrid` card
+- The click does NOT propagate to the parent card's `onClick` (which opens the full review panel) — uses `e.stopPropagation()`
+- Shows a "View KPIs →" button at the bottom which does trigger the full panel open
+
+---
+
+## Files to Create / Modify
+
+| File | Action | Description |
 |---|---|---|
-| Employee | `min-w-[200px]` | Name (bold) + Dept badge + Designation chip |
-| Achieved | `w-28 text-center` | Number input |
-| Remark | `min-w-[220px]` | `Textarea` (rows=2) |
-| File | `w-28` | Upload |
-
-### Department grouping rows (Employee scope only)
-When `scopeLabel === 'Employee'` and rows have `departmentName`, sort rows by `departmentName` then `scopeName`, then render a subtle group header row before each new department:
-
-```
-┌─────────────────────────────────────────────────┐
-│ 🏢 Operations (3 employees)          [group row] │
-├──────────────┬──────────┬──────────────┬─────────┤
-│ Jaspal Singh │  [----]  │ [remark box] │ Upload  │
-│  Operations  │          │              │         │
-│  Sr. Manager │          │              │         │
-├──────────────┴──────────┴──────────────┴─────────┤
-│ 🏢 Finance (2 employees)             [group row] │
-├──────────────┬──────────┬──────────────┬─────────┤
-│ Firoz Shaikh │  [----]  │ [remark box] │ Upload  │
-...
-```
-
-Group header row style: `bg-muted/50 text-xs font-semibold text-muted-foreground` with a Building2 icon.
-
-### Out-of-range warning
-Pass `ratingThresholds` and `targetValue` down to the table as optional props. Each row shows a small orange warning triangle icon (with tooltip) if the entered value is outside range. This reuses the existing `isValueOutOfRange` utility from `@/lib/ratingCalculation`.
-
-### Bulk fill
-A small input + "Fill all empty" button in the table header area:
-```
-[    Enter value    ] [Fill empty rows]
-```
-Clicking "Fill empty rows" calls `onValueChange` for every row where `achievedValue === null`.
-
-### Collapsible trigger enhancement
-```
-▼  27 Employees (5 / 27 entered)    [Fill All: [___] [Apply]]
-```
-When `enteredCount === rows.length`: trigger text turns green.
+| `supabase/migrations/YYYYMMDD_add_mobile_number_to_profiles.sql` | CREATE | Add `mobile_number` column, avatars bucket, RLS policies |
+| `supabase/functions/update-user-profile/index.ts` | CREATE | Edge function for profile updates (email, mobile, password) |
+| `src/pages/ProfileSettings.tsx` | CREATE | Full profile settings page |
+| `src/components/review/EmployeeContactCard.tsx` | CREATE | Popover contact card component |
+| `src/App.tsx` | MODIFY | Add `/profile` route |
+| `src/components/layout/AppSidebar.tsx` | MODIFY | Make profile card in footer clickable → navigates to `/profile` |
+| `src/components/review/EmployeeSelectorGrid.tsx` | MODIFY | Include `mobile_number` in query, add name-click to show `EmployeeContactCard` |
+| `src/hooks/useOrganization.ts` | MODIFY | Add `mobile_number` to `useTeamMembers` / `useProfiles` select |
+| `DOCUMENTATION.md` | MODIFY | Version bump to 1.45.11 + feature docs |
 
 ---
 
-## Files to Modify
+## Security Considerations
 
-| File | Changes |
-|---|---|
-| `src/components/admin/OrgKpiScopedEntryTable.tsx` | Add `departmentName` + `designation` to `ScopedRow`; change `Input` → `Textarea` for remarks; add dept group header rows; wider remark column; sticky table header; bulk fill; out-of-range warnings per row |
-| `src/pages/admin/OrgKpiDataEntry.tsx` | In `buildCardData` employee scope: add `departmentName` and `designation` from `departments` + `allProfiles`; sort employee-scope rows by dept name then emp name |
-| `DOCUMENTATION.md` | Version bump to 1.45.10 |
+- **Password change**: Current password is verified server-side via `supabase.auth.signInWithPassword` inside the edge function before calling `updateUser`. This prevents unauthorized password changes if a session is stolen.
+- **Email change**: Uses Supabase's built-in verification flow (non-admin path) — the old email remains active until the new one is confirmed.
+- **Mobile number**: No PII exposure to unauthorized roles. The contact card is only rendered for reviewer roles. The `profiles` RLS permits managers and admins to read all profile fields.
+- **Avatar uploads**: Scoped to `avatars/{userId}/` folder — users can only write to their own folder. Public read is acceptable as avatars are already displayed publicly throughout the UI.
+- **No role stored on profiles** — this plan does not touch the `user_roles` table or store roles anywhere except `user_roles`.
 
 ---
 
-## Technical Notes
+## Behaviour Notes
 
-- `allProfiles` is already fetched in `OrgKpiDataEntry.tsx` via `useProfiles()` — no extra query needed.
-- `departments` is already fetched in `OrgKpiDataEntry.tsx` via `useDepartments()` — no extra query needed.
-- `ScopedRow.departmentName` and `ScopedRow.designation` are optional — existing department-scope cards that don't populate them will continue to work unchanged (no breaking change to the interface).
-- The `Textarea` for remarks uses `resize-none` and `rows={2}` to keep the table row height consistent while giving 2× the vertical space for text.
-- The `isValueOutOfRange` check in per-row warnings requires `r5/r4/r3/r2/r1`, `targetValue`, and `uom` — these need to be passed as optional props to `OrgKpiScopedEntryTable`. They already exist on the `OrgKpiCardData` (and thus on the `OrgKpiEntryCard` which renders the table).
-- Department-wise grouping only applies when `scopeLabel === 'Employee'`; for Department scope, alphabetical sorting only (no group headers).
-- Sorting is done in-component (pure JS `.sort()`) — no DB changes.
-- No RLS or migration changes needed.
+- The sidebar footer profile card (currently shows name + role + logout) will become clickable on the name/avatar area, navigating to `/profile`. The logout button stays as-is.
+- The Profile Settings page is read-only by default — fields switch to edit mode only when the user clicks "Edit".
+- The `AuthContext` `profile` object is refreshed after a successful profile save so the sidebar avatar and name update instantly without a page reload.
+- For the password section, all three fields are cleared after a successful update.
+- Mobile number is displayed formatted but stored raw (digits + optional `+`, spaces, dashes).
