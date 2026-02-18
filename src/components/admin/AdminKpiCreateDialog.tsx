@@ -300,692 +300,676 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh]">
+      <DialogContent className="max-w-4xl max-h-[92vh]">
         <DialogHeader>
           <DialogTitle>Assign New KRA</DialogTitle>
           <DialogDescription>Create and assign a new KRA/KPI to an employee</DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="h-[60vh] pr-4">
-          <div className="space-y-6 py-2">
+        <ScrollArea className="h-[72vh] pr-4">
+          <div className="py-2 space-y-4">
             {/* Employee Selection - hidden when pre-filled from issuance dialog */}
             {!defaultEmployeeId && (
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Assign to Employee *</Label>
-              <Select value={employeeId} onValueChange={setEmployeeId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select employee" />
-                </SelectTrigger>
-                <SelectContent>
-                  {profiles?.map(profile => (
-                    <SelectItem key={profile.id} value={profile.id}>
-                      {profile.full_name || profile.email} {profile.employee_code ? `(${profile.employee_code})` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Assign to Employee *</Label>
+                <Select value={employeeId} onValueChange={setEmployeeId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select employee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {profiles?.map(profile => (
+                      <SelectItem key={profile.id} value={profile.id}>
+                        {profile.full_name || profile.email} {profile.employee_code ? `(${profile.employee_code})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
 
-            {/* Category */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Category *</Label>
-              {isCustomCategory ? (
-                <div className="space-y-3 rounded-md border p-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-medium text-muted-foreground">New Category</Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() => { setIsCustomCategory(false); setCustomCategoryName(''); setCustomCategoryWeightage(''); setCustomCategoryColor('#3B82F6'); }}
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <Input
-                    value={customCategoryName}
-                    onChange={(e) => setCustomCategoryName(e.target.value)}
-                    placeholder="Category name"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      type="number"
-                      value={customCategoryWeightage}
-                      onChange={(e) => setCustomCategoryWeightage(e.target.value)}
-                      placeholder="Weightage %"
-                      min={0}
-                      max={100}
-                    />
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={customCategoryColor}
-                        onChange={(e) => setCustomCategoryColor(e.target.value)}
-                        className="h-10 w-10 cursor-pointer rounded border border-input p-1"
-                      />
+            {/* Two-column main layout */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+
+              {/* ─── LEFT COLUMN: KRA Identity ─── */}
+              <div className="space-y-4">
+                {/* Section header */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">KRA Identity</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+
+                {/* Category */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Category *</Label>
+                  {isCustomCategory ? (
+                    <div className="space-y-3 rounded-md border p-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-medium text-muted-foreground">New Category</Label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => { setIsCustomCategory(false); setCustomCategoryName(''); setCustomCategoryWeightage(''); setCustomCategoryColor('#3B82F6'); }}
+                        >
+                          <ArrowLeft className="h-4 w-4" />
+                        </Button>
+                      </div>
                       <Input
-                        value={customCategoryColor}
-                        onChange={(e) => setCustomCategoryColor(e.target.value)}
-                        placeholder="#hex"
+                        value={customCategoryName}
+                        onChange={(e) => setCustomCategoryName(e.target.value)}
+                        placeholder="Category name"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input
+                          type="number"
+                          value={customCategoryWeightage}
+                          onChange={(e) => setCustomCategoryWeightage(e.target.value)}
+                          placeholder="Weightage %"
+                          min={0}
+                          max={100}
+                        />
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={customCategoryColor}
+                            onChange={(e) => setCustomCategoryColor(e.target.value)}
+                            className="h-10 w-10 cursor-pointer rounded border border-input p-1"
+                          />
+                          <Input
+                            value={customCategoryColor}
+                            onChange={(e) => setCustomCategoryColor(e.target.value)}
+                            placeholder="#hex"
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="w-full"
+                        disabled={!customCategoryName.trim() || !customCategoryWeightage || createCategory.isPending}
+                        onClick={() => {
+                          createCategory.mutate(
+                            { name: customCategoryName.trim(), weightage: parseFloat(customCategoryWeightage), color: customCategoryColor },
+                            {
+                              onSuccess: (newCat) => {
+                                setCategoryId(newCat.id);
+                                setIsCustomCategory(false);
+                                setCustomCategoryName('');
+                                setCustomCategoryWeightage('');
+                                setCustomCategoryColor('#3B82F6');
+                              },
+                            }
+                          );
+                        }}
+                      >
+                        {createCategory.isPending ? 'Saving...' : 'Save Category'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Popover open={categoryOpen} onOpenChange={setCategoryOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={categoryOpen}
+                          className="w-full justify-between font-normal"
+                        >
+                          {categoryId ? (
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-3 h-3 rounded-full shrink-0"
+                                style={{ backgroundColor: categories?.find(c => c.id === categoryId)?.color || '#3B82F6' }}
+                              />
+                              <span className="truncate">{categories?.find(c => c.id === categoryId)?.name} ({categories?.find(c => c.id === categoryId)?.weightage}%)</span>
+                            </div>
+                          ) : "Select category..."}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search categories..." />
+                          <CommandList>
+                            <CommandEmpty>No categories found.</CommandEmpty>
+                            <CommandGroup>
+                              {categories?.map((cat) => (
+                                <CommandItem
+                                  key={cat.id}
+                                  value={cat.name}
+                                  onSelect={() => {
+                                    setCategoryId(cat.id);
+                                    setCategoryOpen(false);
+                                  }}
+                                >
+                                  <Check className={cn("mr-2 h-4 w-4", categoryId === cat.id ? "opacity-100" : "opacity-0")} />
+                                  <div className="flex items-center gap-2">
+                                    <div
+                                      className="w-3 h-3 rounded-full"
+                                      style={{ backgroundColor: cat.color || '#3B82F6' }}
+                                    />
+                                    {cat.name} ({cat.weightage}%)
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                            <CommandGroup>
+                              <CommandItem
+                                onSelect={() => {
+                                  setIsCustomCategory(true);
+                                  setCategoryOpen(false);
+                                }}
+                              >
+                                <span className="text-muted-foreground">+ Create new category</span>
+                              </CommandItem>
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+
+                {/* KRA Name */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">KRA Name *</Label>
+                  {isCustomKra ? (
+                    <div className="flex gap-2">
+                      <Input
+                        value={kraName}
+                        onChange={(e) => setKraName(e.target.value)}
+                        placeholder="Enter custom KRA name"
                         className="flex-1"
                       />
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="w-full"
-                    disabled={!customCategoryName.trim() || !customCategoryWeightage || createCategory.isPending}
-                    onClick={() => {
-                      createCategory.mutate(
-                        { name: customCategoryName.trim(), weightage: parseFloat(customCategoryWeightage), color: customCategoryColor },
-                        {
-                          onSuccess: (newCat) => {
-                            setCategoryId(newCat.id);
-                            setIsCustomCategory(false);
-                            setCustomCategoryName('');
-                            setCustomCategoryWeightage('');
-                            setCustomCategoryColor('#3B82F6');
-                          },
-                        }
-                      );
-                    }}
-                  >
-                    {createCategory.isPending ? 'Saving...' : 'Save Category'}
-                  </Button>
-                </div>
-              ) : (
-                <Popover open={categoryOpen} onOpenChange={setCategoryOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={categoryOpen}
-                      className="w-full justify-between font-normal"
-                    >
-                      {categoryId ? (
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: categories?.find(c => c.id === categoryId)?.color || '#3B82F6' }}
-                          />
-                          {categories?.find(c => c.id === categoryId)?.name} ({categories?.find(c => c.id === categoryId)?.weightage}%)
-                        </div>
-                      ) : "Select category..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search categories..." />
-                      <CommandList>
-                        <CommandEmpty>No categories found.</CommandEmpty>
-                        <CommandGroup>
-                          {categories?.map((cat) => (
-                            <CommandItem
-                              key={cat.id}
-                              value={cat.name}
-                              onSelect={() => {
-                                setCategoryId(cat.id);
-                                setCategoryOpen(false);
-                              }}
-                            >
-                              <Check className={cn("mr-2 h-4 w-4", categoryId === cat.id ? "opacity-100" : "opacity-0")} />
-                              <div className="flex items-center gap-2">
-                                <div
-                                  className="w-3 h-3 rounded-full"
-                                  style={{ backgroundColor: cat.color || '#3B82F6' }}
-                                />
-                                {cat.name} ({cat.weightage}%)
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                        <CommandGroup>
-                          <CommandItem
-                            onSelect={() => {
-                              setIsCustomCategory(true);
-                              setCategoryOpen(false);
-                            }}
-                          >
-                            <span className="text-muted-foreground">+ Create new category</span>
-                          </CommandItem>
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              )}
-            </div>
-
-            <Separator />
-
-            {/* KRA & KPI Names */}
-            <div className="grid grid-cols-1 gap-4">
-              {/* KRA Name - Combobox or Custom Input */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">KRA Name *</Label>
-                {isCustomKra ? (
-                  <div className="flex gap-2">
-                    <Input
-                      value={kraName}
-                      onChange={(e) => setKraName(e.target.value)}
-                      placeholder="Enter custom KRA name"
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => { setIsCustomKra(false); setKraName(''); }}
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <Popover open={kraOpen} onOpenChange={setKraOpen}>
-                    <PopoverTrigger asChild>
                       <Button
+                        type="button"
                         variant="outline"
-                        role="combobox"
-                        aria-expanded={kraOpen}
-                        className="w-full justify-between font-normal"
-                        disabled={!categoryId}
+                        size="icon"
+                        onClick={() => { setIsCustomKra(false); setKraName(''); }}
                       >
-                        {kraName || (categoryId ? "Select KRA name..." : "Select a category first")}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        <ArrowLeft className="h-4 w-4" />
                       </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search KRA names..." />
-                        <CommandList>
-                          <CommandEmpty>No KRA names found.</CommandEmpty>
-                          <CommandGroup>
-                            {filteredKraNames.map((name) => (
+                    </div>
+                  ) : (
+                    <Popover open={kraOpen} onOpenChange={setKraOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={kraOpen}
+                          className="w-full justify-between font-normal"
+                          disabled={!categoryId}
+                        >
+                          <span className="truncate text-left">
+                            {kraName || (categoryId ? "Select KRA name..." : "Select a category first")}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search KRA names..." />
+                          <CommandList>
+                            <CommandEmpty>No KRA names found.</CommandEmpty>
+                            <CommandGroup>
+                              {filteredKraNames.map((name) => (
+                                <CommandItem
+                                  key={name}
+                                  value={name}
+                                  onSelect={() => {
+                                    setKraName(name);
+                                    setKraOpen(false);
+                                  }}
+                                >
+                                  <Check className={cn("mr-2 h-4 w-4 shrink-0", kraName === name ? "opacity-100" : "opacity-0")} />
+                                  {name}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                            <CommandGroup>
                               <CommandItem
-                                key={name}
-                                value={name}
                                 onSelect={() => {
-                                  setKraName(name);
+                                  setIsCustomKra(true);
+                                  setKraName('');
                                   setKraOpen(false);
                                 }}
                               >
-                                <Check className={cn("mr-2 h-4 w-4", kraName === name ? "opacity-100" : "opacity-0")} />
-                                {name}
+                                <span className="text-muted-foreground">+ Enter custom KRA name</span>
                               </CommandItem>
-                            ))}
-                          </CommandGroup>
-                          <CommandGroup>
-                            <CommandItem
-                              onSelect={() => {
-                                setIsCustomKra(true);
-                                setKraName('');
-                                setKraOpen(false);
-                              }}
-                            >
-                              <span className="text-muted-foreground">+ Enter custom KRA name</span>
-                            </CommandItem>
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                )}
-              </div>
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
 
-              {/* KPI Name - Combobox or Custom Input */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">KPI Name *</Label>
-                {isCustomKpi ? (
-                  <div className="flex gap-2">
-                    <Textarea
-                      value={kpiName}
-                      onChange={(e) => setKpiName(e.target.value)}
-                      placeholder="Enter custom KPI name"
-                      rows={2}
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="self-start"
-                      onClick={() => { setIsCustomKpi(false); setKpiName(''); }}
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <Popover open={kpiOpen} onOpenChange={setKpiOpen}>
-                    <PopoverTrigger asChild>
+                {/* KPI Name */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">KPI Name *</Label>
+                  {isCustomKpi ? (
+                    <div className="flex gap-2">
+                      <Textarea
+                        value={kpiName}
+                        onChange={(e) => setKpiName(e.target.value)}
+                        placeholder="Enter custom KPI name"
+                        rows={3}
+                        className="flex-1"
+                      />
                       <Button
+                        type="button"
                         variant="outline"
-                        role="combobox"
-                        aria-expanded={kpiOpen}
-                        className="w-full justify-between font-normal h-auto min-h-10 whitespace-normal text-left"
-                        disabled={!kraName}
+                        size="icon"
+                        className="self-start"
+                        onClick={() => { setIsCustomKpi(false); setKpiName(''); }}
                       >
-                        {kpiName || (kraName ? "Select KPI name..." : "Select a KRA first")}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        <ArrowLeft className="h-4 w-4" />
                       </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search KPI names..." />
-                        <CommandList>
-                          <CommandEmpty>No KPI templates found.</CommandEmpty>
-                          <CommandGroup>
-                            {filteredKpiTemplates.map((tpl) => (
+                    </div>
+                  ) : (
+                    <Popover open={kpiOpen} onOpenChange={setKpiOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={kpiOpen}
+                          className="w-full justify-between font-normal h-auto min-h-10 text-left"
+                          disabled={!kraName}
+                        >
+                          <span className="line-clamp-2 text-left">
+                            {kpiName || (kraName ? "Select KPI name..." : "Select a KRA first")}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search KPI names..." />
+                          <CommandList>
+                            <CommandEmpty>No KPI templates found.</CommandEmpty>
+                            <CommandGroup>
+                              {filteredKpiTemplates.map((tpl) => (
+                                <CommandItem
+                                  key={tpl.id}
+                                  value={tpl.kpi_name}
+                                  onSelect={() => {
+                                    setKpiName(tpl.kpi_name);
+                                    applyTemplate(tpl.kpi_name);
+                                    setKpiOpen(false);
+                                  }}
+                                >
+                                  <Check className={cn("mr-2 h-4 w-4 shrink-0", kpiName === tpl.kpi_name ? "opacity-100" : "opacity-0")} />
+                                  <div className="flex flex-col">
+                                    <span>{tpl.kpi_name}</span>
+                                    {tpl.target_value != null && (
+                                      <span className="text-xs text-muted-foreground">Target: {tpl.target_value} {tpl.uom || ''}</span>
+                                    )}
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                            <CommandGroup>
                               <CommandItem
-                                key={tpl.id}
-                                value={tpl.kpi_name}
                                 onSelect={() => {
-                                  setKpiName(tpl.kpi_name);
-                                  applyTemplate(tpl.kpi_name);
+                                  setIsCustomKpi(true);
+                                  setKpiName('');
                                   setKpiOpen(false);
                                 }}
                               >
-                                <Check className={cn("mr-2 h-4 w-4 shrink-0", kpiName === tpl.kpi_name ? "opacity-100" : "opacity-0")} />
-                                <div className="flex flex-col">
-                                  <span>{tpl.kpi_name}</span>
-                                  {tpl.target_value != null && (
-                                    <span className="text-xs text-muted-foreground">Target: {tpl.target_value} {tpl.uom || ''}</span>
-                                  )}
-                                </div>
+                                <span className="text-muted-foreground">+ Enter custom KPI name</span>
                               </CommandItem>
-                            ))}
-                          </CommandGroup>
-                          <CommandGroup>
-                            <CommandItem
-                              onSelect={() => {
-                                setIsCustomKpi(true);
-                                setKpiName('');
-                                setKpiOpen(false);
-                              }}
-                            >
-                              <span className="text-muted-foreground">+ Enter custom KPI name</span>
-                            </CommandItem>
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                  {/* Show selected KPI prominently */}
+                  {kpiName && !isCustomKpi && (
+                    <p className="text-xs text-muted-foreground bg-muted/50 rounded p-2 leading-relaxed">{kpiName}</p>
+                  )}
+                </div>
+
+                {/* Rating Thresholds (left column, numeric only) */}
+                {uomType === 'numeric' && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Rating Thresholds</span>
+                      <div className="flex-1 h-px bg-border" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Threshold Mode</Label>
+                      <Select value={thresholdMode} onValueChange={(v: 'absolute' | 'ratio') => setThresholdMode(v)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="absolute">Absolute (Recommended)</SelectItem>
+                          <SelectItem value="ratio">Ratio / Percentage</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {thresholdMode === 'absolute'
+                          ? 'Thresholds are actual values (e.g., R5 = 100 means achieved ≥ 100)'
+                          : 'Thresholds are % of target (e.g., R5 = 100% means achieved ≥ target)'}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-blue-600">R5 (Exceptional)</Label>
+                        <Input value={r5} onChange={(e) => setR5(e.target.value)} placeholder="e.g., ≥110%" className="text-sm" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-green-600">R4 (Exceeds)</Label>
+                        <Input value={r4} onChange={(e) => setR4(e.target.value)} placeholder="e.g., ≥100%" className="text-sm" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-yellow-600">R3 (Meets)</Label>
+                        <Input value={r3} onChange={(e) => setR3(e.target.value)} placeholder="e.g., ≥90%" className="text-sm" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-orange-600">R2 (Below)</Label>
+                        <Input value={r2} onChange={(e) => setR2(e.target.value)} placeholder="e.g., ≥75%" className="text-sm" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-red-600">R1 (Needs Improvement)</Label>
+                        <Input value={r1} onChange={(e) => setR1(e.target.value)} placeholder="e.g., &lt;75%" className="text-sm" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">R0 (N/A)</Label>
+                        <Input value={r0} onChange={(e) => setR0(e.target.value)} placeholder="Optional" className="text-sm" />
+                      </div>
+                    </div>
+                  </div>
                 )}
+
+                {/* Period & Advanced (left column bottom) */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Period</span>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Review Period</Label>
+                      <Select value={reviewPeriod} onValueChange={setReviewPeriod}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {periods.map(period => (
+                            <SelectItem key={period} value={period}>{period}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Review Year</Label>
+                      <Select value={reviewYear.toString()} onValueChange={(v) => setReviewYear(parseInt(v))}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {years.map(year => (
+                            <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <Separator />
+              {/* ─── RIGHT COLUMN: Metrics & Configuration ─── */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Metrics & Configuration</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
 
-            {/* UOM Type Selector */}
-            <UomTypeSelector value={uomType} onChange={setUomType} />
+                {/* UOM Type Selector */}
+                <UomTypeSelector value={uomType} onChange={setUomType} />
 
-            {/* Conditional Fields based on UOM Type */}
-            {uomType === 'numeric' && (
-              <>
-                {/* Metrics */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Unit of Measure (UOM)</Label>
-                    <Select value={uom} onValueChange={setUom}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select UOM" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {UOM_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Target Value</Label>
-                    <Input
-                      type="number"
-                      value={targetValue}
-                      onChange={(e) => setTargetValue(e.target.value)}
-                      placeholder="e.g., 100"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Weightage (%)</Label>
-                    <Input
-                      type="number"
-                      value={weightage}
-                      onChange={(e) => setWeightage(e.target.value)}
-                      placeholder="e.g., 10"
-                      min="0"
-                      max="100"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Criteria</Label>
-                    <Select value={criteria} onValueChange={setCriteria}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Higher is Better">Higher is Better</SelectItem>
-                        <SelectItem value="Lower is Better">Lower is Better</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Frequency</Label>
-                    <Select value={frequency} onValueChange={(v) => { setFrequency(v); setFrequencyCycleStart(''); }}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Daily">Daily</SelectItem>
-                        <SelectItem value="Weekly">Weekly</SelectItem>
-                        <SelectItem value="Monthly">Monthly</SelectItem>
-                        <SelectItem value="Bi-Monthly">Bi-Monthly</SelectItem>
-                        <SelectItem value="Quarterly">Quarterly</SelectItem>
-                        <SelectItem value="Half-Yearly">Half-Yearly</SelectItem>
-                        <SelectItem value="Yearly">Yearly</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {MULTI_MONTH_FREQUENCIES.includes(frequency) && (() => {
-                    const cycleOptions = getCycleOptionsForFrequency(frequency);
-                    if (!cycleOptions) return null;
-                    return (
+                {/* Numeric fields */}
+                {uomType === 'numeric' && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-2">
-                        <Label className="text-sm font-medium">Cycle Start</Label>
-                        <Select value={frequencyCycleStart} onValueChange={setFrequencyCycleStart}>
+                        <Label className="text-sm font-medium">Unit of Measure (UOM)</Label>
+                        <Select value={uom} onValueChange={setUom}>
                           <SelectTrigger>
-                            <SelectValue placeholder="(Use system default)" />
+                            <SelectValue placeholder="Select UOM" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="system_default">(Use system default)</SelectItem>
-                            {cycleOptions.map(opt => (
-                              <SelectItem key={opt.value} value={opt.value}>
-                                {opt.label}
+                            {UOM_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                        <p className="text-xs text-muted-foreground">
-                          Override the global cycle start for this KPI
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Target Value</Label>
+                        <Input
+                          type="number"
+                          value={targetValue}
+                          onChange={(e) => setTargetValue(e.target.value)}
+                          placeholder="e.g., 100"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Weightage (%)</Label>
+                        <Input
+                          type="number"
+                          value={weightage}
+                          onChange={(e) => setWeightage(e.target.value)}
+                          placeholder="e.g., 10"
+                          min="0"
+                          max="100"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Criteria</Label>
+                        <Select value={criteria} onValueChange={setCriteria}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Higher is Better">Higher is Better</SelectItem>
+                            <SelectItem value="Lower is Better">Lower is Better</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Frequency</Label>
+                        <Select value={frequency} onValueChange={(v) => { setFrequency(v); setFrequencyCycleStart(''); }}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Daily">Daily</SelectItem>
+                            <SelectItem value="Weekly">Weekly</SelectItem>
+                            <SelectItem value="Monthly">Monthly</SelectItem>
+                            <SelectItem value="Bi-Monthly">Bi-Monthly</SelectItem>
+                            <SelectItem value="Quarterly">Quarterly</SelectItem>
+                            <SelectItem value="Half-Yearly">Half-Yearly</SelectItem>
+                            <SelectItem value="Yearly">Yearly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {MULTI_MONTH_FREQUENCIES.includes(frequency) && (() => {
+                        const cycleOptions = getCycleOptionsForFrequency(frequency);
+                        if (!cycleOptions) return null;
+                        return (
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Cycle Start</Label>
+                            <Select value={frequencyCycleStart} onValueChange={setFrequencyCycleStart}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="(Use system default)" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="system_default">(Use system default)</SelectItem>
+                                {cycleOptions.map(opt => (
+                                  <SelectItem key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">Override the global cycle start for this KPI</p>
+                          </div>
+                        );
+                      })()}
+                      {frequency === 'Daily' && (
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Day Count Type</Label>
+                          <Select value={dayCountType} onValueChange={(v: 'working_days' | 'all_days') => setDayCountType(v)}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="working_days">Working Days Only</SelectItem>
+                              <SelectItem value="all_days">All Calendar Days</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            {dayCountType === 'working_days'
+                              ? 'Uses employee-specific working days for missed days calculation'
+                              : 'Uses all calendar days (e.g., 31 days in January)'}
+                          </p>
+                        </div>
+                      )}
+                      <div className="space-y-2 col-span-2">
+                        <Label className="text-sm font-medium">Source of Data</Label>
+                        <Input
+                          value={sourceOfData}
+                          onChange={(e) => setSourceOfData(e.target.value)}
+                          placeholder="e.g., CRM, ERP"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Binary fields */}
+                {uomType === 'binary' && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Weightage (%)</Label>
+                        <Input
+                          type="number"
+                          value={weightage}
+                          onChange={(e) => setWeightage(e.target.value)}
+                          placeholder="e.g., 10"
+                          min="0"
+                          max="100"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Frequency</Label>
+                        <Select value={frequency} onValueChange={setFrequency}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Daily">Daily</SelectItem>
+                            <SelectItem value="Weekly">Weekly</SelectItem>
+                            <SelectItem value="Monthly">Monthly</SelectItem>
+                            <SelectItem value="Quarterly">Quarterly</SelectItem>
+                            <SelectItem value="Yearly">Yearly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {frequency === 'Daily' && (
+                        <div className="space-y-2 col-span-2">
+                          <Label className="text-sm font-medium">Day Count Type</Label>
+                          <Select value={dayCountType} onValueChange={(v: 'working_days' | 'all_days') => setDayCountType(v)}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="working_days">Working Days Only</SelectItem>
+                              <SelectItem value="all_days">All Calendar Days</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-4 bg-muted/50 rounded-lg">
+                      <Label className="text-sm font-medium mb-2 block">Binary Scoring</Label>
+                      <div className="flex gap-4">
+                        <Badge className="bg-blue-500 text-white">Yes = R5 (5)</Badge>
+                        <Badge className="bg-red-500 text-white">No = R0 (0)</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Fixed scoring: Yes achieves maximum rating, No achieves minimum rating.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tiered fields */}
+                {uomType === 'tiered' && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Weightage (%)</Label>
+                        <Input
+                          type="number"
+                          value={weightage}
+                          onChange={(e) => setWeightage(e.target.value)}
+                          placeholder="e.g., 10"
+                          min="0"
+                          max="100"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Frequency</Label>
+                        <Select value={frequency} onValueChange={setFrequency}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Daily">Daily</SelectItem>
+                            <SelectItem value="Weekly">Weekly</SelectItem>
+                            <SelectItem value="Monthly">Monthly</SelectItem>
+                            <SelectItem value="Quarterly">Quarterly</SelectItem>
+                            <SelectItem value="Yearly">Yearly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <TieredOptionsBuilder
+                      options={qualitativeOptions}
+                      onChange={setQualitativeOptions}
+                    />
+                  </div>
+                )}
+
+                {/* Advanced Settings */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Advanced</span>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+                  <div className="p-3 border rounded-lg bg-muted/30">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <Label className="text-sm font-medium">Require Reason for Resubmission</Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Employees must provide a reason when editing previously submitted entries
                         </p>
                       </div>
-                    );
-                  })()}
-                  {frequency === 'Daily' && (
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Day Count Type</Label>
-                      <Select value={dayCountType} onValueChange={(v: 'working_days' | 'all_days') => setDayCountType(v)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="working_days">Working Days Only</SelectItem>
-                          <SelectItem value="all_days">All Calendar Days</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        {dayCountType === 'working_days' 
-                          ? 'Uses employee-specific working days for missed days calculation'
-                          : 'Uses all calendar days (e.g., 31 days in January)'}
-                      </p>
-                    </div>
-                  )}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Source of Data</Label>
-                    <Input
-                      value={sourceOfData}
-                      onChange={(e) => setSourceOfData(e.target.value)}
-                      placeholder="e.g., CRM, ERP"
-                    />
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Threshold Mode Selector */}
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Threshold Mode</Label>
-                  <Select value={thresholdMode} onValueChange={(v: 'absolute' | 'ratio') => setThresholdMode(v)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="absolute">
-                        <div className="flex flex-col items-start">
-                          <span className="font-medium">Absolute (Recommended)</span>
-                          <span className="text-xs text-muted-foreground">Thresholds are actual values (e.g., R5 = 100 means achieved ≥ 100)</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="ratio">
-                        <div className="flex flex-col items-start">
-                          <span className="font-medium">Ratio / Percentage</span>
-                          <span className="text-xs text-muted-foreground">Thresholds are % of target (e.g., R5 = 100% means achieved ≥ target)</span>
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Rating Thresholds */}
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Rating Thresholds (R1-R5)</Label>
-                  <p className="text-xs text-muted-foreground">
-                    {thresholdMode === 'absolute' 
-                      ? 'Enter actual values (e.g., 100, 95, 90). Achieved value is compared directly.' 
-                      : 'Enter percentages of target (e.g., 100%, 95%, 90%). Achieved/Target ratio is compared.'}
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs text-blue-600">R5 (Exceptional)</Label>
-                      <Input
-                        value={r5}
-                        onChange={(e) => setR5(e.target.value)}
-                        placeholder="e.g., ≥110%"
-                        className="text-sm"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-green-600">R4 (Exceeds)</Label>
-                      <Input
-                        value={r4}
-                        onChange={(e) => setR4(e.target.value)}
-                        placeholder="e.g., ≥100%"
-                        className="text-sm"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-yellow-600">R3 (Meets)</Label>
-                      <Input
-                        value={r3}
-                        onChange={(e) => setR3(e.target.value)}
-                        placeholder="e.g., ≥90%"
-                        className="text-sm"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-orange-600">R2 (Below)</Label>
-                      <Input
-                        value={r2}
-                        onChange={(e) => setR2(e.target.value)}
-                        placeholder="e.g., ≥75%"
-                        className="text-sm"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-red-600">R1 (Needs Improvement)</Label>
-                      <Input
-                        value={r1}
-                        onChange={(e) => setR1(e.target.value)}
-                        placeholder="e.g., <75%"
-                        className="text-sm"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">R0 (Not Applicable)</Label>
-                      <Input
-                        value={r0}
-                        onChange={(e) => setR0(e.target.value)}
-                        placeholder="Optional"
-                        className="text-sm"
+                      <Switch
+                        checked={requireResubmitReason}
+                        onCheckedChange={setRequireResubmitReason}
                       />
                     </div>
                   </div>
                 </div>
-              </>
-            )}
-
-            {uomType === 'binary' && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Weightage (%)</Label>
-                    <Input
-                      type="number"
-                      value={weightage}
-                      onChange={(e) => setWeightage(e.target.value)}
-                      placeholder="e.g., 10"
-                      min="0"
-                      max="100"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Frequency</Label>
-                    <Select value={frequency} onValueChange={setFrequency}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Daily">Daily</SelectItem>
-                        <SelectItem value="Weekly">Weekly</SelectItem>
-                        <SelectItem value="Monthly">Monthly</SelectItem>
-                        <SelectItem value="Quarterly">Quarterly</SelectItem>
-                        <SelectItem value="Yearly">Yearly</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {frequency === 'Daily' && (
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Day Count Type</Label>
-                      <Select value={dayCountType} onValueChange={(v: 'working_days' | 'all_days') => setDayCountType(v)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="working_days">Working Days Only</SelectItem>
-                          <SelectItem value="all_days">All Calendar Days</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        {dayCountType === 'working_days' 
-                          ? 'Uses employee-specific working days for missed days calculation'
-                          : 'Uses all calendar days (e.g., 31 days in January)'}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                <div className="p-4 bg-muted/50 rounded-lg">
-                  <Label className="text-sm font-medium mb-2 block">Binary Scoring</Label>
-                  <div className="flex gap-4">
-                    <Badge className="bg-blue-500 text-white">Yes = R5 (5)</Badge>
-                    <Badge className="bg-red-500 text-white">No = R0 (0)</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Fixed scoring: Yes achieves maximum rating, No achieves minimum rating.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {uomType === 'tiered' && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Weightage (%)</Label>
-                    <Input
-                      type="number"
-                      value={weightage}
-                      onChange={(e) => setWeightage(e.target.value)}
-                      placeholder="e.g., 10"
-                      min="0"
-                      max="100"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Frequency</Label>
-                    <Select value={frequency} onValueChange={setFrequency}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Daily">Daily</SelectItem>
-                        <SelectItem value="Weekly">Weekly</SelectItem>
-                        <SelectItem value="Monthly">Monthly</SelectItem>
-                        <SelectItem value="Quarterly">Quarterly</SelectItem>
-                        <SelectItem value="Yearly">Yearly</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <TieredOptionsBuilder
-                  options={qualitativeOptions}
-                  onChange={setQualitativeOptions}
-                />
-              </div>
-            )}
-
-            <Separator />
-
-            {/* Advanced Settings */}
-            <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
-              <h3 className="font-medium text-sm">Advanced Settings</h3>
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-sm font-medium">Require Reason for Resubmission</Label>
-                  <p className="text-xs text-muted-foreground">
-                    When enabled, employees must provide a mandatory reason when editing previously submitted daily/weekly entries
-                  </p>
-                </div>
-                <Switch
-                  checked={requireResubmitReason}
-                  onCheckedChange={setRequireResubmitReason}
-                />
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Review Period */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Review Period</Label>
-                <Select value={reviewPeriod} onValueChange={setReviewPeriod}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {periods.map(period => (
-                      <SelectItem key={period} value={period}>{period}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Review Year</Label>
-                <Select value={reviewYear.toString()} onValueChange={(v) => setReviewYear(parseInt(v))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {years.map(year => (
-                      <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
             </div>
           </div>
