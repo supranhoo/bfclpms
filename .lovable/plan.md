@@ -1,72 +1,133 @@
 
-# Fix: `email_changed` Email Not Sent — Event Gate Bypass + DB Correction
+# Fix: Profile Settings Email — Three Bugs to Resolve
 
-## Root Cause (Confirmed from Logs)
+## Summary of All Identified Issues
 
-The edge function logs show the exact failure chain:
-
-```
-[send-email-notification] Event type email_changed is not enabled
-```
-
-The `send-email-notification` function at **line 1029** checks whether the `event_type` exists in the `email_notification_events` array stored in `system_settings`. The `email_changed` event was never added to that array when the feature was built, so every email change notification is silently skipped.
-
-The `email_changed` template IS defined in the function (line 515) — the problem is purely the event gate check at line 1029 blocking it before the template is ever reached.
+From the two screenshots, there are exactly three distinct bugs:
 
 ---
 
-## Two-Part Fix
+### Bug 1: Wrong hint text on the UI — "A verification link will be sent"
 
-### Part 1: Edge Function — Exempt `email_changed` from the event gate
+**Location:** `src/pages/ProfileSettings.tsx` line 407
 
-`email_changed` is a **security-critical notification** (like a password reset confirmation) — it must always send, regardless of admin toggle settings. An admin should never be able to accidentally disable email change confirmations by unchecking an event type.
+**What it says:**
+> "A verification link will be sent to your new email address."
 
-The fix adds a whitelist of always-on events that bypass the `enabledEvents.includes()` check:
+**What it should say:**
+> "Your email will be updated immediately. A confirmation will be sent to your new address."
 
+The current system uses the Admin API with `email_confirm: true` — there is NO verification link step. No click is required. The change is instant. This hint text is left over from the old GoTrue flow and is factually incorrect.
+
+**Fix:** Change the `hint` string in `InlineField` for email to accurately describe the instant update behavior.
+
+---
+
+### Bug 2: Email shows same address for "Previous Email" and "New Email"
+
+**Location:** `supabase/functions/update-user-profile/index.ts` lines 107–161
+
+**Root cause:**
+The edge function captures `oldEmail = user.email ?? ''` from the **JWT token** BEFORE updating the auth record. However, because the Admin API call (`updateUserById`) succeeds first, and then the `profiles` table is updated — by the time the `send-email-notification` call is made, both `old_email` and `new_email` resolve to the same value in the notification body.
+
+**The real problem:** The JWT token's `user.email` reflects what was already in the system at the time the token was issued. If Jaspal's email was ALREADY `jaspalbhanker@gmail.com` (from a previous partial change), then `oldEmail` = `jaspalbhanker@gmail.com` and `newEmail` = `jaspalbhanker@gmail.com` — they are identical.
+
+Additionally, the `newEmail` passed in the request body IS the email Jaspal typed, but there's no guard to prevent re-submitting the same email as a "new" one. The fix must:
+1. Read the `old_email` from the `profiles` table BEFORE updating (not from the JWT token which may be stale)
+2. Add a check: if `oldEmail === newEmail`, return early with a clear message "This is already your current email address"
+
+**Fix:** In `update-user-profile/index.ts`, fetch the current email from the `profiles` table FIRST (which is always up-to-date), use that as `oldEmail`, then validate that `oldEmail !== newEmail` before proceeding.
+
+---
+
+### Bug 3: Email field in Profile Settings still shows old/stale email after save
+
+**Location:** `src/pages/ProfileSettings.tsx` — the `handleSaveEmail` function (lines 233–257)
+
+**What happens:**
+After a successful email save, the function calls `setEditingEmail(false)` and shows a toast — but it does NOT refresh the auth session or profile. So the `user?.email` value displayed in the `InlineField` remains stale (showing the old email) even though the auth record has been updated.
+
+The `user` object in AuthContext comes from the Supabase session, which has a cached email. After an Admin API email change, the **JWT is not automatically refreshed** in the client. The displayed email on the field stays as-is until the user logs out and back in.
+
+**Fix:**
+1. After a successful email save, call `supabase.auth.refreshSession()` to force the client to get the updated token with the new email
+2. Then call `fetchProfile(user.id)` and `queryClient.invalidateQueries` to sync the profile state
+3. Also update the toast message to say "Email updated successfully" (not "Verification email sent")
+
+---
+
+## All Files to Modify
+
+| File | Bug Fixed | Change |
+|---|---|---|
+| `src/pages/ProfileSettings.tsx` | Bug 1 + Bug 3 | Fix hint text; add `supabase.auth.refreshSession()` + `fetchProfile` after email save; fix toast message |
+| `supabase/functions/update-user-profile/index.ts` | Bug 2 | Fetch `old_email` from `profiles` table before updating; add same-email guard |
+| `DOCUMENTATION.md` | All | Version bump to 1.45.19 |
+
+---
+
+## Detailed Technical Changes
+
+### `supabase/functions/update-user-profile/index.ts` — `update_email` operation
+
+**Before (line 107):**
 ```typescript
-// BEFORE (line 1029):
-if (!enabledEvents.includes(event_type)) {
-  // ...skips
+const oldEmail = user.email ?? '';
+```
+
+**After:**
+```typescript
+// Fetch from profiles table — always authoritative, not stale like the JWT token
+const { data: currentProfile } = await supabaseAdmin
+  .from('profiles')
+  .select('email')
+  .eq('id', user.id)
+  .single();
+const oldEmail = currentProfile?.email ?? user.email ?? '';
+
+// Guard: prevent no-op updates
+if (oldEmail.toLowerCase() === newEmail.toLowerCase()) {
+  return new Response(
+    JSON.stringify({ error: 'This is already your current email address.' }),
+    { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
 }
+```
+
+This ensures `old_email` is always the ACTUAL current email from the database — not the potentially stale JWT claim. The notification will then correctly show different Previous/New Email values.
+
+### `src/pages/ProfileSettings.tsx` — `handleSaveEmail` + hint text
+
+**Hint text fix (line 407):**
+```tsx
+// BEFORE:
+hint={editingEmail ? 'A verification link will be sent to your new email address.' : undefined}
 
 // AFTER:
-const ALWAYS_SEND_EVENTS = ['email_changed', 'password_rollout'];
-
-if (!ALWAYS_SEND_EVENTS.includes(event_type) && !enabledEvents.includes(event_type)) {
-  // ...skips only if not always-on AND not in admin-enabled list
-}
+hint={editingEmail ? 'Your email will be updated immediately. A confirmation will be sent to your new address.' : undefined}
 ```
 
-This ensures `email_changed` always fires. `password_rollout` is also included since it's similarly security-critical.
+**`handleSaveEmail` fix — add session refresh after success:**
+```typescript
+// After success:
+toast({ title: 'Email updated', description: 'Your email address has been updated successfully.' });
+setEditingEmail(false);
+// Refresh the auth session so user?.email shows the new value
+await supabase.auth.refreshSession();
+// Sync profile state in AuthContext + admin caches
+await refreshProfile();
+```
 
-### Part 2: Database — Add `email_changed` to enabled events
-
-As a defence-in-depth measure, `email_changed` should also be added to the `email_notification_events` array in `system_settings`. This ensures:
-- The Email Notification Settings UI shows `email_changed` as enabled
-- Admins can see it in the event list
-- If the always-on exemption is ever removed, it still works
-
-This is a direct SQL upsert on `system_settings` to append `email_changed` to the existing events array.
+The `supabase.auth.refreshSession()` call forces the client to fetch a new JWT from the auth server — since the Admin API already updated the email in the auth record, the new token will contain the correct new email, and the UI will display it immediately.
 
 ---
 
-## Files to Modify
+## After These Fixes
 
-| File | Change |
+| Before | After |
 |---|---|
-| `supabase/functions/send-email-notification/index.ts` | Add `ALWAYS_SEND_EVENTS` constant; modify the event gate at line 1029 to bypass it for `email_changed` (and `password_rollout`) |
-| `DOCUMENTATION.md` | Version bump to 1.45.18 |
+| Hint: "A verification link will be sent" | Hint: "Your email will be updated immediately..." |
+| Email field still shows old email after save | Email field shows new email after save (session refreshed) |
+| Email notification: Previous = New (both same) | Email notification: Previous = old address, New = new address |
+| No same-email guard | Blocked with clear error: "This is already your current email address" |
 
-## Database Change
-
-One SQL update to `system_settings` to add `email_changed` to the `email_notification_events` array — executed via a migration.
-
-## What Changes for Jaspal (and Future Users)
-
-After this fix:
-1. User changes their email in Profile Settings
-2. `update-user-profile` edge function updates the auth record instantly and calls `send-email-notification` with `event_type: email_changed`
-3. `send-email-notification` recognizes `email_changed` as an always-on event — **skips the event gate**
-4. Email is sent from `hrms@bfclalloys.com` via Microsoft Graph to the **new** email address
-
-**Note:** Jaspal's email has already been changed in the auth system (`jaspal.bhanker@bfclalloys.com → jaspalbhanker@gmail.com` — confirmed in logs). The change itself succeeded. Only the notification failed. This fix prevents this from happening for future email changes.
