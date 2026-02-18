@@ -1,139 +1,83 @@
 
-# Fix: Email Confirmation Flow & Mobile Number Update Timing
+# Fix: Email Change "AuthSessionMissingError" in Edge Function
 
-## Root Cause Analysis
+## Exact Error
 
-### Issue 1: Email Confirmation Not Working
-
-**The bug**: In `supabase/functions/update-user-profile/index.ts`, the `update_email` operation uses the **Admin API**:
-```typescript
-await supabaseAdmin.auth.admin.updateUserById(user.id, { email: newEmail, email_confirm: false })
+```
+AuthSessionMissingError: Auth session missing!
+at $._useSession (auth-js.mjs)
+at $._updateUser (auth-js.mjs)
 ```
 
-`email_confirm: false` on the **admin API** means "do NOT confirm the email" — it still **immediately replaces** the email without sending any verification email to the user. The admin API bypasses the standard email change flow entirely.
+This error happens when Jaspal tries to change his email address from the Profile Settings page.
 
-**The fix**: Switch to using the **user's own session token** with the regular `auth.updateUser()` call (anon client scoped to the user's JWT). This triggers Supabase's built-in email change flow which sends verification emails to both the old and new addresses — standard behavior that requires the user to click a link to confirm.
+## Root Cause
+
+The current code in `supabase/functions/update-user-profile/index.ts` (lines 108-120) creates a user-scoped Supabase client and calls:
 
 ```typescript
-// CORRECT approach — uses user's session to trigger verification flow
-const supabaseUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+await supabaseUser.auth.updateUser({ email: newEmail }, { emailRedirectTo: ... });
+```
+
+The Supabase JS SDK's `auth.updateUser()` method calls an internal `_useSession()` function. This function looks for a stored session in the client's in-memory or local storage. In an Edge Function environment (Deno), there is no browser session storage — the client is created fresh on every request with no persisted state. Even though the `Authorization` header is passed to `global.headers`, the auth sub-client treats this as an unauthenticated client because no session was ever established.
+
+## The Fix
+
+Bypass the SDK's `auth.updateUser()` entirely and make a **direct `fetch()` call** to the Supabase Auth REST API endpoint instead. This is exactly what `updateUser` does internally — it makes a `PUT /auth/v1/user` request with the Bearer token — but without the session check.
+
+```typescript
+// BEFORE (broken in edge function — requires browser session)
+const supabaseUser = createClient(URL, ANON_KEY, {
   global: { headers: { Authorization: authHeader } },
-  auth: { autoRefreshToken: false, persistSession: false }
+  auth: { autoRefreshToken: false, persistSession: false },
 });
+await supabaseUser.auth.updateUser({ email: newEmail });
 
-const { error } = await supabaseUser.auth.updateUser({ email: newEmail });
+// AFTER (direct REST call — works in edge function)
+const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+  method: 'PUT',
+  headers: {
+    'Authorization': authHeader,
+    'apikey': Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    email: newEmail,
+    data: {},   // preserve existing metadata
+  }),
+});
 ```
 
----
+This triggers Supabase's standard email verification flow (sends confirmation link to the new address) because it's calling the same Auth endpoint with the user's own token — not the admin token.
 
-### Issue 2: Mobile Number Not Updating in UI on Time
+## What Changes
 
-**The bugs** (two compounding problems):
+### File: `supabase/functions/update-user-profile/index.ts`
 
-**Bug A**: In `handleSaveMobile` (ProfileSettings.tsx line 278-279), the call order is:
-```typescript
-queryClient.invalidateQueries({ queryKey: ['profiles'] });
-refreshProfile();   // ← NOT awaited!
-```
-`refreshProfile()` is not awaited, so the next render may happen before `fetchProfile` completes, showing the old mobile number. By the time `fetchProfile` updates `AuthContext`, the component may have already re-rendered with stale data.
+Replace the `update_email` block (lines 88–134) with a direct fetch-based implementation:
 
-**Bug B**: `currentMobile` is derived from `profile?.mobile_number` at render-time. After a successful save, the component closes the edit field (`setEditingMobile(false)`) and re-renders — but since `refreshProfile()` is not awaited, `profile` in AuthContext still has the old value for that render cycle. The user sees the old mobile number until the async refresh completes.
+- Remove the user-scoped `createClient` call (not needed)
+- Replace `supabaseUser.auth.updateUser()` with a `fetch()` call to `${SUPABASE_URL}/auth/v1/user` using `PUT` method
+- Pass `Authorization: authHeader` and `apikey: ANON_KEY` headers
+- Parse the response JSON and surface any auth errors properly
+- Keep the same success toast message for the user: "A verification email has been sent..."
 
-**The fix**:
-1. `await refreshProfile()` before `setEditingMobile(false)` so the profile is fresh when the field closes
-2. Update `refreshProfile` to correctly `await fetchProfile` (it already does this, but the caller must also await it)
-3. After a successful mobile save, also update the local display state optimistically so the UI shows the new value immediately without waiting for the async refresh
+No other files need to change. The edge function redeploys automatically.
 
----
+## Why This Works
+
+The Supabase Auth server (GoTrue) accepts a `PUT /auth/v1/user` request with a valid user JWT and triggers the email change flow (including sending a confirmation email to the new address). This is the identical HTTP call the SDK makes — we're just skipping the SDK's client-side session guard that blocks edge function usage.
+
+## Security
+
+- The user's own JWT (`authHeader`) is used, not the service role key — so the email change is correctly scoped to the requesting user
+- Supabase's built-in verification flow still applies: the old email stays active until the user clicks the confirmation link in the new email
+- No admin bypass — this is a standard user-initiated email change
 
 ## Files to Modify
 
 | File | Change |
 |---|---|
-| `supabase/functions/update-user-profile/index.ts` | Replace admin `updateUserById` email call with user-scoped `auth.updateUser()` to trigger real verification email |
-| `src/pages/ProfileSettings.tsx` | (1) Await `refreshProfile()` in `handleSaveMobile`; (2) Add optimistic local state for mobile display so field shows new value immediately after save |
-| `DOCUMENTATION.md` | Version bump to 1.45.13 |
-
----
-
-## Detailed Changes
-
-### `supabase/functions/update-user-profile/index.ts` — Email Fix
-
-Replace the current `update_email` block:
-
-```typescript
-// BEFORE (broken — admin API does not trigger verification email)
-const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(
-  user.id,
-  { email: newEmail, email_confirm: false }
-);
-```
-
-With a user-scoped client that triggers the standard verification flow:
-
-```typescript
-// AFTER — user-scoped call sends confirmation email to old+new address
-const supabaseUser = createClient(
-  Deno.env.get('SUPABASE_URL') ?? '',
-  Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-  {
-    global: { headers: { Authorization: authHeader } },
-    auth: { autoRefreshToken: false, persistSession: false }
-  }
-);
-
-const { error: updateAuthError } = await supabaseUser.auth.updateUser(
-  { email: newEmail },
-  { emailRedirectTo: Deno.env.get('SITE_URL') ?? 'https://bfclpms.lovable.app' }
-);
-```
-
-The `authHeader` variable is already captured earlier in the function (line 21), so this is a clean change.
-
-### `src/pages/ProfileSettings.tsx` — Mobile Update Timing Fix
-
-**Change 1**: Await `refreshProfile()` in `handleSaveMobile` and close the editing field only after the profile is fresh:
-
-```typescript
-// BEFORE
-toast({ title: 'Mobile number updated' });
-setEditingMobile(false);
-queryClient.invalidateQueries({ queryKey: ['profiles'] });
-refreshProfile();   // not awaited
-
-// AFTER
-toast({ title: 'Mobile number updated' });
-setEditingMobile(false);
-await refreshProfile();   // awaited — AuthContext profile updated before next render
-```
-
-**Change 2**: Add an optimistic local mobile state so the displayed value updates instantly without waiting for the async DB re-fetch (belt-and-suspenders approach):
-
-```typescript
-// Add local optimistic state
-const [localMobile, setLocalMobile] = useState<string | null>(null);
-const currentMobile = localMobile ?? (profile as any)?.mobile_number ?? '';
-
-// In handleSaveMobile after success:
-setLocalMobile(editMobile || null);
-setEditingMobile(false);
-await refreshProfile(); // then sync with DB
-setLocalMobile(null);   // clear optimistic state once real profile is loaded
-```
-
-This ensures:
-- The field closes immediately showing the new value (optimistic)
-- The AuthContext profile is then refreshed from DB in the background
-- Once fresh, `localMobile` is cleared and the component uses the authoritative `profile.mobile_number`
-
----
-
-## Technical Notes
-
-- No database migrations needed
-- No new secrets required — `SUPABASE_ANON_KEY` and `SUPABASE_URL` are already available in the edge function environment
-- The `authHeader` variable is already captured at line 21 of the edge function, so it can be reused for the user-scoped client without any extra extraction
-- The email change verification flow is entirely handled by the Supabase auth backend — when `auth.updateUser({ email })` is called with a user JWT, it automatically sends a confirmation email to the new address and holds the change pending until confirmed
-- No SMTP configuration changes needed — the verification email goes through Supabase's own email service (separate from the custom SMTP used for PMS notifications)
-- `emailRedirectTo` points to the production URL so users land back on the live app after clicking the email confirmation link
+| `supabase/functions/update-user-profile/index.ts` | Replace `supabaseUser.auth.updateUser()` with direct `fetch()` to Auth REST API |
+| `DOCUMENTATION.md` | Version bump to 1.45.14 + note about edge function email fix |
