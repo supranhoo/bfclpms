@@ -278,17 +278,27 @@ export default function OrgKpiDataEntry() {
       const filteredEmps = mappedEmpIds
         ? allProfiles.filter(emp => mappedEmpIds.has(emp.id))
         : allProfiles;
-      scopedRows = filteredEmps.map(emp => {
-        const scopeKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${emp.id}`;
-        const val = existingValuesMap.get(scopeKey);
-        return {
-          scopeId: emp.id,
-          scopeName: emp.full_name || emp.email,
-          achievedValue: val?.achieved_value ?? null,
-          remarks: val?.remarks ?? '',
-          evidenceUrl: val?.evidence_url ?? null,
-        };
-      });
+      scopedRows = filteredEmps
+        .map(emp => {
+          const dept = departments?.find(d => d.id === emp.department_id);
+          const scopeKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${emp.id}`;
+          const val = existingValuesMap.get(scopeKey);
+          return {
+            scopeId: emp.id,
+            scopeName: emp.full_name || emp.email,
+            departmentName: dept?.name,
+            designation: emp.designation ?? undefined,
+            achievedValue: val?.achieved_value ?? null,
+            remarks: val?.remarks ?? '',
+            evidenceUrl: val?.evidence_url ?? null,
+          };
+        })
+        .sort((a, b) => {
+          const deptA = a.departmentName ?? '';
+          const deptB = b.departmentName ?? '';
+          if (deptA !== deptB) return deptA.localeCompare(deptB);
+          return a.scopeName.localeCompare(b.scopeName);
+        });
     }
 
     return {
