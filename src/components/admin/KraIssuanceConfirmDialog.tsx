@@ -245,7 +245,7 @@ export function KraIssuanceConfirmDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
-        <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-5xl max-h-[95vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Send className="h-5 w-5 text-primary" />
@@ -273,7 +273,7 @@ export function KraIssuanceConfirmDialog({
 
           {/* Weightage Summary + Action Buttons */}
           <Card className="border-2">
-            <CardContent className="py-4">
+            <CardContent className="py-3">
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div className="flex items-center gap-3">
                   {weightageIcon}
@@ -344,7 +344,7 @@ export function KraIssuanceConfirmDialog({
               </div>
             ) : (
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
                     <TableHead className="w-10">
                       <Checkbox
@@ -352,14 +352,14 @@ export function KraIssuanceConfirmDialog({
                         onCheckedChange={(checked) => handleSelectAll(!!checked)}
                       />
                     </TableHead>
-                    <TableHead className="w-10">#</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>KRA</TableHead>
-                    <TableHead>KPI</TableHead>
-                    <TableHead className="text-center">UOM</TableHead>
-                    <TableHead className="text-center">Target</TableHead>
-                    <TableHead className="text-center">Weightage</TableHead>
-                    <TableHead className="text-center">Frequency</TableHead>
+                    <TableHead className="w-8">#</TableHead>
+                    <TableHead className="min-w-[130px]">Category</TableHead>
+                    <TableHead className="min-w-[200px]">KRA</TableHead>
+                    <TableHead className="min-w-[200px]">KPI</TableHead>
+                    <TableHead className="text-center w-20">UOM</TableHead>
+                    <TableHead className="text-center w-20">Target</TableHead>
+                    <TableHead className="text-center w-28">Weightage</TableHead>
+                    <TableHead className="text-center w-24">Frequency</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -372,13 +372,13 @@ export function KraIssuanceConfirmDialog({
                         />
                       </TableCell>
                       <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs max-w-[100px] truncate" title={getCategoryName(kpi.category_id)}>
+                      <TableCell className="align-top">
+                        <Badge variant="outline" className="text-xs shrink-0">
                           {getCategoryName(kpi.category_id)}
                         </Badge>
                       </TableCell>
-                      <TableCell className="font-medium max-w-[150px] truncate">{kpi.kra_name}</TableCell>
-                      <TableCell className="max-w-[150px] truncate">{kpi.kpi_name}</TableCell>
+                      <TableCell className="align-top font-medium whitespace-normal leading-snug">{kpi.kra_name}</TableCell>
+                      <TableCell className="align-top whitespace-normal leading-snug text-muted-foreground">{kpi.kpi_name}</TableCell>
                       <TableCell className="text-center text-sm">{kpi.uom || '-'}</TableCell>
                       <TableCell className="text-center text-sm">{kpi.target_value ?? '-'}</TableCell>
                       <TableCell className="text-center">
