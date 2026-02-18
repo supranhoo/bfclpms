@@ -1,160 +1,154 @@
 
-# Bug Fix: Values Still Vanishing in Org KPI Data Entry (Second Pass)
+# Enhancement: OrgKpiScopedEntryTable — Department, Designation, Wider Remarks, Department Sorting & Missing Improvements
 
-## Root Cause Analysis — Two Separate Issues
+## What the User Sees Today (Reference Image)
+The scoped entry table (per-employee scope) shows:
+- **Employee** column (name only, no department or designation)
+- **Achieved** (narrow input)
+- **Remark** (narrow single-line input)
+- **File** (upload)
 
-The previous fix added `if (isDirtyRef.current) return;` to the sync `useEffect`. This guarded against overwrites **while the user is actively typing**. However, there are two remaining race conditions that bypass this guard, causing Jaspal's values to still vanish.
-
----
-
-### Root Cause 1 — The `key` prop is missing `period` and `year` (Line 764 of `OrgKpiDataEntry.tsx`)
-
-```tsx
-// CURRENT — same key for all periods:
-key={`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`}
-
-// This means when the user changes the review period, the OrgKpiEntryCard
-// component is NOT remounted. The useState keeps the previous period's
-// typed value, and the sync useEffect is the only thing that updates it.
-```
-
-When Jaspal switches periods while having unsaved values, the component is not remounted (key doesn't change), and the `isDirtyRef` guard may block the correct re-sync.
+Rows are listed in raw DB order with no grouping or sorting.
 
 ---
 
-### Root Cause 2 — `data.scopedRows` is always a new array reference, bypassing the guard
+## All Changes Planned
 
-This is the **primary bug**. In `OrgKpiDataEntry.tsx` (line 761):
+### 1. Add Department + Designation columns to the Employee scope table
+For the **Employee** scope: show employee name with department and designation as sub-text below the name (two badge-style chips). This uses data already available in `allProfiles` (which has `designation` and `department_id`).
 
-```tsx
-const cardData = buildCardData(kpi);  // called on every render
-```
+For the **Department** scope: add a "Employees" count badge next to the department name (e.g. "3 employees") using the existing `scopeSubText`.
 
-`buildCardData` creates a **new `scopedRows` array** on every call. The `useEffect` dependency `[data.achievedValue, data.remarks, data.evidenceUrl, data.scopedRows]` uses `Object.is` comparison. Since `data.scopedRows !== previous data.scopedRows` (always a new array reference), the effect fires on **every single render** of the parent component.
+### 2. Wider Remark field
+Change the Remark `Input` to a `Textarea` (2 rows, auto-resize). The column will get more minimum width (`min-w-[200px]`).
 
-**The exact failing sequence for Jaspal:**
+### 3. Department-wise sorting
+For **Employee** scope: sort rows by `department name` (A→Z), then by `employee name` within department. Group the rows visually by department with a subtle group header row.
 
-```text
-1. Jaspal types a value  → isDirtyRef = true
-2. Auto-save fires (2s)  → save succeeds → isDirtyRef = false
-3. queryClient.invalidateQueries(['org-kpi-values']) fires
-4. WHILE refetch is in-flight (data still = old cached values):
-   → parent re-renders (ANY parent state change: search typing,
-     scrolling, toast appearing, etc.)
-   → buildCardData(kpi) runs → new scopedRows array created
-   → data.scopedRows !== prev ref → useEffect fires
-   → isDirtyRef.current === false (reset in step 2)
-   → setScopedValues(old data.scopedRows)  ← VALUE OVERWRITTEN with stale DB data
-5. Refetch completes → correct data arrives
-   → same thing happens again (overwrite with correct data this time)
-```
+For **Department** scope: sort rows by `department name` (A→Z).
 
-Even for **organization-scope** KPIs, there's a window between when `isDirtyRef = false` and when the refetch resolves where an unrelated re-render (e.g., the "Saving..." status badge changing) triggers the effect and calls `setAchievedValue(data.achievedValue)` where `data.achievedValue` is the stale pre-save value from cache.
+### 4. Missing improvements identified
+- **Sticky header**: The table header should stay visible while scrolling vertically through many employees.
+- **Progress counter improvement**: Show "X / Y entered" in the collapsible trigger with color coding (green when all done).
+- **"Enter all same" quick action**: A small helper to fill all empty Achieved values with a single value (bulk fill). Useful when all employees share the same org KPI value.
+- **Out-of-range warning per row**: For employee-scope rows, show an inline alert if the entered value is outside the rating thresholds (same logic as the org-scope card currently has).
 
 ---
 
-## The Fix
+## Data Flow Changes
 
-### Two-Part Fix
-
-**Fix 1 — `OrgKpiDataEntry.tsx` line 764: Add `period` and `year` to the card's `key` prop**
-
-This ensures the card fully remounts when the period changes, guaranteeing clean initial state.
-
-```tsx
-// BEFORE:
-key={`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`}
-
-// AFTER:
-key={`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${selectedPeriod}||${selectedYear}`}
+### `ScopedRow` interface (in `OrgKpiScopedEntryTable.tsx`)
+Add two new optional fields:
+```typescript
+export interface ScopedRow {
+  scopeId: string;
+  scopeName: string;
+  scopeSubText?: string;
+  departmentName?: string;   // NEW — for grouping/sorting employee-scope rows
+  designation?: string;       // NEW — for display in employee column
+  achievedValue: number | null;
+  remarks: string;
+  evidenceUrl: string | null;
+}
 ```
 
-**Fix 2 — `OrgKpiEntryCard.tsx` lines 112–119: Change the sync strategy**
-
-Instead of watching the unstable `data.scopedRows` array reference (which triggers on every render), the sync effect should only run when the **KPI identity** changes (i.e., a genuinely different KPI/period), not on every background refetch. For same-identity re-renders, we rely on the `isDirtyRef` guard AND add a **value equality check** to avoid unnecessary syncs.
-
-```tsx
-// BEFORE — fires on every render (scopedRows is always new ref):
-useEffect(() => {
-  if (isDirtyRef.current) return;
-  setAchievedValue(data.achievedValue?.toString() ?? '');
-  setRemarks(data.remarks);
-  setEvidenceUrl(data.evidenceUrl);
-  setScopedValues(data.scopedRows || []);
-  setSaveStatus('idle');
-}, [data.achievedValue, data.remarks, data.evidenceUrl, data.scopedRows]);
-
-// AFTER — stable identity-based sync + value equality guard:
-const kpiIdentityRef = useRef('');
-
-useEffect(() => {
-  const newIdentity = `${data.categoryId}||${data.kraName}||${data.kpiName}||${reviewPeriod}||${reviewYear}`;
-  const identityChanged = newIdentity !== kpiIdentityRef.current;
-
-  if (!identityChanged && isDirtyRef.current) return;
-
-  if (!identityChanged && !isDirtyRef.current) {
-    // Background refetch for same KPI — only sync if values actually differ
-    const currentNumeric = achievedValue === '' ? null : parseFloat(achievedValue);
-    const sameValue = currentNumeric === data.achievedValue
-      || (currentNumeric === null && data.achievedValue === null)
-      || (isNaN(currentNumeric as number) && data.achievedValue === null);
-    const sameRemarks = remarks === data.remarks;
-    const sameEvidence = evidenceUrl === data.evidenceUrl;
-    if (sameValue && sameRemarks && sameEvidence) return; // no real change, skip
-  }
-
-  kpiIdentityRef.current = newIdentity;
-  setAchievedValue(data.achievedValue?.toString() ?? '');
-  setRemarks(data.remarks);
-  setEvidenceUrl(data.evidenceUrl);
-  setScopedValues(data.scopedRows || []);
-  setSaveStatus('idle');
-  isDirtyRef.current = false;
-}, [data.achievedValue, data.remarks, data.evidenceUrl, data.categoryId, data.kraName, data.kpiName, reviewPeriod, reviewYear]);
+### `OrgKpiDataEntry.tsx` — `buildCardData` employee scope section
+Currently builds `scopedRows` for employee scope like this:
+```typescript
+scopedRows = filteredEmps.map(emp => ({
+  scopeId: emp.id,
+  scopeName: emp.full_name || emp.email,
+  achievedValue: ...,
+  remarks: ...,
+  evidenceUrl: ...,
+}));
 ```
 
-Key changes in Fix 2:
-- `data.scopedRows` is **removed from the dependency array** — scoped values are initialized from props on mount (via `useState(data.scopedRows || [])`) and from the identity change guard, but are NOT synced on every background refetch
-- A `kpiIdentityRef` tracks when a genuinely new KPI context is loaded vs a background refetch of the same KPI
-- A value equality check prevents syncing when the DB returned the same values the user already has on screen
+Needs to add `departmentName` and `designation` by looking up each employee's data from `allProfiles` and `departments`:
+```typescript
+scopedRows = filteredEmps.map(emp => {
+  const dept = departments?.find(d => d.id === emp.department_id);
+  return {
+    scopeId: emp.id,
+    scopeName: emp.full_name || emp.email,
+    departmentName: dept?.name,         // NEW
+    designation: emp.designation ?? undefined, // NEW
+    achievedValue: ...,
+    remarks: ...,
+    evidenceUrl: ...,
+  };
+});
+```
+
+No schema changes needed. `departments` is already imported in `OrgKpiDataEntry.tsx`.
 
 ---
 
-## Files to Change
+## UI Changes — `OrgKpiScopedEntryTable.tsx`
 
-| File | Lines | Change |
+### Column layout (Employee scope)
+
+| Column | Width | Content |
 |---|---|---|
-| `src/pages/admin/OrgKpiDataEntry.tsx` | 764 | Add `\|\|${selectedPeriod}\|\|${selectedYear}` to the `key` prop |
-| `src/components/admin/OrgKpiEntryCard.tsx` | 107–119 | Add `kpiIdentityRef`, change `useEffect` to identity-based sync, remove `data.scopedRows` from deps |
-| `DOCUMENTATION.md` | — | Version bump to 1.45.9 + bug fix note |
+| Employee | `min-w-[200px]` | Name (bold) + Dept badge + Designation chip |
+| Achieved | `w-28 text-center` | Number input |
+| Remark | `min-w-[220px]` | `Textarea` (rows=2) |
+| File | `w-28` | Upload |
 
-## Before vs After (Jaspal's scenario)
+### Department grouping rows (Employee scope only)
+When `scopeLabel === 'Employee'` and rows have `departmentName`, sort rows by `departmentName` then `scopeName`, then render a subtle group header row before each new department:
 
-```text
-BEFORE — Still broken:
-Jaspal types value → isDirtyRef = true
-Auto-save (2s) → isDirtyRef = false
-Any parent re-render (toast, search change, scroll):
-  → buildCardData → new scopedRows ref
-  → useEffect fires (isDirtyRef = false)
-  → setScopedValues(stale DB value) ← VALUE ERASED
-
-AFTER — Fixed:
-Jaspal types value → isDirtyRef = true
-Auto-save (2s) → isDirtyRef = false
-Parent re-render → buildCardData → new data object
-  → useEffect: same kpiIdentity, isDirtyRef=false, values equal → SKIP ✓
-Refetch completes with real new data:
-  → useEffect: data.achievedValue changed from null→37560
-  → values NOT equal → sync runs → shows correct DB value ✓
+```
+┌─────────────────────────────────────────────────┐
+│ 🏢 Operations (3 employees)          [group row] │
+├──────────────┬──────────┬──────────────┬─────────┤
+│ Jaspal Singh │  [----]  │ [remark box] │ Upload  │
+│  Operations  │          │              │         │
+│  Sr. Manager │          │              │         │
+├──────────────┴──────────┴──────────────┴─────────┤
+│ 🏢 Finance (2 employees)             [group row] │
+├──────────────┬──────────┬──────────────┬─────────┤
+│ Firoz Shaikh │  [----]  │ [remark box] │ Upload  │
+...
 ```
 
-## Impact Assessment
+Group header row style: `bg-muted/50 text-xs font-semibold text-muted-foreground` with a Building2 icon.
 
-- Zero logic changes to save/propagate/rollback flows
-- No database changes
-- No API changes
-- Scoped (department/employee) KPI entries are now stable during background refetches
-- Period changes still correctly reset the card to DB values (identity changes)
-- Works correctly for all three scope types: organization, department, employee
+### Out-of-range warning
+Pass `ratingThresholds` and `targetValue` down to the table as optional props. Each row shows a small orange warning triangle icon (with tooltip) if the entered value is outside range. This reuses the existing `isValueOutOfRange` utility from `@/lib/ratingCalculation`.
+
+### Bulk fill
+A small input + "Fill all empty" button in the table header area:
+```
+[    Enter value    ] [Fill empty rows]
+```
+Clicking "Fill empty rows" calls `onValueChange` for every row where `achievedValue === null`.
+
+### Collapsible trigger enhancement
+```
+▼  27 Employees (5 / 27 entered)    [Fill All: [___] [Apply]]
+```
+When `enteredCount === rows.length`: trigger text turns green.
+
+---
+
+## Files to Modify
+
+| File | Changes |
+|---|---|
+| `src/components/admin/OrgKpiScopedEntryTable.tsx` | Add `departmentName` + `designation` to `ScopedRow`; change `Input` → `Textarea` for remarks; add dept group header rows; wider remark column; sticky table header; bulk fill; out-of-range warnings per row |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | In `buildCardData` employee scope: add `departmentName` and `designation` from `departments` + `allProfiles`; sort employee-scope rows by dept name then emp name |
+| `DOCUMENTATION.md` | Version bump to 1.45.10 |
+
+---
+
+## Technical Notes
+
+- `allProfiles` is already fetched in `OrgKpiDataEntry.tsx` via `useProfiles()` — no extra query needed.
+- `departments` is already fetched in `OrgKpiDataEntry.tsx` via `useDepartments()` — no extra query needed.
+- `ScopedRow.departmentName` and `ScopedRow.designation` are optional — existing department-scope cards that don't populate them will continue to work unchanged (no breaking change to the interface).
+- The `Textarea` for remarks uses `resize-none` and `rows={2}` to keep the table row height consistent while giving 2× the vertical space for text.
+- The `isValueOutOfRange` check in per-row warnings requires `r5/r4/r3/r2/r1`, `targetValue`, and `uom` — these need to be passed as optional props to `OrgKpiScopedEntryTable`. They already exist on the `OrgKpiCardData` (and thus on the `OrgKpiEntryCard` which renders the table).
+- Department-wise grouping only applies when `scopeLabel === 'Employee'`; for Department scope, alphabetical sorting only (no group headers).
+- Sorting is done in-component (pure JS `.sort()`) — no DB changes.
+- No RLS or migration changes needed.
