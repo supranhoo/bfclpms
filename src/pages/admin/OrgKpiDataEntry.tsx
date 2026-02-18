@@ -761,7 +761,7 @@ export default function OrgKpiDataEntry() {
                   const cardData = buildCardData(kpi);
                   return (
                     <OrgKpiEntryCard
-                      key={`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`}
+                      key={`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${selectedPeriod}||${selectedYear}`}
                       data={cardData}
                       reviewPeriod={selectedPeriod}
                       reviewYear={selectedYear}
