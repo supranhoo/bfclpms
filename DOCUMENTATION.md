@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-18  
-> **Version:** 1.45.12  
+> **Version:** 1.45.13  
 > **Maintainer:** Lovable AI
 
 ---

@@ -143,6 +143,7 @@ export default function ProfileSettings() {
   const [editingMobile, setEditingMobile] = useState(false);
   const [editMobile, setEditMobile] = useState('');
   const [savingMobile, setSavingMobile] = useState(false);
+  const [localMobile, setLocalMobile] = useState<string | null>(null);
 
   // Password
   const [currentPwd, setCurrentPwd] = useState('');
@@ -273,10 +274,12 @@ export default function ProfileSettings() {
       if (res.error) throw new Error(res.error.message);
       if (res.data?.error) throw new Error(res.data.error);
 
-      toast({ title: 'Mobile number updated' });
+      // Optimistic update: show new value immediately while DB refresh happens in background
+      setLocalMobile(editMobile || null);
       setEditingMobile(false);
-      queryClient.invalidateQueries({ queryKey: ['profiles'] });
-      refreshProfile();
+      toast({ title: 'Mobile number updated' });
+      await refreshProfile(); // awaited — syncs AuthContext + admin list
+      setLocalMobile(null);   // clear optimistic state once authoritative profile is loaded
     } catch (err: any) {
       toast({ title: 'Failed to update mobile number', description: err.message, variant: 'destructive' });
     } finally {
@@ -324,7 +327,7 @@ export default function ProfileSettings() {
   };
 
   const displayAvatar = avatarPreview || profile?.avatar_url || undefined;
-  const currentMobile = (profile as any)?.mobile_number || '';
+  const currentMobile = localMobile ?? (profile as any)?.mobile_number ?? '';
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 p-4 sm:p-6">

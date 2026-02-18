@@ -104,10 +104,19 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Use admin API with email_confirm: false so the user must verify the new email
-      const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(
-        user.id,
-        { email: newEmail, email_confirm: false }
+      // Use user-scoped client to trigger Supabase's standard email verification flow
+      const supabaseUser = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        {
+          global: { headers: { Authorization: authHeader } },
+          auth: { autoRefreshToken: false, persistSession: false },
+        }
+      );
+
+      const { error: updateAuthError } = await supabaseUser.auth.updateUser(
+        { email: newEmail },
+        { emailRedirectTo: Deno.env.get('SITE_URL') ?? 'https://bfclpms.lovable.app' }
       );
 
       if (updateAuthError) {
