@@ -10,7 +10,8 @@ import {
   Users,
   ClipboardList,
   Calendar,
-  GraduationCap
+  GraduationCap,
+  Table2
 } from 'lucide-react';
 
 interface ReportCard {
@@ -105,6 +106,13 @@ const reports: ReportCard[] = [
     icon: GraduationCap,
     path: '/reports/tni',
     color: 'text-rose-500',
+  },
+  {
+    title: 'KPI Detail Report',
+    description: 'KPI-level drill-down showing all stage scores (Self, Manager, Skip-Level, HR PMS, Auditor, Mgmt, Final) with weighted totals. N/A KPIs shown with N/A labels.',
+    icon: Table2,
+    path: '/reports/kpi-detail',
+    color: 'text-violet-500',
   },
 ];
 
