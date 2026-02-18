@@ -122,19 +122,24 @@ export function resolvePendingStatuses(
       return ['self_review'];
     case 'skip_level': {
       const idx = workflowStages.indexOf('skip_level_check');
-      return idx > 0 ? [workflowStages[idx - 1]] : ['manager_check'];
+      if (idx === -1) return [];
+      return [workflowStages[idx - 1]];
     }
     case 'hr_pms': {
       const idx = workflowStages.indexOf('hr_pms_review');
-      return idx > 0 ? [workflowStages[idx - 1]] : ['skip_level_check'];
+      if (idx === -1) return [];
+      return [workflowStages[idx - 1]];
     }
     case 'auditor': {
       const idx = workflowStages.indexOf('audit');
+      if (idx === -1) return [];
       const preceding = idx > 0 ? workflowStages[idx - 1] : 'manager_check';
       return [preceding, 'audit'];
     }
-    case 'management':
+    case 'management': {
+      if (!workflowStages.includes('management_review')) return [];
       return ['management_review'];
+    }
     default:
       return [];
   }
@@ -175,19 +180,24 @@ export function resolveReviewableStatuses(
       return ['self_review'];
     case 'skip_level': {
       const idx = workflowStages.indexOf('skip_level_check');
-      return idx > 0 ? [workflowStages[idx - 1]] : ['manager_check'];
+      if (idx === -1) return [];
+      return [workflowStages[idx - 1]];
     }
     case 'hr_pms': {
       const idx = workflowStages.indexOf('hr_pms_review');
-      return idx > 0 ? [workflowStages[idx - 1]] : ['skip_level_check'];
+      if (idx === -1) return [];
+      return [workflowStages[idx - 1]];
     }
     case 'auditor': {
       const idx = workflowStages.indexOf('audit');
+      if (idx === -1) return [];
       const preceding = idx > 0 ? workflowStages[idx - 1] : 'manager_check';
       return [preceding, 'audit'];
     }
-    case 'management':
+    case 'management': {
+      if (!workflowStages.includes('management_review')) return [];
       return ['management_review'];
+    }
     default:
       return [];
   }
@@ -254,21 +264,22 @@ export function canReviewKpi(
       return kpiStatus === 'self_review';
     case 'skip-level-review': {
       const idx = workflowStages.indexOf('skip_level_check');
-      const preceding = idx > 0 ? workflowStages[idx - 1] : 'manager_check';
-      return kpiStatus === preceding;
+      if (idx === -1) return false;
+      return kpiStatus === workflowStages[idx - 1];
     }
     case 'hr-pms-review': {
       const idx = workflowStages.indexOf('hr_pms_review');
-      const preceding = idx > 0 ? workflowStages[idx - 1] : 'skip_level_check';
-      return kpiStatus === preceding;
+      if (idx === -1) return false;
+      return kpiStatus === workflowStages[idx - 1];
     }
     case 'audit': {
       const idx = workflowStages.indexOf('audit');
+      if (idx === -1) return false;
       const preceding = idx > 0 ? workflowStages[idx - 1] : 'manager_check';
       return kpiStatus === preceding || kpiStatus === 'audit';
     }
     case 'management':
-      return kpiStatus === 'management_review';
+      return workflowStages.includes('management_review') && kpiStatus === 'management_review';
     default:
       return false;
   }

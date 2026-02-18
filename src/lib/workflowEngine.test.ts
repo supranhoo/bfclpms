@@ -15,6 +15,12 @@ import {
 
 const SKIP_MANAGER_STAGES = ['kra_set', 'self_review', 'audit', 'management_review', 'approved'];
 const EIGHT_STAGE_PIPELINE = ['kra_set', 'self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'];
+// Pipeline variants without certain stages (guard tests)
+const NO_AUDIT_STAGES = ['kra_set', 'self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'approved'];
+const NO_MANAGEMENT_STAGES = ['kra_set', 'self_review', 'manager_check', 'audit', 'approved'];
+const NO_SKIP_LEVEL_STAGES = ['kra_set', 'self_review', 'manager_check', 'hr_pms_review', 'audit', 'management_review', 'approved'];
+const NO_HR_PMS_STAGES = ['kra_set', 'self_review', 'manager_check', 'skip_level_check', 'audit', 'management_review', 'approved'];
+const MINIMAL_STAGES = ['kra_set', 'self_review', 'manager_check', 'approved'];
 
 describe('workflowEngine', () => {
   describe('resolveNextStatus', () => {
@@ -196,8 +202,108 @@ describe('workflowEngine', () => {
       expect(resolveSendBackStatus('auditor', 'management', EIGHT_STAGE_PIPELINE)).toBe('hr_pms_review');
     });
 
-    it('unknown target returns kra_set', () => {
-      expect(resolveSendBackStatus('unknown', 'auditor')).toBe('kra_set');
+      it('unknown target returns kra_set', () => {
+        expect(resolveSendBackStatus('unknown', 'auditor')).toBe('kra_set');
+      });
+    });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Stage-absence guard tests — all reviewer levels, all pipeline variants
+  // ─────────────────────────────────────────────────────────────────────────
+
+  describe('resolvePendingStatuses — stage-absence guards', () => {
+    it('auditor returns [] when audit stage absent', () => {
+      expect(resolvePendingStatuses('auditor', NO_AUDIT_STAGES)).toEqual([]);
+    });
+
+    it('auditor returns [] in minimal pipeline (no audit)', () => {
+      expect(resolvePendingStatuses('auditor', MINIMAL_STAGES)).toEqual([]);
+    });
+
+    it('management returns [] when management_review stage absent', () => {
+      expect(resolvePendingStatuses('management', NO_MANAGEMENT_STAGES)).toEqual([]);
+    });
+
+    it('management returns [] in minimal pipeline', () => {
+      expect(resolvePendingStatuses('management', MINIMAL_STAGES)).toEqual([]);
+    });
+
+    it('skip_level returns [] when skip_level_check stage absent', () => {
+      expect(resolvePendingStatuses('skip_level', NO_SKIP_LEVEL_STAGES)).toEqual([]);
+    });
+
+    it('skip_level returns [] in default pipeline (no skip-level stage)', () => {
+      expect(resolvePendingStatuses('skip_level', DEFAULT_WORKFLOW_STAGES)).toEqual([]);
+    });
+
+    it('hr_pms returns [] when hr_pms_review stage absent', () => {
+      expect(resolvePendingStatuses('hr_pms', NO_HR_PMS_STAGES)).toEqual([]);
+    });
+
+    it('hr_pms returns [] in default pipeline (no hr_pms stage)', () => {
+      expect(resolvePendingStatuses('hr_pms', DEFAULT_WORKFLOW_STAGES)).toEqual([]);
+    });
+  });
+
+  describe('resolveReviewableStatuses — stage-absence guards', () => {
+    it('auditor returns [] when audit stage absent', () => {
+      expect(resolveReviewableStatuses('auditor', NO_AUDIT_STAGES)).toEqual([]);
+    });
+
+    it('management returns [] when management_review stage absent', () => {
+      expect(resolveReviewableStatuses('management', NO_MANAGEMENT_STAGES)).toEqual([]);
+    });
+
+    it('management returns [] in minimal pipeline', () => {
+      expect(resolveReviewableStatuses('management', MINIMAL_STAGES)).toEqual([]);
+    });
+
+    it('skip_level returns [] when skip_level_check stage absent', () => {
+      expect(resolveReviewableStatuses('skip_level', NO_SKIP_LEVEL_STAGES)).toEqual([]);
+    });
+
+    it('skip_level returns [] in default pipeline', () => {
+      expect(resolveReviewableStatuses('skip_level', DEFAULT_WORKFLOW_STAGES)).toEqual([]);
+    });
+
+    it('hr_pms returns [] when hr_pms_review stage absent', () => {
+      expect(resolveReviewableStatuses('hr_pms', NO_HR_PMS_STAGES)).toEqual([]);
+    });
+
+    it('hr_pms returns [] in default pipeline', () => {
+      expect(resolveReviewableStatuses('hr_pms', DEFAULT_WORKFLOW_STAGES)).toEqual([]);
+    });
+  });
+
+  describe('canReviewKpi — stage-absence guards', () => {
+    it('audit returns false when audit stage absent', () => {
+      expect(canReviewKpi('manager_check', 'audit', NO_AUDIT_STAGES)).toBe(false);
+      expect(canReviewKpi('manager_check', 'audit', MINIMAL_STAGES)).toBe(false);
+    });
+
+    it('management returns false when management_review stage absent', () => {
+      expect(canReviewKpi('management_review', 'management', NO_MANAGEMENT_STAGES)).toBe(false);
+      expect(canReviewKpi('management_review', 'management', MINIMAL_STAGES)).toBe(false);
+    });
+
+    it('skip-level-review returns false when skip_level_check stage absent', () => {
+      expect(canReviewKpi('manager_check', 'skip-level-review', NO_SKIP_LEVEL_STAGES)).toBe(false);
+      expect(canReviewKpi('manager_check', 'skip-level-review', DEFAULT_WORKFLOW_STAGES)).toBe(false);
+    });
+
+    it('hr-pms-review returns false when hr_pms_review stage absent', () => {
+      expect(canReviewKpi('skip_level_check', 'hr-pms-review', NO_HR_PMS_STAGES)).toBe(false);
+      expect(canReviewKpi('skip_level_check', 'hr-pms-review', DEFAULT_WORKFLOW_STAGES)).toBe(false);
+    });
+
+    // Positive: stages present, correct status → still true
+    it('audit still works when audit stage IS present', () => {
+      expect(canReviewKpi('manager_check', 'audit', DEFAULT_WORKFLOW_STAGES)).toBe(true);
+      expect(canReviewKpi('hr_pms_review', 'audit', EIGHT_STAGE_PIPELINE)).toBe(true);
+    });
+
+    it('management still works when management_review IS present', () => {
+      expect(canReviewKpi('management_review', 'management', DEFAULT_WORKFLOW_STAGES)).toBe(true);
     });
   });
 });

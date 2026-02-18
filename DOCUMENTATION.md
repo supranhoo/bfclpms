@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-18  
-> **Version:** 1.45.14  
+> **Version:** 1.45.15  
 > **Maintainer:** Lovable AI
 
 ---
@@ -3228,6 +3228,10 @@ The workflow engine provides pure utility functions that resolve status transiti
 - `UnifiedScorecard.tsx` — Dynamic forward/send-back status resolution; passes `workflowStages={effectiveStages}` to `KpiDetailsTable`, `WorkflowProgressTracker`
 - `AuditScorecard.tsx` — Legacy audit page; uses `useEmployeeWorkflowStages` for dynamic transitions, pending counts, send-back targets; passes `workflowStages` to `KpiDetailsTable`, `WorkflowProgressTracker`
 - `AuditPanel.tsx` — Legacy audit list; includes `self_review` in pending audit counts for skip-manager workflows
+
+**v1.45.15 — Comprehensive Stage-Absence Guards (all levels, all pipelines):**
+
+Three functions — `resolvePendingStatuses`, `resolveReviewableStatuses`, and `canReviewKpi` — previously had hardcoded fallback values when a reviewer stage was absent from an employee's pipeline. For example, if a pipeline had no `audit` stage, the auditor case would fall back to returning `['manager_check', 'audit']`, causing those employees to incorrectly appear in the Audit panel (root cause of Avinash Kumar appearing in the Audit list). All four reviewer cases now return `[]` / `false` immediately if the stage is absent: `auditor` (guards `audit`), `management` (guards `management_review`), `skip_level` (guards `skip_level_check`), `hr_pms` (guards `hr_pms_review`). 56 unit tests (30 new guard tests) all pass.
 - `EmployeeScorecard.tsx` — Dynamic manager approval target status
 - `useKpis.ts` (`useApproveKpi`) — Accepts optional `forwardStatus` parameter
 - `WorkflowProgressTracker.tsx` — Accepts optional `workflowStages` prop to filter displayed stages. Supports clickable stage cards via `activeFilter`/`onFilterChange` props — wired in all scorecards (UnifiedScorecard, AuditScorecard, ManagementScorecard, EmployeeScorecard) and Dashboard to filter KPI lists by status.
