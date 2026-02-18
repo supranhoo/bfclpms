@@ -1026,7 +1026,10 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       enabledEvents = [];
     }
 
-    if (!enabledEvents.includes(event_type)) {
+    // Security-critical events that always send, regardless of admin toggle settings
+    const ALWAYS_SEND_EVENTS = ['email_changed', 'password_rollout'];
+
+    if (!ALWAYS_SEND_EVENTS.includes(event_type) && !enabledEvents.includes(event_type)) {
       console.log(`Event type ${event_type} is not enabled`);
       await logEmail({ event_type, recipient_email, recipient_name, status: 'skipped', metadata: { reason: `Event type ${event_type} not enabled` } });
       return new Response(JSON.stringify({ skipped: true, reason: `Event type ${event_type} not enabled` }), {
