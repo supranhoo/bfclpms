@@ -223,6 +223,73 @@ export function useKpisByPeriod(selectedPeriod: string | undefined, selectedYear
   });
 }
 
+/**
+ * Fetch KPIs across multiple month/year ranges (for YTD, QTD, and Custom period modes).
+ * Batches all period combinations into parallel requests and deduplicates by KPI id.
+ */
+export function useKpisByPeriodRanges(periodRanges: Array<{ month: string; year: number }>) {
+  return useQuery({
+    queryKey: ['kpis-by-period-ranges', periodRanges],
+    enabled: periodRanges.length > 0,
+    queryFn: async () => {
+      if (periodRanges.length === 0) return [];
+
+      // Fetch all period/year combos in parallel, each paginated
+      const fetchSinglePeriod = async (month: string, year: number): Promise<any[]> => {
+        const allKpis: any[] = [];
+        let from = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from('kpis')
+            .select(`
+              *,
+              kra_categories (id, name, color, weightage),
+              profiles:employee_id (id, full_name, email, employee_code)
+            `)
+            .eq('review_period', month)
+            .eq('review_year', year)
+            .order('created_at', { ascending: false })
+            .range(from, from + pageSize - 1);
+
+          if (error) throw error;
+
+          if (data && data.length > 0) {
+            allKpis.push(...data);
+            from += pageSize;
+            hasMore = data.length === pageSize;
+          } else {
+            hasMore = false;
+          }
+        }
+
+        return allKpis;
+      };
+
+      // Run all period fetches in parallel
+      const results = await Promise.all(
+        periodRanges.map(({ month, year }) => fetchSinglePeriod(month, year))
+      );
+
+      // Flatten and deduplicate by KPI id
+      const seen = new Set<string>();
+      const allKpis: any[] = [];
+      for (const batch of results) {
+        for (const kpi of batch) {
+          if (!seen.has(kpi.id)) {
+            seen.add(kpi.id);
+            allKpis.push(kpi);
+          }
+        }
+      }
+
+      return allKpis;
+    },
+  });
+}
+
 export function useKpisByEmployee(employeeId: string | undefined) {
   return useQuery({
     queryKey: ['kpis', employeeId],

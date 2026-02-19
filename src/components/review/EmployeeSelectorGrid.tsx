@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeamMembers, useProfiles, useSkipLevelTeamMembers, useProfilesByWorkflowStage } from '@/hooks/useOrganization';
-import { useKpisByPeriod, KPI } from '@/hooks/useKpis';
+import { useKpisByPeriodRanges, KPI } from '@/hooks/useKpis';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import { resolvePendingStatuses, resolveReviewableStatuses, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
@@ -144,14 +144,20 @@ export function EmployeeSelectorGrid({
   const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
   const [selectedManager, setSelectedManager] = useState<string | null>(null);
 
-  const { data: periodKpis } = useKpisByPeriod(selectedPeriod, selectedYear);
+  // Fix 1 & 3: Use multi-period hook so YTD/QTD/custom modes fetch ALL relevant months
+  const { data: periodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
 
-  // Batch-fetch workflow stages for all employees shown in the grid
+  // Determine which employees to show based on view level and role
+  const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
+
+  // Fix 2: Derive employee IDs from the full visible list, not just periodKpis.
+  // This ensures workflowMap has stages for ALL panel employees, not only those with KPIs in the selected range.
   const allEmployeeIds = useMemo(() => {
-    if (!periodKpis) return [];
-    return [...new Set(periodKpis.map(k => k.employee_id))];
-  }, [periodKpis]);
-  
+    const source = requiredStage ? stageFilteredProfiles : (isFullAccess ? allProfiles : teamMembers);
+    if (!source) return [];
+    return source.map((p: { id: string }) => p.id);
+  }, [requiredStage, stageFilteredProfiles, isFullAccess, allProfiles, teamMembers]);
+
   const { data: workflowMap } = useBulkEmployeeWorkflows(allEmployeeIds);
 
   // Helper: get workflow stages for an employee (with fallback)
@@ -172,9 +178,6 @@ export function EmployeeSelectorGrid({
     };
     return map[viewLevel] || 'manager';
   };
-
-  // Determine which employees to show based on view level and role
-  const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
 
   // isLoading accounts for stage-filtered fetch when a required stage is active
   const isLoading = viewLevel === 'team'
