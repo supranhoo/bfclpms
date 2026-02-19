@@ -1,114 +1,149 @@
 
-# Root Cause Analysis: Why Vivek Sees Fewer Pending KPIs Than Admin
-
-## What the Data Reveals
-
-After deep investigation of the database, code, and RLS policies, there are **3 distinct bugs** causing Vivek to see fewer pending KPIs than expected. Here is the full breakdown.
+# Two Separate Issues — Both Diagnosed and Ready to Fix
 
 ---
 
-## Understanding the "161" vs Vivek's Count
+## Issue 1: Vivek Sees Low Pending Count in HR PMS
 
-The 161 KPIs the admin sees as "pending" are spread across **multiple review periods**:
+### Root Cause: RLS Policies on `kpis` and `review_submissions` Use `roles: {public}` Instead of `{authenticated}`
 
-| Period | Template | Pending Status | Count |
-|---|---|---|---|
-| January 2026 | `self_l1_hr_pms` (9 employees) | `manager_check` | 58 |
-| January 2026 | Default template (397 employees) | `skip_level_check` | 74 |
-| January 2026 | `self_l1_l2_hr_pms` (8 employees) | `skip_level_check` | 29 |
-| February 2026 | `self_l1_hr_pms` | `manager_check` | 4 |
-| **TOTAL** | | | **~165 ≈ 161** |
+Looking at the database RLS policies:
 
-Vivek opens the dashboard and sees **February 2026** (current month) by default. In February 2026, there are only **4 pending KPIs** for the HR PMS role — not 161.
-
----
-
-## Bug 1: `useKpisByPeriod` Only Covers a Single Month
-
-**Location:** `src/components/review/EmployeeSelectorGrid.tsx` line 147
-
-```typescript
-const { data: periodKpis } = useKpisByPeriod(selectedPeriod, selectedYear);
+```
+HR PMS can view all KPIs  →  roles: {public}
+HR PMS can update KPI status during review  →  roles: {public}
+HR PMS can view all submissions  →  roles: {public}
+HR PMS can update submissions during review  →  roles: {public}
 ```
 
-`selectedPeriod` = `periodSelection.selectedMonth` — this is always a **single month string**, even when the user switches the mode to YTD or QTD. The `periodSelection` object has a `periodRanges` array containing all months in the selected range, but `useKpisByPeriod` ignores this entirely.
+This is the critical problem. **Supabase RLS policies on `{public}` only apply to anonymous (unauthenticated) requests** — not to logged-in users. When Vivek logs in and makes requests, he is authenticated (`{authenticated}` role), and these `{public}` policies **do not apply to him**.
 
-**Impact:** In YTD mode (January + February 2026), the stats still only count KPIs from February 2026. The admin may have been viewing YTD/custom mode showing all periods, while Vivek defaults to single month (February) which has only 4 pending items.
+This means:
+- Vivek has the `hr_pms` user role in `user_roles`
+- The `has_role(auth.uid(), 'hr_pms')` function returns `true` for him
+- BUT the SELECT policy is on `{public}` — Vivek is `{authenticated}`, so this policy is **skipped entirely**
+- He falls through to only the policies that match `{authenticated}` — which includes "Employees can view their own KPIs" (only his own KPI) — showing almost no data
 
-**Fix:** Change `useKpisByPeriod` to accept `periodRanges: Array<{ month: string; year: number }>` and fetch all KPIs across ALL ranges in a single OR-condition query — instead of just a single `review_period` + `review_year` filter. The `EmployeeSelectorGrid` should pass `periodSelection.periodRanges` to this hook.
+### Why Admin Sees 161 but Vivek Sees Very Few
+
+- Admin's RLS policy uses `roles: {authenticated}` — so it applies correctly
+- Vivek's HR PMS policies are on `{public}` — they never fire for a logged-in user
+- Vivek only sees KPIs he owns as an employee (his own record)
+
+### Proof from the Database
+
+Compare:
+```
+Admins and auditors can view all KPIs  →  roles: {authenticated}  ← WORKS
+HR PMS can view all KPIs              →  roles: {public}          ← BROKEN
+Management can view all KPIs          →  roles: {public}          ← ALSO BROKEN
+Skip-level managers can view reports  →  roles: {public}          ← ALSO BROKEN
+```
+
+The `{public}` vs `{authenticated}` mismatch is a systemic RLS bug affecting HR PMS, Management, and Skip-Level roles. It explains why these reviewer roles have consistently lower data visibility than expected.
 
 ---
 
-## Bug 2: `workflowMap` Misses Employees with No KPIs in Selected Period
+## Issue 2: Vivek Can't See the Org KPI Data Entry Option for "Adherence to Manning Norms"
 
-**Location:** `src/components/review/EmployeeSelectorGrid.tsx` lines 150–160
+### Confirmed: Vivek IS a Data Owner
 
+From the database, Vivek (`ca3897d0`) is correctly listed in `org_kpi_data_owners` for "Adherence to Manning Norms." So the assignment is correct.
+
+### Root Cause: `DataOwnerRoute` Works — But the **Page-Level Filter** Excludes Him
+
+The `OrgKpiDataEntry` page at line 91:
 ```typescript
-const allEmployeeIds = useMemo(() => {
-  if (!periodKpis) return [];
-  return [...new Set(periodKpis.map(k => k.employee_id))];
-}, [periodKpis]);
-
-const { data: workflowMap } = useBulkEmployeeWorkflows(allEmployeeIds);
-
-const getStages = (employeeId: string): string[] => {
-  return workflowMap?.get(employeeId) || DEFAULT_WORKFLOW_STAGES;
-};
+const { ownershipMap, isAdmin } = useOrgKpiOwnershipMap();
 ```
 
-`DEFAULT_WORKFLOW_STAGES` is:
+And at line 126–133:
 ```typescript
-['kra_set', 'self_review', 'manager_check', 'audit', 'management_review', 'approved']
+const ownershipFilteredKpis = useMemo(() => {
+  if (!orgLevelKpis) return [];
+  if (isAdmin) return orgLevelKpis;
+  return orgLevelKpis.filter(kpi => {
+    const ownerKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+    return ownershipMap.get(ownerKey)?.canEdit === true;
+  });
+}, [orgLevelKpis, isAdmin, ownershipMap]);
 ```
 
-This does **NOT include `hr_pms_review`**. So any employee shown in the `stageFilteredProfiles` list (who does have `hr_pms_review` in their template) but has **no KPIs in the currently selected period** will fall back to `DEFAULT_WORKFLOW_STAGES` → `resolveReviewableStatuses('hr_pms', DEFAULT_WORKFLOW_STAGES)` returns `[]` → they show **0 pending KPIs** even if they have pending KPIs in other periods.
+The `orgLevelKpis` comes from `useOrgLevelKpisWithEmployees()` → `useOrgLevelKpis()`, which queries **the `kpis` table** directly:
+```typescript
+await supabase.from('kpis').select(...).eq('is_org_level', true)
+```
 
-**Fix:** The `allEmployeeIds` passed to `useBulkEmployeeWorkflows` should be derived from **`stageFilteredProfiles`** (the full list of employees visible in the panel) — not just from employees who happen to have KPIs in the selected period. This ensures every employee shown in the grid has their accurate workflow stages resolved.
+Because of the RLS bug from Issue 1, **Vivek cannot read from the `kpis` table** (the HR PMS policy is on `{public}`, so it doesn't fire for authenticated users). The `orgLevelKpis` array returns **empty** for Vivek — not because he's not a data owner, but because the underlying query returns no rows!
+
+Since `orgLevelKpis` is empty, the ownership filter produces an empty list too, and no KPI cards appear on the page.
+
+### Why Both Issues Have the Same Root Cause
+
+Both problems trace back to the same systemic RLS bug: policies for `hr_pms`, `management`, and `skip_level` roles were created with `roles: {public}` instead of `roles: {authenticated}`. This means:
+1. Vivek can't see KPIs in the HR PMS review panel (Issue 1)
+2. Vivek can't see Org KPI data entry cards — they rely on the same `kpis` table query (Issue 2)
 
 ---
 
-## Bug 3: `useKpisByPeriod` Has a 1000-Row Supabase Limit — But `workflowMap` Doesn't Paginate
+## The Fix: Update RLS Policies from `{public}` to `{authenticated}`
 
-**Location:** `src/hooks/useKpis.ts` — `useKpisByPeriod` does paginate (correctly), but `useBulkEmployeeWorkflows` only runs for the IDs it receives. If `allEmployeeIds` is missing employees (due to Bug 2), the bulk RPC call never resolves stages for those employees.
+The following policies need to be updated in a single SQL migration:
 
-This is downstream of Bug 2 — fixing Bug 2 fixes this automatically.
+### Policies to Fix on `kpis` table
+
+| Policy | Current Role | Correct Role |
+|---|---|---|
+| HR PMS can view all KPIs | `public` | `authenticated` |
+| HR PMS can update KPI status during review | `public` | `authenticated` |
+| Management can view all KPIs | `public` | `authenticated` |
+| Management can update KPI status during review | `public` | `authenticated` |
+| Skip-level managers can view reports KPIs | `public` | `authenticated` |
+| Skip-level managers can update reports KPI status | `public` | `authenticated` |
+| Users can update their own KPIs | `public` | `authenticated` |
+
+### Policies to Fix on `review_submissions` table
+
+| Policy | Current Role | Correct Role |
+|---|---|---|
+| HR PMS can view all submissions | `public` | `authenticated` |
+| HR PMS can update submissions during review | `public` | `authenticated` |
+| Management can view all submissions | `public` | `authenticated` |
+| Management can update submissions during review | `public` | `authenticated` |
+| Skip-level managers can view reports submissions | `public` | `authenticated` |
+| Skip-level managers can update reports submissions | `public` | `authenticated` |
+
+### Migration SQL
+
+```sql
+-- Fix kpis table RLS policies
+ALTER POLICY "HR PMS can view all KPIs" ON public.kpis TO authenticated;
+ALTER POLICY "HR PMS can update KPI status during review" ON public.kpis TO authenticated;
+ALTER POLICY "Management can view all KPIs" ON public.kpis TO authenticated;
+ALTER POLICY "Management can update KPI status during review" ON public.kpis TO authenticated;
+ALTER POLICY "Skip-level managers can view reports KPIs" ON public.kpis TO authenticated;
+ALTER POLICY "Skip-level managers can update reports KPI status" ON public.kpis TO authenticated;
+ALTER POLICY "Users can update their own KPIs" ON public.kpis TO authenticated;
+
+-- Fix review_submissions table RLS policies
+ALTER POLICY "HR PMS can view all submissions" ON public.review_submissions TO authenticated;
+ALTER POLICY "HR PMS can update submissions during review" ON public.review_submissions TO authenticated;
+ALTER POLICY "Management can view all submissions" ON public.review_submissions TO authenticated;
+ALTER POLICY "Management can update submissions during review" ON public.review_submissions TO authenticated;
+ALTER POLICY "Skip-level managers can view reports submissions" ON public.review_submissions TO authenticated;
+ALTER POLICY "Skip-level managers can update reports submissions" ON public.review_submissions TO authenticated;
+```
 
 ---
 
-## Complete Fix Plan
+## What Changes After This Fix
 
-### Fix 1: Make `useKpisByPeriod` support multi-period ranges
-
-**File:** `src/hooks/useKpis.ts`
-
-Add a new hook `useKpisByPeriodRanges(periodRanges)` that accepts `Array<{ month: string; year: number }>` and fetches KPIs with an `OR` across all period/year combinations using batched queries. This is the definitive fix for the single-month limitation.
-
-### Fix 2: Derive `allEmployeeIds` from `stageFilteredProfiles` instead of `periodKpis`
-
-**File:** `src/components/review/EmployeeSelectorGrid.tsx` lines 150–153
-
-```typescript
-// BEFORE (Bug 2):
-const allEmployeeIds = useMemo(() => {
-  if (!periodKpis) return [];
-  return [...new Set(periodKpis.map(k => k.employee_id))];
-}, [periodKpis]);
-
-// AFTER (Fix):
-const allEmployeeIds = useMemo(() => {
-  // Use the full list of visible employees (stageFilteredProfiles or allProfiles/teamMembers)
-  // to ensure workflowMap has stages for ALL employees, not just those with KPIs this period
-  const source = requiredStage ? stageFilteredProfiles : (isFullAccess ? allProfiles : teamMembers);
-  if (!source) return [];
-  return source.map(p => p.id);
-}, [requiredStage, stageFilteredProfiles, allProfiles, teamMembers, isFullAccess]);
-```
-
-### Fix 3: Use `useKpisByPeriodRanges` in `EmployeeSelectorGrid`
-
-**File:** `src/components/review/EmployeeSelectorGrid.tsx`
-
-Replace `useKpisByPeriod(selectedPeriod, selectedYear)` with the new multi-period hook `useKpisByPeriodRanges(periodSelection.periodRanges)`. This ensures the stats and status filters correctly reflect all months when the user is in YTD, QTD, or Custom mode.
+| Before | After |
+|---|---|
+| Vivek sees ~2-4 KPIs (only his own) in HR PMS panel | Vivek sees all 161 pending KPIs correctly |
+| Vivek sees blank page for Org KPI Data Entry | Vivek sees all his assigned KPIs (Adherence to Manning Norms, etc.) |
+| Management users potentially have same issue | Management users see correct data |
+| Skip-level reviewers potentially affected | Skip-level review works correctly |
 
 ---
 
@@ -116,23 +151,7 @@ Replace `useKpisByPeriod(selectedPeriod, selectedYear)` with the new multi-perio
 
 | File | Change |
 |---|---|
-| `src/hooks/useKpis.ts` | Add `useKpisByPeriodRanges(periodRanges)` hook that batches multi-period KPI fetches |
-| `src/components/review/EmployeeSelectorGrid.tsx` | (1) Derive `allEmployeeIds` from the full visible employee list, not periodKpis; (2) Replace `useKpisByPeriod` with `useKpisByPeriodRanges`; pass `periodSelection.periodRanges` |
-| `DOCUMENTATION.md` | Version bump to 1.45.22 |
+| Database migration | Fix 13+ RLS policies from `{public}` to `{authenticated}` on `kpis` and `review_submissions` tables |
+| `DOCUMENTATION.md` | Version bump to 1.45.23, document the RLS policy fix |
 
----
-
-## What Changes for Vivek After the Fix
-
-| Scenario | Before | After |
-|---|---|---|
-| Vivek views Feb 2026 (single month) | 4 pending KPIs | 4 pending KPIs (correct — only 4 exist in Feb) |
-| Vivek switches to YTD (Jan + Feb) | Still shows 4 (bug — only Feb counted) | ~165 pending across both months (correct) |
-| Vivek switches to January 2026 | Some KPIs visible, but some employees show 0 due to workflowMap miss | All employees show correct pending counts |
-| Vivek's employee card badges | Some employees show 0 pending due to missing workflowMap entry | All employees show correct pending badge counts |
-
----
-
-## Important Clarification
-
-The "161" the admin sees is **correct data** — it's just spanning multiple months (primarily January 2026). It is **not a permissions bug** — Vivek has full RLS access to all KPIs. The issue is purely a **UI/data-loading gap**: single-month fetch when multi-month display is active, and workflow stage resolution only for employees who happen to have KPIs in the selected period.
+No frontend code changes are needed — this is purely a database security configuration fix.
