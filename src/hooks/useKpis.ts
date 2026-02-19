@@ -205,6 +205,7 @@ export function useKpisByPeriod(selectedPeriod: string | undefined, selectedYear
           .eq('review_period', selectedPeriod as string)
           .eq('review_year', selectedYear as number)
           .order('created_at', { ascending: false })
+          .order('id', { ascending: true })
           .range(from, from + pageSize - 1);
 
         if (error) throw error;
@@ -491,6 +492,7 @@ export function useAdminUpdateKpi() {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
       queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       toast({ title: 'KPI updated by admin' });
     },

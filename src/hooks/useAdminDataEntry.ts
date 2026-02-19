@@ -247,6 +247,7 @@ export function useAdminSubmitReviewData() {
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       toast({ 
         title: 'Data entered successfully', 
         description: 'Audit log created and employee notified.' 
@@ -378,6 +379,7 @@ export function useAdminSubmitSubPeriod() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sub-period-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       toast({ 
         title: 'Daily data updated', 
         description: 'Audit log created and employee notified.' 
@@ -587,6 +589,7 @@ export function useAdminStatusStepBack() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       toast({
         title: 'Status stepped back',

@@ -214,10 +214,16 @@ export default function AllKpis() {
 
   // Get KPIs for a specific employee
   const getEmployeeKpis = useCallback((employeeId: string): KPI[] => {
-    return filteredKpis?.filter(k => {
-      const emp = k.profiles as { id: string } | null;
-      return emp?.id === employeeId;
-    }) || [];
+    return filteredKpis
+      ?.filter(k => {
+        const emp = k.profiles as { id: string } | null;
+        return emp?.id === employeeId;
+      })
+      .sort((a, b) => {
+        const kraCompare = (a.kra_name || '').localeCompare(b.kra_name || '');
+        if (kraCompare !== 0) return kraCompare;
+        return (a.kpi_name || '').localeCompare(b.kpi_name || '');
+      }) || [];
   }, [filteredKpis]);
 
   // Toggle employee expansion
