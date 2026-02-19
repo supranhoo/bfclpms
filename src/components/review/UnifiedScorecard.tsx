@@ -120,7 +120,9 @@ const VIEW_LEVEL_STATIC: Record<ScorecardViewLevel, {
     title: 'HR PMS Review',
     description: 'HR PMS team review and assessment',
     scoreFieldPrefix: 'hr_pms',
-    previousScoreField: 'skip_level_score',
+    // previousScoreField is resolved dynamically in config useMemo below
+    // because it depends on whether skip_level_check exists in the employee's workflow
+    previousScoreField: 'skip_level_score' as const,
     actionLabel: 'Forward to Audit',
     roleIcon: ClipboardCheck,
   },
@@ -166,13 +168,25 @@ export function UnifiedScorecard({
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   
   // Build dynamic config from workflow stages
-  const config = useMemo(() => ({
-    ...staticConfig,
-    pendingStatus: resolvePendingStatuses(viewLevel, effectiveStages)[0] || 'self_review',
-    reviewableStatuses: resolveReviewableStatuses(viewLevel, effectiveStages),
-    forwardStatus: resolveForwardStatus(viewLevel, effectiveStages),
-    sendBackTargets: resolveSendBackTargets(viewLevel, effectiveStages),
-  }), [viewLevel, effectiveStages, staticConfig]);
+  const config = useMemo(() => {
+    // For hr_pms: the "previous score" field depends on which stage precedes hr_pms_review.
+    // If skip_level_check exists in the workflow, it comes before hr_pms_review → use skip_level_score.
+    // Otherwise (manager_check → hr_pms_review directly) → use manager_score.
+    let resolvedPreviousScoreField = staticConfig.previousScoreField;
+    if (viewLevel === 'hr_pms') {
+      resolvedPreviousScoreField = effectiveStages.includes('skip_level_check')
+        ? 'skip_level_score'
+        : 'manager_score';
+    }
+    return {
+      ...staticConfig,
+      previousScoreField: resolvedPreviousScoreField,
+      pendingStatus: resolvePendingStatuses(viewLevel, effectiveStages)[0] || 'self_review',
+      reviewableStatuses: resolveReviewableStatuses(viewLevel, effectiveStages),
+      forwardStatus: resolveForwardStatus(viewLevel, effectiveStages),
+      sendBackTargets: resolveSendBackTargets(viewLevel, effectiveStages),
+    };
+  }, [viewLevel, effectiveStages, staticConfig]);
   
   // Filter KPIs by period and year
   const kpis = useMemo(() => allKpis?.filter(k => {
