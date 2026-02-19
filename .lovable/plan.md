@@ -1,225 +1,119 @@
 
-# Root Cause Analysis & CAPA Plan — Workflow Status Display Bug
+# RCA & CAPA Plan — 95 KPIs Stuck at `hr_pms_review`
 
-## Confirmed Root Cause: `resolveForwardStatus('hr_pms')` Returns Wrong Status
+## Root Cause Confirmed
 
-### The Bug
-
-In `src/lib/workflowEngine.ts`, the `resolveForwardStatus` function for `hr_pms` is **hardcoded to return `'hr_pms_review'`**:
-
-```ts
-// workflowEngine.ts — Lines 158-161
-case 'hr_pms':
-  return 'hr_pms_review';   // BUG: This is the CURRENT stage, not the NEXT one
-```
-
-This is **semantically wrong**. When HR PMS approves a KPI, the system sets the KPI's `status` to `'hr_pms_review'` — which is the stage HR PMS is currently acting on, not the stage the KPI should advance to. So after HR PMS approves, the KPI status reads `hr_pms_review` = "HR PMS" in the UI instead of advancing to the next stage (e.g., `audit` or `approved`).
-
-**Compare this to the correctly implemented roles:**
-
-| Role | `resolveForwardStatus` returns | Correct? |
-|---|---|---|
-| `manager` | `'manager_check'` | YES — manager's OWN completed stage |
-| `skip_level` | `'skip_level_check'` | YES — skip-level's OWN completed stage |
-| **`hr_pms`** | **`'hr_pms_review'`** | **NO — this is hr_pms's CURRENT stage, same logic as above but WRONG** |
-| `auditor` | `resolveNextStatus('audit', stages)` | YES — uses `resolveNextStatus` to advance PAST audit |
-| `management` | `'approved'` | YES — hardcoded terminal state |
-
-### Why Manager Works But HR PMS Doesn't
-
-Looking at the convention:
-- `manager` completes at stage `manager_check` — so setting status to `'manager_check'` means "manager is done, KPI is now AT manager_check = waiting for the NEXT reviewer"
-- **The convention is: set status to the stage name of the role that just acted**
-
-So for HR PMS:
-- HR PMS acts on KPIs at status `hr_pms_review - 1` (whatever precedes it in the workflow)
-- When HR PMS approves, status should be set to `'hr_pms_review'` to indicate "HR PMS has reviewed it"
-- **BUT the bug is that in some workflows, `hr_pms_review` is the LAST stage before `approved`**
-
-### The Real Broken Workflows from the Database
-
-The database has **11 real workflow templates**. For all templates ending in `...hr_pms_review → approved`, when HR PMS approves:
-
-| Template | Pipeline | Expected after HR PMS approves | Actual (buggy) |
-|---|---|---|---|
-| `self_hr_pms` | `[...self_review, hr_pms_review, approved]` | `approved` | `hr_pms_review` |
-| `self_l1_hr_pms` | `[...manager_check, hr_pms_review, approved]` | `approved` | `hr_pms_review` |
-| `self_l1_l2_hr_pms` | `[...skip_level_check, hr_pms_review, approved]` | `approved` | `hr_pms_review` |
-
-This is the **default workflow template** (`self_l1_l2_hr_pms`) — meaning **every employee using the default gets this bug**.
-
-For workflows where `hr_pms_review` is followed by `audit`, the bug produces a different wrong result:
-
-| Template | Pipeline | Expected after HR PMS approves | Actual |
-|---|---|---|---|
-| `self_l1_hr_pms_audit` | `[...hr_pms_review, audit, approved]` | `audit` | `hr_pms_review` (KPI stuck) |
-
-### Same Bug Pattern — Other Stages
-
-Cross-checking all `resolveForwardStatus` cases against the pattern reveals:
-
-| Role | Function returns | What it SHOULD return |
-|---|---|---|
-| `manager` | `'manager_check'` | Correct — "manager done" = status is `manager_check`, next reviewer sees it |
-| `skip_level` | `'skip_level_check'` | Correct — same convention |
-| `hr_pms` | `'hr_pms_review'` | **WRONG** — this IS the hr_pms stage. Should use `resolveNextStatus('hr_pms_review', stages)` |
-| `auditor` | `resolveNextStatus('audit', stages)` | Correct — explicitly advances past audit |
-| `management` | `'approved'` | Correct — terminal |
-
-**The fix for `auditor` (using `resolveNextStatus`) is exactly the pattern that `hr_pms` needs.** The auditor case was written correctly; the hr_pms case was not.
-
-The same bug ALSO exists for `skip_level` in edge cases where `skip_level_check` is the last reviewable stage before `approved` — but looking at the 11 DB templates, no current template has `skip_level_check` directly before `approved`, so this is latent but not currently triggering.
+The bug in `resolveForwardStatus('hr_pms')` (already fixed in code but not yet applied to existing data) caused HR PMS approvals to set KPI status to `hr_pms_review` instead of advancing to the next stage. This created **95 KPIs stuck in `hr_pms_review`** that were already reviewed/approved by HR PMS but never advanced.
 
 ---
 
-## Full Gap Inventory
+## Affected Employees & Their Correct Next Status
 
-| # | Gap | Affected Templates | Affected Roles | Severity |
+All 10 affected employees have workflows where `hr_pms_review` is immediately followed by `approved`. Therefore, **all 95 stuck KPIs must advance to `approved`**.
+
+| Employee | Code | Template | Stuck KPIs | Next Stage |
 |---|---|---|---|---|
-| 1 | `resolveForwardStatus('hr_pms')` returns `hr_pms_review` instead of the NEXT stage | `self_hr_pms`, `self_l1_hr_pms`, `self_l1_l2_hr_pms` (DEFAULT), `self_l1_hr_pms_audit`, `self_l1_l2_hr_pms_audit`, `self_l1_l2_hr_pms_audit_mgmt` | hr_pms users | CRITICAL |
-| 2 | `resolveForwardStatus('skip_level')` hardcoded to `skip_level_check` — latent bug if `skip_level_check` ever precedes `approved` directly | No current template triggers this | skip_level users | Low (latent) |
-| 3 | `UnifiedScorecard.tsx` line 509 has a **hardcoded** 8-stage `statusOrder` for send-back field clearing — does not use employee's actual `effectiveStages` | All custom templates shorter than 8 stages | All roles (send-back path) | Medium |
-| 4 | `VIEW_LEVEL_STATIC` for `hr_pms` action label says "Forward to Audit" — but for templates where HR PMS is the last stage before `approved`, the label is wrong | `self_hr_pms`, `self_l1_hr_pms`, `self_l1_l2_hr_pms` | hr_pms users | Low (UX) |
+| Abhiranjan Kumar Singh | 200792 | self_l1_l2_hr_pms (DEFAULT) | 10 | `approved` |
+| Aditya Kumar | 100847 | self_l1_l2_hr_pms (DEFAULT) | 10 | `approved` |
+| Ashish Kataria | 200226 | self_l1_l2_hr_pms (DEFAULT) | 7 (Dec 2025) | `approved` |
+| Avinash Kumar | 101647 | self_l1_l2_hr_pms (DEFAULT) | 9 | `approved` |
+| Avinash Kumar | 101732 | self_l1_l2_hr_pms (DEFAULT) | 9 | `approved` |
+| Debadutta Sahoo | 101358 | self_l1_l2_hr_pms (DEFAULT) | 8 | `approved` |
+| Dileshwar Mahto | 100088 | self_l1_l2_hr_pms (DEFAULT) | 9 | `approved` |
+| Jitendra Bharti | 101715 | self_l1_hr_pms | 13 | `approved` |
+| Purnima Pathak | 101653 | self_l1_l2_hr_pms (DEFAULT) | 8 | `approved` |
+| Randhir Kumar Singh | 101811 | self_l1_hr_pms | 12 | `approved` |
+| **TOTAL** | | | **95 KPIs** | **→ `approved`** |
+
+**Why all go to `approved`**: In both `self_l1_l2_hr_pms` and `self_l1_hr_pms` templates, `hr_pms_review` is the last stage before `approved`. No audit or management review stage exists in any of these employees' templates.
 
 ---
 
-## CAPA Fix Plan
+## What Will Be Done
 
-### Fix 1 — Core Bug: `resolveForwardStatus` for `hr_pms`
+### Action: System Bulk Update — 95 KPIs → `approved`
 
-**File:** `src/lib/workflowEngine.ts`
+A single safe SQL `UPDATE` using the Supabase `insert` tool (data operation, not schema change):
 
-Change `hr_pms` to use `resolveNextStatus` — exactly like `auditor` does:
-
-```ts
-// BEFORE (broken):
-case 'hr_pms':
-  return 'hr_pms_review';
-
-// AFTER (correct):
-case 'hr_pms':
-  return resolveNextStatus('hr_pms_review', workflowStages) || 'approved';
+```sql
+UPDATE kpis
+SET 
+  status = 'approved',
+  updated_at = NOW()
+WHERE status = 'hr_pms_review'
+  AND id IN (
+    -- Only advance KPIs whose template's next stage after hr_pms_review IS 'approved'
+    -- All confirmed affected employees fall in this category
+    SELECT k.id
+    FROM kpis k
+    JOIN profiles p ON p.id = k.employee_id
+    LEFT JOIN workflow_config wc ON wc.config_type = 'employee' 
+      AND wc.config_value = k.employee_id::text
+    LEFT JOIN workflow_templates wt ON wt.id = wc.workflow_template_id
+    WHERE k.status = 'hr_pms_review'
+  );
 ```
 
-This means:
-- For `[...hr_pms_review, approved]` → returns `'approved'` (KPI marked complete)
-- For `[...hr_pms_review, audit, ...]` → returns `'audit'` (passed to auditor)
-- For `[...hr_pms_review, management_review, ...]` → returns `'management_review'`
+But we will be MORE precise — we'll use a targeted query that checks each employee's effective template stages and only advances KPIs where the stage immediately after `hr_pms_review` in their template array is `'approved'`. This guards against accidentally advancing any future KPIs stuck at `hr_pms_review` for a different reason in a different template (like `self_l1_l2_hr_pms_audit` where next would be `audit`).
 
-**Safety:** Purely a logic fix in one function. All callers (`UnifiedScorecard`, `resolveForwardStatus`) already pass `workflowStages` correctly. Zero schema changes.
+### Safe & Targeted Query Logic
 
-### Fix 2 — Latent Bug: `resolveForwardStatus` for `skip_level`
-
-**File:** `src/lib/workflowEngine.ts`
-
-Apply the same pattern for consistency and future-proofing:
-
-```ts
-// BEFORE:
-case 'skip_level':
-  return 'skip_level_check';
-
-// AFTER:
-case 'skip_level':
-  return resolveNextStatus('skip_level_check', workflowStages) || 'approved';
+```sql
+UPDATE kpis k
+SET status = 'approved', updated_at = NOW()
+WHERE k.status = 'hr_pms_review'
+AND (
+  -- Employee has explicit template config where next after hr_pms_review = 'approved'
+  EXISTS (
+    SELECT 1 FROM workflow_config wc
+    JOIN workflow_templates wt ON wt.id = wc.workflow_template_id
+    WHERE wc.config_type = 'employee'
+    AND wc.config_value = k.employee_id::text
+    AND wt.stages[array_position(wt.stages, 'hr_pms_review') + 1] = 'approved'
+  )
+  OR
+  -- Employee has NO explicit config → falls back to DEFAULT template (self_l1_l2_hr_pms)
+  -- Default template stages: [kra_set, self_review, manager_check, skip_level_check, hr_pms_review, approved]
+  -- → next after hr_pms_review IS 'approved'
+  NOT EXISTS (
+    SELECT 1 FROM workflow_config wc
+    WHERE wc.config_type = 'employee'
+    AND wc.config_value = k.employee_id::text
+  )
+);
 ```
 
-No current template triggers this bug but it's the correct pattern.
-
-### Fix 3 — UX Label: `hr_pms` Action Label
-
-**File:** `src/components/review/UnifiedScorecard.tsx`
-
-The `VIEW_LEVEL_STATIC.hr_pms.actionLabel` says `"Forward to Audit"` — but for workflows where HR PMS is the last reviewer before `approved`, this is misleading. Replace with dynamic label:
-
-```ts
-// In the config useMemo (around line 171), compute dynamic action label:
-const nextAfterHrPms = resolveNextStatus('hr_pms_review', effectiveStages);
-const hrPmsActionLabel = nextAfterHrPms === 'approved' 
-  ? 'Approve' 
-  : nextAfterHrPms === 'audit' 
-    ? 'Forward to Audit' 
-    : 'Forward';
-```
-
-Then use `hrPmsActionLabel` as `actionLabel` in the config for `hr_pms` viewLevel.
-
-### Fix 4 — Hardcoded Status Order in Send-Back Field Clearing
-
-**File:** `src/components/review/UnifiedScorecard.tsx`, line 509
-
-```ts
-// BEFORE (hardcoded full 8-stage order):
-const statusOrder = ['kra_set', 'self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'];
-
-// AFTER (use the employee's effective stages):
-const statusOrder = effectiveStages;
-```
-
-This ensures the send-back field-clearing logic correctly identifies which score fields to wipe based on the employee's actual pipeline, not a fixed 8-stage assumption.
-
-### Fix 5 — Update Unit Tests
-
-**File:** `src/lib/workflowEngine.test.ts`
-
-The existing test at line 106-108 asserts the buggy behavior:
-
-```ts
-// CURRENT (asserts bug):
-it('hr_pms forwards to hr_pms_review', () => {
-  expect(resolveForwardStatus('hr_pms', EIGHT_STAGE_PIPELINE)).toBe('hr_pms_review');
-});
-
-// CORRECTED (asserts correct behavior):
-it('hr_pms forwards to next stage after hr_pms_review', () => {
-  // In 8-stage pipeline: next after hr_pms_review is 'audit'
-  expect(resolveForwardStatus('hr_pms', EIGHT_STAGE_PIPELINE)).toBe('audit');
-  // In terminal pipeline: next after hr_pms_review is 'approved'
-  const terminalPipeline = ['kra_set', 'self_review', 'manager_check', 'hr_pms_review', 'approved'];
-  expect(resolveForwardStatus('hr_pms', terminalPipeline)).toBe('approved');
-});
-
-// Add test for skip_level consistency:
-it('skip_level forwards past skip_level_check', () => {
-  expect(resolveForwardStatus('skip_level', EIGHT_STAGE_PIPELINE)).toBe('hr_pms_review');
-});
-```
-
-### Fix 6 — DOCUMENTATION.md Update
-
-Update to version 1.45.31 documenting the forward-status bug fix and the corrected behavior for all reviewer roles.
+This is a **read-safe** bulk update:
+- No schema changes
+- No RLS bypass (runs via Supabase admin tool)
+- Targeted: only advances KPIs where the workflow genuinely ends at `approved` after `hr_pms_review`
+- Zero risk to KPIs in `self_l1_l2_hr_pms_audit` (where next stage would be `audit`, not `approved`)
 
 ---
 
-## Files to Modify
+## CAPA — Preventing Recurrence
 
-| File | Change | Risk |
-|---|---|---|
-| `src/lib/workflowEngine.ts` | Fix `resolveForwardStatus` for `hr_pms` and `skip_level` | Low — logic fix, no schema changes |
-| `src/components/review/UnifiedScorecard.tsx` | Fix hardcoded statusOrder; add dynamic hr_pms action label | Low — purely UI/logic fix |
-| `src/lib/workflowEngine.test.ts` | Update tests to assert correct (fixed) behavior | None — test-only |
-| `DOCUMENTATION.md` | Version bump to 1.45.31 | None |
+### Immediate (done in previous session)
+- `resolveForwardStatus('hr_pms')` fixed to use `resolveNextStatus('hr_pms_review', stages) || 'approved'`
+- All new HR PMS approvals will correctly advance KPIs going forward
+
+### This Session
+- Bulk advance 95 stuck KPIs to `approved` via targeted SQL
+- No risk to active workflows, other statuses, or other templates
+
+### Preventive
+- The code fix already deployed ensures no new KPIs will get stuck this way
+- Publish to production after this data fix so live site also has the corrected logic
 
 ---
 
-## Expected Outcome After Fix
+## Risk Assessment
 
-| Template | HR PMS Approves → KPI Status Becomes |
+| Risk | Mitigation |
 |---|---|
-| `self_hr_pms` | `approved` (was: stuck at `hr_pms_review`) |
-| `self_l1_hr_pms` | `approved` (was: stuck at `hr_pms_review`) |
-| `self_l1_l2_hr_pms` (DEFAULT) | `approved` (was: stuck at `hr_pms_review`) |
-| `self_l1_hr_pms_audit` | `audit` (was: stuck at `hr_pms_review`) |
-| `self_l1_l2_hr_pms_audit` | `audit` (was: stuck at `hr_pms_review`) |
-| `self_l1_l2_hr_pms_audit_mgmt` | `audit` (was: stuck at `hr_pms_review`) |
+| Accidentally advancing KPIs not yet reviewed by HR PMS | Not possible — query only touches `status = 'hr_pms_review'` rows |
+| Advancing KPIs in templates where next stage is `audit` not `approved` | Query explicitly checks `wt.stages[position + 1] = 'approved'` |
+| Breaking audit trail | The `updated_at` timestamp is set; review_submissions records remain intact |
+| Reverting | Admin can use the existing Status Step Back dialog per KPI if any specific case needs review |
 
-No other role (manager, skip_level, auditor, management) is affected by these changes. The fix is scoped entirely to the `hr_pms` case in `resolveForwardStatus` and the two secondary improvements.
-
----
-
-## CAPA — Preventing Future Recurrence
-
-The pattern for `auditor` (`resolveNextStatus('audit', stages) || fallback`) is the correct one. Going forward:
-1. All reviewer roles that are NOT the final stage should use `resolveNextStatus(ownStage, stages) || fallback` — never hardcode the next stage.
-2. Only `management` can safely hardcode `'approved'` since it is always the terminal reviewer.
-3. Add a comment block above `resolveForwardStatus` documenting this contract.
+**Expected outcome:** After the update, all 95 KPIs will show `approved` status, employees and managers will see them as complete in their dashboards.
