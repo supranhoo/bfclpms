@@ -492,36 +492,36 @@ export function AdminDataEntryDialog({
                     </Label>
                   </div>
                 ))}
-            </RadioGroup>
+              </RadioGroup>
+            </div>
 
-              {/* Quick Fill: No Data (Zero Score) */}
-              <div className="mt-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full border-dashed text-muted-foreground hover:text-foreground gap-2"
-                  onClick={() => {
-                    setAchievedValue('0');
-                    setRating('0');
-                    setScore('0.00');
-                    setCalculatedScore(0);
-                    setCalculatedRatingLevel('red');
-                    setIsAutoCalculated(false);
-                    setIsNa(false);
-                    if (!reason.trim()) {
-                      setReason('No data submitted — scored as zero by admin');
-                    }
-                  }}
-                  disabled={isNa}
-                >
-                  <Zap className="h-3.5 w-3.5" />
-                  Quick Fill: No Data (Score = 0)
-                </Button>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Pre-fills all fields with zero score. Use when employee has not submitted any data. Does not mark as N/A.
-                </p>
-              </div>
+            {/* Quick Fill: No Data (Zero Score) — standalone section, always visible */}
+            <div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full border-dashed text-muted-foreground hover:text-foreground gap-2"
+                onClick={() => {
+                  setAchievedValue('0');
+                  setRating('0');
+                  setScore('0.00');
+                  setCalculatedScore(0);
+                  setCalculatedRatingLevel('red');
+                  setIsAutoCalculated(false);
+                  setIsNa(false);
+                  if (!reason.trim()) {
+                    setReason('No data submitted — scored as zero by admin');
+                  }
+                }}
+                disabled={isNa}
+              >
+                <Zap className="h-3.5 w-3.5" />
+                Quick Fill: No Data (Score = 0)
+              </Button>
+              <p className="text-xs text-muted-foreground mt-1">
+                Pre-fills all fields with zero score. Use when employee has not submitted any data. Does not mark as N/A.
+              </p>
             </div>
 
             {/* Current Value Indicator */}
