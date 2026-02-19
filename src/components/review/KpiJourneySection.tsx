@@ -6,7 +6,7 @@ import { KPI, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
 import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck } from 'lucide-react';
 import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 
-type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms';
+type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
 type JourneyStage = 'self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
 
 interface KpiJourneySectionProps {

@@ -34,7 +34,7 @@ import {
 interface KpiObservationsSectionProps {
   kpiId: string;
   kpiStatus: string;
-  viewLevel: 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms';
+  viewLevel: 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
   baseScore?: number | null;
   isOwnKpi?: boolean;
 }
@@ -47,13 +47,14 @@ function getObserverRole(viewLevel: string, isOwnKpi: boolean): ObserverRole {
     case 'hr_pms': return 'manager';
     case 'auditor': return 'auditor';
     case 'management': return 'management';
+    case 'admin': return 'admin';
     default: return 'self';
   }
 }
 
 function canAddObservation(viewLevel: string, _kpiStatus: string, isOwnKpi: boolean): boolean {
   if (isOwnKpi) return true;
-  return ['manager', 'skip_level', 'hr_pms', 'auditor', 'management'].includes(viewLevel);
+  return ['manager', 'skip_level', 'hr_pms', 'auditor', 'management', 'admin'].includes(viewLevel);
 }
 
 function isAutoApply(viewLevel: string): boolean {
