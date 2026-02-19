@@ -1,80 +1,121 @@
 
-# Fix: Admin KPI Dashboard — Real-Time Updates & KPI Sort Order Stability
+# Fix: Observations — Admin Access & All Manager-Level Roles
 
-## Two Issues Identified
+## Root Cause Analysis
 
----
-
-## Issue 1: Dashboard Not Updating in Real-Time
-
-### Root Cause
-The `useAdminSubmitReviewData` mutation in `src/hooks/useAdminDataEntry.ts` (line 246) only invalidates these query keys on success:
-- `['review-submission-admin']`
-- `['review-submissions']`
-- `['kpis']`
-- `['all-kpis']`
-
-It is **missing** invalidation for `['kpis-by-period']`, which is the **primary query key used by the Admin KPI Dashboard** (`AllKpis.tsx` line 81–84). When the page has a specific month/year selected (the default behavior), it uses `useKpisByPeriod` → query key `['kpis-by-period', selectedPeriod, selectedYear]`. Without invalidating this key, the cache stays stale after any admin action and the dashboard only refreshes on the next page visit or manual refresh.
-
-The same gap exists in `useAdminStatusStepBack` (lines 433+) — its `onSuccess` also does not invalidate `['kpis-by-period']`.
-
-### Fix
-In `src/hooks/useAdminDataEntry.ts`:
-
-1. In `useAdminSubmitReviewData` → `onSuccess`: add `queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] })`
-2. In `useAdminSubmitSubPeriod` → `onSuccess`: add `queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] })`
-3. In `useAdminStatusStepBack` → `onSuccess`: add `queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] })`
-
-Also, the `useAdminUpdateKpi` mutation in `src/hooks/useKpis.ts` (line 490) is also missing `['kpis-by-period']` invalidation. Fix this too.
-
----
-
-## Issue 2: "Individual KPIs" Sequence Changes on Every Refresh
-
-### Root Cause
-When an employee row is expanded in the table, the KPIs for that employee are retrieved by `getEmployeeKpis()` (line 216), which filters `filteredKpis`. The `filteredKpis` list is derived from `kpis`, which is fetched with:
-
-```
-.order('created_at', { ascending: false })
-```
-
-This returns KPIs ordered by creation timestamp descending. The problem is that **when an admin mutation runs** (e.g., data entry, status change), the `updated_at` field is written, and after cache invalidation + refetch, if there is any ambiguity in the server sort (two KPIs with the same `created_at`, or the server returns them in a slightly different order due to row-level locking state), the order can fluctuate.
-
-More critically: the `employeeKpis` list rendered in the expanded panel has **no secondary sort applied** — it simply follows whatever order they appear in `filteredKpis`, which changes based on the server's response order.
-
-### Fix
-In `src/pages/admin/AllKpis.tsx`, stabilize the `getEmployeeKpis` function (line 216) by adding a **deterministic secondary sort** to the returned employee KPIs — sort by `kra_name` ascending, then by `kpi_name` ascending. This is alphabetical and stable across refetches:
+### Issue 1: Jaspal (Admin) Cannot Add Observation
+Jaspal's role is `admin`. The `canAddObservation` function in `KpiObservationsSection.tsx` checks:
 
 ```ts
-const getEmployeeKpis = useCallback((employeeId: string): KPI[] => {
-  return filteredKpis
-    ?.filter(k => {
-      const emp = k.profiles as { id: string } | null;
-      return emp?.id === employeeId;
-    })
-    .sort((a, b) => {
-      const kraCompare = (a.kra_name || '').localeCompare(b.kra_name || '');
-      if (kraCompare !== 0) return kraCompare;
-      return (a.kpi_name || '').localeCompare(b.kpi_name || '');
-    }) || [];
-}, [filteredKpis]);
+function canAddObservation(viewLevel: string, _kpiStatus: string, isOwnKpi: boolean): boolean {
+  if (isOwnKpi) return true;
+  return ['manager', 'skip_level', 'hr_pms', 'auditor', 'management'].includes(viewLevel);
+}
 ```
 
-Additionally, add a secondary sort key to the `useKpisByPeriod` query in `src/hooks/useKpis.ts` (line 187):
-- Change `.order('created_at', { ascending: false })` to include a secondary `.order('id', { ascending: true })` to make the Supabase response deterministic even when `created_at` values collide.
+`'admin'` is **not in this list**. So for Jaspal reviewing Avinash's KPI, `isOwnKpi` is `false` (it's not his KPI), and `viewLevel` for an admin is not `'admin'` in the union type — the component's `viewLevel` prop is typed as `'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms'`. The admin reviewing via the All KPIs page does not even render a `KpiObservationsSection` — there's no observations panel in the Admin Data Entry Dialog.
 
----
+Additionally, if admins access observations through the normal scorecard, `admin` is not part of the `getObserverRole` switch — it falls to `default: return 'self'`, making admin appear as a self-reviewer on someone else's KPI.
+
+### Issue 2: RLS INSERT Policy Missing `hr_pms` Role
+The current INSERT policy for `kpi_observations` is:
+```sql
+(created_by = auth.uid()) AND (
+  EXISTS (SELECT 1 FROM kpis WHERE kpis.id = kpi_observations.kpi_id AND kpis.employee_id = auth.uid())
+  OR has_role(auth.uid(), 'manager')
+  OR has_role(auth.uid(), 'auditor')
+  OR has_role(auth.uid(), 'management')
+  OR has_role(auth.uid(), 'admin')
+)
+```
+`hr_pms` role is **missing** from this list. An HR PMS user cannot insert observations at the database level even though the UI shows them the button.
+
+### Issue 3: `getObserverRole` Falls Back to `'self'` for Admin
+In `getObserverRole`, any `viewLevel` not explicitly listed defaults to `'self'`. This means even if an admin sees the Add button, the inserted record marks their role as `'self'` instead of `'admin'`.
+
+## Fixes Required
+
+### Fix 1: Update RLS INSERT Policy — Add `hr_pms` role
+Update the INSERT policy on `kpi_observations` to include `hr_pms`:
+
+```sql
+DROP POLICY "Users can create observations" ON public.kpi_observations;
+
+CREATE POLICY "Users can create observations"
+ON public.kpi_observations FOR INSERT TO authenticated
+WITH CHECK (
+  created_by = auth.uid() AND (
+    EXISTS (SELECT 1 FROM kpis WHERE kpis.id = kpi_observations.kpi_id AND kpis.employee_id = auth.uid())
+    OR has_role(auth.uid(), 'manager')
+    OR has_role(auth.uid(), 'auditor')
+    OR has_role(auth.uid(), 'management')
+    OR has_role(auth.uid(), 'admin')
+    OR has_role(auth.uid(), 'hr_pms')
+    OR has_role(auth.uid(), 'skip_level')
+  )
+);
+```
+
+### Fix 2: Update `canAddObservation` — Always Allow for All Non-Employee Reviewer Levels
+The function should allow observations for ALL reviewer levels. Since the `viewLevel` prop covers all review roles and admins access the scorecard through Dashboard, the fix is to make `canAddObservation` return `true` for any `viewLevel` that is not `'employee'` viewing someone else's KPI:
+
+```ts
+function canAddObservation(viewLevel: string, _kpiStatus: string, isOwnKpi: boolean): boolean {
+  // Employees can always add to their own KPIs
+  if (isOwnKpi) return true;
+  // All reviewer roles can add observations
+  return ['manager', 'skip_level', 'hr_pms', 'auditor', 'management'].includes(viewLevel);
+}
+```
+
+This is already correct for the listed roles — but we need to also ensure `admin` access works when the viewLevel is mapped correctly.
+
+### Fix 3: Update `getObserverRole` — Handle Admin View Level
+Extend the switch to handle admin correctly. Since `viewLevel` union type doesn't include `'admin'`, we need to either:
+- Extend the `viewLevel` type to include `'admin'`
+- Or add a fallback that recognizes when the reviewer is an admin
+
+The cleanest fix: extend the union type in `KpiObservationsSection` to accept `'admin'` as a valid `viewLevel`, add it to `getObserverRole`, and add it to `canAddObservation`:
+
+```ts
+// In KpiObservationsSection props
+viewLevel: 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
+
+function getObserverRole(viewLevel: string, isOwnKpi: boolean): ObserverRole {
+  if (isOwnKpi && viewLevel === 'employee') return 'self';
+  switch (viewLevel) {
+    case 'manager': return 'manager';
+    case 'skip_level': return 'manager';
+    case 'hr_pms': return 'manager';
+    case 'auditor': return 'auditor';
+    case 'management': return 'management';
+    case 'admin': return 'admin';
+    default: return 'self';
+  }
+}
+
+function canAddObservation(viewLevel: string, isOwnKpi: boolean): boolean {
+  if (isOwnKpi) return true;
+  return ['manager', 'skip_level', 'hr_pms', 'auditor', 'management', 'admin'].includes(viewLevel);
+}
+```
+
+### Fix 4: Ensure `KpiReviewPanel` Propagates Admin View Level
+`KpiReviewPanel` accepts `viewLevel: ViewLevel` where `ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms'`. This type needs `'admin'` added so it can be passed through correctly when an admin uses the scorecard view.
 
 ## Files to Modify
 
 | File | Change |
 |---|---|
-| `src/hooks/useAdminDataEntry.ts` | Add `['kpis-by-period']` invalidation in 3 mutation `onSuccess` handlers |
-| `src/hooks/useKpis.ts` | Add `['kpis-by-period']` invalidation in `useAdminUpdateKpi` onSuccess; add secondary `.order('id')` to `useKpisByPeriod` query |
-| `src/pages/admin/AllKpis.tsx` | Add stable sort (by `kra_name`, then `kpi_name`) inside `getEmployeeKpis` callback |
-| `DOCUMENTATION.md` | Version bump to 1.45.27 |
+| **Database Migration** | Drop and recreate `kpi_observations` INSERT policy to add `hr_pms` and `skip_level` roles |
+| `src/components/review/KpiObservationsSection.tsx` | Add `'admin'` to viewLevel union type; update `getObserverRole` and `canAddObservation` to handle admin |
+| `src/components/review/KpiReviewPanel.tsx` | Add `'admin'` to `ViewLevel` type |
+| `DOCUMENTATION.md` | Version bump to 1.45.28 |
 
 ## Expected Outcome
 
-- After any admin data entry, status step-back, or KPI update — the dashboard stats cards, stage counts, and employee rows all update immediately without requiring a manual refresh.
-- The "Individual KPIs" list within any expanded employee row will always appear in the same alphabetical order (by KRA name, then KPI name), regardless of how many times the page refreshes or mutations fire.
+- Jaspal (admin) can add observations on Avinash's KPI — the button is visible and the insert succeeds at the database level
+- HR PMS users can successfully insert observations (database RLS fixed)
+- All reviewer-level roles (manager, skip_level, hr_pms, auditor, management, admin) can add observations
+- Observer role is correctly recorded as `'admin'` for admin users instead of `'self'`
+- No change to existing employee (self) observation behavior
