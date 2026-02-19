@@ -275,42 +275,48 @@ export function useProfilesByWorkflowStage(stage: string | null) {
     queryFn: async () => {
       if (!stage) return null;
 
-      // 1. Fetch all employee-level overrides with their template stages
-      const { data: overrideConfigs } = await supabase
-        .from('workflow_config')
-        .select('config_value, workflow_templates!inner(stages)')
-        .eq('config_type', 'employee');
-
-      // 2. Get the system default template stages
-      const { data: defaultTemplate } = await supabase
-        .from('workflow_templates')
-        .select('stages')
-        .eq('is_default', true)
-        .maybeSingle();
-
-      const defaultStages: string[] = (defaultTemplate?.stages as string[]) || [];
-      const defaultHasStage = defaultStages.includes(stage);
-
-      // 3. Build employee-id → hasStage map from overrides
-      const overrideMap = new Map<string, boolean>();
-      overrideConfigs?.forEach(cfg => {
-        const stages = (cfg.workflow_templates as any)?.stages as string[] || [];
-        overrideMap.set(cfg.config_value, stages.includes(stage));
-      });
-
-      // 4. Fetch all profiles
+      // 1. Fetch all profiles
       const { data: profiles, error } = await supabase
         .from('profiles')
         .select('*, departments(id, name, code)')
         .order('full_name');
 
       if (error) throw error;
+      if (!profiles || profiles.length === 0) return [];
 
-      // 5. Filter: use override if present, otherwise fall back to system default
-      return profiles?.filter(p => {
-        if (overrideMap.has(p.id)) return overrideMap.get(p.id);
-        return defaultHasStage;
-      }) || [];
+      // 2. Use get_bulk_employee_workflows RPC which handles the FULL cascade:
+      //    employee-level override → department-level → pms_grade-level → default template
+      //    This is the authoritative resolution, identical to what useEmployeeWorkflowStages uses.
+      const profileIds = profiles.map(p => p.id);
+      const { data: bulkData, error: bulkError } = await (supabase as any)
+        .rpc('get_bulk_employee_workflows', { employee_ids: profileIds });
+
+      if (bulkError) {
+        console.error('useProfilesByWorkflowStage: bulk workflow fetch failed, falling back to default', bulkError);
+        // Graceful fallback: only include employees whose default stages contain the stage
+        const { data: defaultTemplate } = await supabase
+          .from('workflow_templates')
+          .select('stages')
+          .eq('is_default', true)
+          .maybeSingle();
+        const defaultStages: string[] = (defaultTemplate?.stages as string[]) || [];
+        return defaultStages.includes(stage) ? profiles : [];
+      }
+
+      // 3. Build employee_id → stages map from RPC result
+      const stagesMap = new Map<string, string[]>();
+      if (bulkData) {
+        for (const row of bulkData as { employee_id: string; stages: string[] }[]) {
+          stagesMap.set(row.employee_id, row.stages);
+        }
+      }
+
+      // 4. Filter: include only employees whose EFFECTIVE workflow contains the required stage
+      const DEFAULT_STAGES = ['kra_set', 'self_review', 'manager_check', 'audit', 'management_review', 'approved'];
+      return profiles.filter(p => {
+        const empStages = stagesMap.get(p.id) || DEFAULT_STAGES;
+        return empStages.includes(stage);
+      });
     },
     enabled: !!stage,
   });
