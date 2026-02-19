@@ -51,10 +51,11 @@ import {
 } from 'lucide-react';
 import { CollapsibleSidebarGroup } from './CollapsibleSidebarGroup';
 
+// NOTE: Keep role arrays in sync with ALL_APP_ROLES in src/lib/roles.ts
 const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
   main: [
-    { title: 'My Dashboard', icon: Home, path: '/dashboard', roles: ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'] },
-    { title: 'Inbox', icon: MessageSquare, path: '/queries', roles: ['employee', 'manager', 'admin', 'auditor', 'management'], showBadge: true },
+    { title: 'My Dashboard', icon: Home, path: '/dashboard', roles: ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms', 'skip_level'] },
+    { title: 'Inbox', icon: MessageSquare, path: '/queries', roles: ['employee', 'manager', 'admin', 'auditor', 'management', 'hr_pms', 'skip_level'], showBadge: true },
     { title: 'PMS Policy', icon: FileText, path: '/pms-policy', roles: [...new Set(['admin', ...policyVisibleRoles])] },
   ],
   manager: [
@@ -225,11 +226,13 @@ export function AppSidebar() {
           inboxBadgeCount={inboxBadgeCount}
         />
 
-        {/* Manager Section */}
-        {(effectiveRole === 'manager' || effectiveRole === 'management' || effectiveRole === 'admin') && (
+        {/* Manager Section — also shown for skip_level managers */}
+        {(effectiveRole === 'manager' || effectiveRole === 'management' || effectiveRole === 'admin' || effectiveRole === 'skip_level') && (
           <CollapsibleSidebarGroup
             label="Manager"
-            items={menuItems.manager}
+            items={[
+              { title: 'Team Reviews', icon: Users, path: '/dashboard?view=team', roles: ['manager', 'admin', 'management', 'skip_level'] },
+            ]}
             isOpen={openSections.has('manager')}
             onToggle={() => toggleSection('manager')}
             filterByRole={filterByRole}

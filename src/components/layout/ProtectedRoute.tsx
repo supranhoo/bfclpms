@@ -1,8 +1,8 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
-
-type AppRole = 'admin' | 'manager' | 'employee' | 'auditor' | 'management' | 'hr_pms';
+// NOTE: AppRole is the single source of truth — update src/lib/roles.ts when adding roles.
+import type { AppRole } from '@/lib/roles';
 
 interface ProtectedRouteProps {
   allowedRoles: AppRole[];

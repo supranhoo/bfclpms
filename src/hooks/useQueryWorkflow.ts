@@ -138,6 +138,7 @@ export function useAcceptQueryResponse() {
 }
 
 // Fetch queries raised to user's subordinates (for FYI/Team Queries tab)
+// Includes both direct reports AND skip-level reports (manager's direct reports)
 export function useSubordinateQueries() {
   const { user } = useAuth();
 
@@ -146,17 +147,30 @@ export function useSubordinateQueries() {
     queryFn: async () => {
       if (!user?.id) return [];
 
-      // Get all direct reports (subordinates)
-      const { data: subordinates, error: subError } = await supabase
+      // Get direct reports (subordinates whose reporting_manager_id = current user)
+      const { data: directReports, error: subError } = await supabase
         .from('profiles')
         .select('id')
         .eq('reporting_manager_id', user.id);
 
       if (subError) throw subError;
 
-      const subordinateIds = subordinates?.map(s => s.id) || [];
+      const directIds = directReports?.map(s => s.id) || [];
 
-      if (subordinateIds.length === 0) return [];
+      // Get skip-level reports: employees whose manager's reporting_manager_id = current user
+      // i.e. employees who report to someone who reports to the current user
+      let skipLevelIds: string[] = [];
+      if (directIds.length > 0) {
+        const { data: skipReports } = await supabase
+          .from('profiles')
+          .select('id')
+          .in('reporting_manager_id', directIds);
+        skipLevelIds = skipReports?.map(s => s.id) || [];
+      }
+
+      const allSubordinateIds = [...new Set([...directIds, ...skipLevelIds])];
+
+      if (allSubordinateIds.length === 0) return [];
 
       // Get queries raised TO subordinates (but NOT by the current user)
       const { data, error } = await supabase
@@ -165,7 +179,7 @@ export function useSubordinateQueries() {
           *,
           kpi:kpi_id(id, kra_name, kpi_name, target_value, uom, review_period, review_year)
         `)
-        .in('raised_to', subordinateIds)
+        .in('raised_to', allSubordinateIds)
         .neq('raised_by', user.id)
         .order('created_at', { ascending: false });
 
