@@ -20,9 +20,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
-import { AlertTriangle, Calculator, Info, Lock, Loader2, ShieldAlert, Zap } from 'lucide-react';
+import { AlertTriangle, Calculator, CheckCircle2, Info, Lock, Loader2, ShieldAlert, Zap } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useAdminSubmitReviewData, AdminRoleLevel } from '@/hooks/useAdminDataEntry';
+import { useAdminSubmitReviewData, useAdminFastTrackApprove, AdminRoleLevel } from '@/hooks/useAdminDataEntry';
 import { calculateRating, type RatingThresholds } from '@/lib/ratingCalculation';
 import { QualitativeValueInput } from '@/components/review/QualitativeValueInput';
 import { DateCalendarInput } from '@/components/review/DateCalendarInput';
@@ -104,8 +104,7 @@ export function AdminDataEntryDialog({
   employeeCode,
 }: AdminDataEntryDialogProps) {
   const submitMutation = useAdminSubmitReviewData();
-
-  // Fetch employee's workflow stages to determine which role levels to show
+  const fastTrackMutation = useAdminFastTrackApprove();
   const { data: workflowStages } = useEmployeeWorkflowStages(employeeId);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const visibleRoleLevels = useMemo(
@@ -124,6 +123,11 @@ export function AdminDataEntryDialog({
   const [advanceStatus, setAdvanceStatus] = useState<boolean>(true);
   const [isAutoCalculated, setIsAutoCalculated] = useState<boolean>(false);
   const [adminOverrideConfirmed, setAdminOverrideConfirmed] = useState<boolean>(false);
+  // Fast Track state
+  const [fastTrackRating, setFastTrackRating] = useState<string>('0');
+  const [fastTrackScore, setFastTrackScore] = useState<string>('0');
+  const [fastTrackConfirmed, setFastTrackConfirmed] = useState<boolean>(false);
+  const [fastTrackReason, setFastTrackReason] = useState<string>('');
   // Qualitative-specific state (aligned with SelfReviewSheet)
   const [calculatedRatingLevel, setCalculatedRatingLevel] = useState<RatingLevel | null>(null);
   const [calculatedScore, setCalculatedScore] = useState<number | null>(null);
@@ -397,6 +401,10 @@ export function AdminDataEntryDialog({
       setIsNa(false);
       setAdvanceStatus(true);
       setAdminOverrideConfirmed(false);
+      setFastTrackRating('0');
+      setFastTrackScore('0');
+      setFastTrackConfirmed(false);
+      setFastTrackReason('');
       setCalculatedScore(null);
       setCalculatedRatingLevel(null);
       setIsAutoCalculated(false);
@@ -423,6 +431,46 @@ export function AdminDataEntryDialog({
   }, [roleLevel, kpiAlreadyPastKraSet]);
 
   const maxScore = kpi?.weightage || 0;
+
+  // Fast Track: determine which review stages are still missing data
+  const REVIEWABLE_ROLE_STAGES: { role: AdminRoleLevel; ratingKey: string; stage: string }[] = [
+    { role: 'manager', ratingKey: 'manager_rating', stage: 'manager_check' },
+    { role: 'skip_level', ratingKey: 'skip_level_rating', stage: 'skip_level_check' },
+    { role: 'hr_pms', ratingKey: 'hr_pms_rating', stage: 'hr_pms_review' },
+    { role: 'auditor', ratingKey: 'auditor_rating', stage: 'audit' },
+    { role: 'management', ratingKey: 'management_rating', stage: 'management_review' },
+  ];
+  // Only stages that are part of this employee's workflow AND have no rating yet
+  const remainingStages = useMemo(() => {
+    return REVIEWABLE_ROLE_STAGES
+      .filter((rs) => effectiveStages.includes(rs.stage))
+      .filter((rs) => {
+        if (!existingSubmission) return true;
+        const val = (existingSubmission as Record<string, unknown>)[rs.ratingKey];
+        return val === null || val === undefined;
+      })
+      .map((rs) => rs.role);
+  }, [effectiveStages, existingSubmission]);
+
+  const showFastTrack = kpiCurrentStatus !== 'approved' && remainingStages.length > 0;
+
+  const handleFastTrack = async () => {
+    if (!kpi || !fastTrackReason.trim() || !fastTrackConfirmed) return;
+    const ftRatingOpt = RATING_OPTIONS.find(r => r.value === fastTrackRating);
+    if (!ftRatingOpt) return;
+
+    await fastTrackMutation.mutateAsync({
+      kpi_id: kpi.id,
+      employee_id: employeeId,
+      rating: ftRatingOpt.dbRating,
+      score: ftRatingOpt.score,
+      achieved_value: null,
+      reason: fastTrackReason.trim(),
+      kpi_name: kpi.kpi_name,
+      remaining_stages: remainingStages,
+    });
+    onClose();
+  };
 
   const handleScoreChange = (val: string) => {
     const num = parseFloat(val);
@@ -480,6 +528,7 @@ export function AdminDataEntryDialog({
   };
 
   const isValid = reason.trim().length > 0 && (!isFrequencyLocked || adminOverrideConfirmed);
+  const anyMutationPending = submitMutation.isPending || fastTrackMutation.isPending;
 
   // For DateCalendarInput — reviewPeriodParsed already computed above
   const reviewPeriod = reviewPeriodParsed;
@@ -798,6 +847,100 @@ export function AdminDataEntryDialog({
               </p>
             </div>
 
+            {/* Fast Track to Approved Section */}
+            {showFastTrack && (
+              <div className="border-t pt-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-primary" />
+                  <Label className="text-base font-semibold">Fast Track to Approved</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Fills all remaining review stages in one step and marks this KPI as <strong>Approved</strong>.
+                  Remaining stages: <strong>{remainingStages.map(s => ALL_ROLE_LEVELS.find(r => r.value === s)?.label || s).join(', ')}</strong>
+                </p>
+
+                <div className="rounded-lg border border-dashed p-4 space-y-4">
+                  {/* Rating selector for fast track */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Apply Rating to All Stages</Label>
+                      <Select value={fastTrackRating} onValueChange={(v) => {
+                        setFastTrackRating(v);
+                        const opt = RATING_OPTIONS.find(r => r.value === v);
+                        if (opt) setFastTrackScore(String(opt.score));
+                      }}>
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Select rating" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {RATING_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              <div className="flex items-center gap-2">
+                                <div className={`w-2 h-2 rounded-full ${opt.colorClass}`} />
+                                {opt.label}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Score (0–5)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="5"
+                        step="0.01"
+                        value={fastTrackScore}
+                        onChange={(e) => setFastTrackScore(e.target.value)}
+                        className="h-9"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Fast Track reason */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Reason for Fast Track *</Label>
+                    <Textarea
+                      value={fastTrackReason}
+                      onChange={(e) => setFastTrackReason(e.target.value)}
+                      placeholder="Enter reason for fast-tracking to Approved (required for audit trail)..."
+                      rows={2}
+                      className={!fastTrackReason.trim() ? 'border-warning text-sm' : 'text-sm'}
+                    />
+                  </div>
+
+                  {/* Confirmation checkbox */}
+                  <div className="flex items-start gap-2 p-2 rounded border border-border bg-muted/30">
+                    <Checkbox
+                      id="fast-track-confirm"
+                      checked={fastTrackConfirmed}
+                      onCheckedChange={(v) => setFastTrackConfirmed(!!v)}
+                      className="mt-0.5"
+                    />
+                    <Label htmlFor="fast-track-confirm" className="cursor-pointer text-xs leading-relaxed">
+                      I confirm this will fill <strong>all remaining {remainingStages.length} stage(s)</strong> with the selected rating and mark this KPI as <strong>Approved</strong>. This action is irreversible without an admin step-back.
+                    </Label>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    className="w-full gap-2"
+                    onClick={handleFastTrack}
+                    disabled={!fastTrackConfirmed || !fastTrackReason.trim() || fastTrackMutation.isPending}
+                  >
+                    {fastTrackMutation.isPending
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <CheckCircle2 className="h-4 w-4" />
+                    }
+                    Fast Track Approve ({remainingStages.length} stage{remainingStages.length > 1 ? 's' : ''})
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Warning Banner */}
             <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 flex items-start gap-2">
               <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
@@ -817,9 +960,9 @@ export function AdminDataEntryDialog({
           </Button>
           <Button 
             onClick={handleSubmit} 
-            disabled={!isValid || submitMutation.isPending}
+            disabled={!isValid || anyMutationPending}
           >
-            {submitMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {anyMutationPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             Save & Log
           </Button>
         </DialogFooter>

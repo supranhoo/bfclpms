@@ -627,6 +627,138 @@ export function useAdminStatusStepBack() {
   });
 }
 
+// ========== Fast Track to Approved ==========
+
+export interface AdminFastTrackParams {
+  kpi_id: string;
+  employee_id: string;
+  rating: RatingLevel;
+  score: number;
+  achieved_value: number | null;
+  reason: string;
+  kpi_name: string;
+  remaining_stages: AdminRoleLevel[]; // e.g. ['manager', 'skip_level', 'hr_pms']
+}
+
+/**
+ * Hook for admin to fast-track a KPI directly to 'approved' by filling all
+ * remaining review stage fields in a single operation.
+ */
+export function useAdminFastTrackApprove() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      kpi_id,
+      employee_id,
+      rating,
+      score,
+      achieved_value,
+      reason,
+      kpi_name,
+      remaining_stages,
+    }: AdminFastTrackParams) => {
+      if (!user?.id) throw new Error('User not authenticated');
+
+      // 1. Build a single update covering ALL remaining stage fields at once
+      const updateFields: Record<string, unknown> = {
+        final_rating: rating,
+        final_score: score,
+        kpi_status: 'submitted' as const,
+        updated_at: new Date().toISOString(),
+      };
+
+      for (const stage of remaining_stages) {
+        updateFields[`${stage}_rating`] = rating;
+        updateFields[`${stage}_score`] = score;
+        updateFields[`${stage}_achieved_value`] = achieved_value;
+      }
+
+      // 2. Get existing submission for audit trail
+      const { data: existingSubmission } = await supabase
+        .from('review_submissions')
+        .select('*')
+        .eq('kpi_id', kpi_id)
+        .maybeSingle();
+
+      // 3. Upsert review_submissions in one call
+      const { data: newSubmission, error: subError } = await supabase
+        .from('review_submissions')
+        .upsert(
+          { kpi_id, ...updateFields },
+          { onConflict: 'kpi_id' }
+        )
+        .select()
+        .single();
+
+      if (subError) throw subError;
+
+      // 4. Update KPI status directly to 'approved'
+      const { error: kpiError } = await supabase
+        .from('kpis')
+        .update({ status: 'approved' as any, updated_at: new Date().toISOString() })
+        .eq('id', kpi_id);
+
+      if (kpiError) throw kpiError;
+
+      // 5. Create audit log
+      const { error: auditError } = await supabase.from('kpi_audit_logs').insert({
+        kpi_id,
+        action: 'ADMIN_FAST_TRACK_APPROVED',
+        performed_by: user.id,
+        on_behalf_of: employee_id,
+        on_behalf_role: 'admin',
+        old_value: existingSubmission || null,
+        new_value: newSubmission,
+        metadata: {
+          reason,
+          source: 'admin_fast_track_approve',
+          stages_filled: remaining_stages,
+          fields_updated: Object.keys(updateFields),
+        },
+      });
+
+      if (auditError) console.error('Failed to create audit log:', auditError);
+
+      // 6. Notify employee
+      const { error: notifyError } = await supabase.from('notifications').insert({
+        user_id: employee_id,
+        type: 'admin_fast_track_approved',
+        title: 'KPI Fast-Tracked to Approved by Admin',
+        message: `Admin fast-tracked your KPI "${kpi_name}" to Approved status, filling ${remaining_stages.length} remaining stage(s). Reason: ${reason}`,
+        kpi_id,
+        related_user_id: user.id,
+        metadata: { reason, stages_filled: remaining_stages },
+      });
+
+      if (notifyError) console.error('Failed to create notification:', notifyError);
+
+      return newSubmission;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['review-submission-admin'] });
+      queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
+      toast({
+        title: 'KPI Fast-Tracked to Approved',
+        description: 'All remaining stages filled. Audit log created and employee notified.',
+      });
+    },
+    onError: (error) => {
+      console.error('Admin fast-track approve failed:', error);
+      toast({
+        title: 'Failed to fast-track KPI',
+        description: (error as Error).message,
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
 /**
  * Hook to fetch existing review submission for a KPI
  */
