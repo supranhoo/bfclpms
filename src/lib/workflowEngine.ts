@@ -147,6 +147,19 @@ export function resolvePendingStatuses(
 
 /**
  * Get the forward status for a view level — what status to set after approval.
+ *
+ * CONTRACT: Every role that is NOT the terminal reviewer MUST use
+ * resolveNextStatus(ownStage, workflowStages) so the KPI advances past
+ * the acting reviewer's own stage. Only `management` may hardcode 'approved'
+ * since it is always the terminal stage.
+ *
+ * Convention used by manager / skip_level:
+ *   Setting status to the role's OWN completed stage name signals "this
+ *   reviewer is done" and the next reviewer's pending-status filter picks it up.
+ *   e.g. manager sets 'manager_check' → auditor sees KPIs at 'manager_check'.
+ *
+ * For hr_pms and auditor the NEXT stage can vary by template (audit, approved,
+ * management_review…) so resolveNextStatus is used to advance dynamically.
  */
 export function resolveForwardStatus(
   viewLevel: 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
@@ -156,9 +169,15 @@ export function resolveForwardStatus(
     case 'manager':
       return 'manager_check';
     case 'skip_level':
-      return 'skip_level_check';
+      // Use resolveNextStatus so skip_level advances past its own stage
+      // even if future templates place 'approved' directly after skip_level_check.
+      return resolveNextStatus('skip_level_check', workflowStages) || 'approved';
     case 'hr_pms':
-      return 'hr_pms_review';
+      // FIXED: was hardcoded to 'hr_pms_review' (the CURRENT stage, not the next).
+      // resolveNextStatus advances past hr_pms_review to whatever follows:
+      //   → 'approved' for templates ending at hr_pms_review
+      //   → 'audit'    for templates that include an audit stage after hr_pms
+      return resolveNextStatus('hr_pms_review', workflowStages) || 'approved';
     case 'auditor':
       return resolveNextStatus('audit', workflowStages) || 'management_review';
     case 'management':

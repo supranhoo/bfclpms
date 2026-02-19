@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-19  
-> **Version:** 1.45.30
+> **Version:** 1.45.31 — Workflow forward-status CAPA fix (hr_pms / skip_level)
 > **Maintainer:** Lovable AI
 
 ---

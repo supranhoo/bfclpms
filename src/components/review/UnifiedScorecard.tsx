@@ -121,9 +121,10 @@ const VIEW_LEVEL_STATIC: Record<ScorecardViewLevel, {
     description: 'HR PMS team review and assessment',
     scoreFieldPrefix: 'hr_pms',
     // previousScoreField is resolved dynamically in config useMemo below
-    // because it depends on whether skip_level_check exists in the employee's workflow
+    // because it depends on whether skip_level_check exists in the employee's workflow.
+    // actionLabel is also resolved dynamically in config useMemo based on nextAfterHrPms.
     previousScoreField: 'skip_level_score' as const,
-    actionLabel: 'Forward to Audit',
+    actionLabel: 'Forward', // overridden dynamically in config useMemo
     roleIcon: ClipboardCheck,
   },
   auditor: {
@@ -178,9 +179,30 @@ export function UnifiedScorecard({
         ? 'skip_level_score'
         : 'manager_score';
     }
+
+    // For hr_pms: resolve dynamic action label based on what comes AFTER hr_pms_review.
+    // - 'approved'           → "Approve"  (hr_pms is the terminal reviewer in this template)
+    // - 'audit'              → "Forward to Audit"
+    // - anything else        → "Forward"
+    let resolvedActionLabel = staticConfig.actionLabel;
+    if (viewLevel === 'hr_pms') {
+      const nextAfterHrPms = (() => {
+        const idx = effectiveStages.indexOf('hr_pms_review');
+        if (idx === -1 || idx >= effectiveStages.length - 1) return null;
+        return effectiveStages[idx + 1];
+      })();
+      resolvedActionLabel =
+        nextAfterHrPms === 'approved'
+          ? 'Approve'
+          : nextAfterHrPms === 'audit'
+            ? 'Forward to Audit'
+            : 'Forward';
+    }
+
     return {
       ...staticConfig,
       previousScoreField: resolvedPreviousScoreField,
+      actionLabel: resolvedActionLabel,
       pendingStatus: resolvePendingStatuses(viewLevel, effectiveStages)[0] || 'self_review',
       reviewableStatuses: resolveReviewableStatuses(viewLevel, effectiveStages),
       forwardStatus: resolveForwardStatus(viewLevel, effectiveStages),
@@ -506,7 +528,9 @@ export function UnifiedScorecard({
       // Cascading clear: clear ALL downstream fields from the target status onward
       // This mirrors the admin step-back logic in useAdminDataEntry.ts
       const clearFields: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      const statusOrder = ['kra_set', 'self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'];
+      // Use employee's actual effectiveStages instead of hardcoded 8-stage order
+      // so field-clearing logic works correctly for all custom pipeline templates.
+      const statusOrder = effectiveStages;
       const targetIdx = statusOrder.indexOf(newStatus);
 
       // Clear kpi_status and self fields if going back to kra_set
