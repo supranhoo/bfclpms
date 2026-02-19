@@ -448,7 +448,7 @@ export function AdminDataEntryDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldAlert className="h-5 w-5 text-warning" />
@@ -475,7 +475,7 @@ export function AdminDataEntryDialog({
             <Loader2 className="h-6 w-6 animate-spin" />
           </div>
         ) : (
-          <div className="space-y-6 py-4">
+          <div className="overflow-y-auto flex-1 space-y-6 py-4 pr-2">
             {/* Role Level Selection */}
             <div className="space-y-3">
               <Label className="text-base font-medium">Data Entry Level</Label>
