@@ -3,8 +3,9 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
-
-type AppRole = 'admin' | 'manager' | 'employee' | 'auditor' | 'management' | 'hr_pms';
+// NOTE: AppRole is the single source of truth — update src/lib/roles.ts when adding roles.
+import type { AppRole } from '@/lib/roles';
+export type { AppRole } from '@/lib/roles';
 
 interface Profile {
   id: string;
