@@ -6,7 +6,7 @@ import { KpiJourneySection } from './KpiJourneySection';
 import { KpiHistoryCard } from './KpiHistoryCard';
 import { KpiObservationsSection } from './KpiObservationsSection';
 
-export type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms';
+export type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
 
 interface KpiReviewPanelProps {
   kpi: KPI;
