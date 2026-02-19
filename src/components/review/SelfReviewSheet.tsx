@@ -511,6 +511,29 @@ export function SelfReviewSheet({
 
             {/* Self Assessment Form - Only in edit mode */}
             {!isReadOnly && selectedKpi && (
+              <>
+              {/* Frequency Lock: show locked card instead of form when KPI is locked */}
+              {isKraSet && isFrequencyLocked ? (
+                <Card>
+                  <CardContent className="py-12 text-center space-y-3">
+                    <div className="flex justify-center">
+                      <div className="p-3 rounded-full bg-muted">
+                        <Lock className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                    </div>
+                    <h3 className="font-semibold text-foreground">Entry not allowed yet</h3>
+                    <p className="text-sm text-muted-foreground">
+                      This <strong>{selectedKpi.frequency}</strong> KPI is locked for{' '}
+                      <strong>{selectedPeriod}</strong>.{' '}
+                      Data entry opens in the active review month of the cycle.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      For Quarterly KPIs (Jan–Mar), entry opens in <strong>March</strong>.
+                      For Bi-Monthly KPIs (Feb–Mar), entry opens in <strong>March</strong>.
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm flex items-center gap-2">
@@ -522,14 +545,7 @@ export function SelfReviewSheet({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Frequency Lock Overlay for multi-month KPIs */}
-                  <div className="relative">
-                  <FrequencyLockedOverlay
-                    frequency={selectedKpi.frequency}
-                    reviewMonth={selectedPeriod}
-                    reviewYear={selectedYear}
-                    frequencyCycleStart={selectedKpi.frequency_cycle_start}
-                  />
+                  <div>
                   {needsSubPeriodForKpi && (
                     <div className="p-3 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-lg">
                       <div className="flex items-center justify-between mb-2">
@@ -703,10 +719,13 @@ export function SelfReviewSheet({
                       </p>
                     </div>
                   )}
-                  </div>{/* end relative wrapper for FrequencyLockedOverlay */}
+                  </div>{/* end relative wrapper */}
                 </CardContent>
               </Card>
+              )}
+              </>
             )}
+
 
             {/* Read-Only View of Submitted Data */}
             {isReadOnly && selectedKpi && (
