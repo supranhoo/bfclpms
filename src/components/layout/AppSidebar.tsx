@@ -90,7 +90,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'Email Logs', icon: Mail, path: '/admin/email-logs', roles: ['admin'] },
   ],
   dataEntry: [
-    { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', roles: ['employee', 'manager', 'auditor', 'management'] },
+    { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', roles: ['employee', 'manager', 'auditor', 'management', 'hr_pms'] },
   ],
   reports: [
     { title: 'View Reports', icon: BarChart3, path: '/reports', roles: ['admin', 'manager', 'auditor', 'management'] },
