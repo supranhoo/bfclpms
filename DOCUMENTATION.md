@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-19  
-> **Version:** 1.45.32 — Frequency lock enforcement CAPA (SelfReviewSheet hard lock, AdminDataEntryDialog override guard, DB trigger)
+> **Version:** 1.45.33 — Admin data entry demotion guard: self-level entries no longer regress KPIs already past `kra_set`; UI warns when advance toggle would have no effect
 > **Maintainer:** Lovable AI
 
 ---

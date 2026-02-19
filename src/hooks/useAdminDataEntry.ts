@@ -194,7 +194,27 @@ export function useAdminSubmitReviewData() {
         let newStatus: string | null = null;
 
         if (role_level === 'self') {
-          newStatus = 'self_review';
+          // Guard against demotion: only advance to self_review if KPI is currently at kra_set.
+          // If the KPI is already at self_review or beyond, skip the status change entirely.
+          const { data: currentKpi } = await supabase
+            .from('kpis')
+            .select('status')
+            .eq('id', kpi_id)
+            .single();
+
+          const STAGE_ORDER = [
+            'kra_set', 'self_review', 'manager_check', 'skip_level_check',
+            'hr_pms_review', 'audit', 'management_review', 'approved',
+          ];
+          const currentStatus = currentKpi?.status || 'kra_set';
+          const currentIdx = STAGE_ORDER.indexOf(currentStatus);
+          const selfReviewIdx = STAGE_ORDER.indexOf('self_review');
+
+          // Only advance if the KPI hasn't yet reached self_review
+          if (currentIdx < selfReviewIdx) {
+            newStatus = 'self_review';
+          }
+          // If already at self_review or beyond, leave newStatus = null → no status update
         } else {
           // Fetch employee's workflow stages to determine correct forward status
           const { data: stagesData } = await supabase

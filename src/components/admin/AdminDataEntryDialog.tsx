@@ -385,7 +385,7 @@ export function AdminDataEntryDialog({
     }
   }, [rating, kpi?.weightage, isAutoCalculated]);
 
-  // Reset form when dialog closes
+  // Reset form when dialog closes — includes adminOverrideConfirmed (Fix 3)
   useEffect(() => {
     if (!isOpen) {
       setRoleLevel('self');
@@ -396,11 +396,31 @@ export function AdminDataEntryDialog({
       setReason('');
       setIsNa(false);
       setAdvanceStatus(true);
+      setAdminOverrideConfirmed(false);
       setCalculatedScore(null);
       setCalculatedRatingLevel(null);
       setIsAutoCalculated(false);
     }
   }, [isOpen]);
+
+  // Auto-set advanceStatus=false when role is 'self' and KPI is already past kra_set (Fix 2a)
+  // This prevents accidental demotion — data-only updates are the common intent here.
+  const STAGE_ORDER_UI = [
+    'kra_set', 'self_review', 'manager_check', 'skip_level_check',
+    'hr_pms_review', 'audit', 'management_review', 'approved',
+  ];
+  const kpiCurrentStatus = kpi?.status || 'kra_set';
+  const kpiStatusIdx = STAGE_ORDER_UI.indexOf(kpiCurrentStatus);
+  const selfReviewIdxUI = STAGE_ORDER_UI.indexOf('self_review');
+  const kpiAlreadyPastKraSet = kpiStatusIdx >= selfReviewIdxUI;
+  const advanceWouldHaveNoEffect = roleLevel === 'self' && kpiAlreadyPastKraSet;
+
+  // When switching to self-role and KPI is already in review, default advanceStatus to false
+  useEffect(() => {
+    if (roleLevel === 'self' && kpiAlreadyPastKraSet) {
+      setAdvanceStatus(false);
+    }
+  }, [roleLevel, kpiAlreadyPastKraSet]);
 
   const maxScore = kpi?.weightage || 0;
 
@@ -731,20 +751,32 @@ export function AdminDataEntryDialog({
             </div>
 
             {/* Advance Workflow Status Toggle */}
-            <div className="flex items-center justify-between border-t pt-4">
-              <div className="space-y-0.5">
-                <Label htmlFor="advance-status" className="text-sm font-medium">
-                  Advance workflow status
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Move the KPI to the next workflow stage after saving
-                </p>
+            <div className="border-t pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="advance-status" className="text-sm font-medium">
+                    Advance workflow status
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Move the KPI to the next workflow stage after saving
+                  </p>
+                </div>
+                <Switch
+                  id="advance-status"
+                  checked={advanceStatus}
+                  onCheckedChange={setAdvanceStatus}
+                />
               </div>
-              <Switch
-                id="advance-status"
-                checked={advanceStatus}
-                onCheckedChange={setAdvanceStatus}
-              />
+
+              {/* Fix 2b — Warn when advance toggle is ON but would have no effect (or demote) */}
+              {advanceWouldHaveNoEffect && advanceStatus && (
+                <Alert className="border-info/30 bg-info/5">
+                  <Info className="h-4 w-4 text-info" />
+                  <AlertDescription className="text-sm text-foreground">
+                    This KPI is already at <strong>{kpiCurrentStatus.replace(/_/g, ' ')}</strong>. Enabling "Advance workflow" for a Self-level entry will have <strong>no effect</strong> — the status will not be changed. Only the data will be updated.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
 
             {/* Reason for Admin Entry - MANDATORY */}
