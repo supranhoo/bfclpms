@@ -99,16 +99,45 @@ describe('workflowEngine', () => {
   });
 
   describe('resolveForwardStatus', () => {
-    it('skip_level forwards to skip_level_check', () => {
-      expect(resolveForwardStatus('skip_level', EIGHT_STAGE_PIPELINE)).toBe('skip_level_check');
+    it('manager always forwards to manager_check', () => {
+      expect(resolveForwardStatus('manager')).toBe('manager_check');
+      expect(resolveForwardStatus('manager', EIGHT_STAGE_PIPELINE)).toBe('manager_check');
     });
 
-    it('hr_pms forwards to hr_pms_review', () => {
-      expect(resolveForwardStatus('hr_pms', EIGHT_STAGE_PIPELINE)).toBe('hr_pms_review');
+    it('skip_level advances PAST skip_level_check to the next stage', () => {
+      // In 8-stage: skip_level_check → hr_pms_review
+      expect(resolveForwardStatus('skip_level', EIGHT_STAGE_PIPELINE)).toBe('hr_pms_review');
+      // In default 6-stage: no skip_level_check → fallback 'approved'
+      expect(resolveForwardStatus('skip_level', DEFAULT_WORKFLOW_STAGES)).toBe('approved');
     });
 
-    it('auditor forwards to management_review', () => {
+    it('hr_pms advances PAST hr_pms_review to the next stage (CORE BUG FIX)', () => {
+      // In 8-stage pipeline: hr_pms_review → audit
+      expect(resolveForwardStatus('hr_pms', EIGHT_STAGE_PIPELINE)).toBe('audit');
+      // In terminal pipeline: hr_pms_review → approved
+      const terminalPipeline = ['kra_set', 'self_review', 'manager_check', 'hr_pms_review', 'approved'];
+      expect(resolveForwardStatus('hr_pms', terminalPipeline)).toBe('approved');
+      // With management after hr_pms:
+      const hrPmsThenMgmt = ['kra_set', 'self_review', 'hr_pms_review', 'management_review', 'approved'];
+      expect(resolveForwardStatus('hr_pms', hrPmsThenMgmt)).toBe('management_review');
+    });
+
+    it('hr_pms falls back to approved when hr_pms_review is last before approved', () => {
+      const selfHrPms = ['kra_set', 'self_review', 'hr_pms_review', 'approved'];
+      expect(resolveForwardStatus('hr_pms', selfHrPms)).toBe('approved');
+    });
+
+    it('auditor forwards to management_review in 8-stage', () => {
       expect(resolveForwardStatus('auditor', EIGHT_STAGE_PIPELINE)).toBe('management_review');
+    });
+
+    it('auditor forwards correctly in default pipeline', () => {
+      expect(resolveForwardStatus('auditor', DEFAULT_WORKFLOW_STAGES)).toBe('management_review');
+    });
+
+    it('management always returns approved', () => {
+      expect(resolveForwardStatus('management')).toBe('approved');
+      expect(resolveForwardStatus('management', EIGHT_STAGE_PIPELINE)).toBe('approved');
     });
   });
 
