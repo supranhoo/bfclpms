@@ -404,11 +404,12 @@ export function useAdminUpdateKpi() {
       // Get old values for audit
       const { data: oldKpi, error: fetchError } = await supabase
         .from('kpis')
-        .select('*, profiles:employee_id(id, full_name, email, employee_code, reporting_manager_id)')
+        .select('id, kpi_name, kra_name, status, employee_id, profiles:employee_id(id, full_name, email, employee_code, reporting_manager_id)')
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
       if (fetchError) throw fetchError;
+      if (!oldKpi) throw new Error('KPI not found');
 
       const statusChanged = updates.status && updates.status !== oldKpi.status;
 
@@ -418,9 +419,10 @@ export function useAdminUpdateKpi() {
         .update(updates)
         .eq('id', id)
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
+      if (!data) throw new Error('Failed to retrieve updated KPI');
 
       // Create audit log entry
       await supabase.from('kpi_audit_logs').insert({
