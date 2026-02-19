@@ -1468,6 +1468,7 @@ export function UnifiedScorecard({
           kpiName={selectedKpi.kpi_name}
           currentStatus={selectedKpi.status}
           workflowStages={effectiveStages}
+          notifyUserId={employee.id}
         />
       )}
     </div>

@@ -213,11 +213,30 @@ export function useAdminSubmitReviewData() {
             console.error('Failed to advance KPI status:', statusError);
           }
 
-          // Also sync review_submissions.kpi_status to 'submitted'
-          await supabase
-            .from('review_submissions')
-            .update({ kpi_status: 'submitted' as any, updated_at: new Date().toISOString() })
-            .eq('kpi_id', kpi_id);
+          // When advancing to 'approved', sync final_rating and final_score from the
+          // just-entered role-level data so dashboards show the correct scores.
+          // This mirrors what ManagementScorecard does on normal submission.
+          if (newStatus === 'approved') {
+            const { error: finalSyncError } = await supabase
+              .from('review_submissions')
+              .update({
+                final_rating: rating || null,
+                final_score: score !== null && score !== undefined ? score : null,
+                kpi_status: 'submitted' as any,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('kpi_id', kpi_id);
+
+            if (finalSyncError) {
+              console.error('Failed to sync final_rating/final_score:', finalSyncError);
+            }
+          } else {
+            // Just update kpi_status to submitted for non-final stages
+            await supabase
+              .from('review_submissions')
+              .update({ kpi_status: 'submitted' as any, updated_at: new Date().toISOString() })
+              .eq('kpi_id', kpi_id);
+          }
         }
       }
 
