@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTeamMembers, useProfiles, useSkipLevelTeamMembers } from '@/hooks/useOrganization';
+import { useTeamMembers, useProfiles, useSkipLevelTeamMembers, useProfilesByWorkflowStage } from '@/hooks/useOrganization';
 import { useKpisByPeriod, KPI } from '@/hooks/useKpis';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
@@ -116,6 +116,19 @@ export function EmployeeSelectorGrid({
   const { data: skipLevelMembers, isLoading: skipLevelLoading } = useSkipLevelTeamMembers(
     (viewLevel === 'team' || viewLevel === 'skip_level') ? user?.id : undefined
   );
+
+  // Map each reviewer panel to the workflow stage it requires employees to have
+  const PANEL_REQUIRED_STAGE: Partial<Record<Exclude<ViewMode, 'self'>, string>> = {
+    hr_pms: 'hr_pms_review',
+    audit: 'audit',
+    management: 'management_review',
+    skip_level: 'skip_level_check',
+  };
+  const requiredStage = PANEL_REQUIRED_STAGE[viewLevel] ?? null;
+
+  // Fetch only employees whose resolved workflow template includes the required stage
+  const { data: stageFilteredProfiles, isLoading: stageFilteredLoading } = useProfilesByWorkflowStage(requiredStage);
+
   const { departments, designations, grades, managers } = useEmployeeFilterOptions();
   const [searchParams] = useSearchParams();
   const autoOpenKpiId = searchParams.get('kpi');
@@ -162,9 +175,13 @@ export function EmployeeSelectorGrid({
 
   // Determine which employees to show based on view level and role
   const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
-  const isLoading = viewLevel === 'skip_level' ? skipLevelLoading 
-    : viewLevel === 'team' ? (isFullAccess ? profilesLoading : (teamLoading || skipLevelLoading))
-    : (isFullAccess ? profilesLoading : teamLoading);
+
+  // isLoading accounts for stage-filtered fetch when a required stage is active
+  const isLoading = viewLevel === 'team'
+    ? (isFullAccess ? profilesLoading : (teamLoading || skipLevelLoading))
+    : requiredStage
+      ? stageFilteredLoading
+      : (isFullAccess ? profilesLoading : teamLoading);
 
   // Build merged base members with relationship tags for team view
   const baseMembers: EmployeeProfile[] | undefined = useMemo(() => {
@@ -184,11 +201,13 @@ export function EmployeeSelectorGrid({
       const indirectTagged = (skipLevelMembers || []).filter(m => !directSet.has(m.id)).map(m => ({ ...m, relationship: 'indirect' as const }));
       return [...directTagged, ...indirectTagged];
     }
-    if (viewLevel === 'skip_level') return skipLevelMembers;
-    if (viewLevel === 'hr_pms') return allProfiles;
+    // For reviewer panels (hr_pms, audit, management, skip_level):
+    // Only show employees whose resolved workflow template includes the required stage.
+    if (requiredStage) return (stageFilteredProfiles as EmployeeProfile[] | undefined) || [];
+    // Fallback for any other full-access panel
     if (isFullAccess) return allProfiles;
     return teamMembers;
-  }, [viewLevel, teamMembers, skipLevelMembers, allProfiles, isFullAccess]);
+  }, [viewLevel, teamMembers, skipLevelMembers, allProfiles, isFullAccess, requiredStage, stageFilteredProfiles]);
 
   // Auto-open KPI from URL
   useEffect(() => {

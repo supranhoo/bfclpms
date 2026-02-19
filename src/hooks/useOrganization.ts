@@ -264,6 +264,58 @@ export function useTeamMembers(managerId: string | undefined) {
  * Fetch skip-level subordinates: employees whose reporting manager reports to the given user.
  * i.e. SELECT p.* FROM profiles p JOIN profiles rm ON p.reporting_manager_id = rm.id WHERE rm.reporting_manager_id = :userId
  */
+/**
+ * Fetch profiles whose resolved workflow template includes the given stage.
+ * Respects the employee-level override (workflow_config) with fallback to the default template.
+ * Returns null when stage is null (meaning "no filter needed").
+ */
+export function useProfilesByWorkflowStage(stage: string | null) {
+  return useQuery({
+    queryKey: ['profiles-by-workflow-stage', stage],
+    queryFn: async () => {
+      if (!stage) return null;
+
+      // 1. Fetch all employee-level overrides with their template stages
+      const { data: overrideConfigs } = await supabase
+        .from('workflow_config')
+        .select('config_value, workflow_templates!inner(stages)')
+        .eq('config_type', 'employee');
+
+      // 2. Get the system default template stages
+      const { data: defaultTemplate } = await supabase
+        .from('workflow_templates')
+        .select('stages')
+        .eq('is_default', true)
+        .maybeSingle();
+
+      const defaultStages: string[] = (defaultTemplate?.stages as string[]) || [];
+      const defaultHasStage = defaultStages.includes(stage);
+
+      // 3. Build employee-id → hasStage map from overrides
+      const overrideMap = new Map<string, boolean>();
+      overrideConfigs?.forEach(cfg => {
+        const stages = (cfg.workflow_templates as any)?.stages as string[] || [];
+        overrideMap.set(cfg.config_value, stages.includes(stage));
+      });
+
+      // 4. Fetch all profiles
+      const { data: profiles, error } = await supabase
+        .from('profiles')
+        .select('*, departments(id, name, code)')
+        .order('full_name');
+
+      if (error) throw error;
+
+      // 5. Filter: use override if present, otherwise fall back to system default
+      return profiles?.filter(p => {
+        if (overrideMap.has(p.id)) return overrideMap.get(p.id);
+        return defaultHasStage;
+      }) || [];
+    },
+    enabled: !!stage,
+  });
+}
+
 export function useSkipLevelTeamMembers(userId: string | undefined) {
   return useQuery({
     queryKey: ['skip-level-team-members', userId],
