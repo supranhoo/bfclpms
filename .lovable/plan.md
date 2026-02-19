@@ -1,119 +1,160 @@
 
-# RCA & CAPA Plan — 95 KPIs Stuck at `hr_pms_review`
+# Frequency Lock Enforcement — CAPA Implementation Plan
 
-## Root Cause Confirmed
+## Confirmed Locking Behavior (No Changes to Rules)
 
-The bug in `resolveForwardStatus('hr_pms')` (already fixed in code but not yet applied to existing data) caused HR PMS approvals to set KPI status to `hr_pms_review` instead of advancing to the next stage. This created **95 KPIs stuck in `hr_pms_review`** that were already reviewed/approved by HR PMS but never advanced.
+The locking rules in `isKpiLockedForPeriod` and `frequencyCycleOptions.ts` are already correct and match the user's requirement exactly:
 
----
+### Bi-Monthly (Feb-Mar cycle)
+- February = LOCKED (month 2 is in `locked_months['Feb-Mar']: [2]`)
+- March = OPEN (active month — entry allowed)
+- April = LOCKED again (Q2 cycle: `Apr-May: [4]`)
 
-## Affected Employees & Their Correct Next Status
+### Quarterly (Jan-Mar cycle)
+- January = LOCKED (month 1 is in `locked_months['Q1']: [1, 2]`)
+- February = LOCKED (month 2 is in `locked_months['Q1']: [1, 2]`)
+- March = OPEN (active month — entry allowed)
+- April = LOCKED again (Q2 cycle: `Q2: [4, 5]`)
 
-All 10 affected employees have workflows where `hr_pms_review` is immediately followed by `approved`. Therefore, **all 95 stuck KPIs must advance to `approved`**.
-
-| Employee | Code | Template | Stuck KPIs | Next Stage |
-|---|---|---|---|---|
-| Abhiranjan Kumar Singh | 200792 | self_l1_l2_hr_pms (DEFAULT) | 10 | `approved` |
-| Aditya Kumar | 100847 | self_l1_l2_hr_pms (DEFAULT) | 10 | `approved` |
-| Ashish Kataria | 200226 | self_l1_l2_hr_pms (DEFAULT) | 7 (Dec 2025) | `approved` |
-| Avinash Kumar | 101647 | self_l1_l2_hr_pms (DEFAULT) | 9 | `approved` |
-| Avinash Kumar | 101732 | self_l1_l2_hr_pms (DEFAULT) | 9 | `approved` |
-| Debadutta Sahoo | 101358 | self_l1_l2_hr_pms (DEFAULT) | 8 | `approved` |
-| Dileshwar Mahto | 100088 | self_l1_l2_hr_pms (DEFAULT) | 9 | `approved` |
-| Jitendra Bharti | 101715 | self_l1_hr_pms | 13 | `approved` |
-| Purnima Pathak | 101653 | self_l1_l2_hr_pms (DEFAULT) | 8 | `approved` |
-| Randhir Kumar Singh | 101811 | self_l1_hr_pms | 12 | `approved` |
-| **TOTAL** | | | **95 KPIs** | **→ `approved`** |
-
-**Why all go to `approved`**: In both `self_l1_l2_hr_pms` and `self_l1_hr_pms` templates, `hr_pms_review` is the last stage before `approved`. No audit or management review stage exists in any of these employees' templates.
+The rules are correct. The problem is that enforcement is **only visual** (overlay + disabled button) with no server-side guarantee. This is what the CAPA plan fixes.
 
 ---
 
-## What Will Be Done
+## What Is Broken (Current State)
 
-### Action: System Bulk Update — 95 KPIs → `approved`
+Three enforcement gaps allow entries in locked months despite correct locking rules:
 
-A single safe SQL `UPDATE` using the Supabase `insert` tool (data operation, not schema change):
+### Gap 1 — Self Review Sheet: Visual-Only Lock
+`FrequencyLockedOverlay` renders inside the form card as a CSS overlay (`position: absolute`). The submit button is disabled via `isFrequencyLocked`, but this relies on the async `useFrequencyConfig` hook. If config loads slowly, there is a brief window where the button is not yet disabled. More critically, there is **no server-side check** — an API-level update to `status = 'self_review'` is not blocked.
 
-```sql
-UPDATE kpis
-SET 
-  status = 'approved',
-  updated_at = NOW()
-WHERE status = 'hr_pms_review'
-  AND id IN (
-    -- Only advance KPIs whose template's next stage after hr_pms_review IS 'approved'
-    -- All confirmed affected employees fall in this category
-    SELECT k.id
-    FROM kpis k
-    JOIN profiles p ON p.id = k.employee_id
-    LEFT JOIN workflow_config wc ON wc.config_type = 'employee' 
-      AND wc.config_value = k.employee_id::text
-    LEFT JOIN workflow_templates wt ON wt.id = wc.workflow_template_id
-    WHERE k.status = 'hr_pms_review'
+Evidence: 13 Quarterly KPIs are in `self_review` for January 2026, 1 for February 2026 — months that should have been locked.
+
+### Gap 2 — Admin On-Behalf Entry: No Lock Check At All
+`AdminDataEntryDialog.tsx` has zero frequency lock validation. Admins can submit data for any KPI in any month with no warning or block.
+
+### Gap 3 — No Database Enforcement
+The `kpis` table `UPDATE` RLS policy allows any employee to change their own KPI status. There is no database trigger preventing `kra_set → self_review` transitions during locked periods.
+
+---
+
+## Files to Modify
+
+| File | Change | Risk |
+|---|---|---|
+| `src/components/review/SelfReviewSheet.tsx` | Replace `FrequencyLockedOverlay` approach: when `isKraSet && isFrequencyLocked`, render a dedicated locked card view instead of the input form | Low |
+| `src/components/admin/AdminDataEntryDialog.tsx` | Add `isKpiLockedForPeriod` check; show lock warning banner; require admin override checkbox with justification | Low |
+| New DB migration | Add trigger `prevent_locked_frequency_submission` on `kpis` table: blocks `kra_set → self_review` for employee-role users when the KPI's review_period month is in the locked months for its frequency | Medium |
+| `DOCUMENTATION.md` | Version bump to 1.45.32 | None |
+
+---
+
+## Technical Implementation Detail
+
+### Fix 1 — SelfReviewSheet.tsx
+
+Currently the form card always renders for `kra_set` KPIs, with an overlay on top when locked. The fix wraps the entire form content in a conditional:
+
+```tsx
+// When kra_set + frequency locked → show locked card instead of form
+if (isKpiStatus('kra_set') && isFrequencyLocked) {
+  return (
+    <Card>
+      <CardContent className="py-12 text-center">
+        <Lock className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
+        <h3 className="font-semibold mb-2">Entry not allowed yet</h3>
+        <p className="text-sm text-muted-foreground">
+          This {selectedKpi.frequency} KPI is locked until <strong>{activeMonth}</strong>.
+          Data entry opens in {activeMonth}.
+        </p>
+      </CardContent>
+    </Card>
   );
+}
 ```
 
-But we will be MORE precise — we'll use a targeted query that checks each employee's effective template stages and only advances KPIs where the stage immediately after `hr_pms_review` in their template array is `'approved'`. This guards against accidentally advancing any future KPIs stuck at `hr_pms_review` for a different reason in a different template (like `self_l1_l2_hr_pms_audit` where next would be `audit`).
+This completely removes the form — no input fields, no submit button — making it impossible to submit through the UI.
 
-### Safe & Targeted Query Logic
+### Fix 2 — AdminDataEntryDialog.tsx
+
+Add frequency lock check using `isKpiLockedForPeriod` with the KPI's `frequency_cycle_start`. If locked, show a warning:
+
+```tsx
+const isLocked = isKpiLockedForPeriod(kpi.frequency, reviewMonth, reviewYear, kpi.frequency_cycle_start, frequencyConfig);
+
+if (isLocked && !adminOverrideConfirmed) {
+  // Show warning banner explaining the lock
+  // Require "I confirm this is an intentional admin override" checkbox
+  // Only enable Save after checkbox is checked
+}
+```
+
+Admins retain override capability but must explicitly acknowledge it.
+
+### Fix 3 — Database Trigger Migration
+
+A PostgreSQL trigger on the `kpis` table that fires BEFORE UPDATE:
 
 ```sql
-UPDATE kpis k
-SET status = 'approved', updated_at = NOW()
-WHERE k.status = 'hr_pms_review'
-AND (
-  -- Employee has explicit template config where next after hr_pms_review = 'approved'
-  EXISTS (
-    SELECT 1 FROM workflow_config wc
-    JOIN workflow_templates wt ON wt.id = wc.workflow_template_id
-    WHERE wc.config_type = 'employee'
-    AND wc.config_value = k.employee_id::text
-    AND wt.stages[array_position(wt.stages, 'hr_pms_review') + 1] = 'approved'
-  )
-  OR
-  -- Employee has NO explicit config → falls back to DEFAULT template (self_l1_l2_hr_pms)
-  -- Default template stages: [kra_set, self_review, manager_check, skip_level_check, hr_pms_review, approved]
-  -- → next after hr_pms_review IS 'approved'
-  NOT EXISTS (
-    SELECT 1 FROM workflow_config wc
-    WHERE wc.config_type = 'employee'
-    AND wc.config_value = k.employee_id::text
-  )
-);
+CREATE OR REPLACE FUNCTION enforce_frequency_lock_on_submission()
+RETURNS TRIGGER AS $$
+DECLARE
+  locked_config jsonb;
+  month_num int;
+  is_admin boolean;
+BEGIN
+  -- Only block the kra_set → self_review transition
+  IF OLD.status = 'kra_set' AND NEW.status = 'self_review' THEN
+    -- Admins are always allowed
+    SELECT has_role(auth.uid(), 'admin'::app_role) INTO is_admin;
+    IF is_admin THEN RETURN NEW; END IF;
+    
+    -- Get the frequency lock config
+    SELECT locked_months INTO locked_config
+    FROM frequency_config
+    WHERE frequency = NEW.frequency
+    LIMIT 1;
+    
+    IF locked_config IS NOT NULL AND NEW.review_period IS NOT NULL THEN
+      -- Get month number from review_period name
+      month_num := EXTRACT(MONTH FROM TO_DATE(NEW.review_period || ' 1 2000', 'Month DD YYYY'));
+      
+      -- Check if this month is in any locked group
+      IF EXISTS (
+        SELECT 1 FROM jsonb_each(locked_config) AS e(key, val)
+        WHERE val @> to_jsonb(month_num)
+      ) THEN
+        RAISE EXCEPTION 'Submission not allowed: % KPI is locked for %. Entry opens in the active review month.',
+          NEW.frequency, NEW.review_period;
+      END IF;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER kpi_frequency_lock_check
+  BEFORE UPDATE ON kpis
+  FOR EACH ROW EXECUTE FUNCTION enforce_frequency_lock_on_submission();
 ```
 
-This is a **read-safe** bulk update:
-- No schema changes
-- No RLS bypass (runs via Supabase admin tool)
-- Targeted: only advances KPIs where the workflow genuinely ends at `approved` after `hr_pms_review`
-- Zero risk to KPIs in `self_l1_l2_hr_pms_audit` (where next stage would be `audit`, not `approved`)
+This is the deepest enforcement layer — even if someone bypasses the UI, the database will reject the status transition.
 
 ---
 
-## CAPA — Preventing Recurrence
+## Existing Data Decision
 
-### Immediate (done in previous session)
-- `resolveForwardStatus('hr_pms')` fixed to use `resolveNextStatus('hr_pms_review', stages) || 'approved'`
-- All new HR PMS approvals will correctly advance KPIs going forward
-
-### This Session
-- Bulk advance 95 stuck KPIs to `approved` via targeted SQL
-- No risk to active workflows, other statuses, or other templates
-
-### Preventive
-- The code fix already deployed ensures no new KPIs will get stuck this way
-- Publish to production after this data fix so live site also has the corrected logic
+The 13 Quarterly KPIs in `self_review` for January 2026 and 1 for February 2026 were submitted through this gap. Recommendation: **leave them as-is** since Q1 ends in March 2026 — managers can review the already-submitted data normally. The trigger will prevent new violations going forward.
 
 ---
 
-## Risk Assessment
+## Expected Outcome After Fix
 
-| Risk | Mitigation |
-|---|---|
-| Accidentally advancing KPIs not yet reviewed by HR PMS | Not possible — query only touches `status = 'hr_pms_review'` rows |
-| Advancing KPIs in templates where next stage is `audit` not `approved` | Query explicitly checks `wt.stages[position + 1] = 'approved'` |
-| Breaking audit trail | The `updated_at` timestamp is set; review_submissions records remain intact |
-| Reverting | Admin can use the existing Status Step Back dialog per KPI if any specific case needs review |
-
-**Expected outcome:** After the update, all 95 KPIs will show `approved` status, employees and managers will see them as complete in their dashboards.
+| Scenario | Before Fix | After Fix |
+|---|---|---|
+| Employee opens Quarterly KPI in January | Form visible, overlay on top, submit disabled | No form at all — locked card with "Entry opens in March" |
+| Employee opens Quarterly KPI in February | Same | Same locked card |
+| Employee opens Quarterly KPI in March | Form visible, submit enabled | No change — unchanged |
+| Admin opens on-behalf entry for locked KPI | No warning, can save | Warning banner + override confirmation required |
+| API-level status update attempt during locked period | Succeeds (no DB check) | Blocked by database trigger with clear error message |
+| Bi-Monthly Feb-Mar KPI in February | Form with overlay | Locked card |
+| Bi-Monthly Feb-Mar KPI in March | Form open | No change |
