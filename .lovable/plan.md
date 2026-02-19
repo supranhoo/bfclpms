@@ -1,78 +1,80 @@
 
-# Fix: Quick Fill Button Still Not Visible — Missing Scroll Container
+# Fix: Admin KPI Dashboard — Real-Time Updates & KPI Sort Order Stability
 
-## What's Happening
+## Two Issues Identified
 
-The ⚡ **Quick Fill: No Data (Score = 0)** button is confirmed present in the code at lines 498–525, correctly placed **between** the role selector and the N/A toggle. However, from the screenshots and code review:
+---
 
-1. The dialog body at line 478 is: `<div className="space-y-6 py-4">` — **no `overflow-y-auto`, no `max-h`**.
-2. The previous implementation step moved the button to the right position but **forgot to add the scroll wrapper** to the dialog body.
-3. Result: On any screen shorter than ~900px, the dialog overflows silently — no scrollbar appears, content is clipped, and the button simply can't be seen or reached.
+## Issue 1: Dashboard Not Updating in Real-Time
 
-The screenshots confirm this exactly — the dialog shows the role selector, then jumps straight to "Mark as Not Applicable" with no Quick Fill button visible between them, and the bottom of the dialog shows "Advance workflow status" toggle perfectly, which means content between the radio group and N/A toggle is being rendered off-screen or clipped.
+### Root Cause
+The `useAdminSubmitReviewData` mutation in `src/hooks/useAdminDataEntry.ts` (line 246) only invalidates these query keys on success:
+- `['review-submission-admin']`
+- `['review-submissions']`
+- `['kpis']`
+- `['all-kpis']`
 
-Wait — looking more carefully at the screenshot: "Mark as Not Applicable" appears immediately after the radio buttons with NO Quick Fill button visible between them. But in the code, the Quick Fill is at line 498–525, BETWEEN the radio group (lines 480–496) and the N/A toggle (lines 573–586). That's a large gap.
+It is **missing** invalidation for `['kpis-by-period']`, which is the **primary query key used by the Admin KPI Dashboard** (`AllKpis.tsx` line 81–84). When the page has a specific month/year selected (the default behavior), it uses `useKpisByPeriod` → query key `['kpis-by-period', selectedPeriod, selectedYear]`. Without invalidating this key, the cache stays stale after any admin action and the dashboard only refreshes on the next page visit or manual refresh.
 
-The issue is actually the **`DialogContent` in `src/components/ui/dialog.tsx`** — it has `max-w-lg` but **no `max-h`** and **no `overflow-y`**. So the entire dialog can grow taller than the viewport, but the `DialogContent` itself doesn't scroll. The dialog body div also doesn't scroll. Since the dialog extends off screen, anything past the viewport fold is unreachable — but the browser doesn't show a scrollbar because no element has `overflow-y: auto`.
+The same gap exists in `useAdminStatusStepBack` (lines 433+) — its `onSuccess` also does not invalidate `['kpis-by-period']`.
 
-## Root Cause Confirmed
+### Fix
+In `src/hooks/useAdminDataEntry.ts`:
 
-- `DialogContent` in `dialog.tsx`: no `max-h`, no `overflow-y`
-- Dialog body `div` at line 478: no `max-h`, no `overflow-y-auto`
-- The dialog extends beyond viewport height → content is clipped with no scrollbar
-- Quick Fill button exists in DOM but is invisible/unreachable
+1. In `useAdminSubmitReviewData` → `onSuccess`: add `queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] })`
+2. In `useAdminSubmitSubPeriod` → `onSuccess`: add `queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] })`
+3. In `useAdminStatusStepBack` → `onSuccess`: add `queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] })`
 
-## Fix — Two Changes to `AdminDataEntryDialog.tsx` Only
+Also, the `useAdminUpdateKpi` mutation in `src/hooks/useKpis.ts` (line 490) is also missing `['kpis-by-period']` invalidation. Fix this too.
 
-**Do NOT touch `dialog.tsx`** (that's a shared component used everywhere — changing it could break other dialogs).
+---
 
-Instead, apply the scroll fix specifically in `AdminDataEntryDialog.tsx`:
+## Issue 2: "Individual KPIs" Sequence Changes on Every Refresh
 
-### Change 1: Add `overflow-y-auto max-h-[70vh]` wrapper around the dialog body
+### Root Cause
+When an employee row is expanded in the table, the KPIs for that employee are retrieved by `getEmployeeKpis()` (line 216), which filters `filteredKpis`. The `filteredKpis` list is derived from `kpis`, which is fetched with:
 
-At line 478, change:
-```tsx
-<div className="space-y-6 py-4">
 ```
-to:
-```tsx
-<div className="overflow-y-auto max-h-[70vh] pr-2 space-y-6 py-4">
+.order('created_at', { ascending: false })
 ```
 
-This makes the body scrollable within 70% of the viewport height so all content — including the Quick Fill button — is always reachable by scrolling.
+This returns KPIs ordered by creation timestamp descending. The problem is that **when an admin mutation runs** (e.g., data entry, status change), the `updated_at` field is written, and after cache invalidation + refetch, if there is any ambiguity in the server sort (two KPIs with the same `created_at`, or the server returns them in a slightly different order due to row-level locking state), the order can fluctuate.
 
-### Change 2: Also apply `max-w-lg` override on `DialogContent` just for this dialog
+More critically: the `employeeKpis` list rendered in the expanded panel has **no secondary sort applied** — it simply follows whatever order they appear in `filteredKpis`, which changes based on the server's response order.
 
-The `DialogContent` wrapping this dialog should get a `className` of `max-h-[90vh]` to ensure the dialog itself doesn't overflow the screen:
+### Fix
+In `src/pages/admin/AllKpis.tsx`, stabilize the `getEmployeeKpis` function (line 216) by adding a **deterministic secondary sort** to the returned employee KPIs — sort by `kra_name` ascending, then by `kpi_name` ascending. This is alphabetical and stable across refetches:
 
-In the `<DialogContent>` tag for `AdminDataEntryDialog`, add `className="max-w-lg max-h-[90vh] flex flex-col"` and then the inner scrollable body div handles overflow.
+```ts
+const getEmployeeKpis = useCallback((employeeId: string): KPI[] => {
+  return filteredKpis
+    ?.filter(k => {
+      const emp = k.profiles as { id: string } | null;
+      return emp?.id === employeeId;
+    })
+    .sort((a, b) => {
+      const kraCompare = (a.kra_name || '').localeCompare(b.kra_name || '');
+      if (kraCompare !== 0) return kraCompare;
+      return (a.kpi_name || '').localeCompare(b.kpi_name || '');
+    }) || [];
+}, [filteredKpis]);
+```
 
-### Change 3 (Bonus): Move Quick Fill button ABOVE the N/A toggle in a more visible position
+Additionally, add a secondary sort key to the `useKpisByPeriod` query in `src/hooks/useKpis.ts` (line 187):
+- Change `.order('created_at', { ascending: false })` to include a secondary `.order('id', { ascending: true })` to make the Supabase response deterministic even when `created_at` values collide.
 
-Currently the order is:
-1. Role selector (radio group) — visible
-2. ⚡ Quick Fill button — SHOULD BE HERE (lines 498–525)
-3. Current value indicator (conditional)
-4. Binary misconfiguration warning (conditional)
-5. Consistency warning (conditional)
-6. N/A Toggle — visible
-
-With scroll added, users can reach the button. But to make it even more discoverable without requiring scroll, move it to be the very FIRST element inside the dialog body, above the role selector, in a subtle info-box style — like a "shortcuts" bar at the top. This way it's always visible immediately when the dialog opens.
-
-Actually the cleanest approach: keep it where it is (immediately after the radio group) but ensure the scroll container is added — this is most logical (you pick the level, then see the quick fill for that level). Just adding scroll is sufficient.
+---
 
 ## Files to Modify
 
-| File | Lines | Change |
-|---|---|---|
-| `src/components/admin/AdminDataEntryDialog.tsx` | 450–455 | Add `className="max-h-[90vh] flex flex-col"` to `DialogContent` |
-| `src/components/admin/AdminDataEntryDialog.tsx` | 478 | Add `overflow-y-auto max-h-[70vh] pr-2` to the body `div` |
+| File | Change |
+|---|---|
+| `src/hooks/useAdminDataEntry.ts` | Add `['kpis-by-period']` invalidation in 3 mutation `onSuccess` handlers |
+| `src/hooks/useKpis.ts` | Add `['kpis-by-period']` invalidation in `useAdminUpdateKpi` onSuccess; add secondary `.order('id')` to `useKpisByPeriod` query |
+| `src/pages/admin/AllKpis.tsx` | Add stable sort (by `kra_name`, then `kpi_name`) inside `getEmployeeKpis` callback |
+| `DOCUMENTATION.md` | Version bump to 1.45.27 |
 
-## Expected Result
+## Expected Outcome
 
-After fix:
-- Dialog body scrolls smoothly within the viewport
-- ⚡ Quick Fill button is visible immediately when user scrolls past the radio group (or even visible without scrolling on taller screens)
-- All other dialogs in the app remain unaffected
-- No logic, workflow, or form behavior changes
-- Version bump to 1.45.26 in DOCUMENTATION.md
+- After any admin data entry, status step-back, or KPI update — the dashboard stats cards, stage counts, and employee rows all update immediately without requiring a manual refresh.
+- The "Individual KPIs" list within any expanded employee row will always appear in the same alphabetical order (by KRA name, then KPI name), regardless of how many times the page refreshes or mutations fire.
