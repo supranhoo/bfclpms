@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-19  
-> **Version:** 1.45.31 — Workflow forward-status CAPA fix (hr_pms / skip_level)
+> **Version:** 1.45.32 — Frequency lock enforcement CAPA (SelfReviewSheet hard lock, AdminDataEntryDialog override guard, DB trigger)
 > **Maintainer:** Lovable AI
 
 ---

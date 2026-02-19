@@ -19,7 +19,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { AlertTriangle, Calculator, Info, Loader2, ShieldAlert, Zap } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { AlertTriangle, Calculator, Info, Lock, Loader2, ShieldAlert, Zap } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAdminSubmitReviewData, AdminRoleLevel } from '@/hooks/useAdminDataEntry';
 import { calculateRating, type RatingThresholds } from '@/lib/ratingCalculation';
@@ -28,6 +29,9 @@ import { DateCalendarInput } from '@/components/review/DateCalendarInput';
 import { QualitativeOption, scoreToRatingLevel } from '@/lib/qualitativeUom';
 import type { KPI, RatingLevel } from '@/hooks/useKpis';
 import type { Database } from '@/integrations/supabase/types';
+import { isKpiLockedForPeriod, getActiveMonthForCycle } from '@/lib/frequencyUtils';
+import { useFrequencyConfig } from '@/hooks/useFrequencyConfig';
+
 
 // Rating options matching existing RatingSelector component
 // Full 0-5 rating scale. DB enum only supports blue|green|yellow|red,
@@ -119,9 +123,23 @@ export function AdminDataEntryDialog({
   const [isNa, setIsNa] = useState<boolean>(false);
   const [advanceStatus, setAdvanceStatus] = useState<boolean>(true);
   const [isAutoCalculated, setIsAutoCalculated] = useState<boolean>(false);
+  const [adminOverrideConfirmed, setAdminOverrideConfirmed] = useState<boolean>(false);
   // Qualitative-specific state (aligned with SelfReviewSheet)
   const [calculatedRatingLevel, setCalculatedRatingLevel] = useState<RatingLevel | null>(null);
   const [calculatedScore, setCalculatedScore] = useState<number | null>(null);
+
+  // Frequency lock check (admin is warned but can override)
+  const reviewPeriodParsed = kpi ? parseReviewPeriod(kpi) : { month: 'January', year: new Date().getFullYear() };
+  const { config: frequencyConfig } = useFrequencyConfig(kpi?.frequency);
+  const isFrequencyLocked = kpi ? isKpiLockedForPeriod(
+    kpi.frequency, reviewPeriodParsed.month, reviewPeriodParsed.year,
+    kpi.frequency_cycle_start, frequencyConfig
+  ) : false;
+  const activeMonth = kpi ? getActiveMonthForCycle(
+    kpi.frequency, reviewPeriodParsed.month, reviewPeriodParsed.year,
+    kpi.frequency_cycle_start, frequencyConfig
+  ) : null;
+
 
   // Detect misconfigured binary KPIs (C3: validation warning)
   const binaryMisconfigWarning = useMemo(() => {
@@ -441,10 +459,10 @@ export function AdminDataEntryDialog({
     onClose();
   };
 
-  const isValid = reason.trim().length > 0;
+  const isValid = reason.trim().length > 0 && (!isFrequencyLocked || adminOverrideConfirmed);
 
-  // For DateCalendarInput
-  const reviewPeriod = kpi ? parseReviewPeriod(kpi) : { month: 'January', year: new Date().getFullYear() };
+  // For DateCalendarInput — reviewPeriodParsed already computed above
+  const reviewPeriod = reviewPeriodParsed;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -495,7 +513,39 @@ export function AdminDataEntryDialog({
               </RadioGroup>
             </div>
 
+            {/* Frequency Lock Warning — shown for Bi-Monthly, Quarterly, etc. in locked months */}
+            {isFrequencyLocked && (
+              <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700">
+                <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <AlertDescription className="space-y-3">
+                  <div>
+                    <p className="font-semibold text-amber-800 dark:text-amber-200 text-sm">
+                      Frequency Lock Active — {kpi?.frequency} KPI
+                    </p>
+                    <p className="text-amber-700 dark:text-amber-300 text-sm mt-1">
+                      This KPI is locked for <strong>{reviewPeriodParsed.month}</strong> because it is not the active review month
+                      {activeMonth ? <> (entry opens in <strong>{activeMonth}</strong>)</> : ''}.
+                      Employees cannot submit during this period.
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-2 p-2 rounded border border-amber-300 dark:border-amber-600 bg-amber-100/50 dark:bg-amber-900/20">
+                    <Checkbox
+                      id="admin-override-confirm"
+                      checked={adminOverrideConfirmed}
+                      onCheckedChange={(v) => setAdminOverrideConfirmed(!!v)}
+                      className="mt-0.5"
+                    />
+                    <Label htmlFor="admin-override-confirm" className="cursor-pointer text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+                      I confirm this is an intentional admin override for a locked frequency period.
+                      This action will be logged in the audit trail.
+                    </Label>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* Quick Fill: No Data (Zero Score) — standalone section, always visible */}
+
             <div>
               <Button
                 type="button"
