@@ -1,160 +1,115 @@
 
-# Frequency Lock Enforcement — CAPA Implementation Plan
+# Root Cause Analysis — Admin Data Entry Changes Not Reflecting for Ashish Kataria (December)
 
-## Confirmed Locking Behavior (No Changes to Rules)
+## What the Database Confirms
 
-The locking rules in `isKpiLockedForPeriod` and `frequencyCycleOptions.ts` are already correct and match the user's requirement exactly:
+After auditing the database, the situation is clear:
 
-### Bi-Monthly (Feb-Mar cycle)
-- February = LOCKED (month 2 is in `locked_months['Feb-Mar']: [2]`)
-- March = OPEN (active month — entry allowed)
-- April = LOCKED again (Q2 cycle: `Apr-May: [4]`)
+**The data IS being saved correctly.** The audit logs confirm all recent admin entries for Ashish Kataria's December KPIs were recorded:
+- 7+ KPIs received `ADMIN_DATA_ENTRY_SELF` entries today (Feb 19, 2026) at ~15:31–15:33 UTC
+- All entries used "Quick Fill: No Data (Score = 0)" — rating `red`, score `0`
+- The `kpi_status` in `review_submissions` was updated to `submitted` ✓
+- The `kpis.status` was advanced to `self_review` ✓
 
-### Quarterly (Jan-Mar cycle)
-- January = LOCKED (month 1 is in `locked_months['Q1']: [1, 2]`)
-- February = LOCKED (month 2 is in `locked_months['Q1']: [1, 2]`)
-- March = OPEN (active month — entry allowed)
-- April = LOCKED again (Q2 cycle: `Q2: [4, 5]`)
+**The problem is: the "Advance workflow status" toggle is moving the KPIs to `self_review` — but several of those KPIs already had status `approved` (from a batch done earlier today at 14:44 UTC). The Quick Fill zero-score entry is then advancing them BACK to `self_review`, which appears as "no change" or "regression" to the admin who expected to see a positive score reflected.**
 
-The rules are correct. The problem is that enforcement is **only visual** (overlay + disabled button) with no server-side guarantee. This is what the CAPA plan fixes.
+## Specific Evidence
 
----
+| KPI | Status at 14:44 | Admin Entry at ~15:32 | Status Now |
+|---|---|---|---|
+| Budgetry Preparation | `self_review` | Quick Fill = 0 | `self_review` |
+| Cost optimisation | `self_review` | Quick Fill = 0 | `self_review` |
+| Stock audit variance | `self_review` | Quick Fill = 0 | `self_review` |
+| Implementation of policies | `self_review` | Quick Fill = 0 | `self_review` |
 
-## What Is Broken (Current State)
+Meanwhile other KPIs like "Adherence to Manning Norms", "Budget saving", "Training Hours" are **`approved`** — these were the ones that didn't receive a second admin entry today.
 
-Three enforcement gaps allow entries in locked months despite correct locking rules:
+The user's "changes not reflecting" is happening because:
 
-### Gap 1 — Self Review Sheet: Visual-Only Lock
-`FrequencyLockedOverlay` renders inside the form card as a CSS overlay (`position: absolute`). The submit button is disabled via `isFrequencyLocked`, but this relies on the async `useFrequencyConfig` hook. If config loads slowly, there is a brief window where the button is not yet disabled. More critically, there is **no server-side check** — an API-level update to `status = 'self_review'` is not blocked.
+1. **The actual values they entered are score = 0 (Quick Fill)** — if they expected to see a different achieved value, the display is correct but they may have used Quick Fill when they intended to enter actual values.
+2. **OR: They entered actual values but the dialog showed `self_review` status KPIs**, so the "Advance workflow status" toggle is ON and set the KPI to `self_review` — which is the same stage it was in, so visually it appears "unchanged" in the All KPIs view that may be filtered by status.
+3. **There is also a React `ref` warning** in `AdminDataEntryDialog`: `Select` component is receiving a `ref` passed from a parent that doesn't use `forwardRef`. This is a console warning (not a crash) but can intermittently cause the Rating `Select` to lose its value on certain render cycles.
 
-Evidence: 13 Quarterly KPIs are in `self_review` for January 2026, 1 for February 2026 — months that should have been locked.
+## The Two Root Problems
 
-### Gap 2 — Admin On-Behalf Entry: No Lock Check At All
-`AdminDataEntryDialog.tsx` has zero frequency lock validation. Admins can submit data for any KPI in any month with no warning or block.
+### Problem 1 — "Advance workflow status" sends already-`approved` KPIs backwards
+When an admin opens a KPI that is currently in `approved` status and uses the Admin Data Entry dialog (with "Advance workflow status" = ON), the mutation sets the status to `self_review` — **because the `self` role level always resolves next status = `self_review`**. This effectively DEMOTES an approved KPI.
 
-### Gap 3 — No Database Enforcement
-The `kpis` table `UPDATE` RLS policy allows any employee to change their own KPI status. There is no database trigger preventing `kra_set → self_review` transitions during locked periods.
+From `useAdminDataEntry.ts` line 196:
+```ts
+if (role_level === 'self') {
+  newStatus = 'self_review';  // Always sets to self_review regardless of current status
+}
+```
 
----
+This means: any admin who opens an already-`approved` KPI, enters data for "self" level, and has "Advance workflow" ON will **regress the KPI from `approved` → `self_review`**.
+
+### Problem 2 — React `ref` warning on Select in AdminDataEntryDialog
+The Rating `Select` (line 685 of `AdminDataEntryDialog.tsx`) receives a ref passed through the dialog stack. This triggers the React warning visible in the console. While this is non-critical, it can cause the `SelectValue` to display stale state.
+
+## What Needs to Be Fixed
+
+### Fix 1 — Guard "Advance workflow status" against demotion (Critical)
+
+In `useAdminDataEntry.ts`, the self-entry status advance logic should check the **current KPI status** before blindly setting it to `self_review`. It should only advance (or maintain) the status — never demote:
+
+```ts
+if (role_level === 'self') {
+  // Only set to self_review if the KPI is currently at kra_set
+  // If it's already at self_review or beyond, don't regress it
+  const { data: currentKpi } = await supabase
+    .from('kpis')
+    .select('status')
+    .eq('id', kpi_id)
+    .single();
+    
+  const STAGE_ORDER = ['kra_set', 'self_review', 'manager_check', ...];
+  const currentIdx = STAGE_ORDER.indexOf(currentKpi.status);
+  const selfReviewIdx = STAGE_ORDER.indexOf('self_review');
+  
+  // Only advance if currently behind self_review
+  if (currentIdx < selfReviewIdx) {
+    newStatus = 'self_review';
+  }
+  // If already at self_review or beyond, don't change status
+}
+```
+
+### Fix 2 — AdminDataEntryDialog UI: Show current KPI status and warn when "Advance Status" would demote
+
+In `AdminDataEntryDialog.tsx`, show a warning banner when:
+- `roleLevel === 'self'` AND
+- KPI current status is `self_review` or beyond AND
+- `advanceStatus` is ON
+
+This warns the admin: "This KPI is already at [manager_check/approved]. Enabling 'Advance workflow' will NOT change the status — data update only."
+
+Also: auto-set `advanceStatus` default to `false` when KPI status is already past `kra_set` for self-level entries (since the data-only update is the common intent when the KPI is already in review).
+
+### Fix 3 — adminOverrideConfirmed state not resetting between KPIs
+
+In `AdminDataEntryDialog.tsx`, the `adminOverrideConfirmed` state is reset only when `isOpen` changes (the dialog closes). But when navigating between KPIs in the All KPIs table (dialog opens for KPI A, closes, reopens for KPI B), the `adminOverrideConfirmed` should properly reset. This is already handled by the `useEffect` on `isOpen`, but the `adminOverrideConfirmed` is NOT included in the reset block. This is a minor gap.
 
 ## Files to Modify
 
 | File | Change | Risk |
 |---|---|---|
-| `src/components/review/SelfReviewSheet.tsx` | Replace `FrequencyLockedOverlay` approach: when `isKraSet && isFrequencyLocked`, render a dedicated locked card view instead of the input form | Low |
-| `src/components/admin/AdminDataEntryDialog.tsx` | Add `isKpiLockedForPeriod` check; show lock warning banner; require admin override checkbox with justification | Low |
-| New DB migration | Add trigger `prevent_locked_frequency_submission` on `kpis` table: blocks `kra_set → self_review` for employee-role users when the KPI's review_period month is in the locked months for its frequency | Medium |
-| `DOCUMENTATION.md` | Version bump to 1.45.32 | None |
+| `src/hooks/useAdminDataEntry.ts` | Fix self-role status advance: check current KPI status before setting `self_review`; never demote a KPI that's already past `self_review` | Low — purely defensive |
+| `src/components/admin/AdminDataEntryDialog.tsx` | (1) Add warning when advance toggle would have no effect or demote; (2) Auto-set advanceStatus=false as default when KPI is beyond `kra_set`; (3) Add `adminOverrideConfirmed` to the reset effect | Low |
+| `DOCUMENTATION.md` | Version bump to 1.45.33 | None |
 
----
+## What Will NOT Change
 
-## Technical Implementation Detail
-
-### Fix 1 — SelfReviewSheet.tsx
-
-Currently the form card always renders for `kra_set` KPIs, with an overlay on top when locked. The fix wraps the entire form content in a conditional:
-
-```tsx
-// When kra_set + frequency locked → show locked card instead of form
-if (isKpiStatus('kra_set') && isFrequencyLocked) {
-  return (
-    <Card>
-      <CardContent className="py-12 text-center">
-        <Lock className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
-        <h3 className="font-semibold mb-2">Entry not allowed yet</h3>
-        <p className="text-sm text-muted-foreground">
-          This {selectedKpi.frequency} KPI is locked until <strong>{activeMonth}</strong>.
-          Data entry opens in {activeMonth}.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-```
-
-This completely removes the form — no input fields, no submit button — making it impossible to submit through the UI.
-
-### Fix 2 — AdminDataEntryDialog.tsx
-
-Add frequency lock check using `isKpiLockedForPeriod` with the KPI's `frequency_cycle_start`. If locked, show a warning:
-
-```tsx
-const isLocked = isKpiLockedForPeriod(kpi.frequency, reviewMonth, reviewYear, kpi.frequency_cycle_start, frequencyConfig);
-
-if (isLocked && !adminOverrideConfirmed) {
-  // Show warning banner explaining the lock
-  // Require "I confirm this is an intentional admin override" checkbox
-  // Only enable Save after checkbox is checked
-}
-```
-
-Admins retain override capability but must explicitly acknowledge it.
-
-### Fix 3 — Database Trigger Migration
-
-A PostgreSQL trigger on the `kpis` table that fires BEFORE UPDATE:
-
-```sql
-CREATE OR REPLACE FUNCTION enforce_frequency_lock_on_submission()
-RETURNS TRIGGER AS $$
-DECLARE
-  locked_config jsonb;
-  month_num int;
-  is_admin boolean;
-BEGIN
-  -- Only block the kra_set → self_review transition
-  IF OLD.status = 'kra_set' AND NEW.status = 'self_review' THEN
-    -- Admins are always allowed
-    SELECT has_role(auth.uid(), 'admin'::app_role) INTO is_admin;
-    IF is_admin THEN RETURN NEW; END IF;
-    
-    -- Get the frequency lock config
-    SELECT locked_months INTO locked_config
-    FROM frequency_config
-    WHERE frequency = NEW.frequency
-    LIMIT 1;
-    
-    IF locked_config IS NOT NULL AND NEW.review_period IS NOT NULL THEN
-      -- Get month number from review_period name
-      month_num := EXTRACT(MONTH FROM TO_DATE(NEW.review_period || ' 1 2000', 'Month DD YYYY'));
-      
-      -- Check if this month is in any locked group
-      IF EXISTS (
-        SELECT 1 FROM jsonb_each(locked_config) AS e(key, val)
-        WHERE val @> to_jsonb(month_num)
-      ) THEN
-        RAISE EXCEPTION 'Submission not allowed: % KPI is locked for %. Entry opens in the active review month.',
-          NEW.frequency, NEW.review_period;
-      END IF;
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE TRIGGER kpi_frequency_lock_check
-  BEFORE UPDATE ON kpis
-  FOR EACH ROW EXECUTE FUNCTION enforce_frequency_lock_on_submission();
-```
-
-This is the deepest enforcement layer — even if someone bypasses the UI, the database will reject the status transition.
-
----
-
-## Existing Data Decision
-
-The 13 Quarterly KPIs in `self_review` for January 2026 and 1 for February 2026 were submitted through this gap. Recommendation: **leave them as-is** since Q1 ends in March 2026 — managers can review the already-submitted data normally. The trigger will prevent new violations going forward.
-
----
+- The data save logic itself is working correctly — values ARE being saved to `review_submissions`
+- The audit trail is intact
+- The frequency lock logic introduced in 1.45.32 is not the cause here (Ashish Kataria's KPIs are all Monthly — Monthly has no locked_months in `frequency_config`)
 
 ## Expected Outcome After Fix
 
 | Scenario | Before Fix | After Fix |
 |---|---|---|
-| Employee opens Quarterly KPI in January | Form visible, overlay on top, submit disabled | No form at all — locked card with "Entry opens in March" |
-| Employee opens Quarterly KPI in February | Same | Same locked card |
-| Employee opens Quarterly KPI in March | Form visible, submit enabled | No change — unchanged |
-| Admin opens on-behalf entry for locked KPI | No warning, can save | Warning banner + override confirmation required |
-| API-level status update attempt during locked period | Succeeds (no DB check) | Blocked by database trigger with clear error message |
-| Bi-Monthly Feb-Mar KPI in February | Form with overlay | Locked card |
-| Bi-Monthly Feb-Mar KPI in March | Form open | No change |
+| Admin enters self data for KPI already `approved`, Advance toggle ON | KPI demoted to `self_review` | Status unchanged (data saved, no demotion) |
+| Admin enters self data for KPI at `kra_set`, Advance toggle ON | KPI advanced to `self_review` ✓ | Same — no change |
+| Admin enters self data for KPI at `manager_check`, Advance toggle ON | KPI demoted to `self_review` | Status unchanged (data saved only) |
+| Advance toggle is ON for a KPI already in review | No warning | Warning banner: "KPI is already at [status] — workflow will not be changed" |
+| adminOverrideConfirmed between KPI switches | May carry over | Always resets on dialog open |
