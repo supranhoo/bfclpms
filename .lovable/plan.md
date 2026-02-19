@@ -1,149 +1,81 @@
 
-# Two Separate Issues — Both Diagnosed and Ready to Fix
+# Fix Plan: Two Separate RLS & Sidebar Issues for Vivek (HR PMS)
 
----
+## Issue 1: Vivek Sees Only 26 Employees in HR PMS Panel (Should See 426)
 
-## Issue 1: Vivek Sees Low Pending Count in HR PMS
+### Root Cause: Missing `profiles` SELECT Policy for `hr_pms` Role
 
-### Root Cause: RLS Policies on `kpis` and `review_submissions` Use `roles: {public}` Instead of `{authenticated}`
+The `profiles` table has SELECT policies for:
+- `admin` — can view all profiles
+- `auditor` — can view all profiles
+- `management` — can view all profiles
+- `manager` — can view direct reports and skip-level reports
 
-Looking at the database RLS policies:
+But there is **zero** SELECT policy for the `hr_pms` role.
 
+When `useProfilesByWorkflowStage` runs for Vivek, it executes:
+```sql
+SELECT * FROM profiles ORDER BY full_name
 ```
-HR PMS can view all KPIs  →  roles: {public}
-HR PMS can update KPI status during review  →  roles: {public}
-HR PMS can view all submissions  →  roles: {public}
-HR PMS can update submissions during review  →  roles: {public}
-```
+Due to RLS, Vivek can only see profiles he has access to:
+1. His own profile (1 row) — via `"Users can view their own profile"` 
+2. ~38 profiles of employees whose org-level KPIs he manages — via `"Data owners can view org kpi employee profiles"` (the `is_data_owner_for_employee` function)
 
-This is the critical problem. **Supabase RLS policies on `{public}` only apply to anonymous (unauthenticated) requests** — not to logged-in users. When Vivek logs in and makes requests, he is authenticated (`{authenticated}` role), and these `{public}` policies **do not apply to him**.
+After the workflow-stage filter keeps only those with `hr_pms_review`, that's exactly 26 — matching the screenshot.
 
-This means:
-- Vivek has the `hr_pms` user role in `user_roles`
-- The `has_role(auth.uid(), 'hr_pms')` function returns `true` for him
-- BUT the SELECT policy is on `{public}` — Vivek is `{authenticated}`, so this policy is **skipped entirely**
-- He falls through to only the policies that match `{authenticated}` — which includes "Employees can view their own KPIs" (only his own KPI) — showing almost no data
+The actual correct count should be **426 employees** (the result of the database query above showing all employees whose effective workflow contains `hr_pms_review`).
 
-### Why Admin Sees 161 but Vivek Sees Very Few
-
-- Admin's RLS policy uses `roles: {authenticated}` — so it applies correctly
-- Vivek's HR PMS policies are on `{public}` — they never fire for a logged-in user
-- Vivek only sees KPIs he owns as an employee (his own record)
-
-### Proof from the Database
-
-Compare:
-```
-Admins and auditors can view all KPIs  →  roles: {authenticated}  ← WORKS
-HR PMS can view all KPIs              →  roles: {public}          ← BROKEN
-Management can view all KPIs          →  roles: {public}          ← ALSO BROKEN
-Skip-level managers can view reports  →  roles: {public}          ← ALSO BROKEN
-```
-
-The `{public}` vs `{authenticated}` mismatch is a systemic RLS bug affecting HR PMS, Management, and Skip-Level roles. It explains why these reviewer roles have consistently lower data visibility than expected.
-
----
-
-## Issue 2: Vivek Can't See the Org KPI Data Entry Option for "Adherence to Manning Norms"
-
-### Confirmed: Vivek IS a Data Owner
-
-From the database, Vivek (`ca3897d0`) is correctly listed in `org_kpi_data_owners` for "Adherence to Manning Norms." So the assignment is correct.
-
-### Root Cause: `DataOwnerRoute` Works — But the **Page-Level Filter** Excludes Him
-
-The `OrgKpiDataEntry` page at line 91:
-```typescript
-const { ownershipMap, isAdmin } = useOrgKpiOwnershipMap();
-```
-
-And at line 126–133:
-```typescript
-const ownershipFilteredKpis = useMemo(() => {
-  if (!orgLevelKpis) return [];
-  if (isAdmin) return orgLevelKpis;
-  return orgLevelKpis.filter(kpi => {
-    const ownerKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
-    return ownershipMap.get(ownerKey)?.canEdit === true;
-  });
-}, [orgLevelKpis, isAdmin, ownershipMap]);
-```
-
-The `orgLevelKpis` comes from `useOrgLevelKpisWithEmployees()` → `useOrgLevelKpis()`, which queries **the `kpis` table** directly:
-```typescript
-await supabase.from('kpis').select(...).eq('is_org_level', true)
-```
-
-Because of the RLS bug from Issue 1, **Vivek cannot read from the `kpis` table** (the HR PMS policy is on `{public}`, so it doesn't fire for authenticated users). The `orgLevelKpis` array returns **empty** for Vivek — not because he's not a data owner, but because the underlying query returns no rows!
-
-Since `orgLevelKpis` is empty, the ownership filter produces an empty list too, and no KPI cards appear on the page.
-
-### Why Both Issues Have the Same Root Cause
-
-Both problems trace back to the same systemic RLS bug: policies for `hr_pms`, `management`, and `skip_level` roles were created with `roles: {public}` instead of `roles: {authenticated}`. This means:
-1. Vivek can't see KPIs in the HR PMS review panel (Issue 1)
-2. Vivek can't see Org KPI data entry cards — they rely on the same `kpis` table query (Issue 2)
-
----
-
-## The Fix: Update RLS Policies from `{public}` to `{authenticated}`
-
-The following policies need to be updated in a single SQL migration:
-
-### Policies to Fix on `kpis` table
-
-| Policy | Current Role | Correct Role |
-|---|---|---|
-| HR PMS can view all KPIs | `public` | `authenticated` |
-| HR PMS can update KPI status during review | `public` | `authenticated` |
-| Management can view all KPIs | `public` | `authenticated` |
-| Management can update KPI status during review | `public` | `authenticated` |
-| Skip-level managers can view reports KPIs | `public` | `authenticated` |
-| Skip-level managers can update reports KPI status | `public` | `authenticated` |
-| Users can update their own KPIs | `public` | `authenticated` |
-
-### Policies to Fix on `review_submissions` table
-
-| Policy | Current Role | Correct Role |
-|---|---|---|
-| HR PMS can view all submissions | `public` | `authenticated` |
-| HR PMS can update submissions during review | `public` | `authenticated` |
-| Management can view all submissions | `public` | `authenticated` |
-| Management can update submissions during review | `public` | `authenticated` |
-| Skip-level managers can view reports submissions | `public` | `authenticated` |
-| Skip-level managers can update reports submissions | `public` | `authenticated` |
-
-### Migration SQL
+### Fix: Add a single RLS policy on `profiles` for `hr_pms`
 
 ```sql
--- Fix kpis table RLS policies
-ALTER POLICY "HR PMS can view all KPIs" ON public.kpis TO authenticated;
-ALTER POLICY "HR PMS can update KPI status during review" ON public.kpis TO authenticated;
-ALTER POLICY "Management can view all KPIs" ON public.kpis TO authenticated;
-ALTER POLICY "Management can update KPI status during review" ON public.kpis TO authenticated;
-ALTER POLICY "Skip-level managers can view reports KPIs" ON public.kpis TO authenticated;
-ALTER POLICY "Skip-level managers can update reports KPI status" ON public.kpis TO authenticated;
-ALTER POLICY "Users can update their own KPIs" ON public.kpis TO authenticated;
+CREATE POLICY "HR PMS can view all profiles"
+ON public.profiles
+FOR SELECT
+TO authenticated
+USING (has_role(auth.uid(), 'hr_pms'));
+```
 
--- Fix review_submissions table RLS policies
-ALTER POLICY "HR PMS can view all submissions" ON public.review_submissions TO authenticated;
-ALTER POLICY "HR PMS can update submissions during review" ON public.review_submissions TO authenticated;
-ALTER POLICY "Management can view all submissions" ON public.review_submissions TO authenticated;
-ALTER POLICY "Management can update submissions during review" ON public.review_submissions TO authenticated;
-ALTER POLICY "Skip-level managers can view reports submissions" ON public.review_submissions TO authenticated;
-ALTER POLICY "Skip-level managers can update reports submissions" ON public.review_submissions TO authenticated;
+This mirrors the exact pattern used for Management and Auditor roles.
+
+---
+
+## Issue 2: Vivek Cannot See/Access "Org KPI Data Entry" in the Sidebar
+
+### Root Cause: `hr_pms` Role Missing from Sidebar Menu Item's Roles Array
+
+In `AppSidebar.tsx`, line 92-94:
+
+```typescript
+dataEntry: [
+  { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', roles: ['employee', 'manager', 'auditor', 'management'] },
+],
+```
+
+The `hr_pms` role is **not in this list**. The sidebar's `filterByRole()` function filters items to only those whose `roles` array includes the current user's `effectiveRole`. Since Vivek's `effectiveRole` is `hr_pms`, this item is stripped out by the filter — so it never renders, even though the "Data Entry" section header does appear (controlled by `effectiveRole !== 'admin' && isDataOwner`).
+
+### Fix: Add `hr_pms` to the roles array
+
+```typescript
+dataEntry: [
+  { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', roles: ['employee', 'manager', 'auditor', 'management', 'hr_pms'] },
+],
 ```
 
 ---
 
-## What Changes After This Fix
+## Technical Notes
 
-| Before | After |
-|---|---|
-| Vivek sees ~2-4 KPIs (only his own) in HR PMS panel | Vivek sees all 161 pending KPIs correctly |
-| Vivek sees blank page for Org KPI Data Entry | Vivek sees all his assigned KPIs (Adherence to Manning Norms, etc.) |
-| Management users potentially have same issue | Management users see correct data |
-| Skip-level reviewers potentially affected | Skip-level review works correctly |
+### Why the Previous Migration (v1.45.23) Didn't Fix Issue 1
+
+The previous migration correctly fixed `kpis` and `review_submissions` tables — both now use `authenticated` role. But the `profiles` table was a **separate missing policy** that was never addressed. The `kpis` fix allowed Vivek to read KPI data, but without the `profiles` fix, the employee list (which drives the `EmployeeSelectorGrid`) is still limited to ~26 employees.
+
+### org_kpi_values Admin Policy (Bonus Fix)
+
+The audit also reveals that `org_kpi_values` has two policies set to `{public}` role (same bug that was fixed on `kpis`/`review_submissions`):
+- `"Admins can manage org_kpi_values"` → uses `{public}`
+- `"Authenticated users can view org_kpi_values"` → uses `{public}`
+
+These should also be fixed to `{authenticated}`.
 
 ---
 
@@ -151,7 +83,17 @@ ALTER POLICY "Skip-level managers can update reports submissions" ON public.revi
 
 | File | Change |
 |---|---|
-| Database migration | Fix 13+ RLS policies from `{public}` to `{authenticated}` on `kpis` and `review_submissions` tables |
-| `DOCUMENTATION.md` | Version bump to 1.45.23, document the RLS policy fix |
+| Database migration | Add `"HR PMS can view all profiles"` SELECT policy on `profiles`; fix `org_kpi_values` public→authenticated policies |
+| `src/components/layout/AppSidebar.tsx` | Add `'hr_pms'` to the `dataEntry` menu item's `roles` array |
+| `DOCUMENTATION.md` | Version bump to 1.45.24 |
 
-No frontend code changes are needed — this is purely a database security configuration fix.
+---
+
+## What Changes for Vivek After This Fix
+
+| Before | After |
+|---|---|
+| HR PMS panel shows 26 employees (only those Vivek manages as data owner) | HR PMS panel shows all 426 employees with `hr_pms_review` in their workflow |
+| "Org KPI Data Entry" menu item invisible in sidebar despite being a data owner | "Org KPI Data Entry" menu item visible and clickable for Vivek |
+| Jaspal's team (Ankit, Jitendra, Randhir, Samir, Upendra, etc.) not visible | All team members visible in HR PMS panel |
+| Pending Review count shows 17 (only from the 26 visible profiles) | Pending Review count shows correct count across all eligible employees |
