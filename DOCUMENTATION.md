@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-19  
-> **Version:** 1.45.29
+> **Version:** 1.45.30
 > **Maintainer:** Lovable AI
 
 ---
@@ -3701,6 +3701,21 @@ Admin clicks "Rollback" on propagated card
 | `src/components/review/AuditScorecard.tsx` | Same pattern |
 | `src/components/review/ManagementScorecard.tsx` | Same pattern |
 | `src/components/review/EmployeeScorecard.tsx` | Same pattern |
+
+---
+
+**v1.45.30 — Inbox Access CAPA: hr_pms and skip_level Full Fix**
+
+All Inbox access gaps for `hr_pms` and `skip_level` roles have been closed:
+
+- `src/lib/roles.ts` (new) — Single source of truth for `ALL_APP_ROLES` and `AppRole` type. `skip_level` now officially recognized as a frontend role.
+- `src/contexts/AuthContext.tsx` — Imports `AppRole` from centralized `roles.ts`.
+- `src/components/layout/ProtectedRoute.tsx` — Imports `AppRole` from centralized `roles.ts`.
+- `src/components/layout/AppSidebar.tsx` — Added `hr_pms` and `skip_level` to Inbox and My Dashboard menu item roles. Manager section (Team Reviews) now also visible to `skip_level` users.
+- `src/App.tsx` — Added `skip_level` to `/profile` and `/pms-policy` ProtectedRoute `allowedRoles` arrays.
+- `src/hooks/useQueryWorkflow.ts` — `useSubordinateQueries` now fetches both direct reports and skip-level (indirect) subordinates so the Team tab shows the full reporting chain for skip-level managers.
+
+**Preventive Action:** `src/lib/roles.ts` is the single file to update when a new database role is added. All downstream files import from it.
 
 ---
 

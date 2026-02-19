@@ -96,13 +96,13 @@ const App = () => (
                 <Route path="/self-review" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/kra-acceptance" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/profile" element={
-                  <ProtectedRoute allowedRoles={['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms']}>
+                  <ProtectedRoute allowedRoles={['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms', 'skip_level']}>
                     <Suspense fallback={<PageFallback />}><ProfileSettings /></Suspense>
                   </ProtectedRoute>
                 } />
                 <Route path="/queries" element={<QueryInbox />} />
                 <Route path="/pms-policy" element={
-                  <ProtectedRoute allowedRoles={['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms']}>
+                  <ProtectedRoute allowedRoles={['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms', 'skip_level']}>
                     <PMSPolicy />
                   </ProtectedRoute>
                 } />
