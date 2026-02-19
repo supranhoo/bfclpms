@@ -1,115 +1,116 @@
 
-# Root Cause Analysis — Admin Data Entry Changes Not Reflecting for Ashish Kataria (December)
+# Fast Track to Approved — Admin Bulk Stage Completion
 
-## What the Database Confirms
+## Problem Statement
 
-After auditing the database, the situation is clear:
+Ashish Kataria's 8 December KPIs are stuck at `self_review`. His workflow is:
+`kra_set → self_review → manager_check → skip_level_check → hr_pms_review → approved`
 
-**The data IS being saved correctly.** The audit logs confirm all recent admin entries for Ashish Kataria's December KPIs were recorded:
-- 7+ KPIs received `ADMIN_DATA_ENTRY_SELF` entries today (Feb 19, 2026) at ~15:31–15:33 UTC
-- All entries used "Quick Fill: No Data (Score = 0)" — rating `red`, score `0`
-- The `kpi_status` in `review_submissions` was updated to `submitted` ✓
-- The `kpis.status` was advanced to `self_review` ✓
+To move each KPI to `approved` currently requires **3 separate Admin Data Entry saves** (Manager, Skip-Level, HR PMS) × 8 KPIs = **24 manual operations**. The dialog has no way to advance multiple stages at once.
 
-**The problem is: the "Advance workflow status" toggle is moving the KPIs to `self_review` — but several of those KPIs already had status `approved` (from a batch done earlier today at 14:44 UTC). The Quick Fill zero-score entry is then advancing them BACK to `self_review`, which appears as "no change" or "regression" to the admin who expected to see a positive score reflected.**
+The user has tried this repeatedly and it is not working because they likely save the "Self" level each time (which correctly doesn't change status since it's already at `self_review`), or they try Manager but must repeat for Skip-Level and HR PMS separately.
 
-## Specific Evidence
+## Root Cause Confirmed
 
-| KPI | Status at 14:44 | Admin Entry at ~15:32 | Status Now |
-|---|---|---|---|
-| Budgetry Preparation | `self_review` | Quick Fill = 0 | `self_review` |
-| Cost optimisation | `self_review` | Quick Fill = 0 | `self_review` |
-| Stock audit variance | `self_review` | Quick Fill = 0 | `self_review` |
-| Implementation of policies | `self_review` | Quick Fill = 0 | `self_review` |
+- All 8 KPIs: `status = self_review`, `self_rating = red`, `self_score = 0`
+- `manager_rating`, `skip_level_rating`, `hr_pms_rating` are ALL NULL
+- `final_rating`, `final_score` are ALL NULL
+- Ashish's workflow has 3 remaining stages before `approved`: manager_check, skip_level_check, hr_pms_review
 
-Meanwhile other KPIs like "Adherence to Manning Norms", "Budget saving", "Training Hours" are **`approved`** — these were the ones that didn't receive a second admin entry today.
+## Solution: "Fast Track to Approved" Button
 
-The user's "changes not reflecting" is happening because:
+Add a dedicated **"Fast Track to Approved"** button to the Admin Data Entry dialog that:
 
-1. **The actual values they entered are score = 0 (Quick Fill)** — if they expected to see a different achieved value, the display is correct but they may have used Quick Fill when they intended to enter actual values.
-2. **OR: They entered actual values but the dialog showed `self_review` status KPIs**, so the "Advance workflow status" toggle is ON and set the KPI to `self_review` — which is the same stage it was in, so visually it appears "unchanged" in the All KPIs view that may be filtered by status.
-3. **There is also a React `ref` warning** in `AdminDataEntryDialog`: `Select` component is receiving a `ref` passed from a parent that doesn't use `forwardRef`. This is a console warning (not a crash) but can intermittently cause the Rating `Select` to lose its value on certain render cycles.
+1. Fills all **remaining review stage fields** (manager, skip_level, hr_pms) with the same score/rating
+2. Sets the KPI status directly to `approved`
+3. Syncs `final_rating` and `final_score`
+4. Creates a single audit log entry documenting the bulk action
+5. Sends one employee notification
 
-## The Two Root Problems
-
-### Problem 1 — "Advance workflow status" sends already-`approved` KPIs backwards
-When an admin opens a KPI that is currently in `approved` status and uses the Admin Data Entry dialog (with "Advance workflow status" = ON), the mutation sets the status to `self_review` — **because the `self` role level always resolves next status = `self_review`**. This effectively DEMOTES an approved KPI.
-
-From `useAdminDataEntry.ts` line 196:
-```ts
-if (role_level === 'self') {
-  newStatus = 'self_review';  // Always sets to self_review regardless of current status
-}
-```
-
-This means: any admin who opens an already-`approved` KPI, enters data for "self" level, and has "Advance workflow" ON will **regress the KPI from `approved` → `self_review`**.
-
-### Problem 2 — React `ref` warning on Select in AdminDataEntryDialog
-The Rating `Select` (line 685 of `AdminDataEntryDialog.tsx`) receives a ref passed through the dialog stack. This triggers the React warning visible in the console. While this is non-critical, it can cause the `SelectValue` to display stale state.
-
-## What Needs to Be Fixed
-
-### Fix 1 — Guard "Advance workflow status" against demotion (Critical)
-
-In `useAdminDataEntry.ts`, the self-entry status advance logic should check the **current KPI status** before blindly setting it to `self_review`. It should only advance (or maintain) the status — never demote:
-
-```ts
-if (role_level === 'self') {
-  // Only set to self_review if the KPI is currently at kra_set
-  // If it's already at self_review or beyond, don't regress it
-  const { data: currentKpi } = await supabase
-    .from('kpis')
-    .select('status')
-    .eq('id', kpi_id)
-    .single();
-    
-  const STAGE_ORDER = ['kra_set', 'self_review', 'manager_check', ...];
-  const currentIdx = STAGE_ORDER.indexOf(currentKpi.status);
-  const selfReviewIdx = STAGE_ORDER.indexOf('self_review');
-  
-  // Only advance if currently behind self_review
-  if (currentIdx < selfReviewIdx) {
-    newStatus = 'self_review';
-  }
-  // If already at self_review or beyond, don't change status
-}
-```
-
-### Fix 2 — AdminDataEntryDialog UI: Show current KPI status and warn when "Advance Status" would demote
-
-In `AdminDataEntryDialog.tsx`, show a warning banner when:
-- `roleLevel === 'self'` AND
-- KPI current status is `self_review` or beyond AND
-- `advanceStatus` is ON
-
-This warns the admin: "This KPI is already at [manager_check/approved]. Enabling 'Advance workflow' will NOT change the status — data update only."
-
-Also: auto-set `advanceStatus` default to `false` when KPI status is already past `kra_set` for self-level entries (since the data-only update is the common intent when the KPI is already in review).
-
-### Fix 3 — adminOverrideConfirmed state not resetting between KPIs
-
-In `AdminDataEntryDialog.tsx`, the `adminOverrideConfirmed` state is reset only when `isOpen` changes (the dialog closes). But when navigating between KPIs in the All KPIs table (dialog opens for KPI A, closes, reopens for KPI B), the `adminOverrideConfirmed` should properly reset. This is already handled by the `useEffect` on `isOpen`, but the `adminOverrideConfirmed` is NOT included in the reset block. This is a minor gap.
+This is the cleanest fix — no UI navigation required. The admin picks the rating, enters one reason, clicks one button.
 
 ## Files to Modify
 
-| File | Change | Risk |
+| File | Change |
+|---|---|
+| `src/hooks/useAdminDataEntry.ts` | Add new `useAdminFastTrackApprove` hook |
+| `src/components/admin/AdminDataEntryDialog.tsx` | Add "Fast Track to Approved" section at the bottom, visible only when KPI is not yet `approved` and has remaining review stages |
+| `DOCUMENTATION.md` | Version bump to 1.45.34 |
+
+## Technical Detail
+
+### New Hook — `useAdminFastTrackApprove`
+
+```ts
+export interface AdminFastTrackParams {
+  kpi_id: string;
+  employee_id: string;
+  rating: RatingLevel;
+  score: number;
+  achieved_value: number | null;
+  reason: string;
+  kpi_name: string;
+  remaining_stages: AdminRoleLevel[];  // e.g. ['manager', 'skip_level', 'hr_pms']
+}
+```
+
+The mutation:
+1. Builds a single update object covering ALL remaining role-level fields at once:
+   - `manager_rating`, `manager_score`, `manager_achieved_value`
+   - `skip_level_rating`, `skip_level_score`, `skip_level_achieved_value`
+   - `hr_pms_rating`, `hr_pms_score`, `hr_pms_achieved_value`
+   - `final_rating`, `final_score`
+   - `kpi_status = 'submitted'`
+2. Upserts into `review_submissions` in one call
+3. Updates `kpis.status = 'approved'` directly (no intermediate steps)
+4. Creates audit log with action `ADMIN_FAST_TRACK_APPROVED`
+5. Sends employee notification
+
+### UI Addition in AdminDataEntryDialog
+
+Below the existing "Advance workflow status" toggle, add a collapsible "Fast Track" section:
+
+```
+┌─────────────────────────────────────────────────┐
+│ ⚡ Fast Track to Approved                        │
+│ Remaining stages: Manager, Skip-Level, HR PMS    │
+│                                                  │
+│ Apply score: [0 ▼]  Rating: [Not Achieved ▼]    │
+│                                                  │
+│ ☐ I confirm this fills all remaining stages     │
+│   and marks this KPI as Approved                │
+│                                                  │
+│ [Fast Track Approve]                            │
+└─────────────────────────────────────────────────┘
+```
+
+**Visibility conditions:**
+- KPI has `status !== 'approved'`
+- There are remaining workflow stages (at least one of: manager, skip_level, hr_pms that has no data yet)
+
+**Guard:**
+- Requires the confirmation checkbox to be checked
+- Requires the reason field to be filled
+
+### How This Fixes Ashish's Specific Case
+
+For each of the 8 stuck KPIs:
+1. Admin opens "Admin Data Entry"
+2. Scrolls to "Fast Track to Approved"
+3. Score is already pre-filled as 0 / Not Achieved (from Quick Fill state)
+4. Checks the confirmation box
+5. Clicks "Fast Track Approve"
+6. KPI jumps from `self_review` → `approved` in one action
+
+8 KPIs × 1 click each = **8 operations** instead of 24.
+
+Alternatively, we can also add a **"Bulk Fast Track"** button on the All KPIs employee expanded view to do all 8 in one click — but that is a larger scope. The per-KPI Fast Track alone solves the immediate problem.
+
+## Expected Outcome
+
+| Scenario | Before | After |
 |---|---|---|
-| `src/hooks/useAdminDataEntry.ts` | Fix self-role status advance: check current KPI status before setting `self_review`; never demote a KPI that's already past `self_review` | Low — purely defensive |
-| `src/components/admin/AdminDataEntryDialog.tsx` | (1) Add warning when advance toggle would have no effect or demote; (2) Auto-set advanceStatus=false as default when KPI is beyond `kra_set`; (3) Add `adminOverrideConfirmed` to the reset effect | Low |
-| `DOCUMENTATION.md` | Version bump to 1.45.33 | None |
-
-## What Will NOT Change
-
-- The data save logic itself is working correctly — values ARE being saved to `review_submissions`
-- The audit trail is intact
-- The frequency lock logic introduced in 1.45.32 is not the cause here (Ashish Kataria's KPIs are all Monthly — Monthly has no locked_months in `frequency_config`)
-
-## Expected Outcome After Fix
-
-| Scenario | Before Fix | After Fix |
-|---|---|---|
-| Admin enters self data for KPI already `approved`, Advance toggle ON | KPI demoted to `self_review` | Status unchanged (data saved, no demotion) |
-| Admin enters self data for KPI at `kra_set`, Advance toggle ON | KPI advanced to `self_review` ✓ | Same — no change |
-| Admin enters self data for KPI at `manager_check`, Advance toggle ON | KPI demoted to `self_review` | Status unchanged (data saved only) |
-| Advance toggle is ON for a KPI already in review | No warning | Warning banner: "KPI is already at [status] — workflow will not be changed" |
-| adminOverrideConfirmed between KPI switches | May carry over | Always resets on dialog open |
+| Move self_review KPI to approved (3-stage workflow) | 3 separate admin saves per KPI | 1 "Fast Track" click per KPI |
+| Ashish's 8 stuck KPIs | ~24 manual operations | 8 clicks |
+| Audit trail | One entry per role level | Single `ADMIN_FAST_TRACK_APPROVED` entry |
+| Employee notification | 3 notifications per KPI | 1 notification per KPI |
