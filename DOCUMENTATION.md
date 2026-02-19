@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-19  
-> **Version:** 1.45.33 — Admin data entry demotion guard: self-level entries no longer regress KPIs already past `kra_set`; UI warns when advance toggle would have no effect
+> **Version:** 1.45.34 — Fast Track to Approved: new one-click admin action fills all remaining workflow stages and marks KPI approved in a single operation with full audit trail
 > **Maintainer:** Lovable AI
 
 ---
