@@ -17,6 +17,8 @@ export interface EmployeeScorecard {
   approvedKpis: number;
   avgSelfScore: number;
   avgManagerScore: number;
+  avgSkipLevelScore?: number;
+  avgHrPmsScore?: number;
   avgAuditorScore: number;
   avgManagementScore: number;
   avgFinalScore: number;
@@ -46,6 +48,20 @@ export interface KpiDetail {
   managerRating: string | null;
   managerRemarks?: string | null;
   managerEvidence?: string | null;
+  
+  // Skip-Level Review
+  skipLevelAchieved?: string | number | null;
+  skipLevelScore?: number | null;
+  skipLevelRating?: string | null;
+  skipLevelRemarks?: string | null;
+  skipLevelEvidence?: string | null;
+  
+  // HR PMS Review
+  hrPmsAchieved?: string | number | null;
+  hrPmsScore?: number | null;
+  hrPmsRating?: string | null;
+  hrPmsRemarks?: string | null;
+  hrPmsEvidence?: string | null;
   
   // Auditor Review
   auditorAchieved?: string | number | null;
@@ -464,6 +480,16 @@ const STAGE_COLORS = {
     bg: [255, 251, 235] as [number, number, number],        // Amber-50
     text: [146, 64, 14] as [number, number, number],        // Amber-800
   },
+  skipLevel: {
+    border: [20, 184, 166] as [number, number, number],     // Teal-500
+    bg: [240, 253, 250] as [number, number, number],        // Teal-50
+    text: [19, 78, 74] as [number, number, number],         // Teal-800
+  },
+  hrPms: {
+    border: [244, 63, 94] as [number, number, number],      // Rose-500
+    bg: [255, 241, 242] as [number, number, number],        // Rose-50
+    text: [159, 18, 57] as [number, number, number],        // Rose-800
+  },
   auditor: {
     border: [139, 92, 246] as [number, number, number],     // Purple-500
     bg: [245, 243, 255] as [number, number, number],        // Purple-50
@@ -489,7 +515,7 @@ function drawKpiDetailCard(
 ): number {
   let currentY = y;
   const panelPadding = 4;
-  const halfWidth = (width - 6) / 2;
+  const thirdWidth = (width - 12) / 3;
   
   // ===== Card Header =====
   const headerHeight = 16;
@@ -546,7 +572,7 @@ function drawKpiDetailCard(
   
   currentY += achievedHeight + 2;
   
-  // ===== Review Panels (2x2 Grid) =====
+  // ===== Review Panels (3x2 Grid) =====
   const panelHeight = 42;
   
   // Helper to draw a review panel
@@ -576,7 +602,7 @@ function drawKpiDetailCard(
     doc.text(title, panelX + 14, panelY + 9);
     
     // Score badge
-    if (score !== null) {
+    if (score !== null && score !== undefined) {
       doc.setFillColor(...getRatingColor(score));
       doc.roundedRect(panelX + panelW - 28, panelY + 3, 25, 8, 2, 2, 'F');
       doc.setFontSize(7);
@@ -619,20 +645,22 @@ function drawKpiDetailCard(
     }
   };
   
-  // Row 1: Self Review + Manager Review
-  drawPanel(x, currentY, halfWidth, 'Self Review', kpi.selfScore, kpi.selfRating, kpi.selfRemarks || null, kpi.selfEvidence || null, STAGE_COLORS.self);
-  drawPanel(x + halfWidth + 6, currentY, halfWidth, 'Manager Review', kpi.managerScore, kpi.managerRating, kpi.managerRemarks || null, kpi.managerEvidence || null, STAGE_COLORS.manager);
+  // Row 1: Self Review + Manager Review + Skip-Level Review
+  drawPanel(x, currentY, thirdWidth, 'Self Review', kpi.selfScore, kpi.selfRating, kpi.selfRemarks || null, kpi.selfEvidence || null, STAGE_COLORS.self);
+  drawPanel(x + thirdWidth + 6, currentY, thirdWidth, 'Manager Review', kpi.managerScore, kpi.managerRating, kpi.managerRemarks || null, kpi.managerEvidence || null, STAGE_COLORS.manager);
+  drawPanel(x + (thirdWidth + 6) * 2, currentY, thirdWidth, 'Skip-Level', kpi.skipLevelScore ?? null, kpi.skipLevelRating ?? null, kpi.skipLevelRemarks || null, kpi.skipLevelEvidence || null, STAGE_COLORS.skipLevel);
   
   currentY += panelHeight + 3;
   
-  // Row 2: Auditor Review + Final/Management
-  drawPanel(x, currentY, halfWidth, 'Auditor Review', kpi.auditorScore, kpi.auditorRating, kpi.auditorRemarks || null, kpi.auditorEvidence || null, STAGE_COLORS.auditor);
+  // Row 2: HR PMS Review + Auditor Review + Final/Management
+  drawPanel(x, currentY, thirdWidth, 'HR PMS Review', kpi.hrPmsScore ?? null, kpi.hrPmsRating ?? null, kpi.hrPmsRemarks || null, kpi.hrPmsEvidence || null, STAGE_COLORS.hrPms);
+  drawPanel(x + thirdWidth + 6, currentY, thirdWidth, 'Auditor Review', kpi.auditorScore, kpi.auditorRating, kpi.auditorRemarks || null, kpi.auditorEvidence || null, STAGE_COLORS.auditor);
   
   // Final Assessment Panel (special formatting)
-  const finalX = x + halfWidth + 6;
+  const finalX = x + (thirdWidth + 6) * 2;
   doc.setFillColor(...STAGE_COLORS.management.bg);
   doc.setDrawColor(...STAGE_COLORS.management.border);
-  doc.roundedRect(finalX, currentY, halfWidth, panelHeight, 2, 2, 'FD');
+  doc.roundedRect(finalX, currentY, thirdWidth, panelHeight, 2, 2, 'FD');
   
   // Title
   doc.setFillColor(...STAGE_COLORS.management.border);
@@ -674,9 +702,9 @@ function drawKpiDetailCard(
   doc.setFontSize(7);
   doc.setFont('helvetica', 'bold');
   doc.setFillColor(...COLORS.success);
-  doc.roundedRect(finalX + halfWidth - 35, currentY + 30, 32, 8, 2, 2, 'F');
+  doc.roundedRect(finalX + thirdWidth - 35, currentY + 30, 32, 8, 2, 2, 'F');
   doc.setTextColor(...COLORS.white);
-  doc.text(kpi.status || 'Open', finalX + halfWidth - 33, currentY + 35);
+  doc.text(kpi.status || 'Open', finalX + thirdWidth - 33, currentY + 35);
   
   currentY += panelHeight + 8;
   
@@ -937,7 +965,7 @@ export function generateDetailedScorecardPdf(
     // Category header row - single row spanning all 8 columns
     tableData.push([{
       content: `${category}   |   Avg: ${catAvg.toFixed(2)}   |   Weight: ${catWeight}%`,
-      colSpan: 8,
+      colSpan: 10,
       styles: {
         fillColor: getCategoryColor(category),
         fontStyle: 'bold',
@@ -964,93 +992,54 @@ export function generateDetailedScorecardPdf(
       }
       
       // Collect notes for this KPI
-      const hasNotes = kpi.selfRemarks || kpi.managerRemarks || kpi.auditorRemarks || kpi.managementRemarks;
+      const hasNotes = kpi.selfRemarks || kpi.managerRemarks || kpi.skipLevelRemarks || kpi.hrPmsRemarks || kpi.auditorRemarks || kpi.managementRemarks;
       let noteRef = '';
       
       if (kpi.selfRemarks) {
-        reviewNotes.push({
-          index: noteIndex,
-          kpiName: kpi.kpiName,
-          stage: 'Self',
-          remarks: kpi.selfRemarks,
-          evidence: kpi.selfEvidence || undefined,
-        });
+        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'Self', remarks: kpi.selfRemarks, evidence: kpi.selfEvidence || undefined });
         noteRef = `[${noteIndex}]`;
         noteIndex++;
       }
       if (kpi.managerRemarks) {
-        reviewNotes.push({
-          index: noteIndex,
-          kpiName: kpi.kpiName,
-          stage: 'Manager',
-          remarks: kpi.managerRemarks,
-          evidence: kpi.managerEvidence || undefined,
-        });
-        if (!noteRef) noteRef = `[${noteIndex}]`;
-        else noteRef += `,${noteIndex}`;
+        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'Manager', remarks: kpi.managerRemarks, evidence: kpi.managerEvidence || undefined });
+        if (!noteRef) noteRef = `[${noteIndex}]`; else noteRef += `,${noteIndex}`;
+        noteIndex++;
+      }
+      if (kpi.skipLevelRemarks) {
+        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'Skip-Level', remarks: kpi.skipLevelRemarks, evidence: kpi.skipLevelEvidence || undefined });
+        if (!noteRef) noteRef = `[${noteIndex}]`; else noteRef += `,${noteIndex}`;
+        noteIndex++;
+      }
+      if (kpi.hrPmsRemarks) {
+        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'HR PMS', remarks: kpi.hrPmsRemarks, evidence: kpi.hrPmsEvidence || undefined });
+        if (!noteRef) noteRef = `[${noteIndex}]`; else noteRef += `,${noteIndex}`;
         noteIndex++;
       }
       if (kpi.auditorRemarks) {
-        reviewNotes.push({
-          index: noteIndex,
-          kpiName: kpi.kpiName,
-          stage: 'Auditor',
-          remarks: kpi.auditorRemarks,
-          evidence: kpi.auditorEvidence || undefined,
-        });
-        if (!noteRef) noteRef = `[${noteIndex}]`;
-        else noteRef += `,${noteIndex}`;
+        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'Auditor', remarks: kpi.auditorRemarks, evidence: kpi.auditorEvidence || undefined });
+        if (!noteRef) noteRef = `[${noteIndex}]`; else noteRef += `,${noteIndex}`;
         noteIndex++;
       }
       if (kpi.managementRemarks) {
-        reviewNotes.push({
-          index: noteIndex,
-          kpiName: kpi.kpiName,
-          stage: 'Management',
-          remarks: kpi.managementRemarks,
-        });
-        if (!noteRef) noteRef = `[${noteIndex}]`;
-        else noteRef += `,${noteIndex}`;
+        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'Management', remarks: kpi.managementRemarks });
+        if (!noteRef) noteRef = `[${noteIndex}]`; else noteRef += `,${noteIndex}`;
         noteIndex++;
       }
       
-      // Build simplified cell contents - avoid multi-line where possible
+      // Build simplified cell contents
       const kpiNameContent = truncateText(kpi.kpiName, 35) + (noteRef ? ` ${noteRef}` : '');
       const targetContent = `${target}${kpi.uom ? ` ${kpi.uom}` : ''}`;
       const achievedContent = achieved !== '-' ? `${achieved}${targetMet ? ' [+]' : ' [-]'}` : '-';
       
       tableData.push([
-        // KRA / KPI name
-        {
-          content: kpiNameContent,
-          styles: { halign: 'left' }
-        } as CellDef,
-        // Weight
-        {
-          content: `${kpi.weightage}%`,
-          styles: { halign: 'center' }
-        } as CellDef,
-        // Target
-        {
-          content: targetContent,
-          styles: { halign: 'center' }
-        } as CellDef,
-        // Self Achieved
-        {
-          content: achievedContent,
-          styles: { halign: 'center' }
-        } as CellDef,
-        // Manager Score
-        {
-          content: kpi.managerScore ? formatScore(kpi.managerScore) : '-',
-          styles: { halign: 'center' }
-        } as CellDef,
-        // Auditor Score
-        {
-          content: kpi.auditorScore ? formatScore(kpi.auditorScore) : '-',
-          styles: { halign: 'center' }
-        } as CellDef,
-        // Final score with rating badge
+        { content: kpiNameContent, styles: { halign: 'left' } } as CellDef,
+        { content: `${kpi.weightage}%`, styles: { halign: 'center' } } as CellDef,
+        { content: targetContent, styles: { halign: 'center' } } as CellDef,
+        { content: achievedContent, styles: { halign: 'center' } } as CellDef,
+        { content: kpi.managerScore ? formatScore(kpi.managerScore) : '-', styles: { halign: 'center' } } as CellDef,
+        { content: kpi.skipLevelScore ? formatScore(kpi.skipLevelScore) : '-', styles: { halign: 'center' } } as CellDef,
+        { content: kpi.hrPmsScore ? formatScore(kpi.hrPmsScore) : '-', styles: { halign: 'center' } } as CellDef,
+        { content: kpi.auditorScore ? formatScore(kpi.auditorScore) : '-', styles: { halign: 'center' } } as CellDef,
         {
           content: `${formatScore(kpi.finalScore)} ${getRatingLabel(kpi.finalScore)}`,
           styles: {
@@ -1060,16 +1049,12 @@ export function generateDetailedScorecardPdf(
             halign: 'center',
           }
         } as CellDef,
-        // Notes indicator
-        {
-          content: hasNotes ? '*' : '',
-          styles: { halign: 'center' }
-        } as CellDef,
+        { content: hasNotes ? '*' : '', styles: { halign: 'center' } } as CellDef,
       ]);
     });
   });
 
-  // Create the table with simplified column structure
+  // Create the table
   autoTable(doc, {
     startY: yPos,
     head: [[
@@ -1077,8 +1062,10 @@ export function generateDetailedScorecardPdf(
       { content: 'W', styles: { halign: 'center' } },
       { content: 'Target', styles: { halign: 'center' } },
       { content: 'Self Ach.', styles: { halign: 'center' } },
-      { content: 'Mgr Score', styles: { halign: 'center' } },
-      { content: 'Aud Score', styles: { halign: 'center' } },
+      { content: 'Mgr', styles: { halign: 'center' } },
+      { content: 'Skip-L', styles: { halign: 'center' } },
+      { content: 'HR PMS', styles: { halign: 'center' } },
+      { content: 'Auditor', styles: { halign: 'center' } },
       { content: 'Final', styles: { halign: 'center' } },
       { content: '*', styles: { halign: 'center' } },
     ]],
@@ -1100,14 +1087,16 @@ export function generateDetailedScorecardPdf(
       valign: 'middle',
     },
     columnStyles: {
-      0: { cellWidth: 70, halign: 'left' },   // KPI Name
-      1: { cellWidth: 14, halign: 'center' }, // Weight
-      2: { cellWidth: 28, halign: 'center' }, // Target
-      3: { cellWidth: 28, halign: 'center' }, // Self Achieved
-      4: { cellWidth: 24, halign: 'center' }, // Manager Score
-      5: { cellWidth: 24, halign: 'center' }, // Auditor Score
-      6: { cellWidth: 28, halign: 'center' }, // Final
-      7: { cellWidth: 10, halign: 'center' }, // Notes indicator
+      0: { cellWidth: 60, halign: 'left' },   // KPI Name
+      1: { cellWidth: 12, halign: 'center' }, // Weight
+      2: { cellWidth: 22, halign: 'center' }, // Target
+      3: { cellWidth: 22, halign: 'center' }, // Self Achieved
+      4: { cellWidth: 18, halign: 'center' }, // Manager
+      5: { cellWidth: 18, halign: 'center' }, // Skip-Level
+      6: { cellWidth: 18, halign: 'center' }, // HR PMS
+      7: { cellWidth: 18, halign: 'center' }, // Auditor
+      8: { cellWidth: 22, halign: 'center' }, // Final
+      9: { cellWidth: 8, halign: 'center' },  // Notes
     },
     alternateRowStyles: {
       fillColor: [252, 252, 253],
@@ -1263,7 +1252,7 @@ export function generateDetailedScorecardPdfBlob(
     // Category header row - single row spanning all 8 columns
     tableData.push([{
       content: `${category}   |   Avg: ${catAvg.toFixed(2)}   |   Weight: ${catWeight}%`,
-      colSpan: 8,
+      colSpan: 10,
       styles: {
         fillColor: getCategoryColor(category),
         fontStyle: 'bold',
@@ -1290,112 +1279,53 @@ export function generateDetailedScorecardPdfBlob(
       }
       
       // Collect notes for this KPI
-      const hasNotes = kpi.selfRemarks || kpi.managerRemarks || kpi.auditorRemarks || kpi.managementRemarks;
+      const hasNotes = kpi.selfRemarks || kpi.managerRemarks || kpi.skipLevelRemarks || kpi.hrPmsRemarks || kpi.auditorRemarks || kpi.managementRemarks;
       let noteRef = '';
       
       if (kpi.selfRemarks) {
-        reviewNotes.push({
-          index: noteIndex,
-          kpiName: kpi.kpiName,
-          stage: 'Self',
-          remarks: kpi.selfRemarks,
-          evidence: kpi.selfEvidence || undefined,
-        });
-        noteRef = `[${noteIndex}]`;
-        noteIndex++;
+        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'Self', remarks: kpi.selfRemarks, evidence: kpi.selfEvidence || undefined });
+        noteRef = `[${noteIndex}]`; noteIndex++;
       }
       if (kpi.managerRemarks) {
-        reviewNotes.push({
-          index: noteIndex,
-          kpiName: kpi.kpiName,
-          stage: 'Manager',
-          remarks: kpi.managerRemarks,
-          evidence: kpi.managerEvidence || undefined,
-        });
-        if (!noteRef) noteRef = `[${noteIndex}]`;
-        else noteRef += `,${noteIndex}`;
-        noteIndex++;
+        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'Manager', remarks: kpi.managerRemarks, evidence: kpi.managerEvidence || undefined });
+        if (!noteRef) noteRef = `[${noteIndex}]`; else noteRef += `,${noteIndex}`; noteIndex++;
+      }
+      if (kpi.skipLevelRemarks) {
+        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'Skip-Level', remarks: kpi.skipLevelRemarks, evidence: kpi.skipLevelEvidence || undefined });
+        if (!noteRef) noteRef = `[${noteIndex}]`; else noteRef += `,${noteIndex}`; noteIndex++;
+      }
+      if (kpi.hrPmsRemarks) {
+        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'HR PMS', remarks: kpi.hrPmsRemarks, evidence: kpi.hrPmsEvidence || undefined });
+        if (!noteRef) noteRef = `[${noteIndex}]`; else noteRef += `,${noteIndex}`; noteIndex++;
       }
       if (kpi.auditorRemarks) {
-        reviewNotes.push({
-          index: noteIndex,
-          kpiName: kpi.kpiName,
-          stage: 'Auditor',
-          remarks: kpi.auditorRemarks,
-          evidence: kpi.auditorEvidence || undefined,
-        });
-        if (!noteRef) noteRef = `[${noteIndex}]`;
-        else noteRef += `,${noteIndex}`;
-        noteIndex++;
+        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'Auditor', remarks: kpi.auditorRemarks, evidence: kpi.auditorEvidence || undefined });
+        if (!noteRef) noteRef = `[${noteIndex}]`; else noteRef += `,${noteIndex}`; noteIndex++;
       }
       if (kpi.managementRemarks) {
-        reviewNotes.push({
-          index: noteIndex,
-          kpiName: kpi.kpiName,
-          stage: 'Management',
-          remarks: kpi.managementRemarks,
-        });
-        if (!noteRef) noteRef = `[${noteIndex}]`;
-        else noteRef += `,${noteIndex}`;
-        noteIndex++;
+        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'Management', remarks: kpi.managementRemarks });
+        if (!noteRef) noteRef = `[${noteIndex}]`; else noteRef += `,${noteIndex}`; noteIndex++;
       }
       
-      // Build simplified cell contents - avoid multi-line where possible
       const kpiNameContent = truncateText(kpi.kpiName, 35) + (noteRef ? ` ${noteRef}` : '');
       const targetContent = `${target}${kpi.uom ? ` ${kpi.uom}` : ''}`;
       const achievedContent = achieved !== '-' ? `${achieved}${targetMet ? ' [+]' : ' [-]'}` : '-';
       
       tableData.push([
-        // KPI name
-        {
-          content: kpiNameContent,
-          styles: { halign: 'left' }
-        } as CellDef,
-        // Weight
-        {
-          content: `${kpi.weightage}%`,
-          styles: { halign: 'center' }
-        } as CellDef,
-        // Target
-        {
-          content: targetContent,
-          styles: { halign: 'center' }
-        } as CellDef,
-        // Self Achieved
-        {
-          content: achievedContent,
-          styles: { halign: 'center' }
-        } as CellDef,
-        // Manager Score
-        {
-          content: kpi.managerScore ? formatScore(kpi.managerScore) : '-',
-          styles: { halign: 'center' }
-        } as CellDef,
-        // Auditor Score
-        {
-          content: kpi.auditorScore ? formatScore(kpi.auditorScore) : '-',
-          styles: { halign: 'center' }
-        } as CellDef,
-        // Final score with rating badge
-        {
-          content: `${formatScore(kpi.finalScore)} ${getRatingLabel(kpi.finalScore)}`,
-          styles: {
-            fontStyle: 'bold',
-            fillColor: getRatingLightColor(kpi.finalScore),
-            textColor: getRatingColor(kpi.finalScore),
-            halign: 'center',
-          }
-        } as CellDef,
-        // Notes indicator
-        {
-          content: hasNotes ? '*' : '',
-          styles: { halign: 'center' }
-        } as CellDef,
+        { content: kpiNameContent, styles: { halign: 'left' } } as CellDef,
+        { content: `${kpi.weightage}%`, styles: { halign: 'center' } } as CellDef,
+        { content: targetContent, styles: { halign: 'center' } } as CellDef,
+        { content: achievedContent, styles: { halign: 'center' } } as CellDef,
+        { content: kpi.managerScore ? formatScore(kpi.managerScore) : '-', styles: { halign: 'center' } } as CellDef,
+        { content: kpi.skipLevelScore ? formatScore(kpi.skipLevelScore) : '-', styles: { halign: 'center' } } as CellDef,
+        { content: kpi.hrPmsScore ? formatScore(kpi.hrPmsScore) : '-', styles: { halign: 'center' } } as CellDef,
+        { content: kpi.auditorScore ? formatScore(kpi.auditorScore) : '-', styles: { halign: 'center' } } as CellDef,
+        { content: `${formatScore(kpi.finalScore)} ${getRatingLabel(kpi.finalScore)}`, styles: { fontStyle: 'bold', fillColor: getRatingLightColor(kpi.finalScore), textColor: getRatingColor(kpi.finalScore), halign: 'center' } } as CellDef,
+        { content: hasNotes ? '*' : '', styles: { halign: 'center' } } as CellDef,
       ]);
     });
   });
 
-  // Create the table with simplified column structure
   autoTable(doc, {
     startY: yPos,
     head: [[
@@ -1403,37 +1333,27 @@ export function generateDetailedScorecardPdfBlob(
       { content: 'W', styles: { halign: 'center' } },
       { content: 'Target', styles: { halign: 'center' } },
       { content: 'Self Ach.', styles: { halign: 'center' } },
-      { content: 'Mgr Score', styles: { halign: 'center' } },
-      { content: 'Aud Score', styles: { halign: 'center' } },
+      { content: 'Mgr', styles: { halign: 'center' } },
+      { content: 'Skip-L', styles: { halign: 'center' } },
+      { content: 'HR PMS', styles: { halign: 'center' } },
+      { content: 'Auditor', styles: { halign: 'center' } },
       { content: 'Final', styles: { halign: 'center' } },
       { content: '*', styles: { halign: 'center' } },
     ]],
     body: tableData,
-    styles: {
-      fontSize: 7,
-      cellPadding: 2,
-      lineColor: [220, 220, 220],
-      lineWidth: 0.1,
-      overflow: 'linebreak',
-      valign: 'middle',
-    },
-    headStyles: {
-      fillColor: COLORS.primary,
-      textColor: COLORS.white,
-      fontSize: 7,
-      fontStyle: 'bold',
-      halign: 'center',
-      valign: 'middle',
-    },
+    styles: { fontSize: 7, cellPadding: 2, lineColor: [220, 220, 220], lineWidth: 0.1, overflow: 'linebreak', valign: 'middle' },
+    headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontSize: 7, fontStyle: 'bold', halign: 'center', valign: 'middle' },
     columnStyles: {
-      0: { cellWidth: 70, halign: 'left' },   // KPI Name
-      1: { cellWidth: 14, halign: 'center' }, // Weight
-      2: { cellWidth: 28, halign: 'center' }, // Target
-      3: { cellWidth: 28, halign: 'center' }, // Self Achieved
-      4: { cellWidth: 24, halign: 'center' }, // Manager Score
-      5: { cellWidth: 24, halign: 'center' }, // Auditor Score
-      6: { cellWidth: 28, halign: 'center' }, // Final
-      7: { cellWidth: 10, halign: 'center' }, // Notes indicator
+      0: { cellWidth: 60, halign: 'left' },
+      1: { cellWidth: 12, halign: 'center' },
+      2: { cellWidth: 22, halign: 'center' },
+      3: { cellWidth: 22, halign: 'center' },
+      4: { cellWidth: 18, halign: 'center' },
+      5: { cellWidth: 18, halign: 'center' },
+      6: { cellWidth: 18, halign: 'center' },
+      7: { cellWidth: 18, halign: 'center' },
+      8: { cellWidth: 22, halign: 'center' },
+      9: { cellWidth: 8, halign: 'center' },
     },
     alternateRowStyles: {
       fillColor: [252, 252, 253],
@@ -1551,6 +1471,8 @@ export function generateBulkScorecardPdf(
     `${sc.approvedKpis}/${sc.totalKpis}`,
     formatScore(sc.avgSelfScore),
     formatScore(sc.avgManagerScore),
+    formatScore(sc.avgSkipLevelScore ?? 0),
+    formatScore(sc.avgHrPmsScore ?? 0),
     formatScore(sc.avgAuditorScore),
     formatScore(sc.avgManagementScore),
     formatScore(sc.avgFinalScore),
@@ -1558,31 +1480,23 @@ export function generateBulkScorecardPdf(
 
   autoTable(doc, {
     startY: yPos,
-    head: [['Code', 'Employee Name', 'Designation', 'Department', 'KPIs', 'Self', 'Manager', 'Auditor', 'Mgmt', 'Final']],
+    head: [['Code', 'Name', 'Designation', 'Dept', 'KPIs', 'Self', 'Mgr', 'Skip-L', 'HR PMS', 'Auditor', 'Mgmt', 'Final']],
     body: tableData,
-    styles: { 
-      fontSize: 8, 
-      cellPadding: 3,
-      lineColor: [220, 220, 220],
-      lineWidth: 0.1,
-    },
-    headStyles: { 
-      fillColor: COLORS.primary, 
-      textColor: COLORS.white, 
-      fontSize: 8,
-      fontStyle: 'bold',
-    },
+    styles: { fontSize: 7, cellPadding: 2, lineColor: [220, 220, 220], lineWidth: 0.1 },
+    headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontSize: 7, fontStyle: 'bold' },
     columnStyles: {
-      0: { cellWidth: 22 },
-      1: { cellWidth: 40 },
-      2: { cellWidth: 35 },
-      3: { cellWidth: 32 },
-      4: { cellWidth: 20, halign: 'center' },
-      5: { cellWidth: 20, halign: 'center' },
-      6: { cellWidth: 22, halign: 'center' },
-      7: { cellWidth: 22, halign: 'center' },
-      8: { cellWidth: 20, halign: 'center' },
-      9: { cellWidth: 20, halign: 'center', fontStyle: 'bold' },
+      0: { cellWidth: 20 },
+      1: { cellWidth: 32 },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 26 },
+      4: { cellWidth: 16, halign: 'center' },
+      5: { cellWidth: 16, halign: 'center' },
+      6: { cellWidth: 16, halign: 'center' },
+      7: { cellWidth: 16, halign: 'center' },
+      8: { cellWidth: 16, halign: 'center' },
+      9: { cellWidth: 16, halign: 'center' },
+      10: { cellWidth: 16, halign: 'center' },
+      11: { cellWidth: 16, halign: 'center', fontStyle: 'bold' },
     },
     alternateRowStyles: {
       fillColor: [250, 250, 250],

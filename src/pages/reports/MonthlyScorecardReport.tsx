@@ -116,6 +116,12 @@ export default function MonthlyScorecardReport() {
             manager_rating,
             manager_remarks,
             manager_evidence_url,
+            skip_level_score,
+            skip_level_rating,
+            skip_level_remarks,
+            hr_pms_score,
+            hr_pms_rating,
+            hr_pms_remarks,
             auditor_score,
             auditor_rating,
             auditor_remarks,
@@ -196,6 +202,8 @@ export default function MonthlyScorecardReport() {
       let totalWeightage = 0;
       let weightedSelfScore = 0;
       let weightedManagerScore = 0;
+      let weightedSkipLevelScore = 0;
+      let weightedHrPmsScore = 0;
       let weightedAuditorScore = 0;
       let weightedManagementScore = 0;
       let weightedFinalScore = 0;
@@ -213,6 +221,12 @@ export default function MonthlyScorecardReport() {
           }
           if (submission.manager_score != null) {
             weightedManagerScore += (submission.manager_score * weight);
+          }
+          if (submission.skip_level_score != null) {
+            weightedSkipLevelScore += (submission.skip_level_score * weight);
+          }
+          if (submission.hr_pms_score != null) {
+            weightedHrPmsScore += (submission.hr_pms_score * weight);
           }
           if (submission.auditor_score != null) {
             weightedAuditorScore += (submission.auditor_score * weight);
@@ -252,6 +266,16 @@ export default function MonthlyScorecardReport() {
           managerRemarks: submission?.manager_remarks,
           managerEvidence: submission?.manager_evidence_url,
           
+          // Skip-Level Review
+          skipLevelScore: submission?.skip_level_score,
+          skipLevelRating: submission?.skip_level_rating,
+          skipLevelRemarks: submission?.skip_level_remarks,
+          
+          // HR PMS Review
+          hrPmsScore: submission?.hr_pms_score,
+          hrPmsRating: submission?.hr_pms_rating,
+          hrPmsRemarks: submission?.hr_pms_remarks,
+          
           // Auditor Review
           auditorScore: submission?.auditor_score,
           auditorRating: submission?.auditor_rating,
@@ -272,6 +296,8 @@ export default function MonthlyScorecardReport() {
 
       const avgSelf = totalWeightage > 0 ? weightedSelfScore / totalWeightage : 0;
       const avgManager = totalWeightage > 0 ? weightedManagerScore / totalWeightage : 0;
+      const avgSkipLevel = totalWeightage > 0 ? weightedSkipLevelScore / totalWeightage : 0;
+      const avgHrPms = totalWeightage > 0 ? weightedHrPmsScore / totalWeightage : 0;
       const avgAuditor = totalWeightage > 0 ? weightedAuditorScore / totalWeightage : 0;
       const avgManagement = totalWeightage > 0 ? weightedManagementScore / totalWeightage : 0;
       const avgFinal = totalWeightage > 0 ? weightedFinalScore / totalWeightage : 0;
@@ -308,6 +334,8 @@ export default function MonthlyScorecardReport() {
         approvedKpis,
         avgSelfScore: avgSelf,
         avgManagerScore: avgManager,
+        avgSkipLevelScore: avgSkipLevel,
+        avgHrPmsScore: avgHrPms,
         avgAuditorScore: avgAuditor,
         avgManagementScore: avgManagement,
         avgFinalScore: avgFinal,
@@ -353,6 +381,8 @@ export default function MonthlyScorecardReport() {
       'Approved KPIs': sc.approvedKpis,
       'Avg Self Score': sc.avgSelfScore.toFixed(2),
       'Avg Manager Score': sc.avgManagerScore.toFixed(2),
+      'Avg Skip-Level Score': sc.avgSkipLevelScore?.toFixed(2) || '0.00',
+      'Avg HR PMS Score': sc.avgHrPmsScore?.toFixed(2) || '0.00',
       'Avg Auditor Score': sc.avgAuditorScore.toFixed(2),
       'Avg Management Score': sc.avgManagementScore.toFixed(2),
       'Avg Final Score': sc.avgFinalScore.toFixed(2),
@@ -532,6 +562,8 @@ export default function MonthlyScorecardReport() {
                     <TableHead className="text-center">KPIs</TableHead>
                     <TableHead className="text-center">Self</TableHead>
                     <TableHead className="text-center">Manager</TableHead>
+                    <TableHead className="text-center">Skip-Level</TableHead>
+                    <TableHead className="text-center">HR PMS</TableHead>
                     <TableHead className="text-center">Auditor</TableHead>
                     <TableHead className="text-center">Mgmt</TableHead>
                     <TableHead className="text-center">Final</TableHead>
@@ -560,6 +592,12 @@ export default function MonthlyScorecardReport() {
                       </TableCell>
                       <TableCell className="text-center">
                         {scorecard.avgManagerScore ? scorecard.avgManagerScore.toFixed(2) : '-'}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {scorecard.avgSkipLevelScore ? scorecard.avgSkipLevelScore.toFixed(2) : '-'}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {scorecard.avgHrPmsScore ? scorecard.avgHrPmsScore.toFixed(2) : '-'}
                       </TableCell>
                       <TableCell className="text-center">
                         {scorecard.avgAuditorScore ? scorecard.avgAuditorScore.toFixed(2) : '-'}

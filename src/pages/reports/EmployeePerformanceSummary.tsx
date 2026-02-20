@@ -28,6 +28,8 @@ const STATUS_COLORS: Record<string, string> = {
   approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
   management_review: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
   audit: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+  hr_pms_review: 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-300',
+  skip_level_check: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-300',
   manager_check: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
   self_review: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
   kra_set: 'bg-muted text-muted-foreground',
@@ -37,6 +39,8 @@ const STATUS_LABELS: Record<string, string> = {
   approved: 'Approved',
   management_review: 'Management Review',
   audit: 'Audit',
+  hr_pms_review: 'HR PMS Review',
+  skip_level_check: 'Skip-Level Check',
   manager_check: 'Manager Check',
   self_review: 'Self Review',
   kra_set: 'KRA Set',
@@ -102,6 +106,8 @@ export default function EmployeePerformanceSummary() {
               final_score,
               self_score,
               manager_score,
+              skip_level_score,
+              hr_pms_score,
               auditor_score,
               management_score,
               is_na
@@ -163,6 +169,8 @@ export default function EmployeePerformanceSummary() {
         const score = submission?.final_score ?? 
                       submission?.management_score ?? 
                       submission?.auditor_score ?? 
+                      submission?.hr_pms_score ?? 
+                      submission?.skip_level_score ?? 
                       submission?.manager_score ?? 
                       submission?.self_score ?? 0;
         const weight = kpi.weightage || 0;
@@ -226,6 +234,8 @@ export default function EmployeePerformanceSummary() {
               final_score,
               self_score,
               manager_score,
+              skip_level_score,
+              hr_pms_score,
               auditor_score,
               management_score,
               is_na
@@ -263,6 +273,8 @@ export default function EmployeePerformanceSummary() {
         const score = submission?.final_score ?? 
                       submission?.management_score ?? 
                       submission?.auditor_score ?? 
+                      submission?.hr_pms_score ?? 
+                      submission?.skip_level_score ?? 
                       submission?.manager_score ?? 
                       submission?.self_score ?? 0;
         const weight = kpi.weightage || 0;
@@ -285,9 +297,11 @@ export default function EmployeePerformanceSummary() {
 
   function getStatusPriority(status: string): number {
     const priorities: Record<string, number> = {
-      'approved': 6,
-      'management_review': 5,
-      'audit': 4,
+      'approved': 8,
+      'management_review': 7,
+      'audit': 6,
+      'hr_pms_review': 5,
+      'skip_level_check': 4,
       'manager_check': 3,
       'self_review': 2,
       'kra_set': 1,
