@@ -1,42 +1,57 @@
 
 
-# Fix: Value History Not Loading in Org KPI Data Entry
+# Fix: Duplicate Key Constraint Error on Org KPI Save
 
 ## Root Cause
 
-In `src/components/admin/OrgKpiAuditLog.tsx` line 25, the `enabled` parameter is hardcoded to `false`:
+The `useBulkUpsertOrgKpiValues` hook in `src/hooks/useOrgKpiValues.ts` uses a fragile "SELECT existing, then INSERT or UPDATE" pattern. If the SELECT somehow does not find the record (race condition from concurrent saves, auto-save firing alongside manual save, etc.), it attempts an INSERT which fails with:
 
-```ts
-const { data: logs, isLoading } = useOrgKpiAuditLog(
-  categoryId, kraName, kpiName, reviewPeriod, reviewYear,
-  false  // <-- Query is permanently disabled, never fetches data
-);
-```
+> duplicate key value violates unique constraint "org_kpi_values_scope_unique_idx"
 
-The hook `useOrgKpiAuditLog` defaults `enabled` to `true`, but the component explicitly overrides it with `false`. This means the database query never runs, so it always shows "No history yet."
+Additionally, the database has **two identical unique indexes** on `org_kpi_values`:
+- `org_kpi_values_scope_unique_idx` (created in migration 20260127)
+- `org_kpi_values_scoped_unique` (created in migration 20260212)
+
+Both are functionally identical. This is redundant and should be cleaned up.
 
 ## Fix
 
-### File: `src/components/admin/OrgKpiAuditLog.tsx`
+### 1. Make upsert resilient to unique violations (`src/hooks/useOrgKpiValues.ts`)
 
-Change line 25 from `false` to `true` (or simply omit the parameter to use the default):
+Wrap the INSERT in a try-catch: if a unique violation (code `23505`) occurs, fall back to an UPDATE using the same match criteria. This mirrors the proven "Update-First-then-Insert" pattern already used in propagation.
 
 ```ts
-// Before
-const { data: logs, isLoading } = useOrgKpiAuditLog(categoryId, kraName, kpiName, reviewPeriod, reviewYear, false);
-
-// After
-const { data: logs, isLoading } = useOrgKpiAuditLog(categoryId, kraName, kpiName, reviewPeriod, reviewYear);
+// Instead of only trying INSERT on !existing:
+try {
+  const { data, error } = await supabase.from('org_kpi_values').insert(value)...;
+  if (error) {
+    if (error.code === '23505') {
+      // Race condition: record was created between SELECT and INSERT
+      // Retry as UPDATE using match criteria
+      ...
+    } else {
+      throw error;
+    }
+  }
+} 
 ```
 
-### File: `DOCUMENTATION.md`
+### 2. Drop duplicate unique index (Database Migration)
 
-- Version bump to 1.45.43
-- Note: Fixed Value History not loading in Org KPI Data Entry cards
+```sql
+DROP INDEX IF EXISTS org_kpi_values_scoped_unique;
+```
+
+Keeps `org_kpi_values_scope_unique_idx` (the original) and removes the duplicate.
+
+### 3. Update DOCUMENTATION.md
+
+- Version bump to 1.45.44
+- Note: Fixed duplicate key error on Org KPI data entry save
 
 ## Impact
 
-- The History popover will now fetch and display audit log entries when clicked
-- No database or schema changes needed
-- No other components are affected
+- Saves from data owners (like Biswajit) will no longer fail when a record already exists
+- Removes a redundant database index
+- No UI changes needed
 
