@@ -17,11 +17,17 @@ export interface EmployeeScorecard {
   approvedKpis: number;
   avgSelfScore: number;
   avgManagerScore: number;
-  avgSkipLevelScore?: number;
-  avgHrPmsScore?: number;
+  avgSkipLevelScore?: number | null;
+  avgHrPmsScore?: number | null;
   avgAuditorScore: number;
   avgManagementScore: number;
   avgFinalScore: number;
+  hasSelfData?: boolean;
+  hasManagerData?: boolean;
+  hasSkipLevelData?: boolean;
+  hasHrPmsData?: boolean;
+  hasAuditorData?: boolean;
+  hasManagementData?: boolean;
   kpiDetails: KpiDetail[];
   categoryMetrics?: CategoryMetric[];
 }
@@ -116,17 +122,16 @@ const COLORS = {
   black: [0, 0, 0] as [number, number, number],
 };
 
-// Category colors for visual grouping
 const CATEGORY_COLORS: { [key: string]: [number, number, number] } = {
-  'ER & IR': [239, 246, 255],      // Blue-50
-  'HR Operations': [240, 253, 244], // Green-50
-  'Compliance': [254, 252, 232],   // Yellow-50
-  'Training': [254, 242, 242],     // Red-50
-  'Performance': [245, 243, 255],  // Purple-50
-  'Finance': [236, 253, 245],      // Emerald-50
-  'Sales': [255, 247, 237],        // Orange-50
-  'Operations': [240, 249, 255],   // Sky-50
-  'default': [249, 250, 251],      // Gray-50
+  'ER & IR': [239, 246, 255],
+  'HR Operations': [240, 253, 244],
+  'Compliance': [254, 252, 232],
+  'Training': [254, 242, 242],
+  'Performance': [245, 243, 255],
+  'Finance': [236, 253, 245],
+  'Sales': [255, 247, 237],
+  'Operations': [240, 249, 255],
+  'default': [249, 250, 251],
 };
 
 const getCategoryColor = (category: string): [number, number, number] => {
@@ -135,18 +140,14 @@ const getCategoryColor = (category: string): [number, number, number] => {
 
 const getRatingColor = (rating: string | number | null): [number, number, number] => {
   if (rating === null || rating === undefined) return COLORS.gray;
-  
-  // Handle numeric ratings with severity gradient
   if (typeof rating === 'number') {
     if (rating >= 5) return COLORS.primary;
     if (rating >= 4) return COLORS.success;
     if (rating >= 3) return COLORS.warning;
-    if (rating >= 2) return COLORS.dangerSoft;  // Light pink for "Needs Improvement"
-    if (rating >= 1) return COLORS.danger;       // Bright red for "Below Expectations"
-    return COLORS.dangerDeep;                    // Deep maroon for "Not Achieved"
+    if (rating >= 2) return COLORS.dangerSoft;
+    if (rating >= 1) return COLORS.danger;
+    return COLORS.dangerDeep;
   }
-  
-  // Handle string ratings (blue, green, yellow, red)
   switch (rating.toLowerCase()) {
     case 'blue': return COLORS.primary;
     case 'green': return COLORS.success;
@@ -158,14 +159,12 @@ const getRatingColor = (rating: string | number | null): [number, number, number
 
 const getRatingLightColor = (rating: string | number | null): [number, number, number] => {
   if (rating === null || rating === undefined) return COLORS.grayLight;
-  
   if (typeof rating === 'number') {
     if (rating >= 5) return COLORS.primaryLight;
     if (rating >= 4) return COLORS.successLight;
     if (rating >= 3) return COLORS.warningLight;
     return COLORS.dangerLight;
   }
-  
   switch (rating.toLowerCase()) {
     case 'blue': return COLORS.primaryLight;
     case 'green': return COLORS.successLight;
@@ -200,6 +199,12 @@ const formatScore = (score: number | null | undefined): string => {
   return score.toFixed(2);
 };
 
+/** Format score with null-check: returns '-' for null/undefined, '0.00' for zero */
+const formatScoreNullSafe = (score: number | null | undefined): string => {
+  if (score == null) return '-';
+  return score.toFixed(2);
+};
+
 const formatPercentage = (value: number): string => {
   return `${Math.round(value * 100) / 100}%`;
 };
@@ -231,11 +236,8 @@ function drawProgressBar(
   fillColor: [number, number, number] = COLORS.primary,
   bgColor: [number, number, number] = COLORS.grayLight
 ): void {
-  // Background
   doc.setFillColor(...bgColor);
   doc.roundedRect(x, y, width, height, height / 2, height / 2, 'F');
-  
-  // Fill
   const fillWidth = Math.min(Math.max(percentage / 100, 0), 1) * width;
   if (fillWidth > 0) {
     doc.setFillColor(...fillColor);
@@ -258,7 +260,6 @@ function drawCategoryChart(
   const barX = x + labelWidth;
   
   categories.forEach((cat) => {
-    // Category name with weightage
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...COLORS.black);
@@ -267,12 +268,10 @@ function drawCategoryChart(
       : truncateText(cat.name, 22);
     doc.text(label, x, currentY + barHeight / 2 + 1);
     
-    // Progress bar
     const percentage = Math.min(cat.percentage, 100);
-    const color = getScoreColor(cat.percentage / 20); // Convert to 5-point scale
+    const color = getScoreColor(cat.percentage / 20);
     drawProgressBar(doc, barX, currentY - 2, barWidth, barHeight, percentage, color);
     
-    // Percentage label
     doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
     doc.text(`${Math.round(percentage)}%`, barX + barWidth + 3, currentY + barHeight / 2);
@@ -293,18 +292,15 @@ function drawProfileBox(
   const boxHeight = 32;
   const colWidth = width / 4;
   
-  // Box background
   doc.setFillColor(...COLORS.grayLight);
   doc.setDrawColor(220, 220, 220);
   doc.roundedRect(x, y, width, boxHeight, 3, 3, 'FD');
   
-  // Section title
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.grayMedium);
   doc.text('EMPLOYEE PROFILE', x + 5, y + 8);
   
-  // Profile fields
   const fields = [
     { label: 'Full Name', value: scorecard.employeeName },
     { label: 'Designation', value: scorecard.designation || '-' },
@@ -314,12 +310,10 @@ function drawProfileBox(
   
   fields.forEach((field, index) => {
     const fieldX = x + 5 + (index * colWidth);
-    
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...COLORS.grayMedium);
     doc.text(field.label, fieldX, y + 17);
-    
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...COLORS.black);
@@ -337,7 +331,6 @@ function drawScoreSummaryBox(
   width: number
 ): number {
   const boxHeight = 45;
-  const scoreBoxWidth = 60;
   const ratingBoxWidth = 50;
   const statusBoxWidth = 55;
   
@@ -350,26 +343,25 @@ function drawScoreSummaryBox(
   doc.setTextColor(...COLORS.grayMedium);
   doc.text('TOTAL SCORE', x + 8, y + 12);
   
-  // Calculate total points
-  const maxScore = scorecard.totalKpis * 5;
-  const earnedScore = scorecard.avgFinalScore * scorecard.totalKpis;
-  const percentage = maxScore > 0 ? (earnedScore / maxScore) * 100 : 0;
+  // Bug 1 Fix: Use weighted average score out of 5.00 instead of meaningless point totals
+  const percentage = scorecard.avgFinalScore > 0 ? (scorecard.avgFinalScore / 5) * 100 : 0;
   
   // Progress bar
   const barWidth = width - ratingBoxWidth - statusBoxWidth - 80;
   const color = getScoreColor(scorecard.avgFinalScore);
   drawProgressBar(doc, x + 8, y + 20, barWidth, 10, percentage, color);
   
-  // Score text
+  // Score text — percentage
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.black);
   doc.text(`${formatPercentage(percentage)}`, x + barWidth + 15, y + 27);
   
+  // Score text — weighted average out of 5.00
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...COLORS.grayMedium);
-  doc.text(`${earnedScore.toFixed(1)} / ${maxScore.toFixed(1)} pts`, x + 8, y + 40);
+  doc.text(`${formatScore(scorecard.avgFinalScore)} / 5.00`, x + 8, y + 40);
   
   // Overall Rating Box
   const ratingX = x + width - ratingBoxWidth - statusBoxWidth - 5;
@@ -421,18 +413,15 @@ function drawLegendBox(
   const boxHeight = 18;
   const boxWidth = Math.min(width, 180);
   
-  // Box background
   doc.setFillColor(250, 250, 250);
   doc.setDrawColor(220, 220, 220);
   doc.roundedRect(x + width - boxWidth, y, boxWidth, boxHeight, 2, 2, 'FD');
   
-  // Title
   doc.setFontSize(6);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.grayMedium);
   doc.text('RATING SCALE:', x + width - boxWidth + 4, y + 6);
   
-  // Rating badges
   const badges = [
     { label: 'B (5)', color: COLORS.primary },
     { label: 'G (4)', color: COLORS.success },
@@ -451,7 +440,6 @@ function drawLegendBox(
     badgeX += 20;
   });
   
-  // Indicators
   doc.setFontSize(6);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...COLORS.grayMedium);
@@ -471,40 +459,39 @@ interface ReviewNote {
 // Review stage colors matching the UI ReviewTrailCard
 const STAGE_COLORS = {
   self: {
-    border: [59, 130, 246] as [number, number, number],     // Blue-500
-    bg: [239, 246, 255] as [number, number, number],        // Blue-50
-    text: [30, 64, 175] as [number, number, number],        // Blue-800
+    border: [59, 130, 246] as [number, number, number],
+    bg: [239, 246, 255] as [number, number, number],
+    text: [30, 64, 175] as [number, number, number],
   },
   manager: {
-    border: [245, 158, 11] as [number, number, number],     // Amber-500
-    bg: [255, 251, 235] as [number, number, number],        // Amber-50
-    text: [146, 64, 14] as [number, number, number],        // Amber-800
+    border: [245, 158, 11] as [number, number, number],
+    bg: [255, 251, 235] as [number, number, number],
+    text: [146, 64, 14] as [number, number, number],
   },
   skipLevel: {
-    border: [20, 184, 166] as [number, number, number],     // Teal-500
-    bg: [240, 253, 250] as [number, number, number],        // Teal-50
-    text: [19, 78, 74] as [number, number, number],         // Teal-800
+    border: [20, 184, 166] as [number, number, number],
+    bg: [240, 253, 250] as [number, number, number],
+    text: [19, 78, 74] as [number, number, number],
   },
   hrPms: {
-    border: [244, 63, 94] as [number, number, number],      // Rose-500
-    bg: [255, 241, 242] as [number, number, number],        // Rose-50
-    text: [159, 18, 57] as [number, number, number],        // Rose-800
+    border: [244, 63, 94] as [number, number, number],
+    bg: [255, 241, 242] as [number, number, number],
+    text: [159, 18, 57] as [number, number, number],
   },
   auditor: {
-    border: [139, 92, 246] as [number, number, number],     // Purple-500
-    bg: [245, 243, 255] as [number, number, number],        // Purple-50
-    text: [91, 33, 182] as [number, number, number],        // Purple-800
+    border: [139, 92, 246] as [number, number, number],
+    bg: [245, 243, 255] as [number, number, number],
+    text: [91, 33, 182] as [number, number, number],
   },
   management: {
-    border: [16, 185, 129] as [number, number, number],     // Emerald-500
-    bg: [236, 253, 245] as [number, number, number],        // Emerald-50
-    text: [6, 95, 70] as [number, number, number],          // Emerald-800
+    border: [16, 185, 129] as [number, number, number],
+    bg: [236, 253, 245] as [number, number, number],
+    text: [6, 95, 70] as [number, number, number],
   },
 };
 
 /**
  * Draws a detailed KPI review card similar to ReviewTrailCard in the UI
- * Returns the Y position after the card
  */
 function drawKpiDetailCard(
   doc: jsPDF,
@@ -523,7 +510,6 @@ function drawKpiDetailCard(
   doc.setDrawColor(200, 200, 200);
   doc.roundedRect(x, currentY, width, headerHeight, 2, 2, 'FD');
   
-  // Category badge
   doc.setFillColor(...COLORS.primary);
   doc.roundedRect(x + 4, currentY + 3, 50, 10, 2, 2, 'F');
   doc.setFontSize(7);
@@ -531,13 +517,11 @@ function drawKpiDetailCard(
   doc.setTextColor(...COLORS.white);
   doc.text(truncateText(kpi.category, 18), x + 6, currentY + 9);
   
-  // KPI Name
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.black);
   doc.text(truncateText(kpi.kpiName, 60), x + 58, currentY + 9);
   
-  // Right side: Weight, Target, UOM
   doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...COLORS.grayMedium);
@@ -548,7 +532,7 @@ function drawKpiDetailCard(
   
   // ===== Achieved Value Bar =====
   const achievedHeight = 14;
-  doc.setFillColor(240, 253, 244); // Green-50
+  doc.setFillColor(240, 253, 244);
   doc.setDrawColor(200, 200, 200);
   doc.roundedRect(x, currentY, width, achievedHeight, 2, 2, 'FD');
   
@@ -558,7 +542,6 @@ function drawKpiDetailCard(
   doc.setTextColor(...COLORS.black);
   doc.text(`Achieved: ${achieved}`, x + 4, currentY + 9);
   
-  // Final score badge on right
   if (kpi.finalScore !== null) {
     const badgeWidth = 35;
     const badgeX = x + width - badgeWidth - 4;
@@ -575,7 +558,6 @@ function drawKpiDetailCard(
   // ===== Review Panels (3x2 Grid) =====
   const panelHeight = 42;
   
-  // Helper to draw a review panel
   const drawPanel = (
     panelX: number,
     panelY: number,
@@ -587,12 +569,10 @@ function drawKpiDetailCard(
     evidence: string | null,
     colors: { border: [number, number, number]; bg: [number, number, number]; text: [number, number, number] }
   ) => {
-    // Panel background
     doc.setFillColor(...colors.bg);
     doc.setDrawColor(...colors.border);
     doc.roundedRect(panelX, panelY, panelW, panelHeight, 2, 2, 'FD');
     
-    // Title with icon indicator
     doc.setFillColor(...colors.border);
     doc.roundedRect(panelX + 3, panelY + 3, 8, 8, 4, 4, 'F');
     
@@ -601,7 +581,6 @@ function drawKpiDetailCard(
     doc.setTextColor(...colors.text);
     doc.text(title, panelX + 14, panelY + 9);
     
-    // Score badge
     if (score !== null && score !== undefined) {
       doc.setFillColor(...getRatingColor(score));
       doc.roundedRect(panelX + panelW - 28, panelY + 3, 25, 8, 2, 2, 'F');
@@ -616,7 +595,6 @@ function drawKpiDetailCard(
       doc.text('Pending', panelX + panelW - 20, panelY + 8);
     }
     
-    // Remarks text (wrapped)
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...COLORS.black);
@@ -637,7 +615,6 @@ function drawKpiDetailCard(
       textY += 4;
     });
     
-    // Evidence indicator
     if (evidence) {
       doc.setFontSize(6);
       doc.setTextColor(...COLORS.primary);
@@ -656,13 +633,12 @@ function drawKpiDetailCard(
   drawPanel(x, currentY, thirdWidth, 'HR PMS Review', kpi.hrPmsScore ?? null, kpi.hrPmsRating ?? null, kpi.hrPmsRemarks || null, kpi.hrPmsEvidence || null, STAGE_COLORS.hrPms);
   drawPanel(x + thirdWidth + 6, currentY, thirdWidth, 'Auditor Review', kpi.auditorScore, kpi.auditorRating, kpi.auditorRemarks || null, kpi.auditorEvidence || null, STAGE_COLORS.auditor);
   
-  // Final Assessment Panel (special formatting)
+  // Final Assessment Panel
   const finalX = x + (thirdWidth + 6) * 2;
   doc.setFillColor(...STAGE_COLORS.management.bg);
   doc.setDrawColor(...STAGE_COLORS.management.border);
   doc.roundedRect(finalX, currentY, thirdWidth, panelHeight, 2, 2, 'FD');
   
-  // Title
   doc.setFillColor(...STAGE_COLORS.management.border);
   doc.roundedRect(finalX + 3, currentY + 3, 8, 8, 4, 4, 'F');
   doc.setFontSize(8);
@@ -670,7 +646,6 @@ function drawKpiDetailCard(
   doc.setTextColor(...STAGE_COLORS.management.text);
   doc.text('Final Assessment', finalX + 14, currentY + 9);
   
-  // Final score (larger)
   if (kpi.finalScore !== null) {
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
@@ -680,7 +655,6 @@ function drawKpiDetailCard(
     doc.setFontSize(10);
     doc.text('/ 5', finalX + 30, currentY + 26);
     
-    // Rating text
     const ratingMap: Record<string, string> = {
       blue: 'Outstanding',
       green: 'Exceeds Expectations',
@@ -698,7 +672,6 @@ function drawKpiDetailCard(
     doc.text('Pending', finalX + 10, currentY + 26);
   }
   
-  // Status badge on right
   doc.setFontSize(7);
   doc.setFont('helvetica', 'bold');
   doc.setFillColor(...COLORS.success);
@@ -711,12 +684,8 @@ function drawKpiDetailCard(
   return currentY;
 }
 
-/**
- * Calculate estimated height of a KPI detail card
- */
 function estimateKpiCardHeight(): number {
-  // Header (16) + Achieved (14) + 2 rows of panels (42 each) + gaps
-  return 16 + 2 + 14 + 2 + 42 + 3 + 42 + 8; // ~129mm total
+  return 16 + 2 + 14 + 2 + 42 + 3 + 42 + 8;
 }
 
 function drawReviewNotesSection(
@@ -729,20 +698,16 @@ function drawReviewNotesSection(
 ): number {
   if (notes.length === 0) return y;
   
-  const startY = y;
   let currentY = y;
   
-  // Section header
   doc.setFillColor(...COLORS.grayLight);
   doc.roundedRect(x, currentY, width, 8, 1, 1, 'F');
-  
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.grayMedium);
   doc.text('REVIEW TRAIL NOTES', x + 4, currentY + 5.5);
   currentY += 11;
   
-  // Notes content
   doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...COLORS.black);
@@ -757,17 +722,14 @@ function drawReviewNotesSection(
       break;
     }
     
-    // Note reference number
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...COLORS.primary);
     doc.text(`[${note.index}]`, x + 4, currentY);
     
-    // Stage badge
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...COLORS.grayMedium);
     doc.text(`${note.stage}:`, x + 14, currentY);
     
-    // Remarks (wrapped text)
     doc.setTextColor(...COLORS.black);
     const remarkLines = doc.splitTextToSize(note.remarks, width - 50);
     const linesToShow = Math.min(remarkLines.length, 2);
@@ -783,7 +745,6 @@ function drawReviewNotesSection(
       doc.text('...', x + 30, currentY - lineHeight);
     }
     
-    // Evidence link indicator
     if (note.evidence) {
       doc.setTextColor(...COLORS.primary);
       doc.setFontSize(6);
@@ -791,15 +752,12 @@ function drawReviewNotesSection(
       doc.setFontSize(7);
     }
     
-    currentY += 1; // Gap between notes
+    currentY += 1;
   }
   
   return currentY;
 }
 
-/**
- * Draws detailed review trail pages with KPI cards
- */
 function drawDetailedReviewTrailPages(
   doc: jsPDF,
   scorecard: EmployeeScorecard,
@@ -807,11 +765,8 @@ function drawDetailedReviewTrailPages(
   margin: number
 ): void {
   const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
   const contentWidth = pageWidth - 2 * margin;
-  const cardHeight = estimateKpiCardHeight();
   
-  // Group KPIs by category
   const groupedKpis = new Map<string, KpiDetail[]>();
   scorecard.kpiDetails.forEach(kpi => {
     if (!groupedKpis.has(kpi.category)) {
@@ -826,12 +781,9 @@ function drawDetailedReviewTrailPages(
   Array.from(groupedKpis.entries()).forEach(([category, kpis]) => {
     kpis.forEach((kpi) => {
       kpiIndex++;
-      
-      // Start new page for each KPI's detailed card
       doc.addPage('landscape');
       let yPos = 15;
       
-      // Page header
       doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(...COLORS.primaryDark);
@@ -846,103 +798,22 @@ function drawDetailedReviewTrailPages(
       );
       
       yPos += 14;
-      
-      // Draw the KPI detail card
       yPos = drawKpiDetailCard(doc, kpi, margin, yPos, contentWidth);
     });
   });
 }
 
-// ============= Main Export Functions =============
+// ============= Shared KPI Table Builder =============
 
-export function generateDetailedScorecardPdf(
-  scorecard: EmployeeScorecard,
-  options: PdfExportOptions
-): void {
-  const doc = new jsPDF({
-    orientation: 'landscape',
-    unit: 'mm',
-    format: 'a4',
-  });
-
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 12;
-  let yPos = 15;
-
-  // ===== PAGE 1: Dashboard Summary =====
-  
-  // Header
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...COLORS.primaryDark);
-  doc.text('Performance Management Dashboard', margin, yPos);
-  
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...COLORS.grayMedium);
-  doc.text(`${options.companyName || 'Organization'} • ${options.period} ${options.year}`, margin, yPos + 7);
-  
-  yPos += 18;
-  
-  // Employee Profile Box
-  yPos = drawProfileBox(doc, scorecard, margin, yPos, pageWidth - 2 * margin);
-  
-  // Score Summary Box
-  yPos = drawScoreSummaryBox(doc, scorecard, margin, yPos, pageWidth - 2 * margin);
-  
-  // Performance by Category Section
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...COLORS.black);
-  doc.text('PERFORMANCE BY CATEGORY', margin, yPos + 5);
-  yPos += 12;
-  
-  // Build category metrics if not provided
-  if (scorecard.categoryMetrics && scorecard.categoryMetrics.length > 0) {
-    yPos = drawCategoryChart(doc, scorecard.categoryMetrics, margin, yPos, pageWidth - 2 * margin);
-  } else {
-    // Generate from KPI details
-    const categoryMap = new Map<string, { totalScore: number; totalWeight: number }>();
-    scorecard.kpiDetails.forEach(kpi => {
-      if (!categoryMap.has(kpi.category)) {
-        categoryMap.set(kpi.category, { totalScore: 0, totalWeight: 0 });
-      }
-      const cat = categoryMap.get(kpi.category)!;
-      cat.totalWeight += kpi.weightage;
-      cat.totalScore += (kpi.finalScore || 0) * kpi.weightage;
-    });
-    
-    const categoryMetrics: CategoryMetric[] = Array.from(categoryMap.entries()).map(([name, data]) => ({
-      name,
-      percentage: data.totalWeight > 0 ? (data.totalScore / data.totalWeight / 5) * 100 : 0,
-      weightage: data.totalWeight,
-      score: data.totalWeight > 0 ? data.totalScore / data.totalWeight : 0,
-    }));
-    
-    yPos = drawCategoryChart(doc, categoryMetrics, margin, yPos, pageWidth - 2 * margin);
-  }
-
-  // ===== PAGE 2+: Enhanced KPI Performance Details Table =====
-  doc.addPage('landscape');
-  yPos = 15;
-  
-  // Table header with legend
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...COLORS.primaryDark);
-  doc.text('KPI Performance Details', margin, yPos);
-  
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...COLORS.grayMedium);
-  doc.text(`${scorecard.employeeName} (${scorecard.employeeCode}) • ${options.period} ${options.year}`, margin, yPos + 6);
-  
-  // Legend box in top-right
-  yPos = drawLegendBox(doc, margin, yPos - 2, pageWidth - 2 * margin);
-  yPos += 2;
-  
-  // Group KPIs by category
+/**
+ * Builds the KPI Performance Details table data with proper null-safe score formatting.
+ * Bug 2 Fix: Column 3 is now "Self" (self_score) instead of "Self Ach." (achieved value).
+ *            Target column shows "Target / Achieved" format.
+ * Bug 3 Fix: All score checks use != null instead of truthy checks.
+ */
+function buildKpiTableData(
+  scorecard: EmployeeScorecard
+): { tableData: RowInput[]; reviewNotes: ReviewNote[] } {
   const groupedKpis = new Map<string, KpiDetail[]>();
   scorecard.kpiDetails.forEach(kpi => {
     if (!groupedKpis.has(kpi.category)) {
@@ -951,21 +822,18 @@ export function generateDetailedScorecardPdf(
     groupedKpis.get(kpi.category)!.push(kpi);
   });
   
-  // Build table data with category headers and collect notes
   const tableData: RowInput[] = [];
   const reviewNotes: ReviewNote[] = [];
   let noteIndex = 1;
   
   Array.from(groupedKpis.entries()).forEach(([category, kpis]) => {
-    // Calculate category averages
     const catWeight = kpis.reduce((sum, k) => sum + k.weightage, 0);
     const catScore = kpis.reduce((sum, k) => sum + (k.finalScore || 0) * k.weightage, 0);
     const catAvg = catWeight > 0 ? catScore / catWeight : 0;
     
-    // Category header row - single row spanning all 8 columns
     tableData.push([{
       content: `${category}   |   Avg: ${catAvg.toFixed(2)}   |   Weight: ${catWeight}%`,
-      colSpan: 10,
+      colSpan: 11,
       styles: {
         fillColor: getCategoryColor(category),
         fontStyle: 'bold',
@@ -975,13 +843,11 @@ export function generateDetailedScorecardPdf(
       }
     }] as CellDef[]);
     
-    // KPI rows
     kpis.forEach(kpi => {
       const target = kpi.target ?? '-';
       const achieved = kpi.selfAchieved ?? '-';
       const isLower = kpi.criteria?.toLowerCase().includes('lower');
       
-      // Determine if target was met
       let targetMet = false;
       if (target !== '-' && achieved !== '-') {
         const targetNum = typeof target === 'number' ? target : parseFloat(String(target));
@@ -991,294 +857,7 @@ export function generateDetailedScorecardPdf(
         }
       }
       
-      // Collect notes for this KPI
-      const hasNotes = kpi.selfRemarks || kpi.managerRemarks || kpi.skipLevelRemarks || kpi.hrPmsRemarks || kpi.auditorRemarks || kpi.managementRemarks;
-      let noteRef = '';
-      
-      if (kpi.selfRemarks) {
-        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'Self', remarks: kpi.selfRemarks, evidence: kpi.selfEvidence || undefined });
-        noteRef = `[${noteIndex}]`;
-        noteIndex++;
-      }
-      if (kpi.managerRemarks) {
-        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'Manager', remarks: kpi.managerRemarks, evidence: kpi.managerEvidence || undefined });
-        if (!noteRef) noteRef = `[${noteIndex}]`; else noteRef += `,${noteIndex}`;
-        noteIndex++;
-      }
-      if (kpi.skipLevelRemarks) {
-        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'Skip-Level', remarks: kpi.skipLevelRemarks, evidence: kpi.skipLevelEvidence || undefined });
-        if (!noteRef) noteRef = `[${noteIndex}]`; else noteRef += `,${noteIndex}`;
-        noteIndex++;
-      }
-      if (kpi.hrPmsRemarks) {
-        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'HR PMS', remarks: kpi.hrPmsRemarks, evidence: kpi.hrPmsEvidence || undefined });
-        if (!noteRef) noteRef = `[${noteIndex}]`; else noteRef += `,${noteIndex}`;
-        noteIndex++;
-      }
-      if (kpi.auditorRemarks) {
-        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'Auditor', remarks: kpi.auditorRemarks, evidence: kpi.auditorEvidence || undefined });
-        if (!noteRef) noteRef = `[${noteIndex}]`; else noteRef += `,${noteIndex}`;
-        noteIndex++;
-      }
-      if (kpi.managementRemarks) {
-        reviewNotes.push({ index: noteIndex, kpiName: kpi.kpiName, stage: 'Management', remarks: kpi.managementRemarks });
-        if (!noteRef) noteRef = `[${noteIndex}]`; else noteRef += `,${noteIndex}`;
-        noteIndex++;
-      }
-      
-      // Build simplified cell contents
-      const kpiNameContent = truncateText(kpi.kpiName, 35) + (noteRef ? ` ${noteRef}` : '');
-      const targetContent = `${target}${kpi.uom ? ` ${kpi.uom}` : ''}`;
-      const achievedContent = achieved !== '-' ? `${achieved}${targetMet ? ' [+]' : ' [-]'}` : '-';
-      
-      tableData.push([
-        { content: kpiNameContent, styles: { halign: 'left' } } as CellDef,
-        { content: `${kpi.weightage}%`, styles: { halign: 'center' } } as CellDef,
-        { content: targetContent, styles: { halign: 'center' } } as CellDef,
-        { content: achievedContent, styles: { halign: 'center' } } as CellDef,
-        { content: kpi.managerScore ? formatScore(kpi.managerScore) : '-', styles: { halign: 'center' } } as CellDef,
-        { content: kpi.skipLevelScore ? formatScore(kpi.skipLevelScore) : '-', styles: { halign: 'center' } } as CellDef,
-        { content: kpi.hrPmsScore ? formatScore(kpi.hrPmsScore) : '-', styles: { halign: 'center' } } as CellDef,
-        { content: kpi.auditorScore ? formatScore(kpi.auditorScore) : '-', styles: { halign: 'center' } } as CellDef,
-        {
-          content: `${formatScore(kpi.finalScore)} ${getRatingLabel(kpi.finalScore)}`,
-          styles: {
-            fontStyle: 'bold',
-            fillColor: getRatingLightColor(kpi.finalScore),
-            textColor: getRatingColor(kpi.finalScore),
-            halign: 'center',
-          }
-        } as CellDef,
-        { content: hasNotes ? '*' : '', styles: { halign: 'center' } } as CellDef,
-      ]);
-    });
-  });
-
-  // Create the table
-  autoTable(doc, {
-    startY: yPos,
-    head: [[
-      { content: 'KPI Name', styles: { halign: 'left' } },
-      { content: 'W', styles: { halign: 'center' } },
-      { content: 'Target', styles: { halign: 'center' } },
-      { content: 'Self Ach.', styles: { halign: 'center' } },
-      { content: 'Mgr', styles: { halign: 'center' } },
-      { content: 'Skip-L', styles: { halign: 'center' } },
-      { content: 'HR PMS', styles: { halign: 'center' } },
-      { content: 'Auditor', styles: { halign: 'center' } },
-      { content: 'Final', styles: { halign: 'center' } },
-      { content: '*', styles: { halign: 'center' } },
-    ]],
-    body: tableData,
-    styles: {
-      fontSize: 7,
-      cellPadding: 2,
-      lineColor: [220, 220, 220],
-      lineWidth: 0.1,
-      overflow: 'linebreak',
-      valign: 'middle',
-    },
-    headStyles: {
-      fillColor: COLORS.primary,
-      textColor: COLORS.white,
-      fontSize: 7,
-      fontStyle: 'bold',
-      halign: 'center',
-      valign: 'middle',
-    },
-    columnStyles: {
-      0: { cellWidth: 60, halign: 'left' },   // KPI Name
-      1: { cellWidth: 12, halign: 'center' }, // Weight
-      2: { cellWidth: 22, halign: 'center' }, // Target
-      3: { cellWidth: 22, halign: 'center' }, // Self Achieved
-      4: { cellWidth: 18, halign: 'center' }, // Manager
-      5: { cellWidth: 18, halign: 'center' }, // Skip-Level
-      6: { cellWidth: 18, halign: 'center' }, // HR PMS
-      7: { cellWidth: 18, halign: 'center' }, // Auditor
-      8: { cellWidth: 22, halign: 'center' }, // Final
-      9: { cellWidth: 8, halign: 'center' },  // Notes
-    },
-    alternateRowStyles: {
-      fillColor: [252, 252, 253],
-    },
-    margin: { left: margin, right: margin, bottom: 45 },
-    didDrawPage: (data) => {
-      // Footer on each page
-      const pageCount = doc.getNumberOfPages();
-      doc.setFontSize(7);
-      doc.setTextColor(...COLORS.grayMedium);
-      doc.text(
-        `Page ${data.pageNumber} of ${pageCount}  •  Generated: ${format(new Date(), 'dd MMM yyyy')}  •  ${options.companyName || ''}`,
-        pageWidth / 2,
-        pageHeight - 8,
-        { align: 'center' }
-      );
-    },
-  });
-
-  // ===== PAGES 3+: Detailed Review Trail Cards =====
-  drawDetailedReviewTrailPages(doc, scorecard, options, margin);
-
-  // Update footer on all pages
-  const pageCount = doc.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFontSize(7);
-    doc.setTextColor(...COLORS.grayMedium);
-    doc.text(
-      `Page ${i} of ${pageCount}  •  Generated: ${format(new Date(), 'dd MMM yyyy')}  •  ${options.companyName || ''}`,
-      pageWidth / 2,
-      pageHeight - 8,
-      { align: 'center' }
-    );
-  }
-
-  // Save
-  const fileName = `Performance_Dashboard_${scorecard.employeeName}_${scorecard.employeeCode}_${options.period}_${options.year}.pdf`;
-  doc.save(fileName.replace(/\s+/g, '_'));
-}
-
-// Keep legacy function for backwards compatibility
-export const generateScorecardPdf = generateDetailedScorecardPdf;
-
-// Generate PDF as Blob for preview (does not save, returns blob)
-export function generateDetailedScorecardPdfBlob(
-  scorecard: EmployeeScorecard,
-  options: PdfExportOptions
-): Blob {
-  const doc = new jsPDF({
-    orientation: 'landscape',
-    unit: 'mm',
-    format: 'a4',
-  });
-
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 12;
-  let yPos = 15;
-
-  // ===== PAGE 1: Dashboard Summary =====
-  
-  // Header
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...COLORS.primaryDark);
-  doc.text('Performance Management Dashboard', margin, yPos);
-  
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...COLORS.grayMedium);
-  doc.text(`${options.companyName || 'Organization'} • ${options.period} ${options.year}`, margin, yPos + 7);
-  
-  yPos += 18;
-  
-  // Employee Profile Box
-  yPos = drawProfileBox(doc, scorecard, margin, yPos, pageWidth - 2 * margin);
-  
-  // Score Summary Box
-  yPos = drawScoreSummaryBox(doc, scorecard, margin, yPos, pageWidth - 2 * margin);
-  
-  // Performance by Category Section
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...COLORS.black);
-  doc.text('PERFORMANCE BY CATEGORY', margin, yPos + 5);
-  yPos += 12;
-  
-  // Build category metrics if not provided
-  if (scorecard.categoryMetrics && scorecard.categoryMetrics.length > 0) {
-    yPos = drawCategoryChart(doc, scorecard.categoryMetrics, margin, yPos, pageWidth - 2 * margin);
-  } else {
-    // Generate from KPI details
-    const categoryMap = new Map<string, { totalScore: number; totalWeight: number }>();
-    scorecard.kpiDetails.forEach(kpi => {
-      if (!categoryMap.has(kpi.category)) {
-        categoryMap.set(kpi.category, { totalScore: 0, totalWeight: 0 });
-      }
-      const cat = categoryMap.get(kpi.category)!;
-      cat.totalWeight += kpi.weightage;
-      cat.totalScore += (kpi.finalScore || 0) * kpi.weightage;
-    });
-    
-    const categoryMetrics: CategoryMetric[] = Array.from(categoryMap.entries()).map(([name, data]) => ({
-      name,
-      percentage: data.totalWeight > 0 ? (data.totalScore / data.totalWeight / 5) * 100 : 0,
-      weightage: data.totalWeight,
-      score: data.totalWeight > 0 ? data.totalScore / data.totalWeight : 0,
-    }));
-    
-    yPos = drawCategoryChart(doc, categoryMetrics, margin, yPos, pageWidth - 2 * margin);
-  }
-
-  // ===== PAGE 2+: Enhanced KPI Performance Details Table =====
-  doc.addPage('landscape');
-  yPos = 15;
-  
-  // Table header with legend
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...COLORS.primaryDark);
-  doc.text('KPI Performance Details', margin, yPos);
-  
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...COLORS.grayMedium);
-  doc.text(`${scorecard.employeeName} (${scorecard.employeeCode}) • ${options.period} ${options.year}`, margin, yPos + 6);
-  
-  // Legend box in top-right
-  yPos = drawLegendBox(doc, margin, yPos - 2, pageWidth - 2 * margin);
-  yPos += 2;
-  
-  // Group KPIs by category
-  const groupedKpis = new Map<string, KpiDetail[]>();
-  scorecard.kpiDetails.forEach(kpi => {
-    if (!groupedKpis.has(kpi.category)) {
-      groupedKpis.set(kpi.category, []);
-    }
-    groupedKpis.get(kpi.category)!.push(kpi);
-  });
-  
-  // Build table data with category headers and collect notes
-  const tableData: RowInput[] = [];
-  const reviewNotes: ReviewNote[] = [];
-  let noteIndex = 1;
-  
-  Array.from(groupedKpis.entries()).forEach(([category, kpis]) => {
-    // Calculate category averages
-    const catWeight = kpis.reduce((sum, k) => sum + k.weightage, 0);
-    const catScore = kpis.reduce((sum, k) => sum + (k.finalScore || 0) * k.weightage, 0);
-    const catAvg = catWeight > 0 ? catScore / catWeight : 0;
-    
-    // Category header row - single row spanning all 8 columns
-    tableData.push([{
-      content: `${category}   |   Avg: ${catAvg.toFixed(2)}   |   Weight: ${catWeight}%`,
-      colSpan: 10,
-      styles: {
-        fillColor: getCategoryColor(category),
-        fontStyle: 'bold',
-        fontSize: 8,
-        textColor: COLORS.grayMedium,
-        halign: 'left',
-      }
-    }] as CellDef[]);
-    
-    // KPI rows
-    kpis.forEach(kpi => {
-      const target = kpi.target ?? '-';
-      const achieved = kpi.selfAchieved ?? '-';
-      const isLower = kpi.criteria?.toLowerCase().includes('lower');
-      
-      // Determine if target was met
-      let targetMet = false;
-      if (target !== '-' && achieved !== '-') {
-        const targetNum = typeof target === 'number' ? target : parseFloat(String(target));
-        const achievedNum = typeof achieved === 'number' ? achieved : parseFloat(String(achieved));
-        if (!isNaN(targetNum) && !isNaN(achievedNum)) {
-          targetMet = isLower ? achievedNum <= targetNum : achievedNum >= targetNum;
-        }
-      }
-      
-      // Collect notes for this KPI
+      // Collect notes
       const hasNotes = kpi.selfRemarks || kpi.managerRemarks || kpi.skipLevelRemarks || kpi.hrPmsRemarks || kpi.auditorRemarks || kpi.managementRemarks;
       let noteRef = '';
       
@@ -1308,6 +887,7 @@ export function generateDetailedScorecardPdfBlob(
       }
       
       const kpiNameContent = truncateText(kpi.kpiName, 35) + (noteRef ? ` ${noteRef}` : '');
+      // Bug 2 Fix: Target column now shows "target / achieved"
       const targetContent = `${target}${kpi.uom ? ` ${kpi.uom}` : ''}`;
       const achievedContent = achieved !== '-' ? `${achieved}${targetMet ? ' [+]' : ' [-]'}` : '-';
       
@@ -1316,51 +896,172 @@ export function generateDetailedScorecardPdfBlob(
         { content: `${kpi.weightage}%`, styles: { halign: 'center' } } as CellDef,
         { content: targetContent, styles: { halign: 'center' } } as CellDef,
         { content: achievedContent, styles: { halign: 'center' } } as CellDef,
-        { content: kpi.managerScore ? formatScore(kpi.managerScore) : '-', styles: { halign: 'center' } } as CellDef,
-        { content: kpi.skipLevelScore ? formatScore(kpi.skipLevelScore) : '-', styles: { halign: 'center' } } as CellDef,
-        { content: kpi.hrPmsScore ? formatScore(kpi.hrPmsScore) : '-', styles: { halign: 'center' } } as CellDef,
-        { content: kpi.auditorScore ? formatScore(kpi.auditorScore) : '-', styles: { halign: 'center' } } as CellDef,
-        { content: `${formatScore(kpi.finalScore)} ${getRatingLabel(kpi.finalScore)}`, styles: { fontStyle: 'bold', fillColor: getRatingLightColor(kpi.finalScore), textColor: getRatingColor(kpi.finalScore), halign: 'center' } } as CellDef,
+        // Bug 2 Fix: Self column now shows self_score instead of achieved value
+        // Bug 3 Fix: null-safe checks for all score columns
+        { content: kpi.selfScore != null ? formatScore(kpi.selfScore) : '-', styles: { halign: 'center' } } as CellDef,
+        { content: kpi.managerScore != null ? formatScore(kpi.managerScore) : '-', styles: { halign: 'center' } } as CellDef,
+        { content: kpi.skipLevelScore != null ? formatScore(kpi.skipLevelScore) : '-', styles: { halign: 'center' } } as CellDef,
+        { content: kpi.hrPmsScore != null ? formatScore(kpi.hrPmsScore) : '-', styles: { halign: 'center' } } as CellDef,
+        { content: kpi.auditorScore != null ? formatScore(kpi.auditorScore) : '-', styles: { halign: 'center' } } as CellDef,
+        {
+          content: `${formatScore(kpi.finalScore)} ${getRatingLabel(kpi.finalScore)}`,
+          styles: {
+            fontStyle: 'bold',
+            fillColor: getRatingLightColor(kpi.finalScore),
+            textColor: getRatingColor(kpi.finalScore),
+            halign: 'center',
+          }
+        } as CellDef,
         { content: hasNotes ? '*' : '', styles: { halign: 'center' } } as CellDef,
       ]);
     });
   });
+  
+  return { tableData, reviewNotes };
+}
+
+/** KPI table header definition — consistent across both PDF functions */
+const KPI_TABLE_HEAD: CellDef[][] = [[
+  { content: 'KPI Name', styles: { halign: 'left' } } as CellDef,
+  { content: 'W', styles: { halign: 'center' } } as CellDef,
+  { content: 'Target', styles: { halign: 'center' } } as CellDef,
+  { content: 'Achieved', styles: { halign: 'center' } } as CellDef,
+  { content: 'Self', styles: { halign: 'center' } } as CellDef,
+  { content: 'Mgr', styles: { halign: 'center' } } as CellDef,
+  { content: 'Skip-L', styles: { halign: 'center' } } as CellDef,
+  { content: 'HR PMS', styles: { halign: 'center' } } as CellDef,
+  { content: 'Auditor', styles: { halign: 'center' } } as CellDef,
+  { content: 'Final', styles: { halign: 'center' } } as CellDef,
+  { content: '*', styles: { halign: 'center' } } as CellDef,
+]];
+
+/** Column styles for the 11-column KPI table */
+const KPI_TABLE_COLUMN_STYLES = {
+  0: { cellWidth: 55, halign: 'left' as const },
+  1: { cellWidth: 12, halign: 'center' as const },
+  2: { cellWidth: 20, halign: 'center' as const },
+  3: { cellWidth: 20, halign: 'center' as const },
+  4: { cellWidth: 16, halign: 'center' as const },
+  5: { cellWidth: 16, halign: 'center' as const },
+  6: { cellWidth: 16, halign: 'center' as const },
+  7: { cellWidth: 16, halign: 'center' as const },
+  8: { cellWidth: 16, halign: 'center' as const },
+  9: { cellWidth: 22, halign: 'center' as const },
+  10: { cellWidth: 8, halign: 'center' as const },
+};
+
+// ============= Bug 5 Fix: Shared PDF builder to eliminate duplication =============
+
+/**
+ * Builds the complete detailed scorecard PDF document.
+ * Both generateDetailedScorecardPdf and generateDetailedScorecardPdfBlob call this.
+ */
+function buildDetailedScorecardDoc(
+  scorecard: EmployeeScorecard,
+  options: PdfExportOptions
+): jsPDF {
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 12;
+  let yPos = 15;
+
+  // ===== PAGE 1: Dashboard Summary =====
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.primaryDark);
+  doc.text('Performance Management Dashboard', margin, yPos);
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...COLORS.grayMedium);
+  doc.text(`${options.companyName || 'Organization'} • ${options.period} ${options.year}`, margin, yPos + 7);
+  
+  yPos += 18;
+  yPos = drawProfileBox(doc, scorecard, margin, yPos, pageWidth - 2 * margin);
+  yPos = drawScoreSummaryBox(doc, scorecard, margin, yPos, pageWidth - 2 * margin);
+  
+  // Performance by Category Section
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.black);
+  doc.text('PERFORMANCE BY CATEGORY', margin, yPos + 5);
+  yPos += 12;
+  
+  if (scorecard.categoryMetrics && scorecard.categoryMetrics.length > 0) {
+    yPos = drawCategoryChart(doc, scorecard.categoryMetrics, margin, yPos, pageWidth - 2 * margin);
+  } else {
+    const categoryMap = new Map<string, { totalScore: number; totalWeight: number }>();
+    scorecard.kpiDetails.forEach(kpi => {
+      if (!categoryMap.has(kpi.category)) {
+        categoryMap.set(kpi.category, { totalScore: 0, totalWeight: 0 });
+      }
+      const cat = categoryMap.get(kpi.category)!;
+      cat.totalWeight += kpi.weightage;
+      cat.totalScore += (kpi.finalScore || 0) * kpi.weightage;
+    });
+    
+    const categoryMetrics: CategoryMetric[] = Array.from(categoryMap.entries()).map(([name, data]) => ({
+      name,
+      percentage: data.totalWeight > 0 ? (data.totalScore / data.totalWeight / 5) * 100 : 0,
+      weightage: data.totalWeight,
+      score: data.totalWeight > 0 ? data.totalScore / data.totalWeight : 0,
+    }));
+    
+    yPos = drawCategoryChart(doc, categoryMetrics, margin, yPos, pageWidth - 2 * margin);
+  }
+
+  // ===== PAGE 2+: KPI Performance Details Table =====
+  doc.addPage('landscape');
+  yPos = 15;
+  
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.primaryDark);
+  doc.text('KPI Performance Details', margin, yPos);
+  
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...COLORS.grayMedium);
+  doc.text(`${scorecard.employeeName} (${scorecard.employeeCode}) • ${options.period} ${options.year}`, margin, yPos + 6);
+  
+  yPos = drawLegendBox(doc, margin, yPos - 2, pageWidth - 2 * margin);
+  yPos += 2;
+  
+  // Build table data using shared builder
+  const { tableData } = buildKpiTableData(scorecard);
 
   autoTable(doc, {
     startY: yPos,
-    head: [[
-      { content: 'KPI Name', styles: { halign: 'left' } },
-      { content: 'W', styles: { halign: 'center' } },
-      { content: 'Target', styles: { halign: 'center' } },
-      { content: 'Self Ach.', styles: { halign: 'center' } },
-      { content: 'Mgr', styles: { halign: 'center' } },
-      { content: 'Skip-L', styles: { halign: 'center' } },
-      { content: 'HR PMS', styles: { halign: 'center' } },
-      { content: 'Auditor', styles: { halign: 'center' } },
-      { content: 'Final', styles: { halign: 'center' } },
-      { content: '*', styles: { halign: 'center' } },
-    ]],
+    head: KPI_TABLE_HEAD,
     body: tableData,
-    styles: { fontSize: 7, cellPadding: 2, lineColor: [220, 220, 220], lineWidth: 0.1, overflow: 'linebreak', valign: 'middle' },
-    headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontSize: 7, fontStyle: 'bold', halign: 'center', valign: 'middle' },
-    columnStyles: {
-      0: { cellWidth: 60, halign: 'left' },
-      1: { cellWidth: 12, halign: 'center' },
-      2: { cellWidth: 22, halign: 'center' },
-      3: { cellWidth: 22, halign: 'center' },
-      4: { cellWidth: 18, halign: 'center' },
-      5: { cellWidth: 18, halign: 'center' },
-      6: { cellWidth: 18, halign: 'center' },
-      7: { cellWidth: 18, halign: 'center' },
-      8: { cellWidth: 22, halign: 'center' },
-      9: { cellWidth: 8, halign: 'center' },
+    styles: {
+      fontSize: 7,
+      cellPadding: 2,
+      lineColor: [220, 220, 220],
+      lineWidth: 0.1,
+      overflow: 'linebreak',
+      valign: 'middle',
     },
+    headStyles: {
+      fillColor: COLORS.primary,
+      textColor: COLORS.white,
+      fontSize: 7,
+      fontStyle: 'bold',
+      halign: 'center',
+      valign: 'middle',
+    },
+    columnStyles: KPI_TABLE_COLUMN_STYLES,
     alternateRowStyles: {
       fillColor: [252, 252, 253],
     },
     margin: { left: margin, right: margin, bottom: 45 },
     didDrawPage: (data) => {
-      // Footer on each page
       const pageCount = doc.getNumberOfPages();
       doc.setFontSize(7);
       doc.setTextColor(...COLORS.grayMedium);
@@ -1390,7 +1091,29 @@ export function generateDetailedScorecardPdfBlob(
     );
   }
 
-  // Return as blob instead of saving
+  return doc;
+}
+
+// ============= Main Export Functions =============
+
+export function generateDetailedScorecardPdf(
+  scorecard: EmployeeScorecard,
+  options: PdfExportOptions
+): void {
+  const doc = buildDetailedScorecardDoc(scorecard, options);
+  const fileName = `Performance_Dashboard_${scorecard.employeeName}_${scorecard.employeeCode}_${options.period}_${options.year}.pdf`;
+  doc.save(fileName.replace(/\s+/g, '_'));
+}
+
+// Keep legacy function for backwards compatibility
+export const generateScorecardPdf = generateDetailedScorecardPdf;
+
+// Generate PDF as Blob for preview (does not save, returns blob)
+export function generateDetailedScorecardPdfBlob(
+  scorecard: EmployeeScorecard,
+  options: PdfExportOptions
+): Blob {
+  const doc = buildDetailedScorecardDoc(scorecard, options);
   return doc.output('blob');
 }
 
@@ -1430,7 +1153,6 @@ export function generateBulkScorecardPdf(
     ? scorecards.reduce((sum, sc) => sum + sc.avgFinalScore, 0) / totalEmployees 
     : 0;
 
-  // Stats boxes
   const statsBoxWidth = (pageWidth - 2 * margin - 30) / 4;
   const stats = [
     { label: 'Total Employees', value: totalEmployees.toString(), color: COLORS.primary },
@@ -1441,19 +1163,14 @@ export function generateBulkScorecardPdf(
 
   stats.forEach((stat, index) => {
     const boxX = margin + (index * (statsBoxWidth + 10));
-    
     doc.setFillColor(...COLORS.grayLight);
     doc.roundedRect(boxX, yPos, statsBoxWidth, 20, 2, 2, 'F');
-    
-    // Left color accent
     doc.setFillColor(...stat.color);
     doc.roundedRect(boxX, yPos, 3, 20, 1, 1, 'F');
-    
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...COLORS.grayMedium);
     doc.text(stat.label, boxX + 8, yPos + 8);
-    
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...COLORS.black);
@@ -1462,7 +1179,7 @@ export function generateBulkScorecardPdf(
 
   yPos += 30;
 
-  // Main Table
+  // Bug 4 Fix: Use null-safe check instead of ?? 0 for missing workflow stages
   const tableData = scorecards.map(sc => [
     sc.employeeCode,
     sc.employeeName,
@@ -1471,8 +1188,8 @@ export function generateBulkScorecardPdf(
     `${sc.approvedKpis}/${sc.totalKpis}`,
     formatScore(sc.avgSelfScore),
     formatScore(sc.avgManagerScore),
-    formatScore(sc.avgSkipLevelScore ?? 0),
-    formatScore(sc.avgHrPmsScore ?? 0),
+    sc.avgSkipLevelScore != null ? formatScore(sc.avgSkipLevelScore) : '-',
+    sc.avgHrPmsScore != null ? formatScore(sc.avgHrPmsScore) : '-',
     formatScore(sc.avgAuditorScore),
     formatScore(sc.avgManagementScore),
     formatScore(sc.avgFinalScore),
@@ -1515,6 +1232,5 @@ export function generateBulkScorecardPdf(
     },
   });
 
-  // Save
   doc.save(`Scorecard_Report_${options.period}_${options.year}.pdf`);
 }
