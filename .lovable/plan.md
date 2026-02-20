@@ -1,136 +1,118 @@
 
 
-# RCA: Monthly Scorecard Report — Jitendra Bharti Incorrect Data
+# RCA: Approved KPIs Missing final_score — Root Cause and Fix Plan
 
-## Database Verification
+## Root Cause
 
-Jitendra Bharti has 13 December KPIs, all in `approved` status. His workflow is: Self -> Manager -> Auditor -> Approved (no Skip-Level, no HR PMS, no Management).
+The bug is in `src/components/review/UnifiedScorecard.tsx` **lines 444-448**:
 
-| KPI | Weight | Self | Manager | Auditor | Final |
-|---|---|---|---|---|---|
-| CLMS Implementation | 25% | 3.00 | 3.00 | 3.00 | 3.00 |
-| All other 12 KPIs | 75% total | 5.00 | 5.00 | 5.00 | 5.00 |
-
-Correct weighted average: (25x3 + 75x5) / 100 = **4.50 / 5.00 = 90%**
-
-The database data is correct. The bugs are all in the report rendering.
-
-## Bugs Found (5 issues)
-
-### Bug 1 (Critical) — PDF "Total Score" shows nonsense point values
-
-In `drawScoreSummaryBox` (pdfExport.ts lines 354-356):
-```
-maxScore = totalKpis * 5         // 13 * 5 = 65
-earnedScore = avgFinalScore * totalKpis  // 4.5 * 13 = 58.5
+```ts
+// For management, set final score
+if (viewLevel === 'management') {
+  updateData.final_rating = rating;
+  updateData.final_score = score;
+}
 ```
 
-Displays **"58.5 / 65.0 pts"** which is meaningless. The correct display should be the **weighted total score** (4.50 / 5.00) or the weighted percentage breakdown.
+`final_score` and `final_rating` are **only populated when the reviewer is "management"**. However, in many workflow templates, the terminal reviewer (the last stage before `approved`) is NOT management — it can be HR PMS, Auditor, or even Skip-Level.
 
-**Fix**: Change to show `(avgFinalScore / 5) * 100`% with the actual weighted score `avgFinalScore` out of `5.00`.
+When HR PMS (or any non-management role) is the last stage and clicks "Approve", the code correctly sets `kpis.status = 'approved'` via `resolveForwardStatus()`, but **never writes `final_score`/`final_rating`** to the `review_submissions` row.
 
-### Bug 2 (Critical) — PDF table missing "Self Score" column
+This same bug exists in **4 separate approval paths** within UnifiedScorecard:
+1. Normal approval (line 444-448)
+2. N/A forwarding (line 694)
+3. N/A override approval (line 749-752)
+4. N/A confirmation (line 804)
 
-The PDF KPI Performance Details table has columns:
-`KPI Name | W | Target | Self Ach. | Mgr | Skip-L | HR PMS | Auditor | Final`
+## Impact Assessment
 
-The "Self Ach." column shows **raw achieved values** (25, 0, 89, 100) while all other columns show **scores** (5.00, 3.00). This is extremely confusing — the user sees "100" under Self but "3.00" under Manager for the same KPI (CLMS).
-
-**Fix**: Replace "Self Ach." with "Self" showing self_score. Add a separate "Achieved" column showing the achieved value, or move achieved to the "Target" column as "Target / Achieved".
-
-### Bug 3 (Medium) — Score of 0 displays as dash (truthy check bug)
-
-Both the UI table and PDF use truthy checks for score display:
-```js
-scorecard.avgSelfScore ? scorecard.avgSelfScore.toFixed(2) : '-'
-kpi.managerScore ? formatScore(kpi.managerScore) : '-'
-```
-
-A score of `0` is falsy, so it renders as `-` instead of `0.00`. Per the architecture, **zero is valid data** and must be preserved.
-
-**Fix**: Change all truthy checks to null checks: `scorecard.avgSelfScore != null ? ... : '-'` and `kpi.managerScore != null ? ... : '-'`
-
-### Bug 4 (Low) — Bulk PDF forces 0.00 for missing workflow stages
-
-In `generateBulkScorecardPdf` (line 1474):
-```js
-formatScore(sc.avgSkipLevelScore ?? 0)  // Shows "0.00" instead of "-"
-```
-
-For employees without Skip-Level in their workflow, this shows `0.00` instead of `-`, implying they were scored zero when the stage doesn't exist.
-
-**Fix**: Use null check: `sc.avgSkipLevelScore != null ? formatScore(sc.avgSkipLevelScore) : '-'`
-
-### Bug 5 (Maintenance) — Entire PDF generation duplicated
-
-`generateDetailedScorecardPdf` (lines 858-1139) and `generateDetailedScorecardPdfBlob` (lines 1145-1395) are 100% copy-pasted with only the final line different (save vs return blob). Any bug fix must be applied twice.
-
-**Fix**: Extract shared logic into a private `buildDetailedScorecardDoc` function that returns the jsPDF doc. Both public functions call it, then either save or return blob.
-
-## Files to Modify (3 files)
-
-| File | Changes | Risk |
+| Period | Affected KPIs | Employees |
 |---|---|---|
-| `src/lib/pdfExport.ts` | Fix Total Score calculation; add Self Score column to PDF table; fix truthy checks; fix bulk PDF null handling; eliminate code duplication | Medium |
-| `src/pages/reports/MonthlyScorecardReport.tsx` | Fix truthy checks in UI table for score display (0 shows as `-`) | Low |
-| `DOCUMENTATION.md` | Version bump to 1.45.36 | None |
+| January 2026 | 72 non-N/A KPIs | 8 employees (Jitendra Bharti, Abhiranjan, Aditya, Avinash, Debadutta, Dileshwar, Purnima, Randhir) |
+| December 2025 | 7 non-N/A KPIs | 1 employee (Ashish Kataria — fast-tracked without scores) |
+| **Total** | **79 KPIs** | **9 employees** |
 
-## Detailed Changes
+All affected KPIs have `status = 'approved'` but `final_score = NULL`.
 
-### pdfExport.ts
+### Downstream Impact
+Every report and dashboard that reads `final_score` shows blank/dash for these employees:
+- Dashboard overall score chart
+- Monthly Scorecard Report (UI + PDF)
+- Performance Report rating distribution
+- Employee Performance Summary
+- KPI Detail Report
+- KPI Tracker Modal trend chart
 
-1. **Create `buildDetailedScorecardDoc` private function** — move the shared PDF generation logic (pages 1-3+) into one function returning `jsPDF`. Both `generateDetailedScorecardPdf` and `generateDetailedScorecardPdfBlob` become 3-line wrappers.
+## Fix Plan (2 files + data repair)
 
-2. **Fix `drawScoreSummaryBox`** — replace misleading point values:
-   - Change `earnedScore` display from `avgFinalScore * totalKpis` to just `avgFinalScore`
-   - Change `maxScore` from `totalKpis * 5` to `5.00`
-   - Display as: `"4.50 / 5.00"` with percentage `90%`
+### 1. Fix: `src/components/review/UnifiedScorecard.tsx`
 
-3. **Fix PDF table columns** — restructure the 10-column table:
-   - Column 3: Change from "Self Ach." (achieved value) to "Self" (self score)
-   - Column layout: `KPI Name | W | Target | Self | Mgr | Skip-L | HR PMS | Auditor | Final | *`
-   - Move achieved value display into the Target column as "Target / Achieved" format
+Replace the management-only check with a dynamic check: **if the forward status is `approved`, set `final_score`/`final_rating`** from the current reviewer's score.
 
-4. **Fix all truthy score checks** — replace `kpi.managerScore ?` with `kpi.managerScore != null ?` across all score columns in both table builders
+All 4 approval paths need the same fix. Change:
 
-5. **Fix bulk PDF null handling** — change `formatScore(sc.avgSkipLevelScore ?? 0)` to use null check for `-` display
-
-### MonthlyScorecardReport.tsx
-
-Fix all 7 score column displays in the UI table from truthy to null check:
-```
-// Before (bug):
-{scorecard.avgSelfScore ? scorecard.avgSelfScore.toFixed(2) : '-'}
-
-// After (fix):
-{scorecard.avgSelfScore != null && scorecard.avgSelfScore !== 0 
-  ? scorecard.avgSelfScore.toFixed(2) 
-  : scorecard.avgSelfScore === 0 ? '0.00' : '-'}
+```ts
+if (viewLevel === 'management') {
+  updateData.final_rating = rating;
+  updateData.final_score = score;
+}
 ```
 
-Simplified pattern for all 7 columns:
+To:
+
+```ts
+// When this approval moves KPI to 'approved', sync final score
+// regardless of which role is the terminal reviewer
+if (approve && config.forwardStatus === 'approved') {
+  updateData.final_rating = rating;
+  updateData.final_score = score;
+}
 ```
-{scorecard.avgSelfScore != null ? scorecard.avgSelfScore.toFixed(2) : '-'}
+
+Apply the same pattern to the N/A forwarding path, N/A override path, and N/A confirmation path.
+
+### 2. Data Repair: Backfill 79 affected KPIs
+
+Run a one-time SQL update to populate `final_score`/`final_rating` for the 79 already-approved KPIs using the authoritative fallback chain:
+
+```sql
+UPDATE review_submissions rs
+SET 
+  final_score = COALESCE(
+    rs.management_score, rs.auditor_score, 
+    rs.hr_pms_score, rs.skip_level_score, 
+    rs.manager_score, rs.self_score
+  ),
+  final_rating = COALESCE(
+    rs.management_rating, rs.auditor_rating,
+    rs.hr_pms_rating, rs.skip_level_rating,
+    rs.manager_rating, rs.self_rating
+  )
+FROM kpis k
+WHERE rs.kpi_id = k.id
+  AND k.status = 'approved'
+  AND rs.final_score IS NULL
+  AND rs.is_na IS NOT TRUE;
 ```
 
-Wait — this would show `0.00` for employees where the stage doesn't exist (e.g., Skip-Level score is 0 because no skip-level data, not because score was 0). The correct approach is to check if any KPI actually has data for that stage. But since `weightedSkipLevelScore` only accumulates when `skip_level_score != null` (line 225-227), if no KPIs have skip-level data, `weightedSkipLevelScore = 0` and `avgSkipLevel = 0`. We cannot distinguish "no data" from "all zeros".
+### 3. Update: `DOCUMENTATION.md`
 
-**Better fix**: Track whether ANY KPI had data for each stage. Add boolean flags like `hasSkipLevelData` and `hasHrPmsData`. Display `-` only when no data exists for that stage, and `0.00` when data exists but is zero.
+- Version bump to 1.45.37
+- Document: terminal-reviewer final_score sync fix
 
-### DOCUMENTATION.md
+## What Will NOT Change
 
-- Version bump to 1.45.36
-- Note: PDF Total Score display corrected from misleading point values to proper weighted average
-- Note: Self Score column added to PDF KPI table (was showing achieved value)
-- Note: Zero-score display bug fixed across all report tables
+- `ManagementScorecard.tsx` — already correctly sets `final_score` (hardcoded management is always terminal there)
+- `useAdminDataEntry.ts` — already handles final_score sync on approved (lines 239-252)
+- Fast Track hook — already handles final_score correctly
+- No report code changes needed — once `final_score` is populated, all reports will show correct data automatically
 
 ## Expected Outcome
 
 | Element | Before (Bug) | After (Fix) |
 |---|---|---|
-| PDF Total Score box | "58.5 / 65.0 pts" (meaningless) | "4.50 / 5.00" with 90% bar |
-| PDF table "Self" column | Shows "100" (achieved value for CLMS) | Shows "3.00" (self score) |
-| Score of 0 in UI/PDF | Displays as `-` | Displays as `0.00` |
-| Skip-Level for Jitendra (no workflow stage) | Shows `0.00` in bulk PDF | Shows `-` |
-| Code duplication | 250 lines duplicated | Single shared function |
+| Jitendra Bharti Jan dashboard | Blank score | Shows weighted 4.50 / 5.00 |
+| 72 January approved KPIs | final_score = NULL | final_score = last reviewer's score |
+| 7 December approved KPIs | final_score = NULL | final_score = last reviewer's score |
+| Future HR PMS terminal approvals | final_score not set | final_score auto-set on approve |
 
