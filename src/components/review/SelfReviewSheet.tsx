@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { safeParseFloat } from '@/lib/utils';
 import { openStorageFile } from '@/lib/storageDownload';
 import { useAuth } from '@/contexts/AuthContext';
@@ -209,9 +209,19 @@ export function SelfReviewSheet({
     );
   }, []);
 
+  // Ref to prevent re-initialization when submissionMap changes (e.g. Chrome tab switch)
+  const lastInitializedRef = useRef<string | null>(null);
+
   // Initialize form when KPI changes
   useEffect(() => {
-    if (!selectedKpi || !open) return;
+    if (!selectedKpi || !open) {
+      lastInitializedRef.current = null;
+      return;
+    }
+
+    // Skip re-initialization if already initialized for this KPI
+    if (lastInitializedRef.current === selectedKpi.id) return;
+    lastInitializedRef.current = selectedKpi.id;
 
     const existing = submissionMap.get(selectedKpi.id);
     setSelectedSubPeriod(null);
