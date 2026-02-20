@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-20  
-> **Version:** 1.45.42 — Admins can mark Org KPIs as "Not Applicable" (N/A) from the Org KPI Data Entry page; propagation nullifies scores and sets `is_na=true` on employee submissions
+> **Version:** 1.45.43 — Fixed Value History not loading in Org KPI Data Entry cards (query was permanently disabled)
 > **Maintainer:** Lovable AI
 
 ---
