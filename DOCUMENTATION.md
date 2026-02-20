@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-20  
-> **Version:** 1.45.40 — Fixed paste-upload duplicating files across multiple Org KPI cards (stopImmediatePropagation prevents multiple listeners from processing the same paste event)
+> **Version:** 1.45.41 — Added missing RLS UPDATE policy on `kpis` table for Data Owners, fixing "Save & Propagate" errors when propagating org-level KPI status to non-direct-report employees
 > **Maintainer:** Lovable AI
 
 ---
