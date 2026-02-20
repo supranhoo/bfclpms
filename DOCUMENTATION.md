@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-20  
-> **Version:** 1.45.41 — Added missing RLS UPDATE policy on `kpis` table for Data Owners, fixing "Save & Propagate" errors when propagating org-level KPI status to non-direct-report employees
+> **Version:** 1.45.42 — Admins can mark Org KPIs as "Not Applicable" (N/A) from the Org KPI Data Entry page; propagation nullifies scores and sets `is_na=true` on employee submissions
 > **Maintainer:** Lovable AI
 
 ---

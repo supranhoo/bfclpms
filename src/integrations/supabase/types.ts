@@ -1506,6 +1506,7 @@ export type Database = {
           evidence_url: string | null
           evidence_urls: Json | null
           id: string
+          is_na: boolean
           kpi_name: string
           kra_name: string
           qualitative_options: Json | null
@@ -1539,6 +1540,7 @@ export type Database = {
           evidence_url?: string | null
           evidence_urls?: Json | null
           id?: string
+          is_na?: boolean
           kpi_name: string
           kra_name: string
           qualitative_options?: Json | null
@@ -1572,6 +1574,7 @@ export type Database = {
           evidence_url?: string | null
           evidence_urls?: Json | null
           id?: string
+          is_na?: boolean
           kpi_name?: string
           kra_name?: string
           qualitative_options?: Json | null

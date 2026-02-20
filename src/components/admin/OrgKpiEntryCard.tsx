@@ -10,7 +10,9 @@ import { OrgKpiScopedEntryTable, ScopedRow } from '@/components/admin/OrgKpiScop
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
 import { Textarea } from '@/components/ui/textarea';
-import { Save, Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Save, Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban } from 'lucide-react';
 
 export interface OrgKpiCardData {
   categoryId: string;
@@ -40,6 +42,8 @@ export interface OrgKpiCardData {
   scopeLabel?: string;
   // Employee count (from useOrgLevelKpisWithEmployees)
   employeeCount?: number;
+  // N/A status
+  isNa?: boolean;
 }
 
 interface OrgKpiEntryCardProps {
@@ -51,12 +55,16 @@ interface OrgKpiEntryCardProps {
     achievedValue: number | null;
     remarks: string;
     evidenceUrl: string | null;
+    isNa?: boolean;
+    naRemarks?: string;
     scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null }>;
   }) => Promise<void>;
   onSaveAndPropagate: (values: {
     achievedValue: number | null;
     remarks: string;
     evidenceUrl: string | null;
+    isNa?: boolean;
+    naRemarks?: string;
     scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null }>;
   }) => Promise<void>;
   onUnlock?: () => Promise<void>;
@@ -91,6 +99,8 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
   const [remarks, setRemarks] = useState(data.remarks);
   const [evidenceUrl, setEvidenceUrl] = useState(data.evidenceUrl);
   const [scopedValues, setScopedValues] = useState<ScopedRow[]>(data.scopedRows || []);
+  const [isNa, setIsNa] = useState(data.isNa ?? false);
+  const [naRemarks, setNaRemarks] = useState('');
 
   // Refs to always access latest values (fixes stale closure in auto-save)
   const achievedValueRef = useRef(achievedValue);
@@ -146,9 +156,11 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
   const getValues = useCallback(() => {
     const parsed = achievedValueRef.current === '' ? null : parseFloat(achievedValueRef.current);
     return {
-      achievedValue: isNaN(parsed as number) ? null : parsed,
-      remarks: remarksRef.current,
-      evidenceUrl: evidenceUrlRef.current,
+      achievedValue: isNa ? null : (isNaN(parsed as number) ? null : parsed),
+      remarks: isNa ? '' : remarksRef.current,
+      evidenceUrl: isNa ? null : evidenceUrlRef.current,
+      isNa,
+      naRemarks: isNa ? naRemarks : undefined,
       scopedValues: data.scope !== 'organization'
         ? scopedValuesRef.current.map(s => ({
             scopeId: s.scopeId,
@@ -158,7 +170,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
           }))
         : undefined,
     };
-  }, [data.scope]);
+  }, [data.scope, isNa, naRemarks]);
 
   // Auto-save with debounce
   const triggerAutoSave = useCallback(() => {
@@ -250,10 +262,17 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
             )}
 
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={statusInfo.variant} className={`gap-1 text-xs ${statusInfo.className}`}>
-                <StatusIcon className="h-3 w-3" />
-                {statusInfo.label}
-              </Badge>
+              {isNa ? (
+                <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
+                  <Ban className="h-3 w-3" />
+                  N/A
+                </Badge>
+              ) : (
+                <Badge variant={statusInfo.variant} className={`gap-1 text-xs ${statusInfo.className}`}>
+                  <StatusIcon className="h-3 w-3" />
+                  {statusInfo.label}
+                </Badge>
+              )}
               {data.employeeCount !== undefined && data.employeeCount > 0 && (
                 <Badge variant="outline" className="gap-1 text-xs">
                   <Users className="h-3 w-3" />
@@ -265,8 +284,26 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
 
           {/* RIGHT COLUMN (60%) - Inputs & Actions */}
           <div className="md:col-span-3 space-y-3 min-w-0">
+            {/* N/A Toggle - Admin only */}
+            {isAdmin && data.scope === 'organization' && !isLocked && (
+              <div className="flex items-center gap-2">
+                <Switch
+                  id={`na-toggle-${data.categoryId}-${data.kpiName}`}
+                  checked={isNa}
+                  onCheckedChange={(checked) => {
+                    setIsNa(checked);
+                    isDirtyRef.current = true;
+                    triggerAutoSave();
+                  }}
+                />
+                <Label htmlFor={`na-toggle-${data.categoryId}-${data.kpiName}`} className="text-xs font-medium cursor-pointer">
+                  Mark as Not Applicable (N/A)
+                </Label>
+              </div>
+            )}
+
             {/* Input area - org scope */}
-            {data.scope === 'organization' && (
+            {data.scope === 'organization' && !isNa && (
               <div className="space-y-2">
                 <Input
                   type="number"
@@ -304,6 +341,25 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
                     onUploadComplete={(url) => { setEvidenceUrl(url); triggerAutoSave(); }}
                   />
                 )}
+              </div>
+            )}
+
+            {/* N/A view */}
+            {data.scope === 'organization' && isNa && (
+              <div className="space-y-2">
+                <Alert variant="default" className="border-muted bg-muted/50 py-2">
+                  <Ban className="h-4 w-4 text-muted-foreground" />
+                  <AlertDescription className="text-xs text-muted-foreground">
+                    This KPI is marked as <strong>Not Applicable</strong>. Scores will be excluded from calculations.
+                  </AlertDescription>
+                </Alert>
+                <Textarea
+                  value={naRemarks}
+                  onChange={(e) => { setNaRemarks(e.target.value); triggerAutoSave(); }}
+                  placeholder="Reason for marking as N/A (required)"
+                  rows={2}
+                  disabled={isLocked}
+                />
               </div>
             )}
 

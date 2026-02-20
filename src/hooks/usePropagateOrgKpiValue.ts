@@ -28,6 +28,8 @@ interface PropagateParams {
   scope: 'organization' | 'department' | 'employee';
   departmentId?: string | null;
   employeeId?: string | null;
+  isNa?: boolean;
+  naRemarks?: string;
 }
 
 /**
@@ -100,6 +102,82 @@ export function usePropagateOrgKpiValue() {
       const details: PropagationDetail[] = [];
       const upsertPromises = targetKpis.map(async (kpi) => {
         const profile = kpi.profiles as any;
+
+        if (params.isNa) {
+          // N/A propagation: null out scores, set is_na
+          const { data: existingSubmission } = await supabase
+            .from('review_submissions')
+            .select('self_score')
+            .eq('kpi_id', kpi.id)
+            .maybeSingle();
+
+          const oldScore = existingSubmission?.self_score ?? null;
+
+          // Try update first
+          const { data: updated, error: updateError } = await supabase
+            .from('review_submissions')
+            .update({
+              achieved_value: null,
+              self_score: null,
+              self_rating: null,
+              is_na: true,
+              na_marked_by_role: 'admin',
+              na_remarks: params.naRemarks || null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('kpi_id', kpi.id)
+            .select('id')
+            .maybeSingle();
+
+          if (updateError) throw updateError;
+
+          if (!updated) {
+            const { error: insertError } = await supabase
+              .from('review_submissions')
+              .insert({
+                kpi_id: kpi.id,
+                achieved_value: null,
+                self_score: null,
+                self_rating: null,
+                is_na: true,
+                na_marked_by_role: 'admin',
+                na_remarks: params.naRemarks || null,
+              });
+
+            if (insertError?.code === '23505') {
+              await supabase
+                .from('review_submissions')
+                .update({
+                  achieved_value: null,
+                  self_score: null,
+                  self_rating: null,
+                  is_na: true,
+                  na_marked_by_role: 'admin',
+                  na_remarks: params.naRemarks || null,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('kpi_id', kpi.id);
+            } else if (insertError) {
+              throw insertError;
+            }
+          }
+
+          // Update KPI status to self_review if still at kra_set
+          await supabase.from('kpis').update({ status: 'self_review' }).eq('id', kpi.id).eq('status', 'kra_set');
+
+          details.push({
+            employeeName: profile?.full_name || 'Unknown',
+            employeeCode: profile?.employee_code || null,
+            departmentName: profile?.departments?.name || null,
+            oldScore,
+            newScore: null,
+            change: null,
+          });
+
+          return kpi.id;
+        }
+
+        // Normal (non-N/A) propagation
         const thresholds: RatingThresholds = {
           r5: kpi.r5, r4: kpi.r4, r3: kpi.r3,
           r2: kpi.r2, r1: kpi.r1, r0: kpi.r0,
@@ -135,6 +213,7 @@ export function usePropagateOrgKpiValue() {
             achieved_value: achievedValue,
             self_score: ratingResult.rating,
             self_rating: ratingLevel,
+            is_na: false,
             updated_at: new Date().toISOString(),
           })
           .eq('kpi_id', kpi.id)
@@ -162,6 +241,7 @@ export function usePropagateOrgKpiValue() {
                 achieved_value: achievedValue,
                 self_score: ratingResult.rating,
                 self_rating: ratingLevel,
+                is_na: false,
                 updated_at: new Date().toISOString(),
               })
               .eq('kpi_id', kpi.id);

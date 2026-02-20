@@ -36,6 +36,8 @@ export interface OrgKpiValue {
   submission_count: number | null;
   // Evidence/supporting file
   evidence_url: string | null;
+  // N/A marking
+  is_na: boolean;
 }
 
 export function useOrgKpiValues(categoryId?: string, reviewPeriod?: string, reviewYear?: number) {
@@ -156,6 +158,7 @@ export function useBulkUpsertOrgKpiValues() {
       r0?: string;
       criteria?: string;
       evidence_url?: string | null;
+      is_na?: boolean;
     }>) => {
       // For scoped values, we need to handle the unique constraint properly
       // Insert/update each value individually to handle the complex unique index
@@ -203,6 +206,7 @@ export function useBulkUpsertOrgKpiValues() {
               r0: value.r0,
               criteria: value.criteria,
               evidence_url: value.evidence_url,
+              is_na: value.is_na,
             })
             .eq('id', existing.id)
             .select()
