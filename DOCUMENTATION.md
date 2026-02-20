@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-20  
-> **Version:** 1.45.38 — Synced Org KPI mappings between January and February 2026: marked 37 Jan-only KPIs as org-level in Feb, 11 Feb-only KPIs as org-level in Jan
+> **Version:** 1.45.39 — Fixed attachment loss on Chrome tab switch in Self Review sheet (useRef guard prevents form re-initialization when submissionMap reference changes)
 > **Maintainer:** Lovable AI
 
 ---
