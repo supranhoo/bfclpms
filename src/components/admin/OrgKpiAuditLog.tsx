@@ -22,7 +22,7 @@ const actionLabels: Record<string, { label: string; variant: 'default' | 'second
 };
 
 export function OrgKpiAuditLog({ categoryId, kraName, kpiName, reviewPeriod, reviewYear }: OrgKpiAuditLogProps) {
-  const { data: logs, isLoading } = useOrgKpiAuditLog(categoryId, kraName, kpiName, reviewPeriod, reviewYear, false);
+  const { data: logs, isLoading } = useOrgKpiAuditLog(categoryId, kraName, kpiName, reviewPeriod, reviewYear);
 
   return (
     <Popover>
