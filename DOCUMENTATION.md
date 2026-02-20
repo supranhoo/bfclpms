@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-02-19  
-> **Version:** 1.45.36 — Monthly Scorecard PDF fixes: Total Score now shows weighted average (4.50/5.00) instead of misleading point values; Self column shows self_score instead of achieved value; zero-score truthy check bug fixed across all UI/PDF tables; bulk PDF shows '-' for missing workflow stages instead of '0.00'; eliminated ~250 lines of PDF code duplication via shared buildDetailedScorecardDoc function
+> **Last Updated:** 2026-02-20  
+> **Version:** 1.45.37 — Terminal-reviewer final_score sync fix: final_score/final_rating now set when ANY role (not just management) is the terminal reviewer and approves a KPI; backfilled 79 affected approved KPIs with NULL final_score
 > **Maintainer:** Lovable AI
 
 ---

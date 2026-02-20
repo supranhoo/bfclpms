@@ -441,8 +441,9 @@ export function UnifiedScorecard({
         updateData[`${prefix}_achieved_value`] = achieved_value;
       }
       
-      // For management, set final score
-      if (viewLevel === 'management') {
+      // When this approval moves KPI to 'approved', sync final score
+      // regardless of which role is the terminal reviewer
+      if (approve && config.forwardStatus === 'approved') {
         updateData.final_rating = rating;
         updateData.final_score = score;
       }
@@ -746,7 +747,8 @@ export function UnifiedScorecard({
             ? reviewerAchievedValue 
             : parseFloat(reviewerAchievedValue as string) || null;
         }
-        if (viewLevel === 'management') {
+        // When this approval moves KPI to 'approved', sync final score
+        if (approve && config.forwardStatus === 'approved') {
           updateData.final_rating = scoreToRating(reviewerScore);
           updateData.final_score = reviewerScore;
         }
