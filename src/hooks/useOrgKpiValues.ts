@@ -214,14 +214,59 @@ export function useBulkUpsertOrgKpiValues() {
           if (error) throw error;
           results.push(data);
         } else {
-          // Insert new
+          // Insert new – catch unique violation (23505) from race conditions
           const { data, error } = await supabase
             .from('org_kpi_values')
             .insert(value)
             .select()
             .single();
-          if (error) throw error;
-          results.push(data);
+          if (error) {
+            if (error.code === '23505') {
+              // Record was created between our SELECT and INSERT – retry as UPDATE
+              let retryQuery = supabase
+                .from('org_kpi_values')
+                .update({
+                  achieved_value: value.achieved_value,
+                  data_source: value.data_source,
+                  remarks: value.remarks,
+                  entered_by: value.entered_by,
+                  target_value: value.target_value,
+                  r5: value.r5,
+                  r4: value.r4,
+                  r3: value.r3,
+                  r2: value.r2,
+                  r1: value.r1,
+                  r0: value.r0,
+                  criteria: value.criteria,
+                  evidence_url: value.evidence_url,
+                  is_na: value.is_na,
+                })
+                .eq('category_id', value.category_id)
+                .eq('kra_name', value.kra_name)
+                .eq('kpi_name', value.kpi_name)
+                .eq('review_period', value.review_period)
+                .eq('review_year', value.review_year);
+
+              if (value.department_id) {
+                retryQuery = retryQuery.eq('department_id', value.department_id);
+              } else {
+                retryQuery = retryQuery.is('department_id', null);
+              }
+              if (value.employee_id) {
+                retryQuery = retryQuery.eq('employee_id', value.employee_id);
+              } else {
+                retryQuery = retryQuery.is('employee_id', null);
+              }
+
+              const { data: retryData, error: retryError } = await retryQuery.select().single();
+              if (retryError) throw retryError;
+              results.push(retryData);
+            } else {
+              throw error;
+            }
+          } else {
+            results.push(data);
+          }
         }
       }
       return results;

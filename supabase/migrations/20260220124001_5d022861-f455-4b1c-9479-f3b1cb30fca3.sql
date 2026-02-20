@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS org_kpi_values_scoped_unique;
