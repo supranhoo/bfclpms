@@ -110,15 +110,86 @@ export function useUpsertOrgKpiValue() {
       department_id?: string;
       employee_id?: string;
     }) => {
+      // Build match criteria including scoped columns
+      let findQuery = supabase
+        .from('org_kpi_values')
+        .select('id')
+        .eq('category_id', value.category_id)
+        .eq('kra_name', value.kra_name)
+        .eq('kpi_name', value.kpi_name)
+        .eq('review_period', value.review_period)
+        .eq('review_year', value.review_year);
+
+      if (value.department_id) {
+        findQuery = findQuery.eq('department_id', value.department_id);
+      } else {
+        findQuery = findQuery.is('department_id', null);
+      }
+      if (value.employee_id) {
+        findQuery = findQuery.eq('employee_id', value.employee_id);
+      } else {
+        findQuery = findQuery.is('employee_id', null);
+      }
+
+      const { data: existing } = await findQuery.maybeSingle();
+
+      if (existing) {
+        const { data, error } = await supabase
+          .from('org_kpi_values')
+          .update({
+            achieved_value: value.achieved_value,
+            data_source: value.data_source,
+            remarks: value.remarks,
+            entered_by: value.entered_by,
+          })
+          .eq('id', existing.id)
+          .select()
+          .single();
+        if (error) throw error;
+        return data;
+      }
+
+      // Insert new – catch 23505 race condition
       const { data, error } = await supabase
         .from('org_kpi_values')
-        .upsert(value, {
-          onConflict: 'category_id,kra_name,kpi_name,review_period,review_year',
-        })
+        .insert(value)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === '23505') {
+          // Retry as update
+          let retryQuery = supabase
+            .from('org_kpi_values')
+            .update({
+              achieved_value: value.achieved_value,
+              data_source: value.data_source,
+              remarks: value.remarks,
+              entered_by: value.entered_by,
+            })
+            .eq('category_id', value.category_id)
+            .eq('kra_name', value.kra_name)
+            .eq('kpi_name', value.kpi_name)
+            .eq('review_period', value.review_period)
+            .eq('review_year', value.review_year);
+
+          if (value.department_id) {
+            retryQuery = retryQuery.eq('department_id', value.department_id);
+          } else {
+            retryQuery = retryQuery.is('department_id', null);
+          }
+          if (value.employee_id) {
+            retryQuery = retryQuery.eq('employee_id', value.employee_id);
+          } else {
+            retryQuery = retryQuery.is('employee_id', null);
+          }
+
+          const { data: retryData, error: retryError } = await retryQuery.select().single();
+          if (retryError) throw retryError;
+          return retryData;
+        }
+        throw error;
+      }
       return data;
     },
     onSuccess: () => {
