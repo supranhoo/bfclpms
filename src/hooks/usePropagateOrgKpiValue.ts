@@ -33,8 +33,136 @@ interface PropagateParams {
 }
 
 /**
- * Propagate org-level KPI values to review_submissions
- * When an admin saves an org value, this updates all matching employee KPIs
+ * Build the KPI ratings array and employee detail map from fetched KPIs.
+ * Rating calculation stays in JS; the array is sent to the server-side RPC.
+ */
+function buildRatingsPayload(
+  targetKpis: any[],
+  achievedValue: number | null,
+  isNa: boolean
+) {
+  const kpiRatings: Array<{
+    kpi_id: string;
+    achieved_value: number | null;
+    self_score: number | null;
+    self_rating: string | null;
+  }> = [];
+
+  const profileMap = new Map<string, { fullName: string; employeeCode: string | null; departmentName: string | null }>();
+
+  for (const kpi of targetKpis) {
+    const profile = kpi.profiles as any;
+    profileMap.set(kpi.id, {
+      fullName: profile?.full_name || 'Unknown',
+      employeeCode: profile?.employee_code || null,
+      departmentName: profile?.departments?.name || null,
+    });
+
+    if (isNa) {
+      kpiRatings.push({
+        kpi_id: kpi.id,
+        achieved_value: null,
+        self_score: null,
+        self_rating: null,
+      });
+    } else {
+      const thresholds: RatingThresholds = {
+        r5: kpi.r5, r4: kpi.r4, r3: kpi.r3,
+        r2: kpi.r2, r1: kpi.r1, r0: kpi.r0,
+      };
+
+      const ratingResult = calculateRating(
+        achievedValue,
+        kpi.target_value,
+        thresholds,
+        kpi.criteria || 'Higher is Better',
+        kpi.weightage || 0,
+        (kpi.uom_type as any) || 'numeric',
+        kpi.qualitative_options as any,
+        kpi.uom,
+        (kpi as any).threshold_mode || 'absolute'
+      );
+
+      kpiRatings.push({
+        kpi_id: kpi.id,
+        achieved_value: achievedValue,
+        self_score: ratingResult.rating,
+        self_rating: scoreToRating(ratingResult.rating),
+      });
+    }
+  }
+
+  return { kpiRatings, profileMap };
+}
+
+/**
+ * Fetch matching org-level KPIs and filter by scope.
+ */
+async function fetchTargetKpis(params: PropagateParams) {
+  const { categoryId, kraName, kpiName, reviewPeriod, reviewYear, scope, departmentId, employeeId } = params;
+
+  const { data: kpis, error } = await supabase
+    .from('kpis')
+    .select(`
+      id, employee_id, target_value, weightage,
+      r5, r4, r3, r2, r1, r0, criteria, uom, uom_type,
+      qualitative_options, threshold_mode, is_org_level, org_level_scope,
+      profiles!kpis_employee_id_fkey(id, full_name, employee_code, department_id, departments(name))
+    `)
+    .eq('category_id', categoryId)
+    .eq('kra_name', kraName)
+    .eq('kpi_name', kpiName)
+    .eq('review_period', reviewPeriod)
+    .eq('review_year', reviewYear)
+    .eq('is_org_level', true);
+
+  if (error) throw error;
+  if (!kpis || kpis.length === 0) return [];
+
+  if (scope === 'department' && departmentId) {
+    return kpis.filter(k => (k.profiles as any)?.department_id === departmentId);
+  } else if (scope === 'employee' && employeeId) {
+    return kpis.filter(k => k.employee_id === employeeId);
+  }
+  return kpis;
+}
+
+/**
+ * Call the server-side RPC and map results back to PropagationResultWithDetails.
+ */
+async function callPropagationRpc(
+  kpiRatings: any[],
+  profileMap: Map<string, any>,
+  isNa: boolean
+): Promise<PropagationResultWithDetails> {
+  const { data, error } = await supabase.rpc('propagate_org_kpi_value', {
+    p_kpi_ratings: kpiRatings,
+    p_is_na: isNa,
+  });
+
+  if (error) throw error;
+
+  const rpcResult = data as any;
+  const details: PropagationDetail[] = (rpcResult.details || []).map((d: any) => {
+    const info = profileMap.get(d.kpi_id);
+    const newScore = d.new_score ?? null;
+    const oldScore = d.old_score ?? null;
+    return {
+      employeeName: info?.fullName || 'Unknown',
+      employeeCode: info?.employeeCode || null,
+      departmentName: info?.departmentName || null,
+      oldScore,
+      newScore,
+      change: oldScore !== null && newScore !== null ? newScore - oldScore : null,
+    };
+  });
+
+  return { propagatedCount: rpcResult.propagated_count, details };
+}
+
+/**
+ * Propagate org-level KPI values to review_submissions via server-side RPC.
+ * Reduces dozens of individual DB calls to 2 (one SELECT, one RPC).
  */
 export function usePropagateOrgKpiValue() {
   const queryClient = useQueryClient();
@@ -42,265 +170,38 @@ export function usePropagateOrgKpiValue() {
 
   return useMutation<PropagationResultWithDetails, Error, PropagateParams>({
     mutationFn: async (params: PropagateParams): Promise<PropagationResultWithDetails> => {
-      const {
-        categoryId,
-        kraName,
-        kpiName,
-        reviewPeriod,
-        reviewYear,
-        achievedValue,
-        scope,
-        departmentId,
-        employeeId,
-      } = params;
+      const targetKpis = await fetchTargetKpis(params);
+      if (targetKpis.length === 0) return { propagatedCount: 0, details: [] };
 
-      // 1. Find all matching KPIs
-      let kpisQuery = supabase
-        .from('kpis')
-        .select(`
-          id,
-          employee_id,
-          target_value,
-          weightage,
-          r5, r4, r3, r2, r1, r0,
-          criteria,
-          uom,
-          uom_type,
-          qualitative_options,
-          threshold_mode,
-          is_org_level,
-          org_level_scope,
-          profiles!kpis_employee_id_fkey(id, full_name, employee_code, department_id, departments(name))
-        `)
-        .eq('category_id', categoryId)
-        .eq('kra_name', kraName)
-        .eq('kpi_name', kpiName)
-        .eq('review_period', reviewPeriod)
-        .eq('review_year', reviewYear)
-        .eq('is_org_level', true);
+      const { kpiRatings, profileMap } = buildRatingsPayload(
+        targetKpis, params.achievedValue, !!params.isNa
+      );
 
-      const { data: kpis, error: kpisError } = await kpisQuery;
-      if (kpisError) throw kpisError;
-
-      if (!kpis || kpis.length === 0) {
-        return { propagatedCount: 0, details: [] };
-      }
-
-      // 2. Filter KPIs based on scope
-      let targetKpis = kpis;
-      if (scope === 'department' && departmentId) {
-        targetKpis = kpis.filter(k => (k.profiles as any)?.department_id === departmentId);
-      } else if (scope === 'employee' && employeeId) {
-        targetKpis = kpis.filter(k => k.employee_id === employeeId);
-      }
-
-      if (targetKpis.length === 0) {
-        return { propagatedCount: 0, details: [] };
-      }
-
-      // 3. Calculate scores and upsert review_submissions
-      const details: PropagationDetail[] = [];
-      const upsertPromises = targetKpis.map(async (kpi) => {
-        const profile = kpi.profiles as any;
-
-        if (params.isNa) {
-          // N/A propagation: null out scores, set is_na
-          const { data: existingSubmission } = await supabase
-            .from('review_submissions')
-            .select('self_score')
-            .eq('kpi_id', kpi.id)
-            .maybeSingle();
-
-          const oldScore = existingSubmission?.self_score ?? null;
-
-          // Try update first
-          const { data: updated, error: updateError } = await supabase
-            .from('review_submissions')
-            .update({
-              achieved_value: null,
-              self_score: null,
-              self_rating: null,
-              is_na: true,
-              na_marked_by_role: 'admin',
-              na_remarks: params.naRemarks || null,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('kpi_id', kpi.id)
-            .select('id')
-            .maybeSingle();
-
-          if (updateError) throw updateError;
-
-          if (!updated) {
-            const { error: insertError } = await supabase
-              .from('review_submissions')
-              .insert({
-                kpi_id: kpi.id,
-                achieved_value: null,
-                self_score: null,
-                self_rating: null,
-                is_na: true,
-                na_marked_by_role: 'admin',
-                na_remarks: params.naRemarks || null,
-              });
-
-            if (insertError?.code === '23505') {
-              await supabase
-                .from('review_submissions')
-                .update({
-                  achieved_value: null,
-                  self_score: null,
-                  self_rating: null,
-                  is_na: true,
-                  na_marked_by_role: 'admin',
-                  na_remarks: params.naRemarks || null,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('kpi_id', kpi.id);
-            } else if (insertError) {
-              throw insertError;
-            }
-          }
-
-          // Update KPI status to self_review if still at kra_set
-          await supabase.from('kpis').update({ status: 'self_review' }).eq('id', kpi.id).eq('status', 'kra_set');
-
-          details.push({
-            employeeName: profile?.full_name || 'Unknown',
-            employeeCode: profile?.employee_code || null,
-            departmentName: profile?.departments?.name || null,
-            oldScore,
-            newScore: null,
-            change: null,
-          });
-
-          return kpi.id;
-        }
-
-        // Normal (non-N/A) propagation
-        const thresholds: RatingThresholds = {
-          r5: kpi.r5, r4: kpi.r4, r3: kpi.r3,
-          r2: kpi.r2, r1: kpi.r1, r0: kpi.r0,
-        };
-
-        const ratingResult = calculateRating(
-          achievedValue,
-          kpi.target_value,
-          thresholds,
-          kpi.criteria || 'Higher is Better',
-          kpi.weightage || 0,
-          (kpi.uom_type as any) || 'numeric',
-          kpi.qualitative_options as any,
-          kpi.uom,
-          (kpi as any).threshold_mode || 'absolute'
-        );
-
-        const ratingLevel = scoreToRating(ratingResult.rating);
-
-        // Get old score for change tracking
-        const { data: existingSubmission } = await supabase
-          .from('review_submissions')
-          .select('self_score')
-          .eq('kpi_id', kpi.id)
-          .maybeSingle();
-
-        const oldScore = existingSubmission?.self_score ?? null;
-
-        // Step 1: Try update first (handles existing rows without RLS/upsert issues)
-        const { data: updated, error: updateError } = await supabase
-          .from('review_submissions')
-          .update({
-            achieved_value: achievedValue,
-            self_score: ratingResult.rating,
-            self_rating: ratingLevel,
-            is_na: false,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('kpi_id', kpi.id)
-          .select('id')
-          .maybeSingle();
-
-        if (updateError) throw updateError;
-
-        // Step 2: If no existing row, insert
-        if (!updated) {
-          const { error: insertError } = await supabase
-            .from('review_submissions')
-            .insert({
-              kpi_id: kpi.id,
-              achieved_value: achievedValue,
-              self_score: ratingResult.rating,
-              self_rating: ratingLevel,
-            });
-
-          // Race condition: row created between update and insert — retry as update
-          if (insertError?.code === '23505') {
-            const { error: retryError } = await supabase
-              .from('review_submissions')
-              .update({
-                achieved_value: achievedValue,
-                self_score: ratingResult.rating,
-                self_rating: ratingLevel,
-                is_na: false,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('kpi_id', kpi.id);
-            if (retryError) throw retryError;
-          } else if (insertError) {
-            throw insertError;
-          }
-        }
-
-        // Update KPI status to self_review if still at kra_set
-        const { error: statusError } = await supabase
-          .from('kpis')
-          .update({ status: 'self_review' })
-          .eq('id', kpi.id)
-          .eq('status', 'kra_set');
-
-        if (statusError) {
-          console.warn('Failed to update KPI status:', statusError);
-        }
-
-        details.push({
-          employeeName: profile?.full_name || 'Unknown',
-          employeeCode: profile?.employee_code || null,
-          departmentName: profile?.departments?.name || null,
-          oldScore,
-          newScore: ratingResult.rating,
-          change: oldScore !== null ? ratingResult.rating - oldScore : null,
-        });
-
-        return kpi.id;
-      });
-
-      await Promise.all(upsertPromises);
-
-      return { propagatedCount: targetKpis.length, details };
+      return callPropagationRpc(kpiRatings, profileMap, !!params.isNa);
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
       if (result.propagatedCount > 0) {
-        toast({ 
+        toast({
           title: `Propagated to ${result.propagatedCount} employee KPI(s)`,
-          description: 'Review submissions updated with org-level values'
+          description: 'Review submissions updated with org-level values',
         });
       }
     },
     onError: (error: Error) => {
-      toast({ 
-        title: 'Failed to propagate values', 
-        description: error.message, 
-        variant: 'destructive' 
+      toast({
+        title: 'Failed to propagate values',
+        description: error.message,
+        variant: 'destructive',
       });
     },
   });
 }
 
 /**
- * Bulk propagate multiple org values at once
+ * Bulk propagate multiple org values at once, using the same server-side RPC.
  */
 export function useBulkPropagateOrgKpiValues() {
   const queryClient = useQueryClient();
@@ -311,133 +212,46 @@ export function useBulkPropagateOrgKpiValues() {
       let totalPropagated = 0;
       const allDetails: PropagationDetail[] = [];
 
+      // Collect all KPI ratings across all params into one RPC call
+      const allRatings: any[] = [];
+      const globalProfileMap = new Map<string, any>();
+      let hasNa = false;
+
       for (const params of values) {
-        const { categoryId, kraName, kpiName, reviewPeriod, reviewYear, achievedValue, scope, departmentId, employeeId } = params;
-        if (achievedValue === null) continue;
+        if (params.achievedValue === null && !params.isNa) continue;
 
-        const { data: kpis } = await supabase
-          .from('kpis')
-          .select(`
-            id, employee_id, target_value, weightage,
-            r5, r4, r3, r2, r1, r0, criteria, uom, uom_type,
-            qualitative_options, threshold_mode,
-            profiles!kpis_employee_id_fkey(id, full_name, employee_code, department_id, departments(name))
-          `)
-          .eq('category_id', categoryId)
-          .eq('kra_name', kraName)
-          .eq('kpi_name', kpiName)
-          .eq('review_period', reviewPeriod)
-          .eq('review_year', reviewYear)
-          .eq('is_org_level', true);
+        const targetKpis = await fetchTargetKpis(params);
+        if (targetKpis.length === 0) continue;
 
-        if (!kpis || kpis.length === 0) continue;
+        const { kpiRatings, profileMap } = buildRatingsPayload(
+          targetKpis, params.achievedValue, !!params.isNa
+        );
 
-        let targetKpis = kpis;
-        if (scope === 'department' && departmentId) {
-          targetKpis = kpis.filter(k => (k.profiles as any)?.department_id === departmentId);
-        } else if (scope === 'employee' && employeeId) {
-          targetKpis = kpis.filter(k => k.employee_id === employeeId);
-        }
-
-        for (const kpi of targetKpis) {
-          const profile = kpi.profiles as any;
-          const thresholds: RatingThresholds = {
-            r5: kpi.r5, r4: kpi.r4, r3: kpi.r3,
-            r2: kpi.r2, r1: kpi.r1, r0: kpi.r0,
-          };
-
-          const ratingResult = calculateRating(
-            achievedValue, kpi.target_value, thresholds,
-            kpi.criteria || 'Higher is Better', kpi.weightage || 0,
-            (kpi.uom_type as any) || 'numeric', kpi.qualitative_options as any,
-            kpi.uom, (kpi as any).threshold_mode || 'absolute'
-          );
-
-          const ratingLevel = scoreToRating(ratingResult.rating);
-
-          // Get old score for change tracking
-          const { data: existing } = await supabase
-            .from('review_submissions')
-            .select('self_score')
-            .eq('kpi_id', kpi.id)
-            .maybeSingle();
-
-          const oldScore = existing?.self_score ?? null;
-
-          // Step 1: Try update first
-          const { data: updated, error: updateError } = await supabase
-            .from('review_submissions')
-            .update({
-              achieved_value: achievedValue,
-              self_score: ratingResult.rating,
-              self_rating: ratingLevel,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('kpi_id', kpi.id)
-            .select('id')
-            .maybeSingle();
-
-          if (updateError) throw updateError;
-
-          // Step 2: If no existing row, insert
-          if (!updated) {
-            const { error: insertError } = await supabase
-              .from('review_submissions')
-              .insert({
-                kpi_id: kpi.id,
-                achieved_value: achievedValue,
-                self_score: ratingResult.rating,
-                self_rating: ratingLevel,
-              });
-
-            if (insertError?.code === '23505') {
-              const { error: retryError } = await supabase
-                .from('review_submissions')
-                .update({
-                  achieved_value: achievedValue,
-                  self_score: ratingResult.rating,
-                  self_rating: ratingLevel,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('kpi_id', kpi.id);
-              if (retryError) throw retryError;
-            } else if (insertError) {
-              throw insertError;
-            }
-          }
-
-          await supabase.from('kpis').update({ status: 'self_review' }).eq('id', kpi.id).eq('status', 'kra_set');
-
-          allDetails.push({
-            employeeName: profile?.full_name || 'Unknown',
-            employeeCode: profile?.employee_code || null,
-            departmentName: profile?.departments?.name || null,
-            oldScore,
-            newScore: ratingResult.rating,
-            change: oldScore !== null ? ratingResult.rating - oldScore : null,
-          });
-
-          totalPropagated++;
-        }
+        allRatings.push(...kpiRatings);
+        profileMap.forEach((v, k) => globalProfileMap.set(k, v));
+        if (params.isNa) hasNa = true;
       }
 
-      return { propagatedCount: totalPropagated, details: allDetails };
+      if (allRatings.length === 0) return { propagatedCount: 0, details: [] };
+
+      const result = await callPropagationRpc(allRatings, globalProfileMap, hasNa);
+      return result;
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
       if (result.propagatedCount > 0) {
-        toast({ 
+        toast({
           title: `Propagated to ${result.propagatedCount} employee KPI(s)`,
         });
       }
     },
     onError: (error: Error) => {
-      toast({ 
-        title: 'Failed to propagate values', 
-        description: error.message, 
-        variant: 'destructive' 
+      toast({
+        title: 'Failed to propagate values',
+        description: error.message,
+        variant: 'destructive',
       });
     },
   });
