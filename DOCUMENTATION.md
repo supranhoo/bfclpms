@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-19  
-> **Version:** 1.45.34 — Fast Track to Approved: new one-click admin action fills all remaining workflow stages and marks KPI approved in a single operation with full audit trail
+> **Version:** 1.45.35 — Reports Overhaul: all reports now use full authoritative score chain (Final > Management > Auditor > HR PMS > Skip-Level > Manager > Self); Monthly Scorecard, Performance Report, Employee Summary, Completion Report, Department Report, and PDF exports updated with Skip-Level and HR PMS columns
 > **Maintainer:** Lovable AI
 
 ---

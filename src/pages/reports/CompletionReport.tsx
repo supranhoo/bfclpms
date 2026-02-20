@@ -43,6 +43,9 @@ export default function CompletionReport() {
       approved: number; 
       selfReviewSubmitted: number;
       managerReviewed: number;
+      skipLevelReviewed: number;
+      hrPmsReviewed: number;
+      auditorReviewed: number;
       year: number 
     }>();
 
@@ -52,26 +55,44 @@ export default function CompletionReport() {
       const key = `${period}-${year}`;
       
       if (!periodMap.has(key)) {
-        periodMap.set(key, { total: 0, approved: 0, selfReviewSubmitted: 0, managerReviewed: 0, year });
+        periodMap.set(key, { total: 0, approved: 0, selfReviewSubmitted: 0, managerReviewed: 0, skipLevelReviewed: 0, hrPmsReviewed: 0, auditorReviewed: 0, year });
       }
       
       const data = periodMap.get(key)!;
       data.total++;
       
-      // Track different stages of completion
-      if (kpi.status === 'approved') {
+      const status = kpi.status || '';
+      
+      // Track different stages of completion (cumulative — each later stage implies earlier ones done)
+      if (status === 'approved') {
         data.approved++;
+        data.auditorReviewed++;
+        data.hrPmsReviewed++;
+        data.skipLevelReviewed++;
         data.managerReviewed++;
         data.selfReviewSubmitted++;
-      } else if (['management_review', 'audit', 'skip_level_check', 'hr_pms_review'].includes(kpi.status || '')) {
+      } else if (status === 'management_review') {
+        data.auditorReviewed++;
+        data.hrPmsReviewed++;
+        data.skipLevelReviewed++;
         data.managerReviewed++;
         data.selfReviewSubmitted++;
-      } else if (kpi.status === 'manager_check') {
-        // Manager has processed this KPI
+      } else if (status === 'audit') {
+        data.hrPmsReviewed++;
+        data.skipLevelReviewed++;
         data.managerReviewed++;
         data.selfReviewSubmitted++;
-      } else if (kpi.status === 'self_review') {
-        // Employee has submitted, awaiting manager
+      } else if (status === 'hr_pms_review') {
+        data.skipLevelReviewed++;
+        data.managerReviewed++;
+        data.selfReviewSubmitted++;
+      } else if (status === 'skip_level_check') {
+        data.managerReviewed++;
+        data.selfReviewSubmitted++;
+      } else if (status === 'manager_check') {
+        data.managerReviewed++;
+        data.selfReviewSubmitted++;
+      } else if (status === 'self_review') {
         data.selfReviewSubmitted++;
       }
     });
@@ -89,6 +110,9 @@ export default function CompletionReport() {
           approved: data.approved,
           selfReviewSubmitted: data.selfReviewSubmitted,
           managerReviewed: data.managerReviewed,
+          skipLevelReviewed: data.skipLevelReviewed,
+          hrPmsReviewed: data.hrPmsReviewed,
+          auditorReviewed: data.auditorReviewed,
           pending: data.total - data.approved,
           notSubmitted: data.total - data.selfReviewSubmitted,
           completionRate,
@@ -107,6 +131,9 @@ export default function CompletionReport() {
       name: `${p.period.substring(0, 3)} ${p.year}`,
       'Self Review': p.selfReviewSubmitted,
       'Manager Review': p.managerReviewed,
+      'Skip-Level': p.skipLevelReviewed,
+      'HR PMS': p.hrPmsReviewed,
+      'Auditor': p.auditorReviewed,
       Approved: p.approved,
       'Not Submitted': p.notSubmitted,
     }));
@@ -140,6 +167,9 @@ export default function CompletionReport() {
       'Total KPIs': p.total,
       'Self Review Submitted': p.selfReviewSubmitted,
       'Manager Reviewed': p.managerReviewed,
+      'Skip-Level Reviewed': p.skipLevelReviewed,
+      'HR PMS Reviewed': p.hrPmsReviewed,
+      'Auditor Reviewed': p.auditorReviewed,
       'Approved': p.approved,
       'Not Submitted': p.notSubmitted,
       'Self Review Rate': `${p.selfReviewRate}%`,
@@ -267,6 +297,9 @@ export default function CompletionReport() {
                   <Legend />
                   <Bar dataKey="Self Review" fill="hsl(210, 80%, 60%)" />
                   <Bar dataKey="Manager Review" fill="hsl(38, 80%, 55%)" />
+                  <Bar dataKey="Skip-Level" fill="hsl(174, 60%, 45%)" />
+                  <Bar dataKey="HR PMS" fill="hsl(340, 65%, 55%)" />
+                  <Bar dataKey="Auditor" fill="hsl(270, 60%, 55%)" />
                   <Bar dataKey="Approved" fill="hsl(145, 65%, 45%)" />
                 </BarChart>
               </ResponsiveContainer>
@@ -290,7 +323,10 @@ export default function CompletionReport() {
                   <TableHead>Year</TableHead>
                   <TableHead className="text-center">Total KPIs</TableHead>
                   <TableHead className="text-center">Self Review</TableHead>
-                  <TableHead className="text-center">Manager Review</TableHead>
+                  <TableHead className="text-center">Manager</TableHead>
+                  <TableHead className="text-center">Skip-Level</TableHead>
+                  <TableHead className="text-center">HR PMS</TableHead>
+                  <TableHead className="text-center">Auditor</TableHead>
                   <TableHead className="text-center">Approved</TableHead>
                   <TableHead className="text-center">Not Submitted</TableHead>
                   <TableHead>Completion</TableHead>
@@ -304,6 +340,9 @@ export default function CompletionReport() {
                     <TableCell className="text-center">{p.total}</TableCell>
                     <TableCell className="text-center text-blue-600">{p.selfReviewSubmitted}</TableCell>
                     <TableCell className="text-center text-amber-600">{p.managerReviewed}</TableCell>
+                    <TableCell className="text-center text-teal-600">{p.skipLevelReviewed}</TableCell>
+                    <TableCell className="text-center text-rose-600">{p.hrPmsReviewed}</TableCell>
+                    <TableCell className="text-center text-purple-600">{p.auditorReviewed}</TableCell>
                     <TableCell className="text-center text-emerald-600">{p.approved}</TableCell>
                     <TableCell className="text-center text-muted-foreground">{p.notSubmitted}</TableCell>
                     <TableCell>
@@ -316,7 +355,7 @@ export default function CompletionReport() {
                 ))}
                 {periodData.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                       No period data found
                     </TableCell>
                   </TableRow>

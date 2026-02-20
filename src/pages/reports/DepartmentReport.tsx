@@ -46,6 +46,8 @@ export default function DepartmentReport() {
         kra_set: deptKpis.filter(k => k.status === 'kra_set').length,
         self_review: deptKpis.filter(k => k.status === 'self_review').length,
         manager_check: deptKpis.filter(k => k.status === 'manager_check').length,
+        skip_level_check: deptKpis.filter(k => k.status === 'skip_level_check').length,
+        hr_pms_review: deptKpis.filter(k => k.status === 'hr_pms_review').length,
         audit: deptKpis.filter(k => k.status === 'audit').length,
         management_review: deptKpis.filter(k => k.status === 'management_review').length,
         approved: approvedKpis,
@@ -94,6 +96,8 @@ export default function DepartmentReport() {
       'KRA Set': d.statusBreakdown.kra_set,
       'Self Review': d.statusBreakdown.self_review,
       'Manager Check': d.statusBreakdown.manager_check,
+      'Skip-Level Check': d.statusBreakdown.skip_level_check,
+      'HR PMS Review': d.statusBreakdown.hr_pms_review,
       'Audit': d.statusBreakdown.audit,
       'Management Review': d.statusBreakdown.management_review,
     }));
