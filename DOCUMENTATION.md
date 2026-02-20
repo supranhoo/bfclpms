@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-20  
-> **Version:** 1.45.43 — Fixed Value History not loading in Org KPI Data Entry cards (query was permanently disabled)
+> **Version:** 1.45.44 — Fixed duplicate key constraint error on Org KPI data entry save (race condition resilience)
 > **Maintainer:** Lovable AI
 
 ---
