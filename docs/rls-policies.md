@@ -61,6 +61,7 @@
 | Skip-level managers can view reports KPIs | SELECT | public | `get_skip_level_manager(employee) = auth.uid()` |
 | Skip-level managers can update reports KPI status | UPDATE | public | `get_skip_level_manager(employee) = auth.uid()` |
 | Data owners can view assigned org-level KPIs | SELECT | authenticated | `is_org_level = true AND owner matches in org_kpi_data_owners` |
+| Data owners can update org-level KPI status | UPDATE | authenticated | `is_org_level = true AND owner matches in org_kpi_data_owners` |
 | Employees can view their own KPIs | SELECT | authenticated | `employee_id = auth.uid()` |
 | Users can update their own KPIs | UPDATE | public | `employee_id = auth.uid()` |
 
