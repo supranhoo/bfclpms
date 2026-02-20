@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-20  
-> **Version:** 1.45.37 — Terminal-reviewer final_score sync fix: final_score/final_rating now set when ANY role (not just management) is the terminal reviewer and approves a KPI; backfilled 79 affected approved KPIs with NULL final_score
+> **Version:** 1.45.38 — Synced Org KPI mappings between January and February 2026: marked 37 Jan-only KPIs as org-level in Feb, 11 Feb-only KPIs as org-level in Jan
 > **Maintainer:** Lovable AI
 
 ---
