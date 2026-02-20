@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-20  
-> **Version:** 1.45.39 — Fixed attachment loss on Chrome tab switch in Self Review sheet (useRef guard prevents form re-initialization when submissionMap reference changes)
+> **Version:** 1.45.40 — Fixed paste-upload duplicating files across multiple Org KPI cards (stopImmediatePropagation prevents multiple listeners from processing the same paste event)
 > **Maintainer:** Lovable AI
 
 ---

@@ -77,6 +77,7 @@ export function OrgKpiFileUpload({ existingUrl, onUploadComplete, disabled }: Or
       const files = ce.clipboardData?.files;
       if (!files || files.length === 0) return;
       e.preventDefault();
+      e.stopImmediatePropagation();
       const file = files[0];
       if (file.size > maxFileSizeBytes) {
         toast({ title: 'File too large', description: `Maximum file size is ${maxFileSizeMb}MB`, variant: 'destructive' });
