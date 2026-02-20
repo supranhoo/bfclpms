@@ -2893,6 +2893,10 @@ export type Database = {
         Args: { _period_name: string; _review_year: number }
         Returns: boolean
       }
+      propagate_org_kpi_value: {
+        Args: { p_is_na?: boolean; p_kpi_ratings: Json }
+        Returns: Json
+      }
     }
     Enums: {
       app_role:

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-20  
-> **Version:** 1.45.44 — Fixed duplicate key constraint error on Org KPI data entry save (race condition resilience)
+> **Version:** 1.45.45 — Server-side propagation RPC to fix statement timeout on org KPI propagation
 > **Maintainer:** Lovable AI
 
 ---
