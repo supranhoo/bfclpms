@@ -1,66 +1,64 @@
 
 
-# Fix: File Upload Duplicating Across Multiple Org KPI Cards
+# Fix: Save & Propagate Error for Data Owner (Biswajit)
 
 ## Root Cause
 
-The bug is in `OrgKpiFileUpload.tsx` -- specifically the **clipboard paste listener** (lines 65-92).
+Biswajit Sahoo is a **Data Owner** with role `manager`. When he clicks "Save & Propagate", the propagation code does two things for each employee KPI:
 
-When the Org KPI Data Entry page renders multiple KPI cards, each card contains its own `OrgKpiFileUpload` component. Every instance that doesn't already have a file (`existingUrl` is null) registers a paste event listener on the **same target** -- `document` (since the cards are NOT inside a dialog).
+1. Updates `review_submissions` with the achieved value and score -- this **works** because there is an RLS policy "Data owners can update org-level submissions"
+2. Updates `kpis` table status from `kra_set` to `self_review` -- this **fails** because there is NO RLS policy allowing data owners to update the `kpis` table
 
-When Biswajit pastes a file (Ctrl+V) or even when the paste event fires for any reason, **ALL** upload instances without an existing file process the event simultaneously. Each one independently uploads the same file and calls its own `onUploadComplete`, causing the file to appear on multiple KPI cards at once.
+The existing `kpis` UPDATE policies are:
+- Admins (universal)
+- Managers (only for direct reports)
+- Auditors, HR PMS, Management, Skip-level managers
+- Employees (own KPIs only)
 
-The `e.preventDefault()` call does NOT stop other listeners from firing -- it only prevents the browser's default paste behavior. Event propagation continues to all listeners.
+Biswajit's manager role only grants him UPDATE access to KPIs of his direct reports. But org-level KPIs span employees across the entire organization who don't report to him. Those status updates get blocked by RLS, causing errors.
 
 ## Fix
 
-### File: `src/components/admin/OrgKpiFileUpload.tsx`
+### 1. Database Migration: Add RLS Policy on `kpis` Table
 
-**Change:** After the first `OrgKpiFileUpload` instance handles a paste event, use `e.stopImmediatePropagation()` to prevent other instances' listeners from also processing the same file.
+Add a new UPDATE policy allowing data owners to update the status of org-level KPIs they are assigned to:
 
-Replace:
-```ts
-e.preventDefault();
+```sql
+CREATE POLICY "Data owners can update org-level KPI status"
+ON public.kpis
+FOR UPDATE
+USING (
+  is_org_level = true
+  AND EXISTS (
+    SELECT 1
+    FROM org_kpi_data_owners o
+    WHERE o.category_id = kpis.category_id
+      AND o.kra_name = kpis.kra_name
+      AND o.kpi_name = kpis.kpi_name
+      AND o.owner_id = auth.uid()
+  )
+);
 ```
 
-With:
-```ts
-e.preventDefault();
-e.stopImmediatePropagation();
-```
+This policy:
+- Only applies to org-level KPIs (`is_org_level = true`)
+- Only grants access if the user is a designated data owner for that specific KPI
+- Follows the same pattern as the existing data owner policies on `review_submissions`
 
-This ensures only **one** upload component (the one closest to focus or first in DOM order) processes the pasted file.
+### 2. Update DOCUMENTATION.md
 
-### File: `DOCUMENTATION.md`
+- Version bump to 1.45.41
+- Note: Added missing RLS policy for data owner KPI status updates during propagation
 
-- Version bump to 1.45.40
-- Note: Fixed paste-upload duplicating files across multiple Org KPI cards
+## No Code Changes Needed
 
-## Why This Happens
+The propagation logic in `usePropagateOrgKpiValue.ts` is correct -- it already handles the KPI status update. The issue is purely an RLS policy gap. Once the policy is added, the existing code will work for data owners like Biswajit.
 
-```text
-Page Layout (no dialog wrapper):
+## Impact
 
-  [OrgKpiEntryCard 1] -> OrgKpiFileUpload -> listens on `document` for paste
-  [OrgKpiEntryCard 2] -> OrgKpiFileUpload -> listens on `document` for paste
-  [OrgKpiEntryCard 3] -> OrgKpiFileUpload -> listens on `document` for paste
-
-  User pastes a file:
-  -> ALL 3 listeners fire
-  -> ALL 3 upload the same file
-  -> ALL 3 call onUploadComplete
-```
-
-After fix with `stopImmediatePropagation`:
-```text
-  User pastes a file:
-  -> Listener 1 fires, uploads file, stops propagation
-  -> Listeners 2 and 3 never fire
-```
-
-## What Will NOT Change
-
-- Click-based upload (via the "Upload" button) -- this already works correctly since each component has its own file input
-- EvidenceUpload and MultiFileUpload components in review sheets -- these are inside dialogs (only one open at a time), so the paste duplication doesn't occur there
-- No database or schema changes needed
+| Scenario | Before (Bug) | After (Fix) |
+|---|---|---|
+| Data owner propagates org KPIs for non-direct-reports | RLS blocks KPI status update, error shown | Status update succeeds |
+| Data owner propagates org KPIs for direct reports | Works (via manager policy) | Works (via both policies) |
+| Admin propagates org KPIs | Works (via admin policy) | Works (unchanged) |
 
