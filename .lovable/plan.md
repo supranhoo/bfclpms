@@ -1,64 +1,98 @@
 
 
-# Fix: Save & Propagate Error for Data Owner (Biswajit)
+# Add "Mark as N/A" for Admins on Org KPI Data Entry
 
-## Root Cause
+## Overview
 
-Biswajit Sahoo is a **Data Owner** with role `manager`. When he clicks "Save & Propagate", the propagation code does two things for each employee KPI:
+Allow administrators to mark an Org KPI as "Not Applicable" directly from the Org KPI Data Entry page. When marked N/A and propagated, all linked employee review submissions will have `is_na = true` with scores nulled out -- matching the existing N/A behavior in the self-review and reviewer flows.
 
-1. Updates `review_submissions` with the achieved value and score -- this **works** because there is an RLS policy "Data owners can update org-level submissions"
-2. Updates `kpis` table status from `kra_set` to `self_review` -- this **fails** because there is NO RLS policy allowing data owners to update the `kpis` table
+## Current Behavior
 
-The existing `kpis` UPDATE policies are:
-- Admins (universal)
-- Managers (only for direct reports)
-- Auditors, HR PMS, Management, Skip-level managers
-- Employees (own KPIs only)
+- Employees can mark individual KPIs as N/A during self-review
+- Reviewers (Manager, Auditor, etc.) can mark or override N/A during their review stage
+- There is no way for admins to mark an entire Org KPI as N/A from the data entry page
+- The Org KPI propagation always pushes a numeric achieved value and calculated score
 
-Biswajit's manager role only grants him UPDATE access to KPIs of his direct reports. But org-level KPIs span employees across the entire organization who don't report to him. Those status updates get blocked by RLS, causing errors.
+## Planned Changes
 
-## Fix
+### 1. Add `is_na` field to `org_kpi_values` table (Database Migration)
 
-### 1. Database Migration: Add RLS Policy on `kpis` Table
-
-Add a new UPDATE policy allowing data owners to update the status of org-level KPIs they are assigned to:
+Add a boolean column to track N/A status at the org KPI value level:
 
 ```sql
-CREATE POLICY "Data owners can update org-level KPI status"
-ON public.kpis
-FOR UPDATE
-USING (
-  is_org_level = true
-  AND EXISTS (
-    SELECT 1
-    FROM org_kpi_data_owners o
-    WHERE o.category_id = kpis.category_id
-      AND o.kra_name = kpis.kra_name
-      AND o.kpi_name = kpis.kpi_name
-      AND o.owner_id = auth.uid()
-  )
-);
+ALTER TABLE org_kpi_values ADD COLUMN is_na boolean NOT NULL DEFAULT false;
 ```
 
-This policy:
-- Only applies to org-level KPIs (`is_org_level = true`)
-- Only grants access if the user is a designated data owner for that specific KPI
-- Follows the same pattern as the existing data owner policies on `review_submissions`
+No new RLS policies needed -- existing policies cover all operations on this table.
 
-### 2. Update DOCUMENTATION.md
+### 2. Update `OrgKpiCardData` interface and card UI (`OrgKpiEntryCard.tsx`)
 
-- Version bump to 1.45.41
-- Note: Added missing RLS policy for data owner KPI status updates during propagation
+- Add `isNa: boolean` to `OrgKpiCardData`
+- Add an N/A toggle (Switch component) visible only to admins, placed above the achieved value input
+- When N/A is toggled ON:
+  - Disable and hide the achieved value, remarks, and evidence inputs
+  - Show a mandatory "Reason for N/A" textarea
+  - Change the status badge to show "N/A" styling
+- When N/A is toggled OFF: restore normal input fields
+- The N/A state auto-saves like other fields and can be propagated via "Save and Propagate"
 
-## No Code Changes Needed
+### 3. Update `onSave` / `onSaveAndPropagate` signatures
 
-The propagation logic in `usePropagateOrgKpiValue.ts` is correct -- it already handles the KPI status update. The issue is purely an RLS policy gap. Once the policy is added, the existing code will work for data owners like Biswajit.
+- Add `isNa?: boolean` and `naRemarks?: string` to the save value objects passed from the card to the page handlers
 
-## Impact
+### 4. Update `OrgKpiDataEntry.tsx` page handlers
 
-| Scenario | Before (Bug) | After (Fix) |
-|---|---|---|
-| Data owner propagates org KPIs for non-direct-reports | RLS blocks KPI status update, error shown | Status update succeeds |
-| Data owner propagates org KPIs for direct reports | Works (via manager policy) | Works (via both policies) |
-| Admin propagates org KPIs | Works (via admin policy) | Works (unchanged) |
+- `handleCardSave`: Include `is_na` in the bulk upsert payload to `org_kpi_values`
+- `handleCardSaveAndPropagate`: When `isNa` is true, propagate with N/A semantics instead of numeric values
+- `buildCardData`: Read `is_na` from `existingValuesMap` and pass it to the card
+
+### 5. Update propagation logic (`usePropagateOrgKpiValue.ts`)
+
+- Add optional `isNa?: boolean` to `PropagateParams`
+- When `isNa` is true:
+  - Set `achieved_value: null`, `self_score: null`, `self_rating: null`, `is_na: true`, `na_marked_by_role: 'admin'` on `review_submissions`
+  - Still update KPI status from `kra_set` to `self_review`
+- When `isNa` is false (default): existing behavior unchanged
+
+### 6. Update `useOrgKpiValues.ts` types
+
+- Add `is_na: boolean` to the `OrgKpiValue` interface
+
+### 7. Update `DOCUMENTATION.md`
+
+- Version bump to 1.45.42
+- Document the N/A capability for Org KPI Data Entry
+
+## UI Layout (Admin View)
+
+```text
++-------------------------------------------+
+| KPI Name                     [N/A Toggle]  |  <-- Admin only
+| KRA: ...                                   |
+|                                            |
+| [When N/A is OFF - normal view]            |
+| Achieved: [____]  Remark: [____]  [File]   |
+|                                            |
+| [When N/A is ON]                           |
+| (!) This KPI is marked as Not Applicable   |
+| Reason: [________________________] *       |
+|                                            |
+| [Audit] [Impact] [Save] [Save & Propagate] |
++-------------------------------------------+
+```
+
+## Propagation Behavior
+
+| Scenario | Achieved Value | is_na | Scores | Status |
+|---|---|---|---|---|
+| Normal propagation | numeric value | false | Calculated | self_review |
+| N/A propagation | null | true | null | self_review |
+| N/A reversed later | numeric value | false | Recalculated | self_review |
+
+## What Will NOT Change
+
+- Self-review N/A flow (employee marks own KPI as N/A)
+- Reviewer N/A override/confirmation flow
+- Non-admin data owners will not see the N/A toggle
+- Scoped (department/employee) entry tables -- N/A applies at the KPI level, not per-scope row
 
