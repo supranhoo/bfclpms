@@ -1,118 +1,85 @@
 
 
-# RCA: Approved KPIs Missing final_score — Root Cause and Fix Plan
+# Sync Org KPI Mappings Between January and February 2026
 
-## Root Cause
+## Current State
 
-The bug is in `src/components/review/UnifiedScorecard.tsx` **lines 444-448**:
+| Period | Unique Org KPIs |
+|---|---|
+| January | 98 |
+| February | 68 |
 
-```ts
-// For management, set final score
-if (viewLevel === 'management') {
-  updateData.final_rating = rating;
-  updateData.final_score = score;
-}
-```
+## Gaps Found
 
-`final_score` and `final_rating` are **only populated when the reviewer is "management"**. However, in many workflow templates, the terminal reviewer (the last stage before `approved`) is NOT management — it can be HR PMS, Auditor, or even Skip-Level.
-
-When HR PMS (or any non-management role) is the last stage and clicks "Approve", the code correctly sets `kpis.status = 'approved'` via `resolveForwardStatus()`, but **never writes `final_score`/`final_rating`** to the `review_submissions` row.
-
-This same bug exists in **4 separate approval paths** within UnifiedScorecard:
-1. Normal approval (line 444-448)
-2. N/A forwarding (line 694)
-3. N/A override approval (line 749-752)
-4. N/A confirmation (line 804)
-
-## Impact Assessment
-
-| Period | Affected KPIs | Employees |
+| Gap Type | Count | Details |
 |---|---|---|
-| January 2026 | 72 non-N/A KPIs | 8 employees (Jitendra Bharti, Abhiranjan, Aditya, Avinash, Debadutta, Dileshwar, Purnima, Randhir) |
-| December 2025 | 7 non-N/A KPIs | 1 employee (Ashish Kataria — fast-tracked without scores) |
-| **Total** | **79 KPIs** | **9 employees** |
+| In January but NOT in February | 41 unique KPIs | 37 have Feb KPI records (just need `is_org_level = true`); 4 have no Feb records at all (cannot be marked -- KPI records don't exist in Feb) |
+| In February but NOT in January | 11 unique KPIs | All 11 have Jan KPI records (just need `is_org_level = true`) |
 
-All affected KPIs have `status = 'approved'` but `final_score = NULL`.
+## What Will Be Done
 
-### Downstream Impact
-Every report and dashboard that reads `final_score` shows blank/dash for these employees:
-- Dashboard overall score chart
-- Monthly Scorecard Report (UI + PDF)
-- Performance Report rating distribution
-- Employee Performance Summary
-- KPI Detail Report
-- KPI Tracker Modal trend chart
+This is purely a **data update** -- no code changes needed. Two SQL UPDATE statements will be run:
 
-## Fix Plan (2 files + data repair)
+### Step 1: Mark Jan-only KPIs as Org-Level in February
 
-### 1. Fix: `src/components/review/UnifiedScorecard.tsx`
+For the 37 KPIs that exist in both months but are only marked as org-level in January, set `is_org_level = true` and copy the `org_level_scope` from the January record onto the matching February KPI records.
 
-Replace the management-only check with a dynamic check: **if the forward status is `approved`, set `final_score`/`final_rating`** from the current reviewer's score.
+4 KPIs have no February records at all -- these cannot be synced since the underlying KPI records don't exist for February. These will be skipped.
 
-All 4 approval paths need the same fix. Change:
+### Step 2: Mark Feb-only KPIs as Org-Level in January
 
-```ts
-if (viewLevel === 'management') {
-  updateData.final_rating = rating;
-  updateData.final_score = score;
-}
-```
+For the 11 KPIs that exist in both months but are only marked as org-level in February, set `is_org_level = true` and copy the `org_level_scope` from the February record onto the matching January KPI records.
 
-To:
+### Step 3: Update DOCUMENTATION.md
 
-```ts
-// When this approval moves KPI to 'approved', sync final score
-// regardless of which role is the terminal reviewer
-if (approve && config.forwardStatus === 'approved') {
-  updateData.final_rating = rating;
-  updateData.final_score = score;
-}
-```
-
-Apply the same pattern to the N/A forwarding path, N/A override path, and N/A confirmation path.
-
-### 2. Data Repair: Backfill 79 affected KPIs
-
-Run a one-time SQL update to populate `final_score`/`final_rating` for the 79 already-approved KPIs using the authoritative fallback chain:
-
-```sql
-UPDATE review_submissions rs
-SET 
-  final_score = COALESCE(
-    rs.management_score, rs.auditor_score, 
-    rs.hr_pms_score, rs.skip_level_score, 
-    rs.manager_score, rs.self_score
-  ),
-  final_rating = COALESCE(
-    rs.management_rating, rs.auditor_rating,
-    rs.hr_pms_rating, rs.skip_level_rating,
-    rs.manager_rating, rs.self_rating
-  )
-FROM kpis k
-WHERE rs.kpi_id = k.id
-  AND k.status = 'approved'
-  AND rs.final_score IS NULL
-  AND rs.is_na IS NOT TRUE;
-```
-
-### 3. Update: `DOCUMENTATION.md`
-
-- Version bump to 1.45.37
-- Document: terminal-reviewer final_score sync fix
-
-## What Will NOT Change
-
-- `ManagementScorecard.tsx` — already correctly sets `final_score` (hardcoded management is always terminal there)
-- `useAdminDataEntry.ts` — already handles final_score sync on approved (lines 239-252)
-- Fast Track hook — already handles final_score correctly
-- No report code changes needed — once `final_score` is populated, all reports will show correct data automatically
+Version bump to 1.45.38 and note the Org KPI sync.
 
 ## Expected Outcome
 
-| Element | Before (Bug) | After (Fix) |
+| Period | Before | After |
 |---|---|---|
-| Jitendra Bharti Jan dashboard | Blank score | Shows weighted 4.50 / 5.00 |
-| 72 January approved KPIs | final_score = NULL | final_score = last reviewer's score |
-| 7 December approved KPIs | final_score = NULL | final_score = last reviewer's score |
-| Future HR PMS terminal approvals | final_score not set | final_score auto-set on approve |
+| January | 98 org KPIs | 98 + 11 = 109 org KPIs |
+| February | 68 org KPIs | 68 + 37 = 105 org KPIs |
+
+The 4 KPIs that only exist in January (no Feb KPI records at all) will remain Jan-only since there are no employee KPI records to mark in February.
+
+## Technical Details
+
+Two UPDATE queries using subqueries to match across periods:
+
+```sql
+-- Query 1: Jan org KPIs -> mark matching Feb records
+UPDATE kpis feb
+SET is_org_level = true,
+    org_level_scope = jan.org_level_scope
+FROM (
+  SELECT DISTINCT category_id, kra_name, kpi_name, org_level_scope
+  FROM kpis
+  WHERE is_org_level = true AND review_period = 'January' AND review_year = 2026
+) jan
+WHERE feb.category_id = jan.category_id
+  AND feb.kra_name = jan.kra_name
+  AND feb.kpi_name = jan.kpi_name
+  AND feb.review_period = 'February'
+  AND feb.review_year = 2026
+  AND feb.is_org_level = false;
+
+-- Query 2: Feb org KPIs -> mark matching Jan records
+UPDATE kpis jan
+SET is_org_level = true,
+    org_level_scope = feb.org_level_scope
+FROM (
+  SELECT DISTINCT category_id, kra_name, kpi_name, org_level_scope
+  FROM kpis
+  WHERE is_org_level = true AND review_period = 'February' AND review_year = 2026
+) feb
+WHERE jan.category_id = feb.category_id
+  AND jan.kra_name = feb.kra_name
+  AND jan.kpi_name = feb.kpi_name
+  AND jan.review_period = 'January'
+  AND jan.review_year = 2026
+  AND jan.is_org_level = false;
+```
+
+No code changes, no schema changes -- data-only operation.
 
