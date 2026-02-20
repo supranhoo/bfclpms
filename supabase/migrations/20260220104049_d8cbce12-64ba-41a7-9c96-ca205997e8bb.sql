@@ -1,0 +1,1 @@
+ALTER TABLE public.org_kpi_values ADD COLUMN is_na boolean NOT NULL DEFAULT false;

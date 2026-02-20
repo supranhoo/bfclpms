@@ -325,13 +325,14 @@ export default function OrgKpiDataEntry() {
       scopedRows,
       scopeLabel,
       employeeCount: empCount,
+      isNa: existing?.is_na ?? false,
     };
   }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap, mappedDepartmentsMap, mappedEmployeesMap]);
 
   // Save handler for a single card
   const handleCardSave = useCallback(async (
     kpi: typeof filteredKpis[0],
-    values: { achievedValue: number | null; remarks: string; evidenceUrl: string | null; scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null }> }
+    values: { achievedValue: number | null; remarks: string; evidenceUrl: string | null; isNa?: boolean; naRemarks?: string; scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null }> }
   ) => {
     const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'organization';
     const toSave: Array<any> = [];
@@ -346,10 +347,11 @@ export default function OrgKpiDataEntry() {
         kpi_name: kpi.kpi_name,
         review_period: selectedPeriod,
         review_year: selectedYear,
-        achieved_value: values.achievedValue,
-        remarks: values.remarks || undefined,
-        evidence_url: values.evidenceUrl,
+        achieved_value: values.isNa ? null : values.achievedValue,
+        remarks: values.isNa ? (values.naRemarks || undefined) : (values.remarks || undefined),
+        evidence_url: values.isNa ? null : values.evidenceUrl,
         entered_by: profile?.id,
+        is_na: values.isNa ?? false,
       });
       if (values.achievedValue !== oldVal) {
         auditEntries.push({
@@ -423,8 +425,10 @@ export default function OrgKpiDataEntry() {
         kpiName: kpi.kpi_name,
         reviewPeriod: selectedPeriod,
         reviewYear: selectedYear,
-        achievedValue: values.achievedValue,
+        achievedValue: values.isNa ? null : values.achievedValue,
         scope: 'organization',
+        isNa: values.isNa,
+        naRemarks: values.naRemarks,
       });
     } else if (scope === 'department' && values.scopedValues) {
       for (const sv of values.scopedValues) {
