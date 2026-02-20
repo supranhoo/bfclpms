@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-19  
-> **Version:** 1.45.35 — Reports Overhaul: all reports now use full authoritative score chain (Final > Management > Auditor > HR PMS > Skip-Level > Manager > Self); Monthly Scorecard, Performance Report, Employee Summary, Completion Report, Department Report, and PDF exports updated with Skip-Level and HR PMS columns
+> **Version:** 1.45.36 — Monthly Scorecard PDF fixes: Total Score now shows weighted average (4.50/5.00) instead of misleading point values; Self column shows self_score instead of achieved value; zero-score truthy check bug fixed across all UI/PDF tables; bulk PDF shows '-' for missing workflow stages instead of '0.00'; eliminated ~250 lines of PDF code duplication via shared buildDetailedScorecardDoc function
 > **Maintainer:** Lovable AI
 
 ---

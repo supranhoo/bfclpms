@@ -54,7 +54,6 @@ export default function MonthlyScorecardReport() {
       const url = URL.createObjectURL(blob);
       setPdfBlobUrl(url);
       
-      // Cleanup URL when dialog closes
       return () => {
         URL.revokeObjectURL(url);
       };
@@ -209,6 +208,14 @@ export default function MonthlyScorecardReport() {
       let weightedFinalScore = 0;
       let completedKpis = 0;
       let approvedKpis = 0;
+      
+      // Track whether ANY KPI has data for each stage (Bug 3 better fix)
+      let hasSelfData = false;
+      let hasManagerData = false;
+      let hasSkipLevelData = false;
+      let hasHrPmsData = false;
+      let hasAuditorData = false;
+      let hasManagementData = false;
 
       const kpiDetails: KpiDetail[] = empKpis.map(kpi => {
         const submission = submissionMap.get(kpi.id);
@@ -218,21 +225,27 @@ export default function MonthlyScorecardReport() {
         if (submission) {
           if (submission.self_score != null) {
             weightedSelfScore += (submission.self_score * weight);
+            hasSelfData = true;
           }
           if (submission.manager_score != null) {
             weightedManagerScore += (submission.manager_score * weight);
+            hasManagerData = true;
           }
           if (submission.skip_level_score != null) {
             weightedSkipLevelScore += (submission.skip_level_score * weight);
+            hasSkipLevelData = true;
           }
           if (submission.hr_pms_score != null) {
             weightedHrPmsScore += (submission.hr_pms_score * weight);
+            hasHrPmsData = true;
           }
           if (submission.auditor_score != null) {
             weightedAuditorScore += (submission.auditor_score * weight);
+            hasAuditorData = true;
           }
           if (submission.management_score != null) {
             weightedManagementScore += (submission.management_score * weight);
+            hasManagementData = true;
           }
           if (submission.final_score != null) {
             weightedFinalScore += (submission.final_score * weight);
@@ -253,41 +266,34 @@ export default function MonthlyScorecardReport() {
           uom: kpi.uom || '%',
           criteria: kpi.criteria || 'Higher is Better',
           
-          // Self Review
           selfAchieved: submission?.achieved_value,
           selfScore: submission?.self_score,
           selfRating: submission?.self_rating,
           selfRemarks: submission?.self_remarks,
           selfEvidence: submission?.self_evidence_url,
           
-          // Manager Review
           managerScore: submission?.manager_score,
           managerRating: submission?.manager_rating,
           managerRemarks: submission?.manager_remarks,
           managerEvidence: submission?.manager_evidence_url,
           
-          // Skip-Level Review
           skipLevelScore: submission?.skip_level_score,
           skipLevelRating: submission?.skip_level_rating,
           skipLevelRemarks: submission?.skip_level_remarks,
           
-          // HR PMS Review
           hrPmsScore: submission?.hr_pms_score,
           hrPmsRating: submission?.hr_pms_rating,
           hrPmsRemarks: submission?.hr_pms_remarks,
           
-          // Auditor Review
           auditorScore: submission?.auditor_score,
           auditorRating: submission?.auditor_rating,
           auditorRemarks: submission?.auditor_remarks,
           auditorEvidence: submission?.auditor_evidence_url,
           
-          // Management Review
           managementScore: submission?.management_score,
           managementRating: submission?.management_rating,
           managementRemarks: submission?.management_remarks,
           
-          // Final
           finalScore: submission?.final_score,
           finalRating: submission?.final_rating,
           status: kpi.status,
@@ -320,7 +326,6 @@ export default function MonthlyScorecardReport() {
         score: data.totalWeight > 0 ? data.totalScore / data.totalWeight : 0,
       }));
 
-      // Get department name
       const deptName = deptMap.get(profile.department_id || '');
 
       return {
@@ -334,11 +339,18 @@ export default function MonthlyScorecardReport() {
         approvedKpis,
         avgSelfScore: avgSelf,
         avgManagerScore: avgManager,
-        avgSkipLevelScore: avgSkipLevel,
-        avgHrPmsScore: avgHrPms,
+        // Use null when no data exists for optional stages to distinguish from zero
+        avgSkipLevelScore: hasSkipLevelData ? avgSkipLevel : null,
+        avgHrPmsScore: hasHrPmsData ? avgHrPms : null,
         avgAuditorScore: avgAuditor,
         avgManagementScore: avgManagement,
         avgFinalScore: avgFinal,
+        hasSelfData,
+        hasManagerData,
+        hasSkipLevelData,
+        hasHrPmsData,
+        hasAuditorData,
+        hasManagementData,
         kpiDetails,
         categoryMetrics,
       };
@@ -381,8 +393,8 @@ export default function MonthlyScorecardReport() {
       'Approved KPIs': sc.approvedKpis,
       'Avg Self Score': sc.avgSelfScore.toFixed(2),
       'Avg Manager Score': sc.avgManagerScore.toFixed(2),
-      'Avg Skip-Level Score': sc.avgSkipLevelScore?.toFixed(2) || '0.00',
-      'Avg HR PMS Score': sc.avgHrPmsScore?.toFixed(2) || '0.00',
+      'Avg Skip-Level Score': sc.avgSkipLevelScore != null ? sc.avgSkipLevelScore.toFixed(2) : '-',
+      'Avg HR PMS Score': sc.avgHrPmsScore != null ? sc.avgHrPmsScore.toFixed(2) : '-',
       'Avg Auditor Score': sc.avgAuditorScore.toFixed(2),
       'Avg Management Score': sc.avgManagementScore.toFixed(2),
       'Avg Final Score': sc.avgFinalScore.toFixed(2),
@@ -429,6 +441,15 @@ export default function MonthlyScorecardReport() {
         {rating.charAt(0).toUpperCase() + rating.slice(1)}
       </Badge>
     );
+  };
+
+  /** Helper: display score with proper null vs zero handling */
+  const displayScore = (score: number | null | undefined, hasData?: boolean): string => {
+    // For optional stages (skip-level, hr-pms), null means "stage doesn't exist"
+    if (score == null) return '-';
+    // hasData flag distinguishes "no data → show dash" from "data exists, score is 0 → show 0.00"
+    if (score === 0 && hasData === false) return '-';
+    return score.toFixed(2);
   };
 
   if (isLoading) {
@@ -588,26 +609,26 @@ export default function MonthlyScorecardReport() {
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
-                        {scorecard.avgSelfScore ? scorecard.avgSelfScore.toFixed(2) : '-'}
+                        {displayScore(scorecard.avgSelfScore, scorecard.hasSelfData)}
                       </TableCell>
                       <TableCell className="text-center">
-                        {scorecard.avgManagerScore ? scorecard.avgManagerScore.toFixed(2) : '-'}
+                        {displayScore(scorecard.avgManagerScore, scorecard.hasManagerData)}
                       </TableCell>
                       <TableCell className="text-center">
-                        {scorecard.avgSkipLevelScore ? scorecard.avgSkipLevelScore.toFixed(2) : '-'}
+                        {displayScore(scorecard.avgSkipLevelScore, scorecard.hasSkipLevelData)}
                       </TableCell>
                       <TableCell className="text-center">
-                        {scorecard.avgHrPmsScore ? scorecard.avgHrPmsScore.toFixed(2) : '-'}
+                        {displayScore(scorecard.avgHrPmsScore, scorecard.hasHrPmsData)}
                       </TableCell>
                       <TableCell className="text-center">
-                        {scorecard.avgAuditorScore ? scorecard.avgAuditorScore.toFixed(2) : '-'}
+                        {displayScore(scorecard.avgAuditorScore, scorecard.hasAuditorData)}
                       </TableCell>
                       <TableCell className="text-center">
-                        {scorecard.avgManagementScore ? scorecard.avgManagementScore.toFixed(2) : '-'}
+                        {displayScore(scorecard.avgManagementScore, scorecard.hasManagementData)}
                       </TableCell>
                       <TableCell className="text-center">
                         <span className="font-semibold">
-                          {scorecard.avgFinalScore ? scorecard.avgFinalScore.toFixed(2) : '-'}
+                          {scorecard.avgFinalScore != null ? scorecard.avgFinalScore.toFixed(2) : '-'}
                         </span>
                       </TableCell>
                       <TableCell className="text-center">
