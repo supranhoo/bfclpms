@@ -1,116 +1,141 @@
 
-# Fast Track to Approved — Admin Bulk Stage Completion
 
-## Problem Statement
+# Reports Overhaul — Full Workflow Alignment
 
-Ashish Kataria's 8 December KPIs are stuck at `self_review`. His workflow is:
-`kra_set → self_review → manager_check → skip_level_check → hr_pms_review → approved`
+## Problem Summary
 
-To move each KPI to `approved` currently requires **3 separate Admin Data Entry saves** (Manager, Skip-Level, HR PMS) × 8 KPIs = **24 manual operations**. The dialog has no way to advance multiple stages at once.
+The reports were built assuming a fixed 6-stage pipeline (KRA Set, Self, Manager, Audit, Management, Approved). The system now supports 11 workflow templates with up to 8 stages, including Skip-Level and HR PMS. Several reports are missing these stages entirely, showing incomplete or misleading data.
 
-The user has tried this repeatedly and it is not working because they likely save the "Self" level each time (which correctly doesn't change status since it's already at `self_review`), or they try Manager but must repeat for Skip-Level and HR PMS separately.
+## Audit Results — Report-by-Report
 
-## Root Cause Confirmed
+| Report | Status | Issues Found |
+|---|---|---|
+| KPI Detail Report | OK | Already has all 6 score columns |
+| KRA Issuance | OK | Already has all 8 status counts |
+| Query Report | OK | Not stage-dependent |
+| TNI Report | OK | Not stage-dependent |
+| Issues Report | OK | Not stage-dependent |
+| Audit Trail Report | OK | Shows raw audit actions |
+| Monthly Scorecard | BROKEN | Table columns hardcoded to Self/Manager/Auditor/Mgmt — missing Skip-Level and HR PMS columns entirely |
+| Performance Report | BROKEN | Score fallback chain skips `skip_level_score` and `hr_pms_score` |
+| Employee Performance Summary | BROKEN | Score fallback chain skips `skip_level_score` and `hr_pms_score`; Status labels/colors missing Skip-Level and HR PMS |
+| Completion Report | PARTIALLY BROKEN | Stage tracking logic works but chart only shows "Self Review" / "Manager Review" / "Approved" — does not visualize intermediate stages |
+| Department Report | BROKEN | Status breakdown hardcoded to 6 statuses — missing `skip_level_check` and `hr_pms_review` counts |
+| PDF Export Library | BROKEN | `KpiDetail` interface has no skip_level/hr_pms fields; PDF table renders only Self/Manager/Auditor/Mgmt columns |
 
-- All 8 KPIs: `status = self_review`, `self_rating = red`, `self_score = 0`
-- `manager_rating`, `skip_level_rating`, `hr_pms_rating` are ALL NULL
-- `final_rating`, `final_score` are ALL NULL
-- Ashish's workflow has 3 remaining stages before `approved`: manager_check, skip_level_check, hr_pms_review
+## Files to Modify (7 files)
 
-## Solution: "Fast Track to Approved" Button
+| File | Change Summary | Risk |
+|---|---|---|
+| `src/pages/reports/MonthlyScorecardReport.tsx` | Add Skip-Level and HR PMS score columns to table and scorecard computation; fetch missing fields from `review_submissions` | Medium |
+| `src/pages/reports/PerformanceReport.tsx` | Fix score fallback chain to include `skip_level_score` and `hr_pms_score` | Low |
+| `src/pages/reports/EmployeePerformanceSummary.tsx` | Fix score fallback chain; add missing status labels and colors for `skip_level_check` and `hr_pms_review` | Low |
+| `src/pages/reports/CompletionReport.tsx` | Add Skip-Level and HR PMS as distinct tracking stages in period data and chart bars | Low |
+| `src/pages/reports/DepartmentReport.tsx` | Add `skip_level_check` and `hr_pms_review` to status breakdown object and Excel export | Low |
+| `src/lib/pdfExport.ts` | Add `skipLevelScore/Rating/Remarks` and `hrPmsScore/Rating/Remarks` to `KpiDetail` interface; add columns to PDF table and detailed card pages | Medium |
+| `DOCUMENTATION.md` | Version bump to 1.45.35, document report alignment | None |
 
-Add a dedicated **"Fast Track to Approved"** button to the Admin Data Entry dialog that:
+## Detailed Changes Per File
 
-1. Fills all **remaining review stage fields** (manager, skip_level, hr_pms) with the same score/rating
-2. Sets the KPI status directly to `approved`
-3. Syncs `final_rating` and `final_score`
-4. Creates a single audit log entry documenting the bulk action
-5. Sends one employee notification
+### 1. MonthlyScorecardReport.tsx
 
-This is the cleanest fix — no UI navigation required. The admin picks the rating, enters one reason, clicks one button.
+**Current**: Fetches and displays only Self, Manager, Auditor, Management scores.
+**Fix**:
+- Add `skip_level_score`, `skip_level_rating`, `skip_level_remarks`, `hr_pms_score`, `hr_pms_rating`, `hr_pms_remarks` to the `review_submissions` select query
+- Add `avgSkipLevelScore` and `avgHrPmsScore` to the scorecard computation
+- Add `weightedSkipLevelScore` and `weightedHrPmsScore` accumulators
+- Add "Skip-Level" and "HR PMS" columns to the table header and body (between Manager and Auditor)
+- Update `EmployeeScorecard` interface in `pdfExport.ts` to include these new averages
+- Update Excel export to include the new columns
 
-## Files to Modify
+### 2. PerformanceReport.tsx
 
-| File | Change |
-|---|---|
-| `src/hooks/useAdminDataEntry.ts` | Add new `useAdminFastTrackApprove` hook |
-| `src/components/admin/AdminDataEntryDialog.tsx` | Add "Fast Track to Approved" section at the bottom, visible only when KPI is not yet `approved` and has remaining review stages |
-| `DOCUMENTATION.md` | Version bump to 1.45.34 |
+**Current**: Rating distribution uses `final_rating || manager_rating || self_rating` — skips intermediate stages.
+**Fix**:
+- Update rating fallback chain to: `final_rating || management_rating || auditor_rating || hr_pms_rating || skip_level_rating || manager_rating || self_rating`
+- Update score fallback in category performance to match the chain already used in KPI Detail Report: `final_score ?? management_score ?? auditor_score ?? hr_pms_score ?? skip_level_score ?? manager_score ?? self_score`
 
-## Technical Detail
+### 3. EmployeePerformanceSummary.tsx
 
-### New Hook — `useAdminFastTrackApprove`
+**Current**: Score fallback is `final_score ?? management_score ?? auditor_score ?? manager_score ?? self_score`. Missing two stages. Status maps have only 6 entries.
+**Fix**:
+- Insert `hr_pms_score` and `skip_level_score` into the fallback chain (matching the authoritative chain from architecture memory)
+- Fetch `skip_level_score` and `hr_pms_score` in the review_submissions select
+- Add `skip_level_check` and `hr_pms_review` to `STATUS_COLORS` and `STATUS_LABELS` maps
+- Add priority values for these statuses in `getStatusPriority`
 
-```ts
-export interface AdminFastTrackParams {
-  kpi_id: string;
-  employee_id: string;
-  rating: RatingLevel;
-  score: number;
-  achieved_value: number | null;
-  reason: string;
-  kpi_name: string;
-  remaining_stages: AdminRoleLevel[];  // e.g. ['manager', 'skip_level', 'hr_pms']
-}
+### 4. CompletionReport.tsx
+
+**Current**: Tracks Self Review, Manager Review, and Approved. Does not distinguish intermediate stages.
+**Fix**:
+- Add `skipLevelReviewed` and `hrPmsReviewed` counters to period tracking
+- Track KPIs at `skip_level_check` and `hr_pms_review` statuses
+- Add "Skip-Level" and "HR PMS" as separate bars in the chart
+- Add columns to the table
+
+### 5. DepartmentReport.tsx
+
+**Current**: `statusBreakdown` object has 6 keys — missing `skip_level_check` and `hr_pms_review`.
+**Fix**:
+- Add `skip_level_check: deptKpis.filter(...)` and `hr_pms_review: deptKpis.filter(...)` to the breakdown
+- Add these to Excel export columns
+- No table display change needed (table shows summary, not per-status breakdown)
+
+### 6. pdfExport.ts (PDF Library)
+
+**Current**: `KpiDetail` interface has Self, Manager, Auditor, Management, Final fields. PDF renders a 4+1 column KPI summary table.
+**Fix**:
+- Add to `KpiDetail` interface:
+  - `skipLevelAchieved`, `skipLevelScore`, `skipLevelRating`, `skipLevelRemarks`, `skipLevelEvidence`
+  - `hrPmsAchieved`, `hrPmsScore`, `hrPmsRating`, `hrPmsRemarks`, `hrPmsEvidence`
+- Add to `EmployeeScorecard` interface:
+  - `avgSkipLevelScore`, `avgHrPmsScore`
+- Update KPI Summary Table (Page 2) to include Skip-Level and HR PMS columns
+- Update Detailed Review Cards (Pages 3+) to show Skip-Level and HR PMS review sections in the 2x2 grid (expand to 3x2 layout)
+- Update `generateBulkScorecardPdf` summary table headers
+
+### 7. DOCUMENTATION.md
+
+- Version bump to 1.45.35
+- Add section documenting that all reports now use the full authoritative score chain: `Final > Management > Auditor > HR PMS > Skip-Level > Manager > Self`
+
+## Standardized Score Fallback Chain
+
+All reports will use this single consistent chain (matching the architecture memory):
+
+```
+final_score
+  ?? management_score
+  ?? auditor_score
+  ?? hr_pms_score
+  ?? skip_level_score
+  ?? manager_score
+  ?? self_score
 ```
 
-The mutation:
-1. Builds a single update object covering ALL remaining role-level fields at once:
-   - `manager_rating`, `manager_score`, `manager_achieved_value`
-   - `skip_level_rating`, `skip_level_score`, `skip_level_achieved_value`
-   - `hr_pms_rating`, `hr_pms_score`, `hr_pms_achieved_value`
-   - `final_rating`, `final_score`
-   - `kpi_status = 'submitted'`
-2. Upserts into `review_submissions` in one call
-3. Updates `kpis.status = 'approved'` directly (no intermediate steps)
-4. Creates audit log with action `ADMIN_FAST_TRACK_APPROVED`
-5. Sends employee notification
+This matches the authoritative chain already documented and used in KPI Detail Report.
 
-### UI Addition in AdminDataEntryDialog
+## What Will NOT Change
 
-Below the existing "Advance workflow status" toggle, add a collapsible "Fast Track" section:
-
-```
-┌─────────────────────────────────────────────────┐
-│ ⚡ Fast Track to Approved                        │
-│ Remaining stages: Manager, Skip-Level, HR PMS    │
-│                                                  │
-│ Apply score: [0 ▼]  Rating: [Not Achieved ▼]    │
-│                                                  │
-│ ☐ I confirm this fills all remaining stages     │
-│   and marks this KPI as Approved                │
-│                                                  │
-│ [Fast Track Approve]                            │
-└─────────────────────────────────────────────────┘
-```
-
-**Visibility conditions:**
-- KPI has `status !== 'approved'`
-- There are remaining workflow stages (at least one of: manager, skip_level, hr_pms that has no data yet)
-
-**Guard:**
-- Requires the confirmation checkbox to be checked
-- Requires the reason field to be filled
-
-### How This Fixes Ashish's Specific Case
-
-For each of the 8 stuck KPIs:
-1. Admin opens "Admin Data Entry"
-2. Scrolls to "Fast Track to Approved"
-3. Score is already pre-filled as 0 / Not Achieved (from Quick Fill state)
-4. Checks the confirmation box
-5. Clicks "Fast Track Approve"
-6. KPI jumps from `self_review` → `approved` in one action
-
-8 KPIs × 1 click each = **8 operations** instead of 24.
-
-Alternatively, we can also add a **"Bulk Fast Track"** button on the All KPIs employee expanded view to do all 8 in one click — but that is a larger scope. The per-KPI Fast Track alone solves the immediate problem.
+- KPI Detail Report (already complete)
+- KRA Issuance Report (already complete)
+- Query Report (not stage-dependent)
+- TNI Report (not stage-dependent)
+- Issues Report (not stage-dependent)
+- Audit Trail Report (shows raw actions)
+- No database changes required
+- No routing changes required
 
 ## Expected Outcome
 
-| Scenario | Before | After |
+| Report | Before | After |
 |---|---|---|
-| Move self_review KPI to approved (3-stage workflow) | 3 separate admin saves per KPI | 1 "Fast Track" click per KPI |
-| Ashish's 8 stuck KPIs | ~24 manual operations | 8 clicks |
-| Audit trail | One entry per role level | Single `ADMIN_FAST_TRACK_APPROVED` entry |
-| Employee notification | 3 notifications per KPI | 1 notification per KPI |
+| Monthly Scorecard table | 4 score columns | 6 score columns (Self, Manager, Skip-Level, HR PMS, Auditor, Mgmt) |
+| Monthly Scorecard PDF | 4 review stages | 6 review stages |
+| Performance Report rating dist. | Skips HR PMS/Skip-Level scores | Uses full authoritative chain |
+| Employee Summary fallback | Skips 2 stages | Complete 7-stage chain |
+| Employee Summary status labels | Missing 2 statuses | All 8 statuses labeled |
+| Completion Report chart | 3 stage bars | 5+ stage bars |
+| Department Report breakdown | 6 status counts | 8 status counts |
+| Excel exports | Missing columns | All stages included |
+
