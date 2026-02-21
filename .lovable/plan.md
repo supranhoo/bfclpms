@@ -1,56 +1,73 @@
 
 
-# RCA: Org KPIs Not Visible on Gaurav Budhia's "My Dashboard"
+# Fix: Cascade-Clear Bug Leaves Stale Reviewer Data After Send-Back
+
+## Problem
+
+When an auditor (or any reviewer) sends a KPI back to an earlier stage, the cascade-clear logic in `UnifiedScorecard.tsx` fails to clear the auditor's own data if intermediate workflow stages (like `hr_pms_review`, `skip_level_check`) are absent from the employee's pipeline.
+
+**Confirmed case:** KPI `7e7316db` for Dippendu Das has `status = self_review` but still contains `auditor_score: 3.00` with remarks. The Review Journey incorrectly shows auditor data on a KPI that is back at self-review.
 
 ## Root Cause
 
-**This is a data assignment gap, not a code bug.**
+The cascade-clear uses `statusOrder.indexOf('hr_pms_review')` to decide whether to clear auditor fields. When `hr_pms_review` is not in the employee's pipeline, `indexOf` returns `-1`. The check `targetIdx <= -1` is always false, so auditor fields are never cleared.
 
-Gaurav Budhia (`director@bfclalloys.com`, role: `management`) has **zero KPIs assigned** for January 2026. He only has 1 KPI record in the entire system (from September 2025).
+Same issue affects `skip_level_check` and `hr_pms_review` lookups -- any missing intermediate stage causes the cascade to silently skip clearing downstream fields.
 
-When Gaurav switches to the **Management Review** view on the dashboard, he can see his direct reports' KPIs (including their org-level KPIs). But when he switches to **"My Dashboard"** (self-view), the system queries `kpis WHERE employee_id = Gaurav's ID` and returns nothing -- because no KPIs (org or otherwise) have ever been assigned to his profile for this period.
+**Employee's actual pipeline:** `[kra_set, self_review, audit, management_review, approved]`
+Missing stages: `manager_check`, `skip_level_check`, `hr_pms_review`
 
-**None of the 40+ org-level KPIs in the system for January 2026 are mapped to Gaurav.**
+## Fix
 
-## Why Reviewer Dashboards Show Org KPIs
+### 1. Update cascade-clear logic in `src/components/review/UnifiedScorecard.tsx` (lines 547-590)
 
-- Reviewer dashboards (Team, Management) query KPIs by the **selected employee's** ID, not the reviewer's own ID
-- So when Gaurav reviews Dippendu Das (22 KPIs, 1 org), he sees Dippendu's org KPIs
-- This creates the perception that "other dashboards have org KPIs but my dashboard doesn't"
+Change each condition from "target is at or before the **preceding** stage" to "target is **before** the stage's own status." This eliminates dependency on intermediate stages that may not exist.
 
-## Resolution Options
+```text
+Current (broken):                          Fixed:
+clear manager if target <= self_review     clear manager if target < manager_check  (or stage absent)
+clear skip    if target <= manager_check   clear skip    if target < skip_level_check (or stage absent)
+clear hr_pms  if target <= skip_level      clear hr_pms  if target < hr_pms_review   (or stage absent)
+clear auditor if target <= hr_pms_review   clear auditor if target < audit            (or stage absent)
+clear mgmt    if target < management       clear mgmt    if target < management_review
+```
 
-### Option A: Assign KPIs to Gaurav (Admin Action)
-An admin needs to assign KPIs (including org-level ones) to Gaurav Budhia for January 2026, either through:
-- The KRA Library bulk assignment
-- The Org KPI Mapping Dashboard (to add him to relevant org KPIs)
-- The Import Data page
+When a stage is absent from the pipeline (`indexOf` returns `-1`), the fields for that stage are always cleared (since they are irrelevant to the pipeline).
 
-### Option B: Code Enhancement -- Auto-display Org KPIs on Self Dashboard
-Add a secondary display on the self-dashboard that shows "Organization KPIs" relevant to the user's department/division even if they're not explicitly assigned to the employee. This would be a **new feature**, not a bug fix.
+### 2. Fix stale data for already-affected KPIs
 
-## Secondary Finding: UI Parity Gap
+Run a one-time data correction query to clear auditor/management data on KPIs that are currently at `self_review` or `kra_set` status but still have stale reviewer data.
 
-The self-dashboard's KPI table (in `Dashboard.tsx`) does **not** show org KPI badges ("Org KPI -- Organization", "Data by: [Name]") that are shown on reviewer dashboards via `KpiDetailsTable.tsx`. If org KPIs were assigned to Gaurav, they would appear in the table but without the visual indicators that identify them as org-level KPIs.
+```sql
+UPDATE review_submissions rs
+SET auditor_rating = NULL, auditor_score = NULL, 
+    auditor_remarks = NULL, auditor_evidence_url = NULL, 
+    auditor_achieved_value = NULL,
+    management_rating = NULL, management_score = NULL,
+    management_remarks = NULL, management_evidence_url = NULL,
+    management_achieved_value = NULL
+FROM kpis k
+WHERE rs.kpi_id = k.id
+  AND k.status IN ('kra_set', 'self_review')
+  AND (rs.auditor_score IS NOT NULL OR rs.management_score IS NOT NULL);
+```
 
-### Fix for UI Parity
-Add org KPI badges to the self-dashboard table rows, matching the visual treatment in the reviewer `KpiDetailsTable` component. This involves adding `Building2`/`Users`/`User` icons and the "Org KPI" / "Data by:" badges to Dashboard.tsx table rows.
+### 3. Also fix the same pattern in `useSendBackKpi` hook (`src/hooks/useKpis.ts`)
 
-## Recommended Actions
+The `useSendBackKpi` hook (lines 940-1040) uses a different approach -- it hardcodes clearing ALL fields. This is correct but only used by the manager role. The `UnifiedScorecard` inline mutation is used by auditor/management/hr_pms/skip_level. No change needed in `useKpis.ts` but worth noting.
 
-1. **Immediate**: Admin assigns relevant org KPIs to Gaurav via the Org KPI Mapping Dashboard
-2. **Code fix**: Add org KPI badge display to the self-dashboard table for visual consistency
-3. **Documentation**: Update version to 1.45.49
+### 4. Update `DOCUMENTATION.md`
 
-## Technical Details
+Version bump to 1.45.50 with a note about the cascade-clear fix.
 
-### Files to Modify
-- `src/pages/Dashboard.tsx` -- Add org KPI badges in the self-view table rows (both desktop table and mobile card)
+## Files to Modify
+
+- `src/components/review/UnifiedScorecard.tsx` -- Fix cascade-clear conditions (lines 547-590)
 - `DOCUMENTATION.md` -- Version bump
 
-### Changes in Dashboard.tsx
-- Import `Building2`, `Users`, `User` icons (already imported but used elsewhere)
-- In the desktop table's Category cell (~line 720): add org scope icon with tooltip (matching KpiDetailsTable pattern)
-- In the desktop table's KRA/KPI cell (~line 729): add "Org KPI -- [scope]" badge and "Data by: [Name]" badge
-- Pass `getOrgKpiValue` result into badge display
+## Impact
+
+- Sending back a KPI will now correctly clear all downstream reviewer data regardless of which intermediate stages exist in the pipeline
+- Existing stale data on affected KPIs will be corrected by the migration
+- No breaking changes for any other workflow or role
 
