@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKraCategories, useDepartments, useProfiles } from '@/hooks/useOrganization';
 import { useOrgKpiValues, useBulkUpsertOrgKpiValues, OrgKpiValue } from '@/hooks/useOrgKpiValues';
@@ -10,7 +11,7 @@ import { useBatchInsertAuditLogs } from '@/hooks/useOrgKpiAuditLog';
 import { useRollbackOrgKpiPropagation, useBulkRollbackOrgKpiPropagation } from '@/hooks/useRollbackOrgKpiPropagation';
 import { OrgLevelScope } from '@/hooks/useKpis';
 import { supabase } from '@/integrations/supabase/client';
-import { useQueryClient } from '@tanstack/react-query';
+// useQueryClient imported above with useQuery
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -95,6 +96,42 @@ export default function OrgKpiDataEntry() {
   const rollbackMutation = useRollbackOrgKpiPropagation();
   const bulkRollbackMutation = useBulkRollbackOrgKpiPropagation();
   const unmarkMutation = useUnmarkAsOrgLevel();
+
+  // Build employee KPI IDs map for employee-scoped org KPIs (for observations panel)
+  const employeeScopedOrgKpis = useMemo(() => {
+    if (!orgLevelData?.kpis) return [];
+    return orgLevelData.kpis.filter(k => (k.kpi as any).org_level_scope === 'employee' && k.employeeIds.length > 0);
+  }, [orgLevelData]);
+
+  const { data: employeeKpiIdsMap } = useQuery({
+    queryKey: ['employee-kpi-ids-for-org', selectedPeriod, selectedYear, employeeScopedOrgKpis.length],
+    queryFn: async () => {
+      const map = new Map<string, string[]>();
+      if (employeeScopedOrgKpis.length === 0) return map;
+
+      for (const entry of employeeScopedOrgKpis) {
+        const kpi = entry.kpi;
+        const empIds = entry.employeeIds;
+        if (empIds.length === 0) continue;
+
+        const { data } = await supabase
+          .from('kpis')
+          .select('id')
+          .eq('category_id', kpi.category_id)
+          .eq('kra_name', kpi.kra_name)
+          .eq('kpi_name', kpi.kpi_name)
+          .eq('review_period', selectedPeriod)
+          .eq('review_year', selectedYear)
+          .in('employee_id', empIds);
+
+        const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+        map.set(key, (data || []).map(d => d.id));
+      }
+      return map;
+    },
+    enabled: employeeScopedOrgKpis.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Previous period data
   const prev = getPreviousPeriod(selectedPeriod, selectedYear);
@@ -779,6 +816,9 @@ export default function OrgKpiDataEntry() {
                 {/* KPI Cards */}
                 {group.kpis.map(kpi => {
                   const cardData = buildCardData(kpi);
+                  const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'organization';
+                  const empKpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+                  const empKpiIds = scope === 'employee' ? employeeKpiIdsMap?.get(empKpiKey) : undefined;
                   return (
                     <OrgKpiEntryCard
                       key={`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${selectedPeriod}||${selectedYear}`}
@@ -786,6 +826,7 @@ export default function OrgKpiDataEntry() {
                       reviewPeriod={selectedPeriod}
                       reviewYear={selectedYear}
                       isAdmin={isAdmin}
+                      employeeKpiIds={empKpiIds}
                       onSave={(values) => handleCardSave(kpi, values)}
                       onSaveAndPropagate={(values) => handleCardSaveAndPropagate(kpi, values)}
                       onUnlock={async () => {

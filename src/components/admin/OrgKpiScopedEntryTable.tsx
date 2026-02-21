@@ -197,7 +197,7 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom }:
   return (
     <TableRow className={rowIsNa ? 'opacity-60' : ''}>
       {/* Name + dept/designation */}
-      <TableCell className="text-sm py-2 min-w-[200px]">
+      <TableCell className="text-sm py-1.5 min-w-[200px]">
         <div className="flex flex-col gap-0.5">
           <span className="font-medium text-sm leading-tight">{row.scopeName}</span>
           <div className="flex flex-wrap gap-1 mt-0.5">
@@ -216,7 +216,7 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom }:
       </TableCell>
 
       {/* N/A toggle */}
-      <TableCell className="py-2 w-16 text-center">
+      <TableCell className="py-1.5 w-16 text-center">
         <Switch
           checked={rowIsNa}
           onCheckedChange={(checked) => onValueChange(row.scopeId, 'isNa', checked ? 'true' : 'false')}
@@ -225,7 +225,7 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom }:
       </TableCell>
 
       {/* Achieved value + out-of-range indicator */}
-      <TableCell className="py-2 w-28">
+      <TableCell className="py-1.5 w-28">
         {rowIsNa ? (
           <div className="flex items-center justify-center gap-1 text-muted-foreground">
             <Ban className="h-3.5 w-3.5" />
@@ -257,7 +257,7 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom }:
       </TableCell>
 
       {/* Remark textarea */}
-      <TableCell className="py-2 min-w-[220px]">
+      <TableCell className="py-1.5 min-w-[220px]">
         {rowIsNa ? (
           <span className="text-xs text-muted-foreground italic">Not Applicable</span>
         ) : (
@@ -272,7 +272,7 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom }:
       </TableCell>
 
       {/* File */}
-      <TableCell className="py-2 w-24">
+      <TableCell className="py-1.5 w-24">
         {!rowIsNa && (
           <OrgKpiFileUpload
             existingUrl={row.evidenceUrl}
@@ -295,7 +295,7 @@ function DepartmentRow({ row, onValueChange }: DepartmentRowProps) {
 
   return (
     <TableRow className={rowIsNa ? 'opacity-60' : ''}>
-      <TableCell className="text-sm py-2 min-w-[200px]">
+      <TableCell className="text-sm py-1.5 min-w-[200px]">
         <div className="flex flex-col">
           <span className="font-medium">{row.scopeName}</span>
           {row.scopeSubText && (
@@ -303,14 +303,14 @@ function DepartmentRow({ row, onValueChange }: DepartmentRowProps) {
           )}
         </div>
       </TableCell>
-      <TableCell className="py-2 w-16 text-center">
+      <TableCell className="py-1.5 w-16 text-center">
         <Switch
           checked={rowIsNa}
           onCheckedChange={(checked) => onValueChange(row.scopeId, 'isNa', checked ? 'true' : 'false')}
           className="scale-75"
         />
       </TableCell>
-      <TableCell className="py-2 w-28">
+      <TableCell className="py-1.5 w-28">
         {rowIsNa ? (
           <div className="flex items-center justify-center gap-1 text-muted-foreground">
             <Ban className="h-3.5 w-3.5" />
@@ -326,7 +326,7 @@ function DepartmentRow({ row, onValueChange }: DepartmentRowProps) {
           />
         )}
       </TableCell>
-      <TableCell className="py-2 min-w-[220px]">
+      <TableCell className="py-1.5 min-w-[220px]">
         {rowIsNa ? (
           <span className="text-xs text-muted-foreground italic">Not Applicable</span>
         ) : (
@@ -339,7 +339,7 @@ function DepartmentRow({ row, onValueChange }: DepartmentRowProps) {
           />
         )}
       </TableCell>
-      <TableCell className="py-2 w-24">
+      <TableCell className="py-1.5 w-24">
         {!rowIsNa && (
           <OrgKpiFileUpload
             existingUrl={row.evidenceUrl}

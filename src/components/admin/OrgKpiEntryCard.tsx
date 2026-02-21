@@ -7,12 +7,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
 import { OrgKpiAuditLog } from '@/components/admin/OrgKpiAuditLog';
 import { OrgKpiScopedEntryTable, ScopedRow } from '@/components/admin/OrgKpiScopedEntryTable';
+import { OrgKpiObservationsSummary } from '@/components/admin/OrgKpiObservationsSummary';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Save, Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban } from 'lucide-react';
+import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban } from 'lucide-react';
 
 export interface OrgKpiCardData {
   categoryId: string;
@@ -51,6 +52,7 @@ interface OrgKpiEntryCardProps {
   reviewPeriod: string;
   reviewYear: number;
   isAdmin?: boolean;
+  employeeKpiIds?: string[];
   onSave: (values: {
     achievedValue: number | null;
     remarks: string;
@@ -86,7 +88,7 @@ const scopeIcons = {
   employee: User,
 };
 
-export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg }: OrgKpiEntryCardProps) {
+export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, employeeKpiIds, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg }: OrgKpiEntryCardProps) {
   const isLocked = data.status === 'propagated' && !isAdmin;
   const isPropagated = data.status === 'propagated';
   const [isUnlocking, setIsUnlocking] = useState(false);
@@ -113,15 +115,10 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
   useEffect(() => { evidenceUrlRef.current = evidenceUrl; }, [evidenceUrl]);
   useEffect(() => { scopedValuesRef.current = scopedValues; }, [scopedValues]);
 
-  const [isSaving, setIsSaving] = useState(false);
   const [isPropagating, setIsPropagating] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isDirtyRef = useRef(false);
-  // Tracks the "identity" of the currently-displayed KPI (category + names + period).
-  // When the identity changes (different KPI or period), we always sync from props.
-  // When the identity is the same (background refetch), we skip the sync if the user
-  // is editing OR if the incoming values match what's already on screen.
   const kpiIdentityRef = useRef('');
 
   useEffect(() => {
@@ -129,9 +126,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
     const identityChanged = newIdentity !== kpiIdentityRef.current;
 
     if (!identityChanged) {
-      // Same KPI — skip if user is actively editing
       if (isDirtyRef.current) return;
-      // Skip if the incoming DB values match what's already shown (no real change)
       const currentNumeric = achievedValue === '' ? null : parseFloat(achievedValue);
       const sameValue =
         currentNumeric === data.achievedValue ||
@@ -152,7 +147,6 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.achievedValue, data.remarks, data.evidenceUrl, data.categoryId, data.kraName, data.kpiName, reviewPeriod, reviewYear]);
 
-  // getValues reads from refs (always current, no stale closure)
   const getValues = useCallback(() => {
     const parsed = achievedValueRef.current === '' ? null : parseFloat(achievedValueRef.current);
     return {
@@ -191,19 +185,6 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
     }, 2000);
   }, [onSave, getValues]);
 
-  const handleManualSave = async () => {
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    setIsSaving(true);
-    try {
-      await onSave(getValues());
-      isDirtyRef.current = false;
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 3000);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleSaveAndPropagate = async () => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     setIsPropagating(true);
@@ -239,393 +220,391 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
 
   return (
     <Card className={`transition-all min-w-0 overflow-hidden ${isDirtyRef.current ? 'ring-1 ring-primary/30' : ''}`}>
-      <CardContent className="p-4 space-y-3">
-        {/* Two-column layout: Info (left) | Inputs+Actions (right) */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          {/* LEFT COLUMN (40%) - KPI Info */}
-          <div className="md:col-span-2 space-y-2 min-w-0">
-            <h3 className="text-sm font-semibold whitespace-pre-wrap break-words">{data.kpiName}</h3>
-            <p className="text-xs text-muted-foreground break-words">KRA: {data.kraName}</p>
+      <CardContent className="p-4 space-y-2">
+        {/* HEADER — KPI identity + metadata */}
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold whitespace-pre-wrap break-words">{data.kpiName}</h3>
+          <p className="text-xs text-muted-foreground break-words">KRA: {data.kraName}</p>
 
-            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <ScopeIcon className="h-3.5 w-3.5" />
-                {data.scope === 'organization' ? 'Org-wide' : data.scope === 'department' ? 'Per Department' : 'Per Employee'}
-              </span>
-              {data.targetValue !== null && (
-                <span>Target: <span className="font-medium text-foreground">{data.targetValue}</span></span>
-              )}
-              {data.uom && (
-                <span>UOM: <span className="font-medium text-foreground">{data.uom}</span></span>
-              )}
-            </div>
-
-            {data.previousValue !== null && data.previousPeriodLabel && (
-              <p className="text-xs text-muted-foreground">
-                Prev ({data.previousPeriodLabel}): <span className="font-medium text-foreground">{data.previousValue}</span>
-              </p>
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <ScopeIcon className="h-3.5 w-3.5" />
+              {data.scope === 'organization' ? 'Org-wide' : data.scope === 'department' ? 'Per Department' : 'Per Employee'}
+            </span>
+            {data.targetValue !== null && (
+              <span>Target: <span className="font-medium text-foreground">{data.targetValue}</span></span>
             )}
-
-            <div className="flex flex-wrap items-center gap-2">
-              {isNa ? (
-                <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
-                  <Ban className="h-3 w-3" />
-                  N/A
-                </Badge>
-              ) : (
-                <Badge variant={statusInfo.variant} className={`gap-1 text-xs ${statusInfo.className}`}>
-                  <StatusIcon className="h-3 w-3" />
-                  {statusInfo.label}
-                </Badge>
-              )}
-              {data.employeeCount !== undefined && data.employeeCount > 0 && (
-                <Badge variant="outline" className="gap-1 text-xs">
-                  <Users className="h-3 w-3" />
-                  {data.employeeCount} employee{data.employeeCount !== 1 ? 's' : ''}
-                </Badge>
-              )}
-            </div>
+            {data.uom && (
+              <span>UOM: <span className="font-medium text-foreground">{data.uom}</span></span>
+            )}
           </div>
 
-          {/* RIGHT COLUMN (60%) - Inputs & Actions */}
-          <div className="md:col-span-3 space-y-3 min-w-0">
-            {/* N/A Toggle - Admin only */}
-            {isAdmin && !isLocked && (
-              <div className="flex items-center gap-2">
-                <Switch
-                  id={`na-toggle-${data.categoryId}-${data.kpiName}`}
-                  checked={isNa}
-                  onCheckedChange={(checked) => {
-                    setIsNa(checked);
-                    isDirtyRef.current = true;
-                    triggerAutoSave();
-                  }}
-                />
-                <Label htmlFor={`na-toggle-${data.categoryId}-${data.kpiName}`} className="text-xs font-medium cursor-pointer">
-                  Mark as Not Applicable (N/A)
-                </Label>
-              </div>
-            )}
+          {data.previousValue !== null && data.previousPeriodLabel && (
+            <p className="text-xs text-muted-foreground">
+              Prev ({data.previousPeriodLabel}): <span className="font-medium text-foreground">{data.previousValue}</span>
+            </p>
+          )}
 
-            {/* Input area - org scope */}
-            {data.scope === 'organization' && !isNa && (
-              <div className="space-y-2">
-                <Input
-                  type="number"
-                  value={achievedValue}
-                  onChange={(e) => { setAchievedValue(e.target.value); triggerAutoSave(); }}
-                  placeholder="Achieved value"
-                  className="h-9"
-                  disabled={isLocked}
-                />
-                {(() => {
-                  const numVal = achievedValue === '' ? null : parseFloat(achievedValue);
-                  if (numVal === null || isNaN(numVal)) return null;
-                  const thresholds: RatingThresholds = { r5: data.r5, r4: data.r4, r3: data.r3, r2: data.r2, r1: data.r1 };
-                  const check = isValueOutOfRange(numVal, data.targetValue, thresholds, data.uom);
-                  if (!check.outOfRange) return null;
-                  return (
-                    <Alert variant="default" className="border-orange-500/50 bg-orange-50 dark:bg-orange-950/30 py-2">
-                      <AlertTriangle className="h-4 w-4 text-orange-600" />
-                      <AlertDescription className="text-xs text-orange-700 dark:text-orange-400">
-                        {check.message}
-                      </AlertDescription>
-                    </Alert>
-                  );
-                })()}
-                <Input
-                  value={remarks}
-                  onChange={(e) => { setRemarks(e.target.value); triggerAutoSave(); }}
-                  placeholder="Remark"
-                  className="h-9"
-                  disabled={isLocked}
-                />
-                {!isLocked && (
-                  <OrgKpiFileUpload
-                    existingUrl={evidenceUrl}
-                    onUploadComplete={(url) => { setEvidenceUrl(url); triggerAutoSave(); }}
-                  />
-                )}
-              </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {isNa ? (
+              <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
+                <Ban className="h-3 w-3" />
+                N/A
+              </Badge>
+            ) : (
+              <Badge variant={statusInfo.variant} className={`gap-1 text-xs ${statusInfo.className}`}>
+                <StatusIcon className="h-3 w-3" />
+                {statusInfo.label}
+              </Badge>
             )}
-
-            {/* N/A view */}
-            {isNa && (
-              <div className="space-y-2">
-                <Alert variant="default" className="border-muted bg-muted/50 py-2">
-                  <Ban className="h-4 w-4 text-muted-foreground" />
-                  <AlertDescription className="text-xs text-muted-foreground">
-                    This KPI is marked as <strong>Not Applicable</strong>. Scores will be excluded from calculations.
-                  </AlertDescription>
-                </Alert>
-                <Textarea
-                  value={naRemarks}
-                  onChange={(e) => { setNaRemarks(e.target.value); triggerAutoSave(); }}
-                  placeholder="Reason for marking as N/A (required)"
-                  rows={2}
-                  disabled={isLocked}
-                />
-              </div>
+            {data.employeeCount !== undefined && data.employeeCount > 0 && (
+              <Badge variant="outline" className="gap-1 text-xs">
+                <Users className="h-3 w-3" />
+                {data.employeeCount} employee{data.employeeCount !== 1 ? 's' : ''}
+              </Badge>
             )}
-
-            {/* Lock banner */}
-            {isLocked && (
-              <div className="flex items-center gap-2 p-2 rounded-md bg-muted text-sm text-muted-foreground">
-                <Lock className="h-4 w-4 shrink-0" />
-                <span>Locked after propagation. Contact admin to unlock.</span>
-              </div>
-            )}
-
-            {/* Actions */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t">
-              <div className="flex items-center gap-2">
-                <OrgKpiAuditLog
-                  categoryId={data.categoryId}
-                  kraName={data.kraName}
-                  kpiName={data.kpiName}
-                  reviewPeriod={reviewPeriod}
-                  reviewYear={reviewYear}
-                />
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" onClick={onOpenImpact}>
-                  <BarChart3 className="h-3.5 w-3.5" />
-                  Impact
-                </Button>
-                {isPropagated && isAdmin && onUnlock && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs gap-1"
-                    disabled={isUnlocking}
-                    onClick={async () => {
-                      setIsUnlocking(true);
-                      try { await onUnlock(); } finally { setIsUnlocking(false); }
-                    }}
-                  >
-                    {isUnlocking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlock className="h-3.5 w-3.5" />}
-                    Unlock
-                  </Button>
-                )}
-                {isPropagated && isAdmin && onRollback && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs gap-1 border-destructive/50 text-destructive hover:bg-destructive/10"
-                        disabled={isRollingBack}
-                      >
-                        {isRollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                        Rollback
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Rollback to Data Entry</AlertDialogTitle>
-                        <AlertDialogDescription asChild>
-                          <div className="space-y-3">
-                            <p>
-                              This will <strong>clear propagated values</strong> from {data.employeeCount || 0} employee scorecard{(data.employeeCount || 0) !== 1 ? 's' : ''} and reset this KPI for fresh data entry.
-                            </p>
-                            <p className="text-destructive font-medium">
-                              This action cannot be undone. Employee self-review scores will be removed.
-                            </p>
-                            <Textarea
-                              placeholder="Reason for rollback (required)"
-                              value={rollbackReason}
-                              onChange={(e) => setRollbackReason(e.target.value)}
-                              className="mt-2"
-                              rows={2}
-                            />
-                          </div>
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setRollbackReason('')}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          disabled={!rollbackReason.trim() || isRollingBack}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          onClick={async (e) => {
-                            e.preventDefault();
-                            setIsRollingBack(true);
-                            try {
-                              await onRollback(rollbackReason.trim());
-                              setRollbackReason('');
-                            } finally {
-                              setIsRollingBack(false);
-                            }
-                          }}
-                        >
-                          {isRollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                          Confirm Rollback
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
-                {/* Bulk Rollback — only for scoped KPIs with multiple propagated entries */}
-                {isPropagated && isAdmin && onBulkRollback && data.scope !== 'organization' && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs gap-1 border-destructive/50 text-destructive hover:bg-destructive/10"
-                        disabled={isBulkRollingBack}
-                      >
-                        {isBulkRollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                        Rollback All Scopes
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Rollback All Scopes to Data Entry</AlertDialogTitle>
-                        <AlertDialogDescription asChild>
-                          <div className="space-y-3">
-                            <p>
-                              This will <strong>clear propagated values across all {data.scopedRows?.length || 'all'} department scopes</strong> of <strong>"{data.kpiName}"</strong> and reset them for fresh data entry.
-                            </p>
-                            <p className="text-destructive font-medium">
-                              All employee self-review scores linked to this KPI will be removed. This cannot be undone.
-                            </p>
-                            <Textarea
-                              placeholder="Reason for bulk rollback (required)"
-                              value={bulkRollbackReason}
-                              onChange={(e) => setBulkRollbackReason(e.target.value)}
-                              className="mt-2"
-                              rows={2}
-                            />
-                          </div>
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setBulkRollbackReason('')}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          disabled={!bulkRollbackReason.trim() || isBulkRollingBack}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          onClick={async (e) => {
-                            e.preventDefault();
-                            setIsBulkRollingBack(true);
-                            try {
-                              await onBulkRollback(bulkRollbackReason.trim());
-                              setBulkRollbackReason('');
-                            } finally {
-                              setIsBulkRollingBack(false);
-                            }
-                          }}
-                        >
-                          {isBulkRollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                          Confirm Bulk Rollback
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
-                {isAdmin && !isPropagated && onRemoveFromOrg && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs gap-1 border-destructive/50 text-destructive hover:bg-destructive/10"
-                        disabled={isRemoving}
-                      >
-                        {isRemoving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                        Remove
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Remove from Organization KPIs</AlertDialogTitle>
-                        <AlertDialogDescription asChild>
-                          <div className="space-y-2">
-                            <p>
-                              This will remove <strong>"{data.kpiName}"</strong> from organization-level tracking.
-                            </p>
-                            <p className="text-destructive font-medium">
-                              All entered org-level values and data owner assignments for this KPI will be deleted.
-                            </p>
-                          </div>
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          disabled={isRemoving}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          onClick={async (e) => {
-                            e.preventDefault();
-                            setIsRemoving(true);
-                            try {
-                              await onRemoveFromOrg();
-                            } finally {
-                              setIsRemoving(false);
-                            }
-                          }}
-                        >
-                          {isRemoving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                          Confirm Remove
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
-              </div>
-              {!isLocked && (
-                <div className="flex items-center gap-2">
-                  {saveStatus === 'saving' && (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin" />Saving...
-                    </span>
-                  )}
-                  {saveStatus === 'saved' && (
-                    <span className="text-xs text-primary flex items-center gap-1">
-                      <CheckCircle2 className="h-3 w-3" />Saved
-                    </span>
-                  )}
-                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleManualSave} disabled={isSaving}>
-                    {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
-                    Save
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button size="sm" className="h-7 text-xs" disabled={isPropagating}>
-                        {isPropagating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5 mr-1" />}
-                        Save & Propagate
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Confirm Propagation</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This will update scores for {data.employeeCount || 0} employee scorecard{(data.employeeCount || 0) !== 1 ? 's' : ''}. 
-                          The entry will be <strong>locked for editing</strong> afterward. Only an admin can unlock it.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleSaveAndPropagate}>
-                          Confirm & Propagate
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-              )}
-            </div>
           </div>
         </div>
 
-        {/* Scoped entry table for dept/employee - full width below both columns */}
-        {data.scope !== 'organization' && data.scopeLabel && !isNa && (
-          <OrgKpiScopedEntryTable
-            rows={scopedValues}
-            onValueChange={handleScopedChange}
-            scopeLabel={data.scopeLabel}
-            ratingThresholds={{ r5: data.r5, r4: data.r4, r3: data.r3, r2: data.r2, r1: data.r1 }}
-            targetValue={data.targetValue}
-            uom={data.uom}
-          />
-        )}
+        {/* CONTENT — N/A toggle + scope-specific inputs */}
+        <div className="space-y-2">
+          {/* N/A Toggle - Admin only */}
+          {isAdmin && !isLocked && (
+            <div className="flex items-center gap-2">
+              <Switch
+                id={`na-toggle-${data.categoryId}-${data.kpiName}`}
+                checked={isNa}
+                onCheckedChange={(checked) => {
+                  setIsNa(checked);
+                  isDirtyRef.current = true;
+                  triggerAutoSave();
+                }}
+              />
+              <Label htmlFor={`na-toggle-${data.categoryId}-${data.kpiName}`} className="text-xs font-medium cursor-pointer">
+                Mark as Not Applicable (N/A)
+              </Label>
+            </div>
+          )}
+
+          {/* Input area - org scope */}
+          {data.scope === 'organization' && !isNa && (
+            <div className="space-y-2">
+              <Input
+                type="number"
+                value={achievedValue}
+                onChange={(e) => { setAchievedValue(e.target.value); triggerAutoSave(); }}
+                placeholder="Achieved value"
+                className="h-9"
+                disabled={isLocked}
+              />
+              {(() => {
+                const numVal = achievedValue === '' ? null : parseFloat(achievedValue);
+                if (numVal === null || isNaN(numVal)) return null;
+                const thresholds: RatingThresholds = { r5: data.r5, r4: data.r4, r3: data.r3, r2: data.r2, r1: data.r1 };
+                const check = isValueOutOfRange(numVal, data.targetValue, thresholds, data.uom);
+                if (!check.outOfRange) return null;
+                return (
+                  <Alert variant="default" className="border-orange-500/50 bg-orange-50 dark:bg-orange-950/30 py-2">
+                    <AlertTriangle className="h-4 w-4 text-orange-600" />
+                    <AlertDescription className="text-xs text-orange-700 dark:text-orange-400">
+                      {check.message}
+                    </AlertDescription>
+                  </Alert>
+                );
+              })()}
+              <Input
+                value={remarks}
+                onChange={(e) => { setRemarks(e.target.value); triggerAutoSave(); }}
+                placeholder="Remark"
+                className="h-9"
+                disabled={isLocked}
+              />
+              {!isLocked && (
+                <OrgKpiFileUpload
+                  existingUrl={evidenceUrl}
+                  onUploadComplete={(url) => { setEvidenceUrl(url); triggerAutoSave(); }}
+                />
+              )}
+            </div>
+          )}
+
+          {/* N/A view */}
+          {isNa && (
+            <div className="space-y-2">
+              <Alert variant="default" className="border-muted bg-muted/50 py-2">
+                <Ban className="h-4 w-4 text-muted-foreground" />
+                <AlertDescription className="text-xs text-muted-foreground">
+                  This KPI is marked as <strong>Not Applicable</strong>. Scores will be excluded from calculations.
+                </AlertDescription>
+              </Alert>
+              <Textarea
+                value={naRemarks}
+                onChange={(e) => { setNaRemarks(e.target.value); triggerAutoSave(); }}
+                placeholder="Reason for marking as N/A (required)"
+                rows={2}
+                disabled={isLocked}
+              />
+            </div>
+          )}
+
+          {/* Scoped entry table for dept/employee */}
+          {data.scope !== 'organization' && data.scopeLabel && !isNa && (
+            <OrgKpiScopedEntryTable
+              rows={scopedValues}
+              onValueChange={handleScopedChange}
+              scopeLabel={data.scopeLabel}
+              ratingThresholds={{ r5: data.r5, r4: data.r4, r3: data.r3, r2: data.r2, r1: data.r1 }}
+              targetValue={data.targetValue}
+              uom={data.uom}
+            />
+          )}
+
+          {/* Employee Observations panel — only for employee-scoped KPIs */}
+          {data.scope === 'employee' && employeeKpiIds && employeeKpiIds.length > 0 && (
+            <OrgKpiObservationsSummary kpiIds={employeeKpiIds} />
+          )}
+
+          {/* Lock banner */}
+          {isLocked && (
+            <div className="flex items-center gap-2 p-2 rounded-md bg-muted text-sm text-muted-foreground">
+              <Lock className="h-4 w-4 shrink-0" />
+              <span>Locked after propagation. Contact admin to unlock.</span>
+            </div>
+          )}
+        </div>
+
+        {/* FOOTER — action buttons at bottom */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t mt-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <OrgKpiAuditLog
+              categoryId={data.categoryId}
+              kraName={data.kraName}
+              kpiName={data.kpiName}
+              reviewPeriod={reviewPeriod}
+              reviewYear={reviewYear}
+            />
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" onClick={onOpenImpact}>
+              <BarChart3 className="h-3.5 w-3.5" />
+              Impact
+            </Button>
+            {isPropagated && isAdmin && onUnlock && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs gap-1"
+                disabled={isUnlocking}
+                onClick={async () => {
+                  setIsUnlocking(true);
+                  try { await onUnlock(); } finally { setIsUnlocking(false); }
+                }}
+              >
+                {isUnlocking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlock className="h-3.5 w-3.5" />}
+                Unlock
+              </Button>
+            )}
+            {isPropagated && isAdmin && onRollback && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1 border-destructive/50 text-destructive hover:bg-destructive/10"
+                    disabled={isRollingBack}
+                  >
+                    {isRollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                    Rollback
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Rollback to Data Entry</AlertDialogTitle>
+                    <AlertDialogDescription asChild>
+                      <div className="space-y-3">
+                        <p>
+                          This will <strong>clear propagated values</strong> from {data.employeeCount || 0} employee scorecard{(data.employeeCount || 0) !== 1 ? 's' : ''} and reset this KPI for fresh data entry.
+                        </p>
+                        <p className="text-destructive font-medium">
+                          This action cannot be undone. Employee self-review scores will be removed.
+                        </p>
+                        <Textarea
+                          placeholder="Reason for rollback (required)"
+                          value={rollbackReason}
+                          onChange={(e) => setRollbackReason(e.target.value)}
+                          className="mt-2"
+                          rows={2}
+                        />
+                      </div>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setRollbackReason('')}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={!rollbackReason.trim() || isRollingBack}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        setIsRollingBack(true);
+                        try {
+                          await onRollback(rollbackReason.trim());
+                          setRollbackReason('');
+                        } finally {
+                          setIsRollingBack(false);
+                        }
+                      }}
+                    >
+                      {isRollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                      Confirm Rollback
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+            {/* Bulk Rollback — only for scoped KPIs with multiple propagated entries */}
+            {isPropagated && isAdmin && onBulkRollback && data.scope !== 'organization' && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1 border-destructive/50 text-destructive hover:bg-destructive/10"
+                    disabled={isBulkRollingBack}
+                  >
+                    {isBulkRollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                    Rollback All Scopes
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Rollback All Scopes to Data Entry</AlertDialogTitle>
+                    <AlertDialogDescription asChild>
+                      <div className="space-y-3">
+                        <p>
+                          This will <strong>clear propagated values across all {data.scopedRows?.length || 'all'} department scopes</strong> of <strong>"{data.kpiName}"</strong> and reset them for fresh data entry.
+                        </p>
+                        <p className="text-destructive font-medium">
+                          All employee self-review scores linked to this KPI will be removed. This cannot be undone.
+                        </p>
+                        <Textarea
+                          placeholder="Reason for bulk rollback (required)"
+                          value={bulkRollbackReason}
+                          onChange={(e) => setBulkRollbackReason(e.target.value)}
+                          className="mt-2"
+                          rows={2}
+                        />
+                      </div>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setBulkRollbackReason('')}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={!bulkRollbackReason.trim() || isBulkRollingBack}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        setIsBulkRollingBack(true);
+                        try {
+                          await onBulkRollback(bulkRollbackReason.trim());
+                          setBulkRollbackReason('');
+                        } finally {
+                          setIsBulkRollingBack(false);
+                        }
+                      }}
+                    >
+                      {isBulkRollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                      Confirm Bulk Rollback
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+            {isAdmin && !isPropagated && onRemoveFromOrg && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1 border-destructive/50 text-destructive hover:bg-destructive/10"
+                    disabled={isRemoving}
+                  >
+                    {isRemoving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    Remove
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Remove from Organization KPIs</AlertDialogTitle>
+                    <AlertDialogDescription asChild>
+                      <div className="space-y-2">
+                        <p>
+                          This will remove <strong>"{data.kpiName}"</strong> from organization-level tracking.
+                        </p>
+                        <p className="text-destructive font-medium">
+                          All entered org-level values and data owner assignments for this KPI will be deleted.
+                        </p>
+                      </div>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={isRemoving}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        setIsRemoving(true);
+                        try {
+                          await onRemoveFromOrg();
+                        } finally {
+                          setIsRemoving(false);
+                        }
+                      }}
+                    >
+                      {isRemoving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                      Confirm Remove
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
+          {!isLocked && (
+            <div className="flex items-center gap-2">
+              {saveStatus === 'saving' && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />Saving...
+                </span>
+              )}
+              {saveStatus === 'saved' && (
+                <span className="text-xs text-primary flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />Saved
+                </span>
+              )}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" className="h-7 text-xs" disabled={isPropagating}>
+                    {isPropagating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5 mr-1" />}
+                    Propagate
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Confirm Propagation</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will update scores for {data.employeeCount || 0} employee scorecard{(data.employeeCount || 0) !== 1 ? 's' : ''}. 
+                      The entry will be <strong>locked for editing</strong> afterward. Only an admin can unlock it.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleSaveAndPropagate}>
+                      Propagate to Scorecards
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
