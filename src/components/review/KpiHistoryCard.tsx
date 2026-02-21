@@ -130,7 +130,7 @@ export function KpiHistoryCard({
                 )}
               </span>
               <Badge variant="outline" className="text-[10px] sm:text-xs px-1 sm:px-1.5">
-                {entry.isNa ? 'N/A' : (entry.score || '-')}
+                {entry.isNa ? 'N/A' : (entry.score != null ? entry.score : '-')}
               </Badge>
               <span className="text-muted-foreground uppercase text-[10px] w-10 sm:w-16 text-right truncate hidden sm:inline">
                 {(entry.status || '').replace(/_/g, ' ')}
