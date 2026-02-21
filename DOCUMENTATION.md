@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.56 — Unified Rollback Records Lobby with Org KPI Rollbacks tab and Excel export for both KPI status requests and admin-initiated propagation rollbacks
+> **Version:** 1.45.57 — Show observer name next to ticket number in Employee Observations summary panel
 > **Maintainer:** Lovable AI
 
 ---
