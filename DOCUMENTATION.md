@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.52 — Per-row N/A toggle for Department/Employee scoped Org KPIs; top-level N/A toggle enabled for all scopes
+> **Version:** 1.45.53 — Vertical stacked card layout for Org KPI Data Entry; removed redundant Save button (auto-save + Propagate only); Employee Observations panel on employee-scoped Org KPI cards
 > **Maintainer:** Lovable AI
 
 ---
