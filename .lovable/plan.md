@@ -1,68 +1,42 @@
 
 
-# Add "Sent Back" Badge for Re-Audit KPIs
+# Fix: Step Back Dialog Not Using Employee's Actual Workflow Stages
 
-## What This Solves
+## The Bug
 
-Auditors currently see all KPIs in the "In Audit" status card without knowing which ones are first-time reviews vs. which ones were sent back from Management. This makes it hard to prioritize re-audit items.
+The `AdminStatusStepBackDialog` calls `getPreviousStatus(currentStatus)` **without** passing the employee's actual workflow stages. It always uses a hardcoded full 8-stage list. This means:
 
-## Approach
+- If an employee's workflow skips certain stages (e.g., no Skip-Level, no HR PMS), the step-back could target a **non-existent stage**, orphaning the KPI in a status nobody can review.
+- Example: Employee workflow is `kra_set -> self_review -> manager_check -> audit -> approved`. Stepping back from `audit` would incorrectly target `hr_pms_review` (which doesn't exist for this employee) instead of `manager_check`.
 
-Query `kpi_audit_logs` for any `MANAGEMENT_SENT_BACK_TO_AUDITOR` actions on KPIs that are currently in `audit` status. Use this data to show an amber "Sent Back" badge next to those KPIs in the Audit Scorecard view.
+## Fix
 
-## Technical Details
+### 1. Pass workflow stages from AllKpis.tsx into the dialog
 
-### 1. New Hook: Detect Sent-Back KPIs
+**File: `src/pages/admin/AllKpis.tsx`**
 
-**File: `src/hooks/useSentBackKpis.ts`** (NEW)
+The page already fetches workflow configurations (via `useWorkflowConfig` or similar). Pass the employee's resolved workflow stages to the `AdminStatusStepBackDialog` as a new prop.
 
-A lightweight hook that takes an array of KPI IDs and returns a `Set<string>` of IDs that have a `MANAGEMENT_SENT_BACK_TO_AUDITOR` entry in `kpi_audit_logs`.
+### 2. Update AdminStatusStepBackDialog to accept and use workflow stages
 
-```typescript
-// Query: select distinct kpi_id from kpi_audit_logs 
-// where kpi_id in (...ids) and action = 'MANAGEMENT_SENT_BACK_TO_AUDITOR'
-```
+**File: `src/components/admin/AdminStatusStepBackDialog.tsx`**
 
-### 2. Update: `src/components/review/AuditScorecard.tsx`
+- Add optional prop `workflowStages?: string[]`
+- Pass it to `getPreviousStatus(currentStatus, workflowStages)` so the target is resolved against the employee's actual pipeline
+- Display the correct stage labels in the status transition badges
 
-- Import and call `useSentBackKpis(kpiIds)` to get the set of sent-back KPI IDs
-- Pass `sentBackKpiIds` set down to `KpiDetailsTable` and `MobileKpiCard` as a new optional prop
-- In the "In Audit" stats card, optionally show a sub-count of sent-back items (e.g., "In Audit: 5 (2 sent back)")
+### 3. Update DOCUMENTATION.md
 
-### 3. Update: `src/components/review/KpiDetailsTable.tsx`
+- Version bump to 1.45.59
+- Document the bug fix
 
-- Add optional prop `sentBackKpiIds?: Set<string>`
-- In the KRA/KPI name cell (around the existing badges for Daily, Bi-Monthly, etc.), add an amber "Sent Back" badge when `sentBackKpiIds?.has(kpi.id)` is true and the KPI status is `audit`
-
-### 4. Update: `src/components/review/MobileKpiCard.tsx`
-
-- Add same optional prop and render the amber "Sent Back" badge in the mobile card header
-
-### 5. Update: `DOCUMENTATION.md`
-
-- Version bump to 1.45.58
-- Document the sent-back indicator feature
-
-## Visual Result
-
-In the KPI table, a sent-back KPI will appear as:
-
-```
-KRA Name                        [Daily] [Sent Back]
-KPI description text
-```
-
-The "Sent Back" badge will be amber/orange with a small undo icon, making it immediately distinguishable from frequency badges.
-
-## Files Summary
+## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/hooks/useSentBackKpis.ts` | NEW -- hook to detect sent-back KPIs via audit logs |
-| `src/components/review/AuditScorecard.tsx` | Use hook, pass data to table/cards, update stats |
-| `src/components/review/KpiDetailsTable.tsx` | Add optional prop, render "Sent Back" badge |
-| `src/components/review/MobileKpiCard.tsx` | Add optional prop, render "Sent Back" badge |
+| `src/components/admin/AdminStatusStepBackDialog.tsx` | Accept `workflowStages` prop, pass to `getPreviousStatus` |
+| `src/pages/admin/AllKpis.tsx` | Pass employee's workflow stages to the dialog |
 | `DOCUMENTATION.md` | Version bump + changelog |
 
-No database changes required -- reads from existing `kpi_audit_logs` table.
+No database changes required.
 
