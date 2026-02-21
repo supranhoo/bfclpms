@@ -1,53 +1,56 @@
 
 
-# Fix: "new row violates row-level security policy for table kpis" for Management Role
+# RCA: Org KPIs Not Visible on Gaurav Budhia's "My Dashboard"
 
 ## Root Cause
 
-Gaurav Budhiya has the **management** role. When he submits a review and approves a KPI, the code updates the KPI status from `management_review` to `approved`.
+**This is a data assignment gap, not a code bug.**
 
-The RLS policy "Management can update KPI status during review" is:
-```sql
-USING (has_role(auth.uid(), 'management') AND status = 'management_review')
-```
+Gaurav Budhia (`director@bfclalloys.com`, role: `management`) has **zero KPIs assigned** for January 2026. He only has 1 KPI record in the entire system (from September 2025).
 
-There is **no explicit WITH CHECK** clause. In PostgreSQL, when WITH CHECK is omitted on an UPDATE policy, it **defaults to the USING expression**. This means the updated row must also satisfy `status = 'management_review'`.
+When Gaurav switches to the **Management Review** view on the dashboard, he can see his direct reports' KPIs (including their org-level KPIs). But when he switches to **"My Dashboard"** (self-view), the system queries `kpis WHERE employee_id = Gaurav's ID` and returns nothing -- because no KPIs (org or otherwise) have ever been assigned to his profile for this period.
 
-After the update changes status to `approved`, the row no longer satisfies the check (`approved != management_review`), so PostgreSQL rejects it with "new row violates row-level security policy."
+**None of the 40+ org-level KPIs in the system for January 2026 are mapped to Gaurav.**
 
-This same issue affects the Send Back action, which changes status to an earlier stage (also not `management_review`).
+## Why Reviewer Dashboards Show Org KPIs
 
-## Fix
+- Reviewer dashboards (Team, Management) query KPIs by the **selected employee's** ID, not the reviewer's own ID
+- So when Gaurav reviews Dippendu Das (22 KPIs, 1 org), he sees Dippendu's org KPIs
+- This creates the perception that "other dashboards have org KPIs but my dashboard doesn't"
 
-Add an explicit `WITH CHECK (true)` to the Management UPDATE policy. The USING clause already correctly restricts which rows Management can touch (only `management_review` KPIs). The WITH CHECK should allow the updated row to have any status (since the whole point is to advance or send back the KPI).
+## Resolution Options
 
-### Database Migration
+### Option A: Assign KPIs to Gaurav (Admin Action)
+An admin needs to assign KPIs (including org-level ones) to Gaurav Budhia for January 2026, either through:
+- The KRA Library bulk assignment
+- The Org KPI Mapping Dashboard (to add him to relevant org KPIs)
+- The Import Data page
 
-```sql
--- Drop the existing restrictive policy
-DROP POLICY IF EXISTS "Management can update KPI status during review" ON public.kpis;
+### Option B: Code Enhancement -- Auto-display Org KPIs on Self Dashboard
+Add a secondary display on the self-dashboard that shows "Organization KPIs" relevant to the user's department/division even if they're not explicitly assigned to the employee. This would be a **new feature**, not a bug fix.
 
--- Re-create with explicit WITH CHECK allowing status transitions
-CREATE POLICY "Management can update KPI status during review"
-  ON public.kpis
-  FOR UPDATE
-  TO authenticated
-  USING (
-    has_role(auth.uid(), 'management'::app_role)
-    AND status = 'management_review'::review_status
-  )
-  WITH CHECK (
-    has_role(auth.uid(), 'management'::app_role)
-  );
-```
+## Secondary Finding: UI Parity Gap
 
-### Documentation Update
+The self-dashboard's KPI table (in `Dashboard.tsx`) does **not** show org KPI badges ("Org KPI -- Organization", "Data by: [Name]") that are shown on reviewer dashboards via `KpiDetailsTable.tsx`. If org KPIs were assigned to Gaurav, they would appear in the table but without the visual indicators that identify them as org-level KPIs.
 
-Update `DOCUMENTATION.md` to version **1.45.48** with a note about the RLS fix for Management role KPI status transitions.
+### Fix for UI Parity
+Add org KPI badges to the self-dashboard table rows, matching the visual treatment in the reviewer `KpiDetailsTable` component. This involves adding `Building2`/`Users`/`User` icons and the "Org KPI" / "Data by:" badges to Dashboard.tsx table rows.
 
-## Impact
+## Recommended Actions
 
-- Management users will be able to approve KPIs (transition from `management_review` to `approved`) and send back KPIs
-- No change for other roles -- their policies already work correctly or have separate handling
-- Security is maintained: Management can still only update KPIs that are currently at `management_review` status (controlled by USING clause)
+1. **Immediate**: Admin assigns relevant org KPIs to Gaurav via the Org KPI Mapping Dashboard
+2. **Code fix**: Add org KPI badge display to the self-dashboard table for visual consistency
+3. **Documentation**: Update version to 1.45.49
+
+## Technical Details
+
+### Files to Modify
+- `src/pages/Dashboard.tsx` -- Add org KPI badges in the self-view table rows (both desktop table and mobile card)
+- `DOCUMENTATION.md` -- Version bump
+
+### Changes in Dashboard.tsx
+- Import `Building2`, `Users`, `User` icons (already imported but used elsewhere)
+- In the desktop table's Category cell (~line 720): add org scope icon with tooltip (matching KpiDetailsTable pattern)
+- In the desktop table's KRA/KPI cell (~line 729): add "Org KPI -- [scope]" badge and "Data by: [Name]" badge
+- Pass `getOrgKpiValue` result into badge display
 
