@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.53 — Vertical stacked card layout for Org KPI Data Entry; removed redundant Save button (auto-save + Propagate only); Employee Observations panel on employee-scoped Org KPI cards
+> **Version:** 1.45.54 — 3-state progress tracking (Pending/Entered/Propagated) with segmented bar, status filter chips, colored card left borders, and enhanced category headers on Org KPI Data Entry
 > **Maintainer:** Lovable AI
 
 ---

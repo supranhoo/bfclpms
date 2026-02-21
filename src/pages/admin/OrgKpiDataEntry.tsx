@@ -47,6 +47,7 @@ export default function OrgKpiDataEntry() {
   const [selectedYear, setSelectedYear] = useState(defaultYear);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'entered' | 'propagated'>('all');
   const [activeTab, setActiveTab] = useState<'entry' | 'suggestions' | 'owners'>('entry');
   const [importOpen, setImportOpen] = useState(false);
 
@@ -185,7 +186,28 @@ export default function OrgKpiDataEntry() {
     return categories.filter(c => categoryIds.has(c.id));
   }, [frequencyFilteredKpis, categories]);
 
-  // Filter by category and search
+  // Helper: get KPI status from existingValuesMap
+  const getKpiStatus = useCallback((kpi: typeof frequencyFilteredKpis[0]): 'pending' | 'entered' | 'propagated' => {
+    const scope = (kpi as any).org_level_scope || 'organization';
+    if (scope === 'organization') {
+      const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+      const val = existingValuesMap.get(key);
+      if (val?.achieved_value !== null && val?.achieved_value !== undefined) {
+        return val?.status === 'propagated' ? 'propagated' : 'entered';
+      }
+      return 'pending';
+    }
+    const prefix = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||`;
+    const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) =>
+      k.startsWith(prefix) && v.achieved_value !== null && v.achieved_value !== undefined
+    );
+    if (matching.length > 0) {
+      return matching.every(([, v]) => v.status === 'propagated') ? 'propagated' : 'entered';
+    }
+    return 'pending';
+  }, [existingValuesMap]);
+
+  // Filter by category, search, and status
   const filteredKpis = useMemo(() => {
     let result = frequencyFilteredKpis;
     if (selectedCategoryId !== 'all') {
@@ -199,8 +221,11 @@ export default function OrgKpiDataEntry() {
         k.kra_categories?.name?.toLowerCase().includes(q)
       );
     }
+    if (statusFilter !== 'all') {
+      result = result.filter(k => getKpiStatus(k) === statusFilter);
+    }
     return result;
-  }, [frequencyFilteredKpis, selectedCategoryId, searchQuery]);
+  }, [frequencyFilteredKpis, selectedCategoryId, searchQuery, statusFilter, getKpiStatus]);
 
   // Group by category
   const groupedKpis = useMemo(() => {
@@ -216,32 +241,42 @@ export default function OrgKpiDataEntry() {
     return Array.from(map.entries());
   }, [filteredKpis]);
 
-  // Progress calculation
+  // Progress calculation with 3-state tracking
   const progressData = useMemo(() => {
     const totalKpis = frequencyFilteredKpis.length;
     let enteredKpis = 0;
-    const categoryMap = new Map<string, { total: number; entered: number }>();
+    let propagatedKpis = 0;
+    const categoryMap = new Map<string, { total: number; entered: number; propagated: number }>();
 
     frequencyFilteredKpis.forEach(kpi => {
       const catId = kpi.category_id;
-      const cat = categoryMap.get(catId) || { total: 0, entered: 0 };
+      const cat = categoryMap.get(catId) || { total: 0, entered: 0, propagated: 0 };
       cat.total++;
 
       const scope = (kpi as any).org_level_scope || 'organization';
-      let isEntered = false;
+      let status: 'pending' | 'entered' | 'propagated' = 'pending';
 
       if (scope === 'organization') {
         const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
         const val = existingValuesMap.get(key);
-        isEntered = val?.achieved_value !== null && val?.achieved_value !== undefined;
+        if (val?.achieved_value !== null && val?.achieved_value !== undefined) {
+          status = val?.status === 'propagated' ? 'propagated' : 'entered';
+        }
       } else {
         const prefix = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||`;
-        isEntered = Array.from(existingValuesMap.entries()).some(([k, v]) =>
+        const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) =>
           k.startsWith(prefix) && v.achieved_value !== null && v.achieved_value !== undefined
         );
+        if (matching.length > 0) {
+          const allPropagated = matching.every(([, v]) => v.status === 'propagated');
+          status = allPropagated ? 'propagated' : 'entered';
+        }
       }
 
-      if (isEntered) {
+      if (status === 'propagated') {
+        propagatedKpis++;
+        cat.propagated++;
+      } else if (status === 'entered') {
         enteredKpis++;
         cat.entered++;
       }
@@ -254,9 +289,10 @@ export default function OrgKpiDataEntry() {
       color: cat.color || '#6B7280',
       total: categoryMap.get(cat.id)?.total || 0,
       entered: categoryMap.get(cat.id)?.entered || 0,
+      propagated: categoryMap.get(cat.id)?.propagated || 0,
     }));
 
-    return { totalKpis, enteredKpis, categoryProgress };
+    return { totalKpis, enteredKpis, propagatedKpis, categoryProgress };
   }, [frequencyFilteredKpis, existingValuesMap, orgLevelCategories]);
 
   // Build card data for a KPI
@@ -747,13 +783,34 @@ export default function OrgKpiDataEntry() {
             <OrgKpiProgressBar
               totalKpis={progressData.totalKpis}
               enteredKpis={progressData.enteredKpis}
+              propagatedKpis={progressData.propagatedKpis}
               categoryProgress={progressData.categoryProgress}
             />
           </CardContent>
         </Card>
       )}
 
-      {/* Tab Toggle: Entry vs Suggestions vs Owner Management */}
+      {/* Status Filter Chips */}
+      {frequencyFilteredKpis.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {([
+            { key: 'all' as const, label: 'All', count: progressData.totalKpis },
+            { key: 'pending' as const, label: 'Pending', count: progressData.totalKpis - progressData.enteredKpis - progressData.propagatedKpis },
+            { key: 'entered' as const, label: 'Entered', count: progressData.enteredKpis },
+            { key: 'propagated' as const, label: 'Propagated', count: progressData.propagatedKpis },
+          ]).map(f => (
+            <Badge
+              key={f.key}
+              variant={statusFilter === f.key ? 'default' : 'outline'}
+              className="cursor-pointer"
+              onClick={() => setStatusFilter(f.key)}
+            >
+              {f.label} ({f.count})
+            </Badge>
+          ))}
+        </div>
+      )}
+
       {isAdmin && (
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'entry' | 'suggestions' | 'owners')}>
           <TabsList>
@@ -796,21 +853,21 @@ export default function OrgKpiDataEntry() {
           )}
 
           {groupedKpis.map(([catId, group]) => {
-            const enteredInCat = group.kpis.filter(kpi => {
-              const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
-              const val = existingValuesMap.get(key);
-              return val?.achieved_value !== null && val?.achieved_value !== undefined;
-            }).length;
+            const catPending = group.kpis.filter(kpi => getKpiStatus(kpi) === 'pending').length;
+            const catEntered = group.kpis.filter(kpi => getKpiStatus(kpi) === 'entered').length;
+            const catPropagated = group.kpis.filter(kpi => getKpiStatus(kpi) === 'propagated').length;
 
             return (
               <div key={catId} className="space-y-3">
                 {/* Category Header */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: group.color }} />
                   <h2 className="text-lg font-semibold text-foreground">{group.categoryName}</h2>
-                  <Badge variant="outline" className="text-xs">
-                    {enteredInCat}/{group.kpis.length} entered
-                  </Badge>
+                  <div className="flex gap-1.5 text-xs">
+                    {catPending > 0 && <Badge variant="outline" className="text-xs">{catPending} Pending</Badge>}
+                    {catEntered > 0 && <Badge variant="secondary" className="text-xs">{catEntered} Entered</Badge>}
+                    {catPropagated > 0 && <Badge variant="default" className="text-xs">{catPropagated} Propagated</Badge>}
+                  </div>
                 </div>
 
                 {/* KPI Cards */}
