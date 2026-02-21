@@ -48,6 +48,7 @@ import {
   UserCheck,
   ClipboardCheck,
   ShieldCheck,
+  Undo2,
 } from 'lucide-react';
 import { CollapsibleSidebarGroup } from './CollapsibleSidebarGroup';
 
@@ -88,6 +89,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'System Settings', icon: Settings, path: '/admin/settings', roles: ['admin'] },
     { title: 'Audit Logs', icon: History, path: '/audit-logs', roles: ['admin'] },
     { title: 'Observations', icon: Eye, path: '/admin/observations', roles: ['admin'] },
+    { title: 'Rollback Requests', icon: Undo2, path: '/admin/rollback-requests', roles: ['admin'] },
     { title: 'Email Logs', icon: Mail, path: '/admin/email-logs', roles: ['admin'] },
   ],
   dataEntry: [

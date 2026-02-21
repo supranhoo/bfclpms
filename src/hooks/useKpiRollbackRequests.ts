@@ -194,6 +194,8 @@ export function useApproveRollbackRequest() {
       queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['all-rollback-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['rollback-status-counts'] });
       toast({ title: 'Rollback approved', description: 'KPI has been sent back for revision.' });
     },
     onError: (error: Error) => {
@@ -240,6 +242,8 @@ export function useRejectRollbackRequest() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['rollback-request', variables.kpi_id] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['all-rollback-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['rollback-status-counts'] });
       toast({ title: 'Rollback request dismissed' });
     },
     onError: (error: Error) => {

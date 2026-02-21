@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.54 — 3-state progress tracking (Pending/Entered/Propagated) with segmented bar, status filter chips, colored card left borders, and enhanced category headers on Org KPI Data Entry
+> **Version:** 1.45.55 — Admin Rollback Request Management Panel with status filters, search, approve/reject actions, self-manager deadlock indicators, and dashboard stat card
 > **Maintainer:** Lovable AI
 
 ---
@@ -881,6 +881,24 @@ Footer Layout:
 **Hook:** `useKpiRollbackRequests` — `usePendingRollbackRequest`, `useCreateRollbackRequest`, `useApproveRollbackRequest`, `useRejectRollbackRequest`
 
 **Edge cases:** Auto-expire trigger on KPI status change, unique partial index prevents duplicates, approved KPIs excluded.
+
+### 4.6.6 Admin Rollback Request Management Panel (v1.45.55)
+
+**Route:** `/admin/rollback-requests`
+
+**Purpose:** Centralized admin panel to monitor, filter, and action all rollback requests across the organization. Resolves self-manager deadlock scenarios where users listed as their own reporting managers cannot have their rollback requests actioned.
+
+**Features:**
+- **Stats cards** showing counts per status (Pending, Approved, Rejected, Expired)
+- **Status filter chips** with default view set to Pending
+- **Search** by requester name, employee name, KPI name, or employee code
+- **Self-manager deadlock indicator**: Warning icon next to requests where the requester is the employee's own reporting manager
+- **Approve/Reject actions** for pending requests (reuses existing hooks)
+- **Dashboard integration**: "Pending Rollbacks" stat card on Admin Dashboard linking to this page
+
+**Components:** `src/pages/admin/RollbackRequests.tsx`
+**Hooks:** `useAllRollbackRequests`, `useRollbackStatusCounts` (from `src/hooks/useAllRollbackRequests.ts`)
+**Sidebar:** Listed under Administration as "Rollback Requests" with `Undo2` icon
 
 ### 4.7 Self Review Workflow
 

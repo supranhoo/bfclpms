@@ -14,7 +14,8 @@ import {
   CheckCircle2,
   Shield,
   Briefcase,
-  ArrowRight
+  ArrowRight,
+  Undo2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -31,6 +32,7 @@ interface DashboardStats {
   kpisByStage: StageCount[];
   lockedPeriods: number;
   activePeriods: number;
+  pendingRollbacks: number;
 }
 
 const STAGE_CONFIG: Record<string, { label: string; icon: typeof Clock; color: string }> = {
@@ -54,11 +56,13 @@ export default function AdminDashboard() {
         { data: kpis },
         { count: openQueries },
         { data: periods },
+        { count: pendingRollbacks },
       ] = await Promise.all([
         supabase.from('profiles').select('*', { count: 'exact', head: true }),
         supabase.from('kpis').select('status'),
         supabase.from('kpi_queries').select('*', { count: 'exact', head: true }).eq('status', 'open').eq('query_type', 'query'),
         supabase.from('review_periods').select('is_locked'),
+        supabase.from('kpi_rollback_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
       ]);
 
       // Count KPIs by stage
@@ -83,6 +87,7 @@ export default function AdminDashboard() {
         kpisByStage,
         lockedPeriods,
         activePeriods,
+        pendingRollbacks: pendingRollbacks || 0,
       };
     },
   });
@@ -153,7 +158,7 @@ export default function AdminDashboard() {
       />
 
       {/* Key Stats */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <StatCard
           title="Total Employees"
           value={stats?.totalEmployees || 0}
@@ -181,6 +186,13 @@ export default function AdminDashboard() {
           icon={AlertCircle}
           description="Requires attention"
           onClick={() => navigate('/reports/queries')}
+        />
+        <StatCard
+          title="Pending Rollbacks"
+          value={stats?.pendingRollbacks || 0}
+          icon={Undo2}
+          description="Awaiting admin action"
+          onClick={() => navigate('/admin/rollback-requests')}
         />
       </div>
 
