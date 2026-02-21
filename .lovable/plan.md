@@ -1,115 +1,86 @@
 
 
-# Admin Rollback Request Management Panel
+# Unified Rollback Records Lobby with Export
 
-## Problem
+## Current State
 
-13 rollback requests are stuck in "pending" because:
-1. 10 requests were raised by users who are listed as their own reporting managers (self-manager deadlock) -- no one else sees the banner to approve them
-2. 3 requests have valid reporting managers but the managers haven't noticed or actioned them
-3. There is no centralized admin view to monitor, filter, or action rollback requests
+The Rollback Requests page (`/admin/rollback-requests`) currently only shows **employee-initiated KPI status rollback requests** from the `kpi_rollback_requests` table. It does NOT show **admin-initiated Org KPI propagation rollbacks** which are logged in `org_kpi_data_entry_logs` (with actions `rollback_to_data_entry` and `bulk_rollback_to_data_entry`).
 
-## Solution
+These are two completely different rollback types:
+1. **KPI Status Rollbacks** -- employees request to revert their KPI status (e.g., manager_review back to self_review). Stored in `kpi_rollback_requests`.
+2. **Org KPI Propagation Rollbacks** -- admins reverse propagated org-level values back to data entry. Logged in `org_kpi_data_entry_logs`.
 
-Create a dedicated admin page at `/admin/rollback-requests` with a table of all rollback requests, status filters, and approve/reject actions. Also surface the pending count on the Admin Dashboard for visibility.
+## Plan
 
-## Technical Implementation
+### 1. Add "Org KPI Rollbacks" Tab
 
-### 1. New Hook: `src/hooks/useAllRollbackRequests.ts`
+Convert the page into a tabbed layout with two sections:
+- **Tab 1: "KPI Status Requests"** -- the existing table (unchanged functionality)
+- **Tab 2: "Org KPI Rollbacks"** -- new table showing admin-initiated propagation rollbacks from `org_kpi_data_entry_logs`
 
-- Fetches all rollback requests (not just per-KPI) with joins to:
-  - `profiles` (requester name, employee code)
-  - `kpis` (KPI name, KRA name, review period, review year, employee_id)
-  - `profiles` again via `kpis.employee_id` (employee name)
-- Supports a `statusFilter` parameter: `'all' | 'pending' | 'approved' | 'rejected' | 'expired'`
-- Query key: `['all-rollback-requests', statusFilter]`
-- Returns enriched data with requester info, KPI details, and employee info
+The Org KPI Rollbacks tab will show:
+- KPI Name, KRA, Category, Review Period/Year
+- Performed By (admin name)
+- Old Value (before rollback)
+- Reason/Remarks
+- Date
+- Action type badge (Single Rollback vs Bulk Rollback)
 
-### 2. New Page: `src/pages/admin/RollbackRequests.tsx`
+### 2. Update Stats Cards
 
-Layout:
-```
-+--------------------------------------------------------------------+
-| Rollback Requests                                                    |
-| Monitor and action KPI rollback requests across the organization     |
-+--------------------------------------------------------------------+
-| [Stats Cards]                                                        |
-| Pending: 13  |  Approved: 13  |  Rejected: 2  |  Expired: 8        |
-+--------------------------------------------------------------------+
-| Status Filter: [All] [Pending] [Approved] [Rejected] [Expired]      |
-| Search: [___________________________]                                |
-+--------------------------------------------------------------------+
-| Table:                                                               |
-| Requester | Employee | KPI | KRA | Period | From -> To | Reason | .. |
-| ...       | ...      | ... | ... | ...    | ...        | ...    | .. |
-+--------------------------------------------------------------------+
-```
+Add a 5th stat card for "Org KPI Rollbacks" count, pulling from `org_kpi_data_entry_logs` where action contains 'rollback'. The existing 4 cards (Pending/Approved/Rejected/Expired) remain and apply only to the KPI Status Requests tab.
 
-Features:
-- **Stats cards** showing counts per status
-- **Status filter chips** (default: Pending)
-- **Search** by requester name, employee name, KPI name
-- **Table columns**: Requester (name + code), Employee (name + code), KPI Name, KRA, Review Period, From Status -> Target Status (with badges), Reason, Created Date, Actions
-- **Actions column** (only for pending): Approve button, Reject button
-- **Self-manager flag**: Show a warning icon next to requests where the requester is the employee's reporting manager (indicating deadlock)
-- Reuses existing `useApproveRollbackRequest()` and `useRejectRollbackRequest()` hooks
-- Invalidates `['all-rollback-requests']` query key on success (add to existing hooks' onSuccess)
+### 3. Excel Export Button
 
-### 3. Update: `src/App.tsx`
+Add a "Download Report" button in the header area that exports the **currently visible data** (whichever tab + filter is active) to an Excel file using the existing `xlsx` library. Columns will match the table layout.
 
-- Add lazy import for `RollbackRequests` page
-- Add route: `/admin/rollback-requests` with `ProtectedRoute allowedRoles={['admin']}`
+For KPI Status Requests tab:
+- Requester Name, Requester Code, Employee Name, Employee Code, KPI, KRA, Period, Year, From Status, To Status, Reason, Request Date, Status, Actioned Date
 
-### 4. Update: `src/components/layout/AppSidebar.tsx`
+For Org KPI Rollbacks tab:
+- KPI Name, KRA, Review Period, Year, Action Type, Performed By, Old Value, Reason, Date
 
-- Add new menu item to the `admin` section:
-  - Title: `Rollback Requests`
-  - Icon: `Undo2` (from lucide-react)
-  - Path: `/admin/rollback-requests`
-  - Roles: `['admin']`
+### 4. New Hook for Org KPI Rollback Logs
 
-### 5. Update: `src/pages/admin/AdminDashboard.tsx`
+Create a query in `useAllRollbackRequests.ts` to fetch rollback entries from `org_kpi_data_entry_logs` where `action IN ('rollback_to_data_entry', 'bulk_rollback_to_data_entry')`, joined with `profiles` for the performer's name.
 
-- Add a query to count pending rollback requests
-- Add a new stat card: "Pending Rollbacks" with count, clicking navigates to `/admin/rollback-requests`
+## Technical Details
 
-### 6. Update: `src/hooks/useKpiRollbackRequests.ts`
+### File 1: `src/hooks/useAllRollbackRequests.ts`
 
-- In `useApproveRollbackRequest` and `useRejectRollbackRequest` onSuccess handlers, add: `queryClient.invalidateQueries({ queryKey: ['all-rollback-requests'] })`
-- This ensures the admin panel refreshes when any rollback is actioned from anywhere
+- Add new interface `OrgKpiRollbackLog` with fields: id, category_id, kra_name, kpi_name, review_period, review_year, action, performed_by, old_value, new_value, remarks, created_at, performer (full_name, employee_code)
+- Add new hook `useOrgKpiRollbackLogs()` that queries `org_kpi_data_entry_logs` filtered to rollback actions, joined with `profiles` for performer info, ordered by `created_at DESC`
+- Add `useOrgKpiRollbackCount()` for the stats card
 
-### 7. Update: `DOCUMENTATION.md`
+### File 2: `src/pages/admin/RollbackRequests.tsx`
 
-- Version bump to 1.45.55
-- Document the new admin rollback management panel
+- Import `Tabs, TabsList, TabsTrigger, TabsContent` from shadcn
+- Wrap existing table in a `TabsContent value="kpi-status"`
+- Add second `TabsContent value="org-kpi"` with the Org KPI rollback table
+- Add a 5th stats card "Org Rollbacks" showing the count
+- Add "Download Report" button next to the search bar using `xlsx` library
+- Export function maps the currently filtered data to Excel rows based on active tab
 
-## RLS Analysis -- No Changes Needed
+### File 3: `DOCUMENTATION.md`
 
-The existing RLS policies already support this:
-- **SELECT**: `true` for all authenticated users (admin can see all requests)
-- **UPDATE**: `auth.uid() <> requested_by` (admin can approve/reject any request they didn't create)
-- **INSERT**: `auth.uid() = requested_by` (unchanged, only requester creates)
+- Version bump to 1.45.56
+- Document unified rollback lobby and export capability
 
-No database migrations required.
+## No Database Changes Required
 
-## Zero Functionality Lost
+Both data sources already exist:
+- `kpi_rollback_requests` -- SELECT policy is `true` for authenticated users
+- `org_kpi_data_entry_logs` -- needs RLS check
 
-- Existing per-KPI rollback banner in review panels -- unchanged
-- RollbackRequestDialog for employees -- unchanged
-- Notification flow on approve/reject -- unchanged (existing hooks handle this)
-- Audit logging on approve/reject -- unchanged
-- KPI status reversion on approve -- unchanged
-- All other admin features -- unchanged
+### RLS Check for `org_kpi_data_entry_logs`
 
-## Files Summary
+Will verify the existing RLS policy allows admin SELECT access. If not, a migration will be needed to add an admin read policy.
+
+## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/hooks/useAllRollbackRequests.ts` | **NEW** -- fetch all rollback requests with filters |
-| `src/pages/admin/RollbackRequests.tsx` | **NEW** -- admin management page |
-| `src/App.tsx` | Add route + lazy import |
-| `src/components/layout/AppSidebar.tsx` | Add sidebar menu item |
-| `src/pages/admin/AdminDashboard.tsx` | Add pending rollback count card |
-| `src/hooks/useKpiRollbackRequests.ts` | Add query invalidation for admin list |
+| `src/hooks/useAllRollbackRequests.ts` | Add `useOrgKpiRollbackLogs` and `useOrgKpiRollbackCount` hooks |
+| `src/pages/admin/RollbackRequests.tsx` | Add tabs, Org KPI rollback table, Excel export button |
 | `DOCUMENTATION.md` | Version bump + changelog |
 
