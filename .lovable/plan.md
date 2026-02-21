@@ -1,84 +1,115 @@
 
 
-# Improve Completion Visibility on Org KPI Data Entry
+# Admin Rollback Request Management Panel
 
-## Current Problem
+## Problem
 
-Users cannot easily distinguish completed from pending KPIs because:
-- The top progress bar only tracks "entered" vs "not entered" — it ignores "propagated" status
-- Individual card status badges (Pending/Entered/Propagated) are small and easy to miss
-- There is no way to filter or group cards by status
-- Category headers show a simple "X/Y entered" count with no propagation info
+13 rollback requests are stuck in "pending" because:
+1. 10 requests were raised by users who are listed as their own reporting managers (self-manager deadlock) -- no one else sees the banner to approve them
+2. 3 requests have valid reporting managers but the managers haven't noticed or actioned them
+3. There is no centralized admin view to monitor, filter, or action rollback requests
 
-## Solution: Multi-Level Status Visibility
+## Solution
 
-### 1. Enhanced Progress Bar with 3-State Tracking
+Create a dedicated admin page at `/admin/rollback-requests` with a table of all rollback requests, status filters, and approve/reject actions. Also surface the pending count on the Admin Dashboard for visibility.
 
-Update `OrgKpiProgressBar` to show three states instead of two:
-- **Pending** (grey) — no value entered
-- **Entered** (blue/primary) — value saved but not propagated
-- **Propagated** (green) — pushed to employee scorecards
+## Technical Implementation
 
-Display a segmented progress bar and update the category badges to show all three counts.
+### 1. New Hook: `src/hooks/useAllRollbackRequests.ts`
 
-### 2. Status Filter Chips
+- Fetches all rollback requests (not just per-KPI) with joins to:
+  - `profiles` (requester name, employee code)
+  - `kpis` (KPI name, KRA name, review period, review year, employee_id)
+  - `profiles` again via `kpis.employee_id` (employee name)
+- Supports a `statusFilter` parameter: `'all' | 'pending' | 'approved' | 'rejected' | 'expired'`
+- Query key: `['all-rollback-requests', statusFilter]`
+- Returns enriched data with requester info, KPI details, and employee info
 
-Add filter chips below the progress bar (or next to the search) so users can show:
-- **All** (default)
-- **Pending** — only cards needing attention
-- **Entered** — saved but not yet propagated
-- **Propagated** — fully complete
+### 2. New Page: `src/pages/admin/RollbackRequests.tsx`
 
-This lets users focus on what still needs work.
+Layout:
+```
++--------------------------------------------------------------------+
+| Rollback Requests                                                    |
+| Monitor and action KPI rollback requests across the organization     |
++--------------------------------------------------------------------+
+| [Stats Cards]                                                        |
+| Pending: 13  |  Approved: 13  |  Rejected: 2  |  Expired: 8        |
++--------------------------------------------------------------------+
+| Status Filter: [All] [Pending] [Approved] [Rejected] [Expired]      |
+| Search: [___________________________]                                |
++--------------------------------------------------------------------+
+| Table:                                                               |
+| Requester | Employee | KPI | KRA | Period | From -> To | Reason | .. |
+| ...       | ...      | ... | ... | ...    | ...        | ...    | .. |
++--------------------------------------------------------------------+
+```
 
-### 3. Visual Card Status Indicator
+Features:
+- **Stats cards** showing counts per status
+- **Status filter chips** (default: Pending)
+- **Search** by requester name, employee name, KPI name
+- **Table columns**: Requester (name + code), Employee (name + code), KPI Name, KRA, Review Period, From Status -> Target Status (with badges), Reason, Created Date, Actions
+- **Actions column** (only for pending): Approve button, Reject button
+- **Self-manager flag**: Show a warning icon next to requests where the requester is the employee's reporting manager (indicating deadlock)
+- Reuses existing `useApproveRollbackRequest()` and `useRejectRollbackRequest()` hooks
+- Invalidates `['all-rollback-requests']` query key on success (add to existing hooks' onSuccess)
 
-Add a colored left border to each `OrgKpiEntryCard`:
-- Pending: `border-l-4 border-l-muted-foreground/30` (grey)
-- Entered: `border-l-4 border-l-primary` (blue)
-- Propagated: `border-l-4 border-l-green-500` (green)
+### 3. Update: `src/App.tsx`
 
-This gives instant visual scanning without reading badges.
+- Add lazy import for `RollbackRequests` page
+- Add route: `/admin/rollback-requests` with `ProtectedRoute allowedRoles={['admin']}`
 
-### 4. Category Header Enhancement
+### 4. Update: `src/components/layout/AppSidebar.tsx`
 
-Update the category group headers (line 808-814 in OrgKpiDataEntry) to show propagation counts:
-- Currently: `3/5 entered`
-- New: `2 Pending | 2 Entered | 1 Propagated`
+- Add new menu item to the `admin` section:
+  - Title: `Rollback Requests`
+  - Icon: `Undo2` (from lucide-react)
+  - Path: `/admin/rollback-requests`
+  - Roles: `['admin']`
 
-## Technical Changes
+### 5. Update: `src/pages/admin/AdminDashboard.tsx`
 
-### File 1: `src/components/admin/OrgKpiProgressBar.tsx`
+- Add a query to count pending rollback requests
+- Add a new stat card: "Pending Rollbacks" with count, clicking navigates to `/admin/rollback-requests`
 
-- Add `propagatedKpis: number` prop alongside `enteredKpis`
-- Add `propagated: number` to `CategoryProgress` interface
-- Replace single progress bar with a stacked/segmented bar showing pending (grey), entered (blue), propagated (green)
-- Update category badges to show 3-state counts
-- Add a legend row: colored dots with labels (Pending / Entered / Propagated)
+### 6. Update: `src/hooks/useKpiRollbackRequests.ts`
 
-### File 2: `src/pages/admin/OrgKpiDataEntry.tsx`
+- In `useApproveRollbackRequest` and `useRejectRollbackRequest` onSuccess handlers, add: `queryClient.invalidateQueries({ queryKey: ['all-rollback-requests'] })`
+- This ensures the admin panel refreshes when any rollback is actioned from anywhere
 
-- **Progress calculation** (lines 220-260): Track `propagatedKpis` count in addition to `enteredKpis`, by checking `existing?.status === 'propagated'`; add `propagated` to each category's progress
-- **New state**: `statusFilter: 'all' | 'pending' | 'entered' | 'propagated'` (default `'all'`)
-- **Status filter chips**: Render after the progress bar card — 4 clickable badges showing counts for each status
-- **Filter logic**: Apply `statusFilter` to `filteredKpis` before grouping — match card status against filter
-- **Category header**: Update the badge from `enteredInCat/total` to show pending/entered/propagated split
-- Pass `propagatedKpis` to `OrgKpiProgressBar`
+### 7. Update: `DOCUMENTATION.md`
 
-### File 3: `src/components/admin/OrgKpiEntryCard.tsx`
+- Version bump to 1.45.55
+- Document the new admin rollback management panel
 
-- Add a left border color based on status:
-  - `pending` + not N/A: `border-l-4 border-l-muted-foreground/30`
-  - `entered`: `border-l-4 border-l-primary`
-  - `propagated`: `border-l-4 border-l-green-500`
-  - N/A: `border-l-4 border-l-orange-400`
+## RLS Analysis -- No Changes Needed
 
-### File 4: `DOCUMENTATION.md`
+The existing RLS policies already support this:
+- **SELECT**: `true` for all authenticated users (admin can see all requests)
+- **UPDATE**: `auth.uid() <> requested_by` (admin can approve/reject any request they didn't create)
+- **INSERT**: `auth.uid() = requested_by` (unchanged, only requester creates)
 
-- Version bump to 1.45.54
-- Document: 3-state progress tracking, status filters, card border indicators
+No database migrations required.
 
 ## Zero Functionality Lost
 
-All existing features remain: auto-save, propagation, N/A toggles, rollback, unlock, scoped tables, observations panel, bulk fill, import/export, copy from last period.
+- Existing per-KPI rollback banner in review panels -- unchanged
+- RollbackRequestDialog for employees -- unchanged
+- Notification flow on approve/reject -- unchanged (existing hooks handle this)
+- Audit logging on approve/reject -- unchanged
+- KPI status reversion on approve -- unchanged
+- All other admin features -- unchanged
+
+## Files Summary
+
+| File | Change |
+|------|--------|
+| `src/hooks/useAllRollbackRequests.ts` | **NEW** -- fetch all rollback requests with filters |
+| `src/pages/admin/RollbackRequests.tsx` | **NEW** -- admin management page |
+| `src/App.tsx` | Add route + lazy import |
+| `src/components/layout/AppSidebar.tsx` | Add sidebar menu item |
+| `src/pages/admin/AdminDashboard.tsx` | Add pending rollback count card |
+| `src/hooks/useKpiRollbackRequests.ts` | Add query invalidation for admin list |
+| `DOCUMENTATION.md` | Version bump + changelog |
 
