@@ -1,45 +1,53 @@
 
 
-# Fix: Non-functional Filters on Admin KPI Dashboard
-
-## Problem
-
-Three filters on the Admin KPI Dashboard (/admin/kpis) are broken: **Manager**, **Department**, and **Division**. They appear to work (dropdown populates, selection changes) but never actually filter the table.
+# Fix: "new row violates row-level security policy for table kpis" for Management Role
 
 ## Root Cause
 
-The KPI queries (`useAllKpis` and `useKpisByPeriod`) fetch employee profiles with only 4 fields:
+Gaurav Budhiya has the **management** role. When he submits a review and approves a KPI, the code updates the KPI status from `management_review` to `approved`.
 
+The RLS policy "Management can update KPI status during review" is:
+```sql
+USING (has_role(auth.uid(), 'management') AND status = 'management_review')
 ```
-profiles:employee_id (id, full_name, email, employee_code)
-```
 
-The filter logic needs `department_id` and `reporting_manager_id`, but these fields are **not included** in the select. So `employee?.department_id` and `employee?.reporting_manager_id` are always `undefined`, and filters never match.
+There is **no explicit WITH CHECK** clause. In PostgreSQL, when WITH CHECK is omitted on an UPDATE policy, it **defaults to the USING expression**. This means the updated row must also satisfy `status = 'management_review'`.
 
-The Division filter has a secondary issue: it traverses `dept?.business_units?.divisions?.id` by looking up the department from the `departments` hook. This works only if `employee?.department_id` is present -- which it isn't, so the lookup also fails.
+After the update changes status to `approved`, the row no longer satisfies the check (`approved != management_review`), so PostgreSQL rejects it with "new row violates row-level security policy."
+
+This same issue affects the Send Back action, which changes status to an earlier stage (also not `management_review`).
 
 ## Fix
 
-### 1. Update `useAllKpis` and `useKpisByPeriod` in `src/hooks/useKpis.ts`
+Add an explicit `WITH CHECK (true)` to the Management UPDATE policy. The USING clause already correctly restricts which rows Management can touch (only `management_review` KPIs). The WITH CHECK should allow the updated row to have any status (since the whole point is to advance or send back the KPI).
 
-Add `department_id` and `reporting_manager_id` to the profiles select:
+### Database Migration
 
+```sql
+-- Drop the existing restrictive policy
+DROP POLICY IF EXISTS "Management can update KPI status during review" ON public.kpis;
+
+-- Re-create with explicit WITH CHECK allowing status transitions
+CREATE POLICY "Management can update KPI status during review"
+  ON public.kpis
+  FOR UPDATE
+  TO authenticated
+  USING (
+    has_role(auth.uid(), 'management'::app_role)
+    AND status = 'management_review'::review_status
+  )
+  WITH CHECK (
+    has_role(auth.uid(), 'management'::app_role)
+  );
 ```
-profiles:employee_id (id, full_name, email, employee_code, department_id, reporting_manager_id)
-```
 
-This is a 2-line change (one per query). No new database calls or schema changes needed.
+### Documentation Update
 
-### 2. Update `DOCUMENTATION.md`
-
-Version bump to 1.45.47 with a note about the fix.
+Update `DOCUMENTATION.md` to version **1.45.48** with a note about the RLS fix for Management role KPI status transitions.
 
 ## Impact
 
-- Manager filter will correctly match `employee.reporting_manager_id`
-- Department filter will correctly match `employee.department_id`
-- Division filter will correctly resolve via `departments -> business_units -> divisions` lookup
-- Period and Year filters were already working (they filter on KPI fields, not profile fields)
-- No database migration needed
-- No breaking changes
+- Management users will be able to approve KPIs (transition from `management_review` to `approved`) and send back KPIs
+- No change for other roles -- their policies already work correctly or have separate handling
+- Security is maintained: Management can still only update KPIs that are currently at `management_review` status (controlled by USING clause)
 
