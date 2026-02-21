@@ -1,30 +1,68 @@
 
 
-# Add Observer Name Next to Ticket Number in Observations Summary
+# Add "Sent Back" Badge for Re-Audit KPIs
 
-## What Changes
+## What This Solves
 
-In the **Employee Observations** panel on the Org KPI Data Entry page, each observation row currently shows: Type badge, Status badge, Ticket number. The observer's name (who created the observation) will be added right after the ticket number.
+Auditors currently see all KPIs in the "In Audit" status card without knowing which ones are first-time reviews vs. which ones were sent back from Management. This makes it hard to prioritize re-audit items.
+
+## Approach
+
+Query `kpi_audit_logs` for any `MANAGEMENT_SENT_BACK_TO_AUDITOR` actions on KPIs that are currently in `audit` status. Use this data to show an amber "Sent Back" badge next to those KPIs in the Audit Scorecard view.
 
 ## Technical Details
 
-### File: `src/components/admin/OrgKpiObservationsSummary.tsx`
+### 1. New Hook: Detect Sent-Back KPIs
 
-In the observation row's header badges area (around line 75-85), after the ticket number span, add a new span displaying `obs.created_by_profile?.full_name` (or email as fallback).
+**File: `src/hooks/useSentBackKpis.ts`** (NEW)
 
-Current display:
-```
-[Positive] [Open] OBS-00040
-```
+A lightweight hook that takes an array of KPI IDs and returns a `Set<string>` of IDs that have a `MANAGEMENT_SENT_BACK_TO_AUDITOR` entry in `kpi_audit_logs`.
 
-Updated display:
-```
-[Positive] [Open] OBS-00040 · Subhransu Sekhar Nayak
+```typescript
+// Query: select distinct kpi_id from kpi_audit_logs 
+// where kpi_id in (...ids) and action = 'MANAGEMENT_SENT_BACK_TO_AUDITOR'
 ```
 
-The name will use the same muted styling as other metadata text, separated by a dot for visual clarity.
+### 2. Update: `src/components/review/AuditScorecard.tsx`
 
-### File: `DOCUMENTATION.md`
-- Minor changelog entry for the UI enhancement.
+- Import and call `useSentBackKpis(kpiIds)` to get the set of sent-back KPI IDs
+- Pass `sentBackKpiIds` set down to `KpiDetailsTable` and `MobileKpiCard` as a new optional prop
+- In the "In Audit" stats card, optionally show a sub-count of sent-back items (e.g., "In Audit: 5 (2 sent back)")
 
-No database, RLS, or hook changes needed -- the `created_by_profile` data (with `full_name` and `email`) is already fetched by the `useObservationsByKpis` hook.
+### 3. Update: `src/components/review/KpiDetailsTable.tsx`
+
+- Add optional prop `sentBackKpiIds?: Set<string>`
+- In the KRA/KPI name cell (around the existing badges for Daily, Bi-Monthly, etc.), add an amber "Sent Back" badge when `sentBackKpiIds?.has(kpi.id)` is true and the KPI status is `audit`
+
+### 4. Update: `src/components/review/MobileKpiCard.tsx`
+
+- Add same optional prop and render the amber "Sent Back" badge in the mobile card header
+
+### 5. Update: `DOCUMENTATION.md`
+
+- Version bump to 1.45.58
+- Document the sent-back indicator feature
+
+## Visual Result
+
+In the KPI table, a sent-back KPI will appear as:
+
+```
+KRA Name                        [Daily] [Sent Back]
+KPI description text
+```
+
+The "Sent Back" badge will be amber/orange with a small undo icon, making it immediately distinguishable from frequency badges.
+
+## Files Summary
+
+| File | Change |
+|------|--------|
+| `src/hooks/useSentBackKpis.ts` | NEW -- hook to detect sent-back KPIs via audit logs |
+| `src/components/review/AuditScorecard.tsx` | Use hook, pass data to table/cards, update stats |
+| `src/components/review/KpiDetailsTable.tsx` | Add optional prop, render "Sent Back" badge |
+| `src/components/review/MobileKpiCard.tsx` | Add optional prop, render "Sent Back" badge |
+| `DOCUMENTATION.md` | Version bump + changelog |
+
+No database changes required -- reads from existing `kpi_audit_logs` table.
+
