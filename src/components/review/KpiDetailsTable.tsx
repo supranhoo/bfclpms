@@ -81,6 +81,7 @@ interface KpiDetailsTableProps {
   getDailyAggregatedScore?: (kpi: KPI) => number | null;
   isKpiLocked?: (kpi: KPI) => boolean;
   workflowStages?: string[];
+  sentBackKpiIds?: Set<string>;
 }
 
 /**
@@ -139,6 +140,7 @@ export function KpiDetailsTable({
   getDailyAggregatedScore,
   isKpiLocked,
   workflowStages,
+  sentBackKpiIds,
 }: KpiDetailsTableProps) {
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const scoreColumns = buildScoreColumns(effectiveStages);
@@ -363,6 +365,12 @@ export function KpiDetailsTable({
                       {kpi.frequency === 'Quarterly' && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-teal-300 text-teal-700 dark:border-teal-600 dark:text-teal-400">
                           Quarterly
+                        </Badge>
+                      )}
+                      {sentBackKpiIds?.has(kpi.id) && kpi.status === 'audit' && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-600 dark:bg-amber-900/20 dark:text-amber-400 gap-0.5">
+                          <Undo2 className="h-2.5 w-2.5" />
+                          Sent Back
                         </Badge>
                       )}
                     </div>

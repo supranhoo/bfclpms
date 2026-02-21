@@ -47,6 +47,7 @@ import {
 import { MobileKpiCard } from '@/components/review/MobileKpiCard';
 import { NaConfirmationCard } from '@/components/review/NaConfirmationCard';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
+import { useSentBackKpis } from '@/hooks/useSentBackKpis';
 import { 
   DEFAULT_WORKFLOW_STAGES, 
   resolveForwardStatus, 
@@ -133,6 +134,7 @@ export function AuditScorecard({
 
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
+  const { data: sentBackKpiIds } = useSentBackKpis(kpiIds);
   const { data: queries } = useKpiQueries(kpiIds);
 
   // Fetch ALL-period submissions for tracker modal & review panel history
@@ -236,6 +238,7 @@ export function AuditScorecard({
   const auditPendingStatuses = resolvePendingStatuses('auditor', effectiveStages);
   const pendingAuditCount = kpis?.filter(k => auditPendingStatuses.includes(k.status || '')).length || 0;
   const inAuditCount = kpis?.filter(k => k.status === 'audit').length || 0;
+  const sentBackInAuditCount = kpis?.filter(k => k.status === 'audit' && sentBackKpiIds?.has(k.id)).length || 0;
   const forwardedCount = kpis?.filter(k => ['management_review', 'approved'].includes(k.status || '')).length || 0;
   const totalKpis = kpis?.length || 0;
 
@@ -664,6 +667,9 @@ export function AuditScorecard({
               <div>
                 <p className="text-[10px] sm:text-xs font-medium text-muted-foreground">In Audit</p>
                 <p className="text-lg sm:text-2xl font-bold text-purple-600">{inAuditCount}</p>
+                {sentBackInAuditCount > 0 && (
+                  <p className="text-[10px] sm:text-xs text-amber-600 font-medium">{sentBackInAuditCount} sent back</p>
+                )}
               </div>
               <FileCheck className="h-4 w-4 sm:h-5 sm:w-5 text-purple-500" />
             </div>
@@ -709,6 +715,7 @@ export function AuditScorecard({
                     onToggleExpand={toggleDailyExpand}
                     isExpanded={expandedDailyKpis.has(kpi.id)}
                     getOrgKpiValue={getOrgKpiValue}
+                    sentBackKpiIds={sentBackKpiIds}
                   />
                 );
               })}
@@ -733,6 +740,7 @@ export function AuditScorecard({
               expandedKpis={expandedDailyKpis}
               onToggleExpand={toggleDailyExpand}
               workflowStages={effectiveStages}
+              sentBackKpiIds={sentBackKpiIds}
             />
           )}
         </CardContent>
