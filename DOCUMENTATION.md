@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.61 — Fix step-back fallback to find nearest existing workflow stage
+> **Version:** 1.45.62 — Fix Review Journey showing wrong stages in Self-Review; fix zero-score display in KPI History
 > **Maintainer:** Lovable AI
 
 ---

@@ -502,6 +502,7 @@ export function SelfReviewSheet({
               onOpenQueryHistory={() => setQueryHistoryOpen(true)}
               onOpenFullHistory={() => setTrackerModalOpen(true)}
               onOpenTimeline={() => setTimelineOpen(true)}
+              workflowStages={effectiveStages}
             />
 
 
