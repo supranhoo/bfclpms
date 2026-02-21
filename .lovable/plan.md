@@ -1,73 +1,84 @@
 
 
-# Fix: Cascade-Clear Bug Leaves Stale Reviewer Data After Send-Back
+# RCA & Fix: Admin-Marked N/A KPI Missing `na_marked_by_role` + Status Display Issue
 
-## Problem
+## Root Cause Analysis
 
-When an auditor (or any reviewer) sends a KPI back to an earlier stage, the cascade-clear logic in `UnifiedScorecard.tsx` fails to clear the auditor's own data if intermediate workflow stages (like `hr_pms_review`, `skip_level_check`) are absent from the employee's pipeline.
+### What Happened (Ashish Kataria's SOP KPI)
 
-**Confirmed case:** KPI `7e7316db` for Dippendu Das has `status = self_review` but still contains `auditor_score: 3.00` with remarks. The Review Journey incorrectly shows auditor data on a KPI that is back at self-review.
+1. The Org KPI "SOP/SMP Creation & Implementation" was **propagated** to Ashish Kataria for January 2026 with `achieved_value = 0` (not N/A). The propagation RPC advanced the KPI status from `kra_set` to `self_review`.
+2. An admin later used the **Admin Data Entry Dialog** to mark this KPI as N/A. This set `is_na = true` in `review_submissions` but:
+   - **Bug 1**: Did NOT set `na_marked_by_role` to `'admin'` (left it as NULL)
+   - **Bug 2**: The status remained at `self_review` because the admin data entry logic does not handle N/A-specific status transitions
 
-## Root Cause
+### Why the Status Shows "Self Review"
 
-The cascade-clear uses `statusOrder.indexOf('hr_pms_review')` to decide whether to clear auditor fields. When `hr_pms_review` is not in the employee's pipeline, `indexOf` returns `-1`. The check `targetIdx <= -1` is always false, so auditor fields are never cleared.
+The KPI status is `self_review` (set by the original propagation). The Admin Data Entry dialog does not change the KPI status when toggling N/A -- it only updates the `review_submissions` row. So the KPI appears as "Self Review" even though it's been marked N/A by the admin.
 
-Same issue affects `skip_level_check` and `hr_pms_review` lookups -- any missing intermediate stage causes the cascade to silently skip clearing downstream fields.
+**This is NOT the expected behavior.** When an admin marks a KPI as N/A, the intent is typically to exclude it from scoring entirely. The KPI should either:
+- Stay at its current status (letting the normal workflow handle it, with reviewers seeing the N/A flag), OR
+- Be fast-tracked to `approved` if the admin wants to close it out
 
-**Employee's actual pipeline:** `[kra_set, self_review, audit, management_review, approved]`
-Missing stages: `manager_check`, `skip_level_check`, `hr_pms_review`
+Currently, the 32 KPIs at `self_review` with `na_marked_by_role = 'employee'` are **correct** -- employees marked them N/A during self-review, and they're waiting for manager review. The 1 KPI with `na_marked_by_role = NULL` is the bug.
 
-## Fix
+### Similar Bug Locations
 
-### 1. Update cascade-clear logic in `src/components/review/UnifiedScorecard.tsx` (lines 547-590)
+The `na_marked_by_role` field is correctly set in:
+- `propagate_org_kpi_value` RPC: Sets `'admin'` when `p_is_na = true` (correct)
+- `SelfReviewSheet`: Sets `'employee'` (correct)
+- `UnifiedScorecard`: Sets the reviewer's role (correct)
 
-Change each condition from "target is at or before the **preceding** stage" to "target is **before** the stage's own status." This eliminates dependency on intermediate stages that may not exist.
+But **NOT** set in:
+- `useAdminDataEntry.ts` (line 135-139): Only sets `is_na` flag, never sets `na_marked_by_role`
 
-```text
-Current (broken):                          Fixed:
-clear manager if target <= self_review     clear manager if target < manager_check  (or stage absent)
-clear skip    if target <= manager_check   clear skip    if target < skip_level_check (or stage absent)
-clear hr_pms  if target <= skip_level      clear hr_pms  if target < hr_pms_review   (or stage absent)
-clear auditor if target <= hr_pms_review   clear auditor if target < audit            (or stage absent)
-clear mgmt    if target < management       clear mgmt    if target < management_review
+## Fix Plan
+
+### 1. Fix `useAdminDataEntry.ts` -- Set `na_marked_by_role` when admin toggles N/A
+
+In the `useAdminSubmitReviewData` hook (lines 133-139), when `is_na` is set to `true`, also set `na_marked_by_role = 'admin'`. When `is_na` is set to `false`, clear `na_marked_by_role = null`.
+
+```typescript
+// Current (broken):
+if (is_na !== undefined) {
+  updateFields.is_na = is_na;
+}
+
+// Fixed:
+if (is_na !== undefined) {
+  updateFields.is_na = is_na;
+  updateFields.na_marked_by_role = is_na ? 'admin' : null;
+}
 ```
 
-When a stage is absent from the pipeline (`indexOf` returns `-1`), the fields for that stage are always cleared (since they are irrelevant to the pipeline).
+### 2. Data Correction -- Fix Ashish Kataria's KPI
 
-### 2. Fix stale data for already-affected KPIs
-
-Run a one-time data correction query to clear auditor/management data on KPIs that are currently at `self_review` or `kra_set` status but still have stale reviewer data.
+Run a one-time SQL migration to set `na_marked_by_role = 'admin'` on any `review_submissions` row where `is_na = true` but `na_marked_by_role` is NULL:
 
 ```sql
-UPDATE review_submissions rs
-SET auditor_rating = NULL, auditor_score = NULL, 
-    auditor_remarks = NULL, auditor_evidence_url = NULL, 
-    auditor_achieved_value = NULL,
-    management_rating = NULL, management_score = NULL,
-    management_remarks = NULL, management_evidence_url = NULL,
-    management_achieved_value = NULL
-FROM kpis k
-WHERE rs.kpi_id = k.id
-  AND k.status IN ('kra_set', 'self_review')
-  AND (rs.auditor_score IS NOT NULL OR rs.management_score IS NOT NULL);
+UPDATE review_submissions
+SET na_marked_by_role = 'admin'
+WHERE is_na = true AND na_marked_by_role IS NULL;
 ```
 
-### 3. Also fix the same pattern in `useSendBackKpi` hook (`src/hooks/useKpis.ts`)
+### 3. Update DOCUMENTATION.md
 
-The `useSendBackKpi` hook (lines 940-1040) uses a different approach -- it hardcodes clearing ALL fields. This is correct but only used by the manager role. The `UnifiedScorecard` inline mutation is used by auditor/management/hr_pms/skip_level. No change needed in `useKpis.ts` but worth noting.
-
-### 4. Update `DOCUMENTATION.md`
-
-Version bump to 1.45.50 with a note about the cascade-clear fix.
+Version bump to 1.45.51 with a note about the admin N/A fix.
 
 ## Files to Modify
 
-- `src/components/review/UnifiedScorecard.tsx` -- Fix cascade-clear conditions (lines 547-590)
-- `DOCUMENTATION.md` -- Version bump
+| File | Change |
+|------|--------|
+| `src/hooks/useAdminDataEntry.ts` | Set `na_marked_by_role` when toggling N/A |
+| `DOCUMENTATION.md` | Version bump to 1.45.51 |
+| Database migration | Correct existing NULL `na_marked_by_role` records |
 
 ## Impact
 
-- Sending back a KPI will now correctly clear all downstream reviewer data regardless of which intermediate stages exist in the pipeline
-- Existing stale data on affected KPIs will be corrected by the migration
-- No breaking changes for any other workflow or role
+- Admin-initiated N/A will now correctly identify the admin as the marking role
+- The N/A confirmation card in reviewer views will display "by Admin" instead of showing no attribution
+- No breaking changes to any other workflow
+
+## Note on Status Behavior
+
+The KPI remaining at `self_review` after admin marks N/A is **by design** of the Admin Data Entry dialog -- it advances status based on the role level selected, not the N/A flag. If the admin selected "Self" level and the KPI was already at `self_review`, no status change occurs. This is acceptable because the N/A flag will be visible to reviewers at each subsequent stage, and they can confirm or override it through the normal workflow.
 
