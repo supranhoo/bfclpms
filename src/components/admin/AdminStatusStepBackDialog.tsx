@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -6,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Undo2 } from 'lucide-react';
 import { getStageLabel } from '@/hooks/useWorkflowConfig';
 import { useAdminStatusStepBack, getPreviousStatus } from '@/hooks/useAdminDataEntry';
+import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 
 type ReviewStatus = Database['public']['Enums']['review_status'];
@@ -19,6 +21,7 @@ interface AdminStatusStepBackDialogProps {
   employeeId: string;
   employeeName: string;
   currentStatus: ReviewStatus;
+  workflowStages?: string[];
 }
 
 export function AdminStatusStepBackDialog({
@@ -30,10 +33,24 @@ export function AdminStatusStepBackDialog({
   employeeId,
   employeeName,
   currentStatus,
+  workflowStages: externalStages,
 }: AdminStatusStepBackDialogProps) {
   const [reason, setReason] = useState('');
   const stepBackMutation = useAdminStatusStepBack();
-  const previousStatus = getPreviousStatus(currentStatus);
+
+  // Fetch employee's actual workflow stages when dialog is open and no external stages provided
+  const { data: fetchedStages } = useQuery({
+    queryKey: ['employee-workflow', employeeId],
+    queryFn: async () => {
+      const { data } = await supabase.rpc('get_employee_workflow', { employee_uuid: employeeId });
+      return (data as string[]) || undefined;
+    },
+    enabled: isOpen && !externalStages,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const workflowStages = externalStages || fetchedStages || undefined;
+  const previousStatus = getPreviousStatus(currentStatus, workflowStages);
 
   const handleSubmit = () => {
     if (!previousStatus || !reason.trim()) return;

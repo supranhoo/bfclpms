@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.58 — Add "Sent Back" badge on re-audit KPIs in Audit Scorecard view
+> **Version:** 1.45.59 — Fix step-back dialog using employee's actual workflow stages
 > **Maintainer:** Lovable AI
 
 ---
@@ -3734,6 +3734,18 @@ All Inbox access gaps for `hr_pms` and `skip_level` roles have been closed:
 - `src/hooks/useQueryWorkflow.ts` — `useSubordinateQueries` now fetches both direct reports and skip-level (indirect) subordinates so the Team tab shows the full reporting chain for skip-level managers.
 
 **Preventive Action:** `src/lib/roles.ts` is the single file to update when a new database role is added. All downstream files import from it.
+
+---
+
+### Bug Fix: Step Back Dialog Not Using Employee's Actual Workflow Stages (v1.45.59)
+
+**Problem:** The `AdminStatusStepBackDialog` called `getPreviousStatus(currentStatus)` without passing the employee's actual workflow stages. It always resolved against the full 8-stage pipeline, which could target a non-existent stage (e.g., `hr_pms_review` for an employee whose workflow skips that stage), orphaning the KPI.
+
+**Fix:** The dialog now fetches the employee's actual workflow stages via the `get_employee_workflow` RPC and passes them to `getPreviousStatus(currentStatus, workflowStages)`. Also accepts an optional `workflowStages` prop for callers that already have the data.
+
+| File | Change |
+|---|---|
+| `src/components/admin/AdminStatusStepBackDialog.tsx` | Fetch employee workflow via RPC; pass stages to `getPreviousStatus` |
 
 ---
 
