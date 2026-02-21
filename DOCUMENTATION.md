@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.51 — Fix admin N/A attribution: Admin Data Entry now correctly sets na_marked_by_role='admin' when toggling N/A; corrected existing records with missing attribution
+> **Version:** 1.45.52 — Enable N/A toggle for Department and Employee scoped Org KPIs (previously only available for Organization scope)
 > **Maintainer:** Lovable AI
 
 ---

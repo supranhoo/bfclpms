@@ -285,7 +285,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
           {/* RIGHT COLUMN (60%) - Inputs & Actions */}
           <div className="md:col-span-3 space-y-3 min-w-0">
             {/* N/A Toggle - Admin only */}
-            {isAdmin && data.scope === 'organization' && !isLocked && (
+            {isAdmin && !isLocked && (
               <div className="flex items-center gap-2">
                 <Switch
                   id={`na-toggle-${data.categoryId}-${data.kpiName}`}
@@ -345,7 +345,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
             )}
 
             {/* N/A view */}
-            {data.scope === 'organization' && isNa && (
+            {isNa && (
               <div className="space-y-2">
                 <Alert variant="default" className="border-muted bg-muted/50 py-2">
                   <Ban className="h-4 w-4 text-muted-foreground" />
@@ -611,7 +611,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
         </div>
 
         {/* Scoped entry table for dept/employee - full width below both columns */}
-        {data.scope !== 'organization' && data.scopeLabel && (
+        {data.scope !== 'organization' && data.scopeLabel && !isNa && (
           <OrgKpiScopedEntryTable
             rows={scopedValues}
             onValueChange={handleScopedChange}
