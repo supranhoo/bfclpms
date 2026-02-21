@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.46 — Fix rollback race condition: disable submit until workflow stages load, add fallback resolution
+> **Version:** 1.45.47 — Fix non-functional Manager/Department/Division filters on Admin KPI Dashboard by adding department_id and reporting_manager_id to profile selects
 > **Maintainer:** Lovable AI
 
 ---

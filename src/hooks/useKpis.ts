@@ -163,7 +163,7 @@ export function useAllKpis() {
           .select(`
             *,
             kra_categories (id, name, color, weightage),
-            profiles:employee_id (id, full_name, email, employee_code)
+            profiles:employee_id (id, full_name, email, employee_code, department_id, reporting_manager_id)
           `)
           .order('created_at', { ascending: false })
           .range(from, from + pageSize - 1);
@@ -200,7 +200,7 @@ export function useKpisByPeriod(selectedPeriod: string | undefined, selectedYear
           .select(`
             *,
             kra_categories (id, name, color, weightage),
-            profiles:employee_id (id, full_name, email, employee_code)
+            profiles:employee_id (id, full_name, email, employee_code, department_id, reporting_manager_id)
           `)
           .eq('review_period', selectedPeriod as string)
           .eq('review_year', selectedYear as number)
@@ -248,7 +248,7 @@ export function useKpisByPeriodRanges(periodRanges: Array<{ month: string; year:
             .select(`
               *,
               kra_categories (id, name, color, weightage),
-              profiles:employee_id (id, full_name, email, employee_code)
+              profiles:employee_id (id, full_name, email, employee_code, department_id, reporting_manager_id)
             `)
             .eq('review_period', month)
             .eq('review_year', year)
