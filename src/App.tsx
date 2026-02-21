@@ -42,6 +42,7 @@ const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const PIPManagement = lazy(() => import("./pages/admin/PIPManagement"));
 const EmailLogs = lazy(() => import("./pages/admin/EmailLogs"));
 const ObservationsOverview = lazy(() => import("./pages/admin/ObservationsOverview"));
+const RollbackRequests = lazy(() => import("./pages/admin/RollbackRequests"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -265,6 +266,11 @@ const App = () => (
                 <Route path="/admin/email-logs" element={
                   <ProtectedRoute allowedRoles={['admin']}>
                     <EmailLogs />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/rollback-requests" element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <Suspense fallback={<PageFallback />}><RollbackRequests /></Suspense>
                   </ProtectedRoute>
                 } />
               </Route>
