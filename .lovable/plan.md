@@ -1,84 +1,39 @@
 
 
-# RCA & Fix: Admin-Marked N/A KPI Missing `na_marked_by_role` + Status Display Issue
+# Fix: N/A Toggle Missing for Department and Employee Scoped Org KPIs
 
-## Root Cause Analysis
+## Problem
 
-### What Happened (Ashish Kataria's SOP KPI)
+The "Mark as Not Applicable (N/A)" toggle on the Org KPI Data Entry cards is only visible for **Organization** scoped KPIs. Department and Employee scoped KPIs do not show the toggle, preventing admins from marking them as N/A.
 
-1. The Org KPI "SOP/SMP Creation & Implementation" was **propagated** to Ashish Kataria for January 2026 with `achieved_value = 0` (not N/A). The propagation RPC advanced the KPI status from `kra_set` to `self_review`.
-2. An admin later used the **Admin Data Entry Dialog** to mark this KPI as N/A. This set `is_na = true` in `review_submissions` but:
-   - **Bug 1**: Did NOT set `na_marked_by_role` to `'admin'` (left it as NULL)
-   - **Bug 2**: The status remained at `self_review` because the admin data entry logic does not handle N/A-specific status transitions
+## Root Cause
 
-### Why the Status Shows "Self Review"
+In `OrgKpiEntryCard.tsx`, three conditional blocks explicitly check `data.scope === 'organization'`, excluding department and employee scopes:
 
-The KPI status is `self_review` (set by the original propagation). The Admin Data Entry dialog does not change the KPI status when toggling N/A -- it only updates the `review_submissions` row. So the KPI appears as "Self Review" even though it's been marked N/A by the admin.
+- **Line 288**: N/A toggle — only rendered for `organization` scope
+- **Line 306**: Input area (hidden when N/A) — only for `organization` scope
+- **Line 348**: N/A explanation view — only for `organization` scope
 
-**This is NOT the expected behavior.** When an admin marks a KPI as N/A, the intent is typically to exclude it from scoring entirely. The KPI should either:
-- Stay at its current status (letting the normal workflow handle it, with reviewers seeing the N/A flag), OR
-- Be fast-tracked to `approved` if the admin wants to close it out
+## Fix
 
-Currently, the 32 KPIs at `self_review` with `na_marked_by_role = 'employee'` are **correct** -- employees marked them N/A during self-review, and they're waiting for manager review. The 1 KPI with `na_marked_by_role = NULL` is the bug.
+Remove the `data.scope === 'organization'` restriction from these three sections so the N/A toggle and N/A view are available for all scope types. When N/A is toggled on for a department/employee scoped KPI, the scoped entry table should also be hidden (since all values become irrelevant).
 
-### Similar Bug Locations
-
-The `na_marked_by_role` field is correctly set in:
-- `propagate_org_kpi_value` RPC: Sets `'admin'` when `p_is_na = true` (correct)
-- `SelfReviewSheet`: Sets `'employee'` (correct)
-- `UnifiedScorecard`: Sets the reviewer's role (correct)
-
-But **NOT** set in:
-- `useAdminDataEntry.ts` (line 135-139): Only sets `is_na` flag, never sets `na_marked_by_role`
-
-## Fix Plan
-
-### 1. Fix `useAdminDataEntry.ts` -- Set `na_marked_by_role` when admin toggles N/A
-
-In the `useAdminSubmitReviewData` hook (lines 133-139), when `is_na` is set to `true`, also set `na_marked_by_role = 'admin'`. When `is_na` is set to `false`, clear `na_marked_by_role = null`.
-
-```typescript
-// Current (broken):
-if (is_na !== undefined) {
-  updateFields.is_na = is_na;
-}
-
-// Fixed:
-if (is_na !== undefined) {
-  updateFields.is_na = is_na;
-  updateFields.na_marked_by_role = is_na ? 'admin' : null;
-}
-```
-
-### 2. Data Correction -- Fix Ashish Kataria's KPI
-
-Run a one-time SQL migration to set `na_marked_by_role = 'admin'` on any `review_submissions` row where `is_na = true` but `na_marked_by_role` is NULL:
-
-```sql
-UPDATE review_submissions
-SET na_marked_by_role = 'admin'
-WHERE is_na = true AND na_marked_by_role IS NULL;
-```
-
-### 3. Update DOCUMENTATION.md
-
-Version bump to 1.45.51 with a note about the admin N/A fix.
-
-## Files to Modify
+### Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/hooks/useAdminDataEntry.ts` | Set `na_marked_by_role` when toggling N/A |
-| `DOCUMENTATION.md` | Version bump to 1.45.51 |
-| Database migration | Correct existing NULL `na_marked_by_role` records |
+| `src/components/admin/OrgKpiEntryCard.tsx` | Remove scope restriction from N/A toggle (line 288), input area (line 306), and N/A view (line 348). Hide scoped entry table when N/A is active (line 614). |
+| `DOCUMENTATION.md` | Version bump to 1.45.52 |
 
-## Impact
+### Detailed Changes in OrgKpiEntryCard.tsx
 
-- Admin-initiated N/A will now correctly identify the admin as the marking role
-- The N/A confirmation card in reviewer views will display "by Admin" instead of showing no attribution
-- No breaking changes to any other workflow
+1. **Line 288** — N/A toggle: Change `isAdmin && data.scope === 'organization' && !isLocked` to `isAdmin && !isLocked`
+2. **Line 306** — Org input area: Keep `data.scope === 'organization'` here (this is the org-specific input section, which is correct)
+3. **Line 348** — N/A view: Change `data.scope === 'organization' && isNa` to `isNa` (show N/A explanation for all scopes)
+4. **Line 614** — Scoped entry table: Change `data.scope !== 'organization' && data.scopeLabel` to `data.scope !== 'organization' && data.scopeLabel && !isNa` (hide scoped table when N/A)
 
-## Note on Status Behavior
-
-The KPI remaining at `self_review` after admin marks N/A is **by design** of the Admin Data Entry dialog -- it advances status based on the role level selected, not the N/A flag. If the admin selected "Self" level and the KPI was already at `self_review`, no status change occurs. This is acceptable because the N/A flag will be visible to reviewers at each subsequent stage, and they can confirm or override it through the normal workflow.
-
+This ensures:
+- All scope types show the N/A toggle (admin only, not locked)
+- Organization scope: toggles between value input and N/A view (unchanged behavior)
+- Department/Employee scope: toggles between scoped entry table and N/A view (new behavior)
+- N/A remarks textarea is available for all scopes
