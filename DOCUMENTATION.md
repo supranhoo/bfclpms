@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.52 — Enable N/A toggle for Department and Employee scoped Org KPIs (previously only available for Organization scope)
+> **Version:** 1.45.52 — Per-row N/A toggle for Department/Employee scoped Org KPIs; top-level N/A toggle enabled for all scopes
 > **Maintainer:** Lovable AI
 
 ---
