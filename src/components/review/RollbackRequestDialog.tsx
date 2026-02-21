@@ -5,8 +5,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useCreateRollbackRequest } from '@/hooks/useKpiRollbackRequests';
+import { useToast } from '@/hooks/use-toast';
 
 interface RollbackRequestDialogProps {
   open: boolean;
@@ -16,6 +17,7 @@ interface RollbackRequestDialogProps {
   currentStatus: string;
   workflowStages: string[];
   notifyUserId?: string;
+  stagesLoading?: boolean;
 }
 
 export function RollbackRequestDialog({
@@ -26,12 +28,25 @@ export function RollbackRequestDialog({
   currentStatus,
   workflowStages,
   notifyUserId,
+  stagesLoading,
 }: RollbackRequestDialogProps) {
   const [reason, setReason] = useState('');
   const createRequest = useCreateRollbackRequest();
+  const { toast } = useToast();
 
   const handleSubmit = async () => {
     if (!reason.trim()) return;
+
+    // Pre-submit validation: ensure currentStatus exists in workflowStages
+    if (!workflowStages.includes(currentStatus)) {
+      toast({
+        title: 'Workflow stages not ready',
+        description: 'The workflow configuration is still loading or does not include the current status. Please try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     await createRequest.mutateAsync({
       kpi_id: kpiId,
       reason: reason.trim(),
@@ -42,6 +57,8 @@ export function RollbackRequestDialog({
     setReason('');
     onOpenChange(false);
   };
+
+  const isSubmitDisabled = !reason.trim() || createRequest.isPending || !!stagesLoading;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -76,9 +93,11 @@ export function RollbackRequestDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button
             onClick={handleSubmit}
-            disabled={!reason.trim() || createRequest.isPending}
+            disabled={isSubmitDisabled}
           >
-            {createRequest.isPending ? 'Submitting...' : 'Submit Request'}
+            {stagesLoading ? (
+              <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Loading stages...</>
+            ) : createRequest.isPending ? 'Submitting...' : 'Submit Request'}
           </Button>
         </DialogFooter>
       </DialogContent>

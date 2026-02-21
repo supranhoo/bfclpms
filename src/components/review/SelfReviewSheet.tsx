@@ -116,7 +116,7 @@ export function SelfReviewSheet({
   // Rollback state
   const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false);
   const { data: pendingRollback } = usePendingRollbackRequest(selectedKpi?.id);
-  const { data: employeeWorkflowStages } = useEmployeeWorkflowStages(profile?.id);
+  const { data: employeeWorkflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(profile?.id);
   const effectiveStages = employeeWorkflowStages || DEFAULT_WORKFLOW_STAGES;
 
   // Frequency lock state
@@ -1050,6 +1050,7 @@ export function SelfReviewSheet({
           currentStatus={selectedKpi.status}
           workflowStages={effectiveStages}
           notifyUserId={profile?.reporting_manager_id || undefined}
+          stagesLoading={stagesLoading}
         />
       )}
     </>
