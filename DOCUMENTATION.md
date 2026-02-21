@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.57 — Show observer name next to ticket number in Employee Observations summary panel
+> **Version:** 1.45.58 — Add "Sent Back" badge on re-audit KPIs in Audit Scorecard view
 > **Maintainer:** Lovable AI
 
 ---

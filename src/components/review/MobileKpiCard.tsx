@@ -32,6 +32,7 @@ interface MobileKpiCardProps {
   isExpanded?: boolean;
   isLocked?: boolean;
   getOrgKpiValue?: (kpi: KPI) => { achieved_value: number | null; data_source: string | null; entered_by_name: string | null } | null;
+  sentBackKpiIds?: Set<string>;
 }
 
 export function MobileKpiCard({
@@ -47,6 +48,7 @@ export function MobileKpiCard({
   isExpanded,
   isLocked,
   getOrgKpiValue,
+  sentBackKpiIds,
 }: MobileKpiCardProps) {
   const isNaKpi = submission?.is_na || false;
   const isDailyKpi = kpi.frequency === 'Daily';
@@ -235,6 +237,12 @@ export function MobileKpiCard({
           {kpi.frequency === 'Quarterly' && (
             <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0 border-teal-300 text-teal-700 dark:border-teal-600 dark:text-teal-400">
               Quarterly
+            </Badge>
+          )}
+          {sentBackKpiIds?.has(kpi.id) && kpi.status === 'audit' && (
+            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0 border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-600 dark:bg-amber-900/20 dark:text-amber-400 gap-0.5">
+              <Undo2 className="h-2.5 w-2.5" />
+              Sent Back
             </Badge>
           )}
         </div>
