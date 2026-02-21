@@ -1,58 +1,67 @@
 
 
-# Fix: Step Back Fallback Maps to Non-Existent Workflow Stage
+# Fix: Review Journey Shows Wrong Stages + KPI History Zero-Score Bug
 
-## The Bug
+## Bugs Found
 
-When a KPI's current status is not in the employee's workflow (orphaned status), the `getPreviousStatus` fallback returns the immediately preceding stage from the global `FULL_STATUS_ORDER` -- but that stage might **also** not exist in the employee's workflow.
+### Bug 1: Review Journey in Self-Review shows default stages instead of employee's actual workflow
 
-**Example:**
-- Employee workflow: `[kra_set, self_review, manager_check, skip_level_check, hr_pms_review, approved]`
-- KPI status: `management_review` (not in employee's workflow)
-- Current fallback returns: `audit` (index 5 in full order)
-- Problem: `audit` is also NOT in the employee's workflow -- KPI gets orphaned again
+**Root Cause**: In `SelfReviewSheet.tsx` (line 493-505), the `KpiReviewPanel` component is rendered **without** the `workflowStages` prop, even though the employee's workflow stages are already fetched and stored in `effectiveStages` (line 120). This causes `KpiJourneySection` to fall back to `DEFAULT_WORKFLOW_STAGES` (the basic 6-stage pipeline: Self, Manager, Auditor, Management).
 
-## The Fix
+Jaspal's actual workflow is: `KRA Set -> Self Review -> Audit Review -> Management Review -> Approved` (no Manager Check, no Skip-Level, no HR PMS). But the Review Journey was showing the default 4-reviewer stages.
 
-### File: `src/hooks/useAdminDataEntry.ts` (line 434-446)
+### Bug 2: KPI History shows score of 0 as a dash
 
-Update `getPreviousStatus` so the fallback walks backward through `FULL_STATUS_ORDER` and returns the **first stage that exists in the employee's workflow**:
+**Root Cause**: In `KpiHistoryCard.tsx` (line 133), the expression `entry.score || '-'` uses the logical OR operator which treats `0` as falsy. Any KPI with a legitimate score of 0 is displayed as `-`.
+
+---
+
+## Fixes
+
+### File 1: `src/components/review/SelfReviewSheet.tsx` (line 493-505)
+
+Add the missing `workflowStages` prop:
 
 ```typescript
-export function getPreviousStatus(
-  current: ReviewStatus,
-  workflowStages?: string[]
-): ReviewStatus | null {
-  const stages = (workflowStages || FULL_STATUS_ORDER) as ReviewStatus[];
-  const idx = stages.indexOf(current);
-
-  // If status not found in employee's workflow, walk backward
-  // through the full order to find the nearest stage that IS
-  // in the employee's workflow
-  if (idx === -1 && workflowStages) {
-    const fullIdx = FULL_STATUS_ORDER.indexOf(current);
-    for (let i = fullIdx - 1; i >= 0; i--) {
-      if (workflowStages.includes(FULL_STATUS_ORDER[i])) {
-        return FULL_STATUS_ORDER[i];
-      }
-    }
-    return null;
-  }
-
-  return idx > 0 ? stages[idx - 1] : null;
-}
+<KpiReviewPanel
+  kpi={selectedKpi}
+  submission={submissionMap.get(selectedKpi.id) || null}
+  allKpis={allKpis}
+  allSubmissions={allSubmissions}
+  viewLevel="employee"
+  currentUserId={profile?.id}
+  selectedPeriod={selectedPeriod}
+  selectedYear={selectedYear}
+  onOpenQueryHistory={() => setQueryHistoryOpen(true)}
+  onOpenFullHistory={() => setTrackerModalOpen(true)}
+  onOpenTimeline={() => setTimelineOpen(true)}
+  workflowStages={effectiveStages}          // <-- ADD THIS
+/>
 ```
 
-With this fix, stepping back from `management_review` for the example employee would correctly land on `hr_pms_review` (the last stage in their workflow before `approved`).
+### File 2: `src/components/review/KpiHistoryCard.tsx` (line 133)
 
-### File: `DOCUMENTATION.md`
+Replace the falsy check with a nullish check:
 
-Version bump to 1.45.61 and document the fix.
+```typescript
+// Before:
+{entry.isNa ? 'N/A' : (entry.score || '-')}
 
-## Files Changed
+// After:
+{entry.isNa ? 'N/A' : (entry.score != null ? entry.score : '-')}
+```
+
+### File 3: `DOCUMENTATION.md`
+
+Version bump to 1.45.62 and document both fixes.
+
+---
+
+## Summary
 
 | File | Change |
 |------|--------|
-| `src/hooks/useAdminDataEntry.ts` | Fix fallback to find nearest existing workflow stage |
-| `DOCUMENTATION.md` | Version bump and changelog |
+| `src/components/review/SelfReviewSheet.tsx` | Pass `workflowStages={effectiveStages}` to `KpiReviewPanel` |
+| `src/components/review/KpiHistoryCard.tsx` | Fix zero-score display with nullish check |
+| `DOCUMENTATION.md` | Version bump to 1.45.62 |
 
