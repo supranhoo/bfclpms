@@ -437,6 +437,11 @@ export function getPreviousStatus(
 ): Database['public']['Enums']['review_status'] | null {
   const stages = (workflowStages || FULL_STATUS_ORDER) as Array<Database['public']['Enums']['review_status']>;
   const idx = stages.indexOf(current);
+  // If status not found in employee's workflow, fall back to full order
+  if (idx === -1 && workflowStages) {
+    const fullIdx = FULL_STATUS_ORDER.indexOf(current);
+    return fullIdx > 0 ? FULL_STATUS_ORDER[fullIdx - 1] : null;
+  }
   return idx > 0 ? stages[idx - 1] : null;
 }
 
