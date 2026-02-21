@@ -1,42 +1,45 @@
 
+# Fix: Step Back Dialog Stuck When KPI Status Not in Employee's Workflow
 
-# Fix: Step Back Dialog Not Using Employee's Actual Workflow Stages
+## The Problem
 
-## The Bug
+The "Step Back" dialog is stuck showing `Management Review <- —` because the employee's resolved workflow is `[kra_set, self_review, manager_check, skip_level_check, hr_pms_review, approved]` which does **not** include `management_review`. The `getPreviousStatus` function does an `indexOf` lookup for `management_review` in the employee's stages, gets `-1`, and returns `null` -- making the dialog unusable.
 
-The `AdminStatusStepBackDialog` calls `getPreviousStatus(currentStatus)` **without** passing the employee's actual workflow stages. It always uses a hardcoded full 8-stage list. This means:
+This can happen when an admin or management user manually advanced a KPI beyond the employee's configured workflow, or when the workflow template was changed after the KPI was already in progress.
 
-- If an employee's workflow skips certain stages (e.g., no Skip-Level, no HR PMS), the step-back could target a **non-existent stage**, orphaning the KPI in a status nobody can review.
-- Example: Employee workflow is `kra_set -> self_review -> manager_check -> audit -> approved`. Stepping back from `audit` would incorrectly target `hr_pms_review` (which doesn't exist for this employee) instead of `manager_check`.
+## The Fix
 
-## Fix
+### File: `src/hooks/useAdminDataEntry.ts` (~line 434-441)
 
-### 1. Pass workflow stages from AllKpis.tsx into the dialog
+Update `getPreviousStatus` to **fall back to the full 8-stage order** when the current status is not found in the employee's workflow. This ensures the step-back always resolves a valid target, even for "orphaned" statuses.
 
-**File: `src/pages/admin/AllKpis.tsx`**
+```typescript
+export function getPreviousStatus(
+  current: ...,
+  workflowStages?: string[]
+): ... | null {
+  const stages = (workflowStages || FULL_STATUS_ORDER) as ...;
+  const idx = stages.indexOf(current);
+  // If status not found in employee's workflow, fall back to full order
+  if (idx === -1 && workflowStages) {
+    const fullIdx = FULL_STATUS_ORDER.indexOf(current);
+    return fullIdx > 0 ? FULL_STATUS_ORDER[fullIdx - 1] : null;
+  }
+  return idx > 0 ? stages[idx - 1] : null;
+}
+```
 
-The page already fetches workflow configurations (via `useWorkflowConfig` or similar). Pass the employee's resolved workflow stages to the `AdminStatusStepBackDialog` as a new prop.
+### File: `src/pages/admin/AllKpis.tsx` (~line 753)
 
-### 2. Update AdminStatusStepBackDialog to accept and use workflow stages
+Same issue for the button visibility check -- it uses `getPreviousStatus` without workflow stages so uses the full list (this part works fine, but it means the button shows even when the dialog will be stuck). No change needed here since the core fix is in `getPreviousStatus`.
 
-**File: `src/components/admin/AdminStatusStepBackDialog.tsx`**
+### File: `DOCUMENTATION.md`
 
-- Add optional prop `workflowStages?: string[]`
-- Pass it to `getPreviousStatus(currentStatus, workflowStages)` so the target is resolved against the employee's actual pipeline
-- Display the correct stage labels in the status transition badges
-
-### 3. Update DOCUMENTATION.md
-
-- Version bump to 1.45.59
-- Document the bug fix
+Version bump to 1.45.60 and document the fix.
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/admin/AdminStatusStepBackDialog.tsx` | Accept `workflowStages` prop, pass to `getPreviousStatus` |
-| `src/pages/admin/AllKpis.tsx` | Pass employee's workflow stages to the dialog |
+| `src/hooks/useAdminDataEntry.ts` | Add fallback to FULL_STATUS_ORDER when status not in employee workflow |
 | `DOCUMENTATION.md` | Version bump + changelog |
-
-No database changes required.
-
