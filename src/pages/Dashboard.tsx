@@ -33,7 +33,7 @@ import { EmployeeSelectorGrid } from '@/components/review/EmployeeSelectorGrid';
 import { UnifiedScorecard } from '@/components/review/UnifiedScorecard';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Target, TrendingUp, CheckCircle2, Clock, BarChart3, Info, Building2, ClipboardEdit, Eye, AlertTriangle, X } from 'lucide-react';
+import { Target, TrendingUp, CheckCircle2, Clock, BarChart3, Info, Building2, Users, User, ClipboardEdit, Eye, AlertTriangle, X } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { calculateOverallCumulativeScore, calculateCategoryCumulative, getScoreForPeriod } from '@/lib/cumulativeScoring';
@@ -680,7 +680,7 @@ export default function Dashboard() {
                   submission={submissionMap.get(kpi.id)}
                   statusColors={statusColors}
                   statusLabels={statusLabels}
-                  
+                  orgKpiValue={kpi.is_org_level ? getOrgKpiValue(kpi) : undefined}
                   onViewLogic={setSelectedKpiLogic}
                   onViewTracker={setSelectedKpiTracker}
                   onReview={(kpi) => {
@@ -724,6 +724,25 @@ export default function Dashboard() {
                             style={{ backgroundColor: kpi.kra_categories?.color }}
                           />
                           <span className="text-sm">{kpi.kra_categories?.name}</span>
+                          {kpi.is_org_level && (() => {
+                            const scope = (kpi as any).org_level_scope || 'organization';
+                            return (
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  {scope === 'organization' ? (
+                                    <Building2 className="h-3 w-3 text-muted-foreground" />
+                                  ) : scope === 'department' ? (
+                                    <Users className="h-3 w-3 text-muted-foreground" />
+                                  ) : (
+                                    <User className="h-3 w-3 text-muted-foreground" />
+                                  )}
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Organization-level KPI ({scope} scope)</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            );
+                          })()}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -736,6 +755,29 @@ export default function Dashboard() {
                             reviewYear={selectedYear}
                             frequencyCycleStart={kpi.frequency_cycle_start}
                           />
+                          {kpi.is_org_level && (() => {
+                            const scope = (kpi as any).org_level_scope || 'organization';
+                            const orgVal = getOrgKpiValue(kpi);
+                            return (
+                              <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-1">
+                                  {scope === 'organization' ? (
+                                    <Building2 className="h-2.5 w-2.5" />
+                                  ) : scope === 'department' ? (
+                                    <Users className="h-2.5 w-2.5" />
+                                  ) : (
+                                    <User className="h-2.5 w-2.5" />
+                                  )}
+                                  Org KPI — {scope.charAt(0).toUpperCase() + scope.slice(1)}
+                                </Badge>
+                                {orgVal?.entered_by_name && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                    Data by: {orgVal.entered_by_name}
+                                  </Badge>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
