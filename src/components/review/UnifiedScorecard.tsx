@@ -544,8 +544,9 @@ export function UnifiedScorecard({
         clearFields.achieved_value = null;
       }
 
-      // Clear manager fields when target <= self_review
-      if (targetIdx <= statusOrder.indexOf('self_review')) {
+      // Clear manager fields when target is before manager_check (or stage absent from pipeline)
+      const managerIdx = statusOrder.indexOf('manager_check');
+      if (managerIdx === -1 || targetIdx < managerIdx) {
         clearFields.manager_rating = null;
         clearFields.manager_score = null;
         clearFields.manager_remarks = null;
@@ -553,8 +554,9 @@ export function UnifiedScorecard({
         clearFields.manager_achieved_value = null;
       }
 
-      // Clear skip_level fields when target <= manager_check
-      if (targetIdx <= statusOrder.indexOf('manager_check')) {
+      // Clear skip_level fields when target is before skip_level_check (or stage absent)
+      const skipIdx = statusOrder.indexOf('skip_level_check');
+      if (skipIdx === -1 || targetIdx < skipIdx) {
         clearFields.skip_level_rating = null;
         clearFields.skip_level_score = null;
         clearFields.skip_level_remarks = null;
@@ -562,8 +564,9 @@ export function UnifiedScorecard({
         clearFields.skip_level_achieved_value = null;
       }
 
-      // Clear hr_pms fields when target <= skip_level_check
-      if (targetIdx <= statusOrder.indexOf('skip_level_check')) {
+      // Clear hr_pms fields when target is before hr_pms_review (or stage absent)
+      const hrPmsIdx = statusOrder.indexOf('hr_pms_review');
+      if (hrPmsIdx === -1 || targetIdx < hrPmsIdx) {
         clearFields.hr_pms_rating = null;
         clearFields.hr_pms_score = null;
         clearFields.hr_pms_remarks = null;
@@ -571,8 +574,9 @@ export function UnifiedScorecard({
         clearFields.hr_pms_achieved_value = null;
       }
 
-      // Clear auditor fields when target <= hr_pms_review
-      if (targetIdx <= statusOrder.indexOf('hr_pms_review')) {
+      // Clear auditor fields when target is before audit (or stage absent)
+      const auditIdx = statusOrder.indexOf('audit');
+      if (auditIdx === -1 || targetIdx < auditIdx) {
         clearFields.auditor_rating = null;
         clearFields.auditor_score = null;
         clearFields.auditor_remarks = null;
@@ -580,8 +584,9 @@ export function UnifiedScorecard({
         clearFields.auditor_achieved_value = null;
       }
 
-      // Clear management fields when target before management_review
-      if (targetIdx < statusOrder.indexOf('management_review')) {
+      // Clear management fields when target is before management_review (or stage absent)
+      const mgmtIdx = statusOrder.indexOf('management_review');
+      if (mgmtIdx === -1 || targetIdx < mgmtIdx) {
         clearFields.management_rating = null;
         clearFields.management_score = null;
         clearFields.management_remarks = null;
