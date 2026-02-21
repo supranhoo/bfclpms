@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.48 — Fix RLS policy for Management role: add explicit WITH CHECK to allow KPI status transitions (approve/send-back) from management_review stage
+> **Version:** 1.45.49 — Add org KPI scope badges and "Data by" indicators to self-dashboard (desktop table + mobile card) for visual parity with reviewer views
 > **Maintainer:** Lovable AI
 
 ---

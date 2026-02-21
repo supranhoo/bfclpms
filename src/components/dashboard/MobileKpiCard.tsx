@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Info, BarChart3, ClipboardEdit } from 'lucide-react';
+import { Info, BarChart3, ClipboardEdit, Building2, Users, User } from 'lucide-react';
 import { KPI } from '@/hooks/useKpis';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
@@ -18,6 +18,7 @@ interface MobileKpiCardProps {
   statusColors: Record<string, string>;
   statusLabels: Record<string, string>;
   score?: number | null;
+  orgKpiValue?: { achieved_value: number | null; data_source: string | null; entered_by_name: string | null } | null;
   onViewLogic: (kpi: KPI) => void;
   onViewTracker: (kpi: KPI) => void;
   onReview?: (kpi: KPI) => void;
@@ -29,11 +30,13 @@ export function MobileKpiCard({
   statusColors,
   statusLabels,
   score: scoreProp,
+  orgKpiValue,
   onViewLogic,
   onViewTracker,
   onReview,
 }: MobileKpiCardProps) {
   const score = scoreProp ?? submission?.final_score ?? submission?.self_score ?? null;
+  const scope = (kpi as any).org_level_scope || 'organization';
 
   return (
     <Card className="p-4">
@@ -47,6 +50,15 @@ export function MobileKpiCard({
           <span className="text-xs text-muted-foreground truncate max-w-[120px]">
             {kpi.kra_categories?.name}
           </span>
+          {kpi.is_org_level && (
+            scope === 'organization' ? (
+              <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+            ) : scope === 'department' ? (
+              <Users className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+            ) : (
+              <User className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+            )
+          )}
         </div>
         <div className="flex items-center gap-1">
           {kpi.frequency === 'Bi-Monthly' && (
@@ -67,7 +79,30 @@ export function MobileKpiCard({
 
       {/* KRA/KPI names */}
       <p className="font-medium text-sm mb-1 line-clamp-1 whitespace-pre-wrap">{renderBoldKpiText(kpi.kra_name)}</p>
-      <p className="text-xs text-muted-foreground mb-3 line-clamp-2 whitespace-pre-wrap">{renderBoldKpiText(kpi.kpi_name)}</p>
+      <p className="text-xs text-muted-foreground mb-1 line-clamp-2 whitespace-pre-wrap">{renderBoldKpiText(kpi.kpi_name)}</p>
+
+      {/* Org KPI badges */}
+      {kpi.is_org_level && (
+        <div className="flex flex-wrap items-center gap-1 mb-3">
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-1">
+            {scope === 'organization' ? (
+              <Building2 className="h-2.5 w-2.5" />
+            ) : scope === 'department' ? (
+              <Users className="h-2.5 w-2.5" />
+            ) : (
+              <User className="h-2.5 w-2.5" />
+            )}
+            Org KPI — {scope.charAt(0).toUpperCase() + scope.slice(1)}
+          </Badge>
+          {orgKpiValue?.entered_by_name && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              Data by: {orgKpiValue.entered_by_name}
+            </Badge>
+          )}
+        </div>
+      )}
+
+      {!kpi.is_org_level && <div className="mb-3" />}
 
       {/* Metrics row */}
       <div className="flex items-center justify-between">
