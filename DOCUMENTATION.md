@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.50 — Fix cascade-clear bug: send-back now correctly clears all downstream reviewer data regardless of missing intermediate workflow stages; clean stale auditor/management data on KPIs at self_review/kra_set
+> **Version:** 1.45.51 — Fix admin N/A attribution: Admin Data Entry now correctly sets na_marked_by_role='admin' when toggling N/A; corrected existing records with missing attribution
 > **Maintainer:** Lovable AI
 
 ---

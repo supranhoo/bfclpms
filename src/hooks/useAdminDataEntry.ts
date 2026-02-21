@@ -134,6 +134,7 @@ export function useAdminSubmitReviewData() {
       // otherwise auto-clear when achieved_value is provided
       if (is_na !== undefined) {
         updateFields.is_na = is_na;
+        updateFields.na_marked_by_role = is_na ? 'admin' : null;
       } else if (achieved_value !== undefined && achieved_value !== null) {
         updateFields.is_na = false;
       }
