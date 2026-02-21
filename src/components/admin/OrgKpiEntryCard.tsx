@@ -57,7 +57,7 @@ interface OrgKpiEntryCardProps {
     evidenceUrl: string | null;
     isNa?: boolean;
     naRemarks?: string;
-    scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null }>;
+    scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null; isNa?: boolean }>;
   }) => Promise<void>;
   onSaveAndPropagate: (values: {
     achievedValue: number | null;
@@ -65,7 +65,7 @@ interface OrgKpiEntryCardProps {
     evidenceUrl: string | null;
     isNa?: boolean;
     naRemarks?: string;
-    scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null }>;
+    scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null; isNa?: boolean }>;
   }) => Promise<void>;
   onUnlock?: () => Promise<void>;
   onRollback?: (reason: string) => Promise<void>;
@@ -164,9 +164,10 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
       scopedValues: data.scope !== 'organization'
         ? scopedValuesRef.current.map(s => ({
             scopeId: s.scopeId,
-            achievedValue: s.achievedValue,
-            remarks: s.remarks,
-            evidenceUrl: s.evidenceUrl,
+            achievedValue: s.isNa ? null : s.achievedValue,
+            remarks: s.isNa ? '' : s.remarks,
+            evidenceUrl: s.isNa ? null : s.evidenceUrl,
+            isNa: s.isNa,
           }))
         : undefined,
     };
@@ -215,9 +216,13 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, onSav
     }
   };
 
-  const handleScopedChange = (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl', value: string | null) => {
+  const handleScopedChange = (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa', value: string | null) => {
     setScopedValues(prev => prev.map(r => {
       if (r.scopeId !== scopeId) return r;
+      if (field === 'isNa') {
+        const na = value === 'true';
+        return { ...r, isNa: na, ...(na ? { achievedValue: null, remarks: '', evidenceUrl: null } : {}) };
+      }
       if (field === 'achievedValue') {
         const parsed = value === '' || value === null ? null : parseFloat(value);
         return { ...r, achievedValue: isNaN(parsed as number) ? null : parsed };

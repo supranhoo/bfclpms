@@ -270,6 +270,7 @@ export default function OrgKpiDataEntry() {
           achievedValue: val?.achieved_value ?? null,
           remarks: val?.remarks ?? '',
           evidenceUrl: val?.evidence_url ?? null,
+          isNa: val?.is_na ?? false,
         };
       });
     } else if (scope === 'employee' && allProfiles) {
@@ -292,6 +293,7 @@ export default function OrgKpiDataEntry() {
             achievedValue: val?.achieved_value ?? null,
             remarks: val?.remarks ?? '',
             evidenceUrl: val?.evidence_url ?? null,
+            isNa: val?.is_na ?? false,
           };
         })
         .sort((a, b) => {
@@ -332,7 +334,7 @@ export default function OrgKpiDataEntry() {
   // Save handler for a single card
   const handleCardSave = useCallback(async (
     kpi: typeof filteredKpis[0],
-    values: { achievedValue: number | null; remarks: string; evidenceUrl: string | null; isNa?: boolean; naRemarks?: string; scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null }> }
+    values: { achievedValue: number | null; remarks: string; evidenceUrl: string | null; isNa?: boolean; naRemarks?: string; scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null; isNa?: boolean }> }
   ) => {
     const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'organization';
     const toSave: Array<any> = [];
@@ -379,12 +381,13 @@ export default function OrgKpiDataEntry() {
           kpi_name: kpi.kpi_name,
           review_period: selectedPeriod,
           review_year: selectedYear,
-          achieved_value: sv.achievedValue,
-          remarks: sv.remarks || undefined,
-          evidence_url: sv.evidenceUrl,
+          achieved_value: sv.isNa ? null : sv.achievedValue,
+          remarks: sv.isNa ? '' : (sv.remarks || undefined),
+          evidence_url: sv.isNa ? null : sv.evidenceUrl,
           entered_by: profile?.id,
           department_id: isDept ? sv.scopeId : undefined,
           employee_id: !isDept ? sv.scopeId : undefined,
+          is_na: sv.isNa ?? false,
         });
         if (sv.achievedValue !== oldVal) {
           auditEntries.push({
@@ -432,30 +435,32 @@ export default function OrgKpiDataEntry() {
       });
     } else if (scope === 'department' && values.scopedValues) {
       for (const sv of values.scopedValues) {
-        if (sv.achievedValue === null) continue;
+        if (sv.achievedValue === null && !sv.isNa) continue;
         await propagate.mutateAsync({
           categoryId: kpi.category_id,
           kraName: kpi.kra_name,
           kpiName: kpi.kpi_name,
           reviewPeriod: selectedPeriod,
           reviewYear: selectedYear,
-          achievedValue: sv.achievedValue,
+          achievedValue: sv.isNa ? null : sv.achievedValue,
           scope: 'department',
           departmentId: sv.scopeId,
+          isNa: sv.isNa,
         });
       }
     } else if (scope === 'employee' && values.scopedValues) {
       for (const sv of values.scopedValues) {
-        if (sv.achievedValue === null) continue;
+        if (sv.achievedValue === null && !sv.isNa) continue;
         await propagate.mutateAsync({
           categoryId: kpi.category_id,
           kraName: kpi.kra_name,
           kpiName: kpi.kpi_name,
           reviewPeriod: selectedPeriod,
           reviewYear: selectedYear,
-          achievedValue: sv.achievedValue,
+          achievedValue: sv.isNa ? null : sv.achievedValue,
           scope: 'employee',
           employeeId: sv.scopeId,
+          isNa: sv.isNa,
         });
       }
     }
