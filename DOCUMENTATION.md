@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.55 — Admin Rollback Request Management Panel with status filters, search, approve/reject actions, self-manager deadlock indicators, and dashboard stat card
+> **Version:** 1.45.56 — Unified Rollback Records Lobby with Org KPI Rollbacks tab and Excel export for both KPI status requests and admin-initiated propagation rollbacks
 > **Maintainer:** Lovable AI
 
 ---

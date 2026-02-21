@@ -81,3 +81,66 @@ export function useRollbackStatusCounts() {
     },
   });
 }
+
+// --- Org KPI Propagation Rollback Logs ---
+
+export interface OrgKpiRollbackLog {
+  id: string;
+  category_id: string;
+  kra_name: string;
+  kpi_name: string;
+  review_period: string;
+  review_year: number;
+  action: string;
+  performed_by: string | null;
+  old_value: number | null;
+  new_value: number | null;
+  remarks: string | null;
+  created_at: string;
+  performer: { full_name: string | null; employee_code: string | null } | null;
+}
+
+export function useOrgKpiRollbackLogs() {
+  return useQuery({
+    queryKey: ['org-kpi-rollback-logs'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('org_kpi_data_entry_logs')
+        .select('*')
+        .in('action', ['rollback_to_data_entry', 'bulk_rollback_to_data_entry'])
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+
+      const performerIds = [...new Set((data || []).map(r => r.performed_by).filter(Boolean))];
+      let performerMap: Record<string, { full_name: string | null; employee_code: string | null }> = {};
+      if (performerIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, employee_code')
+          .in('id', performerIds);
+        (profiles || []).forEach(p => {
+          performerMap[p.id] = { full_name: p.full_name, employee_code: p.employee_code };
+        });
+      }
+
+      return (data || []).map((r): OrgKpiRollbackLog => ({
+        ...r,
+        performer: r.performed_by ? performerMap[r.performed_by] || null : null,
+      }));
+    },
+  });
+}
+
+export function useOrgKpiRollbackCount() {
+  return useQuery({
+    queryKey: ['org-kpi-rollback-count'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('org_kpi_data_entry_logs')
+        .select('id', { count: 'exact', head: true })
+        .in('action', ['rollback_to_data_entry', 'bulk_rollback_to_data_entry']);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+}
