@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.60 — Fix step-back dialog stuck when KPI status not in employee's workflow
+> **Version:** 1.45.61 — Fix step-back fallback to find nearest existing workflow stage
 > **Maintainer:** Lovable AI
 
 ---
