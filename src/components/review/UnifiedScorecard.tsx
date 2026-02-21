@@ -165,7 +165,7 @@ export function UnifiedScorecard({
   const staticConfig = VIEW_LEVEL_STATIC[viewLevel];
   
   // Fetch the employee's workflow stages dynamically
-  const { data: workflowStages } = useEmployeeWorkflowStages(employee.id);
+  const { data: workflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(employee.id);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   
   // Build dynamic config from workflow stages
@@ -1495,6 +1495,7 @@ export function UnifiedScorecard({
           currentStatus={selectedKpi.status}
           workflowStages={effectiveStages}
           notifyUserId={employee.id}
+          stagesLoading={stagesLoading}
         />
       )}
     </div>

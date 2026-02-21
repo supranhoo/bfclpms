@@ -4,6 +4,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { resolvePreviousStatus } from '@/lib/workflowEngine';
 
+/** Comprehensive ordered list of all possible workflow statuses for fallback resolution */
+const ALL_WORKFLOW_STATUSES = [
+  'kra_set', 'self_review', 'manager_check', 'skip_level_check',
+  'hr_pms_review', 'audit', 'management_review', 'approved'
+];
+
 export interface RollbackRequest {
   id: string;
   kpi_id: string;
@@ -58,7 +64,21 @@ export function useCreateRollbackRequest() {
     }) => {
       if (!user?.id) throw new Error('Not authenticated');
 
-      const targetStatus = resolvePreviousStatus(current_status, workflow_stages);
+      let targetStatus = resolvePreviousStatus(current_status, workflow_stages);
+
+      // Safety fallback: if the current status wasn't found in the provided stages,
+      // try resolving against the comprehensive all-stages list
+      if (!targetStatus) {
+        const fallbackIdx = ALL_WORKFLOW_STATUSES.indexOf(current_status);
+        if (fallbackIdx > 0) {
+          targetStatus = ALL_WORKFLOW_STATUSES[fallbackIdx - 1];
+          console.warn(
+            `[Rollback] Fallback resolution used: ${current_status} → ${targetStatus}. ` +
+            `Provided stages did not contain current status.`
+          );
+        }
+      }
+
       if (!targetStatus) throw new Error('Cannot determine rollback target status');
 
       const { data, error } = await supabase
