@@ -219,7 +219,12 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, emplo
   const ScopeIcon = scopeIcons[data.scope];
 
   return (
-    <Card className={`transition-all min-w-0 overflow-hidden ${isDirtyRef.current ? 'ring-1 ring-primary/30' : ''}`}>
+    <Card className={`transition-all min-w-0 overflow-hidden ${isDirtyRef.current ? 'ring-1 ring-primary/30' : ''} ${
+      isNa ? 'border-l-4 border-l-orange-400' :
+      data.status === 'propagated' ? 'border-l-4 border-l-green-500' :
+      data.status === 'entered' ? 'border-l-4 border-l-primary' :
+      'border-l-4 border-l-muted-foreground/30'
+    }`}>
       <CardContent className="p-4 space-y-2">
         {/* HEADER — KPI identity + metadata */}
         <div className="space-y-1">
