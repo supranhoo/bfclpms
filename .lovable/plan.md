@@ -1,148 +1,84 @@
 
 
-# Comprehensive UI Overhaul: Organization KPI Data Entry
+# Improve Completion Visibility on Org KPI Data Entry
 
-This plan consolidates all three approved changes into a single execution:
-1. **Vertical stacked card layout** (replace cramped 2-column grid)
-2. **Remove redundant Save button** (auto-save + Propagate only)
-3. **Employee Observations panel** on Org KPI cards (for Employee-scoped KPIs)
+## Current Problem
 
----
+Users cannot easily distinguish completed from pending KPIs because:
+- The top progress bar only tracks "entered" vs "not entered" — it ignores "propagated" status
+- Individual card status badges (Pending/Entered/Propagated) are small and easy to miss
+- There is no way to filter or group cards by status
+- Category headers show a simple "X/Y entered" count with no propagation info
 
-## Change 1: Vertical Stacked Card Layout
+## Solution: Multi-Level Status Visibility
 
-**Problem:** The current 2-column grid (40%/60%) feels cluttered. Save/Propagate buttons at the top-right of each card sit adjacent to the next card's buttons, causing accidental clicks.
+### 1. Enhanced Progress Bar with 3-State Tracking
 
-**Solution:** Replace the `grid grid-cols-1 md:grid-cols-5` layout with a vertical `space-y` stack in three zones:
+Update `OrgKpiProgressBar` to show three states instead of two:
+- **Pending** (grey) — no value entered
+- **Entered** (blue/primary) — value saved but not propagated
+- **Propagated** (green) — pushed to employee scorecards
 
-```text
-+------------------------------------------------------------------+
-| HEADER (full width)                                               |
-|  KPI Name (bold)                                                  |
-|  KRA: ...  |  [Scope]  [Target: 5]  [UOM: Number]                |
-|  [Status badge]  [52 employees]  [Prev: 4.2]                     |
-+------------------------------------------------------------------+
-| CONTENT (adapts by scope)                                         |
-|  [N/A Toggle]                                                     |
-|  Org: value input + remark + file upload                          |
-|  Dept/Emp: scoped entry table (full width)                        |
-|  -- OR if N/A: explanation alert + reason textarea --             |
-|  Emp scope: [Observations panel - collapsible]                    |
-+------------------------------------------------------------------+
-| FOOTER (border-t, actions at bottom)                              |
-|  [History] [Impact] [Unlock] [Rollback] [Remove]                  |
-|                                    [auto-save status]  [Propagate]|
-+------------------------------------------------------------------+
-```
+Display a segmented progress bar and update the category badges to show all three counts.
 
-### File: `src/components/admin/OrgKpiEntryCard.tsx`
+### 2. Status Filter Chips
 
-- **Lines 244-616:** Remove the `grid grid-cols-1 md:grid-cols-5 gap-4` wrapper and both column divs
-- Replace with a vertical `space-y-2` structure:
-  - **Header block:** KPI name, KRA subtitle, metadata badges (scope icon + label, target, UOM), previous value, status + employee count -- all inline/wrapping, full width
-  - **Content block:** N/A toggle, then scope-specific inputs (unchanged logic, just full-width now), lock banner
-  - **Footer block (NEW):** A `div` with `border-t pt-3 mt-1 flex flex-wrap items-center justify-between gap-2` containing all action buttons -- moved from inside the right column to the card bottom
+Add filter chips below the progress bar (or next to the search) so users can show:
+- **All** (default)
+- **Pending** — only cards needing attention
+- **Entered** — saved but not yet propagated
+- **Propagated** — fully complete
 
-### File: `src/components/admin/OrgKpiScopedEntryTable.tsx`
+This lets users focus on what still needs work.
 
-- Minor: reduce row padding from `py-2` to `py-1.5` for denser display (lines 200, 219, 228, 260, 275, 298, 306, 313, 329, 342)
+### 3. Visual Card Status Indicator
 
----
+Add a colored left border to each `OrgKpiEntryCard`:
+- Pending: `border-l-4 border-l-muted-foreground/30` (grey)
+- Entered: `border-l-4 border-l-primary` (blue)
+- Propagated: `border-l-4 border-l-green-500` (green)
 
-## Change 2: Remove Redundant Save Button
+This gives instant visual scanning without reading badges.
 
-**Problem:** Three save mechanisms exist: auto-save (2s debounce), manual "Save" button, and "Save and Propagate". The manual Save duplicates auto-save.
+### 4. Category Header Enhancement
 
-**Solution:**
-- Remove the `handleManualSave` function (lines 194-205) and `isSaving` state (line 116)
-- Remove the "Save" button element (lines 585-588)
-- Rename "Save and Propagate" to **"Propagate"** (line 593)
-- Rename confirmation dialog button from "Confirm and Propagate" to **"Propagate to Scorecards"** (line 606)
-- Keep auto-save timer, `saveStatus` indicator ("Saving..." / "Saved"), and `triggerAutoSave` logic unchanged
-- Remove the `Save` icon import if no longer used
+Update the category group headers (line 808-814 in OrgKpiDataEntry) to show propagation counts:
+- Currently: `3/5 entered`
+- New: `2 Pending | 2 Entered | 1 Propagated`
 
-**Result:** Footer simplifies to:
-```text
-[History] [Impact] [...]          [Saving...] [Propagate]
-```
+## Technical Changes
 
----
+### File 1: `src/components/admin/OrgKpiProgressBar.tsx`
 
-## Change 3: Employee Observations Panel on Org KPI Cards
+- Add `propagatedKpis: number` prop alongside `enteredKpis`
+- Add `propagated: number` to `CategoryProgress` interface
+- Replace single progress bar with a stacked/segmented bar showing pending (grey), entered (blue), propagated (green)
+- Update category badges to show 3-state counts
+- Add a legend row: colored dots with labels (Pending / Entered / Propagated)
 
-**Problem:** For Employee-scoped Org KPIs, observations raised by employees on the Dashboard are not visible on the data entry page. Reviewers must navigate away to check feedback before updating scores.
+### File 2: `src/pages/admin/OrgKpiDataEntry.tsx`
 
-**Solution:** Add a collapsible "Employee Observations" section to the `OrgKpiEntryCard` for Employee-scoped KPIs. This fetches and displays observations for all KPIs matching the Org KPI's category/KRA/KPI name and the mapped employee IDs.
+- **Progress calculation** (lines 220-260): Track `propagatedKpis` count in addition to `enteredKpis`, by checking `existing?.status === 'propagated'`; add `propagated` to each category's progress
+- **New state**: `statusFilter: 'all' | 'pending' | 'entered' | 'propagated'` (default `'all'`)
+- **Status filter chips**: Render after the progress bar card — 4 clickable badges showing counts for each status
+- **Filter logic**: Apply `statusFilter` to `filteredKpis` before grouping — match card status against filter
+- **Category header**: Update the badge from `enteredInCat/total` to show pending/entered/propagated split
+- Pass `propagatedKpis` to `OrgKpiProgressBar`
 
-### How it works:
+### File 3: `src/components/admin/OrgKpiEntryCard.tsx`
 
-1. The `OrgKpiEntryCard` already receives `scopedRows` with employee IDs (for employee-scoped KPIs)
-2. We need the actual `kpi.id` values for those employees to query observations
-3. The parent page (`OrgKpiDataEntry.tsx`) will pass a new prop `employeeKpiIds` -- an array of KPI IDs belonging to the mapped employees for this Org KPI
-4. Inside the card, use the existing `useObservationsByKpis(employeeKpiIds)` hook to fetch all observations
-5. Display them in a collapsible section below the scoped entry table, grouped by employee, showing observation type, title, status, and the conversational thread
+- Add a left border color based on status:
+  - `pending` + not N/A: `border-l-4 border-l-muted-foreground/30`
+  - `entered`: `border-l-4 border-l-primary`
+  - `propagated`: `border-l-4 border-l-green-500`
+  - N/A: `border-l-4 border-l-orange-400`
 
-### Technical changes:
+### File 4: `DOCUMENTATION.md`
 
-**File: `src/components/admin/OrgKpiEntryCard.tsx`**
-
-- Add new optional prop: `employeeKpiIds?: string[]`
-- Import `useObservationsByKpis` from `@/hooks/useKpiObservations`
-- Import `Collapsible`, `CollapsibleContent`, `CollapsibleTrigger` from `@/components/ui/collapsible`
-- Import `Eye`, `MessageSquare` icons
-- After the scoped entry table section (line 628), add a new collapsible section:
-  - Only renders when `data.scope === 'employee'` and `employeeKpiIds` has entries
-  - Trigger button shows "Employee Observations" with count badge
-  - Content displays observation cards grouped by employee name
-  - Each observation shows: type badge (positive/concern/neutral), title, status badge, who raised it, date
-  - Read-only view (no edit/delete from this page -- admins use the Dashboard for that)
-
-**File: `src/pages/admin/OrgKpiDataEntry.tsx`**
-
-- Build a mapping of employee KPI IDs per Org KPI identifier
-- In the `buildCardData` or alongside it, query `kpis` table to find KPI records matching `(category_id, kra_name, kpi_name, employee_id IN mappedEmployeeIds, review_period, review_year)`
-- Pass `employeeKpiIds` prop to `OrgKpiEntryCard`
-- This uses existing data from `orgLevelData.kpis` which already has `employeeIds`
-
-**New component: `src/components/admin/OrgKpiObservationsSummary.tsx`**
-
-A lightweight read-only component that:
-- Accepts `kpiIds: string[]`
-- Calls `useObservationsByKpis(kpiIds)`
-- Renders a collapsible panel with observation summaries
-- Shows employee name, observation type badge, title, status, date
-- Links each observation to allow navigation to the full detail on the Dashboard (optional)
-
----
-
-## File: `DOCUMENTATION.md`
-
-- Version bump to **1.45.53**
-- Document: vertical card layout, Save button removal, Employee Observations panel
-
----
-
-## Summary of All Files Modified
-
-| File | Changes |
-|------|---------|
-| `src/components/admin/OrgKpiEntryCard.tsx` | Vertical layout, remove Save button, rename Propagate, add observations panel |
-| `src/components/admin/OrgKpiScopedEntryTable.tsx` | Reduce row padding |
-| `src/components/admin/OrgKpiObservationsSummary.tsx` | **NEW** -- read-only observations panel |
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Pass `employeeKpiIds` prop to cards |
-| `DOCUMENTATION.md` | Version bump + changelog |
+- Version bump to 1.45.54
+- Document: 3-state progress tracking, status filters, card border indicators
 
 ## Zero Functionality Lost
 
-- Auto-save (2s debounce) -- unchanged
-- Propagation logic (org/dept/employee) -- unchanged
-- N/A toggle (global + per-row) -- unchanged
-- All rollback, bulk rollback, unlock, remove dialogs -- unchanged
-- Scoped entry table with bulk fill, progress counters, department grouping -- unchanged
-- History, Impact, audit log access -- unchanged
-- Lock banner for non-admin users -- unchanged
-- Out-of-range validation warnings -- unchanged
-- File upload on all scope types -- unchanged
-- Copy from Last Period, Export, Import -- unchanged
-- Data Owners and Suggestions tabs -- unchanged
+All existing features remain: auto-save, propagation, N/A toggles, rollback, unlock, scoped tables, observations panel, bulk fill, import/export, copy from last period.
 
