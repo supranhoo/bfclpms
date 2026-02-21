@@ -82,6 +82,11 @@ export function OrgKpiObservationsSummary({ kpiIds }: OrgKpiObservationsSummaryP
                           {(obs as any).ticket_number && (
                             <span className="text-muted-foreground">{(obs as any).ticket_number}</span>
                           )}
+                          {obs.created_by_profile && (
+                            <span className="text-muted-foreground">
+                              · {obs.created_by_profile.full_name || obs.created_by_profile.email}
+                            </span>
+                          )}
                         </div>
                         <p className="font-medium text-foreground leading-tight">{obs.title}</p>
                         {obs.description && (
