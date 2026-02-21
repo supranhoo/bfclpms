@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.47 — Fix non-functional Manager/Department/Division filters on Admin KPI Dashboard by adding department_id and reporting_manager_id to profile selects
+> **Version:** 1.45.48 — Fix RLS policy for Management role: add explicit WITH CHECK to allow KPI status transitions (approve/send-back) from management_review stage
 > **Maintainer:** Lovable AI
 
 ---
