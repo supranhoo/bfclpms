@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-21  
-> **Version:** 1.45.49 — Add org KPI scope badges and "Data by" indicators to self-dashboard (desktop table + mobile card) for visual parity with reviewer views
+> **Version:** 1.45.50 — Fix cascade-clear bug: send-back now correctly clears all downstream reviewer data regardless of missing intermediate workflow stages; clean stale auditor/management data on KPIs at self_review/kra_set
 > **Maintainer:** Lovable AI
 
 ---
