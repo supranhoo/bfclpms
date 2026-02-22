@@ -525,6 +525,40 @@ You will now use {{new_email}} to log in to the system.
 
 If you did not make this change, please contact your administrator immediately.`,
   },
+  observation_raised: {
+    subject: '[PMS] New Observation Raised on Your KPI',
+    body: `Hi {{recipient_name}},
+
+{{actor_name}} has raised a new observation on your KPI.
+
+KPI: {{kpi_name}}
+Observation: {{observation_title}}
+Type: {{observation_type}}
+
+Please log in to review the observation and respond if needed.`,
+  },
+  observation_reply: {
+    subject: '[PMS] New Reply on Observation',
+    body: `Hi {{recipient_name}},
+
+{{actor_name}} has replied to an observation on your KPI.
+
+KPI: {{kpi_name}}
+Observation: {{observation_title}}
+
+Please log in to view the reply and continue the conversation.`,
+  },
+  observation_resolved: {
+    subject: '[PMS] Observation Resolved',
+    body: `Hi {{recipient_name}},
+
+An observation on your KPI has been resolved.
+
+KPI: {{kpi_name}}
+Observation: {{observation_title}}
+
+No further action is needed on this observation.`,
+  },
 };
 
 const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string }> = {
@@ -553,6 +587,9 @@ const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string
   rollback_approved: { color: '#10b981', emoji: '✅', title: 'Rollback Approved' },
   rollback_rejected: { color: '#64748b', emoji: '🚫', title: 'Rollback Dismissed' },
   email_changed: { color: '#6366f1', emoji: '✉️', title: 'Email Address Updated' },
+  observation_raised: { color: '#f97316', emoji: '👁️', title: 'Observation Raised' },
+  observation_reply: { color: '#8b5cf6', emoji: '💬', title: 'Observation Reply' },
+  observation_resolved: { color: '#10b981', emoji: '✅', title: 'Observation Resolved' },
 };
 
 // Build KRA table HTML for batch assignment emails

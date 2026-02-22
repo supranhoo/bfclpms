@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-02-21  
-> **Version:** 1.45.62 — Fix Review Journey showing wrong stages in Self-Review; fix zero-score display in KPI History
+> **Last Updated:** 2026-02-22  
+> **Version:** 1.45.63 — Fix observation email placeholders: add observation_title/observation_type to DB triggers, send_email function, and edge function default templates
 > **Maintainer:** Lovable AI
 
 ---
