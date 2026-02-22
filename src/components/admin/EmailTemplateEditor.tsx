@@ -328,6 +328,7 @@ Thank you for your dedication and hard work during this period. We appreciate yo
 KPI: {{kpi_name}}
 Observation: {{observation_title}}
 Type: {{observation_type}}
+Description: {{observation_description}}
 
 Please review and respond to the observation.`,
     color: '#f97316',
@@ -421,6 +422,7 @@ const PLACEHOLDERS = [
   { key: '{{milestone_expected_outcome}}', description: 'Expected outcome (PIP milestone only)' },
   { key: '{{observation_title}}', description: 'Observation title (observation events only)' },
   { key: '{{observation_type}}', description: 'Observation type (observation raised only)' },
+  { key: '{{observation_description}}', description: 'Observation description (observation events only)' },
   { key: '{{generated_password}}', description: 'Generated password (password rollout only)' },
   { key: '{{login_email}}', description: 'User login email (password rollout only)' },
   { key: '{{login_url}}', description: 'Application login URL (password rollout only)' },
