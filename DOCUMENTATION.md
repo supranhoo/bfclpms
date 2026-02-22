@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-22  
-> **Version:** 1.45.65 — Add {{observation_description}} placeholder to observation email pipeline (trigger → DB function → edge function)
+> **Version:** 1.45.66 — Add {{observation_description}} to Email Template Editor (PLACEHOLDERS list + default body)
 > **Maintainer:** Lovable AI
 
 ---
