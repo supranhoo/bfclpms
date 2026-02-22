@@ -43,7 +43,12 @@ export interface KpiMappingFilters {
 
 const PAGE_SIZE = 20;
 
-export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number) {
+export interface MatrixSortConfig {
+  field: 'code' | 'name' | 'grade' | 'designation' | 'department' | 'firstMappedMonth';
+  direction: 'asc' | 'desc';
+}
+
+export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, sort?: MatrixSortConfig) {
   // Fetch profiles with hierarchy
   const { data: profiles, isLoading: profilesLoading } = useQuery({
     queryKey: ['kpi-mapping-profiles'],
@@ -98,8 +103,8 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number) {
   const isLoading = profilesLoading || kpisLoading;
 
   // Build the matrix and apply filters
-  const { rows, totalCount, totalEmployees, coveragePercent } = useMemo(() => {
-    if (!profiles || !kpis) return { rows: [], totalCount: 0, totalEmployees: 0, coveragePercent: 0 };
+  const { rows, allFilteredRows, totalCount, totalEmployees, mappedEmployees, coveragePercent } = useMemo(() => {
+    if (!profiles || !kpis) return { rows: [], allFilteredRows: [], totalCount: 0, totalEmployees: 0, mappedEmployees: 0, coveragePercent: 0 };
 
     // Build employee → fiscal-month-index set
     const employeeMonths = new Map<string, Set<number>>();
@@ -174,17 +179,31 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number) {
     const mappedCount = allRows.filter(r => Object.values(r.months).some(Boolean)).length;
     const coveragePercent = totalCount > 0 ? Math.round((mappedCount / totalCount) * 100) : 0;
 
+    // Sort
+    if (sort) {
+      const dir = sort.direction === 'asc' ? 1 : -1;
+      allRows.sort((a, b) => {
+        const av = (a[sort.field] ?? '') as string;
+        const bv = (b[sort.field] ?? '') as string;
+        return av.localeCompare(bv) * dir;
+      });
+    }
+
+    const allFilteredRows = [...allRows];
+
     // Paginate
     const start = (page - 1) * PAGE_SIZE;
     const rows = allRows.slice(start, start + PAGE_SIZE);
 
-    return { rows, totalCount, totalEmployees: totalCount, coveragePercent };
-  }, [profiles, kpis, filters, page]);
+    return { rows, allFilteredRows, totalCount, totalEmployees: totalCount, mappedEmployees: mappedCount, coveragePercent };
+  }, [profiles, kpis, filters, page, sort]);
 
   return {
     rows,
+    allFilteredRows,
     totalCount,
     totalEmployees,
+    mappedEmployees,
     coveragePercent,
     isLoading,
     pageSize: PAGE_SIZE,
