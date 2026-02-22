@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,8 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
-import { Check, X, Download, RotateCcw, Search, Users, Percent } from 'lucide-react';
-import { useKpiMappingMatrix, type KpiMappingFilters, type EmployeeMatrixRow } from '@/hooks/useAdminReports';
+import { Check, X, Download, RotateCcw, Search, Users, Percent, UserCheck, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { useKpiMappingMatrix, type KpiMappingFilters, type EmployeeMatrixRow, type MatrixSortConfig } from '@/hooks/useAdminReports';
 import { useDivisions, useBusinessUnits, useDepartments } from '@/hooks/useOrganization';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import * as XLSX from 'xlsx';
@@ -34,8 +34,19 @@ export default function KpiMappingMatrix() {
     search: '',
   });
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<MatrixSortConfig>({ field: 'name', direction: 'asc' });
 
-  const { rows, totalCount, totalEmployees, coveragePercent, isLoading, totalPages } = useKpiMappingMatrix(filters, page);
+  const toggleSort = useCallback((field: MatrixSortConfig['field']) => {
+    setPage(1);
+    setSort(prev => prev.field === field ? { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : { field, direction: 'asc' });
+  }, []);
+
+  const SortIcon = ({ field }: { field: MatrixSortConfig['field'] }) => {
+    if (sort.field !== field) return <ArrowUpDown className="h-3 w-3 ml-1 text-muted-foreground" />;
+    return sort.direction === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
+
+  const { rows, allFilteredRows, totalCount, totalEmployees, mappedEmployees, coveragePercent, isLoading, totalPages } = useKpiMappingMatrix(filters, page, sort);
   const { data: divisions } = useDivisions();
   const { data: businessUnits } = useBusinessUnits();
   const { data: departments } = useDepartments();
@@ -76,9 +87,7 @@ export default function KpiMappingMatrix() {
   };
 
   const exportExcel = () => {
-    // Re-fetch all filtered rows (not just current page) for export
-    // We'll use the hook's full data by temporarily getting all rows
-    const wsData = rows.length > 0 ? getExportData(rows) : [];
+    const wsData = allFilteredRows.length > 0 ? getExportData(allFilteredRows) : [];
     if (wsData.length === 0) return;
     const ws = XLSX.utils.json_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
@@ -113,6 +122,15 @@ export default function KpiMappingMatrix() {
             <div>
               <p className="text-2xl font-bold">{isLoading ? '-' : totalEmployees}</p>
               <p className="text-xs text-muted-foreground">Total Employees</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 pt-6">
+            <UserCheck className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <p className="text-2xl font-bold">{isLoading ? '-' : mappedEmployees}</p>
+              <p className="text-xs text-muted-foreground">Mapped Employees</p>
             </div>
           </CardContent>
         </Card>
@@ -212,7 +230,7 @@ export default function KpiMappingMatrix() {
             </Button>
 
             <div className="ml-auto">
-              <Button variant="outline" onClick={exportExcel} disabled={rows.length === 0}>
+              <Button variant="outline" onClick={exportExcel} disabled={allFilteredRows.length === 0}>
                 <Download className="h-4 w-4 mr-2" />
                 Export Excel
               </Button>
@@ -242,12 +260,24 @@ export default function KpiMappingMatrix() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[100px] sticky left-0 bg-background z-10">Code</TableHead>
-                    <TableHead className="min-w-[150px]">Name</TableHead>
-                    <TableHead className="min-w-[80px]">Grade</TableHead>
-                    <TableHead className="min-w-[120px]">Designation</TableHead>
-                    <TableHead className="min-w-[120px]">Department</TableHead>
-                    <TableHead className="min-w-[100px]">First Mapped</TableHead>
+                    <TableHead className="min-w-[100px] sticky left-0 bg-background z-10 cursor-pointer select-none" onClick={() => toggleSort('code')}>
+                      <span className="inline-flex items-center">Code<SortIcon field="code" /></span>
+                    </TableHead>
+                    <TableHead className="min-w-[150px] cursor-pointer select-none" onClick={() => toggleSort('name')}>
+                      <span className="inline-flex items-center">Name<SortIcon field="name" /></span>
+                    </TableHead>
+                    <TableHead className="min-w-[80px] cursor-pointer select-none" onClick={() => toggleSort('grade')}>
+                      <span className="inline-flex items-center">Grade<SortIcon field="grade" /></span>
+                    </TableHead>
+                    <TableHead className="min-w-[120px] cursor-pointer select-none" onClick={() => toggleSort('designation')}>
+                      <span className="inline-flex items-center">Designation<SortIcon field="designation" /></span>
+                    </TableHead>
+                    <TableHead className="min-w-[120px] cursor-pointer select-none" onClick={() => toggleSort('department')}>
+                      <span className="inline-flex items-center">Department<SortIcon field="department" /></span>
+                    </TableHead>
+                    <TableHead className="min-w-[100px] cursor-pointer select-none" onClick={() => toggleSort('firstMappedMonth')}>
+                      <span className="inline-flex items-center">First Mapped<SortIcon field="firstMappedMonth" /></span>
+                    </TableHead>
                     {MONTH_HEADERS.map(m => (
                       <TableHead key={m} className="text-center min-w-[50px]">{m}</TableHead>
                     ))}
