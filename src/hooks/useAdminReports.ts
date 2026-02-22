@@ -59,12 +59,22 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number) {
   const { data: kpis, isLoading: kpisLoading } = useQuery({
     queryKey: ['kpi-mapping-kpis', filters.year],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('kpis')
-        .select('employee_id, review_period')
-        .eq('review_year', filters.year);
-      if (error) throw error;
-      return data;
+      let allKpis: { employee_id: string; review_period: string }[] = [];
+      let from = 0;
+      const batchSize = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from('kpis')
+          .select('employee_id, review_period')
+          .eq('review_year', filters.year)
+          .range(from, from + batchSize - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allKpis = allKpis.concat(data);
+        if (data.length < batchSize) break;
+        from += batchSize;
+      }
+      return allKpis;
     },
   });
 
