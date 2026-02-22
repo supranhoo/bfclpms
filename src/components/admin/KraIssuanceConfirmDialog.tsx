@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { sendKraAssignmentNotifications, KraNotificationItem } from '@/lib/kraNotifications';
 import { AdminKpiCreateDialog } from './AdminKpiCreateDialog';
+import { getAllPeriodsForMonth } from '@/lib/frequencyUtils';
 
 interface KraIssuanceConfirmDialogProps {
   isOpen: boolean;
@@ -53,11 +54,15 @@ export function KraIssuanceConfirmDialog({
   const { data: kpis, isLoading } = useQuery({
     queryKey: ['issuance-kpis', employeeId, reviewPeriod, reviewYear],
     queryFn: async () => {
+      // Build list of all review_period values that cover this month
+      // (e.g. for 'February' → ['February', 'Q1', 'Q3', 'Q4', 'H1', ...])
+      const possiblePeriods = getAllPeriodsForMonth(reviewPeriod);
+      
       const { data, error } = await supabase
         .from('kpis')
         .select('id, category_id, kra_name, kpi_name, uom, target_value, weightage, frequency, is_issued, is_org_level')
         .eq('employee_id', employeeId)
-        .eq('review_period', reviewPeriod)
+        .in('review_period', possiblePeriods)
         .eq('review_year', reviewYear)
         .order('kra_name');
       if (error) throw error;

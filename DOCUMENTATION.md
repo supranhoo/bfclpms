@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-22  
-> **Version:** 1.45.67 — Add KPI Mapping Matrix dashboard (/admin/kpi-mapping) with 12-month matrix, org-hierarchy filters, pagination, and Excel export
+> **Version:** 1.45.69 — Fix KRA Issuance dialog missing non-monthly KPIs (Quarterly, Half-Yearly, Yearly) by expanding review_period query
 > **Maintainer:** Lovable AI
 
 ---
