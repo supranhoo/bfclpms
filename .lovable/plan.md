@@ -1,56 +1,79 @@
 
+# Fix: KRA Issuance Dialog Missing Non-Monthly KPIs
 
-# Fix: KPI Mapping Matrix Data Truncation (1,000-Row Limit)
+## Problem
+
+Employee **Rupesh Kumar Sharma (101851)** has 12 Monthly KPIs totaling **90%** plus 1 Quarterly KPI worth **10%** (total = 100%). The Quarterly KPI has `review_period = 'Q3'` with `frequency_cycle_start = 'Jul-Sep'`, which means Q3 covers **January, February, March**.
+
+However, the KRA Issuance Confirmation dialog only queries `review_period = 'February'`, so it completely misses the Quarterly KPI. This is why the total shows 90% instead of 100%.
 
 ## Root Cause
 
-The KPI Mapping Matrix shows inaccurate data because the database query for KPIs hits the default **1,000-row limit**. For year 2025, there are **2,908 KPI records** but only the first 1,000 are fetched. Employee "101125 Jaspal" (and many others) have KPIs that fall beyond this cutoff, so they appear unmapped.
+In `KraIssuanceConfirmDialog.tsx` (line 60), the query filters strictly by:
+```
+.eq('review_period', reviewPeriod)
+```
+
+Non-monthly KPIs are stored with period labels like `Q1`, `Q3`, `H1`, `Jan-Dec`, etc. -- not the monthly name. So they never match.
 
 ## Fix
 
-### File: `src/hooks/useAdminReports.ts`
+### File: `src/components/admin/KraIssuanceConfirmDialog.tsx`
 
-Replace the single KPI fetch query with a **paginated fetch loop** that retrieves all rows in batches of 1,000. This is a common pattern when Supabase data exceeds the default limit.
+Modify the KPI fetch query to also include non-monthly KPIs whose frequency cycle covers the selected month.
 
-**Current code (broken):**
+**Approach:**
+1. Build a list of all possible `review_period` values that cover the selected month (e.g., for February: `['February', 'Q3', 'Q4', 'H1', 'H2', 'Jan-Dec', 'Apr-Mar', 'Jul-Jun']` depending on cycle configurations).
+2. Use `.in('review_period', possiblePeriods)` instead of `.eq('review_period', reviewPeriod)`.
+
+A utility function `getPeriodsContainingMonth(monthName)` will be created in `src/lib/frequencyUtils.ts` that returns all possible period labels (Q1-Q4, H1-H2, Yearly, Bi-Monthly) that could contain a given month, considering all cycle start configurations.
+
+### File: `src/lib/frequencyUtils.ts`
+
+Add a new exported function:
+
 ```typescript
-const { data, error } = await supabase
-  .from('kpis')
-  .select('employee_id, review_period')
-  .eq('review_year', filters.year);
-```
-
-**New code (fetches all rows):**
-```typescript
-let allKpis: { employee_id: string; review_period: string }[] = [];
-let from = 0;
-const batchSize = 1000;
-while (true) {
-  const { data, error } = await supabase
-    .from('kpis')
-    .select('employee_id, review_period')
-    .eq('review_year', filters.year)
-    .range(from, from + batchSize - 1);
-  if (error) throw error;
-  if (!data || data.length === 0) break;
-  allKpis = allKpis.concat(data);
-  if (data.length < batchSize) break;
-  from += batchSize;
+export function getAllPeriodsForMonth(monthName: string): string[] {
+  // Start with the month itself (for Monthly KPIs)
+  const periods: string[] = [monthName];
+  const monthNum = getMonthNumber(monthName);
+  
+  // Check all Quarterly cycle options
+  for (const opt of QUARTERLY_OPTIONS) {
+    for (const [label, lockedMonths] of Object.entries(opt.lockedMonths)) {
+      const activeMonth = findActiveMonthForGroup(lockedMonths);
+      if (lockedMonths.includes(monthNum) || activeMonth === monthNum) {
+        periods.push(label); // e.g., 'Q3'
+      }
+    }
+  }
+  
+  // Same for Bi-Monthly, Half-Yearly, Yearly options
+  // ...
+  
+  return [...new Set(periods)];
 }
-return allKpis;
 ```
-
-The same fix is not needed for profiles (451 rows, under the limit) but will be applied as a safety measure for future growth.
 
 ### File: `DOCUMENTATION.md`
 
-Version bump to 1.45.68.
+Version bump to 1.45.69.
 
-## Impact Assessment
+## Technical Details
 
-| Risk | Assessment |
+| Aspect | Detail |
+|--------|--------|
+| Files changed | `src/lib/frequencyUtils.ts`, `src/components/admin/KraIssuanceConfirmDialog.tsx`, `DOCUMENTATION.md` |
+| Query change | `.eq('review_period', reviewPeriod)` becomes `.in('review_period', possiblePeriods)` |
+| Data impact | None -- read-only query change |
+| Regression risk | Low -- only adds more matching KPIs that were previously hidden |
+| Performance | Negligible -- same index, slightly broader filter |
+
+## Risk Assessment
+
+| Risk | Mitigation |
 |------|-----------|
-| Data Impact | None -- read-only queries, no schema changes |
-| Regression Risk | None -- same data shape, just fetches completely |
-| Performance | Minimal -- adds 1-2 extra round trips for large datasets |
-
+| Data Impact | Read-only query expansion, no schema changes |
+| Workflow Impact | Correctly includes non-monthly KPIs in issuance, improving accuracy |
+| Regression Risk | Low -- the query now correctly matches what the employee actually has |
+| Weightage Calculation | No change to weightage logic; it will naturally sum correctly once all KPIs are fetched |
