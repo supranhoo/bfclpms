@@ -1025,7 +1025,8 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       milestone_date, milestone_description, milestone_expected_outcome,
       send_back_reason, generated_password, login_email, employee_code, app_name,
       kra_list, kra_count, employee_name, total_weightage,
-      old_email, new_email } = body;
+      old_email, new_email,
+      observation_title, observation_type } = body;
 
     // Check if email notifications are enabled
     const { data: enabledSetting } = await supabase
@@ -1171,6 +1172,8 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       total_weightage,
       old_email,
       new_email,
+      observation_title,
+      observation_type,
     };
 
     // For kra_batch_assigned, inject the KRA table HTML into the placeholder
