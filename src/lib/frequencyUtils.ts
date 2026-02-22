@@ -15,6 +15,7 @@ import { format, subDays, getDaysInMonth, getDay, startOfMonth, addDays, isSameD
 import type { FrequencyConfig } from '@/hooks/useFrequencyConfig';
 import { resolveEffectiveCycleOption } from '@/lib/frequencyCycleOptions';
 import type { CycleOption } from '@/lib/frequencyCycleOptions';
+import { BI_MONTHLY_OPTIONS, QUARTERLY_OPTIONS, HALF_YEARLY_OPTIONS, YEARLY_OPTIONS } from '@/lib/frequencyCycleOptions';
 
 export type FrequencyType = 'Daily' | 'Weekly' | 'Monthly' | 'Bi-Monthly' | 'Quarterly' | 'Half-Yearly' | 'Yearly';
 
@@ -603,4 +604,34 @@ export function requiresSubPeriodSelection(frequency: FrequencyType | string | n
  */
 export function hasMultiMonthCycle(frequency: FrequencyType | string | null): boolean {
   return ['Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'].includes(frequency || '');
+}
+
+/**
+ * Get all possible review_period values that cover a given month.
+ * Used by KRA Issuance to fetch non-monthly KPIs whose cycle includes the selected month.
+ * E.g. for "February" → ['February', 'Q1', 'Q3', 'Q4', 'H1', 'H2', 'Jan-Dec', 'Apr-Mar', 'Jul-Jun', 'Jan-Feb', 'Feb-Mar']
+ */
+export function getAllPeriodsForMonth(monthName: string): string[] {
+  const periods: string[] = [monthName];
+  const monthNum = getMonthNumber(monthName);
+
+  const allOptionSets = [
+    BI_MONTHLY_OPTIONS,
+    QUARTERLY_OPTIONS,
+    HALF_YEARLY_OPTIONS,
+    YEARLY_OPTIONS,
+  ];
+
+  for (const optionSet of allOptionSets) {
+    for (const opt of optionSet) {
+      for (const [label, lockedMonths] of Object.entries(opt.lockedMonths)) {
+        const activeMonth = findActiveMonthForGroup(lockedMonths);
+        if (lockedMonths.includes(monthNum) || activeMonth === monthNum) {
+          periods.push(label);
+        }
+      }
+    }
+  }
+
+  return [...new Set(periods)];
 }
