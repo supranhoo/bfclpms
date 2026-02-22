@@ -11,7 +11,8 @@ import {
   ClipboardList,
   Calendar,
   GraduationCap,
-  Table2
+  Table2,
+  Grid3X3
 } from 'lucide-react';
 
 interface ReportCard {
@@ -113,6 +114,13 @@ const reports: ReportCard[] = [
     icon: Table2,
     path: '/reports/kpi-detail',
     color: 'text-violet-500',
+  },
+  {
+    title: 'KPI Mapping Matrix',
+    description: '12-month view of KPI mapping status per employee with org-hierarchy filters',
+    icon: Grid3X3,
+    path: '/admin/kpi-mapping',
+    color: 'text-teal-500',
   },
 ];
 

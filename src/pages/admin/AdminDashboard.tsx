@@ -16,6 +16,7 @@ import {
   Briefcase,
   ArrowRight,
   Undo2,
+  Grid3X3,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -281,6 +282,17 @@ export default function AdminDashboard() {
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-4 w-4" />
                 <span>View Reports</span>
+              </div>
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant="outline" 
+              className="justify-between h-auto py-3"
+              onClick={() => navigate('/admin/kpi-mapping')}
+            >
+              <div className="flex items-center gap-2">
+                <Grid3X3 className="h-4 w-4" />
+                <span>KPI Mapping Matrix</span>
               </div>
               <ArrowRight className="h-4 w-4" />
             </Button>
