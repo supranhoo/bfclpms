@@ -14,10 +14,13 @@ import { useDivisions, useBusinessUnits, useDepartments } from '@/hooks/useOrgan
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import * as XLSX from 'xlsx';
 
-const MONTH_HEADERS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const MONTH_KEYS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'] as const;
+// Fiscal order: Jul–Jun
+const MONTH_HEADERS = ['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun'];
+const MONTH_KEYS = ['jul','aug','sep','oct','nov','dec','jan','feb','mar','apr','may','jun'] as const;
 
 const currentYear = new Date().getFullYear();
+// Fiscal year starts in July; show label like "2025-26"
+const fiscalLabel = (startYear: number) => `${startYear}-${String(startYear + 1).slice(-2)}`;
 const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 
 export default function KpiMappingMatrix() {
@@ -80,7 +83,7 @@ export default function KpiMappingMatrix() {
     const ws = XLSX.utils.json_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'KPI Mapping');
-    XLSX.writeFile(wb, `KPI_Mapping_Matrix_${filters.year}.xlsx`);
+    XLSX.writeFile(wb, `KPI_Mapping_Matrix_${fiscalLabel(filters.year)}.xlsx`);
   };
 
   const getExportData = (data: EmployeeMatrixRow[]) =>
@@ -133,7 +136,7 @@ export default function KpiMappingMatrix() {
               <Select value={String(filters.year)} onValueChange={v => updateFilter('year', Number(v))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {yearOptions.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                  {yearOptions.map(y => <SelectItem key={y} value={String(y)}>{fiscalLabel(y)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

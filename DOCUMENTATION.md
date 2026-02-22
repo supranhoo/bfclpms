@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-22  
-> **Version:** 1.45.69 — Fix KRA Issuance dialog missing non-monthly KPIs (Quarterly, Half-Yearly, Yearly) by expanding review_period query
+> **Version:** 1.45.70 — KPI Mapping Matrix switched to July-June fiscal year cycle
 > **Maintainer:** Lovable AI
 
 ---

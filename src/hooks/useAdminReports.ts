@@ -2,13 +2,18 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useMemo, useState } from 'react';
 
+// Calendar-order month names (used for DB review_period values)
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ] as const;
 
-const MONTH_KEYS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'] as const;
-type MonthKey = typeof MONTH_KEYS[number];
+// Fiscal-order month keys (Jul=0 … Jun=11)
+const FISCAL_MONTH_KEYS = ['jul','aug','sep','oct','nov','dec','jan','feb','mar','apr','may','jun'] as const;
+type MonthKey = typeof FISCAL_MONTH_KEYS[number];
+
+// Map calendar month index (0-based Jan=0) → fiscal index (Jul=0)
+const calendarToFiscalIdx = (calIdx: number) => (calIdx + 6) % 12;
 
 export interface EmployeeMatrixRow {
   employeeId: string;
@@ -55,26 +60,38 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number) {
     },
   });
 
-  // Fetch KPIs for the selected year
+  // Fetch KPIs for the fiscal year (Jul of startYear – Jun of startYear+1)
   const { data: kpis, isLoading: kpisLoading } = useQuery({
     queryKey: ['kpi-mapping-kpis', filters.year],
     queryFn: async () => {
-      let allKpis: { employee_id: string; review_period: string }[] = [];
-      let from = 0;
-      const batchSize = 1000;
-      while (true) {
-        const { data, error } = await supabase
-          .from('kpis')
-          .select('employee_id, review_period')
-          .eq('review_year', filters.year)
-          .range(from, from + batchSize - 1);
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        allKpis = allKpis.concat(data);
-        if (data.length < batchSize) break;
-        from += batchSize;
-      }
-      return allKpis;
+      const h2Months = ['July','August','September','October','November','December'];
+      const h1Months = ['January','February','March','April','May','June'];
+
+      const fetchBatched = async (year: number, months: string[]) => {
+        let all: { employee_id: string; review_period: string }[] = [];
+        let from = 0;
+        const batchSize = 1000;
+        while (true) {
+          const { data, error } = await supabase
+            .from('kpis')
+            .select('employee_id, review_period')
+            .eq('review_year', year)
+            .in('review_period', months)
+            .range(from, from + batchSize - 1);
+          if (error) throw error;
+          if (!data || data.length === 0) break;
+          all = all.concat(data);
+          if (data.length < batchSize) break;
+          from += batchSize;
+        }
+        return all;
+      };
+
+      const [h2, h1] = await Promise.all([
+        fetchBatched(filters.year, h2Months),
+        fetchBatched(filters.year + 1, h1Months),
+      ]);
+      return [...h2, ...h1];
     },
   });
 
@@ -84,16 +101,17 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number) {
   const { rows, totalCount, totalEmployees, coveragePercent } = useMemo(() => {
     if (!profiles || !kpis) return { rows: [], totalCount: 0, totalEmployees: 0, coveragePercent: 0 };
 
-    // Build employee → month set
+    // Build employee → fiscal-month-index set
     const employeeMonths = new Map<string, Set<number>>();
     for (const kpi of kpis) {
       if (!kpi.review_period || !kpi.employee_id) continue;
-      const monthIdx = MONTH_NAMES.indexOf(kpi.review_period as any);
-      if (monthIdx === -1) continue;
+      const calIdx = MONTH_NAMES.indexOf(kpi.review_period as any);
+      if (calIdx === -1) continue;
+      const fiscalIdx = calendarToFiscalIdx(calIdx);
       if (!employeeMonths.has(kpi.employee_id)) {
         employeeMonths.set(kpi.employee_id, new Set());
       }
-      employeeMonths.get(kpi.employee_id)!.add(monthIdx);
+      employeeMonths.get(kpi.employee_id)!.add(fiscalIdx);
     }
 
     // Build full rows
@@ -104,7 +122,7 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number) {
       const monthSet = employeeMonths.get(p.id) || new Set<number>();
       const monthsObj = {} as Record<MonthKey, boolean>;
       let firstIdx = -1;
-      MONTH_KEYS.forEach((key, idx) => {
+      FISCAL_MONTH_KEYS.forEach((key, idx) => {
         const has = monthSet.has(idx);
         monthsObj[key] = has;
         if (has && firstIdx === -1) firstIdx = idx;
@@ -122,7 +140,7 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number) {
         departmentId: p.department_id,
         businessUnitId: bu?.id || null,
         divisionId: div?.id || null,
-        firstMappedMonth: firstIdx >= 0 ? MONTH_NAMES[firstIdx] : null,
+        firstMappedMonth: firstIdx >= 0 ? MONTH_NAMES[(firstIdx + 6) % 12] : null,
         months: monthsObj,
       };
     });
