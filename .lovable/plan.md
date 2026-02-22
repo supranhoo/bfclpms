@@ -1,38 +1,47 @@
 
 
-# Add `{{observation_description}}` Placeholder to Observation Emails
+# Add `{{observation_description}}` to Email Template Editor
 
-## Problem
+## Summary
 
-When an observation is raised, the description entered by the observer is captured in the `kpi_observations.description` column but never appears in the email. There is no `{{observation_description}}` placeholder in the templates or the data pipeline.
+Add the `observation_description` placeholder to two places in `EmailTemplateEditor.tsx`:
+1. The PLACEHOLDERS reference list (so admins see it as an available placeholder)
+2. The default `observation_raised` email body template
 
-## Fix (3 layers, same pattern as title/type)
+## Changes
 
-### Layer 1: DB Trigger -- `notify_on_observation_change`
+### File: `src/components/admin/EmailTemplateEditor.tsx`
 
-Add `'observation_description', NEW.description` to every `jsonb_build_object` call in the trigger so the description is stored in the notification metadata.
+**Change 1 -- PLACEHOLDERS array (after line 423)**
 
-### Layer 2: DB Function -- `send_email_on_notification`
+Add a new entry after the `observation_type` placeholder:
 
-Add `'observation_description', NEW.metadata->>'observation_description'` to the HTTP POST body so the value is sent to the edge function.
+```
+{ key: '{{observation_description}}', description: 'Observation description (observation events only)' },
+```
 
-### Layer 3: Edge Function -- `send-email-notification/index.ts`
+**Change 2 -- observation_raised default body (line 330)**
 
-Three changes:
+Insert `Description: {{observation_description}}` after the `Type:` line:
 
-1. **Destructure**: Add `observation_description` to the body destructure (line ~1029).
-2. **placeholderData**: Add `observation_description` to the object (line ~1176).
-3. **Templates**: Add `Description: {{observation_description}}` line to the `observation_raised` default template (after the Type line).
+```
+KPI: {{kpi_name}}
+Observation: {{observation_title}}
+Type: {{observation_type}}
+Description: {{observation_description}}
+```
 
-### Layer 4: Documentation
+### File: `DOCUMENTATION.md`
 
-Version bump `DOCUMENTATION.md` to 1.45.65.
+Version bump to 1.45.66.
 
-## Files Changed
+## Technical Details
 
-| File | Change |
-|------|--------|
-| New DB migration | Update `notify_on_observation_change` and `send_email_on_notification` to include `observation_description` |
-| `supabase/functions/send-email-notification/index.ts` | Add `observation_description` to destructure, placeholderData, and default template |
-| `DOCUMENTATION.md` | Version bump to 1.45.65 |
+| File | Lines | Change |
+|------|-------|--------|
+| `src/components/admin/EmailTemplateEditor.tsx` | ~423 | Add `observation_description` to PLACEHOLDERS array |
+| `src/components/admin/EmailTemplateEditor.tsx` | ~330 | Add `Description: {{observation_description}}` to default template body |
+| `DOCUMENTATION.md` | version line | Bump to 1.45.66 |
+
+No backend or database changes needed -- the edge function already supports this placeholder from the previous fix.
 
