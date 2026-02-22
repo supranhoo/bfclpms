@@ -91,6 +91,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'Observations', icon: Eye, path: '/admin/observations', roles: ['admin'] },
     { title: 'Rollback Requests', icon: Undo2, path: '/admin/rollback-requests', roles: ['admin'] },
     { title: 'Email Logs', icon: Mail, path: '/admin/email-logs', roles: ['admin'] },
+    { title: 'KPI Mapping', icon: Target, path: '/admin/kpi-mapping', roles: ['admin'] },
   ],
   dataEntry: [
     { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', roles: ['employee', 'manager', 'auditor', 'management', 'hr_pms'] },

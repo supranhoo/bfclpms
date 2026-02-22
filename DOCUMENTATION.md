@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-22  
-> **Version:** 1.45.66 — Add {{observation_description}} to Email Template Editor (PLACEHOLDERS list + default body)
+> **Version:** 1.45.67 — Add KPI Mapping Matrix dashboard (/admin/kpi-mapping) with 12-month matrix, org-hierarchy filters, pagination, and Excel export
 > **Maintainer:** Lovable AI
 
 ---

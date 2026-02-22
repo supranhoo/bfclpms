@@ -43,6 +43,7 @@ const PIPManagement = lazy(() => import("./pages/admin/PIPManagement"));
 const EmailLogs = lazy(() => import("./pages/admin/EmailLogs"));
 const ObservationsOverview = lazy(() => import("./pages/admin/ObservationsOverview"));
 const RollbackRequests = lazy(() => import("./pages/admin/RollbackRequests"));
+const KpiMappingMatrix = lazy(() => import("./pages/admin/KpiMappingMatrix"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -271,6 +272,11 @@ const App = () => (
                 <Route path="/admin/rollback-requests" element={
                   <ProtectedRoute allowedRoles={['admin']}>
                     <Suspense fallback={<PageFallback />}><RollbackRequests /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/kpi-mapping" element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <Suspense fallback={<PageFallback />}><KpiMappingMatrix /></Suspense>
                   </ProtectedRoute>
                 } />
               </Route>
