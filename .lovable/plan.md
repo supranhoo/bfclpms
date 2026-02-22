@@ -1,79 +1,59 @@
 
-# Fix: KRA Issuance Dialog Missing Non-Monthly KPIs
 
-## Problem
+# KPI Mapping Matrix: July-June Fiscal Year Cycle
 
-Employee **Rupesh Kumar Sharma (101851)** has 12 Monthly KPIs totaling **90%** plus 1 Quarterly KPI worth **10%** (total = 100%). The Quarterly KPI has `review_period = 'Q3'` with `frequency_cycle_start = 'Jul-Sep'`, which means Q3 covers **January, February, March**.
+## Overview
 
-However, the KRA Issuance Confirmation dialog only queries `review_period = 'February'`, so it completely misses the Quarterly KPI. This is why the total shows 90% instead of 100%.
+Change the KPI Mapping Matrix from a January-December calendar year layout to a **July-June fiscal year** layout. The columns will reorder to Jul-Jun, the year selector will show fiscal years (e.g., "2025-26"), and the data query will span two calendar years.
 
-## Root Cause
+## Changes
 
-In `KraIssuanceConfirmDialog.tsx` (line 60), the query filters strictly by:
-```
-.eq('review_period', reviewPeriod)
-```
+### 1. `src/pages/admin/KpiMappingMatrix.tsx` -- Reorder Columns and Fiscal Year Selector
 
-Non-monthly KPIs are stored with period labels like `Q1`, `Q3`, `H1`, `Jan-Dec`, etc. -- not the monthly name. So they never match.
+**Column headers** change from `[Jan, Feb, ..., Dec]` to `[Jul, Aug, Sep, Oct, Nov, Dec, Jan, Feb, Mar, Apr, May, Jun]`.
 
-## Fix
+**Month keys** reorder accordingly: `[jul, aug, sep, oct, nov, dec, jan, feb, mar, apr, may, jun]`.
 
-### File: `src/components/admin/KraIssuanceConfirmDialog.tsx`
+**Year selector** displays fiscal year labels like "2025-26" instead of "2025". The stored value remains the start year (e.g., 2025 for Jul 2025 - Jun 2026).
 
-Modify the KPI fetch query to also include non-monthly KPIs whose frequency cycle covers the selected month.
+**Excel export** mirrors the new column order with fiscal year in the filename (e.g., `KPI_Mapping_Matrix_2025-26.xlsx`).
 
-**Approach:**
-1. Build a list of all possible `review_period` values that cover the selected month (e.g., for February: `['February', 'Q3', 'Q4', 'H1', 'H2', 'Jan-Dec', 'Apr-Mar', 'Jul-Jun']` depending on cycle configurations).
-2. Use `.in('review_period', possiblePeriods)` instead of `.eq('review_period', reviewPeriod)`.
+### 2. `src/hooks/useAdminReports.ts` -- Fetch Two Calendar Years
 
-A utility function `getPeriodsContainingMonth(monthName)` will be created in `src/lib/frequencyUtils.ts` that returns all possible period labels (Q1-Q4, H1-H2, Yearly, Bi-Monthly) that could contain a given month, considering all cycle start configurations.
+Currently fetches KPIs for a single `review_year`. For a fiscal year starting July 2025:
+- Fetch KPIs with `review_year = 2025` and `review_period` in Jul-Dec
+- Fetch KPIs with `review_year = 2026` and `review_period` in Jan-Jun
 
-### File: `src/lib/frequencyUtils.ts`
+The month-to-column mapping will use the fiscal order (Jul=0, Aug=1, ..., Jun=11) so the matrix correctly shows 12 columns in fiscal sequence.
 
-Add a new exported function:
+The "First Mapped Month" will be computed based on the fiscal order (earliest month in the Jul-Jun sequence).
 
-```typescript
-export function getAllPeriodsForMonth(monthName: string): string[] {
-  // Start with the month itself (for Monthly KPIs)
-  const periods: string[] = [monthName];
-  const monthNum = getMonthNumber(monthName);
-  
-  // Check all Quarterly cycle options
-  for (const opt of QUARTERLY_OPTIONS) {
-    for (const [label, lockedMonths] of Object.entries(opt.lockedMonths)) {
-      const activeMonth = findActiveMonthForGroup(lockedMonths);
-      if (lockedMonths.includes(monthNum) || activeMonth === monthNum) {
-        periods.push(label); // e.g., 'Q3'
-      }
-    }
-  }
-  
-  // Same for Bi-Monthly, Half-Yearly, Yearly options
-  // ...
-  
-  return [...new Set(periods)];
-}
-```
+### 3. `DOCUMENTATION.md` -- Version Bump
 
-### File: `DOCUMENTATION.md`
-
-Version bump to 1.45.69.
+Version bump to 1.45.70.
 
 ## Technical Details
 
-| Aspect | Detail |
-|--------|--------|
-| Files changed | `src/lib/frequencyUtils.ts`, `src/components/admin/KraIssuanceConfirmDialog.tsx`, `DOCUMENTATION.md` |
-| Query change | `.eq('review_period', reviewPeriod)` becomes `.in('review_period', possiblePeriods)` |
-| Data impact | None -- read-only query change |
-| Regression risk | Low -- only adds more matching KPIs that were previously hidden |
-| Performance | Negligible -- same index, slightly broader filter |
+**Data fetch strategy:**
+```text
+Fiscal year 2025-26:
+  Query 1: review_year = 2025, review_period IN ('July','August',...,'December')
+  Query 2: review_year = 2026, review_period IN ('January','February',...,'June')
+```
 
-## Risk Assessment
+Both queries use the existing batched fetch pattern (1000 rows per batch).
 
-| Risk | Mitigation |
+**Fiscal month index mapping:**
+```text
+Jul=0, Aug=1, Sep=2, Oct=3, Nov=4, Dec=5,
+Jan=6, Feb=7, Mar=8, Apr=9, May=10, Jun=11
+```
+
+**Risk Assessment:**
+
+| Risk | Assessment |
 |------|-----------|
-| Data Impact | Read-only query expansion, no schema changes |
-| Workflow Impact | Correctly includes non-monthly KPIs in issuance, improving accuracy |
-| Regression Risk | Low -- the query now correctly matches what the employee actually has |
-| Weightage Calculation | No change to weightage logic; it will naturally sum correctly once all KPIs are fetched |
+| Data Impact | None -- read-only query, no schema changes |
+| Regression Risk | Low -- only changes column order and query filter |
+| UI Consistency | Same table layout, just reordered months |
+
