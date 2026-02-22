@@ -1,59 +1,73 @@
 
 
-# KPI Mapping Matrix: July-June Fiscal Year Cycle
+# KPI Mapping Matrix Enhancements
 
-## Overview
+## 1. Excel Export -- Full Report (Not Just Current Page)
 
-Change the KPI Mapping Matrix from a January-December calendar year layout to a **July-June fiscal year** layout. The columns will reorder to Jul-Jun, the year selector will show fiscal years (e.g., "2025-26"), and the data query will span two calendar years.
+**Problem:** The `exportExcel` function uses `rows` which only contains the current page (20 rows). The hook paginates internally but doesn't expose all filtered rows.
 
-## Changes
+**Fix:** The `useKpiMappingMatrix` hook will return a new `allFilteredRows` array containing all rows (pre-pagination). The `exportExcel` function will use this instead of `rows`.
 
-### 1. `src/pages/admin/KpiMappingMatrix.tsx` -- Reorder Columns and Fiscal Year Selector
+### Changes in `src/hooks/useAdminReports.ts`:
+- Return `allFilteredRows` alongside the paginated `rows` from the `useMemo` block
+- Add it to the hook's return object
 
-**Column headers** change from `[Jan, Feb, ..., Dec]` to `[Jul, Aug, Sep, Oct, Nov, Dec, Jan, Feb, Mar, Apr, May, Jun]`.
+### Changes in `src/pages/admin/KpiMappingMatrix.tsx`:
+- Destructure `allFilteredRows` from the hook
+- Use `allFilteredRows` in `exportExcel` instead of `rows`
 
-**Month keys** reorder accordingly: `[jul, aug, sep, oct, nov, dec, jan, feb, mar, apr, may, jun]`.
+---
 
-**Year selector** displays fiscal year labels like "2025-26" instead of "2025". The stored value remains the start year (e.g., 2025 for Jul 2025 - Jun 2026).
+## 2. "Mapped Employees" Count Card
 
-**Excel export** mirrors the new column order with fiscal year in the filename (e.g., `KPI_Mapping_Matrix_2025-26.xlsx`).
+**Problem:** Dashboard only shows "Total Employees" and "Mapping Coverage %". User wants to see the raw count of employees who have at least one KPI mapped.
 
-### 2. `src/hooks/useAdminReports.ts` -- Fetch Two Calendar Years
+**Fix:** The hook already computes `mappedCount` internally. Expose it as a new return value.
 
-Currently fetches KPIs for a single `review_year`. For a fiscal year starting July 2025:
-- Fetch KPIs with `review_year = 2025` and `review_period` in Jul-Dec
-- Fetch KPIs with `review_year = 2026` and `review_period` in Jan-Jun
+### Changes in `src/hooks/useAdminReports.ts`:
+- Return `mappedEmployees` (the count of employees with at least one mapped month)
 
-The month-to-column mapping will use the fiscal order (Jul=0, Aug=1, ..., Jun=11) so the matrix correctly shows 12 columns in fiscal sequence.
+### Changes in `src/pages/admin/KpiMappingMatrix.tsx`:
+- Add a third summary card between "Total Employees" and "Mapping Coverage" showing "Mapped Employees" count with a `UserCheck` icon
 
-The "First Mapped Month" will be computed based on the fiscal order (earliest month in the Jul-Jun sequence).
+---
 
-### 3. `DOCUMENTATION.md` -- Version Bump
+## 3. Sort Functionality on Table
 
-Version bump to 1.45.70.
+**Problem:** No sorting on columns currently.
 
-## Technical Details
+**Fix:** Add client-side sorting state for columns: Code, Name, Grade, Designation, Department, First Mapped. Clicking a column header toggles asc/desc. Sorting is applied in the hook before pagination.
 
-**Data fetch strategy:**
-```text
-Fiscal year 2025-26:
-  Query 1: review_year = 2025, review_period IN ('July','August',...,'December')
-  Query 2: review_year = 2026, review_period IN ('January','February',...,'June')
-```
+### Changes in `src/hooks/useAdminReports.ts`:
+- Accept a `sort` parameter: `{ field: string; direction: 'asc' | 'desc' }`
+- Apply `allRows.sort(...)` after filters and before pagination based on the sort config
+- Sortable fields: `code`, `name`, `grade`, `designation`, `department`, `firstMappedMonth`
 
-Both queries use the existing batched fetch pattern (1000 rows per batch).
+### Changes in `src/pages/admin/KpiMappingMatrix.tsx`:
+- Add `sortField` and `sortDirection` state
+- Pass sort config to the hook
+- Make table headers clickable with sort direction arrows (using `ArrowUpDown`, `ArrowUp`, `ArrowDown` icons from lucide)
+- Clicking a header toggles the sort; clicking again reverses direction
 
-**Fiscal month index mapping:**
-```text
-Jul=0, Aug=1, Sep=2, Oct=3, Nov=4, Dec=5,
-Jan=6, Feb=7, Mar=8, Apr=9, May=10, Jun=11
-```
+---
 
-**Risk Assessment:**
+## 4. Version Bump
+
+### `DOCUMENTATION.md`: Version bump to 1.45.71
+
+---
+
+## Technical Summary
+
+| File | Changes |
+|------|---------|
+| `src/hooks/useAdminReports.ts` | Return `allFilteredRows`, `mappedEmployees`; accept and apply sort config |
+| `src/pages/admin/KpiMappingMatrix.tsx` | Use `allFilteredRows` for export; add Mapped Employees card; add sortable column headers with state |
+| `DOCUMENTATION.md` | Version bump |
 
 | Risk | Assessment |
 |------|-----------|
-| Data Impact | None -- read-only query, no schema changes |
-| Regression Risk | Low -- only changes column order and query filter |
-| UI Consistency | Same table layout, just reordered months |
+| Data Impact | None -- all client-side changes |
+| Regression Risk | Low -- additive changes only |
+| Performance | Negligible -- sorting a few hundred rows client-side |
 
