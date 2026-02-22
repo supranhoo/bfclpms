@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-22  
-> **Version:** 1.45.63 — Fix observation email placeholders: add observation_title/observation_type to DB triggers, send_email function, and edge function default templates
+> **Version:** 1.45.64 — Fix observation email: destructure observation_title/observation_type from body and add to placeholderData in edge function
 > **Maintainer:** Lovable AI
 
 ---
