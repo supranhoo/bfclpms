@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-22  
-> **Version:** 1.45.64 — Fix observation email: destructure observation_title/observation_type from body and add to placeholderData in edge function
+> **Version:** 1.45.65 — Add {{observation_description}} placeholder to observation email pipeline (trigger → DB function → edge function)
 > **Maintainer:** Lovable AI
 
 ---

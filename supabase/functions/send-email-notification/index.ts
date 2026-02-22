@@ -534,6 +534,7 @@ If you did not make this change, please contact your administrator immediately.`
 KPI: {{kpi_name}}
 Observation: {{observation_title}}
 Type: {{observation_type}}
+Description: {{observation_description}}
 
 Please log in to review the observation and respond if needed.`,
   },
@@ -1026,7 +1027,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       send_back_reason, generated_password, login_email, employee_code, app_name,
       kra_list, kra_count, employee_name, total_weightage,
       old_email, new_email,
-      observation_title, observation_type } = body;
+      observation_title, observation_type, observation_description } = body;
 
     // Check if email notifications are enabled
     const { data: enabledSetting } = await supabase
@@ -1174,6 +1175,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       new_email,
       observation_title,
       observation_type,
+      observation_description,
     };
 
     // For kra_batch_assigned, inject the KRA table HTML into the placeholder
