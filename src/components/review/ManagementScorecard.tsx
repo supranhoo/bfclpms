@@ -89,11 +89,11 @@ export function ManagementScorecard({
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const sendBackTargets = resolveSendBackTargets('management', effectiveStages);
   
-  // Filter KPIs by period and year
+  // Filter KPIs by period and year, excluding non-issued (draft/template) KPIs (v1.45.94)
   const kpis = useMemo(() => allKpis?.filter(k => {
     const periodMatch = k.review_period?.trim().toLowerCase() === selectedPeriod?.trim().toLowerCase();
     const yearMatch = k.review_year === selectedYear;
-    return periodMatch && yearMatch;
+    return periodMatch && yearMatch && (k as any).is_issued !== false;
   }), [allKpis, selectedPeriod, selectedYear]);
 
   // Fetch org KPI values for this period

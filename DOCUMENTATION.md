@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.93 — Bottleneck Resolver: terminal stage handling fix (hr_pms_review, skip_level_check)
+> **Version:** 1.45.94 — Dashboard: exclude non-issued KPIs from all reviewer panel stats
 > **Maintainer:** Lovable AI
 
 ---
@@ -3797,6 +3797,21 @@ All Inbox access gaps for `hr_pms` and `skip_level` roles have been closed:
 |---|---|
 | `src/hooks/useBottleneckReport.ts` | Added `not_issued` stage, `urgencyStats`, `topHolders`, `responsibleRole`; expanded stats |
 | `src/pages/reports/BottleneckReport.tsx` | 7 clickable summary cards, urgency donut chart, top holders table, critical row highlights, Not Issued badge |
+
+---
+
+### Fix: Dashboard Inflated Counts from Non-Issued KPIs (v1.45.94)
+
+**Summary:** The Dashboard reviewer panels (Team, Audit, HR PMS, Management) were counting non-issued KPIs (`is_issued = false`) — draft/template records that were never actually issued to employees. This inflated stat cards and employee badge counts. The Bottleneck Report already excluded these correctly, causing a mismatch. Added `is_issued !== false` filtering to `EmployeeSelectorGrid` (which powers all panel stats), `AuditScorecard`, `UnifiedScorecard`, and `ManagementScorecard`.
+
+**Global Data Contract:** All reviewer panels and reports MUST filter `is_issued !== false` to exclude draft/template KPIs from workflow statistics.
+
+| File | Change |
+|---|---|
+| `src/components/review/EmployeeSelectorGrid.tsx` | Filter `periodKpis` via `is_issued !== false` before stats/filtering |
+| `src/components/review/AuditScorecard.tsx` | Added `is_issued !== false` to period/year KPI filter |
+| `src/components/review/UnifiedScorecard.tsx` | Added `is_issued !== false` to period/year KPI filter |
+| `src/components/review/ManagementScorecard.tsx` | Added `is_issued !== false` to period/year KPI filter |
 
 ---
 
