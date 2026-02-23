@@ -1,73 +1,49 @@
 
 
-# KPI Mapping Matrix Enhancements
+# Fix: KPI Mapping Matrix Missing Non-Monthly KPIs
 
-## 1. Excel Export -- Full Report (Not Just Current Page)
+## Problem
 
-**Problem:** The `exportExcel` function uses `rows` which only contains the current page (20 rows). The hook paginates internally but doesn't expose all filtered rows.
+The KPI Mapping Matrix shows **90% weightage** for Rupesh Kumar Sharma because his Quarterly KPI (review_period = 'Q3') is not being fetched. The current query only looks for monthly period names like 'July', 'August', etc., so non-monthly KPIs (Quarterly, Half-Yearly, Yearly, Bi-Monthly) are invisible to the matrix.
 
-**Fix:** The `useKpiMappingMatrix` hook will return a new `allFilteredRows` array containing all rows (pre-pagination). The `exportExcel` function will use this instead of `rows`.
+This is the same root cause as the recently fixed KRA Issuance dialog bug.
 
-### Changes in `src/hooks/useAdminReports.ts`:
-- Return `allFilteredRows` alongside the paginated `rows` from the `useMemo` block
-- Add it to the hook's return object
+## Root Cause
 
-### Changes in `src/pages/admin/KpiMappingMatrix.tsx`:
-- Destructure `allFilteredRows` from the hook
-- Use `allFilteredRows` in `exportExcel` instead of `rows`
+In `src/hooks/useAdminReports.ts` (lines 72-84), the fetch query filters by:
+```
+.in('review_period', ['July', 'August', ...])
+```
 
----
+A Quarterly KPI with `review_period = 'Q3'` and `frequency_cycle_start = 'Jul-Sep'` covers January-March, but is never matched because 'Q3' is not in the month name list.
 
-## 2. "Mapped Employees" Count Card
+## Fix
 
-**Problem:** Dashboard only shows "Total Employees" and "Mapping Coverage %". User wants to see the raw count of employees who have at least one KPI mapped.
+### 1. `src/hooks/useAdminReports.ts` -- Expand Query and Map Non-Monthly KPIs
 
-**Fix:** The hook already computes `mappedCount` internally. Expose it as a new return value.
+**Query change:** Remove the `.in('review_period', months)` filter. Instead, fetch ALL KPIs for each relevant `review_year`, also selecting `frequency` and `frequency_cycle_start`.
 
-### Changes in `src/hooks/useAdminReports.ts`:
-- Return `mappedEmployees` (the count of employees with at least one mapped month)
+**Mapping change:** After fetching, determine which fiscal months each KPI covers:
+- Monthly KPIs: map `review_period` directly to the month (existing logic)
+- Non-monthly KPIs: use the KPI's `frequency` and `frequency_cycle_start` to look up the cycle option, find which months are in the period's locked group (plus the active month), and mark all those months
 
-### Changes in `src/pages/admin/KpiMappingMatrix.tsx`:
-- Add a third summary card between "Total Employees" and "Mapping Coverage" showing "Mapped Employees" count with a `UserCheck` icon
+This uses the existing `getCycleOptionsForFrequency` and cycle option data from `frequencyCycleOptions.ts`.
 
----
+**New helper function** `getMonthsForPeriod(reviewPeriod, frequency, cycleStart)`:
+- For monthly KPIs, returns the single calendar month index
+- For non-monthly KPIs, looks up the cycle option and returns all month numbers covered by that period label
 
-## 3. Sort Functionality on Table
+### 2. `DOCUMENTATION.md` -- Version Bump
 
-**Problem:** No sorting on columns currently.
+Version bump to 1.45.72.
 
-**Fix:** Add client-side sorting state for columns: Code, Name, Grade, Designation, Department, First Mapped. Clicking a column header toggles asc/desc. Sorting is applied in the hook before pagination.
+## Technical Details
 
-### Changes in `src/hooks/useAdminReports.ts`:
-- Accept a `sort` parameter: `{ field: string; direction: 'asc' | 'desc' }`
-- Apply `allRows.sort(...)` after filters and before pagination based on the sort config
-- Sortable fields: `code`, `name`, `grade`, `designation`, `department`, `firstMappedMonth`
-
-### Changes in `src/pages/admin/KpiMappingMatrix.tsx`:
-- Add `sortField` and `sortDirection` state
-- Pass sort config to the hook
-- Make table headers clickable with sort direction arrows (using `ArrowUpDown`, `ArrowUp`, `ArrowDown` icons from lucide)
-- Clicking a header toggles the sort; clicking again reverses direction
-
----
-
-## 4. Version Bump
-
-### `DOCUMENTATION.md`: Version bump to 1.45.71
-
----
-
-## Technical Summary
-
-| File | Changes |
-|------|---------|
-| `src/hooks/useAdminReports.ts` | Return `allFilteredRows`, `mappedEmployees`; accept and apply sort config |
-| `src/pages/admin/KpiMappingMatrix.tsx` | Use `allFilteredRows` for export; add Mapped Employees card; add sortable column headers with state |
-| `DOCUMENTATION.md` | Version bump |
-
-| Risk | Assessment |
-|------|-----------|
-| Data Impact | None -- all client-side changes |
-| Regression Risk | Low -- additive changes only |
-| Performance | Negligible -- sorting a few hundred rows client-side |
+| Aspect | Detail |
+|--------|--------|
+| Files changed | `src/hooks/useAdminReports.ts`, `DOCUMENTATION.md` |
+| Query change | Remove `.in('review_period', months)` filter; add `frequency, frequency_cycle_start` to select |
+| Data impact | None -- read-only query expansion |
+| Regression risk | Low -- only adds previously missing KPIs to the matrix |
+| Performance | Slightly more rows fetched, but processing is client-side and fast |
 
