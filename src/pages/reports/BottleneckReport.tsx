@@ -75,6 +75,7 @@ export default function BottleneckReport() {
     departments, divisions, businessUnits,
     availableYears, availablePeriods,
     availableMonths, monthWindowStart, setMonthWindowStart,
+    employeeChartData, employeeChartDepartment, setEmployeeChartDepartment,
     page, setPage, totalPages,
   } = useBottleneckReport();
 
@@ -295,6 +296,52 @@ export default function BottleneckReport() {
           </Card>
         )}
       </div>
+
+      {/* Row 3b: By Employee stacked bar chart */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <div>
+            <CardTitle>By Employee</CardTitle>
+            <CardDescription>Top 15 employees with most pending KPIs by stage</CardDescription>
+          </div>
+          <Select value={employeeChartDepartment} onValueChange={setEmployeeChartDepartment}>
+            <SelectTrigger className="w-44 h-8 text-xs">
+              <SelectValue placeholder="Department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments.map(d => (
+                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardHeader>
+        <CardContent>
+          {employeeChartData.length > 0 ? (
+            <div className="h-[360px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={employeeChartData} layout="vertical" margin={{ left: 140 }}>
+                  <XAxis type="number" />
+                  <YAxis type="category" dataKey="employee" width={130} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Legend />
+                  {ALL_STAGES.map(stage => (
+                    <Bar
+                      key={stage}
+                      dataKey={stage}
+                      stackId="a"
+                      fill={STAGE_COLORS[stage]}
+                      name={STAGE_LABELS[stage].replace('Awaiting ', '').replace('KRA ', '')}
+                    />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-8">No employee data available</p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Row 4: Top Bottleneck Holders */}
       {topHolders.length > 0 && (
