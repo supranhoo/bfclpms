@@ -88,12 +88,10 @@ export function resolveBottleneckStage(
 
   // Active-stage statuses: the KPI IS at this reviewer, not past them.
   // Aligned with workflowEngine's canReviewKpi & resolvePendingStatuses.
-  if (kpiStatus === 'audit') {
-    return NEXT_STAGE_MAP['audit'];
-  }
-  if (kpiStatus === 'management_review') {
-    return NEXT_STAGE_MAP['management_review'];
-  }
+  if (kpiStatus === 'audit') return NEXT_STAGE_MAP['audit'];
+  if (kpiStatus === 'management_review') return NEXT_STAGE_MAP['management_review'];
+  if (kpiStatus === 'hr_pms_review') return NEXT_STAGE_MAP['hr_pms_review'];
+  if (kpiStatus === 'skip_level_check') return NEXT_STAGE_MAP['skip_level_check'];
 
   const currentIndex = stages.indexOf(kpiStatus);
 
@@ -107,6 +105,16 @@ export function resolveBottleneckStage(
   }
 
   const nextStage = currentIndex + 1 < stages.length ? stages[currentIndex + 1] : 'approved';
+
+  // Safety net: if next stage is 'approved', the current reviewer is the terminal actor
+  if (nextStage === 'approved') {
+    return NEXT_STAGE_MAP[kpiStatus] || {
+      stageKey: 'awaiting_management',
+      stageLabel: kpiStatus,
+      responsibleRole: '-',
+    };
+  }
+
   return NEXT_STAGE_MAP[nextStage] || {
     stageKey: 'awaiting_management',
     stageLabel: nextStage,

@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.92 — Bottleneck Resolver: audit & management_review fix
+> **Version:** 1.45.93 — Bottleneck Resolver: terminal stage handling fix (hr_pms_review, skip_level_check)
 > **Maintainer:** Lovable AI
 
 ---
