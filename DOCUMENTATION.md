@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.72 — KPI Mapping Matrix includes non-monthly KPIs (Quarterly, Half-Yearly, Yearly, Bi-Monthly)
+> **Version:** 1.45.73 — Admin KPI Dashboard period filter includes non-monthly KPIs
 > **Maintainer:** Lovable AI
 
 ---
