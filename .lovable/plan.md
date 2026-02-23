@@ -1,75 +1,71 @@
 
 
-# Fix: Normalize Frequency String Mismatch
+# Daily KPI Evidence Upload -- Per-Day Supporting Documents
 
-## Problem
+## Summary
 
-The database contains mismatched frequency strings that bypass all frequency logic:
-- **120 KPIs** have `frequency = 'Bimonthly'` (expected: `'Bi-Monthly'`)
-- **6 KPIs** have `frequency = 'quarterly'` (expected: `'Quarterly'`)
+Add the ability for employees to upload supporting evidence (files/images) for each daily submission. These uploads will be visible to all reviewers (Manager, Skip-Level, HR PMS, Auditor, Management) when viewing the daily submission summary.
 
-Because every `switch` statement and `.includes()` check in the codebase uses the exact canonical strings (`'Bi-Monthly'`, `'Quarterly'`), these 126 KPIs are treated as if they have no frequency rules -- no locking, no cycle grouping, no multi-month behavior.
+## Current State
 
-## Two-Part Fix
+- The `sub_period_submissions` table already has an `evidence_url` (text) column, but it is **never used** -- the Daily and Weekly submission grids don't expose any upload UI.
+- The `DailySubmissionSummary` (reviewer-facing table) does not display any evidence column.
+- The platform's multi-file pattern uses a JSONB array column (`evidence_urls`) alongside the legacy single-string column.
 
-### Part 1: Database Normalization (Migration)
+## What Changes
 
-Run two `UPDATE` statements to fix existing data:
+### 1. Database: Add `evidence_urls` JSONB Column
 
-```text
-UPDATE kpis SET frequency = 'Bi-Monthly' WHERE frequency = 'Bimonthly';
-UPDATE kpis SET frequency = 'Quarterly'  WHERE frequency = 'quarterly';
-```
+Add a `evidence_urls` JSONB column to `sub_period_submissions` to support multi-file uploads per day (up to 5 files), consistent with the existing pattern used in `review_submissions` and `org_kpi_values`.
 
-Also normalize the `kpi_templates` table to prevent re-importing bad values:
+### 2. Employee View: `DailySubmissionGrid.tsx`
 
-```text
-UPDATE kpi_templates SET frequency = 'Bi-Monthly' WHERE frequency = 'Bimonthly';
-UPDATE kpi_templates SET frequency = 'Quarterly'  WHERE frequency = 'quarterly';
-```
+When editing a day entry:
+- Show a compact `MultiFileUpload` component below the value/remarks inputs.
+- Pass the uploaded URLs into the `useSubmitSubPeriod` mutation.
+- Display a small file icon/badge on submitted rows that have evidence, linking to the files.
 
-### Part 2: Code -- Add `normalizeFrequency` Helper
+### 3. Employee View: `WeeklySubmissionTable.tsx`
 
-Create a single normalization function in `src/lib/frequencyUtils.ts` that maps common variants to canonical values. Then apply it at key entry points so future mismatches are handled gracefully.
+Same treatment -- add `MultiFileUpload` to weekly entry editing for consistency.
 
-**New function:**
+### 4. Reviewer View: `DailySubmissionSummary.tsx`
 
-```text
-normalizeFrequency(raw) maps:
-  'bimonthly' -> 'Bi-Monthly'
-  'bi-monthly' -> 'Bi-Monthly'
-  'quarterly' -> 'Quarterly'
-  'half-yearly' -> 'Half-Yearly'
-  'halfyearly' -> 'Half-Yearly'
-  'daily' -> 'Daily'
-  'weekly' -> 'Weekly'
-  'monthly' -> 'Monthly'
-  'yearly' -> 'Yearly'
-```
+Add an "Evidence" column to the submissions table:
+- Show a clickable file icon with a count badge (e.g., a paperclip icon with "2") when evidence exists for a day.
+- Clicking opens the file via the existing blob-based download mechanism (`openStorageFile`).
+- Visible to all reviewer levels.
 
-**Apply at these entry points (4 files):**
+### 5. Hook: `useSubPeriodSubmissions.ts`
 
-| File | Where | What |
-|------|-------|------|
-| `src/lib/frequencyUtils.ts` | `isKpiLockedForPeriod`, `getActiveMonthForCycle`, `getCycleMonths`, `getCycleLabel`, `hasMultiMonthCycle`, `requiresSubPeriodSelection` | Normalize the `frequency` parameter at the top of each function |
-| `src/lib/frequencyCycleOptions.ts` | `getCycleOptionsForFrequency` | Normalize before the switch |
-| `src/hooks/useAdminReports.ts` | `getCalendarMonthsForPeriod` | Normalize the frequency parameter |
-| `src/pages/admin/AllKpis.tsx` | Client-side filter | Normalize when comparing frequency |
+- Update the `SubPeriodSubmission` interface to include `evidence_urls: string[] | null`.
+- Update the `useSubmitSubPeriod` mutation to accept and persist both `evidence_url` (legacy, last file) and `evidence_urls` (JSONB array).
 
-### Part 3: Also fix the abbreviated month name bug in `getCalendarMonthsForPeriod`
+### 6. Documentation
 
-Add a `SHORT_MONTHS` array to correctly resolve "Mar" to index 2, ensuring the active month of a cycle is included in coverage results.
+Version bump to **1.45.76** with changelog entry.
 
-### Part 4: Documentation
-
-Version bump to **1.45.75** with changelog entry.
-
-## Risk Assessment
+## Technical Details
 
 | Aspect | Detail |
 |--------|--------|
-| Data impact | 126 KPIs + any matching templates get their frequency string corrected |
-| Workflow impact | These KPIs will now correctly follow frequency locking (users may lose the ability to enter data during locked months, which is the intended behavior) |
-| Regression risk | Very low -- normalization is additive; existing correct values pass through unchanged |
-| Rollback | Simple UPDATE to revert if needed |
+| Files changed | `sub_period_submissions` (migration), `DailySubmissionGrid.tsx`, `WeeklySubmissionTable.tsx`, `DailySubmissionSummary.tsx`, `useSubPeriodSubmissions.ts`, `DOCUMENTATION.md` |
+| New DB column | `evidence_urls JSONB DEFAULT '[]'` on `sub_period_submissions` |
+| Storage bucket | Existing `review-evidence` bucket (already public + authenticated) |
+| Upload path | `{userId}/{kpiId}/daily-evidence/{timestamp}.{ext}` |
+| Max files per day | 5 (consistent with platform standard) |
+| Data impact | Additive -- new nullable column, no existing data affected |
+| RLS impact | None -- uses existing `sub_period_submissions` RLS policies |
+| Regression risk | Very low -- additive UI change, existing flows unchanged |
+
+## User Experience Flow
+
+1. Employee opens Daily KPI submission grid
+2. Clicks "Enter" or "Edit" for a day
+3. Sees the existing value + remarks inputs, plus a new compact file upload area
+4. Uploads supporting documents (photos, PDFs, spreadsheets)
+5. Saves the submission -- files are stored and linked to that day's record
+6. Manager (or any reviewer) opens the employee's KPI review
+7. In the Daily Submission Summary table, sees a file/paperclip icon on days that have evidence
+8. Clicks the icon to view/download the uploaded files
 
