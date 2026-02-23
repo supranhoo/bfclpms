@@ -1,49 +1,48 @@
 
 
-# Fix: KPI Mapping Matrix Missing Non-Monthly KPIs
+# Fix: Admin KPI Dashboard - Include Non-Monthly KPIs in Period Filter
 
 ## Problem
 
-The KPI Mapping Matrix shows **90% weightage** for Rupesh Kumar Sharma because his Quarterly KPI (review_period = 'Q3') is not being fetched. The current query only looks for monthly period names like 'July', 'August', etc., so non-monthly KPIs (Quarterly, Half-Yearly, Yearly, Bi-Monthly) are invisible to the matrix.
-
-This is the same root cause as the recently fixed KRA Issuance dialog bug.
+On the Admin KPI Dashboard (`/admin/kpis`), when filtering by period "February", only KPIs with `review_period = 'February'` are shown. Rupesh Kumar Sharma has a Quarterly KPI with `review_period = 'Q3'` and `frequency_cycle_start = 'Jul-Sep'`, which covers January through March (including February). This KPI is excluded by the strict string match, causing the weightage to display 90% instead of 100%.
 
 ## Root Cause
 
-In `src/hooks/useAdminReports.ts` (lines 72-84), the fetch query filters by:
+In `src/pages/admin/AllKpis.tsx`, line 153:
 ```
-.in('review_period', ['July', 'August', ...])
+if (selectedPeriod !== 'all' && kpi.review_period !== selectedPeriod) {
+  return false;
+}
 ```
 
-A Quarterly KPI with `review_period = 'Q3'` and `frequency_cycle_start = 'Jul-Sep'` covers January-March, but is never matched because 'Q3' is not in the month name list.
+This is a direct string comparison. A Quarterly KPI with `review_period = 'Q3'` will never match the selected period `'February'`.
 
 ## Fix
 
-### 1. `src/hooks/useAdminReports.ts` -- Expand Query and Map Non-Monthly KPIs
+### 1. `src/pages/admin/AllKpis.tsx` -- Expand Period Filter Logic
 
-**Query change:** Remove the `.in('review_period', months)` filter. Instead, fetch ALL KPIs for each relevant `review_year`, also selecting `frequency` and `frequency_cycle_start`.
+Import `getCalendarMonthsForPeriod` from `useAdminReports.ts` (or extract it to a shared utility) and the `MONTH_NAMES` array.
 
-**Mapping change:** After fetching, determine which fiscal months each KPI covers:
-- Monthly KPIs: map `review_period` directly to the month (existing logic)
-- Non-monthly KPIs: use the KPI's `frequency` and `frequency_cycle_start` to look up the cycle option, find which months are in the period's locked group (plus the active month), and mark all those months
+When a month name is selected as the period filter (e.g., "February"):
+- Monthly KPIs: keep existing direct match (`review_period === 'February'`)
+- Non-monthly KPIs: use `getCalendarMonthsForPeriod(kpi.review_period, kpi.frequency, kpi.frequency_cycle_start)` to resolve the calendar months the KPI covers. If the selected month's index is in that list, include the KPI.
 
-This uses the existing `getCycleOptionsForFrequency` and cycle option data from `frequencyCycleOptions.ts`.
+When a non-month period is selected (e.g., "Q3"): keep existing direct match behavior.
 
-**New helper function** `getMonthsForPeriod(reviewPeriod, frequency, cycleStart)`:
-- For monthly KPIs, returns the single calendar month index
-- For non-monthly KPIs, looks up the cycle option and returns all month numbers covered by that period label
+### 2. `src/hooks/useAdminReports.ts` -- Export Helper
 
-### 2. `DOCUMENTATION.md` -- Version Bump
+Export the `getCalendarMonthsForPeriod` function and `MONTH_NAMES` so they can be reused in AllKpis.tsx.
 
-Version bump to 1.45.72.
+### 3. `DOCUMENTATION.md` -- Version Bump
+
+Version bump to 1.45.73.
 
 ## Technical Details
 
 | Aspect | Detail |
 |--------|--------|
-| Files changed | `src/hooks/useAdminReports.ts`, `DOCUMENTATION.md` |
-| Query change | Remove `.in('review_period', months)` filter; add `frequency, frequency_cycle_start` to select |
-| Data impact | None -- read-only query expansion |
-| Regression risk | Low -- only adds previously missing KPIs to the matrix |
-| Performance | Slightly more rows fetched, but processing is client-side and fast |
+| Files changed | `src/pages/admin/AllKpis.tsx`, `src/hooks/useAdminReports.ts`, `DOCUMENTATION.md` |
+| Logic change | Period filter now checks if non-monthly KPIs cover the selected month |
+| Data impact | None -- client-side filter logic only |
+| Regression risk | Low -- only adds previously excluded KPIs; monthly KPIs unaffected |
 
