@@ -141,7 +141,7 @@ export default function BottleneckReport() {
       <div className="space-y-6">
         <Skeleton className="h-8 w-64" />
         <div className="grid gap-4 md:grid-cols-4 lg:grid-cols-7">
-          {[1, 2, 3, 4, 5, 6, 7].map(i => <Skeleton key={i} className="h-24" />)}
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => <Skeleton key={i} className="h-24" />)}
         </div>
         <Skeleton className="h-64" />
         <Skeleton className="h-96" />
@@ -164,13 +164,15 @@ export default function BottleneckReport() {
       />
 
       {/* Row 1: Summary Cards (7) */}
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-9">
         <SummaryCard label="Total Pending" value={stats.total} icon={Clock} onClick={() => handleStageClick('all')} active={selectedStage === 'all'} />
         <SummaryCard label="KRA Set" value={stats.kraSet} icon={FileCheck} color="text-slate-500" onClick={() => handleStageClick('kra_set')} active={selectedStage === 'kra_set'} />
         <SummaryCard label="Self Review" value={stats.selfReview} icon={Users} color="text-blue-600" onClick={() => handleStageClick('self_review')} active={selectedStage === 'self_review'} />
         <SummaryCard label="Manager" value={stats.manager} icon={UserCheck} color="text-yellow-600" onClick={() => handleStageClick('manager_check')} active={selectedStage === 'manager_check'} />
         <SummaryCard label="Skip-Level" value={stats.skipLevel} icon={Eye} color="text-violet-600" onClick={() => handleStageClick('skip_level_check')} active={selectedStage === 'skip_level_check'} />
         <SummaryCard label="HR PMS" value={stats.hrPms} icon={ShieldCheck} color="text-pink-600" onClick={() => handleStageClick('hr_pms_review')} active={selectedStage === 'hr_pms_review'} />
+        <SummaryCard label="Audit" value={stats.audit} icon={Gavel} color="text-orange-600" onClick={() => handleStageClick('audit')} active={selectedStage === 'audit'} />
+        <SummaryCard label="Management" value={stats.management} icon={ShieldCheck} color="text-red-600" onClick={() => handleStageClick('management_review')} active={selectedStage === 'management_review'} />
         <SummaryCard label="Avg Days" value={stats.avgDays} icon={Timer} />
       </div>
 
