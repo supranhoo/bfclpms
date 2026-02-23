@@ -1,68 +1,78 @@
 
 
-# Fix Bottleneck Resolver for `audit` and `management_review` Statuses (v1.45.92)
+# Fix Terminal Stage Resolution in Bottleneck Report (v1.45.93)
 
 ## Root Cause
 
-The `resolveBottleneckStage` function in `src/lib/bottleneckResolver.ts` assumes every KPI status represents a **completed** stage and looks at the **next** pipeline stage to determine who is responsible. This is correct for most statuses but **wrong for two**:
+The bottleneck resolver has a critical gap: when a KPI's status is the **last review stage before `approved`** in an employee's pipeline, it maps to the `approved` entry and gets silently dropped from the report.
 
-| Status | Resolver says | Actually responsible | Why |
-|--------|--------------|---------------------|-----|
-| `audit` | Awaiting Management (next stage) | **Awaiting Audit** (Auditor) | Auditor reviews KPIs AT `audit` status (confirmed by `canReviewKpi`) |
-| `management_review` | Approved (next = approved, then dropped) | **Awaiting Management** | Management reviews KPIs AT `management_review` status |
+**Your employees' actual workflow pipeline:**
+`[kra_set, self_review, manager_check, skip_level_check, hr_pms_review, approved]`
 
-This causes:
-- 250 Audit KPIs in Jan being miscounted as "Management"
-- Management KPIs being silently **dropped** from the report (filtered out as "Approved")
-- All summary card totals are wrong
+There is NO `audit` or `management_review` stage. HR PMS is the **terminal reviewer**.
+
+**What happens now with a KPI at `hr_pms_review`:**
+1. It's not `kra_set`, `audit`, or `management_review` -- falls to general logic
+2. `stages.indexOf('hr_pms_review')` = 4
+3. `nextStage = stages[5]` = `'approved'`
+4. `NEXT_STAGE_MAP['approved']` = `{ responsibleRole: '-', stageLabel: 'Approved' }`
+5. Hook sees `responsibleRole === '-'` and **drops the KPI entirely**
+
+Result: 110 KPIs at `hr_pms_review` vanish from the report. The Audit card shows 0 because no KPIs have `audit` status (the stage doesn't exist in the pipeline).
 
 ## Solution
 
-Instead of always using "next stage" logic, align with the workflow engine's own `resolvePendingStatuses` function which defines exactly which statuses each reviewer role acts on. Specifically:
+When the next stage in the pipeline is `approved`, the KPI is at its **terminal review stage** -- the current reviewer is actively responsible. Instead of looking up the next stage, map the **current status** to its responsible role.
 
-- `audit` status maps to **Awaiting Audit** (Auditor is responsible)
-- `management_review` status maps to **Awaiting Management** (Management is responsible)
+Additionally, `hr_pms_review` and `skip_level_check` should be treated as active stages (like `audit` and `management_review`) since in some pipelines they ARE the terminal reviewer.
 
 ## Technical Changes
 
-### `src/lib/bottleneckResolver.ts`
+### 1. `src/lib/bottleneckResolver.ts`
 
-Update `resolveBottleneckStage` to handle `audit` and `management_review` as **"current stage = active reviewer"** rather than "look at next stage":
+Add explicit handling for `hr_pms_review` and `skip_level_check` as active stages (same pattern as `audit` and `management_review`):
 
 ```
-function resolveBottleneckStage(kpiStatus, workflowStages):
-  if kpiStatus === 'kra_set' -> awaiting_self_review (unchanged)
-  
-  // NEW: These statuses mean the KPI IS at this reviewer
-  if kpiStatus === 'audit' -> awaiting_audit (Auditor responsible)
-  if kpiStatus === 'management_review' -> awaiting_management (Management responsible)
-  
-  // For all other statuses, use "next stage" logic (unchanged)
-  find currentIndex in pipeline
-  nextStage = pipeline[currentIndex + 1]
-  map nextStage to responsible role
+if (kpiStatus === 'hr_pms_review') return NEXT_STAGE_MAP['hr_pms_review'];   // awaiting_hr_pms
+if (kpiStatus === 'skip_level_check') return NEXT_STAGE_MAP['skip_level_check']; // awaiting_skip_level
 ```
 
-This is a minimal, surgical fix -- only adding two explicit checks before the existing "next stage" logic.
+Also add a safety net: when the "next stage" resolves to `approved`, fall back to mapping the current status instead of dropping the KPI:
 
-### `DOCUMENTATION.md`
+```
+const nextStage = currentIndex + 1 < stages.length ? stages[currentIndex + 1] : 'approved';
+if (nextStage === 'approved') {
+  // Terminal stage — current reviewer is responsible
+  return NEXT_STAGE_MAP[kpiStatus] || { stageKey: 'awaiting_management', stageLabel: kpiStatus, responsibleRole: '-' };
+}
+return NEXT_STAGE_MAP[nextStage] || { ... };
+```
 
-Bump version to v1.45.92 and document the fix.
+### 2. `src/lib/bottleneckResolver.test.ts`
 
-## Why This Is Correct
+Add test cases:
+- `hr_pms_review` in a pipeline ending at `hr_pms_review -> approved` resolves to `awaiting_hr_pms`
+- `skip_level_check` as terminal stage resolves to `awaiting_skip_level`
+- `manager_check` as terminal stage (if pipeline is `[..., manager_check, approved]`) resolves to `awaiting_manager`
 
-The workflow engine (`src/lib/workflowEngine.ts`) confirms this behavior:
+### 3. `DOCUMENTATION.md`
 
-- `canReviewKpi('audit', 'audit', stages)` returns `true` -- auditor acts on `audit` status
-- `canReviewKpi('management_review', 'management', stages)` returns `true` -- management acts on `management_review` status
-- `resolvePendingStatuses('auditor', stages)` includes `'audit'` -- auditor sees `audit` as pending
-- `resolvePendingStatuses('management', stages)` returns `['management_review']` -- management sees it as pending
+Bump to v1.45.93 and document the terminal-stage handling fix.
+
+## Impact
+
+After this fix:
+- 110 KPIs at `hr_pms_review` will correctly appear under "HR PMS" in the Bottleneck Report
+- The "Total Pending" count will increase from ~188 to ~298 (recovering the dropped KPIs)
+- No KPIs will show under "Audit" (which is correct -- there IS no audit stage in your workflow)
+
+Note: The Dashboard's "Pending Audit: 250" shown in the Audit Panel may itself be inaccurate due to a similar workflow resolution issue there. That would be a separate investigation if needed.
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
 | Data impact | None -- read-only report | No schema changes |
-| Regression | Low -- only changes 2 status mappings | Aligns with workflow engine's own logic |
-| Accuracy | High confidence -- will match dashboard counts | Uses same semantics as `canReviewKpi` |
+| Regression | Low -- adds explicit handling for 2 more statuses + safety net | Existing test cases unaffected |
+| Accuracy | High confidence | KPIs previously dropped will now be correctly categorized |
 
