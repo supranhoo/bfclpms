@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Calendar, Check, X, AlertTriangle, Edit2 } from 'lucide-react';
+import { Calendar, Check, X, AlertTriangle, Edit2, Paperclip } from 'lucide-react';
+import { openStorageFile } from '@/lib/storageDownload';
 import { SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
 import { getMonthNumber } from '@/lib/frequencyUtils';
@@ -244,6 +245,7 @@ export function DailySubmissionSummary({
                     {col.shortLabel}
                   </TableHead>
                 ))}
+                <TableHead className="text-center w-[60px] hidden sm:table-cell">Files</TableHead>
                 <TableHead className="text-right hidden sm:table-cell">Submitted At</TableHead>
               </TableRow>
             </TableHeader>
@@ -335,6 +337,23 @@ export function DailySubmissionSummary({
                     );
                   })}
                   
+                  <TableCell className="text-center hidden sm:table-cell">
+                    {(() => {
+                      const urls = (submission.evidence_urls as string[] | null) || [];
+                      if (urls.length === 0) return <span className="text-muted-foreground">—</span>;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => urls.forEach(url => openStorageFile(url))}
+                          className="inline-flex items-center gap-0.5 text-primary hover:underline mx-auto"
+                          title={`${urls.length} file(s) attached`}
+                        >
+                          <Paperclip className="h-3.5 w-3.5" />
+                          <span className="text-xs font-medium">{urls.length}</span>
+                        </button>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell className="text-right text-sm text-muted-foreground hidden sm:table-cell">
                     {formattedTimestamp}
                   </TableCell>

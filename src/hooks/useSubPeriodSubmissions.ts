@@ -19,6 +19,7 @@ export interface SubPeriodSubmission {
   updated_at: string;
   update_reason: string | null;
   is_resubmitted: boolean;
+  evidence_urls: string[] | null;
   // Per-level approved values
   manager_achieved_value: number | null;
   auditor_achieved_value: number | null;
@@ -98,6 +99,7 @@ export function useSubmitSubPeriod() {
       achieved_value,
       remarks,
       evidence_url,
+      evidence_urls,
       review_month,
       review_year,
       update_reason,
@@ -109,11 +111,16 @@ export function useSubmitSubPeriod() {
       achieved_value: number | null;
       remarks?: string | null;
       evidence_url?: string | null;
+      evidence_urls?: string[] | null;
       review_month: string;
       review_year: number;
       update_reason?: string | null;
       is_resubmission?: boolean;
     }) => {
+      // Sync legacy single-URL column with last file from array
+      const urls = evidence_urls || [];
+      const legacyUrl = urls.length > 0 ? urls[urls.length - 1] : (evidence_url || null);
+
       const { data, error } = await supabase
         .from('sub_period_submissions')
         .upsert(
@@ -123,7 +130,8 @@ export function useSubmitSubPeriod() {
             sub_period_value,
             achieved_value,
             remarks: remarks || null,
-            evidence_url: evidence_url || null,
+            evidence_url: legacyUrl,
+            evidence_urls: urls as any,
             review_month,
             review_year,
             submitted_by: user?.id,

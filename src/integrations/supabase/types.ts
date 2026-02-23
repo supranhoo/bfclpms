@@ -2363,6 +2363,7 @@ export type Database = {
           auditor_achieved_value: number | null
           created_at: string | null
           evidence_url: string | null
+          evidence_urls: Json | null
           hr_pms_achieved_value: number | null
           id: string
           is_resubmitted: boolean | null
@@ -2386,6 +2387,7 @@ export type Database = {
           auditor_achieved_value?: number | null
           created_at?: string | null
           evidence_url?: string | null
+          evidence_urls?: Json | null
           hr_pms_achieved_value?: number | null
           id?: string
           is_resubmitted?: boolean | null
@@ -2409,6 +2411,7 @@ export type Database = {
           auditor_achieved_value?: number | null
           created_at?: string | null
           evidence_url?: string | null
+          evidence_urls?: Json | null
           hr_pms_achieved_value?: number | null
           id?: string
           is_resubmitted?: boolean | null
