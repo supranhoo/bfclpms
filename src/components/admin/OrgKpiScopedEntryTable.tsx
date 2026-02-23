@@ -320,7 +320,10 @@ function DepartmentRow({ row, onValueChange }: DepartmentRowProps) {
       </TableCell>
       {/* Target (read-only) */}
       <TableCell className="py-1.5 w-24 text-center">
-        <span className="text-xs text-muted-foreground">—</span>
+        <span className={`text-xs ${rowIsNa ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}>
+          {row.targetValue != null ? row.targetValue : '—'}
+          {row.uom && row.targetValue != null && <span className="ml-0.5 text-[10px]">{row.uom}</span>}
+        </span>
       </TableCell>
       <TableCell className="py-1.5 w-16 text-center">
         <Switch
