@@ -116,6 +116,7 @@ export function useBottleneckReport() {
   const [page, setPage] = useState(1);
   const pageSize = 25;
   const [monthWindowStart, setMonthWindowStart] = useState(0);
+  const [employeeChartDepartment, setEmployeeChartDepartment] = useState<string>('all');
 
   const deptMap = useMemo(() => {
     const m = new Map<string, { name: string; businessUnitId: string | null }>();
@@ -304,6 +305,31 @@ export function useBottleneckReport() {
     });
   }, [allRows]);
 
+  // Employee chart data (with its own department filter)
+  const employeeChartData = useMemo(() => {
+    let rows = filteredRows;
+    if (employeeChartDepartment !== 'all') {
+      rows = rows.filter(r => r.departmentId === employeeChartDepartment);
+    }
+
+    const empMap = new Map<string, Record<string, number>>();
+    rows.forEach(r => {
+      const key = r.employeeName;
+      if (!empMap.has(key)) empMap.set(key, {});
+      const entry = empMap.get(key)!;
+      entry[r.stageKey] = (entry[r.stageKey] || 0) + 1;
+    });
+
+    return Array.from(empMap.entries())
+      .map(([employee, stages]) => ({ employee, ...stages }))
+      .sort((a, b) => {
+        const totalA = ALL_STAGES.reduce((s, k) => s + ((a as any)[k] || 0), 0);
+        const totalB = ALL_STAGES.reduce((s, k) => s + ((b as any)[k] || 0), 0);
+        return totalB - totalA;
+      })
+      .slice(0, 15);
+  }, [filteredRows, employeeChartDepartment]);
+
   const totalPages = Math.ceil(filteredRows.length / pageSize);
   const paginatedRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
 
@@ -329,6 +355,7 @@ export function useBottleneckReport() {
     availablePeriods,
     availableMonths,
     monthWindowStart, setMonthWindowStart,
+    employeeChartData, employeeChartDepartment, setEmployeeChartDepartment,
     page, setPage, totalPages, pageSize,
   };
 }
