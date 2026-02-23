@@ -86,6 +86,15 @@ export function resolveBottleneckStage(
     };
   }
 
+  // Active-stage statuses: the KPI IS at this reviewer, not past them.
+  // Aligned with workflowEngine's canReviewKpi & resolvePendingStatuses.
+  if (kpiStatus === 'audit') {
+    return NEXT_STAGE_MAP['audit'];
+  }
+  if (kpiStatus === 'management_review') {
+    return NEXT_STAGE_MAP['management_review'];
+  }
+
   const currentIndex = stages.indexOf(kpiStatus);
 
   if (currentIndex === -1) {
