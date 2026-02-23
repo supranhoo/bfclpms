@@ -1,44 +1,75 @@
 
 
-# Fix: Server-Side Query Excludes Non-Monthly KPIs
+# Fix: Normalize Frequency String Mismatch
 
 ## Problem
 
-The client-side filter logic added previously is correct, but it never gets a chance to run. The **server-side query** in `useKpisByPeriod` (in `src/hooks/useKpis.ts`, line 205) applies a strict `.eq('review_period', selectedPeriod)` filter. When "February" is selected, the database only returns rows where `review_period = 'February'`. Rupesh Kumar Sharma's Quarterly KPI (`review_period = 'Q3'`) is never fetched from the database at all.
+The database contains mismatched frequency strings that bypass all frequency logic:
+- **120 KPIs** have `frequency = 'Bimonthly'` (expected: `'Bi-Monthly'`)
+- **6 KPIs** have `frequency = 'quarterly'` (expected: `'Quarterly'`)
 
-## Root Cause
+Because every `switch` statement and `.includes()` check in the codebase uses the exact canonical strings (`'Bi-Monthly'`, `'Quarterly'`), these 126 KPIs are treated as if they have no frequency rules -- no locking, no cycle grouping, no multi-month behavior.
 
+## Two-Part Fix
+
+### Part 1: Database Normalization (Migration)
+
+Run two `UPDATE` statements to fix existing data:
+
+```text
+UPDATE kpis SET frequency = 'Bi-Monthly' WHERE frequency = 'Bimonthly';
+UPDATE kpis SET frequency = 'Quarterly'  WHERE frequency = 'quarterly';
 ```
-// src/hooks/useKpis.ts line 205
-.eq('review_period', selectedPeriod as string)
+
+Also normalize the `kpi_templates` table to prevent re-importing bad values:
+
+```text
+UPDATE kpi_templates SET frequency = 'Bi-Monthly' WHERE frequency = 'Bimonthly';
+UPDATE kpi_templates SET frequency = 'Quarterly'  WHERE frequency = 'quarterly';
 ```
 
-This strict server-side filter prevents non-monthly KPIs from ever reaching the client.
+### Part 2: Code -- Add `normalizeFrequency` Helper
 
-## Fix
+Create a single normalization function in `src/lib/frequencyUtils.ts` that maps common variants to canonical values. Then apply it at key entry points so future mismatches are handled gracefully.
 
-### 1. `src/hooks/useKpis.ts` -- Fetch by Year Only When a Month Is Selected
+**New function:**
 
-When `selectedPeriod` is a month name (e.g., "February"), the query should fetch ALL KPIs for that year (filter by year only, not by period). The existing client-side filter in `AllKpis.tsx` will then correctly include/exclude non-monthly KPIs.
+```text
+normalizeFrequency(raw) maps:
+  'bimonthly' -> 'Bi-Monthly'
+  'bi-monthly' -> 'Bi-Monthly'
+  'quarterly' -> 'Quarterly'
+  'half-yearly' -> 'Half-Yearly'
+  'halfyearly' -> 'Half-Yearly'
+  'daily' -> 'Daily'
+  'weekly' -> 'Weekly'
+  'monthly' -> 'Monthly'
+  'yearly' -> 'Yearly'
+```
 
-When `selectedPeriod` is a non-month value (e.g., "Q3", "H1"), keep the existing `.eq('review_period', ...)` behavior since those are direct matches.
+**Apply at these entry points (4 files):**
 
-**Logic change in `useKpisByPeriod`:**
-- Import `MONTH_NAMES` from `useAdminReports`
-- If `selectedPeriod` is in `MONTH_NAMES`, omit the `.eq('review_period', ...)` filter (fetch all KPIs for the year)
-- Otherwise, keep the `.eq('review_period', ...)` filter as-is
+| File | Where | What |
+|------|-------|------|
+| `src/lib/frequencyUtils.ts` | `isKpiLockedForPeriod`, `getActiveMonthForCycle`, `getCycleMonths`, `getCycleLabel`, `hasMultiMonthCycle`, `requiresSubPeriodSelection` | Normalize the `frequency` parameter at the top of each function |
+| `src/lib/frequencyCycleOptions.ts` | `getCycleOptionsForFrequency` | Normalize before the switch |
+| `src/hooks/useAdminReports.ts` | `getCalendarMonthsForPeriod` | Normalize the frequency parameter |
+| `src/pages/admin/AllKpis.tsx` | Client-side filter | Normalize when comparing frequency |
 
-### 2. `DOCUMENTATION.md` -- Version Bump
+### Part 3: Also fix the abbreviated month name bug in `getCalendarMonthsForPeriod`
 
-Version bump to 1.45.74.
+Add a `SHORT_MONTHS` array to correctly resolve "Mar" to index 2, ensuring the active month of a cycle is included in coverage results.
 
-## Technical Details
+### Part 4: Documentation
+
+Version bump to **1.45.75** with changelog entry.
+
+## Risk Assessment
 
 | Aspect | Detail |
 |--------|--------|
-| Files changed | `src/hooks/useKpis.ts`, `DOCUMENTATION.md` |
-| Query change | When a month is selected, fetch all KPIs for that year instead of filtering by period server-side |
-| Data impact | None -- read-only query change |
-| Regression risk | Low -- client-side filter already handles period matching correctly; slightly more data fetched per request when a month filter is active |
-| Performance | Minor increase in data fetched (all periods for a year instead of one), but bounded by year filter and paginated in 1000-row batches |
+| Data impact | 126 KPIs + any matching templates get their frequency string corrected |
+| Workflow impact | These KPIs will now correctly follow frequency locking (users may lose the ability to enter data during locked months, which is the intended behavior) |
+| Regression risk | Very low -- normalization is additive; existing correct values pass through unchanged |
+| Rollback | Simple UPDATE to revert if needed |
 
