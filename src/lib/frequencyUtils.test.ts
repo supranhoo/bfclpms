@@ -9,7 +9,31 @@ import {
   getCycleLabel,
   requiresSubPeriodSelection,
   hasMultiMonthCycle,
+  normalizeFrequency,
 } from './frequencyUtils';
+
+describe('normalizeFrequency', () => {
+  it('normalizes common variants', () => {
+    expect(normalizeFrequency('Bimonthly')).toBe('Bi-Monthly');
+    expect(normalizeFrequency('bimonthly')).toBe('Bi-Monthly');
+    expect(normalizeFrequency('Bi-Monthly')).toBe('Bi-Monthly');
+    expect(normalizeFrequency('quarterly')).toBe('Quarterly');
+    expect(normalizeFrequency('Quarterly')).toBe('Quarterly');
+    expect(normalizeFrequency('half-yearly')).toBe('Half-Yearly');
+    expect(normalizeFrequency('HalfYearly')).toBe('Half-Yearly');
+    expect(normalizeFrequency('Daily')).toBe('Daily');
+    expect(normalizeFrequency('monthly')).toBe('Monthly');
+  });
+
+  it('returns null for null/undefined', () => {
+    expect(normalizeFrequency(null)).toBeNull();
+    expect(normalizeFrequency(undefined)).toBeNull();
+  });
+
+  it('passes through unknown values', () => {
+    expect(normalizeFrequency('Custom')).toBe('Custom');
+  });
+});
 
 describe('getMonthNumber', () => {
   it('returns correct number for all 12 months', () => {

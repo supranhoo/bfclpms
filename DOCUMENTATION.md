@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.74 — Server-side query fetches all KPIs for year when month is selected
+> **Version:** 1.45.75 — Normalize frequency string mismatch (Bimonthly→Bi-Monthly, quarterly→Quarterly) with defensive code normalization
 > **Maintainer:** Lovable AI
 
 ---
