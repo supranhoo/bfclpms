@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.80 — Fix null vs undefined fallback bug causing target values to show "—"
+> **Version:** 1.45.81 — Fix per-employee targets by building target map from hook data instead of fragile separate query
 > **Maintainer:** Lovable AI
 
 ---
