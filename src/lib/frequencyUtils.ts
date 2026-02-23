@@ -19,6 +19,25 @@ import { BI_MONTHLY_OPTIONS, QUARTERLY_OPTIONS, HALF_YEARLY_OPTIONS, YEARLY_OPTI
 
 export type FrequencyType = 'Daily' | 'Weekly' | 'Monthly' | 'Bi-Monthly' | 'Quarterly' | 'Half-Yearly' | 'Yearly';
 
+/**
+ * Normalize frequency strings to their canonical form.
+ * Handles common variants like 'Bimonthly' → 'Bi-Monthly', 'quarterly' → 'Quarterly'.
+ */
+export function normalizeFrequency(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const key = raw.toLowerCase().replace(/[-\s]/g, '');
+  const map: Record<string, string> = {
+    daily: 'Daily',
+    weekly: 'Weekly',
+    monthly: 'Monthly',
+    bimonthly: 'Bi-Monthly',
+    quarterly: 'Quarterly',
+    halfyearly: 'Half-Yearly',
+    yearly: 'Yearly',
+  };
+  return map[key] ?? raw;
+}
+
 export type YearlyCycleType = 'Jan-Dec' | 'Jul-Jun' | 'Apr-Mar' | 'Custom';
 
 export interface SubPeriodOption {
@@ -216,12 +235,13 @@ function isMonthLockedByConfig(monthNum: number, lockedMonths: Record<string, nu
  * When a FrequencyConfig is provided, uses database-driven locked_months instead of hardcoded values.
  */
 export function isKpiLockedForPeriod(
-  frequency: FrequencyType | string | null,
+  rawFrequency: FrequencyType | string | null,
   reviewMonth: string,
   reviewYear: number,
   frequencyCycleStart?: string | null,
   config?: FrequencyConfig | null
 ): boolean {
+  const frequency = normalizeFrequency(rawFrequency);
   if (!frequency) return false;
   
   const monthNum = getMonthNumber(reviewMonth);
@@ -282,12 +302,13 @@ function isYearlyLocked(monthNum: number, cycleStart: string): boolean {
  * When a FrequencyConfig is provided, uses the database-driven active_month.
  */
 export function getActiveMonthForCycle(
-  frequency: FrequencyType | string | null,
+  rawFrequency: FrequencyType | string | null,
   reviewMonth: string,
   reviewYear: number,
   frequencyCycleStart?: string | null,
   config?: FrequencyConfig | null
 ): string {
+  const frequency = normalizeFrequency(rawFrequency);
   if (!frequency) return reviewMonth;
 
   // Resolve effective cycle option: per-KPI override → global config → hardcoded default
@@ -378,12 +399,13 @@ function findActiveMonthForGroup(lockedMonths: number[]): number {
  * When a FrequencyConfig is provided, uses the database-driven locked_months.
  */
 export function getCycleMonths(
-  frequency: FrequencyType | string | null,
+  rawFrequency: FrequencyType | string | null,
   reviewMonth: string,
   reviewYear: number,
   frequencyCycleStart?: string | null,
   config?: FrequencyConfig | null
 ): string[] {
+  const frequency = normalizeFrequency(rawFrequency);
   if (!frequency) return [reviewMonth];
   
   const monthNum = getMonthNumber(reviewMonth);
@@ -455,12 +477,13 @@ export function getCycleMonths(
  * When a FrequencyConfig is provided, derives the label from the sub_frequency.
  */
 export function getCycleLabel(
-  frequency: FrequencyType | string | null,
+  rawFrequency: FrequencyType | string | null,
   reviewMonth: string,
   reviewYear: number,
   frequencyCycleStart?: string | null,
   config?: FrequencyConfig | null
 ): string {
+  const frequency = normalizeFrequency(rawFrequency);
   if (!frequency) return reviewMonth;
 
   // Resolve effective cycle option: per-KPI override → global config → hardcoded default
@@ -595,14 +618,16 @@ export function getLockedMonthsInCycle(
 /**
  * Determine if frequency requires sub-period selection (Daily/Weekly)
  */
-export function requiresSubPeriodSelection(frequency: FrequencyType | string | null): boolean {
+export function requiresSubPeriodSelection(rawFrequency: FrequencyType | string | null): boolean {
+  const frequency = normalizeFrequency(rawFrequency);
   return frequency === 'Daily' || frequency === 'Weekly';
 }
 
 /**
  * Determine if frequency has multi-month cycle behavior
  */
-export function hasMultiMonthCycle(frequency: FrequencyType | string | null): boolean {
+export function hasMultiMonthCycle(rawFrequency: FrequencyType | string | null): boolean {
+  const frequency = normalizeFrequency(rawFrequency);
   return ['Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'].includes(frequency || '');
 }
 

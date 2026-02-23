@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useMemo, useState } from 'react';
 import { getCycleOptionsForFrequency } from '@/lib/frequencyCycleOptions';
+import { normalizeFrequency } from '@/lib/frequencyUtils';
 
 // Calendar-order month names (used for DB review_period values)
 export const MONTH_NAMES = [
@@ -46,11 +47,15 @@ export interface KpiMappingFilters {
  * For a non-monthly KPI, resolve which calendar month indices (0-based, Jan=0) it covers.
  * E.g. a Quarterly KPI with review_period='Q1' and cycle_start='Jan-Mar' covers months 0,1,2.
  */
+/** Short month names used in cycle labels like "Jan-Mar" */
+const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
 export function getCalendarMonthsForPeriod(
   reviewPeriod: string,
-  frequency: string | null,
+  rawFrequency: string | null,
   cycleStart: string | null,
 ): number[] {
+  const frequency = normalizeFrequency(rawFrequency);
   if (!frequency) return [];
   const options = getCycleOptionsForFrequency(frequency);
   if (!options) return [];
@@ -98,7 +103,8 @@ export function getCalendarMonthsForPeriod(
     if (periodLabel) {
       const parts = periodLabel.split('-');
       const lastMonthName = parts[parts.length - 1];
-      const lastMonthIdx = MONTH_NAMES.indexOf(lastMonthName as any);
+      const shortIdx = SHORT_MONTHS.indexOf(lastMonthName);
+      const lastMonthIdx = shortIdx !== -1 ? shortIdx : MONTH_NAMES.indexOf(lastMonthName as any);
       if (lastMonthIdx !== -1) {
         const monthNum = lastMonthIdx + 1; // 1-based
         if (!allMonths.includes(monthNum)) {

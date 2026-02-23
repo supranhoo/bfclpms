@@ -140,19 +140,16 @@ export const MULTI_MONTH_FREQUENCIES = ['Bi-Monthly', 'Quarterly', 'Half-Yearly'
  * Get the available cycle options for a given frequency.
  * Returns undefined for frequencies that don't support cycle start configuration.
  */
-export function getCycleOptionsForFrequency(frequency: string | null | undefined): CycleOption[] | undefined {
-  switch (frequency) {
-    case 'Bi-Monthly':
-      return BI_MONTHLY_OPTIONS;
-    case 'Quarterly':
-      return QUARTERLY_OPTIONS;
-    case 'Half-Yearly':
-      return HALF_YEARLY_OPTIONS;
-    case 'Yearly':
-      return YEARLY_OPTIONS;
-    default:
-      return undefined;
-  }
+export function getCycleOptionsForFrequency(rawFrequency: string | null | undefined): CycleOption[] | undefined {
+  if (!rawFrequency) return undefined;
+  const key = rawFrequency.toLowerCase().replace(/[-\s]/g, '');
+  const map: Record<string, CycleOption[]> = {
+    bimonthly: BI_MONTHLY_OPTIONS,
+    quarterly: QUARTERLY_OPTIONS,
+    halfyearly: HALF_YEARLY_OPTIONS,
+    yearly: YEARLY_OPTIONS,
+  };
+  return map[key];
 }
 
 /**
