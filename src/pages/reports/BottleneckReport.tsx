@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -7,14 +7,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Download, Clock, Users, AlertTriangle, Timer, ChevronLeft, ChevronRight } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Download, Clock, Users, AlertTriangle, Timer, ChevronLeft, ChevronRight, UserCheck, ShieldCheck, Eye } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
-import { useBottleneckReport, ALL_STAGES, STAGE_LABELS, type BottleneckRow } from '@/hooks/useBottleneckReport';
+import { useBottleneckReport, ALL_STAGES, STAGE_LABELS, type BottleneckRow, type TopHolder } from '@/hooks/useBottleneckReport';
 import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 const STAGE_COLORS: Record<string, string> = {
+  not_issued: '#64748b',
   kra_set: '#94a3b8',
   self_review: '#3b82f6',
   manager_check: '#f59e0b',
@@ -23,6 +25,8 @@ const STAGE_COLORS: Record<string, string> = {
   audit: '#f97316',
   management_review: '#ef4444',
 };
+
+const URGENCY_COLORS = { green: '#22c55e', amber: '#f59e0b', red: '#ef4444' };
 
 function DaysPendingBadge({ days }: { days: number }) {
   if (days <= 7) {
@@ -34,10 +38,34 @@ function DaysPendingBadge({ days }: { days: number }) {
   return <Badge variant="destructive">{days}d</Badge>;
 }
 
+function SummaryCard({
+  label, value, icon: Icon, color, active, onClick,
+}: {
+  label: string; value: number | string; icon: React.ElementType; color?: string; active?: boolean; onClick?: () => void;
+}) {
+  return (
+    <Card
+      className={cn(
+        'cursor-pointer transition-all hover:shadow-md',
+        active && 'ring-2 ring-primary'
+      )}
+      onClick={onClick}
+    >
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+        <Icon className={cn('h-4 w-4', color || 'text-muted-foreground')} />
+      </CardHeader>
+      <CardContent>
+        <div className={cn('text-3xl font-bold', color)}>{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function BottleneckReport() {
   const { toast } = useToast();
   const {
-    rows, allFilteredRows, stats, chartData, isLoading,
+    rows, allFilteredRows, stats, urgencyStats, topHolders, chartData, isLoading,
     selectedYear, setSelectedYear,
     selectedPeriod, setSelectedPeriod,
     selectedDepartment, setSelectedDepartment,
@@ -49,6 +77,13 @@ export default function BottleneckReport() {
     availableYears, availablePeriods,
     page, setPage, totalPages,
   } = useBottleneckReport();
+
+  const [showAllHolders, setShowAllHolders] = useState(false);
+
+  const handleStageClick = useCallback((stage: string) => {
+    setSelectedStage(prev => prev === stage ? 'all' : stage);
+    setPage(1);
+  }, [setSelectedStage, setPage]);
 
   const handleExport = useCallback(() => {
     if (allFilteredRows.length === 0) {
@@ -64,6 +99,7 @@ export default function BottleneckReport() {
       'Period': r.period,
       'Year': r.year,
       'Current Stage': r.currentStage,
+      'Issued': r.isIssued ? 'Yes' : 'No',
       'Responsible Person': r.responsiblePerson,
       'Days Pending': r.daysPending,
       'Last Updated': format(new Date(r.lastUpdated), 'dd-MMM-yyyy'),
@@ -75,12 +111,20 @@ export default function BottleneckReport() {
     toast({ title: 'Report downloaded successfully' });
   }, [allFilteredRows, toast]);
 
+  const urgencyChartData = [
+    { name: '0-7 days', value: urgencyStats.green, color: URGENCY_COLORS.green },
+    { name: '8-14 days', value: urgencyStats.amber, color: URGENCY_COLORS.amber },
+    { name: '15+ days', value: urgencyStats.red, color: URGENCY_COLORS.red },
+  ];
+
+  const displayedHolders: TopHolder[] = showAllHolders ? topHolders : topHolders.slice(0, 10);
+
   if (isLoading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-64" />
-        <div className="grid gap-4 md:grid-cols-5">
-          {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-24" />)}
+        <div className="grid gap-4 md:grid-cols-4 lg:grid-cols-7">
+          {[1, 2, 3, 4, 5, 6, 7].map(i => <Skeleton key={i} className="h-24" />)}
         </div>
         <Skeleton className="h-64" />
         <Skeleton className="h-96" />
@@ -102,87 +146,137 @@ export default function BottleneckReport() {
         }
       />
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-5">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Pending</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.total}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Self Review</CardTitle>
-            <Users className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-600">{stats.selfReview}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Manager</CardTitle>
-            <Users className="h-4 w-4 text-yellow-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-yellow-600">{stats.manager}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Audit / Mgmt</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-orange-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-orange-600">{stats.auditMgmt}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Avg Days Pending</CardTitle>
-            <Timer className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.avgDays}</div>
-          </CardContent>
-        </Card>
+      {/* Row 1: Summary Cards (7) */}
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
+        <SummaryCard label="Total Pending" value={stats.total} icon={Clock} onClick={() => handleStageClick('all')} active={selectedStage === 'all'} />
+        <SummaryCard label="Not Issued" value={stats.notIssued} icon={AlertTriangle} color="text-slate-500" onClick={() => handleStageClick('not_issued')} active={selectedStage === 'not_issued'} />
+        <SummaryCard label="Self Review" value={stats.selfReview} icon={Users} color="text-blue-600" onClick={() => handleStageClick('self_review')} active={selectedStage === 'self_review'} />
+        <SummaryCard label="Manager" value={stats.manager} icon={UserCheck} color="text-yellow-600" onClick={() => handleStageClick('manager_check')} active={selectedStage === 'manager_check'} />
+        <SummaryCard label="Skip-Level" value={stats.skipLevel} icon={Eye} color="text-violet-600" onClick={() => handleStageClick('skip_level_check')} active={selectedStage === 'skip_level_check'} />
+        <SummaryCard label="HR PMS" value={stats.hrPms} icon={ShieldCheck} color="text-pink-600" onClick={() => handleStageClick('hr_pms_review')} active={selectedStage === 'hr_pms_review'} />
+        <SummaryCard label="Avg Days" value={stats.avgDays} icon={Timer} />
       </div>
 
-      {/* Chart */}
-      {chartData.length > 0 && (
+      {/* Row 2: Charts side-by-side */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Urgency Donut */}
         <Card>
           <CardHeader>
-            <CardTitle>Bottleneck Distribution by Department</CardTitle>
-            <CardDescription>Number of KPIs stuck at each workflow stage</CardDescription>
+            <CardTitle>Urgency Distribution</CardTitle>
+            <CardDescription>KPIs by days pending severity</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} layout="vertical" margin={{ left: 120 }}>
-                  <XAxis type="number" />
-                  <YAxis type="category" dataKey="department" width={110} tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Legend />
-                  {ALL_STAGES.map(stage => (
-                    <Bar
-                      key={stage}
-                      dataKey={stage}
-                      stackId="a"
-                      fill={STAGE_COLORS[stage]}
-                      name={STAGE_LABELS[stage].replace('Awaiting ', '')}
-                    />
+            <div className="h-[280px] flex items-center justify-center">
+              {stats.total === 0 ? (
+                <p className="text-muted-foreground">No pending KPIs</p>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={urgencyChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={3}
+                      dataKey="value"
+                      label={({ name, value }) => `${name}: ${value}`}
+                    >
+                      {urgencyChartData.map((entry, idx) => (
+                        <Cell key={idx} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Department stacked bar */}
+        {chartData.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>By Department</CardTitle>
+              <CardDescription>KPIs stuck at each workflow stage</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} layout="vertical" margin={{ left: 120 }}>
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="department" width={110} tick={{ fontSize: 12 }} />
+                    <Tooltip />
+                    <Legend />
+                    {ALL_STAGES.map(stage => (
+                      <Bar
+                        key={stage}
+                        dataKey={stage}
+                        stackId="a"
+                        fill={STAGE_COLORS[stage]}
+                        name={STAGE_LABELS[stage].replace('Awaiting ', '').replace('KRA ', '')}
+                      />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Row 3: Top Bottleneck Holders */}
+      {topHolders.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Top Bottleneck Holders</CardTitle>
+              <CardDescription>People with the most pending KPIs, sorted by critical count</CardDescription>
+            </div>
+            {topHolders.length > 10 && (
+              <Button variant="ghost" size="sm" onClick={() => setShowAllHolders(v => !v)}>
+                {showAllHolders ? 'Show Top 10' : `Show All (${topHolders.length})`}
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Responsible Person</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead className="text-center">Pending KPIs</TableHead>
+                    <TableHead className="text-center">Critical (15+d)</TableHead>
+                    <TableHead className="text-center">Avg Days</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {displayedHolders.map((h, i) => (
+                    <TableRow key={i} className={h.criticalCount > 0 ? 'bg-destructive/5' : ''}>
+                      <TableCell className="font-medium">{h.name}</TableCell>
+                      <TableCell><Badge variant="secondary">{h.role}</Badge></TableCell>
+                      <TableCell className="text-center font-semibold">{h.totalPending}</TableCell>
+                      <TableCell className="text-center">
+                        {h.criticalCount > 0 ? (
+                          <Badge variant="destructive">{h.criticalCount}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground">0</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">{h.avgDays}d</TableCell>
+                    </TableRow>
                   ))}
-                </BarChart>
-              </ResponsiveContainer>
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Filters */}
+      {/* Row 4: Filters */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">Filters</CardTitle>
@@ -283,14 +377,22 @@ export default function BottleneckReport() {
               </TableHeader>
               <TableBody>
                 {rows.map(row => (
-                  <TableRow key={row.kpiId}>
+                  <TableRow
+                    key={row.kpiId}
+                    className={row.daysPending > 14 ? 'bg-destructive/5' : ''}
+                  >
                     <TableCell className="font-mono text-sm">{row.employeeCode}</TableCell>
                     <TableCell className="font-medium">{row.employeeName}</TableCell>
                     <TableCell className="text-muted-foreground">{row.departmentName}</TableCell>
                     <TableCell className="max-w-[200px] truncate" title={row.kpiName}>{row.kpiName}</TableCell>
                     <TableCell>{row.period}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className="text-xs whitespace-nowrap">{row.currentStage}</Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="secondary" className="text-xs whitespace-nowrap">{row.currentStage}</Badge>
+                        {!row.isIssued && (
+                          <Badge variant="outline" className="text-xs border-orange-300 text-orange-600">Not Issued</Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>{row.responsiblePerson}</TableCell>
                     <TableCell className="text-center">
@@ -312,7 +414,6 @@ export default function BottleneckReport() {
             </Table>
           </div>
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
               <p className="text-sm text-muted-foreground">

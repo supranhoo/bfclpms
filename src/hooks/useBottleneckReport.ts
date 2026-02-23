@@ -4,10 +4,11 @@ import { useDepartments, useDivisions, useBusinessUnits } from '@/hooks/useOrgan
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
-export type StageKey = 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review';
+export type StageKey = 'not_issued' | 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review';
 
 export const STAGE_LABELS: Record<StageKey, string> = {
-  kra_set: 'KRA Set (Not Started)',
+  not_issued: 'KRA Not Issued',
+  kra_set: 'KRA Set (Awaiting Start)',
   self_review: 'Awaiting Self Review',
   manager_check: 'Awaiting Manager Review',
   skip_level_check: 'Awaiting Skip-Level Review',
@@ -31,8 +32,24 @@ export interface BottleneckRow {
   currentStage: string;
   stageKey: StageKey;
   responsiblePerson: string;
+  responsibleRole: string;
   daysPending: number;
   lastUpdated: string;
+  isIssued: boolean;
+}
+
+export interface TopHolder {
+  name: string;
+  role: string;
+  totalPending: number;
+  criticalCount: number;
+  avgDays: number;
+}
+
+export interface UrgencyStats {
+  green: number;
+  amber: number;
+  red: number;
 }
 
 function getResponsiblePerson(
@@ -41,6 +58,8 @@ function getResponsiblePerson(
   managerName: string | null,
 ): string {
   switch (stageKey) {
+    case 'not_issued':
+      return 'Admin';
     case 'kra_set':
     case 'self_review':
       return employeeName;
@@ -59,13 +78,26 @@ function getResponsiblePerson(
   }
 }
 
+function getResponsibleRole(stageKey: StageKey): string {
+  switch (stageKey) {
+    case 'not_issued': return 'Admin';
+    case 'kra_set':
+    case 'self_review': return 'Employee';
+    case 'manager_check': return 'Manager';
+    case 'skip_level_check': return 'Skip-Level';
+    case 'hr_pms_review': return 'HR PMS';
+    case 'audit': return 'Auditor';
+    case 'management_review': return 'Management';
+    default: return '-';
+  }
+}
+
 export function useBottleneckReport() {
   const { data: allKpis, isLoading: kpisLoading } = useAllKpis();
   const { data: departments } = useDepartments();
   const { data: divisions } = useDivisions();
   const { data: businessUnits } = useBusinessUnits();
 
-  // Fetch all profiles for manager name lookup
   const { data: profilesMap } = useQuery({
     queryKey: ['profiles-map-bottleneck'],
     queryFn: async () => {
@@ -89,7 +121,6 @@ export function useBottleneckReport() {
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
-  // Build department lookup
   const deptMap = useMemo(() => {
     const m = new Map<string, { name: string; businessUnitId: string | null }>();
     departments?.forEach(d => m.set(d.id, { name: d.name, businessUnitId: d.business_unit_id }));
@@ -109,7 +140,15 @@ export function useBottleneckReport() {
     return allKpis
       .filter(kpi => kpi.status !== 'approved')
       .map((kpi): BottleneckRow | null => {
-        const stageKey = kpi.status as StageKey;
+        const isIssued = (kpi as any).is_issued !== false;
+        let stageKey: StageKey;
+
+        if (kpi.status === 'kra_set' && !isIssued) {
+          stageKey = 'not_issued';
+        } else {
+          stageKey = kpi.status as StageKey;
+        }
+
         if (!STAGE_LABELS[stageKey]) return null;
 
         const profile = kpi.profiles as { id?: string; full_name?: string; employee_code?: string; department_id?: string; reporting_manager_id?: string } | null;
@@ -135,8 +174,10 @@ export function useBottleneckReport() {
           currentStage: STAGE_LABELS[stageKey],
           stageKey,
           responsiblePerson: getResponsiblePerson(stageKey, employeeName, managerProfile?.full_name || null),
+          responsibleRole: getResponsibleRole(stageKey),
           daysPending,
           lastUpdated: kpi.updated_at,
+          isIssued,
         };
       })
       .filter(Boolean) as BottleneckRow[];
@@ -146,15 +187,9 @@ export function useBottleneckReport() {
   const filteredRows = useMemo(() => {
     let rows = allRows;
 
-    if (selectedYear !== 'all') {
-      rows = rows.filter(r => String(r.year) === selectedYear);
-    }
-    if (selectedPeriod !== 'all') {
-      rows = rows.filter(r => r.period === selectedPeriod);
-    }
-    if (selectedDepartment !== 'all') {
-      rows = rows.filter(r => r.departmentId === selectedDepartment);
-    }
+    if (selectedYear !== 'all') rows = rows.filter(r => String(r.year) === selectedYear);
+    if (selectedPeriod !== 'all') rows = rows.filter(r => r.period === selectedPeriod);
+    if (selectedDepartment !== 'all') rows = rows.filter(r => r.departmentId === selectedDepartment);
     if (selectedDivision !== 'all') {
       rows = rows.filter(r => {
         if (!r.departmentId) return false;
@@ -171,9 +206,7 @@ export function useBottleneckReport() {
         return dept?.businessUnitId === selectedBusinessUnit;
       });
     }
-    if (selectedStage !== 'all') {
-      rows = rows.filter(r => r.stageKey === selectedStage);
-    }
+    if (selectedStage !== 'all') rows = rows.filter(r => r.stageKey === selectedStage);
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       rows = rows.filter(r =>
@@ -186,24 +219,60 @@ export function useBottleneckReport() {
     return rows.sort((a, b) => b.daysPending - a.daysPending);
   }, [allRows, selectedYear, selectedPeriod, selectedDepartment, selectedDivision, selectedBusinessUnit, selectedStage, searchQuery, deptMap, buMap]);
 
-  // Summary stats
+  // Summary stats (expanded)
   const stats = useMemo(() => {
     const total = filteredRows.length;
     const selfReview = filteredRows.filter(r => r.stageKey === 'self_review').length;
     const manager = filteredRows.filter(r => r.stageKey === 'manager_check').length;
+    const skipLevel = filteredRows.filter(r => r.stageKey === 'skip_level_check').length;
+    const hrPms = filteredRows.filter(r => r.stageKey === 'hr_pms_review').length;
     const auditMgmt = filteredRows.filter(r => r.stageKey === 'audit' || r.stageKey === 'management_review').length;
+    const notIssued = filteredRows.filter(r => r.stageKey === 'not_issued').length;
     const avgDays = total > 0 ? Math.round(filteredRows.reduce((s, r) => s + r.daysPending, 0) / total) : 0;
-    return { total, selfReview, manager, auditMgmt, avgDays };
+    return { total, selfReview, manager, skipLevel, hrPms, auditMgmt, notIssued, avgDays };
   }, [filteredRows]);
 
-  // Chart data: stage distribution by department
+  // Urgency stats
+  const urgencyStats = useMemo((): UrgencyStats => {
+    let green = 0, amber = 0, red = 0;
+    filteredRows.forEach(r => {
+      if (r.daysPending <= 7) green++;
+      else if (r.daysPending <= 14) amber++;
+      else red++;
+    });
+    return { green, amber, red };
+  }, [filteredRows]);
+
+  // Top bottleneck holders
+  const topHolders = useMemo((): TopHolder[] => {
+    const holderMap = new Map<string, { role: string; days: number[]; critical: number }>();
+    filteredRows.forEach(r => {
+      const key = r.responsiblePerson;
+      if (!holderMap.has(key)) {
+        holderMap.set(key, { role: r.responsibleRole, days: [], critical: 0 });
+      }
+      const entry = holderMap.get(key)!;
+      entry.days.push(r.daysPending);
+      if (r.daysPending > 14) entry.critical++;
+    });
+
+    return Array.from(holderMap.entries())
+      .map(([name, data]) => ({
+        name,
+        role: data.role,
+        totalPending: data.days.length,
+        criticalCount: data.critical,
+        avgDays: Math.round(data.days.reduce((a, b) => a + b, 0) / data.days.length),
+      }))
+      .sort((a, b) => b.criticalCount - a.criticalCount || b.totalPending - a.totalPending);
+  }, [filteredRows]);
+
+  // Chart data
   const chartData = useMemo(() => {
     const deptStageMap = new Map<string, Record<string, number>>();
     filteredRows.forEach(r => {
       const dept = r.departmentName;
-      if (!deptStageMap.has(dept)) {
-        deptStageMap.set(dept, {});
-      }
+      if (!deptStageMap.has(dept)) deptStageMap.set(dept, {});
       const entry = deptStageMap.get(dept)!;
       entry[r.stageKey] = (entry[r.stageKey] || 0) + 1;
     });
@@ -218,7 +287,6 @@ export function useBottleneckReport() {
       .slice(0, 15);
   }, [filteredRows]);
 
-  // Available years and periods
   const availableYears = useMemo(() => {
     const years = new Set(allRows.map(r => r.year).filter(Boolean));
     return Array.from(years).sort((a, b) => (b || 0) - (a || 0));
@@ -229,7 +297,6 @@ export function useBottleneckReport() {
     return Array.from(periods).sort();
   }, [allRows]);
 
-  // Pagination
   const totalPages = Math.ceil(filteredRows.length / pageSize);
   const paginatedRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
 
@@ -237,9 +304,10 @@ export function useBottleneckReport() {
     rows: paginatedRows,
     allFilteredRows: filteredRows,
     stats,
+    urgencyStats,
+    topHolders,
     chartData,
     isLoading: kpisLoading,
-    // Filters
     selectedYear, setSelectedYear,
     selectedPeriod, setSelectedPeriod,
     selectedDepartment, setSelectedDepartment,
@@ -247,13 +315,11 @@ export function useBottleneckReport() {
     selectedBusinessUnit, setSelectedBusinessUnit,
     selectedStage, setSelectedStage,
     searchQuery, setSearchQuery,
-    // Filter options
     departments: departments || [],
     divisions: divisions || [],
     businessUnits: businessUnits || [],
     availableYears,
     availablePeriods,
-    // Pagination
     page, setPage, totalPages, pageSize,
   };
 }
