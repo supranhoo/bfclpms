@@ -1,78 +1,89 @@
 
 
-# Fix Terminal Stage Resolution in Bottleneck Report (v1.45.93)
+# Fix: Dashboard Inflated Counts from Non-Issued KPIs (v1.45.93)
 
-## Root Cause
+## Root Cause Found
 
-The bottleneck resolver has a critical gap: when a KPI's status is the **last review stage before `approved`** in an employee's pipeline, it maps to the `approved` entry and gets silently dropped from the report.
+The Bottleneck Report data is **correct**. The **Dashboard** is the source of the inaccurate numbers.
 
-**Your employees' actual workflow pipeline:**
-`[kra_set, self_review, manager_check, skip_level_check, hr_pms_review, approved]`
+The database contains **674 non-issued KPIs** (is_issued = false) for January 2026 that have workflow statuses like `self_review` (366), `manager_check` (303), etc., even though they were never actually issued to employees. These are template/draft KPIs.
 
-There is NO `audit` or `management_review` stage. HR PMS is the **terminal reviewer**.
+The Dashboard's `EmployeeSelectorGrid` uses `useKpisByPeriodRanges` which fetches ALL KPIs without filtering `is_issued`. When the Audit Panel computes "Pending Audit", it counts these non-issued KPIs, inflating the number from the correct ~110 to the displayed 250.
 
-**What happens now with a KPI at `hr_pms_review`:**
-1. It's not `kra_set`, `audit`, or `management_review` -- falls to general logic
-2. `stages.indexOf('hr_pms_review')` = 4
-3. `nextStage = stages[5]` = `'approved'`
-4. `NEXT_STAGE_MAP['approved']` = `{ responsibleRole: '-', stageLabel: 'Approved' }`
-5. Hook sees `responsibleRole === '-'` and **drops the KPI entirely**
+The Bottleneck Report correctly filters `is_issued !== false`, which is why its numbers are lower and accurate.
 
-Result: 110 KPIs at `hr_pms_review` vanish from the report. The Audit card shows 0 because no KPIs have `audit` status (the stage doesn't exist in the pipeline).
+## Database Evidence (January 2026, Non-Approved)
+
+```text
+Status           | Issued (true) | Non-Issued (false) | Ghost count
+-----------------+---------------+--------------------+------------
+kra_set          |            66 |                181 |        181
+self_review      |            53 |                366 |        366
+manager_check    |            86 |                303 |        303
+hr_pms_review    |           110 |                  4 |          4
+management_review|             0 |                 27 |         27
+```
+
+Total non-issued phantom KPIs: **881**. These inflate every stat card across all Dashboard panels (Team, Audit, HR PMS, Management).
 
 ## Solution
 
-When the next stage in the pipeline is `approved`, the KPI is at its **terminal review stage** -- the current reviewer is actively responsible. Instead of looking up the next stage, map the **current status** to its responsible role.
-
-Additionally, `hr_pms_review` and `skip_level_check` should be treated as active stages (like `audit` and `management_review`) since in some pipelines they ARE the terminal reviewer.
+Add `is_issued` filtering to the Dashboard's KPI data pipeline so non-issued KPIs are excluded from all reviewer panel stats and employee cards.
 
 ## Technical Changes
 
-### 1. `src/lib/bottleneckResolver.ts`
+### 1. `src/components/review/EmployeeSelectorGrid.tsx`
 
-Add explicit handling for `hr_pms_review` and `skip_level_check` as active stages (same pattern as `audit` and `management_review`):
+Filter `periodKpis` to exclude non-issued KPIs before using them for stats and employee filtering:
 
-```
-if (kpiStatus === 'hr_pms_review') return NEXT_STAGE_MAP['hr_pms_review'];   // awaiting_hr_pms
-if (kpiStatus === 'skip_level_check') return NEXT_STAGE_MAP['skip_level_check']; // awaiting_skip_level
-```
-
-Also add a safety net: when the "next stage" resolves to `approved`, fall back to mapping the current status instead of dropping the KPI:
-
-```
-const nextStage = currentIndex + 1 < stages.length ? stages[currentIndex + 1] : 'approved';
-if (nextStage === 'approved') {
-  // Terminal stage — current reviewer is responsible
-  return NEXT_STAGE_MAP[kpiStatus] || { stageKey: 'awaiting_management', stageLabel: kpiStatus, responsibleRole: '-' };
-}
-return NEXT_STAGE_MAP[nextStage] || { ... };
+```typescript
+// After line 148: const { data: periodKpis } = useKpisByPeriodRanges(...)
+const issuedPeriodKpis = useMemo(() => {
+  return periodKpis?.filter(k => (k as any).is_issued !== false) || [];
+}, [periodKpis]);
 ```
 
-### 2. `src/lib/bottleneckResolver.test.ts`
+Then replace all references to `periodKpis` in stats calculations, employee badge counts, and filtering logic with `issuedPeriodKpis`.
 
-Add test cases:
-- `hr_pms_review` in a pipeline ending at `hr_pms_review -> approved` resolves to `awaiting_hr_pms`
-- `skip_level_check` as terminal stage resolves to `awaiting_skip_level`
-- `manager_check` as terminal stage (if pipeline is `[..., manager_check, approved]`) resolves to `awaiting_manager`
+This affects:
+- The `stats` useMemo (line ~340) that computes summary card values
+- The `getEmployeeKpiStats` function (line ~418) that computes per-employee badges
+- The `relevantKpis` variable derived from `periodKpis`
 
-### 3. `DOCUMENTATION.md`
+### 2. `src/components/review/AuditScorecard.tsx`
 
-Bump to v1.45.93 and document the terminal-stage handling fix.
+The AuditScorecard also counts pending/in-audit using `kpis` from `useKpisByEmployee` which does NOT filter `is_issued`. Add the same filter:
 
-## Impact
+```typescript
+// After filtering by period/year (line ~98)
+const kpis = useMemo(() => allKpis?.filter(k => {
+  const periodMatch = ...;
+  const yearMatch = ...;
+  return periodMatch && yearMatch && (k as any).is_issued !== false;
+}), [allKpis, selectedPeriod, selectedYear]);
+```
 
-After this fix:
-- 110 KPIs at `hr_pms_review` will correctly appear under "HR PMS" in the Bottleneck Report
-- The "Total Pending" count will increase from ~188 to ~298 (recovering the dropped KPIs)
-- No KPIs will show under "Audit" (which is correct -- there IS no audit stage in your workflow)
+### 3. Similar fix needed in `UnifiedScorecard.tsx` and `ManagementScorecard.tsx`
 
-Note: The Dashboard's "Pending Audit: 250" shown in the Audit Panel may itself be inaccurate due to a similar workflow resolution issue there. That would be a separate investigation if needed.
+All scorecard components that compute stats from KPI lists must exclude non-issued KPIs.
+
+### 4. `DOCUMENTATION.md`
+
+Bump to v1.45.94 and document the `is_issued` filtering requirement as a global data contract: "All reviewer panels and reports MUST filter `is_issued !== false` to exclude draft/template KPIs from workflow statistics."
+
+## Impact After Fix
+
+- Dashboard "Pending Audit" for Jan will drop from 250 to ~110 (only genuinely issued KPIs at hr_pms_review)
+- All panel stats (Team, HR PMS, Audit, Management) will show accurate counts
+- Bottleneck Report numbers will now **match** the Dashboard
+- Total Pending across all panels will decrease significantly
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | None -- read-only report | No schema changes |
-| Regression | Low -- adds explicit handling for 2 more statuses + safety net | Existing test cases unaffected |
-| Accuracy | High confidence | KPIs previously dropped will now be correctly categorized |
+| Data accuracy | Improves -- removes phantom counts | Numbers will match bottleneck report |
+| User expectation | Medium -- all dashboard stats will decrease | Numbers will now be accurate; explain change |
+| Regression | Low -- additive filter only | Non-issued KPIs were never actionable anyway |
+| Performance | None -- client-side filter on already-fetched data | No additional queries |
 
