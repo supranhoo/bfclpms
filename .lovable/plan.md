@@ -1,71 +1,41 @@
 
 
-# Daily KPI Evidence Upload -- Per-Day Supporting Documents
+# Add Target Column to Org KPI Scoped Entry Table
 
-## Summary
+## Problem
 
-Add the ability for employees to upload supporting evidence (files/images) for each daily submission. These uploads will be visible to all reviewers (Manager, Skip-Level, HR PMS, Auditor, Management) when viewing the daily submission summary.
+When data entry users (admins or data owners) are entering employee/department-level achieved values in the Org KPI Data Entry page, the **target value** is only visible in the card header above. With 14+ employee rows, this forces users to scroll up or memorize the target -- inefficient and error-prone.
 
-## Current State
+## Solution
 
-- The `sub_period_submissions` table already has an `evidence_url` (text) column, but it is **never used** -- the Daily and Weekly submission grids don't expose any upload UI.
-- The `DailySubmissionSummary` (reviewer-facing table) does not display any evidence column.
-- The platform's multi-file pattern uses a JSONB array column (`evidence_urls`) alongside the legacy single-string column.
+Add a read-only **"Target"** column to the scoped entry table, positioned between the Employee/Department name column and the N/A toggle. This gives both admins and data owners immediate inline reference while entering data.
 
-## What Changes
+## Layout Change
 
-### 1. Database: Add `evidence_urls` JSONB Column
+**Current:** | Employee | N/A | Achieved | Remark | File |
 
-Add a `evidence_urls` JSONB column to `sub_period_submissions` to support multi-file uploads per day (up to 5 files), consistent with the existing pattern used in `review_submissions` and `org_kpi_values`.
+**Proposed:** | Employee | Target | N/A | Achieved | Remark | File |
 
-### 2. Employee View: `DailySubmissionGrid.tsx`
+## Changes
 
-When editing a day entry:
-- Show a compact `MultiFileUpload` component below the value/remarks inputs.
-- Pass the uploaded URLs into the `useSubmitSubPeriod` mutation.
-- Display a small file icon/badge on submitted rows that have evidence, linking to the files.
+### File: `src/components/admin/OrgKpiScopedEntryTable.tsx`
 
-### 3. Employee View: `WeeklySubmissionTable.tsx`
+1. **Table Header**: Add a "Target" column header (narrow, `w-24`) between the name column and N/A column.
+2. **EmployeeRow**: Add a read-only cell showing the target value and UOM in muted text. Dim it further when the row is N/A.
+3. **DepartmentRow**: Same treatment for consistency.
+4. **Department group header row**: Update `colSpan` from 5 to 6 to span the new column.
 
-Same treatment -- add `MultiFileUpload` to weekly entry editing for consistency.
+### File: `DOCUMENTATION.md`
 
-### 4. Reviewer View: `DailySubmissionSummary.tsx`
-
-Add an "Evidence" column to the submissions table:
-- Show a clickable file icon with a count badge (e.g., a paperclip icon with "2") when evidence exists for a day.
-- Clicking opens the file via the existing blob-based download mechanism (`openStorageFile`).
-- Visible to all reviewer levels.
-
-### 5. Hook: `useSubPeriodSubmissions.ts`
-
-- Update the `SubPeriodSubmission` interface to include `evidence_urls: string[] | null`.
-- Update the `useSubmitSubPeriod` mutation to accept and persist both `evidence_url` (legacy, last file) and `evidence_urls` (JSONB array).
-
-### 6. Documentation
-
-Version bump to **1.45.76** with changelog entry.
+Version bump to **1.45.77** with changelog entry.
 
 ## Technical Details
 
 | Aspect | Detail |
 |--------|--------|
-| Files changed | `sub_period_submissions` (migration), `DailySubmissionGrid.tsx`, `WeeklySubmissionTable.tsx`, `DailySubmissionSummary.tsx`, `useSubPeriodSubmissions.ts`, `DOCUMENTATION.md` |
-| New DB column | `evidence_urls JSONB DEFAULT '[]'` on `sub_period_submissions` |
-| Storage bucket | Existing `review-evidence` bucket (already public + authenticated) |
-| Upload path | `{userId}/{kpiId}/daily-evidence/{timestamp}.{ext}` |
-| Max files per day | 5 (consistent with platform standard) |
-| Data impact | Additive -- new nullable column, no existing data affected |
-| RLS impact | None -- uses existing `sub_period_submissions` RLS policies |
-| Regression risk | Very low -- additive UI change, existing flows unchanged |
-
-## User Experience Flow
-
-1. Employee opens Daily KPI submission grid
-2. Clicks "Enter" or "Edit" for a day
-3. Sees the existing value + remarks inputs, plus a new compact file upload area
-4. Uploads supporting documents (photos, PDFs, spreadsheets)
-5. Saves the submission -- files are stored and linked to that day's record
-6. Manager (or any reviewer) opens the employee's KPI review
-7. In the Daily Submission Summary table, sees a file/paperclip icon on days that have evidence
-8. Clicks the icon to view/download the uploaded files
+| Files changed | `OrgKpiScopedEntryTable.tsx`, `DOCUMENTATION.md` |
+| Data impact | None -- purely UI display |
+| Props needed | `targetValue` and `uom` are already passed to the component |
+| Visible to | Both admins and data owner users (via DataOwnerRoute) |
+| Regression risk | None -- adding a read-only column with no logic changes |
 
