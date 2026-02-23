@@ -79,7 +79,7 @@ export function useBottleneckReport() {
     if (!allKpis) return [];
     const ids = new Set<string>();
     allKpis
-      .filter(kpi => kpi.status !== 'approved' && (kpi as any).is_issued !== false)
+      .filter(kpi => kpi.status !== 'approved')
       .forEach(kpi => {
         const profile = kpi.profiles as { id?: string } | null;
         if (profile?.id) ids.add(profile.id);
@@ -120,7 +120,7 @@ export function useBottleneckReport() {
     if (!allKpis || !profilesMap) return [];
 
     return allKpis
-      .filter(kpi => kpi.status !== 'approved' && (kpi as any).is_issued !== false)
+      .filter(kpi => kpi.status !== 'approved')
       .map((kpi): BottleneckRow | null => {
         const rawStatus = kpi.status as string;
 

@@ -215,7 +215,7 @@ export function UnifiedScorecard({
   const kpis = useMemo(() => allKpis?.filter(k => {
     const periodMatch = k.review_period?.trim().toLowerCase() === selectedPeriod?.trim().toLowerCase();
     const yearMatch = k.review_year === selectedYear;
-    return periodMatch && yearMatch && (k as any).is_issued !== false;
+    return periodMatch && yearMatch;
   }), [allKpis, selectedPeriod, selectedYear]);
 
   // Fetch org KPI values for this period
