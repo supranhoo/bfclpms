@@ -75,7 +75,7 @@ export default function BottleneckReport() {
     departments, divisions, businessUnits,
     availableYears, availablePeriods,
     availableMonths, monthWindowStart, setMonthWindowStart,
-    employeeChartData, employeeChartDepartment, setEmployeeChartDepartment,
+    employeeChartData, employeeChartDepartment, setEmployeeChartDepartment, employeeChartDepartments,
     page, setPage, totalPages,
   } = useBottleneckReport();
 
@@ -310,7 +310,7 @@ export default function BottleneckReport() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Departments</SelectItem>
-              {departments.map(d => (
+              {employeeChartDepartments.map(d => (
                 <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
               ))}
             </SelectContent>
