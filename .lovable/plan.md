@@ -1,89 +1,68 @@
 
 
-# Fix: Dashboard Inflated Counts from Non-Issued KPIs (v1.45.93)
+# Revert: Remove Incorrect `is_issued` Filter from Dashboard (v1.45.95)
 
-## Root Cause Found
+## Root Cause
 
-The Bottleneck Report data is **correct**. The **Dashboard** is the source of the inaccurate numbers.
+The v1.45.94 fix applied an `is_issued !== false` filter to four dashboard components based on the incorrect assumption that `is_issued = false` meant "draft/template KPI." In reality, `is_issued` defaults to `false` in the database schema and was only explicitly set to `true` for 18 out of 83 employees. The filter removed 1,057 out of 1,373 KPIs (77%) and made 65 employees completely invisible on the dashboard.
 
-The database contains **674 non-issued KPIs** (is_issued = false) for January 2026 that have workflow statuses like `self_review` (366), `manager_check` (303), etc., even though they were never actually issued to employees. These are template/draft KPIs.
-
-The Dashboard's `EmployeeSelectorGrid` uses `useKpisByPeriodRanges` which fetches ALL KPIs without filtering `is_issued`. When the Audit Panel computes "Pending Audit", it counts these non-issued KPIs, inflating the number from the correct ~110 to the displayed 250.
-
-The Bottleneck Report correctly filters `is_issued !== false`, which is why its numbers are lower and accurate.
-
-## Database Evidence (January 2026, Non-Approved)
+### Database Evidence (January 2026)
 
 ```text
-Status           | Issued (true) | Non-Issued (false) | Ghost count
------------------+---------------+--------------------+------------
-kra_set          |            66 |                181 |        181
-self_review      |            53 |                366 |        366
-manager_check    |            86 |                303 |        303
-hr_pms_review    |           110 |                  4 |          4
-management_review|             0 |                 27 |         27
+is_issued  | Employees | KPIs
+-----------+-----------+------
+false      |        65 | 1,057  <-- ALL removed by filter
+true       |        18 |   316  <-- only these survived
 ```
 
-Total non-issued phantom KPIs: **881**. These inflate every stat card across all Dashboard panels (Team, Audit, HR PMS, Management).
+65 employees (including Shrikant Ganguly with 17 KPIs) have ONLY `is_issued=false` records and were completely wiped from the dashboard.
 
 ## Solution
 
-Add `is_issued` filtering to the Dashboard's KPI data pipeline so non-issued KPIs are excluded from all reviewer panel stats and employee cards.
+Remove the `is_issued` filter from all four dashboard components where it was added in v1.45.94. The `is_issued` flag is not a reliable indicator of draft vs. active KPIs -- it is simply an unset default for the vast majority of records.
 
 ## Technical Changes
 
 ### 1. `src/components/review/EmployeeSelectorGrid.tsx`
 
-Filter `periodKpis` to exclude non-issued KPIs before using them for stats and employee filtering:
+Remove the `issuedPeriodKpis` filter and revert to using `rawPeriodKpis` (renamed back to `periodKpis`) directly:
 
-```typescript
-// After line 148: const { data: periodKpis } = useKpisByPeriodRanges(...)
-const issuedPeriodKpis = useMemo(() => {
-  return periodKpis?.filter(k => (k as any).is_issued !== false) || [];
-}, [periodKpis]);
-```
-
-Then replace all references to `periodKpis` in stats calculations, employee badge counts, and filtering logic with `issuedPeriodKpis`.
-
-This affects:
-- The `stats` useMemo (line ~340) that computes summary card values
-- The `getEmployeeKpiStats` function (line ~418) that computes per-employee badges
-- The `relevantKpis` variable derived from `periodKpis`
+- Remove lines ~150-153 that filter `is_issued !== false`
+- Rename `rawPeriodKpis` back to `periodKpis` in the destructured query result
+- Remove all references to `issuedPeriodKpis` (revert to `periodKpis`)
 
 ### 2. `src/components/review/AuditScorecard.tsx`
 
-The AuditScorecard also counts pending/in-audit using `kpis` from `useKpisByEmployee` which does NOT filter `is_issued`. Add the same filter:
+Remove the `(k as any).is_issued !== false` condition from the KPI filtering useMemo.
 
-```typescript
-// After filtering by period/year (line ~98)
-const kpis = useMemo(() => allKpis?.filter(k => {
-  const periodMatch = ...;
-  const yearMatch = ...;
-  return periodMatch && yearMatch && (k as any).is_issued !== false;
-}), [allKpis, selectedPeriod, selectedYear]);
-```
+### 3. `src/components/review/UnifiedScorecard.tsx`
 
-### 3. Similar fix needed in `UnifiedScorecard.tsx` and `ManagementScorecard.tsx`
+Remove the `(k as any).is_issued !== false` condition from the KPI filtering useMemo.
 
-All scorecard components that compute stats from KPI lists must exclude non-issued KPIs.
+### 4. `src/components/review/ManagementScorecard.tsx`
 
-### 4. `DOCUMENTATION.md`
+Remove the `(k as any).is_issued !== false` condition from the KPI filtering useMemo.
 
-Bump to v1.45.94 and document the `is_issued` filtering requirement as a global data contract: "All reviewer panels and reports MUST filter `is_issued !== false` to exclude draft/template KPIs from workflow statistics."
+### 5. `src/hooks/useBottleneckReport.ts`
 
-## Impact After Fix
+Remove the `(kpi as any).is_issued !== false` condition from the two filter calls (lines ~82 and ~123). This filter was also incorrectly excluding legitimate KPIs from the bottleneck report.
 
-- Dashboard "Pending Audit" for Jan will drop from 250 to ~110 (only genuinely issued KPIs at hr_pms_review)
-- All panel stats (Team, HR PMS, Audit, Management) will show accurate counts
-- Bottleneck Report numbers will now **match** the Dashboard
-- Total Pending across all panels will decrease significantly
+### 6. `DOCUMENTATION.md`
+
+Bump to v1.45.95. Remove the "is_issued filtering contract" from the documentation. Add a note that `is_issued` defaults to `false` and is NOT a reliable draft indicator -- it must not be used for filtering without first ensuring all legitimate KPIs have the flag set correctly.
+
+## Impact
+
+- All 65 missing employees (including Shrikant Ganguly) will reappear on the dashboard
+- All 1,057 previously-hidden KPIs will be restored to dashboard stats
+- Bottleneck Report will also show the full KPI set
+- Dashboard numbers will return to their pre-v1.45.94 state
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data accuracy | Improves -- removes phantom counts | Numbers will match bottleneck report |
-| User expectation | Medium -- all dashboard stats will decrease | Numbers will now be accurate; explain change |
-| Regression | Low -- additive filter only | Non-issued KPIs were never actionable anyway |
-| Performance | None -- client-side filter on already-fetched data | No additional queries |
+| Data accuracy | Dashboard counts will increase back to pre-fix levels | These are real KPIs, not phantoms |
+| Regression | None -- this is a pure revert of the incorrect filter | Restores original behavior |
+| Future fix | If `is_issued` filtering is ever needed, a data migration must first set `is_issued=true` for all legitimate KPIs | Do not re-apply filter without migration |
 
