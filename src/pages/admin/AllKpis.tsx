@@ -20,6 +20,7 @@ import { AdminStatusStepBackDialog } from '@/components/admin/AdminStatusStepBac
 import { CopyKrasDialog } from '@/components/admin/CopyKrasDialog';
 import { KraIssuanceConfirmDialog } from '@/components/admin/KraIssuanceConfirmDialog';
 import { getPreviousStatus } from '@/hooks/useAdminDataEntry';
+import { getCalendarMonthsForPeriod, MONTH_NAMES } from '@/hooks/useAdminReports';
 import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy, Trash2, Undo2, Send, CheckCircle, ArrowUp } from 'lucide-react';
 import {
   AlertDialog,
@@ -149,9 +150,26 @@ export default function AllKpis() {
         }
       }
       
-      // Filter by period
-      if (selectedPeriod !== 'all' && kpi.review_period !== selectedPeriod) {
-        return false;
+      // Filter by period (supports non-monthly KPIs like Quarterly, Half-Yearly, etc.)
+      if (selectedPeriod !== 'all') {
+        if (kpi.review_period === selectedPeriod) {
+          // Direct match — keep
+        } else {
+          // Check if the selected period is a month name and the KPI covers it
+          const monthIdx = MONTH_NAMES.indexOf(selectedPeriod as any);
+          if (monthIdx !== -1) {
+            const coveredMonths = getCalendarMonthsForPeriod(
+              kpi.review_period ?? '',
+              kpi.frequency ?? null,
+              kpi.frequency_cycle_start ?? null,
+            );
+            if (!coveredMonths.includes(monthIdx)) {
+              return false;
+            }
+          } else {
+            return false;
+          }
+        }
       }
       
       // Filter by year

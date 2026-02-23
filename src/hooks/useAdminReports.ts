@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { getCycleOptionsForFrequency } from '@/lib/frequencyCycleOptions';
 
 // Calendar-order month names (used for DB review_period values)
-const MONTH_NAMES = [
+export const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ] as const;
@@ -46,7 +46,7 @@ export interface KpiMappingFilters {
  * For a non-monthly KPI, resolve which calendar month indices (0-based, Jan=0) it covers.
  * E.g. a Quarterly KPI with review_period='Q1' and cycle_start='Jan-Mar' covers months 0,1,2.
  */
-function getCalendarMonthsForPeriod(
+export function getCalendarMonthsForPeriod(
   reviewPeriod: string,
   frequency: string | null,
   cycleStart: string | null,
