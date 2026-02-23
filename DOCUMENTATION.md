@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.76 — Daily/Weekly KPI evidence upload: employees can attach supporting documents per sub-period submission, visible to all reviewers
+> **Version:** 1.45.77 — Org KPI scoped entry table: added inline read-only Target column visible to admins and data owners
 > **Maintainer:** Lovable AI
 
 ---

@@ -125,6 +125,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
             <TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
               <TableRow className="bg-muted/30">
                 <TableHead className="text-xs min-w-[200px]">{scopeLabel}</TableHead>
+                <TableHead className="text-xs w-24 text-center">Target</TableHead>
                 <TableHead className="text-xs w-16 text-center">N/A</TableHead>
                 <TableHead className="text-xs w-28 text-center">Achieved</TableHead>
                 <TableHead className="text-xs min-w-[220px]">Remark</TableHead>
@@ -138,7 +139,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                   <>
                     {/* Department group header */}
                     <TableRow key={`group-${group.dept ?? 'none'}`} className="bg-muted/50 hover:bg-muted/50">
-                      <TableCell colSpan={5} className="py-1.5 px-3">
+                      <TableCell colSpan={6} className="py-1.5 px-3">
                         <div className="flex items-center gap-2">
                           <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           <span className="text-xs font-semibold text-muted-foreground">
@@ -213,6 +214,14 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom }:
             )}
           </div>
         </div>
+      </TableCell>
+
+      {/* Target (read-only) */}
+      <TableCell className="py-1.5 w-24 text-center">
+        <span className={`text-xs ${rowIsNa ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}>
+          {targetValue != null ? targetValue : '—'}
+          {uom && targetValue != null && <span className="ml-0.5 text-[10px]">{uom}</span>}
+        </span>
       </TableCell>
 
       {/* N/A toggle */}
@@ -302,6 +311,10 @@ function DepartmentRow({ row, onValueChange }: DepartmentRowProps) {
             <span className="text-xs text-muted-foreground mt-0.5">{row.scopeSubText}</span>
           )}
         </div>
+      </TableCell>
+      {/* Target (read-only) */}
+      <TableCell className="py-1.5 w-24 text-center">
+        <span className="text-xs text-muted-foreground">—</span>
       </TableCell>
       <TableCell className="py-1.5 w-16 text-center">
         <Switch
