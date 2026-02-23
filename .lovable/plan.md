@@ -1,48 +1,44 @@
 
 
-# Fix: Admin KPI Dashboard - Include Non-Monthly KPIs in Period Filter
+# Fix: Server-Side Query Excludes Non-Monthly KPIs
 
 ## Problem
 
-On the Admin KPI Dashboard (`/admin/kpis`), when filtering by period "February", only KPIs with `review_period = 'February'` are shown. Rupesh Kumar Sharma has a Quarterly KPI with `review_period = 'Q3'` and `frequency_cycle_start = 'Jul-Sep'`, which covers January through March (including February). This KPI is excluded by the strict string match, causing the weightage to display 90% instead of 100%.
+The client-side filter logic added previously is correct, but it never gets a chance to run. The **server-side query** in `useKpisByPeriod` (in `src/hooks/useKpis.ts`, line 205) applies a strict `.eq('review_period', selectedPeriod)` filter. When "February" is selected, the database only returns rows where `review_period = 'February'`. Rupesh Kumar Sharma's Quarterly KPI (`review_period = 'Q3'`) is never fetched from the database at all.
 
 ## Root Cause
 
-In `src/pages/admin/AllKpis.tsx`, line 153:
 ```
-if (selectedPeriod !== 'all' && kpi.review_period !== selectedPeriod) {
-  return false;
-}
+// src/hooks/useKpis.ts line 205
+.eq('review_period', selectedPeriod as string)
 ```
 
-This is a direct string comparison. A Quarterly KPI with `review_period = 'Q3'` will never match the selected period `'February'`.
+This strict server-side filter prevents non-monthly KPIs from ever reaching the client.
 
 ## Fix
 
-### 1. `src/pages/admin/AllKpis.tsx` -- Expand Period Filter Logic
+### 1. `src/hooks/useKpis.ts` -- Fetch by Year Only When a Month Is Selected
 
-Import `getCalendarMonthsForPeriod` from `useAdminReports.ts` (or extract it to a shared utility) and the `MONTH_NAMES` array.
+When `selectedPeriod` is a month name (e.g., "February"), the query should fetch ALL KPIs for that year (filter by year only, not by period). The existing client-side filter in `AllKpis.tsx` will then correctly include/exclude non-monthly KPIs.
 
-When a month name is selected as the period filter (e.g., "February"):
-- Monthly KPIs: keep existing direct match (`review_period === 'February'`)
-- Non-monthly KPIs: use `getCalendarMonthsForPeriod(kpi.review_period, kpi.frequency, kpi.frequency_cycle_start)` to resolve the calendar months the KPI covers. If the selected month's index is in that list, include the KPI.
+When `selectedPeriod` is a non-month value (e.g., "Q3", "H1"), keep the existing `.eq('review_period', ...)` behavior since those are direct matches.
 
-When a non-month period is selected (e.g., "Q3"): keep existing direct match behavior.
+**Logic change in `useKpisByPeriod`:**
+- Import `MONTH_NAMES` from `useAdminReports`
+- If `selectedPeriod` is in `MONTH_NAMES`, omit the `.eq('review_period', ...)` filter (fetch all KPIs for the year)
+- Otherwise, keep the `.eq('review_period', ...)` filter as-is
 
-### 2. `src/hooks/useAdminReports.ts` -- Export Helper
+### 2. `DOCUMENTATION.md` -- Version Bump
 
-Export the `getCalendarMonthsForPeriod` function and `MONTH_NAMES` so they can be reused in AllKpis.tsx.
-
-### 3. `DOCUMENTATION.md` -- Version Bump
-
-Version bump to 1.45.73.
+Version bump to 1.45.74.
 
 ## Technical Details
 
 | Aspect | Detail |
 |--------|--------|
-| Files changed | `src/pages/admin/AllKpis.tsx`, `src/hooks/useAdminReports.ts`, `DOCUMENTATION.md` |
-| Logic change | Period filter now checks if non-monthly KPIs cover the selected month |
-| Data impact | None -- client-side filter logic only |
-| Regression risk | Low -- only adds previously excluded KPIs; monthly KPIs unaffected |
+| Files changed | `src/hooks/useKpis.ts`, `DOCUMENTATION.md` |
+| Query change | When a month is selected, fetch all KPIs for that year instead of filtering by period server-side |
+| Data impact | None -- read-only query change |
+| Regression risk | Low -- client-side filter already handles period matching correctly; slightly more data fetched per request when a month filter is active |
+| Performance | Minor increase in data fetched (all periods for a year instead of one), but bounded by year filter and paginated in 1000-row batches |
 
