@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKraCategories, useDepartments, useProfiles } from '@/hooks/useOrganization';
 import { useOrgKpiValues, useBulkUpsertOrgKpiValues, OrgKpiValue } from '@/hooks/useOrgKpiValues';
@@ -98,48 +98,9 @@ export default function OrgKpiDataEntry() {
   const bulkRollbackMutation = useBulkRollbackOrgKpiPropagation();
   const unmarkMutation = useUnmarkAsOrgLevel();
 
-  // Build employee KPI IDs map for employee-scoped org KPIs (for observations panel)
-  const employeeScopedOrgKpis = useMemo(() => {
-    if (!orgLevelData?.kpis) return [];
-    return orgLevelData.kpis.filter(k => (k.kpi as any).org_level_scope === 'employee' && k.employeeIds.length > 0);
-  }, [orgLevelData]);
-
-  const { data: employeeKpiData } = useQuery({
-    queryKey: ['employee-kpi-ids-for-org', selectedPeriod, selectedYear, employeeScopedOrgKpis.length],
-    queryFn: async () => {
-      const idsMap = new Map<string, string[]>();
-      const targetMap = new Map<string, { target_value: number | null; uom: string | null }>();
-      if (employeeScopedOrgKpis.length === 0) return { idsMap, targetMap };
-
-      for (const entry of employeeScopedOrgKpis) {
-        const kpi = entry.kpi;
-        const empIds = entry.employeeIds;
-        if (empIds.length === 0) continue;
-
-        const { data } = await supabase
-          .from('kpis')
-          .select('id, employee_id, target_value, uom')
-          .eq('category_id', kpi.category_id)
-          .eq('kra_name', kpi.kra_name)
-          .eq('kpi_name', kpi.kpi_name)
-          .eq('review_period', selectedPeriod)
-          .eq('review_year', selectedYear)
-          .in('employee_id', empIds);
-
-        const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
-        idsMap.set(key, (data || []).map(d => d.id));
-        (data || []).forEach(d => {
-          targetMap.set(`${key}||${d.employee_id}`, { target_value: d.target_value, uom: d.uom });
-        });
-      }
-      return { idsMap, targetMap };
-    },
-    enabled: employeeScopedOrgKpis.length > 0,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const employeeKpiIdsMap = employeeKpiData?.idsMap;
-  const employeeTargetMap = employeeKpiData?.targetMap;
+  // Per-employee target map and KPI IDs map from the hook (no separate query needed)
+  const employeeTargetMap = orgLevelData?.perEmployeeTargetMap;
+  const employeeKpiIdsMap = orgLevelData?.employeeKpiIdsMap;
 
   // Previous period data
   const prev = getPreviousPeriod(selectedPeriod, selectedYear);

@@ -76,22 +76,26 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
         if (!uniqueMap.has(key)) uniqueMap.set(key, kpi);
       });
 
-      // 2. Count employees per org KPI and collect employee IDs
-      const { data: empCounts, error: err2 } = await supabase
-        .from('kpis')
-        .select('category_id, kra_name, kpi_name, employee_id')
-        .eq('is_org_level', true)
-        .eq('review_period', reviewPeriod!)
-        .eq('review_year', reviewYear!);
-
-      if (err2) throw err2;
-
+      // 2. Build per-employee target map and KPI IDs map from raw records (before dedup discards them)
+      const perEmployeeTargetMap = new Map<string, { target_value: number | null; uom: string | null }>();
+      const employeeKpiIdsMap = new Map<string, string[]>();
       const countMap = new Map<string, Set<string>>();
-      empCounts?.forEach(k => {
+      allOrgKpis?.forEach(k => {
         const key = `${k.category_id}||${k.kra_name}||${k.kpi_name}`;
         const s = countMap.get(key) || new Set<string>();
         s.add(k.employee_id);
         countMap.set(key, s);
+        // Store per-employee target
+        const empKey = `${key}||${k.employee_id}`;
+        if (!perEmployeeTargetMap.has(empKey)) {
+          perEmployeeTargetMap.set(empKey, { target_value: k.target_value, uom: k.uom });
+        }
+        // Collect KPI IDs per org KPI definition (for observations panel)
+        if ((k as any).org_level_scope === 'employee') {
+          const ids = employeeKpiIdsMap.get(key) || [];
+          ids.push(k.id);
+          employeeKpiIdsMap.set(key, ids);
+        }
       });
 
       // 3. Fetch department_id for all mapped employees to build dept mapping
@@ -145,7 +149,7 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
         }
       });
 
-      return { kpis: result, unmappedCount, totalOrgKpis: uniqueMap.size };
+      return { kpis: result, unmappedCount, totalOrgKpis: uniqueMap.size, perEmployeeTargetMap, employeeKpiIdsMap };
     },
     enabled: !!reviewPeriod && !!reviewYear,
   });
