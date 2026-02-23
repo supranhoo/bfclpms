@@ -145,12 +145,7 @@ export function EmployeeSelectorGrid({
   const [selectedManager, setSelectedManager] = useState<string | null>(null);
 
   // Fix 1 & 3: Use multi-period hook so YTD/QTD/custom modes fetch ALL relevant months
-  const { data: rawPeriodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
-
-  // v1.45.94: Exclude non-issued (draft/template) KPIs from all dashboard stats
-  const periodKpis = useMemo(() => {
-    return rawPeriodKpis?.filter(k => (k as any).is_issued !== false) || [];
-  }, [rawPeriodKpis]);
+  const { data: periodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
 
   // Determine which employees to show based on view level and role
   const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';

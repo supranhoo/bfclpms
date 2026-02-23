@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.94 — Dashboard: exclude non-issued KPIs from all reviewer panel stats
+> **Version:** 1.45.95 — Revert: remove incorrect is_issued filter (not a reliable draft indicator)
 > **Maintainer:** Lovable AI
 
 ---
@@ -3800,18 +3800,25 @@ All Inbox access gaps for `hr_pms` and `skip_level` roles have been closed:
 
 ---
 
-### Fix: Dashboard Inflated Counts from Non-Issued KPIs (v1.45.94)
+### Fix: Dashboard Inflated Counts from Non-Issued KPIs (v1.45.94) — REVERTED in v1.45.95
 
-**Summary:** The Dashboard reviewer panels (Team, Audit, HR PMS, Management) were counting non-issued KPIs (`is_issued = false`) — draft/template records that were never actually issued to employees. This inflated stat cards and employee badge counts. The Bottleneck Report already excluded these correctly, causing a mismatch. Added `is_issued !== false` filtering to `EmployeeSelectorGrid` (which powers all panel stats), `AuditScorecard`, `UnifiedScorecard`, and `ManagementScorecard`.
+**Summary:** This change was reverted. The `is_issued` column defaults to `false` in the database and was only set to `true` for 18/83 employees. The filter removed 77% of KPIs and made 65 employees invisible on the dashboard.
 
-**Global Data Contract:** All reviewer panels and reports MUST filter `is_issued !== false` to exclude draft/template KPIs from workflow statistics.
+---
+
+### Revert: Remove Incorrect is_issued Filter (v1.45.95)
+
+**Summary:** Removed the `is_issued !== false` filter from all four dashboard components and the Bottleneck Report hook. The `is_issued` flag defaults to `false` and is NOT a reliable indicator of draft vs. active KPIs — it must not be used for filtering without first running a data migration to set `is_issued = true` for all legitimate KPIs.
+
+**WARNING:** Do NOT re-apply `is_issued` filtering without first ensuring all legitimate KPIs have the flag set correctly via a database migration.
 
 | File | Change |
 |---|---|
-| `src/components/review/EmployeeSelectorGrid.tsx` | Filter `periodKpis` via `is_issued !== false` before stats/filtering |
-| `src/components/review/AuditScorecard.tsx` | Added `is_issued !== false` to period/year KPI filter |
-| `src/components/review/UnifiedScorecard.tsx` | Added `is_issued !== false` to period/year KPI filter |
-| `src/components/review/ManagementScorecard.tsx` | Added `is_issued !== false` to period/year KPI filter |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Removed `issuedPeriodKpis` filter, reverted to direct `periodKpis` |
+| `src/components/review/AuditScorecard.tsx` | Removed `is_issued !== false` from KPI filter |
+| `src/components/review/UnifiedScorecard.tsx` | Removed `is_issued !== false` from KPI filter |
+| `src/components/review/ManagementScorecard.tsx` | Removed `is_issued !== false` from KPI filter |
+| `src/hooks/useBottleneckReport.ts` | Removed `is_issued !== false` from both filter calls |
 
 ---
 
