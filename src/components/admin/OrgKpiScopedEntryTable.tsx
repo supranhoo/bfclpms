@@ -21,6 +21,8 @@ export interface ScopedRow {
   remarks: string;
   evidenceUrl: string | null;
   isNa?: boolean;
+  targetValue?: number | null;
+  uom?: string | null;
 }
 
 interface OrgKpiScopedEntryTableProps {
@@ -188,9 +190,13 @@ interface EmployeeRowProps {
 }
 
 function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom }: EmployeeRowProps) {
+  // Prefer per-employee target over card-level fallback
+  const effectiveTarget = row.targetValue !== undefined ? row.targetValue : targetValue;
+  const effectiveUom = row.uom !== undefined ? row.uom : uom;
+
   const numVal = row.achievedValue;
   const outOfRange = numVal !== null && ratingThresholds
-    ? isValueOutOfRange(numVal, targetValue ?? null, ratingThresholds, uom ?? null)
+    ? isValueOutOfRange(numVal, effectiveTarget ?? null, ratingThresholds, effectiveUom ?? null)
     : null;
 
   const rowIsNa = row.isNa ?? false;
@@ -216,11 +222,11 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom }:
         </div>
       </TableCell>
 
-      {/* Target (read-only) */}
+      {/* Target (read-only) — per-employee target preferred */}
       <TableCell className="py-1.5 w-24 text-center">
         <span className={`text-xs ${rowIsNa ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}>
-          {targetValue != null ? targetValue : '—'}
-          {uom && targetValue != null && <span className="ml-0.5 text-[10px]">{uom}</span>}
+          {effectiveTarget != null ? effectiveTarget : '—'}
+          {effectiveUom && effectiveTarget != null && <span className="ml-0.5 text-[10px]">{effectiveUom}</span>}
         </span>
       </TableCell>
 
