@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.75 — Normalize frequency string mismatch (Bimonthly→Bi-Monthly, quarterly→Quarterly) with defensive code normalization
+> **Version:** 1.45.76 — Daily/Weekly KPI evidence upload: employees can attach supporting documents per sub-period submission, visible to all reviewers
 > **Maintainer:** Lovable AI
 
 ---
@@ -3746,6 +3746,20 @@ All Inbox access gaps for `hr_pms` and `skip_level` roles have been closed:
 | File | Change |
 |---|---|
 | `src/components/admin/AdminStatusStepBackDialog.tsx` | Fetch employee workflow via RPC; pass stages to `getPreviousStatus` |
+
+---
+
+### Feature: Daily/Weekly KPI Evidence Upload (v1.45.76)
+
+**Summary:** Employees can now upload supporting evidence (JPEG, PNG, PDF, Excel — up to 5 files) for each daily or weekly KPI submission. Uploaded documents are visible to all reviewer levels (Manager, Skip-Level, HR PMS, Auditor, Management) in the Daily Submission Summary table via a paperclip icon with file count badge.
+
+| File | Change |
+|---|---|
+| `sub_period_submissions` (migration) | Added `evidence_urls JSONB DEFAULT '[]'` column |
+| `src/hooks/useSubPeriodSubmissions.ts` | Added `evidence_urls` to interface and mutation; syncs legacy `evidence_url` column |
+| `src/components/review/DailySubmissionGrid.tsx` | Integrated `MultiFileUpload` in edit mode; shows paperclip badge on submitted rows |
+| `src/components/review/WeeklySubmissionTable.tsx` | Same treatment as daily grid for consistency |
+| `src/components/review/DailySubmissionSummary.tsx` | Added "Files" column with clickable paperclip icon + count badge |
 
 ---
 

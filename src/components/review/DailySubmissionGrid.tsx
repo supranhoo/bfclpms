@@ -5,7 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Check, Calendar, Loader2, Lock, AlertTriangle } from 'lucide-react';
+import { Check, Calendar, Loader2, Lock, AlertTriangle, Paperclip } from 'lucide-react';
+import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
+import { useAuth } from '@/contexts/AuthContext';
+import { openStorageFile } from '@/lib/storageDownload';
 import { SubPeriodSubmission, useSubmitSubPeriod } from '@/hooks/useSubPeriodSubmissions';
 import { getDailySubPeriods, getMonthNumber, canSubmitForSubPeriod } from '@/lib/frequencyUtils';
 import { QualitativeOption, BINARY_OPTIONS, scoreToRatingLevel } from '@/lib/qualitativeUom';
@@ -45,6 +48,7 @@ interface DayEntry {
   submissionId?: string;
   canSubmit: boolean;
   submittedAt?: string;
+  evidenceUrls: string[];
 }
 
 export function DailySubmissionGrid({
@@ -60,10 +64,12 @@ export function DailySubmissionGrid({
   requireResubmitReason = true,
 }: DailySubmissionGridProps) {
   const submitSubPeriod = useSubmitSubPeriod();
+  const { user } = useAuth();
   const [editingDay, setEditingDay] = useState<number | null>(null);
   const [tempValue, setTempValue] = useState<string>('');
   const [tempRating, setTempRating] = useState<number | null>(null);
   const [tempRemarks, setTempRemarks] = useState<string>('');
+  const [tempEvidenceUrls, setTempEvidenceUrls] = useState<string[]>([]);
   
   // Resubmission confirmation state
   const [confirmEditEntry, setConfirmEditEntry] = useState<DayEntry | null>(null);
@@ -95,6 +101,7 @@ export function DailySubmissionGrid({
         submissionId: submission?.id,
         canSubmit: availableDateValues.includes(dateStr),
         submittedAt: submission?.submitted_at || undefined,
+        evidenceUrls: (submission?.evidence_urls as string[] | null) || [],
       });
     }
     
@@ -142,6 +149,7 @@ export function DailySubmissionGrid({
     setEditingDay(entry.day);
     setTempValue(entry.achieved_value);
     setTempRemarks(entry.remarks);
+    setTempEvidenceUrls(entry.evidenceUrls);
     setUpdateReason(reason);
     
     // For qualitative, try to find matching rating
@@ -207,6 +215,7 @@ export function DailySubmissionGrid({
       sub_period_value: entry.date,
       achieved_value: value,
       remarks: tempRemarks || null,
+      evidence_urls: tempEvidenceUrls,
       review_month: reviewMonth,
       review_year: reviewYear,
       update_reason: updateReason || null,
@@ -217,6 +226,7 @@ export function DailySubmissionGrid({
     setTempValue('');
     setTempRating(null);
     setTempRemarks('');
+    setTempEvidenceUrls([]);
     setUpdateReason('');
     onSubmissionComplete?.();
   };
@@ -226,6 +236,7 @@ export function DailySubmissionGrid({
     setTempValue('');
     setTempRating(null);
     setTempRemarks('');
+    setTempEvidenceUrls([]);
     setUpdateReason('');
   };
 
@@ -300,16 +311,42 @@ export function DailySubmissionGrid({
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
                   {editingDay === entry.day ? (
-                    <Textarea
-                      value={tempRemarks}
-                      onChange={(e) => setTempRemarks(e.target.value)}
-                      placeholder="Optional remarks..."
-                      className="min-h-[60px]"
-                    />
+                    <div className="space-y-2">
+                      <Textarea
+                        value={tempRemarks}
+                        onChange={(e) => setTempRemarks(e.target.value)}
+                        placeholder="Optional remarks..."
+                        className="min-h-[60px]"
+                      />
+                      {user && (
+                        <MultiFileUpload
+                          userId={user.id}
+                          contextId={kpiId}
+                          folder="daily-evidence"
+                          existingUrls={tempEvidenceUrls}
+                          onUploadComplete={setTempEvidenceUrls}
+                          maxFiles={5}
+                          label="Supporting Documents"
+                        />
+                      )}
+                    </div>
                   ) : (
-                    <span className="text-sm text-muted-foreground line-clamp-2">
-                      {entry.remarks || '-'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground line-clamp-2">
+                        {entry.remarks || '-'}
+                      </span>
+                      {entry.evidenceUrls.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => entry.evidenceUrls.forEach(url => openStorageFile(url))}
+                          className="inline-flex items-center gap-0.5 text-primary hover:underline shrink-0"
+                          title={`${entry.evidenceUrls.length} file(s) attached`}
+                        >
+                          <Paperclip className="h-3.5 w-3.5" />
+                          <span className="text-xs">{entry.evidenceUrls.length}</span>
+                        </button>
+                      )}
+                    </div>
                   )}
                 </TableCell>
                 <TableCell>
