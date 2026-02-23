@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Download, Clock, Users, AlertTriangle, Timer, ChevronLeft, ChevronRight, UserCheck, ShieldCheck, Eye } from 'lucide-react';
+import { Download, Clock, Users, Timer, ChevronLeft, ChevronRight, UserCheck, ShieldCheck, Eye } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
@@ -16,7 +16,6 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 const STAGE_COLORS: Record<string, string> = {
-  not_issued: '#64748b',
   kra_set: '#94a3b8',
   self_review: '#3b82f6',
   manager_check: '#f59e0b',
@@ -99,7 +98,6 @@ export default function BottleneckReport() {
       'Period': r.period,
       'Year': r.year,
       'Current Stage': r.currentStage,
-      'Issued': r.isIssued ? 'Yes' : 'No',
       'Responsible Person': r.responsiblePerson,
       'Days Pending': r.daysPending,
       'Last Updated': format(new Date(r.lastUpdated), 'dd-MMM-yyyy'),
@@ -146,10 +144,9 @@ export default function BottleneckReport() {
         }
       />
 
-      {/* Row 1: Summary Cards (7) */}
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
+      {/* Row 1: Summary Cards (6) */}
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         <SummaryCard label="Total Pending" value={stats.total} icon={Clock} onClick={() => handleStageClick('all')} active={selectedStage === 'all'} />
-        <SummaryCard label="Not Issued" value={stats.notIssued} icon={AlertTriangle} color="text-slate-500" onClick={() => handleStageClick('not_issued')} active={selectedStage === 'not_issued'} />
         <SummaryCard label="Self Review" value={stats.selfReview} icon={Users} color="text-blue-600" onClick={() => handleStageClick('self_review')} active={selectedStage === 'self_review'} />
         <SummaryCard label="Manager" value={stats.manager} icon={UserCheck} color="text-yellow-600" onClick={() => handleStageClick('manager_check')} active={selectedStage === 'manager_check'} />
         <SummaryCard label="Skip-Level" value={stats.skipLevel} icon={Eye} color="text-violet-600" onClick={() => handleStageClick('skip_level_check')} active={selectedStage === 'skip_level_check'} />
@@ -387,12 +384,7 @@ export default function BottleneckReport() {
                     <TableCell className="max-w-[200px] truncate" title={row.kpiName}>{row.kpiName}</TableCell>
                     <TableCell>{row.period}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        <Badge variant="secondary" className="text-xs whitespace-nowrap">{row.currentStage}</Badge>
-                        {!row.isIssued && (
-                          <Badge variant="outline" className="text-xs border-orange-300 text-orange-600">Not Issued</Badge>
-                        )}
-                      </div>
+                      <Badge variant="secondary" className="text-xs whitespace-nowrap">{row.currentStage}</Badge>
                     </TableCell>
                     <TableCell>{row.responsiblePerson}</TableCell>
                     <TableCell className="text-center">
