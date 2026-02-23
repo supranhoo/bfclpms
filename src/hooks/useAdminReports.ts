@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useMemo, useState } from 'react';
+import { getCycleOptionsForFrequency } from '@/lib/frequencyCycleOptions';
 
 // Calendar-order month names (used for DB review_period values)
 const MONTH_NAMES = [
@@ -41,6 +42,76 @@ export interface KpiMappingFilters {
   search: string;
 }
 
+/**
+ * For a non-monthly KPI, resolve which calendar month indices (0-based, Jan=0) it covers.
+ * E.g. a Quarterly KPI with review_period='Q1' and cycle_start='Jan-Mar' covers months 0,1,2.
+ */
+function getCalendarMonthsForPeriod(
+  reviewPeriod: string,
+  frequency: string | null,
+  cycleStart: string | null,
+): number[] {
+  if (!frequency) return [];
+  const options = getCycleOptionsForFrequency(frequency);
+  if (!options) return [];
+
+  // Find the matching cycle option
+  const cycleOption = cycleStart
+    ? options.find(o => o.value === cycleStart) || options[0]
+    : options[0];
+
+  // Parse the sub-frequency to get period labels (e.g. 'Jan-Mar,Apr-Jun,...')
+  const periods = cycleOption.subFrequency.split(',');
+
+  // Find the locked months keys that map to this review_period
+  const lockedKeys = Object.keys(cycleOption.lockedMonths);
+
+  // Try to match review_period to a locked key (e.g. 'Q1', 'H1', 'Jan-Mar', etc.)
+  let matchedKey: string | null = null;
+
+  // Direct match on locked key
+  if (lockedKeys.includes(reviewPeriod)) {
+    matchedKey = reviewPeriod;
+  } else {
+    // Try matching period labels like 'Q1' -> index 0 -> first locked key
+    // Common patterns: Q1-Q4, H1-H2, or period range labels
+    const periodIdx = periods.indexOf(reviewPeriod);
+    if (periodIdx !== -1 && periodIdx < lockedKeys.length) {
+      matchedKey = lockedKeys[periodIdx];
+    }
+  }
+
+  if (!matchedKey) return [];
+
+  // The locked months + the active month give us all months in the cycle
+  const lockedMonthNums = cycleOption.lockedMonths[matchedKey] || [];
+  // Also include the active month for this period
+  // Active month is the last month of the first period; for other periods, offset accordingly
+  const allMonths = [...lockedMonthNums];
+
+  // Determine the active month for this specific period
+  // The active month in cycleOption is for the first period; we need to compute for matching period
+  const periodIndex = lockedKeys.indexOf(matchedKey);
+  if (periodIndex !== -1) {
+    // Parse the period range to find the active (last) month
+    const periodLabel = periods[periodIndex];
+    if (periodLabel) {
+      const parts = periodLabel.split('-');
+      const lastMonthName = parts[parts.length - 1];
+      const lastMonthIdx = MONTH_NAMES.indexOf(lastMonthName as any);
+      if (lastMonthIdx !== -1) {
+        const monthNum = lastMonthIdx + 1; // 1-based
+        if (!allMonths.includes(monthNum)) {
+          allMonths.push(monthNum);
+        }
+      }
+    }
+  }
+
+  // Convert 1-based month numbers to 0-based calendar indices
+  return allMonths.map(m => m - 1);
+}
+
 const PAGE_SIZE = 20;
 
 export interface MatrixSortConfig {
@@ -69,19 +140,15 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
   const { data: kpis, isLoading: kpisLoading } = useQuery({
     queryKey: ['kpi-mapping-kpis', filters.year],
     queryFn: async () => {
-      const h2Months = ['July','August','September','October','November','December'];
-      const h1Months = ['January','February','March','April','May','June'];
-
-      const fetchBatched = async (year: number, months: string[]) => {
-        let all: { employee_id: string; review_period: string }[] = [];
+      const fetchBatched = async (year: number) => {
+        let all: { employee_id: string; review_period: string; frequency: string | null; frequency_cycle_start: string | null }[] = [];
         let from = 0;
         const batchSize = 1000;
         while (true) {
           const { data, error } = await supabase
             .from('kpis')
-            .select('employee_id, review_period')
+            .select('employee_id, review_period, frequency, frequency_cycle_start')
             .eq('review_year', year)
-            .in('review_period', months)
             .range(from, from + batchSize - 1);
           if (error) throw error;
           if (!data || data.length === 0) break;
@@ -93,8 +160,8 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
       };
 
       const [h2, h1] = await Promise.all([
-        fetchBatched(filters.year, h2Months),
-        fetchBatched(filters.year + 1, h1Months),
+        fetchBatched(filters.year),
+        fetchBatched(filters.year + 1),
       ]);
       return [...h2, ...h1];
     },
@@ -108,15 +175,30 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
 
     // Build employee → fiscal-month-index set
     const employeeMonths = new Map<string, Set<number>>();
+
+    const addMonthForEmployee = (empId: string, calIdx: number) => {
+      const fiscalIdx = calendarToFiscalIdx(calIdx);
+      if (!employeeMonths.has(empId)) {
+        employeeMonths.set(empId, new Set());
+      }
+      employeeMonths.get(empId)!.add(fiscalIdx);
+    };
+
     for (const kpi of kpis) {
       if (!kpi.review_period || !kpi.employee_id) continue;
+
+      // Try direct month name match first (Monthly / null frequency)
       const calIdx = MONTH_NAMES.indexOf(kpi.review_period as any);
-      if (calIdx === -1) continue;
-      const fiscalIdx = calendarToFiscalIdx(calIdx);
-      if (!employeeMonths.has(kpi.employee_id)) {
-        employeeMonths.set(kpi.employee_id, new Set());
+      if (calIdx !== -1) {
+        addMonthForEmployee(kpi.employee_id, calIdx);
+        continue;
       }
-      employeeMonths.get(kpi.employee_id)!.add(fiscalIdx);
+
+      // Non-monthly KPI: resolve covered months from cycle options
+      const coveredMonths = getCalendarMonthsForPeriod(kpi.review_period, kpi.frequency, kpi.frequency_cycle_start);
+      for (const cm of coveredMonths) {
+        addMonthForEmployee(kpi.employee_id, cm);
+      }
     }
 
     // Build full rows
