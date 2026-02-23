@@ -191,8 +191,8 @@ interface EmployeeRowProps {
 
 function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom }: EmployeeRowProps) {
   // Prefer per-employee target over card-level fallback
-  const effectiveTarget = row.targetValue !== undefined ? row.targetValue : targetValue;
-  const effectiveUom = row.uom !== undefined ? row.uom : uom;
+  const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
+  const effectiveUom = row.uom != null ? row.uom : uom;
 
   const numVal = row.achievedValue;
   const outOfRange = numVal !== null && ratingThresholds
