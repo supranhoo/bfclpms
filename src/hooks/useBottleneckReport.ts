@@ -4,10 +4,9 @@ import { useDepartments, useDivisions, useBusinessUnits } from '@/hooks/useOrgan
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
-export type StageKey = 'not_issued' | 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review';
+export type StageKey = 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review';
 
 export const STAGE_LABELS: Record<StageKey, string> = {
-  not_issued: 'KRA Not Issued',
   kra_set: 'KRA Set (Awaiting Start)',
   self_review: 'Awaiting Self Review',
   manager_check: 'Awaiting Manager Review',
@@ -35,7 +34,6 @@ export interface BottleneckRow {
   responsibleRole: string;
   daysPending: number;
   lastUpdated: string;
-  isIssued: boolean;
 }
 
 export interface TopHolder {
@@ -58,8 +56,6 @@ function getResponsiblePerson(
   managerName: string | null,
 ): string {
   switch (stageKey) {
-    case 'not_issued':
-      return 'Admin';
     case 'kra_set':
     case 'self_review':
       return employeeName;
@@ -80,7 +76,6 @@ function getResponsiblePerson(
 
 function getResponsibleRole(stageKey: StageKey): string {
   switch (stageKey) {
-    case 'not_issued': return 'Admin';
     case 'kra_set':
     case 'self_review': return 'Employee';
     case 'manager_check': return 'Manager';
@@ -138,16 +133,9 @@ export function useBottleneckReport() {
     if (!allKpis || !profilesMap) return [];
 
     return allKpis
-      .filter(kpi => kpi.status !== 'approved')
+      .filter(kpi => kpi.status !== 'approved' && (kpi as any).is_issued !== false)
       .map((kpi): BottleneckRow | null => {
-        const isIssued = (kpi as any).is_issued !== false;
-        let stageKey: StageKey;
-
-        if (kpi.status === 'kra_set' && !isIssued) {
-          stageKey = 'not_issued';
-        } else {
-          stageKey = kpi.status as StageKey;
-        }
+        const stageKey = kpi.status as StageKey;
 
         if (!STAGE_LABELS[stageKey]) return null;
 
@@ -177,7 +165,6 @@ export function useBottleneckReport() {
           responsibleRole: getResponsibleRole(stageKey),
           daysPending,
           lastUpdated: kpi.updated_at,
-          isIssued,
         };
       })
       .filter(Boolean) as BottleneckRow[];
@@ -227,9 +214,8 @@ export function useBottleneckReport() {
     const skipLevel = filteredRows.filter(r => r.stageKey === 'skip_level_check').length;
     const hrPms = filteredRows.filter(r => r.stageKey === 'hr_pms_review').length;
     const auditMgmt = filteredRows.filter(r => r.stageKey === 'audit' || r.stageKey === 'management_review').length;
-    const notIssued = filteredRows.filter(r => r.stageKey === 'not_issued').length;
     const avgDays = total > 0 ? Math.round(filteredRows.reduce((s, r) => s + r.daysPending, 0) / total) : 0;
-    return { total, selfReview, manager, skipLevel, hrPms, auditMgmt, notIssued, avgDays };
+    return { total, selfReview, manager, skipLevel, hrPms, auditMgmt, avgDays };
   }, [filteredRows]);
 
   // Urgency stats
