@@ -1,47 +1,29 @@
 
-# Filter Employee Chart Departments to Only Those with KPIs (v1.45.89)
+
+# Add Missing Audit & Management Summary Cards (v1.45.90)
 
 ## Problem
 
-The "By Employee" chart's Department dropdown currently lists **all** departments from the organization, including those with zero pending KPIs. This clutters the filter with irrelevant options.
-
-## Solution
-
-Compute a list of departments that actually have pending KPIs in the current filtered dataset, and use that list instead of the full `departments` array for the employee chart's dropdown.
+The hook already computes `stats.audit` and `stats.management`, but the summary cards row only renders 7 cards -- Audit and Management are missing from the UI.
 
 ## Changes
 
-### 1. `src/hooks/useBottleneckReport.ts`
+### `src/pages/reports/BottleneckReport.tsx`
 
-Add a new computed value `employeeChartDepartments` that derives unique departments from `filteredRows`:
+1. **Add two summary cards** after HR PMS and before Avg Days:
+   - "Audit" card using `stats.audit`, orange color, `Gavel` icon (already imported), clickable to filter `audit` stage
+   - "Management" card using `stats.management`, red color, a suitable icon, clickable to filter `management_review` stage
 
-```typescript
-const employeeChartDepartments = useMemo(() => {
-  const deptSet = new Map<string, string>();
-  filteredRows.forEach(r => {
-    if (r.departmentId && r.departmentName !== '-') {
-      deptSet.set(r.departmentId, r.departmentName);
-    }
-  });
-  return Array.from(deptSet.entries())
-    .map(([id, name]) => ({ id, name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-}, [filteredRows]);
-```
+2. **Update grid** from `lg:grid-cols-7` to `lg:grid-cols-9` (9 cards total):
+   - Total Pending | KRA Set | Self Review | Manager | Skip-Level | HR PMS | **Audit** | **Management** | Avg Days
 
-Export it in the return object.
+3. **Update skeleton loader** from 7 to 9 skeleton items to match.
 
-### 2. `src/pages/reports/BottleneckReport.tsx`
+### No hook changes needed -- `stats.audit` and `stats.management` are already computed and exported.
 
-Replace `departments.map(d => ...)` in the employee chart's `<Select>` with `employeeChartDepartments.map(d => ...)` so only departments with active bottleneck KPIs appear.
+### `DOCUMENTATION.md` -- bump version to v1.45.90.
 
-### 3. `DOCUMENTATION.md`
+## Risk
 
-Bump version to **1.45.89**, note the filtered department list behavior.
+None -- purely additive UI change, no data or logic impact.
 
-## Risk Assessment
-
-| Aspect | Risk |
-|--------|------|
-| Data impact | None -- read-only filtering |
-| Regression risk | None -- only changes dropdown options for one chart |
