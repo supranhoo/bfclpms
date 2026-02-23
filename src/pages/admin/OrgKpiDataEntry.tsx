@@ -351,6 +351,8 @@ export default function OrgKpiDataEntry() {
           remarks: val?.remarks ?? '',
           evidenceUrl: val?.evidence_url ?? null,
           isNa: val?.is_na ?? false,
+          targetValue: kpi.target_value ?? null,
+          uom: kpi.uom ?? null,
         };
       });
     } else if (scope === 'employee' && allProfiles) {
