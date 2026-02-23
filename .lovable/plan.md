@@ -1,40 +1,51 @@
 
 
-# Fix: Incorrect Per-Employee Targets in Org KPI Data Entry
+# Fix: Per-Employee Targets All Showing Same Value (Map Serialization Bug)
 
 ## Problem
 
-All employee rows display "35" as the target, even though the database stores different targets per employee (14, 35, 70, 140, 315). The card-level fallback target of 35 is being used for all rows.
+All employee rows display "14 Number" as the target, even though the database stores different targets per employee (14, 35, 70, 140, 315). The fix from v1.45.81 correctly builds a `Map` with per-employee targets, but the targets are lost before reaching the UI.
 
 ## Root Cause
 
-The separate `employeeKpiData` query (line 107-139 in `OrgKpiDataEntry.tsx`) uses `.eq('kpi_name', kpi.kpi_name)` where the `kpi_name` contains multi-line text with newlines, formula text, and special characters. This likely causes a URL-encoding mismatch in the PostgREST query parameter, resulting in zero results returned. With no results, the `employeeTargetMap` is empty, `empTarget` is always undefined, `row.targetValue` is set to `null`, and the `!= null` fallback correctly falls back to the card-level target (35).
+React Query uses **structural sharing** by default to optimize re-renders. This process internally serializes and deserializes the query result, which **destroys JavaScript `Map` objects** -- converting them into empty plain objects `{}`. Since `perEmployeeTargetMap` and `employeeKpiIdsMap` are `Map` instances, they become empty objects after React Query processes them. When the code calls `.get()` on the (now-empty) object, it returns `undefined`, and the fallback logic then uses the card-level target (14) for every row.
 
-## Solution: Eliminate the Fragile Separate Query
+## Fix
 
-Instead of making a second query with problematic string matching, build the per-employee target map directly inside the `useOrgLevelKpisWithEmployees` hook, which already fetches ALL KPI records (`SELECT *`) before deduplication. The raw records contain each employee's `target_value` and `uom`.
+### Option A (Recommended): Convert Maps to plain objects before returning
 
-### 1. `src/hooks/useOrgLevelKpis.ts` -- Build target map before dedup
+In `src/hooks/useOrgLevelKpis.ts`, convert the two `Map` instances to plain key-value objects before returning them from `queryFn`. Then update the consumer in `OrgKpiDataEntry.tsx` to use bracket notation `obj[key]` instead of `.get(key)`.
 
-After the first query returns all org-level KPI records (line 60-68) and before deduplication, iterate over all records to build a `perEmployeeTargetMap` keyed by `category_id||kra_name||kpi_name||employee_id`. Return this map in the hook's result alongside `kpis`, `unmappedCount`, and `totalOrgKpis`.
+**useOrgLevelKpis.ts** -- Convert Maps to plain objects:
+```typescript
+// Convert to plain objects for React Query compatibility
+const perEmployeeTargets: Record<string, { target_value: number | null; uom: string | null }> = {};
+perEmployeeTargetMap.forEach((val, key) => { perEmployeeTargets[key] = val; });
 
-### 2. `src/pages/admin/OrgKpiDataEntry.tsx` -- Use the hook-provided map
+const employeeKpiIds: Record<string, string[]> = {};
+employeeKpiIdsMap.forEach((val, key) => { employeeKpiIds[key] = val; });
 
-- Remove the separate `employeeKpiData` query (lines 101-142) entirely since the hook now provides the target map.
-- Extract the `perEmployeeTargetMap` from `orgLevelData`.
-- In `buildCardData`, use this map instead of the removed `employeeTargetMap`.
-- Keep the `employeeKpiIdsMap` functionality by building it from the same hook data (or keep a simplified version of the query that only fetches IDs).
+return { kpis: result, unmappedCount, totalOrgKpis: uniqueMap.size, 
+         perEmployeeTargetMap: perEmployeeTargets, employeeKpiIdsMap: employeeKpiIds };
+```
 
-### 3. `DOCUMENTATION.md` -- Version bump to 1.45.81
+**OrgKpiDataEntry.tsx** -- Use bracket notation:
+```typescript
+const empTarget = employeeTargetMap?.[empTargetKey];
+// instead of: employeeTargetMap?.get(empTargetKey)
+```
+
+### Version bump
+
+Update `DOCUMENTATION.md` to version **1.45.82**.
 
 ## Technical Details
 
 | Aspect | Detail |
 |--------|--------|
 | Files changed | `useOrgLevelKpis.ts`, `OrgKpiDataEntry.tsx`, `DOCUMENTATION.md` |
-| Root cause | PostgREST `.eq()` with multi-line kpi_name string likely fails silently |
-| Data source | Same `allOrgKpis` query already fetched, just not discarded during dedup |
+| Root cause | React Query structural sharing serializes Map to {} |
+| Data impact | None |
 | DB changes | None |
-| RLS impact | None |
-| Regression risk | Low -- removes a fragile secondary query in favor of data already available |
+| Regression risk | None -- fixing data transport format |
 
