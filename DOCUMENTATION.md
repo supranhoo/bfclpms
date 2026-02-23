@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.91 — Workflow-Aware Bottleneck Report
+> **Version:** 1.45.92 — Bottleneck Resolver: audit & management_review fix
 > **Maintainer:** Lovable AI
 
 ---
