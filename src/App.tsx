@@ -58,6 +58,7 @@ const EmployeePerformanceSummary = lazy(() => import("./pages/reports/EmployeePe
 const TNIReport = lazy(() => import("./pages/reports/TNIReport"));
 const IssuesReport = lazy(() => import("./pages/reports/IssuesReport"));
 const KpiDetailReport = lazy(() => import("./pages/reports/KpiDetailReport"));
+const BottleneckReport = lazy(() => import("./pages/reports/BottleneckReport"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -252,6 +253,11 @@ const App = () => (
                 <Route path="/reports/kpi-detail" element={
                   <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management', 'hr_pms']}>
                     <Suspense fallback={<PageFallback />}><KpiDetailReport /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/reports/bottleneck" element={
+                  <ProtectedRoute allowedRoles={['admin', 'auditor', 'management']}>
+                    <Suspense fallback={<PageFallback />}><BottleneckReport /></Suspense>
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/pip" element={

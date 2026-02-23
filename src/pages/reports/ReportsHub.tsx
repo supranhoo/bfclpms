@@ -12,7 +12,8 @@ import {
   Calendar,
   GraduationCap,
   Table2,
-  Grid3X3
+  Grid3X3,
+  Workflow
 } from 'lucide-react';
 
 interface ReportCard {
@@ -121,6 +122,13 @@ const reports: ReportCard[] = [
     icon: Grid3X3,
     path: '/admin/kpi-mapping',
     color: 'text-teal-500',
+  },
+  {
+    title: 'Workflow Bottleneck Report',
+    description: 'Identify stuck KPIs by workflow stage, responsible reviewer, and days pending',
+    icon: Workflow,
+    path: '/reports/bottleneck',
+    color: 'text-amber-500',
   },
 ];
 
