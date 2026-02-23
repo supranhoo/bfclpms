@@ -115,6 +115,7 @@ export function useBottleneckReport() {
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 25;
+  const [monthWindowStart, setMonthWindowStart] = useState(0);
 
   const deptMap = useMemo(() => {
     const m = new Map<string, { name: string; businessUnitId: string | null }>();
@@ -206,24 +207,26 @@ export function useBottleneckReport() {
     return rows.sort((a, b) => b.daysPending - a.daysPending);
   }, [allRows, selectedYear, selectedPeriod, selectedDepartment, selectedDivision, selectedBusinessUnit, selectedStage, searchQuery, deptMap, buMap]);
 
-  // Summary stats (expanded)
+  // Summary stats (expanded with KRA Set, Audit, Management split)
   const stats = useMemo(() => {
     const total = filteredRows.length;
+    const kraSet = filteredRows.filter(r => r.stageKey === 'kra_set').length;
     const selfReview = filteredRows.filter(r => r.stageKey === 'self_review').length;
     const manager = filteredRows.filter(r => r.stageKey === 'manager_check').length;
     const skipLevel = filteredRows.filter(r => r.stageKey === 'skip_level_check').length;
     const hrPms = filteredRows.filter(r => r.stageKey === 'hr_pms_review').length;
-    const auditMgmt = filteredRows.filter(r => r.stageKey === 'audit' || r.stageKey === 'management_review').length;
+    const audit = filteredRows.filter(r => r.stageKey === 'audit').length;
+    const management = filteredRows.filter(r => r.stageKey === 'management_review').length;
     const avgDays = total > 0 ? Math.round(filteredRows.reduce((s, r) => s + r.daysPending, 0) / total) : 0;
-    return { total, selfReview, manager, skipLevel, hrPms, auditMgmt, avgDays };
+    return { total, kraSet, selfReview, manager, skipLevel, hrPms, audit, management, avgDays };
   }, [filteredRows]);
 
-  // Urgency stats
+  // Urgency stats (3/5/7 day thresholds)
   const urgencyStats = useMemo((): UrgencyStats => {
     let green = 0, amber = 0, red = 0;
     filteredRows.forEach(r => {
-      if (r.daysPending <= 7) green++;
-      else if (r.daysPending <= 14) amber++;
+      if (r.daysPending <= 3) green++;
+      else if (r.daysPending <= 5) amber++;
       else red++;
     });
     return { green, amber, red };
@@ -239,7 +242,7 @@ export function useBottleneckReport() {
       }
       const entry = holderMap.get(key)!;
       entry.days.push(r.daysPending);
-      if (r.daysPending > 14) entry.critical++;
+      if (r.daysPending >= 7) entry.critical++;
     });
 
     return Array.from(holderMap.entries())
@@ -283,6 +286,24 @@ export function useBottleneckReport() {
     return Array.from(periods).sort();
   }, [allRows]);
 
+  // Available months for tile navigation (newest first)
+  const availableMonths = useMemo(() => {
+    const monthSet = new Map<string, { label: string; period: string; year: string }>();
+    allRows.forEach(r => {
+      if (r.period === '-' || !r.year) return;
+      const key = `${r.period}-${r.year}`;
+      if (!monthSet.has(key)) {
+        const shortLabel = r.period.substring(0, 3) + ' ' + r.year;
+        monthSet.set(key, { label: shortLabel, period: r.period, year: String(r.year) });
+      }
+    });
+    return Array.from(monthSet.values()).sort((a, b) => {
+      const yDiff = Number(b.year) - Number(a.year);
+      if (yDiff !== 0) return yDiff;
+      return b.period.localeCompare(a.period);
+    });
+  }, [allRows]);
+
   const totalPages = Math.ceil(filteredRows.length / pageSize);
   const paginatedRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
 
@@ -306,6 +327,8 @@ export function useBottleneckReport() {
     businessUnits: businessUnits || [],
     availableYears,
     availablePeriods,
+    availableMonths,
+    monthWindowStart, setMonthWindowStart,
     page, setPage, totalPages, pageSize,
   };
 }

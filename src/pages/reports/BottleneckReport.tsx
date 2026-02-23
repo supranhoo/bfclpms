@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Download, Clock, Users, Timer, ChevronLeft, ChevronRight, UserCheck, ShieldCheck, Eye } from 'lucide-react';
+import { Download, Clock, Users, Timer, ChevronLeft, ChevronRight, UserCheck, ShieldCheck, Eye, FileCheck, Gavel } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
@@ -28,10 +28,10 @@ const STAGE_COLORS: Record<string, string> = {
 const URGENCY_COLORS = { green: '#22c55e', amber: '#f59e0b', red: '#ef4444' };
 
 function DaysPendingBadge({ days }: { days: number }) {
-  if (days <= 7) {
+  if (days <= 3) {
     return <Badge variant="outline" className="bg-green-500/10 text-green-700 border-green-300">{days}d</Badge>;
   }
-  if (days <= 14) {
+  if (days <= 5) {
     return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-700 border-yellow-300">{days}d</Badge>;
   }
   return <Badge variant="destructive">{days}d</Badge>;
@@ -74,6 +74,7 @@ export default function BottleneckReport() {
     searchQuery, setSearchQuery,
     departments, divisions, businessUnits,
     availableYears, availablePeriods,
+    availableMonths, monthWindowStart, setMonthWindowStart,
     page, setPage, totalPages,
   } = useBottleneckReport();
 
@@ -83,6 +84,18 @@ export default function BottleneckReport() {
     setSelectedStage(prev => prev === stage ? 'all' : stage);
     setPage(1);
   }, [setSelectedStage, setPage]);
+
+  const handleMonthClick = useCallback((period: string, year: string) => {
+    const isActive = selectedPeriod === period && selectedYear === year;
+    if (isActive) {
+      setSelectedPeriod('all');
+      setSelectedYear('all');
+    } else {
+      setSelectedPeriod(period);
+      setSelectedYear(year);
+    }
+    setPage(1);
+  }, [selectedPeriod, selectedYear, setSelectedPeriod, setSelectedYear, setPage]);
 
   const handleExport = useCallback(() => {
     if (allFilteredRows.length === 0) {
@@ -110,12 +123,17 @@ export default function BottleneckReport() {
   }, [allFilteredRows, toast]);
 
   const urgencyChartData = [
-    { name: '0-7 days', value: urgencyStats.green, color: URGENCY_COLORS.green },
-    { name: '8-14 days', value: urgencyStats.amber, color: URGENCY_COLORS.amber },
-    { name: '15+ days', value: urgencyStats.red, color: URGENCY_COLORS.red },
+    { name: '0-3 days', value: urgencyStats.green, color: URGENCY_COLORS.green },
+    { name: '4-5 days', value: urgencyStats.amber, color: URGENCY_COLORS.amber },
+    { name: '6+ days', value: urgencyStats.red, color: URGENCY_COLORS.red },
   ];
 
   const displayedHolders: TopHolder[] = showAllHolders ? topHolders : topHolders.slice(0, 10);
+
+  // Month tile window (show 3 at a time)
+  const visibleMonths = availableMonths.slice(monthWindowStart, monthWindowStart + 3);
+  const canScrollLeft = monthWindowStart > 0;
+  const canScrollRight = monthWindowStart + 3 < availableMonths.length;
 
   if (isLoading) {
     return (
@@ -144,9 +162,10 @@ export default function BottleneckReport() {
         }
       />
 
-      {/* Row 1: Summary Cards (6) */}
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+      {/* Row 1: Summary Cards (7) */}
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
         <SummaryCard label="Total Pending" value={stats.total} icon={Clock} onClick={() => handleStageClick('all')} active={selectedStage === 'all'} />
+        <SummaryCard label="KRA Set" value={stats.kraSet} icon={FileCheck} color="text-slate-500" onClick={() => handleStageClick('kra_set')} active={selectedStage === 'kra_set'} />
         <SummaryCard label="Self Review" value={stats.selfReview} icon={Users} color="text-blue-600" onClick={() => handleStageClick('self_review')} active={selectedStage === 'self_review'} />
         <SummaryCard label="Manager" value={stats.manager} icon={UserCheck} color="text-yellow-600" onClick={() => handleStageClick('manager_check')} active={selectedStage === 'manager_check'} />
         <SummaryCard label="Skip-Level" value={stats.skipLevel} icon={Eye} color="text-violet-600" onClick={() => handleStageClick('skip_level_check')} active={selectedStage === 'skip_level_check'} />
@@ -154,18 +173,66 @@ export default function BottleneckReport() {
         <SummaryCard label="Avg Days" value={stats.avgDays} icon={Timer} />
       </div>
 
-      {/* Row 2: Charts side-by-side */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Urgency Donut */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Urgency Distribution</CardTitle>
-            <CardDescription>KPIs by days pending severity</CardDescription>
+      {/* Row 2: Month Filter Tiles */}
+      {availableMonths.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            disabled={!canScrollLeft}
+            onClick={() => setMonthWindowStart(Math.max(0, monthWindowStart - 1))}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+
+          <Button
+            variant={selectedPeriod === 'all' && selectedYear === 'all' ? 'default' : 'outline'}
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => { setSelectedPeriod('all'); setSelectedYear('all'); setPage(1); }}
+          >
+            All
+          </Button>
+
+          {visibleMonths.map(m => {
+            const isActive = selectedPeriod === m.period && selectedYear === m.year;
+            return (
+              <Button
+                key={`${m.period}-${m.year}`}
+                variant={isActive ? 'default' : 'outline'}
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => handleMonthClick(m.period, m.year)}
+              >
+                {m.label}
+              </Button>
+            );
+          })}
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            disabled={!canScrollRight}
+            onClick={() => setMonthWindowStart(monthWindowStart + 1)}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      {/* Row 3: Charts — Urgency (1/3) + Department (2/3) */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {/* Urgency Donut (compact) */}
+        <Card className="md:col-span-1">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Urgency Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[280px] flex items-center justify-center">
+            <div className="h-[200px] flex items-center justify-center">
               {stats.total === 0 ? (
-                <p className="text-muted-foreground">No pending KPIs</p>
+                <p className="text-sm text-muted-foreground">No pending KPIs</p>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -173,18 +240,17 @@ export default function BottleneckReport() {
                       data={urgencyChartData}
                       cx="50%"
                       cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
+                      innerRadius={40}
+                      outerRadius={70}
                       paddingAngle={3}
                       dataKey="value"
-                      label={({ name, value }) => `${name}: ${value}`}
                     >
                       {urgencyChartData.map((entry, idx) => (
                         <Cell key={idx} fill={entry.color} />
                       ))}
                     </Pie>
                     <Tooltip />
-                    <Legend />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} />
                   </PieChart>
                 </ResponsiveContainer>
               )}
@@ -192,9 +258,9 @@ export default function BottleneckReport() {
           </CardContent>
         </Card>
 
-        {/* Department stacked bar */}
-        {chartData.length > 0 && (
-          <Card>
+        {/* Department stacked bar (2/3 width) */}
+        {chartData.length > 0 ? (
+          <Card className="md:col-span-2">
             <CardHeader>
               <CardTitle>By Department</CardTitle>
               <CardDescription>KPIs stuck at each workflow stage</CardDescription>
@@ -221,10 +287,16 @@ export default function BottleneckReport() {
               </div>
             </CardContent>
           </Card>
+        ) : (
+          <Card className="md:col-span-2 flex items-center justify-center">
+            <CardContent className="py-12">
+              <p className="text-muted-foreground text-center">No department data available</p>
+            </CardContent>
+          </Card>
         )}
       </div>
 
-      {/* Row 3: Top Bottleneck Holders */}
+      {/* Row 4: Top Bottleneck Holders */}
       {topHolders.length > 0 && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
@@ -246,7 +318,7 @@ export default function BottleneckReport() {
                     <TableHead>Responsible Person</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead className="text-center">Pending KPIs</TableHead>
-                    <TableHead className="text-center">Critical (15+d)</TableHead>
+                    <TableHead className="text-center">Critical (7+d)</TableHead>
                     <TableHead className="text-center">Avg Days</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -273,7 +345,7 @@ export default function BottleneckReport() {
         </Card>
       )}
 
-      {/* Row 4: Filters */}
+      {/* Row 5: Filters */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">Filters</CardTitle>
@@ -376,7 +448,7 @@ export default function BottleneckReport() {
                 {rows.map(row => (
                   <TableRow
                     key={row.kpiId}
-                    className={row.daysPending > 14 ? 'bg-destructive/5' : ''}
+                    className={row.daysPending >= 6 ? 'bg-destructive/5' : ''}
                   >
                     <TableCell className="font-mono text-sm">{row.employeeCode}</TableCell>
                     <TableCell className="font-medium">{row.employeeName}</TableCell>
