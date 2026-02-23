@@ -1,78 +1,84 @@
 
 
-# Org KPI Rating Override Warning for Reviewers
+# Workflow Bottleneck Report -- "Where Is It Stuck?"
 
-## Overview
+## Purpose
 
-When an Organization KPI's value and rating have been propagated by a Data Owner, any subsequent reviewer (Manager, Auditor, Skip-Level, HR PMS, or Management) who changes the propagated rating should see a **warning confirmation dialog** before their change is saved. This ensures reviewers are consciously aware they are overriding a centrally-entered, data-owner-vetted score.
+A new report page that answers: **"For each employee, which KPIs are stuck at which workflow stage, who is the responsible reviewer, and how long have they been waiting?"** This gives HR/Admin a clear view of workflow bottlenecks across the organization.
 
-## How It Works
+## Report Layout
 
-1. When a reviewer opens a KPI review panel for an Org-level KPI, the system already knows the propagated score (from `review_submissions.self_score` and the `orgKpiValuesMap` which tracks `entered_by_name`).
-2. When the reviewer selects a score that **differs** from the propagated/previous-level score, a warning **AlertDialog** appears before submission.
-3. The dialog displays:
-   - The KPI name
-   - The original propagated rating (e.g., "R4 - Very Good") and who entered it (data owner name)
-   - The new rating the reviewer is selecting
-   - A mandatory remarks field (reason for override) if one isn't already filled
-   - "Proceed" and "Cancel" buttons
-4. If the reviewer confirms, the save proceeds normally. If they cancel, the score reverts to the previous value.
+### Summary Cards (Top)
+- **Total Pending KPIs** -- all KPIs not yet "approved"
+- **Stuck at Self Review** -- count of KPIs at `self_review`
+- **Stuck at Manager** -- count at `manager_check`
+- **Stuck at Auditor/Management** -- combined count at `audit` + `management_review`
+- **Avg Days Pending** -- average days since `updated_at` for non-approved KPIs
+
+### Bottleneck Distribution Chart
+A horizontal stacked bar chart showing how many KPIs are waiting at each workflow stage, broken down by department.
+
+### Filters
+- Year, Period (month), Department, Division, Business Unit, Status stage, Search (employee name/code)
+
+### Detail Table (Main Content)
+| Emp Code | Employee Name | Department | KPI Name | Period | Current Stage | Responsible Person | Days Pending | Last Updated |
+|----------|--------------|------------|----------|--------|--------------|-------------------|-------------|-------------|
+
+- **Current Stage**: Human-readable label (e.g., "Awaiting Manager Review")
+- **Responsible Person**: For `self_review` it's the employee; for `manager_check` it's the reporting manager; for `audit` it's the auditor role; etc.
+- **Days Pending**: Calculated as `today - updated_at` (number of days the KPI has been at the current stage)
+- Color-coded urgency: Green (0-7 days), Amber (8-14 days), Red (15+ days)
+
+### Excel Export
+Full table export with all columns.
 
 ## Technical Plan
 
-### 1. New Component: `OrgKpiRatingOverrideWarning.tsx`
+### 1. New hook: `src/hooks/useBottleneckReport.ts`
 
-Create `src/components/review/OrgKpiRatingOverrideWarning.tsx` -- a reusable AlertDialog component.
+- Fetches all non-approved KPIs with profiles join (`full_name`, `employee_code`, `department_id`, `reporting_manager_id`)
+- Fetches department/BU/division hierarchy
+- Joins reporting manager names for the "Responsible Person" column
+- Computes `daysPending = Math.floor((Date.now() - new Date(kpi.updated_at).getTime()) / 86400000)`
+- Maps `kpi.status` to human-readable stage labels and determines responsible person based on stage
+- Returns filtered, sorted, paginated rows
 
-**Props:**
-- `open: boolean`
-- `onConfirm: () => void`
-- `onCancel: () => void`
-- `kpiName: string`
-- `originalScore: number`
-- `originalEnteredBy: string | null`
-- `newScore: number`
+### 2. New page: `src/pages/reports/BottleneckReport.tsx`
 
-**Renders:**
-- An AlertDialog with a warning icon and amber/orange styling
-- Shows: "You are changing the rating from R{original} to R{new} for an Organization KPI originally entered by {dataOwnerName}."
-- Confirm button: "Proceed with Override"
-- Cancel button: "Keep Original Rating"
+- Summary stat cards
+- Recharts horizontal bar chart for stage distribution
+- Filter bar (year, period, department, status stage, search)
+- Paginated detail table with color-coded "Days Pending" badges
+- Excel export button
 
-### 2. Integration into `UnifiedScorecard.tsx`
+### 3. Wire into routing
 
-- Add state: `orgOverrideWarningOpen`, `pendingSubmitArgs`
-- In the submit handler, before calling `submitReview.mutate()`:
-  - Check if `selectedKpi?.is_org_level === true`
-  - Check if the reviewer's score differs from the previous-level score (e.g., `self_score` for manager, `manager_score` for auditor, etc.)
-  - If both conditions are true, show the warning dialog instead of immediately submitting
-  - On confirm, proceed with `submitReview.mutate(pendingSubmitArgs)`
-  - On cancel, close dialog and do nothing
+- Add lazy import in `App.tsx`
+- Add route `/reports/bottleneck`
+- Add card entry in `ReportsHub.tsx`
 
-### 3. Integration into `ManagementScorecard.tsx` and `AuditScorecard.tsx`
+### 4. Documentation
 
-Apply the same pattern: intercept the save/approve action, check for org-level + score change, and show the warning dialog.
-
-### 4. Documentation Update
-
-Bump version to **1.45.83** and document the new Org KPI rating override warning feature in `DOCUMENTATION.md`.
+- Bump version to **1.45.84**
+- Document the new report in `DOCUMENTATION.md`
 
 ## Files to Create/Modify
 
 | File | Action |
 |------|--------|
-| `src/components/review/OrgKpiRatingOverrideWarning.tsx` | **Create** -- new AlertDialog component |
-| `src/components/review/UnifiedScorecard.tsx` | **Modify** -- add override detection + dialog trigger |
-| `src/components/review/ManagementScorecard.tsx` | **Modify** -- add override detection + dialog trigger |
-| `src/components/review/AuditScorecard.tsx` | **Modify** -- add override detection + dialog trigger |
-| `DOCUMENTATION.md` | **Modify** -- version bump + feature documentation |
+| `src/hooks/useBottleneckReport.ts` | **Create** -- data fetching and processing |
+| `src/pages/reports/BottleneckReport.tsx` | **Create** -- full report page |
+| `src/App.tsx` | **Modify** -- add lazy import + route |
+| `src/pages/reports/ReportsHub.tsx` | **Modify** -- add report card |
+| `DOCUMENTATION.md` | **Modify** -- version bump + feature docs |
 
 ## Risk Assessment
 
 | Aspect | Detail |
 |--------|--------|
-| Data impact | None -- this is purely a UI-side warning; no schema changes |
-| Workflow impact | None -- does not alter the approval flow, only adds a confirmation step |
-| Regression risk | Low -- the warning is gated behind `is_org_level === true` and score mismatch checks |
-| UI/UX consistency | Uses existing AlertDialog pattern already used for propagation confirmations |
+| Data impact | None -- read-only report using existing `kpis` + `profiles` tables |
+| DB changes | None |
+| RLS impact | None -- uses existing admin/auditor SELECT policies |
+| Regression risk | None -- additive feature, no existing code modified except routing |
 
