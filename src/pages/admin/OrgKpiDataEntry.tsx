@@ -104,11 +104,12 @@ export default function OrgKpiDataEntry() {
     return orgLevelData.kpis.filter(k => (k.kpi as any).org_level_scope === 'employee' && k.employeeIds.length > 0);
   }, [orgLevelData]);
 
-  const { data: employeeKpiIdsMap } = useQuery({
+  const { data: employeeKpiData } = useQuery({
     queryKey: ['employee-kpi-ids-for-org', selectedPeriod, selectedYear, employeeScopedOrgKpis.length],
     queryFn: async () => {
-      const map = new Map<string, string[]>();
-      if (employeeScopedOrgKpis.length === 0) return map;
+      const idsMap = new Map<string, string[]>();
+      const targetMap = new Map<string, { target_value: number | null; uom: string | null }>();
+      if (employeeScopedOrgKpis.length === 0) return { idsMap, targetMap };
 
       for (const entry of employeeScopedOrgKpis) {
         const kpi = entry.kpi;
@@ -117,7 +118,7 @@ export default function OrgKpiDataEntry() {
 
         const { data } = await supabase
           .from('kpis')
-          .select('id')
+          .select('id, employee_id, target_value, uom')
           .eq('category_id', kpi.category_id)
           .eq('kra_name', kpi.kra_name)
           .eq('kpi_name', kpi.kpi_name)
@@ -126,13 +127,19 @@ export default function OrgKpiDataEntry() {
           .in('employee_id', empIds);
 
         const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
-        map.set(key, (data || []).map(d => d.id));
+        idsMap.set(key, (data || []).map(d => d.id));
+        (data || []).forEach(d => {
+          targetMap.set(`${key}||${d.employee_id}`, { target_value: d.target_value, uom: d.uom });
+        });
       }
-      return map;
+      return { idsMap, targetMap };
     },
     enabled: employeeScopedOrgKpis.length > 0,
     staleTime: 5 * 60 * 1000,
   });
+
+  const employeeKpiIdsMap = employeeKpiData?.idsMap;
+  const employeeTargetMap = employeeKpiData?.targetMap;
 
   // Previous period data
   const prev = getPreviousPeriod(selectedPeriod, selectedYear);
@@ -358,6 +365,9 @@ export default function OrgKpiDataEntry() {
           const dept = departments?.find(d => d.id === emp.department_id);
           const scopeKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${emp.id}`;
           const val = existingValuesMap.get(scopeKey);
+          // Per-employee target from their individual KPI record
+          const empTargetKey = `${kpiKey}||${emp.id}`;
+          const empTarget = employeeTargetMap?.get(empTargetKey);
           return {
             scopeId: emp.id,
             scopeName: emp.full_name || emp.email,
@@ -367,6 +377,8 @@ export default function OrgKpiDataEntry() {
             remarks: val?.remarks ?? '',
             evidenceUrl: val?.evidence_url ?? null,
             isNa: val?.is_na ?? false,
+            targetValue: empTarget?.target_value ?? null,
+            uom: empTarget?.uom ?? null,
           };
         })
         .sort((a, b) => {
@@ -402,7 +414,7 @@ export default function OrgKpiDataEntry() {
       employeeCount: empCount,
       isNa: existing?.is_na ?? false,
     };
-  }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap, mappedDepartmentsMap, mappedEmployeesMap]);
+  }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap, mappedDepartmentsMap, mappedEmployeesMap, employeeTargetMap]);
 
   // Save handler for a single card
   const handleCardSave = useCallback(async (

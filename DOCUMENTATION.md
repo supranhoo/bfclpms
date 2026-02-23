@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.77 — Org KPI scoped entry table: added inline read-only Target column visible to admins and data owners
+> **Version:** 1.45.78 — Org KPI data entry: per-employee targets displayed inline instead of uniform card-level target
 > **Maintainer:** Lovable AI
 
 ---
