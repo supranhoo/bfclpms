@@ -149,7 +149,14 @@ export function useOrgLevelKpisWithEmployees(reviewPeriod?: string, reviewYear?:
         }
       });
 
-      return { kpis: result, unmappedCount, totalOrgKpis: uniqueMap.size, perEmployeeTargetMap, employeeKpiIdsMap };
+      // Convert Maps to plain objects for React Query compatibility (structural sharing destroys Maps)
+      const perEmployeeTargets: Record<string, { target_value: number | null; uom: string | null }> = {};
+      perEmployeeTargetMap.forEach((val, key) => { perEmployeeTargets[key] = val; });
+
+      const employeeKpiIds: Record<string, string[]> = {};
+      employeeKpiIdsMap.forEach((val, key) => { employeeKpiIds[key] = val; });
+
+      return { kpis: result, unmappedCount, totalOrgKpis: uniqueMap.size, perEmployeeTargetMap: perEmployeeTargets, employeeKpiIdsMap: employeeKpiIds };
     },
     enabled: !!reviewPeriod && !!reviewYear,
   });

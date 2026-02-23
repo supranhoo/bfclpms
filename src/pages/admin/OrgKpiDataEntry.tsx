@@ -330,7 +330,7 @@ export default function OrgKpiDataEntry() {
           const val = existingValuesMap.get(scopeKey);
           // Per-employee target from their individual KPI record
           const empTargetKey = `${kpiKey}||${emp.id}`;
-          const empTarget = employeeTargetMap?.get(empTargetKey);
+          const empTarget = employeeTargetMap?.[empTargetKey];
           return {
             scopeId: emp.id,
             scopeName: emp.full_name || emp.email,
@@ -850,7 +850,7 @@ export default function OrgKpiDataEntry() {
                   const cardData = buildCardData(kpi);
                   const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'organization';
                   const empKpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
-                  const empKpiIds = scope === 'employee' ? employeeKpiIdsMap?.get(empKpiKey) : undefined;
+                  const empKpiIds = scope === 'employee' ? employeeKpiIdsMap?.[empKpiKey] : undefined;
                   return (
                     <OrgKpiEntryCard
                       key={`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${selectedPeriod}||${selectedYear}`}

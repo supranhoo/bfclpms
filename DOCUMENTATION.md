@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.81 — Fix per-employee targets by building target map from hook data instead of fragile separate query
+> **Version:** 1.45.82 — Fix Map serialization bug: convert Maps to plain objects for React Query compatibility
 > **Maintainer:** Lovable AI
 
 ---
