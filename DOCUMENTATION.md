@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.82 — Fix Map serialization bug: convert Maps to plain objects for React Query compatibility
+> **Version:** 1.45.83 — Org KPI rating override warning for reviewers
 > **Maintainer:** Lovable AI
 
 ---
@@ -3760,6 +3760,19 @@ All Inbox access gaps for `hr_pms` and `skip_level` roles have been closed:
 | `src/components/review/DailySubmissionGrid.tsx` | Integrated `MultiFileUpload` in edit mode; shows paperclip badge on submitted rows |
 | `src/components/review/WeeklySubmissionTable.tsx` | Same treatment as daily grid for consistency |
 | `src/components/review/DailySubmissionSummary.tsx` | Added "Files" column with clickable paperclip icon + count badge |
+
+---
+
+### Feature: Org KPI Rating Override Warning (v1.45.83)
+
+**Summary:** When a reviewer (Manager, Auditor, Skip-Level, HR PMS, or Management) changes the rating of an Organization KPI that was originally propagated by a Data Owner, a warning AlertDialog appears before submission. The dialog displays the original rating, the data owner's name, and the proposed new rating, requiring explicit confirmation to proceed. This ensures reviewers are consciously aware they are overriding a centrally-entered score.
+
+| File | Change |
+|---|---|
+| `src/components/review/OrgKpiRatingOverrideWarning.tsx` | **New** — Reusable AlertDialog warning component |
+| `src/components/review/UnifiedScorecard.tsx` | Added override detection before submit; shows warning dialog for org-level KPIs with score mismatch |
+| `src/components/review/ManagementScorecard.tsx` | Same override detection pattern for management review |
+| `src/components/review/AuditScorecard.tsx` | Same override detection pattern for audit review |
 
 ---
 

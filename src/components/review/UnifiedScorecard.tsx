@@ -53,6 +53,7 @@ import {
 } from '@/lib/reviewConstants';
 import { MobileKpiCard } from '@/components/review/MobileKpiCard';
 import { NaConfirmationCard } from '@/components/review/NaConfirmationCard';
+import { OrgKpiRatingOverrideWarning } from '@/components/review/OrgKpiRatingOverrideWarning';
 import { RollbackRequestBanner } from '@/components/review/RollbackRequestBanner';
 import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog';
 import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
@@ -299,6 +300,10 @@ export function UnifiedScorecard({
   // Org KPI send-back dialog state (for management)
   const [orgKpiSendBackOpen, setOrgKpiSendBackOpen] = useState(false);
   const [selectedOrgKpiForSendBack, setSelectedOrgKpiForSendBack] = useState<KPI | null>(null);
+
+  // Org KPI override warning state
+  const [orgOverrideWarningOpen, setOrgOverrideWarningOpen] = useState(false);
+  const [pendingApproveAction, setPendingApproveAction] = useState<boolean | null>(null);
 
   // Rollback state
   const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false);
@@ -888,6 +893,17 @@ export function UnifiedScorecard({
       }
     }
     
+    // Org KPI override warning check
+    if (selectedKpi.is_org_level) {
+      const submission = submissionMap.get(selectedKpi.id);
+      const previousScore = submission?.[config.previousScoreField] as number | null;
+      if (previousScore !== null && previousScore !== undefined && reviewerScore !== previousScore) {
+        setPendingApproveAction(approve);
+        setOrgOverrideWarningOpen(true);
+        return;
+      }
+    }
+
     const rating = scoreToRating(reviewerScore);
     submitReview.mutate({
       kpi_id: selectedKpi.id,
@@ -901,6 +917,26 @@ export function UnifiedScorecard({
         : reviewerAchievedValue ? parseFloat(reviewerAchievedValue) : null,
       approve,
     });
+  };
+
+  const handleOrgOverrideConfirm = () => {
+    setOrgOverrideWarningOpen(false);
+    if (selectedKpi && reviewerScore !== null && pendingApproveAction !== null) {
+      const rating = scoreToRating(reviewerScore);
+      submitReview.mutate({
+        kpi_id: selectedKpi.id,
+        rating,
+        score: reviewerScore,
+        remarks: reviewerRemarks,
+        evidence_url: reviewerEvidenceUrls[0] || null,
+        evidence_urls: reviewerEvidenceUrls,
+        achieved_value: typeof reviewerAchievedValue === 'number' 
+          ? reviewerAchievedValue 
+          : reviewerAchievedValue ? parseFloat(reviewerAchievedValue) : null,
+        approve: pendingApproveAction,
+      });
+    }
+    setPendingApproveAction(null);
   };
 
   // Open send back dialog
@@ -1503,6 +1539,23 @@ export function UnifiedScorecard({
           stagesLoading={stagesLoading}
         />
       )}
+      {/* Org KPI Rating Override Warning */}
+      <OrgKpiRatingOverrideWarning
+        open={orgOverrideWarningOpen}
+        onConfirm={handleOrgOverrideConfirm}
+        onCancel={() => { setOrgOverrideWarningOpen(false); setPendingApproveAction(null); }}
+        kpiName={selectedKpi?.kpi_name || ''}
+        originalScore={(() => {
+          const sub = selectedKpi ? submissionMap.get(selectedKpi.id) : null;
+          return (sub?.[config.previousScoreField] as number) ?? 0;
+        })()}
+        originalEnteredBy={(() => {
+          if (!selectedKpi?.is_org_level) return null;
+          const orgVal = getOrgKpiValue(selectedKpi);
+          return orgVal?.entered_by_name || null;
+        })()}
+        newScore={reviewerScore ?? 0}
+      />
     </div>
   );
 }
@@ -1653,9 +1706,8 @@ function DailySubmissionSummaryWithOverride({
           )}
         </div>
       )}
-    </div>
-  );
-}
+        </div>
+      )}
 
 // Helper component: shows a hint when no KPIs exist for the selected period
 function NoKpisPeriodHint({
