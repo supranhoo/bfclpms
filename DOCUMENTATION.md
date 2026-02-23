@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.73 — Admin KPI Dashboard period filter includes non-monthly KPIs
+> **Version:** 1.45.74 — Server-side query fetches all KPIs for year when month is selected
 > **Maintainer:** Lovable AI
 
 ---

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, addMonths } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { MONTH_NAMES } from '@/hooks/useAdminReports';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
@@ -195,15 +196,24 @@ export function useKpisByPeriod(selectedPeriod: string | undefined, selectedYear
       let hasMore = true;
 
       while (hasMore) {
-        const { data, error } = await supabase
+      let query = supabase
           .from('kpis')
           .select(`
             *,
             kra_categories (id, name, color, weightage),
             profiles:employee_id (id, full_name, email, employee_code, department_id, reporting_manager_id)
           `)
-          .eq('review_period', selectedPeriod as string)
-          .eq('review_year', selectedYear as number)
+          .eq('review_year', selectedYear as number);
+
+      // Only filter by review_period server-side for non-month values (e.g. Q3, H1).
+      // When a month is selected, fetch ALL KPIs for the year so the client-side
+      // filter can resolve non-monthly KPIs that cover that month.
+      const isMonthPeriod = MONTH_NAMES.includes(selectedPeriod as any);
+      if (!isMonthPeriod && selectedPeriod !== 'all') {
+        query = query.eq('review_period', selectedPeriod as string);
+      }
+
+      const { data, error } = await query
           .order('created_at', { ascending: false })
           .order('id', { ascending: true })
           .range(from, from + pageSize - 1);
