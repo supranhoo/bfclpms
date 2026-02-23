@@ -3,17 +3,23 @@ import { useAllKpis } from '@/hooks/useKpis';
 import { useDepartments, useDivisions, useBusinessUnits } from '@/hooks/useOrganization';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
+import {
+  resolveBottleneckStage,
+  resolveResponsiblePerson,
+  type ResolvedStageKey,
+} from '@/lib/bottleneckResolver';
 
-export type StageKey = 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review';
+// The resolved stage keys used for grouping / filtering
+export type StageKey = ResolvedStageKey;
 
 export const STAGE_LABELS: Record<StageKey, string> = {
-  kra_set: 'KRA Set (Awaiting Start)',
-  self_review: 'Awaiting Self Review',
-  manager_check: 'Awaiting Manager Review',
-  skip_level_check: 'Awaiting Skip-Level Review',
-  hr_pms_review: 'Awaiting HR PMS Review',
-  audit: 'Awaiting Auditor Review',
-  management_review: 'Awaiting Management Review',
+  awaiting_self_review: 'Awaiting Self Review',
+  awaiting_manager: 'Awaiting Manager Review',
+  awaiting_skip_level: 'Awaiting Skip-Level Review',
+  awaiting_hr_pms: 'Awaiting HR PMS Review',
+  awaiting_audit: 'Awaiting Audit',
+  awaiting_management: 'Awaiting Management Review',
 };
 
 export const ALL_STAGES = Object.keys(STAGE_LABELS) as StageKey[];
@@ -50,43 +56,6 @@ export interface UrgencyStats {
   red: number;
 }
 
-function getResponsiblePerson(
-  stageKey: StageKey,
-  employeeName: string,
-  managerName: string | null,
-): string {
-  switch (stageKey) {
-    case 'kra_set':
-    case 'self_review':
-      return employeeName;
-    case 'manager_check':
-      return managerName || 'Reporting Manager';
-    case 'skip_level_check':
-      return 'Skip-Level Manager';
-    case 'hr_pms_review':
-      return 'HR PMS';
-    case 'audit':
-      return 'Auditor';
-    case 'management_review':
-      return 'Management';
-    default:
-      return '-';
-  }
-}
-
-function getResponsibleRole(stageKey: StageKey): string {
-  switch (stageKey) {
-    case 'kra_set':
-    case 'self_review': return 'Employee';
-    case 'manager_check': return 'Manager';
-    case 'skip_level_check': return 'Skip-Level';
-    case 'hr_pms_review': return 'HR PMS';
-    case 'audit': return 'Auditor';
-    case 'management_review': return 'Management';
-    default: return '-';
-  }
-}
-
 export function useBottleneckReport() {
   const { data: allKpis, isLoading: kpisLoading } = useAllKpis();
   const { data: departments } = useDepartments();
@@ -104,6 +73,22 @@ export function useBottleneckReport() {
       return map;
     },
   });
+
+  // Collect unique employee IDs from pending (non-approved) KPIs
+  const pendingEmployeeIds = useMemo(() => {
+    if (!allKpis) return [];
+    const ids = new Set<string>();
+    allKpis
+      .filter(kpi => kpi.status !== 'approved' && (kpi as any).is_issued !== false)
+      .forEach(kpi => {
+        const profile = kpi.profiles as { id?: string } | null;
+        if (profile?.id) ids.add(profile.id);
+      });
+    return Array.from(ids);
+  }, [allKpis]);
+
+  // Bulk-fetch workflow stages for all pending employees
+  const { data: workflowMap } = useBulkEmployeeWorkflows(pendingEmployeeIds);
 
   // Filters
   const [selectedYear, setSelectedYear] = useState<string>('all');
@@ -130,24 +115,30 @@ export function useBottleneckReport() {
     return m;
   }, [businessUnits]);
 
-  // Process all non-approved KPIs into bottleneck rows
+  // Process all non-approved KPIs into bottleneck rows (workflow-aware)
   const allRows = useMemo(() => {
     if (!allKpis || !profilesMap) return [];
 
     return allKpis
       .filter(kpi => kpi.status !== 'approved' && (kpi as any).is_issued !== false)
       .map((kpi): BottleneckRow | null => {
-        const stageKey = kpi.status as StageKey;
-
-        if (!STAGE_LABELS[stageKey]) return null;
+        const rawStatus = kpi.status as string;
 
         const profile = kpi.profiles as { id?: string; full_name?: string; employee_code?: string; department_id?: string; reporting_manager_id?: string } | null;
+        const employeeId = profile?.id || (kpi as any).employee_id;
         const employeeName = profile?.full_name || 'Unknown';
         const employeeCode = profile?.employee_code || '-';
         const deptId = profile?.department_id || null;
         const deptInfo = deptId ? deptMap.get(deptId) : null;
         const managerId = profile?.reporting_manager_id;
         const managerProfile = managerId ? profilesMap.get(managerId) : null;
+
+        // Resolve using the employee's actual workflow pipeline
+        const employeeStages = workflowMap?.get(employeeId);
+        const resolved = resolveBottleneckStage(rawStatus, employeeStages);
+
+        // Skip if resolved to "approved" edge case
+        if (resolved.responsibleRole === '-' && resolved.stageLabel === 'Approved') return null;
 
         const daysPending = Math.floor((Date.now() - new Date(kpi.updated_at).getTime()) / 86400000);
 
@@ -161,16 +152,16 @@ export function useBottleneckReport() {
           kraName: kpi.kra_name,
           period: kpi.review_period || '-',
           year: kpi.review_year,
-          currentStage: STAGE_LABELS[stageKey],
-          stageKey,
-          responsiblePerson: getResponsiblePerson(stageKey, employeeName, managerProfile?.full_name || null),
-          responsibleRole: getResponsibleRole(stageKey),
+          currentStage: resolved.stageLabel,
+          stageKey: resolved.stageKey,
+          responsiblePerson: resolveResponsiblePerson(resolved, employeeName, managerProfile?.full_name || null),
+          responsibleRole: resolved.responsibleRole,
           daysPending,
           lastUpdated: kpi.updated_at,
         };
       })
       .filter(Boolean) as BottleneckRow[];
-  }, [allKpis, profilesMap, deptMap]);
+  }, [allKpis, profilesMap, deptMap, workflowMap]);
 
   // Apply filters
   const filteredRows = useMemo(() => {
@@ -208,18 +199,17 @@ export function useBottleneckReport() {
     return rows.sort((a, b) => b.daysPending - a.daysPending);
   }, [allRows, selectedYear, selectedPeriod, selectedDepartment, selectedDivision, selectedBusinessUnit, selectedStage, searchQuery, deptMap, buMap]);
 
-  // Summary stats (expanded with KRA Set, Audit, Management split)
+  // Summary stats grouped by resolved stage
   const stats = useMemo(() => {
     const total = filteredRows.length;
-    const kraSet = filteredRows.filter(r => r.stageKey === 'kra_set').length;
-    const selfReview = filteredRows.filter(r => r.stageKey === 'self_review').length;
-    const manager = filteredRows.filter(r => r.stageKey === 'manager_check').length;
-    const skipLevel = filteredRows.filter(r => r.stageKey === 'skip_level_check').length;
-    const hrPms = filteredRows.filter(r => r.stageKey === 'hr_pms_review').length;
-    const audit = filteredRows.filter(r => r.stageKey === 'audit').length;
-    const management = filteredRows.filter(r => r.stageKey === 'management_review').length;
+    const selfReview = filteredRows.filter(r => r.stageKey === 'awaiting_self_review').length;
+    const manager = filteredRows.filter(r => r.stageKey === 'awaiting_manager').length;
+    const skipLevel = filteredRows.filter(r => r.stageKey === 'awaiting_skip_level').length;
+    const hrPms = filteredRows.filter(r => r.stageKey === 'awaiting_hr_pms').length;
+    const audit = filteredRows.filter(r => r.stageKey === 'awaiting_audit').length;
+    const management = filteredRows.filter(r => r.stageKey === 'awaiting_management').length;
     const avgDays = total > 0 ? Math.round(filteredRows.reduce((s, r) => s + r.daysPending, 0) / total) : 0;
-    return { total, kraSet, selfReview, manager, skipLevel, hrPms, audit, management, avgDays };
+    return { total, selfReview, manager, skipLevel, hrPms, audit, management, avgDays };
   }, [filteredRows]);
 
   // Urgency stats (3/5/7 day thresholds)

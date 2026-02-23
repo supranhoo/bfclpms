@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Download, Clock, Users, Timer, ChevronLeft, ChevronRight, UserCheck, ShieldCheck, Eye, FileCheck, Gavel } from 'lucide-react';
+import { Download, Clock, Users, Timer, ChevronLeft, ChevronRight, UserCheck, ShieldCheck, Eye, Gavel } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
@@ -16,13 +16,12 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 const STAGE_COLORS: Record<string, string> = {
-  kra_set: '#94a3b8',
-  self_review: '#3b82f6',
-  manager_check: '#f59e0b',
-  skip_level_check: '#8b5cf6',
-  hr_pms_review: '#ec4899',
-  audit: '#f97316',
-  management_review: '#ef4444',
+  awaiting_self_review: '#3b82f6',
+  awaiting_manager: '#f59e0b',
+  awaiting_skip_level: '#8b5cf6',
+  awaiting_hr_pms: '#ec4899',
+  awaiting_audit: '#f97316',
+  awaiting_management: '#ef4444',
 };
 
 const URGENCY_COLORS = { green: '#22c55e', amber: '#f59e0b', red: '#ef4444' };
@@ -140,8 +139,8 @@ export default function BottleneckReport() {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-64" />
-        <div className="grid gap-4 md:grid-cols-4 lg:grid-cols-7">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => <Skeleton key={i} className="h-24" />)}
+        <div className="grid gap-4 md:grid-cols-4 lg:grid-cols-8">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map(i => <Skeleton key={i} className="h-24" />)}
         </div>
         <Skeleton className="h-64" />
         <Skeleton className="h-96" />
@@ -164,15 +163,14 @@ export default function BottleneckReport() {
       />
 
       {/* Row 1: Summary Cards (7) */}
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-9">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-8">
         <SummaryCard label="Total Pending" value={stats.total} icon={Clock} onClick={() => handleStageClick('all')} active={selectedStage === 'all'} />
-        <SummaryCard label="KRA Set" value={stats.kraSet} icon={FileCheck} color="text-slate-500" onClick={() => handleStageClick('kra_set')} active={selectedStage === 'kra_set'} />
-        <SummaryCard label="Self Review" value={stats.selfReview} icon={Users} color="text-blue-600" onClick={() => handleStageClick('self_review')} active={selectedStage === 'self_review'} />
-        <SummaryCard label="Manager" value={stats.manager} icon={UserCheck} color="text-yellow-600" onClick={() => handleStageClick('manager_check')} active={selectedStage === 'manager_check'} />
-        <SummaryCard label="Skip-Level" value={stats.skipLevel} icon={Eye} color="text-violet-600" onClick={() => handleStageClick('skip_level_check')} active={selectedStage === 'skip_level_check'} />
-        <SummaryCard label="HR PMS" value={stats.hrPms} icon={ShieldCheck} color="text-pink-600" onClick={() => handleStageClick('hr_pms_review')} active={selectedStage === 'hr_pms_review'} />
-        <SummaryCard label="Audit" value={stats.audit} icon={Gavel} color="text-orange-600" onClick={() => handleStageClick('audit')} active={selectedStage === 'audit'} />
-        <SummaryCard label="Management" value={stats.management} icon={ShieldCheck} color="text-red-600" onClick={() => handleStageClick('management_review')} active={selectedStage === 'management_review'} />
+        <SummaryCard label="Self Review" value={stats.selfReview} icon={Users} color="text-blue-600" onClick={() => handleStageClick('awaiting_self_review')} active={selectedStage === 'awaiting_self_review'} />
+        <SummaryCard label="Manager" value={stats.manager} icon={UserCheck} color="text-yellow-600" onClick={() => handleStageClick('awaiting_manager')} active={selectedStage === 'awaiting_manager'} />
+        <SummaryCard label="Skip-Level" value={stats.skipLevel} icon={Eye} color="text-violet-600" onClick={() => handleStageClick('awaiting_skip_level')} active={selectedStage === 'awaiting_skip_level'} />
+        <SummaryCard label="HR PMS" value={stats.hrPms} icon={ShieldCheck} color="text-pink-600" onClick={() => handleStageClick('awaiting_hr_pms')} active={selectedStage === 'awaiting_hr_pms'} />
+        <SummaryCard label="Audit" value={stats.audit} icon={Gavel} color="text-orange-600" onClick={() => handleStageClick('awaiting_audit')} active={selectedStage === 'awaiting_audit'} />
+        <SummaryCard label="Management" value={stats.management} icon={ShieldCheck} color="text-red-600" onClick={() => handleStageClick('awaiting_management')} active={selectedStage === 'awaiting_management'} />
         <SummaryCard label="Avg Days" value={stats.avgDays} icon={Timer} />
       </div>
 
