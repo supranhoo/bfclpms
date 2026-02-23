@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-02-22  
-> **Version:** 1.45.70 — KPI Mapping Matrix switched to July-June fiscal year cycle
+> **Last Updated:** 2026-02-23  
+> **Version:** 1.45.72 — KPI Mapping Matrix includes non-monthly KPIs (Quarterly, Half-Yearly, Yearly, Bi-Monthly)
 > **Maintainer:** Lovable AI
 
 ---
