@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.83 — Org KPI rating override warning for reviewers
+> **Version:** 1.45.84 — Workflow Bottleneck Report
 > **Maintainer:** Lovable AI
 
 ---
@@ -3773,6 +3773,19 @@ All Inbox access gaps for `hr_pms` and `skip_level` roles have been closed:
 | `src/components/review/UnifiedScorecard.tsx` | Added override detection before submit; shows warning dialog for org-level KPIs with score mismatch |
 | `src/components/review/ManagementScorecard.tsx` | Same override detection pattern for management review |
 | `src/components/review/AuditScorecard.tsx` | Same override detection pattern for audit review |
+
+---
+
+### Feature: Workflow Bottleneck Report (v1.45.84)
+
+**Summary:** A new report page (`/reports/bottleneck`) that answers "Where is it stuck?" — showing all non-approved KPIs grouped by workflow stage, the responsible reviewer, and color-coded days pending (Green ≤7d, Amber 8–14d, Red 15+d). Includes summary stat cards, a horizontal stacked bar chart by department, comprehensive filters (year, period, department, division, BU, stage, search), a paginated detail table, and Excel export.
+
+| File | Change |
+|---|---|
+| `src/hooks/useBottleneckReport.ts` | **New** — Data hook with filtering, pagination, chart data, and stage mapping |
+| `src/pages/reports/BottleneckReport.tsx` | **New** — Full report page with cards, chart, filters, table, and export |
+| `src/App.tsx` | Added lazy import and `/reports/bottleneck` route |
+| `src/pages/reports/ReportsHub.tsx` | Added Workflow Bottleneck Report card |
 
 ---
 
