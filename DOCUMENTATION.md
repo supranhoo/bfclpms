@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.78 — Org KPI data entry: per-employee targets displayed inline instead of uniform card-level target
+> **Version:** 1.45.80 — Fix null vs undefined fallback bug causing target values to show "—"
 > **Maintainer:** Lovable AI
 
 ---
