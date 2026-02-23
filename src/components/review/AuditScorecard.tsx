@@ -46,6 +46,7 @@ import {
 } from '@/lib/reviewConstants';
 import { MobileKpiCard } from '@/components/review/MobileKpiCard';
 import { NaConfirmationCard } from '@/components/review/NaConfirmationCard';
+import { OrgKpiRatingOverrideWarning } from '@/components/review/OrgKpiRatingOverrideWarning';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { useSentBackKpis } from '@/hooks/useSentBackKpis';
 import { 
@@ -175,6 +176,10 @@ export function AuditScorecard({
   // N/A override state
   const [naOverridden, setNaOverridden] = useState(false);
   const [overrideNaRemarks, setOverrideNaRemarks] = useState('');
+  
+  // Org KPI override warning state
+  const [orgOverrideWarningOpen, setOrgOverrideWarningOpen] = useState(false);
+  const [pendingApproveAction, setPendingApproveAction] = useState<boolean | null>(null);
   
   const { saveOverrides, acceptPreviousLevel, isLoading: isSavingOverrides } = useReviewerSubPeriodOverride();
 
@@ -480,12 +485,28 @@ export function AuditScorecard({
     // Regular KPI flow
     if (auditorScore === null) return;
     
+    // Org KPI override warning check
+    if (selectedKpi.is_org_level) {
+      const previousScore = submission?.manager_score ?? submission?.self_score ?? null;
+      if (previousScore !== null && previousScore !== undefined && auditorScore !== previousScore) {
+        setPendingApproveAction(approve);
+        setOrgOverrideWarningOpen(true);
+        return;
+      }
+    }
+
+    await executeAuditSubmit(approve);
+  };
+
+  const executeAuditSubmit = async (approve: boolean) => {
+    if (!selectedKpi || auditorScore === null) return;
+    const submission = submissionMap.get(selectedKpi.id);
+
     const isDailyBinary = selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary';
     
     // For daily binary KPIs, persist auditor values
     if (isDailyBinary) {
       if (auditorAgrees === false && dailyOverrides.size > 0) {
-        // Auditor disagrees - save overrides
         const overrideEntries = Array.from(dailyOverrides.entries()).map(([date, value]) => ({
           sub_period_value: date,
           achieved_value: value,
@@ -506,7 +527,6 @@ export function AuditScorecard({
           new_score: auditorScore,
         });
       } else {
-        // Auditor agrees - copy manager values to auditor column
         await acceptPreviousLevel.mutateAsync({
           kpi_id: selectedKpi.id,
           review_level: 'auditor',
@@ -528,6 +548,14 @@ export function AuditScorecard({
         : auditorAchievedValue ? parseFloat(auditorAchievedValue) : null,
       approve,
     });
+  };
+
+  const handleOrgOverrideConfirm = () => {
+    setOrgOverrideWarningOpen(false);
+    if (pendingApproveAction !== null) {
+      executeAuditSubmit(pendingApproveAction);
+    }
+    setPendingApproveAction(null);
   };
 
   const openSendBackDialog = (kpi: KPI) => {
@@ -1048,6 +1076,23 @@ export function AuditScorecard({
         isOpen={timelineOpen}
         onClose={() => setTimelineOpen(false)}
         kpi={selectedKpi}
+      />
+      {/* Org KPI Rating Override Warning */}
+      <OrgKpiRatingOverrideWarning
+        open={orgOverrideWarningOpen}
+        onConfirm={handleOrgOverrideConfirm}
+        onCancel={() => { setOrgOverrideWarningOpen(false); setPendingApproveAction(null); }}
+        kpiName={selectedKpi?.kpi_name || ''}
+        originalScore={(() => {
+          const sub = selectedKpi ? submissionMap.get(selectedKpi.id) : null;
+          return (sub?.manager_score ?? sub?.self_score) as number ?? 0;
+        })()}
+        originalEnteredBy={(() => {
+          if (!selectedKpi?.is_org_level) return null;
+          const orgVal = getOrgKpiValue(selectedKpi);
+          return orgVal?.entered_by_name || null;
+        })()}
+        newScore={auditorScore ?? 0}
       />
     </div>
   );
