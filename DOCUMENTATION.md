@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-23  
-> **Version:** 1.45.84 — Workflow Bottleneck Report
+> **Version:** 1.45.85 — Enhanced Workflow Bottleneck Report v2
 > **Maintainer:** Lovable AI
 
 ---
@@ -3786,6 +3786,17 @@ All Inbox access gaps for `hr_pms` and `skip_level` roles have been closed:
 | `src/pages/reports/BottleneckReport.tsx` | **New** — Full report page with cards, chart, filters, table, and export |
 | `src/App.tsx` | Added lazy import and `/reports/bottleneck` route |
 | `src/pages/reports/ReportsHub.tsx` | Added Workflow Bottleneck Report card |
+
+---
+
+### Enhancement: Workflow Bottleneck Report v2 (v1.45.85)
+
+**Summary:** Enhanced the bottleneck report with three new analytical dimensions: (1) **Urgency Distribution** donut chart showing Green/Amber/Red zone counts, (2) **Top Bottleneck Holders** table aggregating pending KPIs per responsible person sorted by critical (15+d) count, (3) **Expanded Summary Cards** (7 clickable cards including Skip-Level, HR PMS, and Not-Issued) that auto-filter the detail table. Also added "Not Issued" vs "KRA Set" distinction using `is_issued` flag, critical row highlighting (red tint for 15+d rows), and `responsibleRole` field for clearer accountability.
+
+| File | Change |
+|---|---|
+| `src/hooks/useBottleneckReport.ts` | Added `not_issued` stage, `urgencyStats`, `topHolders`, `responsibleRole`; expanded stats |
+| `src/pages/reports/BottleneckReport.tsx` | 7 clickable summary cards, urgency donut chart, top holders table, critical row highlights, Not Issued badge |
 
 ---
 
