@@ -305,6 +305,19 @@ export function useBottleneckReport() {
     });
   }, [allRows]);
 
+  // Departments that actually have pending KPIs (for employee chart filter)
+  const employeeChartDepartments = useMemo(() => {
+    const deptSet = new Map<string, string>();
+    filteredRows.forEach(r => {
+      if (r.departmentId && r.departmentName !== '-') {
+        deptSet.set(r.departmentId, r.departmentName);
+      }
+    });
+    return Array.from(deptSet.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [filteredRows]);
+
   // Employee chart data (with its own department filter)
   const employeeChartData = useMemo(() => {
     let rows = filteredRows;
@@ -355,7 +368,7 @@ export function useBottleneckReport() {
     availablePeriods,
     availableMonths,
     monthWindowStart, setMonthWindowStart,
-    employeeChartData, employeeChartDepartment, setEmployeeChartDepartment,
+    employeeChartData, employeeChartDepartment, setEmployeeChartDepartment, employeeChartDepartments,
     page, setPage, totalPages, pageSize,
   };
 }
