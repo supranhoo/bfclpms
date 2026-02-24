@@ -480,6 +480,7 @@ export default function OrgKpiDataEntry() {
         scope: 'organization',
         isNa: values.isNa,
         naRemarks: values.naRemarks,
+        remarks: values.remarks || undefined,
       });
     } else if (scope === 'department' && values.scopedValues) {
       for (const sv of values.scopedValues) {
@@ -494,6 +495,7 @@ export default function OrgKpiDataEntry() {
           scope: 'department',
           departmentId: sv.scopeId,
           isNa: sv.isNa,
+          remarks: sv.remarks || undefined,
         });
       }
     } else if (scope === 'employee' && values.scopedValues) {
@@ -509,6 +511,7 @@ export default function OrgKpiDataEntry() {
           scope: 'employee',
           employeeId: sv.scopeId,
           isNa: sv.isNa,
+          remarks: sv.remarks || undefined,
         });
       }
     }

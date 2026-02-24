@@ -30,6 +30,7 @@ interface PropagateParams {
   employeeId?: string | null;
   isNa?: boolean;
   naRemarks?: string;
+  remarks?: string;
 }
 
 /**
@@ -133,11 +134,13 @@ async function fetchTargetKpis(params: PropagateParams) {
 async function callPropagationRpc(
   kpiRatings: any[],
   profileMap: Map<string, any>,
-  isNa: boolean
+  isNa: boolean,
+  remarks?: string | null
 ): Promise<PropagationResultWithDetails> {
   const { data, error } = await supabase.rpc('propagate_org_kpi_value', {
     p_kpi_ratings: kpiRatings,
     p_is_na: isNa,
+    p_remarks: remarks || null,
   });
 
   if (error) throw error;
@@ -177,7 +180,7 @@ export function usePropagateOrgKpiValue() {
         targetKpis, params.achievedValue, !!params.isNa
       );
 
-      return callPropagationRpc(kpiRatings, profileMap, !!params.isNa);
+      return callPropagationRpc(kpiRatings, profileMap, !!params.isNa, params.remarks);
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
@@ -234,7 +237,7 @@ export function useBulkPropagateOrgKpiValues() {
 
       if (allRatings.length === 0) return { propagatedCount: 0, details: [] };
 
-      const result = await callPropagationRpc(allRatings, globalProfileMap, hasNa);
+      const result = await callPropagationRpc(allRatings, globalProfileMap, hasNa, null);
       return result;
     },
     onSuccess: (result) => {
