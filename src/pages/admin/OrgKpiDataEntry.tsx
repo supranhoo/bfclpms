@@ -158,7 +158,7 @@ export default function OrgKpiDataEntry() {
 
   // Helper: get KPI status from existingValuesMap
   const getKpiStatus = useCallback((kpi: typeof frequencyFilteredKpis[0]): 'pending' | 'entered' | 'propagated' => {
-    const scope = (kpi as any).org_level_scope || 'organization';
+    const scope = (kpi as any).org_level_scope || 'employee';
     if (scope === 'organization') {
       const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
       const val = existingValuesMap.get(key);
@@ -653,7 +653,7 @@ export default function OrgKpiDataEntry() {
     const daysSincePeriodStart = Math.max(0, differenceInDays(today, periodStart));
 
     frequencyFilteredKpis.forEach(kpi => {
-      const scope = ((kpi as any).org_level_scope as string) || 'organization';
+      const scope = ((kpi as any).org_level_scope as string) || 'employee';
       const kpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
       const ownerEntry = ownershipMap.get(kpiKey);
       const ownerNames = ownerEntry?.owners?.map(o => o.owner?.full_name || 'Unknown').join(', ') || '';
