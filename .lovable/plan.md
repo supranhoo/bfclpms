@@ -1,68 +1,72 @@
 
 
-# Revert: Remove Incorrect `is_issued` Filter from Dashboard (v1.45.95)
+# Fix: Propagate Org KPI Remarks to Self Review (v1.45.96)
+
+## Problem
+
+When a Data Owner enters an Org KPI value with remarks (e.g., "8674891/8868250") on the Org KPI Data Entry page and clicks "Propagate", the remarks are saved to `org_kpi_values.remarks` but are **never copied** into `review_submissions.self_remarks`. 
+
+As a result, the Review Journey's "Self" stage card shows "No remarks" even though the data owner entered remarks alongside the achieved value.
 
 ## Root Cause
 
-The v1.45.94 fix applied an `is_issued !== false` filter to four dashboard components based on the incorrect assumption that `is_issued = false` meant "draft/template KPI." In reality, `is_issued` defaults to `false` in the database schema and was only explicitly set to `true` for 18 out of 83 employees. The filter removed 1,057 out of 1,373 KPIs (77%) and made 65 employees completely invisible on the dashboard.
+The propagation pipeline has two gaps:
 
-### Database Evidence (January 2026)
+1. **Client-side**: The `PropagateParams` interface in `usePropagateOrgKpiValue.ts` does not include a `remarks` field. The `handleCardSaveAndPropagate` function in `OrgKpiDataEntry.tsx` does not pass remarks to the propagation call.
 
-```text
-is_issued  | Employees | KPIs
------------+-----------+------
-false      |        65 | 1,057  <-- ALL removed by filter
-true       |        18 |   316  <-- only these survived
-```
-
-65 employees (including Shrikant Ganguly with 17 KPIs) have ONLY `is_issued=false` records and were completely wiped from the dashboard.
+2. **Server-side (RPC)**: The `propagate_org_kpi_value` database function only sets `achieved_value`, `self_score`, `self_rating`, `is_na`, and `na_marked_by_role` on `review_submissions`. It does not touch `self_remarks`.
 
 ## Solution
 
-Remove the `is_issued` filter from all four dashboard components where it was added in v1.45.94. The `is_issued` flag is not a reliable indicator of draft vs. active KPIs -- it is simply an unset default for the vast majority of records.
+Thread the remarks through from the org KPI entry UI all the way into the `review_submissions.self_remarks` column during propagation.
 
 ## Technical Changes
 
-### 1. `src/components/review/EmployeeSelectorGrid.tsx`
+### 1. Database: Update `propagate_org_kpi_value` RPC
 
-Remove the `issuedPeriodKpis` filter and revert to using `rawPeriodKpis` (renamed back to `periodKpis`) directly:
+Add a `p_remarks` parameter to the RPC function and use it to set `self_remarks` on upsert:
 
-- Remove lines ~150-153 that filter `is_issued !== false`
-- Rename `rawPeriodKpis` back to `periodKpis` in the destructured query result
-- Remove all references to `issuedPeriodKpis` (revert to `periodKpis`)
+- New parameter: `p_remarks text DEFAULT NULL`
+- In the INSERT/ON CONFLICT block, add `self_remarks = p_remarks` (only when `p_remarks IS NOT NULL`)
+- The remarks from `org_kpi_values` will now flow into `review_submissions.self_remarks`
 
-### 2. `src/components/review/AuditScorecard.tsx`
+### 2. `src/hooks/usePropagateOrgKpiValue.ts`
 
-Remove the `(k as any).is_issued !== false` condition from the KPI filtering useMemo.
+- Add `remarks?: string` to the `PropagateParams` interface
+- Pass remarks through to the RPC call: add `p_remarks: params.remarks || null` to the `supabase.rpc('propagate_org_kpi_value', ...)` call
+- For employee-scoped entries, pass per-employee remarks from the scoped values
 
-### 3. `src/components/review/UnifiedScorecard.tsx`
+### 3. `src/pages/admin/OrgKpiDataEntry.tsx`
 
-Remove the `(k as any).is_issued !== false` condition from the KPI filtering useMemo.
+- In `handleCardSaveAndPropagate`, pass `remarks` from `values.remarks` to the propagation call for each scope type (organization, department, employee)
+- For scoped values (department/employee), pass `sv.remarks` from the scoped row data
 
-### 4. `src/components/review/ManagementScorecard.tsx`
+### 4. `DOCUMENTATION.md`
 
-Remove the `(k as any).is_issued !== false` condition from the KPI filtering useMemo.
+Bump to v1.45.96 and document the remarks propagation pipeline.
 
-### 5. `src/hooks/useBottleneckReport.ts`
+## Data Flow After Fix
 
-Remove the `(kpi as any).is_issued !== false` condition from the two filter calls (lines ~82 and ~123). This filter was also incorrectly excluding legitimate KPIs from the bottleneck report.
-
-### 6. `DOCUMENTATION.md`
-
-Bump to v1.45.95. Remove the "is_issued filtering contract" from the documentation. Add a note that `is_issued` defaults to `false` and is NOT a reliable draft indicator -- it must not be used for filtering without first ensuring all legitimate KPIs have the flag set correctly.
+```text
+Org KPI Data Entry (remarks field)
+  --> org_kpi_values.remarks (saved via bulk upsert)
+  --> handleCardSaveAndPropagate passes remarks to propagate.mutateAsync()
+  --> propagate_org_kpi_value RPC receives p_remarks
+  --> review_submissions.self_remarks = p_remarks
+  --> Review Journey "Self" card shows remarks
+```
 
 ## Impact
 
-- All 65 missing employees (including Shrikant Ganguly) will reappear on the dashboard
-- All 1,057 previously-hidden KPIs will be restored to dashboard stats
-- Bottleneck Report will also show the full KPI set
-- Dashboard numbers will return to their pre-v1.45.94 state
+- Org KPI remarks will appear under the "Self" stage in Review Journey for all reviewer panels
+- Existing KPIs that were already propagated without remarks will NOT be retroactively updated (they stay as "No remarks" unless re-propagated)
+- No schema changes needed -- the `self_remarks` column already exists on `review_submissions`
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data accuracy | Dashboard counts will increase back to pre-fix levels | These are real KPIs, not phantoms |
-| Regression | None -- this is a pure revert of the incorrect filter | Restores original behavior |
-| Future fix | If `is_issued` filtering is ever needed, a data migration must first set `is_issued=true` for all legitimate KPIs | Do not re-apply filter without migration |
+| Data impact | Low -- only sets self_remarks where it was previously NULL | Remarks are additive, no data overwritten |
+| Regression | Low -- RPC has a default NULL parameter, so existing calls without remarks still work | Backward compatible |
+| Workflow | None -- remarks don't affect scoring or status advancement | Read-only display field |
 
