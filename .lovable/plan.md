@@ -1,65 +1,52 @@
 
 
-# Add "Remove from Org KPI" Button on Data Owners Tab (v1.46.1)
+# Fix: Incorrect Org KPI Values Across All Views (v1.46.1-hotfix)
 
-## Overview
+## Root Cause
 
-Add a button next to the "Assign Data Owners" icon on each KPI row in the **Data Owners** tab, allowing admins to remove a KPI from organization-level status (reverting it to a normal KPI).
+The v1.45.99 migration changed all org-level KPI scopes to `employee`, and v1.46.0 fixed the default fallback in `OrgKpiDataEntry.tsx`. However, **10+ other locations** in the codebase still use `|| 'organization'` as the scope fallback. This causes the org KPI value lookup to build the wrong cache key.
 
-## What the Button Does
+When viewing Debadutta Sahoo in HR PMS Review:
+- The `UnifiedScorecard` builds the lookup key as `categoryId||kraName||kpiName||null||null` (organization scope)
+- But the actual `org_kpi_values` records are stored with `employee_id = {Debadutta's ID}` (employee scope)
+- Result: wrong or missing values are displayed
 
-When clicked, the button will:
-1. Show a confirmation dialog (since this is a destructive action)
-2. On confirm, call the existing `useUnmarkAsOrgLevel` hook which:
-   - Sets `is_org_level = false` and `org_level_scope = null` on all matching KPI records
-   - Deletes associated `org_kpi_values` for the period
-   - Deletes associated `org_kpi_data_owners` entries
-3. Show a success toast and refresh the KPI lists
+## Files to Fix
 
-## UI Placement
+All occurrences of `|| 'organization'` scope fallback need to change to `|| 'employee'`:
 
-Each KPI row in the Data Owners tab currently shows:
+| File | Lines | Context |
+|------|-------|---------|
+| `src/pages/Dashboard.tsx` | ~120 | Self-view org KPI value lookup |
+| `src/components/review/UnifiedScorecard.tsx` | ~239 | HR PMS / Team / Audit / Management review |
+| `src/components/review/EmployeeScorecard.tsx` | ~116 | Employee scorecard org KPI lookup |
+| `src/components/review/ManagementScorecard.tsx` | ~117 | Management scorecard org KPI lookup |
+| `src/components/review/SelfReviewSheet.tsx` | ~235, ~442 | Self-review submission logic |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | ~226, ~270, ~389, ~472, ~634 | Data entry (missed in v1.46.0) |
+| `src/components/review/KpiHeaderSection.tsx` | ~22 | KPI header badge display |
+| `src/components/admin/OrgKpiMappingDashboard.tsx` | ~107 | Mapping dashboard |
+
+## Change Pattern
+
+Each fix is identical -- replace the fallback value:
+
+```typescript
+// Before (broken):
+const scope = (kpi as any).org_level_scope || 'organization';
+
+// After (correct):
+const scope = (kpi as any).org_level_scope || 'employee';
 ```
-[KPI Name / KRA Name]          [Owner Avatars] [Assign Icon]
-```
-
-After this change:
-```
-[KPI Name / KRA Name]          [Owner Avatars] [Assign Icon] [Remove Icon]
-```
-
-The remove button will use a `Trash2` or `XCircle` icon with a destructive ghost style to visually distinguish it from the assign action.
-
-## Technical Changes
-
-### 1. Update `OrgKpiOwnerManagement` component
-
-**File**: `src/components/admin/OrgKpiOwnerManagement.tsx`
-
-- Add `reviewPeriod` and `reviewYear` props (needed by `useUnmarkAsOrgLevel`)
-- Import and use `useUnmarkAsOrgLevel` hook
-- Add an `AlertDialog` for confirmation before removal
-- Add a small destructive ghost button (XCircle icon) next to the existing Users icon button on each KPI row
-- On confirm: call `unmark.mutateAsync(...)` with the KPI's `categoryId`, `kraName`, `kpiName`, `reviewPeriod`, and `reviewYear`
-- Show toast on success
-
-### 2. Update `OrgKpiDataEntry` page
-
-**File**: `src/pages/admin/OrgKpiDataEntry.tsx`
-
-- Pass `reviewPeriod={selectedPeriod}` and `reviewYear={selectedYear}` to `OrgKpiOwnerManagement`
-
-### 3. Update `DOCUMENTATION.md`
-
-- Bump to v1.46.1
-- Document the new "Remove from Org KPI" action on the Data Owners tab
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | Medium | Confirmation dialog prevents accidental clicks. The hook deletes org_kpi_values and data_owner records, which is intentional cleanup |
-| Reversibility | Easy | KPI can be re-marked as Org-level from the Suggestions tab |
-| Regression | Low | Uses existing `useUnmarkAsOrgLevel` hook already proven on the entry cards |
-| RLS | None | No policy changes needed; existing admin policies cover DELETE on org_kpi_values and org_kpi_data_owners |
+| Data impact | None | Read-only display logic only |
+| Regression | Very low | All org KPIs in DB already have scope = 'employee'; this just aligns fallbacks |
+| Scope | Low | The `organization` and `department` branches still exist for any future use |
+
+## Documentation
+
+- Update `DOCUMENTATION.md` to note the comprehensive scope fallback fix
 
