@@ -1,72 +1,143 @@
 
 
-# Fix: Propagate Org KPI Remarks to Self Review (v1.45.96)
+# Fix: HR PMS Cannot See KPIs After Skip-Level Approval (v1.45.97)
 
 ## Problem
 
-When a Data Owner enters an Org KPI value with remarks (e.g., "8674891/8868250") on the Org KPI Data Entry page and clicks "Propagate", the remarks are saved to `org_kpi_values.remarks` but are **never copied** into `review_submissions.self_remarks`. 
-
-As a result, the Review Journey's "Self" stage card shows "No remarks" even though the data owner entered remarks alongside the achieved value.
+Vivek (HR PMS role) cannot see or act on Badal Kumar Ravi's KPIs for January 2026. Badal has 19 KPIs all at `hr_pms_review` status, but the HR PMS panel never shows them.
 
 ## Root Cause
 
-The propagation pipeline has two gaps:
+A convention mismatch in the workflow engine between how skip-level sets the forward status and how HR PMS resolves its pending/reviewable statuses.
 
-1. **Client-side**: The `PropagateParams` interface in `usePropagateOrgKpiValue.ts` does not include a `remarks` field. The `handleCardSaveAndPropagate` function in `OrgKpiDataEntry.tsx` does not pass remarks to the propagation call.
+Badal's workflow: `kra_set -> self_review -> manager_check -> skip_level_check -> hr_pms_review -> approved`
 
-2. **Server-side (RPC)**: The `propagate_org_kpi_value` database function only sets `achieved_value`, `self_score`, `self_rating`, `is_na`, and `na_marked_by_role` on `review_submissions`. It does not touch `self_remarks`.
+**What happens:**
+1. Skip-level approves Badal's KPIs
+2. `resolveForwardStatus('skip_level')` calls `resolveNextStatus('skip_level_check')` which returns `hr_pms_review`
+3. KPIs are now at status `hr_pms_review`
+4. HR PMS panel calls `resolveReviewableStatuses('hr_pms')` which returns `[skip_level_check]` (the stage BEFORE `hr_pms_review`)
+5. KPIs at `hr_pms_review` do not match `skip_level_check` -- Badal is invisible
+
+The auditor role already handles this correctly by accepting BOTH the preceding stage AND its own stage: `return [preceding, 'audit']`. HR PMS does not have this dual-status handling.
 
 ## Solution
 
-Thread the remarks through from the org KPI entry UI all the way into the `review_submissions.self_remarks` column during propagation.
+Update `resolvePendingStatuses`, `resolveReviewableStatuses`, and `canReviewKpi` for the `hr_pms` role to accept BOTH the preceding stage AND `hr_pms_review` -- matching the pattern already used by the auditor role.
 
 ## Technical Changes
 
-### 1. Database: Update `propagate_org_kpi_value` RPC
+### 1. `src/lib/workflowEngine.ts`
 
-Add a `p_remarks` parameter to the RPC function and use it to set `self_remarks` on upsert:
+**`resolvePendingStatuses` (line 128-132)** -- change hr_pms case:
 
-- New parameter: `p_remarks text DEFAULT NULL`
-- In the INSERT/ON CONFLICT block, add `self_remarks = p_remarks` (only when `p_remarks IS NOT NULL`)
-- The remarks from `org_kpi_values` will now flow into `review_submissions.self_remarks`
+```typescript
+// BEFORE:
+case 'hr_pms': {
+  const idx = workflowStages.indexOf('hr_pms_review');
+  if (idx === -1) return [];
+  return [workflowStages[idx - 1]];
+}
 
-### 2. `src/hooks/usePropagateOrgKpiValue.ts`
+// AFTER (mirrors auditor pattern):
+case 'hr_pms': {
+  const idx = workflowStages.indexOf('hr_pms_review');
+  if (idx === -1) return [];
+  const preceding = idx > 0 ? workflowStages[idx - 1] : 'skip_level_check';
+  return [preceding, 'hr_pms_review'];
+}
+```
 
-- Add `remarks?: string` to the `PropagateParams` interface
-- Pass remarks through to the RPC call: add `p_remarks: params.remarks || null` to the `supabase.rpc('propagate_org_kpi_value', ...)` call
-- For employee-scoped entries, pass per-employee remarks from the scoped values
+**`resolveReviewableStatuses` (line 205-209)** -- same fix:
 
-### 3. `src/pages/admin/OrgKpiDataEntry.tsx`
+```typescript
+// BEFORE:
+case 'hr_pms': {
+  const idx = workflowStages.indexOf('hr_pms_review');
+  if (idx === -1) return [];
+  return [workflowStages[idx - 1]];
+}
 
-- In `handleCardSaveAndPropagate`, pass `remarks` from `values.remarks` to the propagation call for each scope type (organization, department, employee)
-- For scoped values (department/employee), pass `sv.remarks` from the scoped row data
+// AFTER:
+case 'hr_pms': {
+  const idx = workflowStages.indexOf('hr_pms_review');
+  if (idx === -1) return [];
+  const preceding = idx > 0 ? workflowStages[idx - 1] : 'skip_level_check';
+  return [preceding, 'hr_pms_review'];
+}
+```
+
+**`canReviewKpi` (line 289-293)** -- same fix:
+
+```typescript
+// BEFORE:
+case 'hr-pms-review': {
+  const idx = workflowStages.indexOf('hr_pms_review');
+  if (idx === -1) return false;
+  return kpiStatus === workflowStages[idx - 1];
+}
+
+// AFTER:
+case 'hr-pms-review': {
+  const idx = workflowStages.indexOf('hr_pms_review');
+  if (idx === -1) return false;
+  const preceding = idx > 0 ? workflowStages[idx - 1] : 'skip_level_check';
+  return kpiStatus === preceding || kpiStatus === 'hr_pms_review';
+}
+```
+
+### 2. `src/components/review/EmployeeSelectorGrid.tsx`
+
+Update the HR PMS stats calculation (line ~395-401) to separate "pending" and "in review" counts, similar to how the auditor panel distinguishes pending vs in-audit:
+
+```typescript
+// HR PMS stats: pending = preceding stage, in-review = hr_pms_review
+case 'hr_pms':
+  relevantKpis.forEach(k => {
+    const stages = getStages(k.employee_id);
+    const reviewable = resolveReviewableStatuses('hr_pms', stages);
+    if (reviewable.includes(k.status || '') && k.status !== 'hr_pms_review') pending++;
+    else if (k.status === 'hr_pms_review') inReview++;
+    // done logic remains unchanged
+  });
+```
+
+Update the per-employee badge calculation (line ~452-461) to also differentiate:
+
+```typescript
+badge1: empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'hr_pms_review').length,
+badge2: empKpis.filter(k => k.status === 'hr_pms_review').length,
+```
+
+### 3. `src/lib/workflowEngine.test.ts`
+
+Update the HR PMS test (line 89-92) to expect the new dual-status behavior:
+
+```typescript
+it('hr_pms sees both skip_level_check and hr_pms_review in 8-stage', () => {
+  const statuses = resolvePendingStatuses('hr_pms', EIGHT_STAGE_PIPELINE);
+  expect(statuses).toContain('skip_level_check');
+  expect(statuses).toContain('hr_pms_review');
+});
+```
 
 ### 4. `DOCUMENTATION.md`
 
-Bump to v1.45.96 and document the remarks propagation pipeline.
-
-## Data Flow After Fix
-
-```text
-Org KPI Data Entry (remarks field)
-  --> org_kpi_values.remarks (saved via bulk upsert)
-  --> handleCardSaveAndPropagate passes remarks to propagate.mutateAsync()
-  --> propagate_org_kpi_value RPC receives p_remarks
-  --> review_submissions.self_remarks = p_remarks
-  --> Review Journey "Self" card shows remarks
-```
+Bump to v1.45.97. Document the HR PMS dual-status reviewable pattern and that it mirrors the auditor convention.
 
 ## Impact
 
-- Org KPI remarks will appear under the "Self" stage in Review Journey for all reviewer panels
-- Existing KPIs that were already propagated without remarks will NOT be retroactively updated (they stay as "No remarks" unless re-propagated)
-- No schema changes needed -- the `self_remarks` column already exists on `review_submissions`
+- Badal Kumar Ravi (and any other employees whose KPIs are at `hr_pms_review`) will become visible to Vivek and all HR PMS users
+- All 19 of Badal's January 2026 KPIs will appear as actionable in the HR PMS panel
+- No data migration needed -- the fix is purely in the status-matching logic
+- No change to `resolveForwardStatus` -- existing forward behavior is preserved
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | Low -- only sets self_remarks where it was previously NULL | Remarks are additive, no data overwritten |
-| Regression | Low -- RPC has a default NULL parameter, so existing calls without remarks still work | Backward compatible |
-| Workflow | None -- remarks don't affect scoring or status advancement | Read-only display field |
+| Data accuracy | None -- no data changes | Read-only logic fix |
+| Regression | Low -- mirrors existing auditor pattern | Test coverage updated |
+| Other roles | None -- only hr_pms logic changes | Manager, skip_level, auditor, management unchanged |
+| Existing KPIs at skip_level_check | Still handled -- preceding status still included | Dual-status covers both cases |
 
