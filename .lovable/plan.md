@@ -1,143 +1,92 @@
 
 
-# Fix: HR PMS Cannot See KPIs After Skip-Level Approval (v1.45.97)
+# Org KPI Pending Data Report (v1.45.98)
 
-## Problem
+## Overview
 
-Vivek (HR PMS role) cannot see or act on Badal Kumar Ravi's KPIs for January 2026. Badal has 19 KPIs all at `hr_pms_review` status, but the HR PMS panel never shows them.
+Add a "Download Pending Report" button to the Organization KPI Data Entry page that generates a comprehensive Excel report showing all pending KPIs -- what needs to be uploaded, for which employees/departments, and who the assigned data provider is.
 
-## Root Cause
+## Report Columns
 
-A convention mismatch in the workflow engine between how skip-level sets the forward status and how HR PMS resolves its pending/reviewable statuses.
+The report will include all export template columns plus pending-specific intelligence:
 
-Badal's workflow: `kra_set -> self_review -> manager_check -> skip_level_check -> hr_pms_review -> approved`
+| Column | Source | Purpose |
+|--------|--------|---------|
+| Category | kra_categories.name | Group identification |
+| KRA | kpi.kra_name | KRA identification |
+| KPI Name | kpi.kpi_name | KPI identification |
+| Target | kpi.target_value | Reference for data entry |
+| UOM | kpi.uom | Unit of measure |
+| Scope | kpi.org_level_scope | Organization / Department / Employee |
+| Status | existingValuesMap | Pending / Entered / Propagated |
+| Department | department name (for dept/emp scope) | Who it's pending for |
+| Employee | employee name (for emp scope) | Who it's pending for |
+| Employee Code | employee code (for emp scope) | Quick identification |
+| Achieved Value | org_kpi_values | Current value (blank if pending) |
+| Remark | org_kpi_values | Current remark |
+| Data Owner(s) | ownershipMap | Who is responsible for uploading |
+| Data Owner Email(s) | ownershipMap | Contact info for follow-up |
+| R5 / R4 / R3 / R2 / R1 | rating thresholds | Reference for scoring |
+| Frequency | kpi.frequency | Entry cadence |
+| Previous Period Value | prevValuesMap | Historical reference |
 
-**What happens:**
-1. Skip-level approves Badal's KPIs
-2. `resolveForwardStatus('skip_level')` calls `resolveNextStatus('skip_level_check')` which returns `hr_pms_review`
-3. KPIs are now at status `hr_pms_review`
-4. HR PMS panel calls `resolveReviewableStatuses('hr_pms')` which returns `[skip_level_check]` (the stage BEFORE `hr_pms_review`)
-5. KPIs at `hr_pms_review` do not match `skip_level_check` -- Badal is invisible
+## Additional Inputs (My Brainstorming Additions)
 
-The auditor role already handles this correctly by accepting BOTH the preceding stage AND its own stage: `return [preceding, 'audit']`. HR PMS does not have this dual-status handling.
-
-## Solution
-
-Update `resolvePendingStatuses`, `resolveReviewableStatuses`, and `canReviewKpi` for the `hr_pms` role to accept BOTH the preceding stage AND `hr_pms_review` -- matching the pattern already used by the auditor role.
+1. **Days Pending**: For KPIs with status "pending", calculate how many days into the current period we are -- helps prioritize urgency.
+2. **Employee Count**: For org/dept scope KPIs, show how many employees will be affected once propagated -- helps prioritize high-impact KPIs.
+3. **Two Sheets**: Sheet 1 = "Pending Only" (filtered to status = pending), Sheet 2 = "Full Status" (all KPIs with their status). This way the report serves both as a quick action list and a complete overview.
+4. **Summary Row at Top**: A header section showing total KPIs, pending count, entered count, propagated count, and completion percentage.
+5. **Color-coded Status**: Excel conditional formatting on the Status column (red = Pending, yellow = Entered, green = Propagated).
 
 ## Technical Changes
 
-### 1. `src/lib/workflowEngine.ts`
+### 1. New Component: `src/components/admin/OrgKpiPendingReport.tsx`
 
-**`resolvePendingStatuses` (line 128-132)** -- change hr_pms case:
+A button component that accepts:
+- All org-level KPIs with their status, scope, and values
+- Ownership map (data owners per KPI)
+- Department and employee mappings
+- Previous period values
+- Selected period/year
 
-```typescript
-// BEFORE:
-case 'hr_pms': {
-  const idx = workflowStages.indexOf('hr_pms_review');
-  if (idx === -1) return [];
-  return [workflowStages[idx - 1]];
-}
+On click, it generates a multi-sheet Excel workbook using the `xlsx` library (already installed).
 
-// AFTER (mirrors auditor pattern):
-case 'hr_pms': {
-  const idx = workflowStages.indexOf('hr_pms_review');
-  if (idx === -1) return [];
-  const preceding = idx > 0 ? workflowStages[idx - 1] : 'skip_level_check';
-  return [preceding, 'hr_pms_review'];
-}
-```
+### 2. `src/pages/admin/OrgKpiDataEntry.tsx`
 
-**`resolveReviewableStatuses` (line 205-209)** -- same fix:
+- Build a `pendingReportData` memo that assembles all rows with status, scope breakdowns, and data owner names
+- Add the `OrgKpiPendingReport` button next to the existing "Export Template" and "Import Excel" buttons in the admin toolbar (line ~714-724)
+- Pass ownership map, departments, profiles, employee count map, and previous values to the report component
 
-```typescript
-// BEFORE:
-case 'hr_pms': {
-  const idx = workflowStages.indexOf('hr_pms_review');
-  if (idx === -1) return [];
-  return [workflowStages[idx - 1]];
-}
+### 3. Report Generation Logic
 
-// AFTER:
-case 'hr_pms': {
-  const idx = workflowStages.indexOf('hr_pms_review');
-  if (idx === -1) return [];
-  const preceding = idx > 0 ? workflowStages[idx - 1] : 'skip_level_check';
-  return [preceding, 'hr_pms_review'];
-}
-```
+For each org-level KPI:
+- **Organization scope**: One row showing the KPI status and data owner(s)
+- **Department scope**: One row PER mapped department, each showing its own status (value entered or not) and the data owner(s)
+- **Employee scope**: One row PER mapped employee, showing individual status and data owner(s)
 
-**`canReviewKpi` (line 289-293)** -- same fix:
-
-```typescript
-// BEFORE:
-case 'hr-pms-review': {
-  const idx = workflowStages.indexOf('hr_pms_review');
-  if (idx === -1) return false;
-  return kpiStatus === workflowStages[idx - 1];
-}
-
-// AFTER:
-case 'hr-pms-review': {
-  const idx = workflowStages.indexOf('hr_pms_review');
-  if (idx === -1) return false;
-  const preceding = idx > 0 ? workflowStages[idx - 1] : 'skip_level_check';
-  return kpiStatus === preceding || kpiStatus === 'hr_pms_review';
-}
-```
-
-### 2. `src/components/review/EmployeeSelectorGrid.tsx`
-
-Update the HR PMS stats calculation (line ~395-401) to separate "pending" and "in review" counts, similar to how the auditor panel distinguishes pending vs in-audit:
-
-```typescript
-// HR PMS stats: pending = preceding stage, in-review = hr_pms_review
-case 'hr_pms':
-  relevantKpis.forEach(k => {
-    const stages = getStages(k.employee_id);
-    const reviewable = resolveReviewableStatuses('hr_pms', stages);
-    if (reviewable.includes(k.status || '') && k.status !== 'hr_pms_review') pending++;
-    else if (k.status === 'hr_pms_review') inReview++;
-    // done logic remains unchanged
-  });
-```
-
-Update the per-employee badge calculation (line ~452-461) to also differentiate:
-
-```typescript
-badge1: empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'hr_pms_review').length,
-badge2: empKpis.filter(k => k.status === 'hr_pms_review').length,
-```
-
-### 3. `src/lib/workflowEngine.test.ts`
-
-Update the HR PMS test (line 89-92) to expect the new dual-status behavior:
-
-```typescript
-it('hr_pms sees both skip_level_check and hr_pms_review in 8-stage', () => {
-  const statuses = resolvePendingStatuses('hr_pms', EIGHT_STAGE_PIPELINE);
-  expect(statuses).toContain('skip_level_check');
-  expect(statuses).toContain('hr_pms_review');
-});
-```
+This granular breakdown ensures the report answers "exactly what is pending and for whom."
 
 ### 4. `DOCUMENTATION.md`
 
-Bump to v1.45.97. Document the HR PMS dual-status reviewable pattern and that it mirrors the auditor convention.
+Bump to v1.45.98. Document the pending report feature and its column definitions.
 
-## Impact
+## UI Placement
 
-- Badal Kumar Ravi (and any other employees whose KPIs are at `hr_pms_review`) will become visible to Vivek and all HR PMS users
-- All 19 of Badal's January 2026 KPIs will appear as actionable in the HR PMS panel
-- No data migration needed -- the fix is purely in the status-matching logic
-- No change to `resolveForwardStatus` -- existing forward behavior is preserved
+The button will appear in the admin toolbar alongside "Copy from Last Period", "Export Template", and "Import Excel":
 
-## Risk Assessment
+```
+[Copy from Last Period] [Export Template] [Download Pending Report] [Import Excel]
+```
 
-| Aspect | Risk | Mitigation |
-|--------|------|-----------|
-| Data accuracy | None -- no data changes | Read-only logic fix |
-| Regression | Low -- mirrors existing auditor pattern | Test coverage updated |
-| Other roles | None -- only hr_pms logic changes | Manager, skip_level, auditor, management unchanged |
-| Existing KPIs at skip_level_check | Still handled -- preceding status still included | Dual-status covers both cases |
+It will use a `FileBarChart` icon to distinguish it from the template export. Available to admins only (consistent with other bulk tools).
+
+## No Database Changes
+
+All data needed is already fetched by existing hooks. The report is generated entirely client-side from:
+- `frequencyFilteredKpis` (KPI definitions)
+- `existingValuesMap` (current values and statuses)
+- `ownershipMap` (data owners)
+- `departments` and `allProfiles` (scope targets)
+- `prevValuesMap` (historical reference)
+- `mappedDepartmentsMap` / `mappedEmployeesMap` (scope mappings)
 
