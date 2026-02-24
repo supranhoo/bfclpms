@@ -391,17 +391,21 @@ export function EmployeeSelectorGrid({
       });
       return { totalEmployees: baseMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'hr_pms') {
-      let pending = 0, reviewed = 0;
+      let pending = 0, inReview = 0, forwarded = 0;
       relevantKpis.forEach(k => {
         const stages = getStages(k.employee_id);
         const reviewable = resolveReviewableStatuses('hr_pms', stages);
-        if (reviewable.includes(k.status || '')) pending++;
+        if (reviewable.includes(k.status || '') && k.status !== 'hr_pms_review') pending++;
+        else if (k.status === 'hr_pms_review') inReview++;
         else {
           const hrIdx = stages.indexOf('hr_pms_review');
-          if (hrIdx >= 0 && stages.slice(hrIdx).includes(k.status || '')) reviewed++;
+          if (hrIdx >= 0) {
+            const afterHr = stages.slice(hrIdx + 1);
+            if (afterHr.includes(k.status || '')) forwarded++;
+          }
         }
       });
-      return { totalEmployees: baseMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: baseMembers.length, stat1: pending, stat2: inReview, stat3: forwarded, stat4: 0, totalKpis: relevantKpis.length };
     } else {
       return {
         totalEmployees: baseMembers.length,
@@ -452,11 +456,11 @@ export function EmployeeSelectorGrid({
     } else if (viewLevel === 'hr_pms') {
       const reviewable = resolveReviewableStatuses('hr_pms', stages);
       const hrIdx = stages.indexOf('hr_pms_review');
-      const doneStatuses = hrIdx >= 0 ? stages.slice(hrIdx) : [];
+      const doneStatuses = hrIdx >= 0 ? stages.slice(hrIdx + 1) : [];
       return {
-        badge1: empKpis.filter(k => reviewable.includes(k.status || '')).length,
-        badge2: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
-        badge3: 0,
+        badge1: empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'hr_pms_review').length,
+        badge2: empKpis.filter(k => k.status === 'hr_pms_review').length,
+        badge3: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
         total: empKpis.length,
       };
     } else if (viewLevel === 'audit') {
