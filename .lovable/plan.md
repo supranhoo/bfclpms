@@ -1,51 +1,65 @@
 
 
-# Fix: Employee Name and Code Missing in Pending Report (v1.46.0)
+# Add "Remove from Org KPI" Button on Data Owners Tab (v1.46.1)
 
-## Root Cause
+## Overview
 
-After the v1.45.99 migration changed all org-level KPI scopes to `employee`, the Pending Report generation logic correctly enters the employee branch. However, there are two potential issues:
+Add a button next to the "Assign Data Owners" icon on each KPI row in the **Data Owners** tab, allowing admins to remove a KPI from organization-level status (reverting it to a normal KPI).
 
-1. **Stale React Query cache**: If the page was open during the migration, the cached KPI data still has the old `org_level_scope` values (`organization` or `department`). The report code branches on this value -- the `organization` and `department` branches explicitly set `employee: ''` and `employeeCode: ''`.
+## What the Button Does
 
-2. **Fallback safety**: If `allProfiles` hasn't loaded yet when the memo runs, the entire employee branch is skipped (due to the `&& allProfiles` guard), producing zero rows.
+When clicked, the button will:
+1. Show a confirmation dialog (since this is a destructive action)
+2. On confirm, call the existing `useUnmarkAsOrgLevel` hook which:
+   - Sets `is_org_level = false` and `org_level_scope = null` on all matching KPI records
+   - Deletes associated `org_kpi_values` for the period
+   - Deletes associated `org_kpi_data_owners` entries
+3. Show a success toast and refresh the KPI lists
 
-## Fix
+## UI Placement
 
-### 1. Force scope to `employee` in report generation (`src/pages/admin/OrgKpiDataEntry.tsx`)
-
-Since all org-level KPIs are now employee-scoped by policy, the report generation should default to `employee` scope rather than falling back to `organization`. Change line 656:
-
-```typescript
-// Before:
-const scope = ((kpi as any).org_level_scope as string) || 'organization';
-
-// After:
-const scope = ((kpi as any).org_level_scope as string) || 'employee';
+Each KPI row in the Data Owners tab currently shows:
+```
+[KPI Name / KRA Name]          [Owner Avatars] [Assign Icon]
 ```
 
-This ensures that even with cached data, the employee branch is used.
+After this change:
+```
+[KPI Name / KRA Name]          [Owner Avatars] [Assign Icon] [Remove Icon]
+```
 
-### 2. Ensure `allProfiles` dependency is ready
+The remove button will use a `Trash2` or `XCircle` icon with a destructive ghost style to visually distinguish it from the assign action.
 
-Add a guard at the start of `pendingReportRows` memo: if `allProfiles` is not yet loaded, return an empty array early. This prevents partial reports from being generated. (This is already handled by the `&& allProfiles` check, but we should also disable the download button until profiles are loaded.)
+## Technical Changes
 
-### 3. Ensure `getKpiStatus` also defaults correctly
+### 1. Update `OrgKpiOwnerManagement` component
 
-The `getKpiStatus` callback at line 161 also uses `|| 'organization'` as default scope. Update this to `|| 'employee'` for consistency.
+**File**: `src/components/admin/OrgKpiOwnerManagement.tsx`
 
-## Changes Summary
+- Add `reviewPeriod` and `reviewYear` props (needed by `useUnmarkAsOrgLevel`)
+- Import and use `useUnmarkAsOrgLevel` hook
+- Add an `AlertDialog` for confirmation before removal
+- Add a small destructive ghost button (XCircle icon) next to the existing Users icon button on each KPI row
+- On confirm: call `unmark.mutateAsync(...)` with the KPI's `categoryId`, `kraName`, `kpiName`, `reviewPeriod`, and `reviewYear`
+- Show toast on success
 
-| File | Change |
-|------|--------|
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Change default scope fallback from `'organization'` to `'employee'` in `pendingReportRows` memo (line 656) and `getKpiStatus` (line 161) |
-| `DOCUMENTATION.md` | Bump to v1.46.0 |
+### 2. Update `OrgKpiDataEntry` page
+
+**File**: `src/pages/admin/OrgKpiDataEntry.tsx`
+
+- Pass `reviewPeriod={selectedPeriod}` and `reviewYear={selectedYear}` to `OrgKpiOwnerManagement`
+
+### 3. Update `DOCUMENTATION.md`
+
+- Bump to v1.46.1
+- Document the new "Remove from Org KPI" action on the Data Owners tab
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | None | Read-only UI change, no DB modifications |
-| Regression | Very low | Only changes default fallback value; since all KPIs are now `employee` scope, this aligns code with data |
-| Existing functionality | None | Organization and department branches still exist if scope is explicitly set to those values |
+| Data impact | Medium | Confirmation dialog prevents accidental clicks. The hook deletes org_kpi_values and data_owner records, which is intentional cleanup |
+| Reversibility | Easy | KPI can be re-marked as Org-level from the Suggestions tab |
+| Regression | Low | Uses existing `useUnmarkAsOrgLevel` hook already proven on the entry cards |
+| RLS | None | No policy changes needed; existing admin policies cover DELETE on org_kpi_values and org_kpi_data_owners |
 
