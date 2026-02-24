@@ -19,7 +19,7 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   const categoryColor = kpi.kra_categories?.color || '#6B7280';
   const status = kpi.status || 'kra_set';
   const weightage = kpi.weightage || 0;
-  const scope = kpi.org_level_scope || 'organization';
+  const scope = kpi.org_level_scope || 'employee';
 
   return (
     <div className="p-3 sm:p-4 bg-muted/30 rounded-lg border">

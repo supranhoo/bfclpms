@@ -17,7 +17,7 @@ export function useMarkAsOrgLevel() {
     mutationFn: async (params: MarkOrgLevelParams) => {
       let query = supabase
         .from('kpis')
-        .update({ is_org_level: true, org_level_scope: params.scope || 'organization' })
+        .update({ is_org_level: true, org_level_scope: params.scope || 'employee' })
         .eq('kra_name', params.kraName)
         .eq('kpi_name', params.kpiName)
         .eq('review_period', params.reviewPeriod)
@@ -43,7 +43,7 @@ export function useMarkAsOrgLevel() {
       for (const params of items) {
         let query = supabase
           .from('kpis')
-          .update({ is_org_level: true, org_level_scope: params.scope || 'organization' })
+          .update({ is_org_level: true, org_level_scope: params.scope || 'employee' })
           .eq('kra_name', params.kraName)
           .eq('kpi_name', params.kpiName)
           .eq('review_period', params.reviewPeriod)

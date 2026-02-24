@@ -104,7 +104,7 @@ export function OrgKpiMappingDashboard({ reviewPeriod, reviewYear }: MappingProp
           kraName: kpi.kra_name,
           kpiName: kpi.kpi_name,
           categoryId: kpi.category_id,
-          orgLevelScope: kpi.org_level_scope || 'organization',
+          orgLevelScope: kpi.org_level_scope || 'employee',
           employees: [],
         });
       }

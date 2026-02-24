@@ -310,7 +310,7 @@ export function KpiDetailsTable({
           
           // Org-level display
           const orgValue = getOrgKpiValue?.(kpi);
-          const scope = kpi.org_level_scope || 'organization';
+          const scope = kpi.org_level_scope || 'employee';
           
           return (
             <React.Fragment key={kpi.id}>

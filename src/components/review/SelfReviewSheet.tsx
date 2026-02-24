@@ -232,7 +232,7 @@ export function SelfReviewSheet({
 
     if (!needsSubPeriod) {
       // Get org value
-      const scope = selectedKpi.org_level_scope || 'organization';
+      const scope = selectedKpi.org_level_scope || 'employee';
       let orgKey: string;
       if (scope === 'organization') {
         orgKey = `${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}||null||null`;
@@ -439,7 +439,7 @@ export function SelfReviewSheet({
   // Compute state
   const isSelectedKpiOrgLevel = selectedKpi?.is_org_level || false;
   const orgKey = (() => {
-    const scope = selectedKpi.org_level_scope || 'organization';
+    const scope = selectedKpi.org_level_scope || 'employee';
     if (scope === 'organization') return `${selectedKpi.category_id}||${selectedKpi.kra_name}||${selectedKpi.kpi_name}||null||null`;
     if (scope === 'department') {
       const deptId = profile?.department_id || 'null';

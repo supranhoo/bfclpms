@@ -117,7 +117,7 @@ export default function Dashboard() {
   // Helper to get org KPI value based on scope
   const getOrgKpiValue = useCallback((kpi: KPI) => {
     if (!kpi.is_org_level) return null;
-    const scope = (kpi as any).org_level_scope || 'organization';
+    const scope = (kpi as any).org_level_scope || 'employee';
     let key: string;
     if (scope === 'organization') {
       key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
@@ -725,7 +725,7 @@ export default function Dashboard() {
                           />
                           <span className="text-sm">{kpi.kra_categories?.name}</span>
                           {kpi.is_org_level && (() => {
-                            const scope = (kpi as any).org_level_scope || 'organization';
+                            const scope = (kpi as any).org_level_scope || 'employee';
                             return (
                               <Tooltip>
                                 <TooltipTrigger>
@@ -756,7 +756,7 @@ export default function Dashboard() {
                             frequencyCycleStart={kpi.frequency_cycle_start}
                           />
                           {kpi.is_org_level && (() => {
-                            const scope = (kpi as any).org_level_scope || 'organization';
+                            const scope = (kpi as any).org_level_scope || 'employee';
                             const orgVal = getOrgKpiValue(kpi);
                             return (
                               <div className="flex flex-wrap items-center gap-1 mt-1.5">
