@@ -912,7 +912,7 @@ export default function OrgKpiDataEntry() {
 
       {/* Owner Management Tab */}
       {activeTab === 'owners' && isAdmin && (
-        <OrgKpiOwnerManagement kpiDefinitions={allKpiDefinitions} />
+        <OrgKpiOwnerManagement kpiDefinitions={allKpiDefinitions} reviewPeriod={selectedPeriod} reviewYear={selectedYear} />
       )}
 
       {/* Suggestions Tab */}
