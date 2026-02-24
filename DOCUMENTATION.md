@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-24  
-> **Version:** 1.45.97 — Fix HR PMS dual-status reviewable pattern (mirrors auditor convention)
+> **Version:** 1.45.99 — Bulk update all org-level KPI scopes (department/organization → employee)
 > **Maintainer:** Lovable AI
 
 ---
