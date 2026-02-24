@@ -22,12 +22,14 @@ import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/R
 import { OrgKpiProgressBar } from '@/components/admin/OrgKpiProgressBar';
 import { OrgKpiEntryCard, OrgKpiCardData } from '@/components/admin/OrgKpiEntryCard';
 import { OrgKpiBulkExport } from '@/components/admin/OrgKpiBulkExport';
+import { OrgKpiPendingReport, PendingReportRow } from '@/components/admin/OrgKpiPendingReport';
 import { OrgKpiBulkImport } from '@/components/admin/OrgKpiBulkImport';
 import { OrgKpiOwnerManagement } from '@/components/admin/OrgKpiOwnerManagement';
 import { OrgKpiImpactSheet } from '@/components/admin/OrgKpiImpactSheet';
 import { OrgKpiSuggestionsPanel } from '@/components/admin/OrgKpiSuggestionsPanel';
 import { Building2, AlertTriangle, Search, Copy, Upload, Users as UsersIcon, Lightbulb, Info } from 'lucide-react';
 import { isKpiLockedForPeriod, getActiveMonthForCycle } from '@/lib/frequencyUtils';
+import { differenceInDays, parse } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
 // Helper to get previous period
@@ -643,6 +645,105 @@ export default function OrgKpiDataEntry() {
     });
   }, [ownershipFilteredKpis, existingValuesMap]);
 
+  // Pending report data — granular rows per scope target
+  const pendingReportRows = useMemo((): PendingReportRow[] => {
+    const rows: PendingReportRow[] = [];
+    const periodStart = parse(`1 ${selectedPeriod} ${selectedYear}`, 'd MMMM yyyy', new Date());
+    const today = new Date();
+    const daysSincePeriodStart = Math.max(0, differenceInDays(today, periodStart));
+
+    frequencyFilteredKpis.forEach(kpi => {
+      const scope = ((kpi as any).org_level_scope as string) || 'organization';
+      const kpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+      const ownerEntry = ownershipMap.get(kpiKey);
+      const ownerNames = ownerEntry?.owners?.map(o => o.owner?.full_name || 'Unknown').join(', ') || '';
+      const ownerEmails = ownerEntry?.owners?.map(o => o.owner?.email || '').filter(Boolean).join(', ') || '';
+      const prevValue = prevValuesMap.get(kpiKey) ?? null;
+      const empCount = employeeCountMap.get(kpiKey) ?? null;
+      const freq = (kpi as any).frequency || '';
+
+      const baseRow = {
+        category: kpi.kra_categories?.name || '',
+        kraName: kpi.kra_name,
+        kpiName: kpi.kpi_name,
+        target: kpi.target_value,
+        uom: kpi.uom,
+        scope: scope.charAt(0).toUpperCase() + scope.slice(1),
+        dataOwners: ownerNames,
+        dataOwnerEmails: ownerEmails,
+        r5: kpi.r5 ?? '',
+        r4: kpi.r4 ?? '',
+        r3: kpi.r3 ?? '',
+        r2: kpi.r2 ?? '',
+        r1: kpi.r1 ?? '',
+        frequency: freq,
+        previousValue: prevValue,
+        employeeCount: empCount,
+      };
+
+      if (scope === 'organization') {
+        const valKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+        const val = existingValuesMap.get(valKey);
+        const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
+        const status = hasValue ? (val?.status === 'propagated' ? 'Propagated' : 'Entered') : 'Pending';
+        rows.push({
+          ...baseRow,
+          status: status as PendingReportRow['status'],
+          department: '',
+          employee: '',
+          employeeCode: '',
+          achievedValue: val?.achieved_value ?? null,
+          remark: val?.remarks ?? '',
+          daysPending: status === 'Pending' ? daysSincePeriodStart : null,
+        });
+      } else if (scope === 'department' && departments) {
+        const mappedDeptIds = mappedDepartmentsMap.get(kpiKey);
+        const filteredDepts = mappedDeptIds
+          ? departments.filter(d => mappedDeptIds.has(d.id))
+          : departments;
+        filteredDepts.forEach(dept => {
+          const valKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${dept.id}||null`;
+          const val = existingValuesMap.get(valKey);
+          const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
+          const status = hasValue ? (val?.status === 'propagated' ? 'Propagated' : 'Entered') : 'Pending';
+          rows.push({
+            ...baseRow,
+            status: status as PendingReportRow['status'],
+            department: dept.name,
+            employee: '',
+            employeeCode: '',
+            achievedValue: val?.achieved_value ?? null,
+            remark: val?.remarks ?? '',
+            daysPending: status === 'Pending' ? daysSincePeriodStart : null,
+          });
+        });
+      } else if (scope === 'employee' && allProfiles) {
+        const mappedEmpIds = mappedEmployeesMap.get(kpiKey);
+        const filteredEmps = mappedEmpIds
+          ? allProfiles.filter(emp => mappedEmpIds.has(emp.id))
+          : allProfiles;
+        filteredEmps.forEach(emp => {
+          const dept = departments?.find(d => d.id === emp.department_id);
+          const valKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${emp.id}`;
+          const val = existingValuesMap.get(valKey);
+          const hasValue = val?.achieved_value !== null && val?.achieved_value !== undefined;
+          const status = hasValue ? (val?.status === 'propagated' ? 'Propagated' : 'Entered') : 'Pending';
+          rows.push({
+            ...baseRow,
+            status: status as PendingReportRow['status'],
+            department: dept?.name || '',
+            employee: emp.full_name || emp.email,
+            employeeCode: (emp as any).employee_code || '',
+            achievedValue: val?.achieved_value ?? null,
+            remark: val?.remarks ?? '',
+            daysPending: status === 'Pending' ? daysSincePeriodStart : null,
+          });
+        });
+      }
+    });
+
+    return rows;
+  }, [frequencyFilteredKpis, existingValuesMap, ownershipMap, prevValuesMap, employeeCountMap, departments, allProfiles, mappedDepartmentsMap, mappedEmployeesMap, selectedPeriod, selectedYear]);
   if (kpisLoading) {
     return <TableSkeleton rows={5} columns={5} />;
   }
@@ -717,6 +818,7 @@ export default function OrgKpiDataEntry() {
                   Copy from Last Period
                 </Button>
                 <OrgKpiBulkExport kpis={exportData} reviewPeriod={selectedPeriod} reviewYear={selectedYear} />
+                <OrgKpiPendingReport rows={pendingReportRows} reviewPeriod={selectedPeriod} reviewYear={selectedYear} />
                 <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="gap-1.5">
                   <Upload className="h-4 w-4" />
                   Import Excel
