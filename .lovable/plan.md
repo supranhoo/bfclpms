@@ -1,92 +1,41 @@
 
 
-# Org KPI Pending Data Report (v1.45.98)
+# Bulk Update Org KPI Scope to Employee (v1.45.99)
 
-## Overview
+## What This Does
 
-Add a "Download Pending Report" button to the Organization KPI Data Entry page that generates a comprehensive Excel report showing all pending KPIs -- what needs to be uploaded, for which employees/departments, and who the assigned data provider is.
+Updates the `org_level_scope` column on all organization-level KPIs from:
+- **Department** (395 KPIs) --> **Employee**
+- **Organization** (574 KPIs) --> **Employee**
 
-## Report Columns
+After this change, all 1,532 org-level KPIs will have scope = `employee`, meaning data entry will happen at the individual employee level.
 
-The report will include all export template columns plus pending-specific intelligence:
+## Technical Change
 
-| Column | Source | Purpose |
-|--------|--------|---------|
-| Category | kra_categories.name | Group identification |
-| KRA | kpi.kra_name | KRA identification |
-| KPI Name | kpi.kpi_name | KPI identification |
-| Target | kpi.target_value | Reference for data entry |
-| UOM | kpi.uom | Unit of measure |
-| Scope | kpi.org_level_scope | Organization / Department / Employee |
-| Status | existingValuesMap | Pending / Entered / Propagated |
-| Department | department name (for dept/emp scope) | Who it's pending for |
-| Employee | employee name (for emp scope) | Who it's pending for |
-| Employee Code | employee code (for emp scope) | Quick identification |
-| Achieved Value | org_kpi_values | Current value (blank if pending) |
-| Remark | org_kpi_values | Current remark |
-| Data Owner(s) | ownershipMap | Who is responsible for uploading |
-| Data Owner Email(s) | ownershipMap | Contact info for follow-up |
-| R5 / R4 / R3 / R2 / R1 | rating thresholds | Reference for scoring |
-| Frequency | kpi.frequency | Entry cadence |
-| Previous Period Value | prevValuesMap | Historical reference |
+A single database migration that runs:
 
-## Additional Inputs (My Brainstorming Additions)
-
-1. **Days Pending**: For KPIs with status "pending", calculate how many days into the current period we are -- helps prioritize urgency.
-2. **Employee Count**: For org/dept scope KPIs, show how many employees will be affected once propagated -- helps prioritize high-impact KPIs.
-3. **Two Sheets**: Sheet 1 = "Pending Only" (filtered to status = pending), Sheet 2 = "Full Status" (all KPIs with their status). This way the report serves both as a quick action list and a complete overview.
-4. **Summary Row at Top**: A header section showing total KPIs, pending count, entered count, propagated count, and completion percentage.
-5. **Color-coded Status**: Excel conditional formatting on the Status column (red = Pending, yellow = Entered, green = Propagated).
-
-## Technical Changes
-
-### 1. New Component: `src/components/admin/OrgKpiPendingReport.tsx`
-
-A button component that accepts:
-- All org-level KPIs with their status, scope, and values
-- Ownership map (data owners per KPI)
-- Department and employee mappings
-- Previous period values
-- Selected period/year
-
-On click, it generates a multi-sheet Excel workbook using the `xlsx` library (already installed).
-
-### 2. `src/pages/admin/OrgKpiDataEntry.tsx`
-
-- Build a `pendingReportData` memo that assembles all rows with status, scope breakdowns, and data owner names
-- Add the `OrgKpiPendingReport` button next to the existing "Export Template" and "Import Excel" buttons in the admin toolbar (line ~714-724)
-- Pass ownership map, departments, profiles, employee count map, and previous values to the report component
-
-### 3. Report Generation Logic
-
-For each org-level KPI:
-- **Organization scope**: One row showing the KPI status and data owner(s)
-- **Department scope**: One row PER mapped department, each showing its own status (value entered or not) and the data owner(s)
-- **Employee scope**: One row PER mapped employee, showing individual status and data owner(s)
-
-This granular breakdown ensures the report answers "exactly what is pending and for whom."
-
-### 4. `DOCUMENTATION.md`
-
-Bump to v1.45.98. Document the pending report feature and its column definitions.
-
-## UI Placement
-
-The button will appear in the admin toolbar alongside "Copy from Last Period", "Export Template", and "Import Excel":
-
-```
-[Copy from Last Period] [Export Template] [Download Pending Report] [Import Excel]
+```sql
+UPDATE kpis
+SET org_level_scope = 'employee', updated_at = now()
+WHERE is_org_level = true
+  AND org_level_scope IN ('department', 'organization');
 ```
 
-It will use a `FileBarChart` icon to distinguish it from the template export. Available to admins only (consistent with other bulk tools).
+This updates 969 records in one atomic operation.
 
-## No Database Changes
+## Risk Assessment
 
-All data needed is already fetched by existing hooks. The report is generated entirely client-side from:
-- `frequencyFilteredKpis` (KPI definitions)
-- `existingValuesMap` (current values and statuses)
-- `ownershipMap` (data owners)
-- `departments` and `allProfiles` (scope targets)
-- `prevValuesMap` (historical reference)
-- `mappedDepartmentsMap` / `mappedEmployeesMap` (scope mappings)
+| Aspect | Risk | Mitigation |
+|--------|------|-----------|
+| Data integrity | Low | Only changes the scope column; no KPI definitions, scores, or values are altered |
+| Existing org_kpi_values | Medium | Any previously entered values at dept/org scope will still exist in `org_kpi_values` but the UI will now expect employee-scoped entries. Existing dept/org values will need re-entry at employee level |
+| Reversibility | Easy | Can revert by running a reverse UPDATE if needed |
+| RLS | None | No policy changes needed |
 
+## Important Note
+
+After this migration, the Org KPI Data Entry page will show employee-level rows for all KPIs. Any values previously entered at department or organization scope will no longer display in the entry cards (since the scope has changed). Those values still exist in the database but won't match the new scope filter. New values will need to be entered per employee.
+
+## Documentation
+
+Bump `DOCUMENTATION.md` to v1.45.99 noting the bulk scope migration.
