@@ -1,17 +1,27 @@
 import { useState, useMemo } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { useOrgKpiDataOwners, useAssignOrgKpiOwner, useRemoveOrgKpiOwner } from '@/hooks/useOrgKpiDataOwner';
+import { useOrgKpiDataOwners, useAssignOrgKpiOwner } from '@/hooks/useOrgKpiDataOwner';
 import { useProfiles } from '@/hooks/useOrganization';
+import { useUnmarkAsOrgLevel } from '@/hooks/useMarkAsOrgLevel';
 import { OrgKpiOwnerDialog } from '@/components/admin/OrgKpiOwnerDialog';
-import { Users, UserPlus, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Users, UserPlus, Loader2, ChevronDown, ChevronRight, XCircle } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface KpiDef {
   categoryId: string;
@@ -23,18 +33,22 @@ interface KpiDef {
 
 interface OrgKpiOwnerManagementProps {
   kpiDefinitions: KpiDef[];
+  reviewPeriod: string;
+  reviewYear: number;
 }
 
-export function OrgKpiOwnerManagement({ kpiDefinitions }: OrgKpiOwnerManagementProps) {
+export function OrgKpiOwnerManagement({ kpiDefinitions, reviewPeriod, reviewYear }: OrgKpiOwnerManagementProps) {
   const { data: owners, isLoading } = useOrgKpiDataOwners();
   const { data: profiles } = useProfiles();
   const assignOwner = useAssignOrgKpiOwner();
+  const unmark = useUnmarkAsOrgLevel();
   const { toast } = useToast();
 
   const [ownerDialogOpen, setOwnerDialogOpen] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState<{ categoryId: string; kraName: string; kpiName: string } | null>(null);
   const [bulkUserId, setBulkUserId] = useState<string>('');
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
+  const [removeTarget, setRemoveTarget] = useState<KpiDef | null>(null);
 
   // Group KPIs by category
   const categorized = useMemo(() => {
@@ -85,6 +99,24 @@ export function OrgKpiOwnerManagement({ kpiDefinitions }: OrgKpiOwnerManagementP
     }
     toast({ title: `Assigned to ${assigned} KPIs in this category` });
     setBulkUserId('');
+  };
+
+  const handleRemoveFromOrgKpi = async () => {
+    if (!removeTarget) return;
+    try {
+      await unmark.mutateAsync({
+        categoryId: removeTarget.categoryId,
+        kraName: removeTarget.kraName,
+        kpiName: removeTarget.kpiName,
+        reviewPeriod,
+        reviewYear,
+      });
+      toast({ title: 'KPI removed from Organization level', description: `"${removeTarget.kpiName}" is now a normal KPI.` });
+    } catch (err: any) {
+      toast({ title: 'Failed to remove', description: err?.message || 'An error occurred', variant: 'destructive' });
+    } finally {
+      setRemoveTarget(null);
+    }
   };
 
   const getInitials = (name: string | null) => {
@@ -200,6 +232,15 @@ export function OrgKpiOwnerManagement({ kpiDefinitions }: OrgKpiOwnerManagementP
                               >
                                 <Users className="h-3.5 w-3.5" />
                               </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => setRemoveTarget(kpi)}
+                                title="Remove from Org KPI"
+                              >
+                                <XCircle className="h-3.5 w-3.5" />
+                              </Button>
                             </div>
                           </div>
                         );
@@ -221,6 +262,28 @@ export function OrgKpiOwnerManagement({ kpiDefinitions }: OrgKpiOwnerManagementP
           kpiName={selectedKpi.kpiName}
         />
       )}
+
+      {/* Remove from Org KPI confirmation */}
+      <AlertDialog open={!!removeTarget} onOpenChange={(open) => { if (!open) setRemoveTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove from Organization KPI?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will revert <strong>"{removeTarget?.kpiName}"</strong> to a normal KPI. All organization-level values and data owner assignments for this KPI will be deleted. This action can be reversed by re-marking it from the Suggestions tab.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRemoveFromOrgKpi}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {unmark.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
