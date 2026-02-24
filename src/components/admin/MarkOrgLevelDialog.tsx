@@ -29,14 +29,14 @@ export function MarkOrgLevelDialog({ open, onOpenChange, suggestion, reviewPerio
   const { toast } = useToast();
   const { markSingle } = useMarkAsOrgLevel();
   const isEdit = suggestion?.already_org_level ?? false;
-  const [scope, setScope] = useState(suggestion?.org_level_scope || 'organization');
+  const [scope, setScope] = useState(suggestion?.org_level_scope || 'employee');
   const [similarGroups, setSimilarGroups] = useState<SimilarGroup[]>([]);
   const [includeSimilar, setIncludeSimilar] = useState(true);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!open || !suggestion) return;
-    setScope(suggestion.org_level_scope || 'organization');
+    setScope(suggestion.org_level_scope || 'employee');
     // Find similar KPIs (same kra_name + kpi_name in OTHER categories)
     const fetchSimilar = async () => {
       const { data } = await supabase

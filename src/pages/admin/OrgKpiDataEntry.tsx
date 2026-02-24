@@ -223,7 +223,7 @@ export default function OrgKpiDataEntry() {
       const cat = categoryMap.get(catId) || { total: 0, entered: 0, propagated: 0 };
       cat.total++;
 
-      const scope = (kpi as any).org_level_scope || 'organization';
+      const scope = (kpi as any).org_level_scope || 'employee';
       let status: 'pending' | 'entered' | 'propagated' = 'pending';
 
       if (scope === 'organization') {
@@ -267,7 +267,7 @@ export default function OrgKpiDataEntry() {
 
   // Build card data for a KPI
   const buildCardData = useCallback((kpi: typeof filteredKpis[0]): OrgKpiCardData => {
-    const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'organization';
+    const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
     const catName = kpi.kra_categories?.name || '';
     const catColor = kpi.kra_categories?.color || '#6B7280';
     const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
@@ -386,7 +386,7 @@ export default function OrgKpiDataEntry() {
     kpi: typeof filteredKpis[0],
     values: { achievedValue: number | null; remarks: string; evidenceUrl: string | null; isNa?: boolean; naRemarks?: string; scopedValues?: Array<{ scopeId: string; achievedValue: number | null; remarks: string; evidenceUrl: string | null; isNa?: boolean }> }
   ) => {
-    const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'organization';
+    const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
     const toSave: Array<any> = [];
     const auditEntries: Array<any> = [];
 
@@ -469,7 +469,7 @@ export default function OrgKpiDataEntry() {
     values: Parameters<typeof handleCardSave>[1]
   ) => {
     await handleCardSave(kpi, values);
-    const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'organization';
+    const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
     
     if (scope === 'organization') {
       await propagate.mutateAsync({
@@ -631,7 +631,7 @@ export default function OrgKpiDataEntry() {
     return ownershipFilteredKpis.map(kpi => {
       const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
       const existing = existingValuesMap.get(key);
-      const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'organization';
+      const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
       return {
         categoryName: kpi.kra_categories?.name || '',
         kraName: kpi.kra_name,
@@ -953,7 +953,7 @@ export default function OrgKpiDataEntry() {
                 {/* KPI Cards */}
                 {group.kpis.map(kpi => {
                   const cardData = buildCardData(kpi);
-                  const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'organization';
+                  const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
                   const empKpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
                   const empKpiIds = scope === 'employee' ? employeeKpiIdsMap?.[empKpiKey] : undefined;
                   return (

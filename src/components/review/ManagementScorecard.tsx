@@ -114,7 +114,7 @@ export function ManagementScorecard({
   // Helper to get org KPI value based on scope
   const getOrgKpiValue = (kpi: KPI) => {
     if (!kpi.is_org_level) return null;
-    const scope = (kpi as any).org_level_scope || 'organization';
+    const scope = (kpi as any).org_level_scope || 'employee';
     let key: string;
     if (scope === 'organization') {
       key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
