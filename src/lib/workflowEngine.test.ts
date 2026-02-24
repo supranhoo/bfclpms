@@ -86,9 +86,10 @@ describe('workflowEngine', () => {
       expect(statuses).toEqual(['manager_check']);
     });
 
-    it('hr_pms sees skip_level_check (preceding stage) in 8-stage', () => {
+    it('hr_pms sees both skip_level_check and hr_pms_review in 8-stage', () => {
       const statuses = resolvePendingStatuses('hr_pms', EIGHT_STAGE_PIPELINE);
-      expect(statuses).toEqual(['skip_level_check']);
+      expect(statuses).toContain('skip_level_check');
+      expect(statuses).toContain('hr_pms_review');
     });
 
     it('auditor sees hr_pms_review (preceding stage) in 8-stage', () => {
@@ -152,9 +153,10 @@ describe('workflowEngine', () => {
       expect(statuses).toEqual(['manager_check']);
     });
 
-    it('hr_pms can review skip_level_check in 8-stage', () => {
+    it('hr_pms can review both skip_level_check and hr_pms_review in 8-stage', () => {
       const statuses = resolveReviewableStatuses('hr_pms', EIGHT_STAGE_PIPELINE);
-      expect(statuses).toEqual(['skip_level_check']);
+      expect(statuses).toContain('skip_level_check');
+      expect(statuses).toContain('hr_pms_review');
     });
 
     it('auditor can review hr_pms_review in 8-stage', () => {
@@ -198,6 +200,10 @@ describe('workflowEngine', () => {
 
     it('hr-pms-review can review skip_level_check in 8-stage', () => {
       expect(canReviewKpi('skip_level_check', 'hr-pms-review', EIGHT_STAGE_PIPELINE)).toBe(true);
+    });
+
+    it('hr-pms-review can review hr_pms_review status in 8-stage', () => {
+      expect(canReviewKpi('hr_pms_review', 'hr-pms-review', EIGHT_STAGE_PIPELINE)).toBe(true);
     });
 
     it('audit can review hr_pms_review in 8-stage', () => {

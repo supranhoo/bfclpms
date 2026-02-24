@@ -128,7 +128,8 @@ export function resolvePendingStatuses(
     case 'hr_pms': {
       const idx = workflowStages.indexOf('hr_pms_review');
       if (idx === -1) return [];
-      return [workflowStages[idx - 1]];
+      const preceding = idx > 0 ? workflowStages[idx - 1] : 'skip_level_check';
+      return [preceding, 'hr_pms_review'];
     }
     case 'auditor': {
       const idx = workflowStages.indexOf('audit');
@@ -205,7 +206,8 @@ export function resolveReviewableStatuses(
     case 'hr_pms': {
       const idx = workflowStages.indexOf('hr_pms_review');
       if (idx === -1) return [];
-      return [workflowStages[idx - 1]];
+      const preceding = idx > 0 ? workflowStages[idx - 1] : 'skip_level_check';
+      return [preceding, 'hr_pms_review'];
     }
     case 'auditor': {
       const idx = workflowStages.indexOf('audit');
@@ -289,7 +291,8 @@ export function canReviewKpi(
     case 'hr-pms-review': {
       const idx = workflowStages.indexOf('hr_pms_review');
       if (idx === -1) return false;
-      return kpiStatus === workflowStages[idx - 1];
+      const preceding = idx > 0 ? workflowStages[idx - 1] : 'skip_level_check';
+      return kpiStatus === preceding || kpiStatus === 'hr_pms_review';
     }
     case 'audit': {
       const idx = workflowStages.indexOf('audit');

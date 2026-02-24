@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-02-23  
-> **Version:** 1.45.95 — Revert: remove incorrect is_issued filter (not a reliable draft indicator)
+> **Last Updated:** 2026-02-24  
+> **Version:** 1.45.97 — Fix HR PMS dual-status reviewable pattern (mirrors auditor convention)
 > **Maintainer:** Lovable AI
 
 ---
