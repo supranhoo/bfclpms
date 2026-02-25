@@ -27,6 +27,10 @@ export interface KpiObservation {
   // Joined data
   created_by_profile?: { full_name: string | null; email: string };
   reviewed_by_profile?: { full_name: string | null; email: string } | null;
+  kpi?: {
+    employee_id: string;
+    employee_profile?: { full_name: string | null; email: string };
+  };
 }
 
 export interface CreateObservationInput {
@@ -88,7 +92,8 @@ export function useObservationsByKpis(kpiIds: string[]) {
         .select(`
           *,
           created_by_profile:profiles!kpi_observations_created_by_fkey(full_name, email),
-          reviewed_by_profile:profiles!kpi_observations_reviewed_by_fkey(full_name, email)
+          reviewed_by_profile:profiles!kpi_observations_reviewed_by_fkey(full_name, email),
+          kpi:kpis!kpi_observations_kpi_id_fkey(employee_id, employee_profile:profiles!kpis_employee_id_fkey(full_name, email))
         `)
         .in('kpi_id', kpiIds)
         .order('created_at', { ascending: false });
