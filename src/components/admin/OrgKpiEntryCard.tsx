@@ -15,7 +15,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
 import { Textarea } from '@/components/ui/textarea';
 import { QualitativeSelect } from '@/components/review/QualitativeSelect';
-import type { QualitativeOption } from '@/lib/qualitativeUom';
+import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban } from 'lucide-react';
@@ -332,7 +332,9 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, emplo
                   qualitativeOptions={(data.qualitativeOptions as QualitativeOption[]) || null}
                   value={(() => {
                     // Find option label matching stored rating
-                    const opts = data.qualitativeOptions || [];
+                    const opts = data.qualitativeOptions?.length
+                      ? data.qualitativeOptions
+                      : (data.uomType === 'binary' ? BINARY_OPTIONS : []);
                     const numVal = achievedValue === '' ? null : parseFloat(achievedValue);
                     if (numVal === null || isNaN(numVal)) return null;
                     const match = opts.find(o => Number(o.rating) === numVal);

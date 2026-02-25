@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
 import { isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
 import { QualitativeSelect } from '@/components/review/QualitativeSelect';
-import type { QualitativeOption } from '@/lib/qualitativeUom';
+import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
 import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown } from 'lucide-react';
 
 export interface ScopedRow {
@@ -283,7 +283,9 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, o
             uomType={row.uomType}
             qualitativeOptions={(row.qualitativeOptions as QualitativeOption[]) || null}
             value={(() => {
-              const opts = row.qualitativeOptions || [];
+              const opts = row.qualitativeOptions?.length
+                ? row.qualitativeOptions
+                : (row.uomType === 'binary' ? BINARY_OPTIONS : []);
               if (row.achievedValue === null) return null;
               const match = opts.find(o => Number(o.rating) === row.achievedValue);
               return match?.label || null;
@@ -397,7 +399,9 @@ function DepartmentRow({ row, onValueChange }: DepartmentRowProps) {
             uomType={row.uomType}
             qualitativeOptions={(row.qualitativeOptions as QualitativeOption[]) || null}
             value={(() => {
-              const opts = row.qualitativeOptions || [];
+              const opts = row.qualitativeOptions?.length
+                ? row.qualitativeOptions
+                : (row.uomType === 'binary' ? BINARY_OPTIONS : []);
               if (row.achievedValue === null) return null;
               const match = opts.find(o => Number(o.rating) === row.achievedValue);
               return match?.label || null;
