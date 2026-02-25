@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -7,7 +7,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
 import { OrgKpiAuditLog } from '@/components/admin/OrgKpiAuditLog';
 import { OrgKpiScopedEntryTable, ScopedRow } from '@/components/admin/OrgKpiScopedEntryTable';
+import type { ObservationCounts } from '@/components/admin/OrgKpiScopedEntryTable';
 import { OrgKpiObservationsSummary } from '@/components/admin/OrgKpiObservationsSummary';
+import { useObservationsByKpis } from '@/hooks/useKpiObservations';
 import { OrgKpiOwnerDialog } from '@/components/admin/OrgKpiOwnerDialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
@@ -104,6 +106,28 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, emplo
   const [evidenceUrl, setEvidenceUrl] = useState(data.evidenceUrl);
   const [scopedValues, setScopedValues] = useState<ScopedRow[]>(data.scopedRows || []);
   const [isNa, setIsNa] = useState(data.isNa ?? false);
+
+  // Fetch observations for employee-scoped KPIs (React Query deduplicates with OrgKpiObservationsSummary)
+  const isEmployeeScope = data.scope === 'employee';
+  const obsKpiIds = isEmployeeScope && employeeKpiIds ? employeeKpiIds : [];
+  const { data: observationMap } = useObservationsByKpis(obsKpiIds);
+
+  const employeeObservationCounts = useMemo(() => {
+    if (!observationMap || observationMap.size === 0) return undefined;
+    const counts = new Map<string, ObservationCounts>();
+    observationMap.forEach((observations) => {
+      observations.forEach(obs => {
+        const empId = obs.kpi?.employee_id;
+        if (!empId) return;
+        const existing = counts.get(empId) || { positive: 0, concern: 0, neutral: 0 };
+        if (obs.observation_type === 'positive') existing.positive++;
+        else if (obs.observation_type === 'concern') existing.concern++;
+        else existing.neutral++;
+        counts.set(empId, existing);
+      });
+    });
+    return counts.size > 0 ? counts : undefined;
+  }, [observationMap]);
   const [naRemarks, setNaRemarks] = useState('');
 
   // Refs to always access latest values (fixes stale closure in auto-save)
@@ -364,6 +388,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, emplo
               ratingThresholds={{ r5: data.r5, r4: data.r4, r3: data.r3, r2: data.r2, r1: data.r1 }}
               targetValue={data.targetValue}
               uom={data.uom}
+              observationCounts={employeeObservationCounts}
             />
           )}
 
