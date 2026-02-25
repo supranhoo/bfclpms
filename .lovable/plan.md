@@ -1,66 +1,72 @@
 
 
-# Support Binary/Tiered KPIs in Org KPI Data Entry (v1.46.8)
+# Fix: QualitativeSelect Not Retaining Selection in Org KPI Data Entry (v1.46.9)
 
-## Overview
+## Root Cause
 
-When an Org-level KPI has `uom_type` set to `binary` or `tiered`, the data entry interface should show a dropdown selector (using the existing `QualitativeSelect` component) instead of a numeric input -- both for org-scope cards and for individual employee/department rows in the scoped entry table.
+When qualitative options are loaded from the database JSON column (`qualitative_options`), the `rating` field may arrive as a **string** (e.g., `"5"`) instead of a **number** (`5`). After a user makes a selection, `handleScopedChange` stores the achieved value via `parseFloat()` as a proper number. On re-render, the strict equality check (`===`) fails because `"5" !== 5`, so no matching option is found, the value resolves to `null`, and the Select shows "Select..." again -- making it appear the selection was lost.
 
-## Technical Changes
+This same issue affects **three locations** where option matching happens:
+1. **EmployeeRow** in `OrgKpiScopedEntryTable.tsx` (line ~288)
+2. **DepartmentRow** in `OrgKpiScopedEntryTable.tsx` (line ~395)
+3. **Org-scope input** in `OrgKpiEntryCard.tsx` (line ~338)
 
-### 1. Extend `OrgKpiCardData` interface (`OrgKpiEntryCard.tsx`)
+## Fix
 
-Add two new optional fields:
-- `uomType?: 'numeric' | 'binary' | 'tiered' | null`
-- `qualitativeOptions?: Array<{ label: string; rating: number; definition: string }> | null`
+Normalize the `rating` field to a number in all comparison sites by using `Number(o.rating)` instead of raw `o.rating`.
 
-### 2. Pass data through in `buildCardData` (`OrgKpiDataEntry.tsx`)
+### Files to Change
 
-In the `buildCardData` function (~line 404-428), add:
+**1. `src/components/admin/OrgKpiScopedEntryTable.tsx`**
+
+In **EmployeeRow** (line ~288), change:
 ```
-uomType: (kpi as any).uom_type || 'numeric',
-qualitativeOptions: (kpi as any).qualitative_options || null,
+opts.find(o => o.rating === row.achievedValue)
+```
+to:
+```
+opts.find(o => Number(o.rating) === row.achievedValue)
 ```
 
-Also pass these to scoped rows so the table knows the UOM type.
+In **DepartmentRow** (line ~395), apply the same fix.
 
-### 3. Update `ScopedRow` interface (`OrgKpiScopedEntryTable.tsx`)
+**2. `src/components/admin/OrgKpiEntryCard.tsx`**
 
-Add optional fields:
-- `uomType?: 'numeric' | 'binary' | 'tiered' | null`
-- `qualitativeOptions?: Array<{ label: string; rating: number; definition: string }> | null`
+In the org-scope QualitativeSelect value computation (line ~338), change:
+```
+opts.find(o => o.rating === numVal)
+```
+to:
+```
+opts.find(o => Number(o.rating) === numVal)
+```
 
-### 4. Update org-scope input in `OrgKpiEntryCard` (~lines 322-361)
+**3. `src/components/review/QualitativeSelect.tsx`**
 
-When `data.uomType === 'binary' || data.uomType === 'tiered'`:
-- Replace the numeric `<Input type="number">` with `<QualitativeSelect>`
-- On selection, store the rating as `achievedValue` and optionally include the label in remarks
-- Skip the out-of-range warning (not applicable to qualitative)
+In `handleChange` (line ~46), normalize when finding option:
+```
+options.find(o => o.label === selectedLabel)
+```
+(This one uses label matching, so it's fine.)
 
-### 5. Update `EmployeeRow` and `DepartmentRow` in `OrgKpiScopedEntryTable`
+In `selectedOption` lookup (line ~52), this also uses label matching -- fine.
 
-For rows where `row.uomType === 'binary' || row.uomType === 'tiered'`:
-- Replace the numeric `<Input type="number">` with `<QualitativeSelect>`
-- The `onValueChange` callback sends the rating number as the achieved value
-- Hide the "Bulk fill" numeric input when all KPIs in the table are qualitative
+No changes needed in `QualitativeSelect.tsx` itself since it matches by **label** (string), not by rating.
 
-### 6. Update `handleScopedChange` in `OrgKpiEntryCard`
+## Summary of Edits
 
-No changes needed -- it already handles `achievedValue` as a string that gets parsed to a number. The rating (0-5) from `QualitativeSelect` will flow through naturally.
+| File | Lines | Change |
+|------|-------|--------|
+| `OrgKpiScopedEntryTable.tsx` | ~288, ~395 | `Number(o.rating) === row.achievedValue` |
+| `OrgKpiEntryCard.tsx` | ~338 | `Number(o.rating) === numVal` |
 
-## Files to Edit
-
-| File | Change |
-|------|--------|
-| `src/components/admin/OrgKpiEntryCard.tsx` | Add `uomType`/`qualitativeOptions` to interface; render `QualitativeSelect` for org-scope |
-| `src/components/admin/OrgKpiScopedEntryTable.tsx` | Add fields to `ScopedRow`; render `QualitativeSelect` in employee/department rows |
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Pass `uomType` and `qualitativeOptions` in `buildCardData` and scoped rows |
+Total: 3 one-line fixes across 2 files.
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | None | Rating stored as number in existing `achieved_value` column |
-| Regression | Very low | Numeric KPIs untouched; qualitative rendering only when `uom_type` is binary/tiered |
-| UI consistency | Good | Reuses existing `QualitativeSelect` component from review module |
+| Data impact | None | Read-only display fix, no write changes |
+| Regression | None | `Number(5)` returns `5`, so numeric values still match correctly |
+| Scope | Minimal | Only affects the comparison operator in 3 spots |
 
