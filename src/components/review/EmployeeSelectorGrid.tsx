@@ -54,6 +54,7 @@ const STATUS_OPTIONS_BY_LEVEL: Record<Exclude<ViewMode, 'self'>, Array<{ value: 
   hr_pms: [
     { value: 'all', label: 'All Employees' },
     { value: 'pending', label: 'Pending HR PMS Review' },
+    { value: 'in_review', label: 'In HR PMS Review' },
     { value: 'reviewed', label: 'Reviewed' },
   ],
   audit: [
@@ -308,13 +309,15 @@ export function EmployeeSelectorGrid({
             }
           }
         } else if (viewLevel === 'hr_pms') {
-          if (statusFilter === 'pending' && reviewableStatuses.includes(kpi.status || '')) {
+          if (statusFilter === 'pending' && reviewableStatuses.includes(kpi.status || '') && kpi.status !== 'hr_pms_review') {
+            employeeIds.add(kpi.employee_id);
+          } else if (statusFilter === 'in_review' && kpi.status === 'hr_pms_review') {
             employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'reviewed') {
             const hrIdx = stages.indexOf('hr_pms_review');
             if (hrIdx >= 0) {
-              const doneStatuses = stages.slice(hrIdx);
-              if (doneStatuses.includes(kpi.status || '')) employeeIds.add(kpi.employee_id);
+              const afterHr = stages.slice(hrIdx + 1);
+              if (afterHr.includes(kpi.status || '')) employeeIds.add(kpi.employee_id);
             }
           }
         } else if (viewLevel === 'management') {
@@ -555,10 +558,11 @@ export function EmployeeSelectorGrid({
       );
     } else if (viewLevel === 'hr_pms') {
       return (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
           <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="amber" subtitle="Awaiting HR PMS review" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
-          <StatCard icon={CheckCircle2} label="Reviewed" value={stats.stat2} color="green" subtitle="HR PMS completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} />
+          <StatCard icon={FileCheck} label="In Review" value={stats.stat2} color="purple" subtitle="Currently in HR PMS" onClick={() => toggleStatusFilter('in_review')} active={statusFilter === 'in_review'} />
+          <StatCard icon={CheckCircle2} label="Reviewed" value={stats.stat3} color="green" subtitle="HR PMS completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} />
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
         </div>
       );
@@ -645,8 +649,13 @@ export function EmployeeSelectorGrid({
             </Badge>
           )}
           {kpiStats.badge2 > 0 && (
+            <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">
+              {kpiStats.badge2} in review
+            </Badge>
+          )}
+          {kpiStats.badge3 > 0 && (
             <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
-              {kpiStats.badge2} reviewed
+              {kpiStats.badge3} reviewed
             </Badge>
           )}
         </>
