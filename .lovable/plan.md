@@ -1,52 +1,75 @@
 
 
-# Fix: Incorrect Org KPI Values Across All Views (v1.46.1-hotfix)
+# Fix: HR PMS Badge & Stats Showing Wrong Counts (v1.46.2)
+
+## Problem
+
+On the HR PMS employee selector grid, Debadutta Sahoo shows **"1 reviewed"** but inside the scorecard, that 1 KPI is actually at `hr_pms_review` status -- meaning it's **pending** HR PMS action. Meanwhile, the 8 approved KPIs (which truly passed HR PMS) are not shown at all.
 
 ## Root Cause
 
-The v1.45.99 migration changed all org-level KPI scopes to `employee`, and v1.46.0 fixed the default fallback in `OrgKpiDataEntry.tsx`. However, **10+ other locations** in the codebase still use `|| 'organization'` as the scope fallback. This causes the org KPI value lookup to build the wrong cache key.
+The HR PMS counting logic in `EmployeeSelectorGrid.tsx` has a labeling/logic mismatch:
 
-When viewing Debadutta Sahoo in HR PMS Review:
-- The `UnifiedScorecard` builds the lookup key as `categoryId||kraName||kpiName||null||null` (organization scope)
-- But the actual `org_kpi_values` records are stored with `employee_id = {Debadutta's ID}` (employee scope)
-- Result: wrong or missing values are displayed
+| What's counted | Current label | Correct label |
+|---|---|---|
+| KPIs arriving at HR PMS (preceding stage) | "Pending" | "Pending" |
+| KPIs at `hr_pms_review` status | **"Reviewed"** | **"In Review"** (or merge with Pending) |
+| KPIs past `hr_pms_review` (audit, approved, etc.) | **Not shown** | **"Reviewed"** |
 
-## Files to Fix
+This mirrors the same pattern that **Audit view already uses correctly** (Pending / In Audit / Forwarded).
 
-All occurrences of `|| 'organization'` scope fallback need to change to `|| 'employee'`:
+## Solution
 
-| File | Lines | Context |
-|------|-------|---------|
-| `src/pages/Dashboard.tsx` | ~120 | Self-view org KPI value lookup |
-| `src/components/review/UnifiedScorecard.tsx` | ~239 | HR PMS / Team / Audit / Management review |
-| `src/components/review/EmployeeScorecard.tsx` | ~116 | Employee scorecard org KPI lookup |
-| `src/components/review/ManagementScorecard.tsx` | ~117 | Management scorecard org KPI lookup |
-| `src/components/review/SelfReviewSheet.tsx` | ~235, ~442 | Self-review submission logic |
-| `src/pages/admin/OrgKpiDataEntry.tsx` | ~226, ~270, ~389, ~472, ~634 | Data entry (missed in v1.46.0) |
-| `src/components/review/KpiHeaderSection.tsx` | ~22 | KPI header badge display |
-| `src/components/admin/OrgKpiMappingDashboard.tsx` | ~107 | Mapping dashboard |
+Align HR PMS with the Audit view's 3-column pattern:
 
-## Change Pattern
-
-Each fix is identical -- replace the fallback value:
-
-```typescript
-// Before (broken):
-const scope = (kpi as any).org_level_scope || 'organization';
-
-// After (correct):
-const scope = (kpi as any).org_level_scope || 'employee';
 ```
+Before:  [Total Employees] [Pending Review] [Reviewed]     [Total KPIs]
+After:   [Total Employees] [Pending Review] [In Review]    [Reviewed]
+```
+
+### Changes in `src/components/review/EmployeeSelectorGrid.tsx`
+
+**1. Stats calculation (lines 393-408)** -- Already correctly calculates 3 values, just need to use all 3:
+- `stat1` = pending (arriving at HR PMS) -- keep as-is
+- `stat2` = in review (`hr_pms_review` status) -- keep as-is  
+- `stat3` = forwarded/reviewed (past HR PMS) -- keep as-is
+
+**2. Stats cards rendering (lines 556-564)** -- Show 4 clickable stat cards instead of 3:
+- "Total Employees" (all)
+- "Pending Review" (stat1) -- KPIs arriving
+- "In Review" (stat2) -- KPIs at hr_pms_review  
+- "Reviewed" (stat3) -- KPIs past HR PMS
+
+**3. Employee badges (lines 456-465 and 639-653)** -- Show all 3 badge types:
+- `badge1` > 0: "X pending" (rose)
+- `badge2` > 0: "X in review" (amber/purple)  
+- `badge3` > 0: "X reviewed" (green)
+
+**4. Status filter options (lines 54-58)** -- Add "In Review" option:
+```
+{ value: 'pending', label: 'Pending HR PMS Review' },
+{ value: 'in_review', label: 'In HR PMS Review' },
+{ value: 'reviewed', label: 'Reviewed' },
+```
+
+**5. Status filtering logic (lines 310-319)** -- Add `in_review` filter branch for `hr_pms_review` status.
+
+### Update `DOCUMENTATION.md`
+
+Bump version and document the HR PMS badge fix.
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
-|--------|------|-----------|
-| Data impact | None | Read-only display logic only |
-| Regression | Very low | All org KPIs in DB already have scope = 'employee'; this just aligns fallbacks |
-| Scope | Low | The `organization` and `department` branches still exist for any future use |
+|---|---|---|
+| Data impact | None | Read-only display logic |
+| Regression | Very low | Only affects HR PMS view badge/stats display |
+| Consistency | Improved | Now matches the Audit view's proven 3-column pattern |
 
-## Documentation
+## Expected Result After Fix
 
-- Update `DOCUMENTATION.md` to note the comprehensive scope fallback fix
+Debadutta Sahoo's card will show:
+- **"1 in review"** (amber badge) for the KPI at `hr_pms_review`
+- **"8 reviewed"** (green badge) for the approved KPIs
 
+Stats cards will show accurate "Pending Review", "In Review", and "Reviewed" counts.
