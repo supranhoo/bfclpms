@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
 import { isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
-import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban } from 'lucide-react';
+import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown } from 'lucide-react';
 
 export interface ScopedRow {
   scopeId: string; // departmentId or employeeId
@@ -25,6 +25,12 @@ export interface ScopedRow {
   uom?: string | null;
 }
 
+export interface ObservationCounts {
+  positive: number;
+  concern: number;
+  neutral: number;
+}
+
 interface OrgKpiScopedEntryTableProps {
   rows: ScopedRow[];
   onValueChange: (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa', value: string | null) => void;
@@ -33,9 +39,11 @@ interface OrgKpiScopedEntryTableProps {
   ratingThresholds?: RatingThresholds;
   targetValue?: number | null;
   uom?: string | null;
+  // Observation counts per employee
+  observationCounts?: Map<string, ObservationCounts>;
 }
 
-export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom }: OrgKpiScopedEntryTableProps) {
+export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, observationCounts }: OrgKpiScopedEntryTableProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [bulkFillValue, setBulkFillValue] = useState('');
 
@@ -162,6 +170,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                         ratingThresholds={ratingThresholds}
                         targetValue={targetValue}
                         uom={uom}
+                        observationCounts={observationCounts?.get(row.scopeId)}
                       />
                     ))}
                   </>
@@ -187,9 +196,10 @@ interface EmployeeRowProps {
   ratingThresholds?: RatingThresholds;
   targetValue?: number | null;
   uom?: string | null;
+  observationCounts?: ObservationCounts;
 }
 
-function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom }: EmployeeRowProps) {
+function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, observationCounts }: EmployeeRowProps) {
   // Prefer per-employee target over card-level fallback
   const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
   const effectiveUom = row.uom != null ? row.uom : uom;
@@ -216,6 +226,23 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom }:
             {row.designation && (
               <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal">
                 {row.designation}
+              </Badge>
+            )}
+            {observationCounts && observationCounts.positive > 0 && (
+              <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400 gap-0.5">
+                <TrendingUp className="w-2.5 h-2.5" />
+                Positive: {observationCounts.positive}
+              </Badge>
+            )}
+            {observationCounts && observationCounts.concern > 0 && (
+              <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400 gap-0.5">
+                <TrendingDown className="w-2.5 h-2.5" />
+                Concern: {observationCounts.concern}
+              </Badge>
+            )}
+            {observationCounts && observationCounts.neutral > 0 && (
+              <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal gap-0.5">
+                Neutral: {observationCounts.neutral}
               </Badge>
             )}
           </div>
