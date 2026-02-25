@@ -285,7 +285,7 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, o
             value={(() => {
               const opts = row.qualitativeOptions || [];
               if (row.achievedValue === null) return null;
-              const match = opts.find(o => o.rating === row.achievedValue);
+              const match = opts.find(o => Number(o.rating) === row.achievedValue);
               return match?.label || null;
             })()}
             onChange={(label, rating) => {
@@ -399,7 +399,7 @@ function DepartmentRow({ row, onValueChange }: DepartmentRowProps) {
             value={(() => {
               const opts = row.qualitativeOptions || [];
               if (row.achievedValue === null) return null;
-              const match = opts.find(o => o.rating === row.achievedValue);
+              const match = opts.find(o => Number(o.rating) === row.achievedValue);
               return match?.label || null;
             })()}
             onChange={(label, rating) => {

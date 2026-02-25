@@ -335,7 +335,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, emplo
                     const opts = data.qualitativeOptions || [];
                     const numVal = achievedValue === '' ? null : parseFloat(achievedValue);
                     if (numVal === null || isNaN(numVal)) return null;
-                    const match = opts.find(o => o.rating === numVal);
+                    const match = opts.find(o => Number(o.rating) === numVal);
                     return match?.label || null;
                   })()}
                   onChange={(label, rating) => {
