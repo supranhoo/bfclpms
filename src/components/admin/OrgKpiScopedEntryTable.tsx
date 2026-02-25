@@ -274,7 +274,14 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom }:
       {/* Remark textarea */}
       <TableCell className="py-1.5 min-w-[220px]">
         {rowIsNa ? (
-          <span className="text-xs text-muted-foreground italic">Not Applicable</span>
+          <Textarea
+            value={row.remarks}
+            onChange={(e) => onValueChange(row.scopeId, 'remarks', e.target.value)}
+            placeholder="Reason for N/A (required)"
+            className="text-sm resize-none min-h-0 border-destructive/50"
+            rows={2}
+            required
+          />
         ) : (
           <Textarea
             value={row.remarks}
@@ -350,7 +357,14 @@ function DepartmentRow({ row, onValueChange }: DepartmentRowProps) {
       </TableCell>
       <TableCell className="py-1.5 min-w-[220px]">
         {rowIsNa ? (
-          <span className="text-xs text-muted-foreground italic">Not Applicable</span>
+          <Textarea
+            value={row.remarks}
+            onChange={(e) => onValueChange(row.scopeId, 'remarks', e.target.value)}
+            placeholder="Reason for N/A (required)"
+            className="text-sm resize-none min-h-0 border-destructive/50"
+            rows={2}
+            required
+          />
         ) : (
           <Textarea
             value={row.remarks}
