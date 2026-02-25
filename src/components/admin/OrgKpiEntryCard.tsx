@@ -14,6 +14,8 @@ import { OrgKpiOwnerDialog } from '@/components/admin/OrgKpiOwnerDialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
 import { Textarea } from '@/components/ui/textarea';
+import { QualitativeSelect } from '@/components/review/QualitativeSelect';
+import type { QualitativeOption } from '@/lib/qualitativeUom';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Loader2, CheckCircle2, Clock, ArrowUpRight, Building2, Users, User, BarChart3, Lock, Unlock, AlertTriangle, RotateCcw, Trash2, Ban } from 'lucide-react';
@@ -48,6 +50,9 @@ export interface OrgKpiCardData {
   employeeCount?: number;
   // N/A status
   isNa?: boolean;
+  // Qualitative UOM support
+  uomType?: 'numeric' | 'binary' | 'tiered' | null;
+  qualitativeOptions?: Array<{ label: string; rating: number; definition: string }> | null;
 }
 
 interface OrgKpiEntryCardProps {
@@ -321,29 +326,52 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, emplo
           {/* Input area - org scope */}
           {data.scope === 'organization' && !isNa && (
             <div className="space-y-2">
-              <Input
-                type="number"
-                value={achievedValue}
-                onChange={(e) => { setAchievedValue(e.target.value); triggerAutoSave(); }}
-                placeholder="Achieved value"
-                className="h-9"
-                disabled={isLocked}
-              />
-              {(() => {
-                const numVal = achievedValue === '' ? null : parseFloat(achievedValue);
-                if (numVal === null || isNaN(numVal)) return null;
-                const thresholds: RatingThresholds = { r5: data.r5, r4: data.r4, r3: data.r3, r2: data.r2, r1: data.r1 };
-                const check = isValueOutOfRange(numVal, data.targetValue, thresholds, data.uom);
-                if (!check.outOfRange) return null;
-                return (
-                  <Alert variant="default" className="border-orange-500/50 bg-orange-50 dark:bg-orange-950/30 py-2">
-                    <AlertTriangle className="h-4 w-4 text-orange-600" />
-                    <AlertDescription className="text-xs text-orange-700 dark:text-orange-400">
-                      {check.message}
-                    </AlertDescription>
-                  </Alert>
-                );
-              })()}
+              {(data.uomType === 'binary' || data.uomType === 'tiered') ? (
+                <QualitativeSelect
+                  uomType={data.uomType}
+                  qualitativeOptions={(data.qualitativeOptions as QualitativeOption[]) || null}
+                  value={(() => {
+                    // Find option label matching stored rating
+                    const opts = data.qualitativeOptions || [];
+                    const numVal = achievedValue === '' ? null : parseFloat(achievedValue);
+                    if (numVal === null || isNaN(numVal)) return null;
+                    const match = opts.find(o => o.rating === numVal);
+                    return match?.label || null;
+                  })()}
+                  onChange={(label, rating) => {
+                    setAchievedValue(rating.toString());
+                    triggerAutoSave();
+                  }}
+                  disabled={isLocked}
+                  className="h-9"
+                />
+              ) : (
+                <>
+                  <Input
+                    type="number"
+                    value={achievedValue}
+                    onChange={(e) => { setAchievedValue(e.target.value); triggerAutoSave(); }}
+                    placeholder="Achieved value"
+                    className="h-9"
+                    disabled={isLocked}
+                  />
+                  {(() => {
+                    const numVal = achievedValue === '' ? null : parseFloat(achievedValue);
+                    if (numVal === null || isNaN(numVal)) return null;
+                    const thresholds: RatingThresholds = { r5: data.r5, r4: data.r4, r3: data.r3, r2: data.r2, r1: data.r1 };
+                    const check = isValueOutOfRange(numVal, data.targetValue, thresholds, data.uom);
+                    if (!check.outOfRange) return null;
+                    return (
+                      <Alert variant="default" className="border-orange-500/50 bg-orange-50 dark:bg-orange-950/30 py-2">
+                        <AlertTriangle className="h-4 w-4 text-orange-600" />
+                        <AlertDescription className="text-xs text-orange-700 dark:text-orange-400">
+                          {check.message}
+                        </AlertDescription>
+                      </Alert>
+                    );
+                  })()}
+                </>
+              )}
               <Input
                 value={remarks}
                 onChange={(e) => { setRemarks(e.target.value); triggerAutoSave(); }}

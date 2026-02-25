@@ -354,16 +354,18 @@ export default function OrgKpiDataEntry() {
           if (names.length > 0) scopeSubText = names.join(', ');
         }
         return {
-          scopeId: dept.id,
-          scopeName: dept.name,
-          scopeSubText,
-          achievedValue: val?.achieved_value ?? null,
-          remarks: val?.remarks ?? '',
-          evidenceUrl: val?.evidence_url ?? null,
-          isNa: val?.is_na ?? false,
-          targetValue: kpi.target_value ?? null,
-          uom: kpi.uom ?? null,
-        };
+            scopeId: dept.id,
+            scopeName: dept.name,
+            scopeSubText,
+            achievedValue: val?.achieved_value ?? null,
+            remarks: val?.remarks ?? '',
+            evidenceUrl: val?.evidence_url ?? null,
+            isNa: val?.is_na ?? false,
+            targetValue: kpi.target_value ?? null,
+            uom: kpi.uom ?? null,
+            uomType: (kpi as any).uom_type || 'numeric',
+            qualitativeOptions: (kpi as any).qualitative_options || null,
+          };
       });
     } else if (scope === 'employee' && allProfiles) {
       scopeLabel = 'Employee';
@@ -391,6 +393,8 @@ export default function OrgKpiDataEntry() {
             isNa: val?.is_na ?? false,
             targetValue: empTarget?.target_value ?? null,
             uom: empTarget?.uom ?? null,
+            uomType: (kpi as any).uom_type || 'numeric',
+            qualitativeOptions: (kpi as any).qualitative_options || null,
           };
         })
         .sort((a, b) => {
@@ -401,7 +405,7 @@ export default function OrgKpiDataEntry() {
         });
     }
 
-    return {
+      return {
       categoryId: kpi.category_id,
       categoryName: catName,
       categoryColor: catColor,
@@ -425,6 +429,8 @@ export default function OrgKpiDataEntry() {
       scopeLabel,
       employeeCount: empCount,
       isNa: existing?.is_na ?? false,
+      uomType: (kpi as any).uom_type || 'numeric',
+      qualitativeOptions: (kpi as any).qualitative_options || null,
     };
   }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap, mappedDepartmentsMap, mappedEmployeesMap, employeeTargetMap]);
 
