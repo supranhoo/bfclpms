@@ -52,6 +52,7 @@ export default function OrgKpiDataEntry() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'entered' | 'propagated'>('all');
   const [activeTab, setActiveTab] = useState<'entry' | 'suggestions' | 'owners'>('entry');
   const [importOpen, setImportOpen] = useState(false);
+  const [selectedOwnerId, setSelectedOwnerId] = useState<string | null>(null);
 
   // Impact sheet state
   const [impactOpen, setImpactOpen] = useState(false);
@@ -197,10 +198,56 @@ export default function OrgKpiDataEntry() {
     return result;
   }, [frequencyFilteredKpis, selectedCategoryId, searchQuery, statusFilter, getKpiStatus]);
 
+  // Compute data owner tiles data
+  const ownerTilesData = useMemo(() => {
+    if (!isAdmin) return [];
+    const ownerMap = new Map<string, { ownerId: string; ownerName: string; totalKpis: number; enteredKpis: number }>();
+
+    ownershipMap.forEach((val, kpiKey) => {
+      // Check if this KPI is in the current filtered set (frequencyFilteredKpis)
+      const isInScope = frequencyFilteredKpis.some(k =>
+        `${k.category_id}||${k.kra_name}||${k.kpi_name}` === kpiKey
+      );
+      if (!isInScope) return;
+
+      const kpiStatus = (() => {
+        const kpi = frequencyFilteredKpis.find(k =>
+          `${k.category_id}||${k.kra_name}||${k.kpi_name}` === kpiKey
+        );
+        return kpi ? getKpiStatus(kpi) : 'pending';
+      })();
+      const isEntered = kpiStatus === 'entered' || kpiStatus === 'propagated';
+
+      val.owners.forEach(owner => {
+        const existing = ownerMap.get(owner.owner_id) || {
+          ownerId: owner.owner_id,
+          ownerName: owner.owner?.full_name || owner.owner?.email || 'Unknown',
+          totalKpis: 0,
+          enteredKpis: 0,
+        };
+        existing.totalKpis++;
+        if (isEntered) existing.enteredKpis++;
+        ownerMap.set(owner.owner_id, existing);
+      });
+    });
+
+    return Array.from(ownerMap.values()).sort((a, b) => a.ownerName.localeCompare(b.ownerName));
+  }, [isAdmin, ownershipMap, frequencyFilteredKpis, getKpiStatus]);
+
+  // Apply owner filter on top of filteredKpis
+  const ownerFilteredKpis = useMemo(() => {
+    if (!selectedOwnerId) return filteredKpis;
+    return filteredKpis.filter(kpi => {
+      const kpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+      const entry = ownershipMap.get(kpiKey);
+      return entry?.owners.some(o => o.owner_id === selectedOwnerId);
+    });
+  }, [filteredKpis, selectedOwnerId, ownershipMap]);
+
   // Group by category
   const groupedKpis = useMemo(() => {
-    const map = new Map<string, { categoryName: string; color: string; kpis: typeof filteredKpis }>();
-    filteredKpis.forEach(kpi => {
+    const map = new Map<string, { categoryName: string; color: string; kpis: typeof ownerFilteredKpis }>();
+    ownerFilteredKpis.forEach(kpi => {
       const catId = kpi.category_id;
       const catName = kpi.kra_categories?.name || 'Uncategorized';
       const color = kpi.kra_categories?.color || '#6B7280';
@@ -209,7 +256,7 @@ export default function OrgKpiDataEntry() {
       map.set(catId, existing);
     });
     return Array.from(map.entries());
-  }, [filteredKpis]);
+  }, [ownerFilteredKpis]);
 
   // Progress calculation with 3-state tracking
   const progressData = useMemo(() => {
@@ -908,6 +955,29 @@ export default function OrgKpiDataEntry() {
             </TabsTrigger>
           </TabsList>
         </Tabs>
+      )}
+
+      {/* Data Owner Filter Tiles */}
+      {isAdmin && activeTab === 'entry' && ownerTilesData.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <Badge
+            variant={selectedOwnerId === null ? 'default' : 'outline'}
+            className="cursor-pointer"
+            onClick={() => setSelectedOwnerId(null)}
+          >
+            All ({frequencyFilteredKpis.length})
+          </Badge>
+          {ownerTilesData.map(owner => (
+            <Badge
+              key={owner.ownerId}
+              variant={selectedOwnerId === owner.ownerId ? 'default' : 'outline'}
+              className="cursor-pointer"
+              onClick={() => setSelectedOwnerId(owner.ownerId)}
+            >
+              {owner.ownerName} ({owner.enteredKpis}/{owner.totalKpis})
+            </Badge>
+          ))}
+        </div>
       )}
 
       {/* Owner Management Tab */}
