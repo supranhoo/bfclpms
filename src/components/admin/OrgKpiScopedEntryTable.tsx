@@ -9,6 +9,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
 import { isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
+import { QualitativeSelect } from '@/components/review/QualitativeSelect';
+import type { QualitativeOption } from '@/lib/qualitativeUom';
 import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown } from 'lucide-react';
 
 export interface ScopedRow {
@@ -23,6 +25,8 @@ export interface ScopedRow {
   isNa?: boolean;
   targetValue?: number | null;
   uom?: string | null;
+  uomType?: 'numeric' | 'binary' | 'tiered' | null;
+  qualitativeOptions?: Array<{ label: string; rating: number; definition: string }> | null;
 }
 
 export interface ObservationCounts {
@@ -48,6 +52,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
   const [bulkFillValue, setBulkFillValue] = useState('');
 
   const naCount = rows.filter(r => r.isNa).length;
+  const allQualitative = rows.length > 0 && rows.every(r => r.uomType === 'binary' || r.uomType === 'tiered');
   const enteredCount = rows.filter(r => r.achievedValue !== null || r.isNa).length;
   const allEntered = rows.length > 0 && enteredCount === rows.length;
 
@@ -105,8 +110,8 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
           </Button>
         </CollapsibleTrigger>
 
-        {/* Bulk fill — inline next to the trigger */}
-        {isOpen && emptyCount > 0 && (
+        {/* Bulk fill — inline next to the trigger (hidden for qualitative KPIs) */}
+        {isOpen && emptyCount > 0 && !allQualitative && (
           <div className="flex items-center gap-1 flex-shrink-0">
             <Input
               type="number"
@@ -266,13 +271,28 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, o
         />
       </TableCell>
 
-      {/* Achieved value + out-of-range indicator */}
+      {/* Achieved value */}
       <TableCell className="py-1.5 w-28">
         {rowIsNa ? (
           <div className="flex items-center justify-center gap-1 text-muted-foreground">
             <Ban className="h-3.5 w-3.5" />
             <span className="text-xs font-medium">N/A</span>
           </div>
+        ) : (row.uomType === 'binary' || row.uomType === 'tiered') ? (
+          <QualitativeSelect
+            uomType={row.uomType}
+            qualitativeOptions={(row.qualitativeOptions as QualitativeOption[]) || null}
+            value={(() => {
+              const opts = row.qualitativeOptions || [];
+              if (row.achievedValue === null) return null;
+              const match = opts.find(o => o.rating === row.achievedValue);
+              return match?.label || null;
+            })()}
+            onChange={(label, rating) => {
+              onValueChange(row.scopeId, 'achievedValue', rating.toString());
+            }}
+            className="h-8 w-full text-sm"
+          />
         ) : (
           <div className="flex items-center gap-1">
             <Input
@@ -372,6 +392,21 @@ function DepartmentRow({ row, onValueChange }: DepartmentRowProps) {
             <Ban className="h-3.5 w-3.5" />
             <span className="text-xs font-medium">N/A</span>
           </div>
+        ) : (row.uomType === 'binary' || row.uomType === 'tiered') ? (
+          <QualitativeSelect
+            uomType={row.uomType}
+            qualitativeOptions={(row.qualitativeOptions as QualitativeOption[]) || null}
+            value={(() => {
+              const opts = row.qualitativeOptions || [];
+              if (row.achievedValue === null) return null;
+              const match = opts.find(o => o.rating === row.achievedValue);
+              return match?.label || null;
+            })()}
+            onChange={(label, rating) => {
+              onValueChange(row.scopeId, 'achievedValue', rating.toString());
+            }}
+            className="h-8 w-full text-sm"
+          />
         ) : (
           <Input
             type="number"
