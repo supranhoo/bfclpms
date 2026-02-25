@@ -1,72 +1,42 @@
 
 
-# Fix: QualitativeSelect Not Retaining Selection in Org KPI Data Entry (v1.46.9)
+# Fix: Qualitative Select Not Showing Saved Value (v1.46.10)
 
 ## Root Cause
 
-When qualitative options are loaded from the database JSON column (`qualitative_options`), the `rating` field may arrive as a **string** (e.g., `"5"`) instead of a **number** (`5`). After a user makes a selection, `handleScopedChange` stores the achieved value via `parseFloat()` as a proper number. On re-render, the strict equality check (`===`) fails because `"5" !== 5`, so no matching option is found, the value resolves to `null`, and the Select shows "Select..." again -- making it appear the selection was lost.
+When a KPI has `uom_type = 'binary'` but `qualitative_options` is `null` in the database, the value-to-label lookup fails because it searches an empty array (`[]`), while the `QualitativeSelect` component internally falls back to `BINARY_OPTIONS` (`Yes=5, No=0`) for its dropdown items.
 
-This same issue affects **three locations** where option matching happens:
-1. **EmployeeRow** in `OrgKpiScopedEntryTable.tsx` (line ~288)
-2. **DepartmentRow** in `OrgKpiScopedEntryTable.tsx` (line ~395)
-3. **Org-scope input** in `OrgKpiEntryCard.tsx` (line ~338)
+The mismatch:
+- **Dropdown options**: `QualitativeSelect` uses `BINARY_OPTIONS` as fallback when `qualitativeOptions` is null and `uomType` is `'binary'`
+- **Value lookup**: The parent code uses `row.qualitativeOptions || []` -- which is `[]` when null -- so `opts.find(...)` never matches, and the value stays as `null` / "Select..."
 
 ## Fix
 
-Normalize the `rating` field to a number in all comparison sites by using `Number(o.rating)` instead of raw `o.rating`.
-
-### Files to Change
-
-**1. `src/components/admin/OrgKpiScopedEntryTable.tsx`**
-
-In **EmployeeRow** (line ~288), change:
+Use the same fallback logic as `QualitativeSelect` when computing the display value. Replace:
 ```
-opts.find(o => o.rating === row.achievedValue)
+const opts = row.qualitativeOptions || [];
 ```
-to:
+with:
 ```
-opts.find(o => Number(o.rating) === row.achievedValue)
+const opts = row.qualitativeOptions?.length
+  ? row.qualitativeOptions
+  : (row.uomType === 'binary' ? BINARY_OPTIONS : []);
 ```
 
-In **DepartmentRow** (line ~395), apply the same fix.
+This must be applied in **3 locations** across 2 files:
 
-**2. `src/components/admin/OrgKpiEntryCard.tsx`**
+| File | Location | Line |
+|------|----------|------|
+| `OrgKpiScopedEntryTable.tsx` | EmployeeRow value lookup | ~286 |
+| `OrgKpiScopedEntryTable.tsx` | DepartmentRow value lookup | ~400 |
+| `OrgKpiEntryCard.tsx` | Org-scope value lookup | ~335 |
 
-In the org-scope QualitativeSelect value computation (line ~338), change:
-```
-opts.find(o => o.rating === numVal)
-```
-to:
-```
-opts.find(o => Number(o.rating) === numVal)
-```
-
-**3. `src/components/review/QualitativeSelect.tsx`**
-
-In `handleChange` (line ~46), normalize when finding option:
-```
-options.find(o => o.label === selectedLabel)
-```
-(This one uses label matching, so it's fine.)
-
-In `selectedOption` lookup (line ~52), this also uses label matching -- fine.
-
-No changes needed in `QualitativeSelect.tsx` itself since it matches by **label** (string), not by rating.
-
-## Summary of Edits
-
-| File | Lines | Change |
-|------|-------|--------|
-| `OrgKpiScopedEntryTable.tsx` | ~288, ~395 | `Number(o.rating) === row.achievedValue` |
-| `OrgKpiEntryCard.tsx` | ~338 | `Number(o.rating) === numVal` |
-
-Total: 3 one-line fixes across 2 files.
+Additionally, import `BINARY_OPTIONS` from `@/lib/qualitativeUom` in `OrgKpiScopedEntryTable.tsx` (it's already imported in `OrgKpiEntryCard.tsx` via the `QualitativeOption` type but `BINARY_OPTIONS` itself needs to be imported).
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | None | Read-only display fix, no write changes |
-| Regression | None | `Number(5)` returns `5`, so numeric values still match correctly |
-| Scope | Minimal | Only affects the comparison operator in 3 spots |
+| Data impact | None | Read-only display fix |
+| Regression | None | Only changes fallback array for value lookup; numeric KPIs unaffected |
 
