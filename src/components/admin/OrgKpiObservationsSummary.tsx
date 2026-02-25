@@ -32,14 +32,14 @@ export function OrgKpiObservationsSummary({ kpiIds }: OrgKpiObservationsSummaryP
 
   if (isLoading || allObservations.length === 0) return null;
 
-  // Group by employee (created_by_profile)
+  // Group by target employee (KPI owner) instead of observer
   const grouped = new Map<string, { name: string; observations: KpiObservation[] }>();
   allObservations.forEach(obs => {
-    const name = obs.created_by_profile?.full_name || obs.created_by_profile?.email || 'Unknown';
-    const key = obs.created_by;
-    const existing = grouped.get(key) || { name, observations: [] };
+    const employeeId = obs.kpi?.employee_id || obs.created_by;
+    const employeeName = obs.kpi?.employee_profile?.full_name || obs.kpi?.employee_profile?.email || 'Unknown Employee';
+    const existing = grouped.get(employeeId) || { name: employeeName, observations: [] };
     existing.observations.push(obs);
-    grouped.set(key, existing);
+    grouped.set(employeeId, existing);
   });
 
   return (
@@ -84,7 +84,7 @@ export function OrgKpiObservationsSummary({ kpiIds }: OrgKpiObservationsSummaryP
                           )}
                           {obs.created_by_profile && (
                             <span className="text-muted-foreground">
-                              · {obs.created_by_profile.full_name || obs.created_by_profile.email}
+                              · Raised by: {obs.created_by_profile.full_name || obs.created_by_profile.email}
                             </span>
                           )}
                         </div>
