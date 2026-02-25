@@ -1,56 +1,66 @@
 
 
-# Show Observation Counts per Employee Row in Scoped Entry Table (v1.46.7)
+# Support Binary/Tiered KPIs in Org KPI Data Entry (v1.46.8)
 
 ## Overview
 
-Add a compact observation count badge next to the employee's designation in the Org KPI scoped entry table. For example: "Assistant General Manager **(Positive: 1, Concern: 2)**". This provides immediate visibility into existing feedback without needing to scroll to the observations summary panel.
-
-## Visual Result
-
-Each employee row currently shows:
-```
-K Srinivasa Rao
-[1050 TPD-E And I] [Assistant General Manager]
-```
-
-After this change, if the employee has observations:
-```
-K Srinivasa Rao
-[1050 TPD-E And I] [Assistant General Manager] [Positive: 1] [Concern: 2]
-```
-
-The counts will appear as small colored badges (green for positive, red for concern, gray for neutral) -- only shown when count > 0.
+When an Org-level KPI has `uom_type` set to `binary` or `tiered`, the data entry interface should show a dropdown selector (using the existing `QualitativeSelect` component) instead of a numeric input -- both for org-scope cards and for individual employee/department rows in the scoped entry table.
 
 ## Technical Changes
 
-### 1. Update `ScopedRow` interface and `OrgKpiScopedEntryTable` props
+### 1. Extend `OrgKpiCardData` interface (`OrgKpiEntryCard.tsx`)
 
-**File: `src/components/admin/OrgKpiScopedEntryTable.tsx`**
+Add two new optional fields:
+- `uomType?: 'numeric' | 'binary' | 'tiered' | null`
+- `qualitativeOptions?: Array<{ label: string; rating: number; definition: string }> | null`
 
-- Add an optional `observationCounts` prop to the table: a map from scopeId to `{ positive: number; concern: number; neutral: number }`.
-- In `EmployeeRow`, read the counts for the current `row.scopeId` and render small badges next to the designation badge.
-- Import `TrendingUp` and `TrendingDown` icons from lucide for visual consistency with the observations summary.
+### 2. Pass data through in `buildCardData` (`OrgKpiDataEntry.tsx`)
 
-### 2. Compute observation counts in `OrgKpiEntryCard`
+In the `buildCardData` function (~line 404-428), add:
+```
+uomType: (kpi as any).uom_type || 'numeric',
+qualitativeOptions: (kpi as any).qualitative_options || null,
+```
 
-**File: `src/components/admin/OrgKpiEntryCard.tsx`**
+Also pass these to scoped rows so the table knows the UOM type.
 
-- Import `useObservationsByKpis` from `@/hooks/useKpiObservations`.
-- Call `useObservationsByKpis(employeeKpiIds || [])` to fetch all observations for employee-scoped KPIs (this data is already fetched for the `OrgKpiObservationsSummary` component, but since that's a separate component, we need it here too -- React Query will deduplicate the request via caching).
-- Build a `Map<string, { positive: number; concern: number; neutral: number }>` keyed by employee ID by iterating through the observation map and using `obs.kpi?.employee_id`.
-- Pass this map as the `observationCounts` prop to `OrgKpiScopedEntryTable`.
+### 3. Update `ScopedRow` interface (`OrgKpiScopedEntryTable.tsx`)
 
-### 3. No database or hook changes needed
+Add optional fields:
+- `uomType?: 'numeric' | 'binary' | 'tiered' | null`
+- `qualitativeOptions?: Array<{ label: string; rating: number; definition: string }> | null`
 
-The `useObservationsByKpis` hook already fetches `kpi.employee_id` (added in v1.46.5), so no backend changes are required.
+### 4. Update org-scope input in `OrgKpiEntryCard` (~lines 322-361)
+
+When `data.uomType === 'binary' || data.uomType === 'tiered'`:
+- Replace the numeric `<Input type="number">` with `<QualitativeSelect>`
+- On selection, store the rating as `achievedValue` and optionally include the label in remarks
+- Skip the out-of-range warning (not applicable to qualitative)
+
+### 5. Update `EmployeeRow` and `DepartmentRow` in `OrgKpiScopedEntryTable`
+
+For rows where `row.uomType === 'binary' || row.uomType === 'tiered'`:
+- Replace the numeric `<Input type="number">` with `<QualitativeSelect>`
+- The `onValueChange` callback sends the rating number as the achieved value
+- Hide the "Bulk fill" numeric input when all KPIs in the table are qualitative
+
+### 6. Update `handleScopedChange` in `OrgKpiEntryCard`
+
+No changes needed -- it already handles `achievedValue` as a string that gets parsed to a number. The rating (0-5) from `QualitativeSelect` will flow through naturally.
+
+## Files to Edit
+
+| File | Change |
+|------|--------|
+| `src/components/admin/OrgKpiEntryCard.tsx` | Add `uomType`/`qualitativeOptions` to interface; render `QualitativeSelect` for org-scope |
+| `src/components/admin/OrgKpiScopedEntryTable.tsx` | Add fields to `ScopedRow`; render `QualitativeSelect` in employee/department rows |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | Pass `uomType` and `qualitativeOptions` in `buildCardData` and scoped rows |
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | None | Read-only display, no writes |
-| Query performance | None | React Query deduplicates the request already made by OrgKpiObservationsSummary |
-| Regression | Very low | Additive badges only, existing row layout untouched |
-| UI consistency | Good | Uses same color scheme as observation summary badges |
+| Data impact | None | Rating stored as number in existing `achieved_value` column |
+| Regression | Very low | Numeric KPIs untouched; qualitative rendering only when `uom_type` is binary/tiered |
+| UI consistency | Good | Reuses existing `QualitativeSelect` component from review module |
 
