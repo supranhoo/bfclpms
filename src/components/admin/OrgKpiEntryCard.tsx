@@ -8,6 +8,7 @@ import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
 import { OrgKpiAuditLog } from '@/components/admin/OrgKpiAuditLog';
 import { OrgKpiScopedEntryTable, ScopedRow } from '@/components/admin/OrgKpiScopedEntryTable';
 import { OrgKpiObservationsSummary } from '@/components/admin/OrgKpiObservationsSummary';
+import { OrgKpiOwnerDialog } from '@/components/admin/OrgKpiOwnerDialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
 import { Textarea } from '@/components/ui/textarea';
@@ -95,6 +96,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, emplo
   const [isRollingBack, setIsRollingBack] = useState(false);
   const [isBulkRollingBack, setIsBulkRollingBack] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [showOwnerDialog, setShowOwnerDialog] = useState(false);
   const [rollbackReason, setRollbackReason] = useState('');
   const [bulkRollbackReason, setBulkRollbackReason] = useState('');
   const [achievedValue, setAchievedValue] = useState<string>(data.achievedValue?.toString() ?? '');
@@ -219,6 +221,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, emplo
   const ScopeIcon = scopeIcons[data.scope];
 
   return (
+    <>
     <Card className={`transition-all min-w-0 overflow-hidden ${isDirtyRef.current ? 'ring-1 ring-primary/30' : ''} ${
       isNa ? 'border-l-4 border-l-orange-400' :
       data.status === 'propagated' ? 'border-l-4 border-l-green-500' :
@@ -392,6 +395,12 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, emplo
               <BarChart3 className="h-3.5 w-3.5" />
               Impact
             </Button>
+            {isAdmin && (
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" onClick={() => setShowOwnerDialog(true)}>
+                <Users className="h-3.5 w-3.5" />
+                Data Owners
+              </Button>
+            )}
             {isPropagated && isAdmin && onUnlock && (
               <Button
                 variant="outline"
@@ -612,5 +621,16 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, emplo
         </div>
       </CardContent>
     </Card>
+
+    {isAdmin && (
+      <OrgKpiOwnerDialog
+        open={showOwnerDialog}
+        onOpenChange={setShowOwnerDialog}
+        categoryId={data.categoryId}
+        kraName={data.kraName}
+        kpiName={data.kpiName}
+      />
+    )}
+    </>
   );
 }
