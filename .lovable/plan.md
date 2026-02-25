@@ -1,52 +1,48 @@
 
 
-# Show Target Employee on Org KPI Observations (v1.46.5)
+# Add Data Owner Filter Tiles to Org KPI Data Entry (v1.46.6)
 
-## Problem
+## Overview
 
-In the "Employee Observations" section of the Org KPI Data Entry card, observations are grouped by **who raised** them (the observer), but there's no clear indication of **which employee** the observation was raised **for**. Since Org KPIs span all employees, it's critical to show the target employee.
+Add a row of clickable data owner tiles just below the "Data Entry | Suggestions | Data Owners" tab bar. Each tile shows the owner's name and their completion ratio (e.g., "Biswajit 10/25"), allowing admins to quickly filter KPI cards by a specific data owner. An "All" tile resets the filter.
 
-## Solution
+## Visual Layout
 
-Join through the `kpis` table to fetch the target employee's profile, then group observations by the **target employee** (KPI owner) instead of the observer. The observer name will still be shown inline on each observation row.
+```text
+[Data Entry]  [Suggestions]  [Data Owners]       <-- existing tabs
+
+[All (50)]  [Biswajit (10/25)]  [Jaspal (25/25)]  [Vivek (15/15)]   <-- NEW owner tiles
+```
+
+- Each tile is a clickable Badge/Button showing: Owner Name (entered/total)
+- Active tile is highlighted (default variant), others are outline
+- Only visible on the "Data Entry" tab and only when admin
+- "All" tile shows aggregate totals and clears the owner filter
 
 ## Technical Changes
 
-### 1. Update `useObservationsByKpis` hook (`src/hooks/useKpiObservations.ts`)
+### 1. Update `OrgKpiDataEntry.tsx`
 
-Add a nested join through the `kpis` table to fetch the target employee profile:
+**New state**: Add `selectedOwnerId` state (string | null, default null).
 
-```typescript
-// Current select:
-.select(`*, created_by_profile:..., reviewed_by_profile:...`)
+**Compute owner tiles data**: Using the existing `ownershipMap` and `frequencyFilteredKpis`, build a list of unique data owners with their assigned KPI count and entered count:
+- Iterate through `ownershipMap` entries
+- For each owner, count total KPIs assigned and how many have values entered
+- Produce: `{ ownerId, ownerName, totalKpis, enteredKpis }`
 
-// Updated select adds:
-kpi:kpis!kpi_observations_kpi_id_fkey(employee_id, employee_profile:profiles!kpis_employee_id_fkey(full_name, email))
-```
+**Filter logic**: When `selectedOwnerId` is set, filter `filteredKpis` to only include KPIs where the selected owner is assigned (via `ownershipMap` lookup).
 
-Update the `KpiObservation` interface to include the joined employee data:
-```typescript
-kpi?: {
-  employee_id: string;
-  employee_profile?: { full_name: string | null; email: string };
-};
-```
+**UI**: Render the owner tiles row between the Tabs component and the card list, only when `activeTab === 'entry'` and `isAdmin`. Use Badge components matching the existing category pill styling.
 
-### 2. Update `OrgKpiObservationsSummary` component (`src/components/admin/OrgKpiObservationsSummary.tsx`)
+### 2. No other file changes needed
 
-Change grouping logic from `created_by` to the target employee (`kpi.employee_id`):
-
-- Group key: `obs.kpi?.employee_id` instead of `obs.created_by`
-- Group name: `obs.kpi?.employee_profile?.full_name` instead of `obs.created_by_profile?.full_name`
-- Each observation row label changes from showing the observer name (redundant with group header) to showing: "Raised by: [observer name]" with the `observer_role` badge
-
-This way each group header clearly shows **"Debadutta Sahoo - 2 observations"** (the person it's about), and inside each row you see **"Raised by: Jaspal (manager)"**.
+All data owner information is already loaded via `useOrgKpiOwnershipMap()`. The filtering is purely client-side.
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | None | Read-only join, no schema changes |
-| Regression | Very low | Only affects Org KPI observation summary display |
-| Query performance | Minimal | Single additional join on indexed FK |
+| Data impact | None | Read-only, client-side filter |
+| Regression | None | Additive UI, existing filter logic untouched |
+| Performance | Minimal | Reuses existing ownershipMap data |
 
