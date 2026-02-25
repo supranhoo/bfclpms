@@ -1,48 +1,56 @@
 
 
-# Add Data Owner Filter Tiles to Org KPI Data Entry (v1.46.6)
+# Show Observation Counts per Employee Row in Scoped Entry Table (v1.46.7)
 
 ## Overview
 
-Add a row of clickable data owner tiles just below the "Data Entry | Suggestions | Data Owners" tab bar. Each tile shows the owner's name and their completion ratio (e.g., "Biswajit 10/25"), allowing admins to quickly filter KPI cards by a specific data owner. An "All" tile resets the filter.
+Add a compact observation count badge next to the employee's designation in the Org KPI scoped entry table. For example: "Assistant General Manager **(Positive: 1, Concern: 2)**". This provides immediate visibility into existing feedback without needing to scroll to the observations summary panel.
 
-## Visual Layout
+## Visual Result
 
-```text
-[Data Entry]  [Suggestions]  [Data Owners]       <-- existing tabs
-
-[All (50)]  [Biswajit (10/25)]  [Jaspal (25/25)]  [Vivek (15/15)]   <-- NEW owner tiles
+Each employee row currently shows:
+```
+K Srinivasa Rao
+[1050 TPD-E And I] [Assistant General Manager]
 ```
 
-- Each tile is a clickable Badge/Button showing: Owner Name (entered/total)
-- Active tile is highlighted (default variant), others are outline
-- Only visible on the "Data Entry" tab and only when admin
-- "All" tile shows aggregate totals and clears the owner filter
+After this change, if the employee has observations:
+```
+K Srinivasa Rao
+[1050 TPD-E And I] [Assistant General Manager] [Positive: 1] [Concern: 2]
+```
+
+The counts will appear as small colored badges (green for positive, red for concern, gray for neutral) -- only shown when count > 0.
 
 ## Technical Changes
 
-### 1. Update `OrgKpiDataEntry.tsx`
+### 1. Update `ScopedRow` interface and `OrgKpiScopedEntryTable` props
 
-**New state**: Add `selectedOwnerId` state (string | null, default null).
+**File: `src/components/admin/OrgKpiScopedEntryTable.tsx`**
 
-**Compute owner tiles data**: Using the existing `ownershipMap` and `frequencyFilteredKpis`, build a list of unique data owners with their assigned KPI count and entered count:
-- Iterate through `ownershipMap` entries
-- For each owner, count total KPIs assigned and how many have values entered
-- Produce: `{ ownerId, ownerName, totalKpis, enteredKpis }`
+- Add an optional `observationCounts` prop to the table: a map from scopeId to `{ positive: number; concern: number; neutral: number }`.
+- In `EmployeeRow`, read the counts for the current `row.scopeId` and render small badges next to the designation badge.
+- Import `TrendingUp` and `TrendingDown` icons from lucide for visual consistency with the observations summary.
 
-**Filter logic**: When `selectedOwnerId` is set, filter `filteredKpis` to only include KPIs where the selected owner is assigned (via `ownershipMap` lookup).
+### 2. Compute observation counts in `OrgKpiEntryCard`
 
-**UI**: Render the owner tiles row between the Tabs component and the card list, only when `activeTab === 'entry'` and `isAdmin`. Use Badge components matching the existing category pill styling.
+**File: `src/components/admin/OrgKpiEntryCard.tsx`**
 
-### 2. No other file changes needed
+- Import `useObservationsByKpis` from `@/hooks/useKpiObservations`.
+- Call `useObservationsByKpis(employeeKpiIds || [])` to fetch all observations for employee-scoped KPIs (this data is already fetched for the `OrgKpiObservationsSummary` component, but since that's a separate component, we need it here too -- React Query will deduplicate the request via caching).
+- Build a `Map<string, { positive: number; concern: number; neutral: number }>` keyed by employee ID by iterating through the observation map and using `obs.kpi?.employee_id`.
+- Pass this map as the `observationCounts` prop to `OrgKpiScopedEntryTable`.
 
-All data owner information is already loaded via `useOrgKpiOwnershipMap()`. The filtering is purely client-side.
+### 3. No database or hook changes needed
+
+The `useObservationsByKpis` hook already fetches `kpi.employee_id` (added in v1.46.5), so no backend changes are required.
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | None | Read-only, client-side filter |
-| Regression | None | Additive UI, existing filter logic untouched |
-| Performance | Minimal | Reuses existing ownershipMap data |
+| Data impact | None | Read-only display, no writes |
+| Query performance | None | React Query deduplicates the request already made by OrgKpiObservationsSummary |
+| Regression | Very low | Additive badges only, existing row layout untouched |
+| UI consistency | Good | Uses same color scheme as observation summary badges |
 
