@@ -1,43 +1,45 @@
 
 
-# Add "Assign Data Owners" Button to Data Entry Card Footer (v1.46.3)
+# Enable Remark Input for N/A Marked Rows in Org KPI Data Entry (v1.46.4)
 
-## Overview
+## Problem
 
-Add an "Assign Data Owners" button in the footer of each KPI card on the **Data Entry** tab, positioned between the existing "Impact" and "Remove" buttons. This allows admins to assign data owners directly from the data entry view without switching to the Data Owners tab.
+When an employee's KPI is marked as "N/A" in the Org KPI Data Entry scoped table, the Remark column displays static "Not Applicable" text, preventing the data owner from entering a justification. Per system policy, N/A marking requires a mandatory remark/reason.
 
-## UI Placement
+## Solution
 
-Current footer:
-```
-[History] [Impact] [Remove]                    [Propagate]
-```
-
-After:
-```
-[History] [Impact] [Data Owners] [Remove]      [Propagate]
-```
-
-The button will use the `Users` icon with ghost styling, consistent with the History and Impact buttons.
+Replace the static "Not Applicable" text with a Remark textarea when N/A is toggled on, for both Employee and Department row types. The remark field will be marked as required with a visual indicator.
 
 ## Technical Changes
 
-### 1. Update `OrgKpiEntryCard.tsx`
+### File: `src/components/admin/OrgKpiScopedEntryTable.tsx`
 
-- Import `OrgKpiOwnerDialog` component and add `useState` for dialog open state
-- Add a "Data Owners" ghost button (Users icon) in the footer actions area, after the Impact button
-- Render the `OrgKpiOwnerDialog` at the bottom of the card, controlled by the local state
-- Only show for admin users (`isAdmin` prop)
+**EmployeeRow (lines 276-277)**: Replace the static "Not Applicable" text with a Textarea that allows entering N/A justification:
 
-### 2. No other file changes needed
+```typescript
+// Before:
+<span className="text-xs text-muted-foreground italic">Not Applicable</span>
 
-The `OrgKpiOwnerDialog` is a self-contained component that handles all owner CRUD internally (search, assign, remove). It only needs `categoryId`, `kraName`, and `kpiName` props -- all already available in the card's `data` prop.
+// After:
+<Textarea
+  value={row.remarks}
+  onChange={(e) => onValueChange(row.scopeId, 'remarks', e.target.value)}
+  placeholder="Reason for N/A (required)"
+  className="text-sm resize-none min-h-0 border-orange-300"
+  rows={2}
+  required
+/>
+```
+
+**DepartmentRow (lines 352-353)**: Same change for department-scoped rows.
+
+No database or other file changes needed -- the `remarks` field already flows through the existing save/propagate pipeline.
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | None | Reuses existing dialog and hooks |
-| Regression | None | Additive change only, no existing logic modified |
-| UI consistency | Good | Uses same button style as History/Impact |
+| Data impact | None | Remark column already exists and is saved |
+| Regression | None | Only changes what renders inside the N/A branch |
+| Policy alignment | Improved | Matches existing N/A justification requirement |
 
