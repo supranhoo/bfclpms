@@ -1,44 +1,38 @@
 
-
-# Fix: Auditor Assignment Badge Not Visible in Dashboard Audit View (v1.46.27)
+# Fix: Audit KPI Assignment Badge Not Rendering for Auditors (v1.46.28)
 
 ## Root Cause
 
-The dashboard uses `UnifiedScorecard` for all reviewer views (manager, auditor, HR PMS, management). However, `UnifiedScorecard` never imports `useAuditKpiAssignments` and never passes the `auditKpiAssignments` prop to `KpiDetailsTable`.
+In `UnifiedScorecard.tsx`, the `useAuditKpiAssignments` hook is called with `allKpis` (ALL KPIs across ALL periods — up to 138+ per employee), instead of `kpis` (period-filtered, typically ~23).
 
-Inside `KpiDetailsTable`, the `AuditKpiAssignPopover` renders when `viewType === 'audit'`, but it receives `auditKpiAssignments?.get(kpi.id)` which is always `undefined` (since the prop is never provided). This means:
-- The popover trigger shows the generic `UserPlus` icon button (no badge)
-- `currentAssignment` is always `null`, so the auditor name badge never appears
+This creates a Supabase `.in('kpi_id', [...138 UUIDs])` query that generates a URL exceeding PostgREST's URL length limit (~4000-5000 chars). The request silently fails or returns empty data. The result: `auditKpiAssignments` is an empty Map, so no badges render.
 
-The old `AuditScorecard` component correctly fetches and passes this data, but it is no longer used on the dashboard -- it was replaced by `UnifiedScorecard`.
+The old `AuditScorecard` component works because it uses period-filtered `kpiIds` (line 137-141), which is only ~20-30 IDs.
 
 ## Solution
 
-Add `useAuditKpiAssignments` to `UnifiedScorecard` so it fetches KPI-level audit assignments when the view is in audit mode, and passes them to `KpiDetailsTable`.
+Change `auditKpiIdList` in `UnifiedScorecard.tsx` to use `kpis` (period-filtered) instead of `allKpis`. Move its declaration below the `kpis` computation (line 220).
 
 ## Changes
 
-### 1. `src/components/review/UnifiedScorecard.tsx`
+### `src/components/review/UnifiedScorecard.tsx`
 
-- **Import** `useAuditKpiAssignments` from the hook file
-- **Call the hook** conditionally when `viewLevel === 'auditor'`, passing the current KPI IDs
-- **Pass** `auditKpiAssignments` prop to `KpiDetailsTable`
+1. **Remove** the current `auditKpiIdList` + `useAuditKpiAssignments` block at lines 173-175
+2. **Add** the same logic after `kpis` is defined (after line 224), using `kpis` instead of `allKpis`:
 
-This is the same pattern already used in `AuditScorecard.tsx` (lines 52, 141, 774).
+```typescript
+const auditKpiIdList = useMemo(() => (kpis || []).map(k => k.id), [kpis]);
+const { data: auditKpiAssignments } = useAuditKpiAssignments(
+  viewLevel === 'auditor' ? auditKpiIdList : []
+);
+```
 
-### 2. No other changes needed
-
-- The hook (`useAuditKpiAssignments`) already uses a two-step fetch and works correctly
-- The `KpiDetailsTable` already accepts and renders the `auditKpiAssignments` prop
-- The `AuditKpiAssignPopover` already displays the badge when `currentAssignment` is non-null
-- RLS policies already allow auditors and admins to SELECT from the table
+This reduces the `.in()` clause from 138+ IDs to ~23, well within URL limits.
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | None | Read-only query addition |
-| Performance | Negligible | Hook is disabled when not in audit view; query only runs for auditors |
-| Regression | None | Adds missing data flow; no existing behavior changes |
-| Scope | 1 file, ~5 lines added | Minimal surface area |
-
+| Data impact | None | Read-only query change |
+| Regression | None | Only affects which KPI IDs are queried; badges only matter for displayed KPIs |
+| Performance | Improved | Fewer IDs = smaller query = faster response |
