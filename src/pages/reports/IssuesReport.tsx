@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useReportAccess } from '@/hooks/useReportAccess';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +17,8 @@ import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
 export default function IssuesReport() {
+  const { canDownload } = useReportAccess();
+  const canExport = canDownload('issues');
   const { issues, summary, isLoading } = useSystemIssues();
   const [selectedIssue, setSelectedIssue] = useState<SystemIssue | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -111,10 +114,12 @@ export default function IssuesReport() {
         description="Consolidated view of all system-wide issues requiring attention"
         backTo="/reports"
         actions={
-          <Button onClick={handleExport} variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Export Excel
-          </Button>
+          canExport ? (
+            <Button onClick={handleExport} variant="outline">
+              <Download className="h-4 w-4 mr-2" />
+              Export Excel
+            </Button>
+          ) : undefined
         }
       />
 

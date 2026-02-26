@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useReportAccess } from '@/hooks/useReportAccess';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -66,6 +67,8 @@ interface EmployeePerformance {
 }
 
 export default function EmployeePerformanceSummary() {
+  const { canDownload } = useReportAccess();
+  const canExport = canDownload('employee-summary');
   const currentYear = new Date().getFullYear();
   
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
@@ -498,10 +501,12 @@ export default function EmployeePerformanceSummary() {
         description="Comprehensive view of employee scores, ratings, and review status"
         backTo="/reports"
         actions={
-          <Button onClick={handleExport} disabled={!filteredData.length}>
-            <Download className="mr-2 h-4 w-4" />
-            Download Excel
-          </Button>
+          canExport ? (
+            <Button onClick={handleExport} disabled={!filteredData.length}>
+              <Download className="mr-2 h-4 w-4" />
+              Download Excel
+            </Button>
+          ) : undefined
         }
       />
 

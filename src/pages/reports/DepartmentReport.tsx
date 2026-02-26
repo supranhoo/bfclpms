@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { useReportAccess } from '@/hooks/useReportAccess';
 import { useAllKpis } from '@/hooks/useKpis';
 import { useDepartments, useDivisions } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,6 +14,8 @@ import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 
 export default function DepartmentReport() {
+  const { canDownload } = useReportAccess();
+  const canExport = canDownload('department');
   const { data: allKpis, isLoading } = useAllKpis();
   const { data: departments } = useDepartments();
   const { data: divisions } = useDivisions();
@@ -128,10 +131,12 @@ export default function DepartmentReport() {
         description="KPI status and completion rates by department"
         backTo="/reports"
         actions={
-          <Button variant="outline" onClick={handleExportExcel}>
-            <Download className="h-4 w-4 mr-2" />
-            Export Excel
-          </Button>
+          canExport ? (
+            <Button variant="outline" onClick={handleExportExcel}>
+              <Download className="h-4 w-4 mr-2" />
+              Export Excel
+            </Button>
+          ) : undefined
         }
       />
 

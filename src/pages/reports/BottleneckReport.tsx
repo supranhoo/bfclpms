@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useReportAccess } from '@/hooks/useReportAccess';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -61,6 +62,8 @@ function SummaryCard({
 }
 
 export default function BottleneckReport() {
+  const { canDownload } = useReportAccess();
+  const canExport = canDownload('bottleneck');
   const { toast } = useToast();
   const {
     rows, allFilteredRows, stats, urgencyStats, topHolders, chartData, isLoading,
@@ -155,10 +158,12 @@ export default function BottleneckReport() {
         description="Identify where KPIs are stuck, who is responsible, and how long they've been pending"
         backTo="/reports"
         actions={
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-2" />
-            Export Excel
-          </Button>
+          canExport ? (
+            <Button variant="outline" onClick={handleExport}>
+              <Download className="h-4 w-4 mr-2" />
+              Export Excel
+            </Button>
+          ) : undefined
         }
       />
 

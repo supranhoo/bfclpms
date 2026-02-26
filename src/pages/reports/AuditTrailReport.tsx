@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useReportAccess } from '@/hooks/useReportAccess';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -126,6 +127,8 @@ const actionColors: Record<string, string> = {
 };
 
 export default function AuditTrailReport() {
+  const { canDownload } = useReportAccess();
+  const canExport = canDownload('audit-trail');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const [selectedAction, setSelectedAction] = useState<string>('all');
@@ -297,10 +300,12 @@ export default function AuditTrailReport() {
         description="Complete history of all KPI modifications and approvals"
         backTo="/reports"
         actions={
-          <Button onClick={handleExport} className="gap-2">
-            <Download className="h-4 w-4" />
-            Export Excel
-          </Button>
+          canExport ? (
+            <Button onClick={handleExport} className="gap-2">
+              <Download className="h-4 w-4" />
+              Export Excel
+            </Button>
+          ) : undefined
         }
       />
 

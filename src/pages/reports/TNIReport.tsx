@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useReportAccess } from '@/hooks/useReportAccess';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -53,6 +54,8 @@ const STATUS_BADGE: Record<TNIStatus, 'destructive' | 'outline' | 'secondary' | 
 };
 
 export default function TNIReport() {
+  const { canDownload } = useReportAccess();
+  const canExport = canDownload('tni');
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedPeriod, setSelectedPeriod] = useState<string>('');
@@ -140,10 +143,12 @@ export default function TNIReport() {
         backTo="/reports"
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleExport} disabled={!trainingNeeds?.length}>
-              <Download className="h-4 w-4 mr-2" />
-              Export
-            </Button>
+            {canExport && (
+              <Button variant="outline" size="sm" onClick={handleExport} disabled={!trainingNeeds?.length}>
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            )}
             <Button 
               size="sm" 
               onClick={handleDetect} 

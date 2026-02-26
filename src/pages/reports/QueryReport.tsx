@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { useReportAccess } from '@/hooks/useReportAccess';
 import { useAllKpis, useKpiQueries } from '@/hooks/useKpis';
 import { useProfiles } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +15,8 @@ import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 
 export default function QueryReport() {
+  const { canDownload } = useReportAccess();
+  const canExport = canDownload('queries');
   const { data: allKpis, isLoading: kpisLoading } = useAllKpis();
   const { data: profiles } = useProfiles();
   const kpiIds = useMemo(() => allKpis?.map(k => k.id) || [], [allKpis]);
@@ -125,10 +128,12 @@ export default function QueryReport() {
         description="Track all queries raised during the review process"
         backTo="/reports"
         actions={
-          <Button variant="outline" onClick={handleExportExcel}>
-            <Download className="h-4 w-4 mr-2" />
-            Export Excel
-          </Button>
+          canExport ? (
+            <Button variant="outline" onClick={handleExportExcel}>
+              <Download className="h-4 w-4 mr-2" />
+              Export Excel
+            </Button>
+          ) : undefined
         }
       />
 

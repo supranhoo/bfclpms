@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { useReportAccess } from '@/hooks/useReportAccess';
 import { useAllKpis } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,8 @@ const MONTH_ORDER = ['January', 'February', 'March', 'April', 'May', 'June',
                      'July', 'August', 'September', 'October', 'November', 'December'];
 
 export default function CompletionReport() {
+  const { canDownload } = useReportAccess();
+  const canExport = canDownload('completion');
   const { data: allKpis, isLoading } = useAllKpis();
   const { toast } = useToast();
 
@@ -202,10 +205,12 @@ export default function CompletionReport() {
         description="Period-wise KPI completion trends"
         backTo="/reports"
         actions={
-          <Button variant="outline" onClick={handleExportExcel}>
-            <Download className="h-4 w-4 mr-2" />
-            Export Excel
-          </Button>
+          canExport ? (
+            <Button variant="outline" onClick={handleExportExcel}>
+              <Download className="h-4 w-4 mr-2" />
+              Export Excel
+            </Button>
+          ) : undefined
         }
       />
 

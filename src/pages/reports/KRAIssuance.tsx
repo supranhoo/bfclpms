@@ -1,4 +1,5 @@
 import { useMemo, useCallback } from 'react';
+import { useReportAccess } from '@/hooks/useReportAccess';
 import { useAllKpis } from '@/hooks/useKpis';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,6 +36,8 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function KRAIssuance() {
+  const { canDownload } = useReportAccess();
+  const canExport = canDownload('kra-issuance');
   const { data: allKpis, isLoading } = useAllKpis();
   const { data: categories } = useKraCategories();
 
@@ -99,10 +102,12 @@ export default function KRAIssuance() {
         description="Track KPI issuance and completion status"
         backTo="/reports"
         actions={
-          <Button variant="outline" onClick={handleExportExcel}>
-            <Download className="h-4 w-4 mr-2" />
-            Export Excel
-          </Button>
+          canExport ? (
+            <Button variant="outline" onClick={handleExportExcel}>
+              <Download className="h-4 w-4 mr-2" />
+              Export Excel
+            </Button>
+          ) : undefined
         }
       />
 
