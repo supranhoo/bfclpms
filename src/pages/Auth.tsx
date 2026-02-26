@@ -38,6 +38,7 @@ export default function Auth() {
   const [forgotPasswordError, setForgotPasswordError] = useState<string | null>(null);
   const [lastResetRequest, setLastResetRequest] = useState<number>(0);
   const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
+  const [bgLoaded, setBgLoaded] = useState(false);
 
   const COOLDOWN_SECONDS = 60; // Rate limit: 1 request per 60 seconds
 
@@ -50,6 +51,18 @@ export default function Auth() {
       return () => clearTimeout(timer);
     }
   }, [cooldownRemaining]);
+
+  const displayAppName = appSettings?.app_name || 'PMS Dashboard';
+  const wallpapers = (appSettings?.login_wallpapers || []) as string[];
+
+  // Defer mobile background image load for faster initial paint
+  useEffect(() => {
+    if (wallpapers.length > 0) {
+      const img = new window.Image();
+      img.onload = () => setBgLoaded(true);
+      img.src = wallpapers[0];
+    }
+  }, [wallpapers]);
 
   if (loading || isLoadingSettings) {
     return (
@@ -115,8 +128,6 @@ export default function Auth() {
     setForgotPasswordError(null);
   };
 
-  const displayAppName = appSettings?.app_name || 'PMS Dashboard';
-  const wallpapers = appSettings?.login_wallpapers || [];
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -142,10 +153,12 @@ export default function Auth() {
         <div className="absolute inset-0 lg:hidden">
           {wallpapers.length > 0 ? (
             <>
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-20"
-                style={{ backgroundImage: `url(${wallpapers[0]})` }}
-              />
+              {bgLoaded && (
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-20"
+                  style={{ backgroundImage: `url(${wallpapers[0]})` }}
+                />
+              )}
               <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
             </>
           ) : (

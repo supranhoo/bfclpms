@@ -192,15 +192,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        toast({
+          title: "Sign in failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+      return { error };
+    } catch (networkError) {
+      const err = new Error('Network error. Please check your internet connection and try again.');
       toast({
         title: "Sign in failed",
-        description: error.message,
+        description: err.message,
         variant: "destructive",
       });
+      return { error: err };
     }
-    return { error };
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
