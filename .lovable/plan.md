@@ -1,76 +1,82 @@
 
+# RCA & CAPA: Org KPI Value and Rating Not Reflecting in Reviewer Views
 
-# Fix: Manager Approval Not Advancing to "Approved" in Short Workflows
+## Root Cause Analysis (RCA)
 
-## Root Cause
+### Issue Summary
+After updating Organization KPI data and propagating, the **remark** appears correctly in the scorecard, but the **achieved value** and **rating/score** are not reflecting properly in certain views.
 
-In `src/lib/workflowEngine.ts`, the `resolveForwardStatus('manager', ...)` function is **hardcoded** to always return `'manager_check'`:
+### Root Causes Identified
 
-```
-case 'manager':
-  return 'manager_check';
-```
+#### RC-1: Desktop KPI Table Missing Org KPI Value Prop (HIGH)
+In `UnifiedScorecard.tsx` (line 1133-1148), the desktop `KpiDetailsTable` is rendered **without** the `getOrgKpiValue` prop. However, the mobile `MobileKpiCard` (line 1118) correctly receives it. This means:
+- Desktop users cannot see org KPI achieved values in the table
+- The org KPI badge and value display in the table row is broken on desktop
 
-For a short workflow like `['kra_set', 'self_review', 'manager_check', 'approved']` (where the manager is the terminal reviewer), this means KPIs get stuck at `manager_check` forever -- they never advance to `approved`. The correct behavior: when there is no stage after `manager_check`, the status should advance to `approved`.
-
-This also causes a secondary issue: the `UnifiedScorecard` syncs `final_score` and `final_rating` only when `config.forwardStatus === 'approved'`. Since `forwardStatus` is stuck at `'manager_check'`, final scores are never written for these employees.
-
-## Impact Analysis
-
-Any employee whose resolved workflow template ends at `manager_check` (no audit, HR PMS, or management stages) is affected. Their KPIs can never reach `approved` status through normal workflow.
-
-## Fix
-
-### File: `src/lib/workflowEngine.ts`
-
-Change the `manager` case in `resolveForwardStatus` from a hardcoded return to use `resolveNextStatus`, matching the pattern already used by `skip_level` and `hr_pms`:
-
-```
-case 'manager':
-  return resolveNextStatus('manager_check', workflowStages) || 'manager_check';
+```text
+Mobile view (correct):     <MobileKpiCard getOrgKpiValue={getOrgKpiValue} ... />
+Desktop view (MISSING):    <KpiDetailsTable ... />  <-- no getOrgKpiValue prop
 ```
 
-- For the default 6-stage pipeline: `resolveNextStatus('manager_check', ...)` returns `'audit'` -- but manager shouldn't advance to audit; the convention is to set `manager_check` so the auditor sees it as pending. However, looking more carefully at the convention, other roles (skip_level, hr_pms, auditor) already use `resolveNextStatus` to advance **past** their own stage. The manager case should follow the same pattern.
-- For `['kra_set', 'self_review', 'manager_check', 'approved']`: returns `'approved'`
-- For the default 6-stage pipeline: returns `'audit'` (which is the same behavior as before since auditor sees `manager_check` and `audit` as reviewable via the dual-status pattern)
+#### RC-2: Reviewer Score Initialization Ignores Org KPI Data (MEDIUM)
+When a reviewer (Manager, Auditor, HR PMS, etc.) opens the review sheet via `openReviewSheet()` (line 638-667), the `reviewerAchievedValue` is initialized only from:
+1. `submission.[prefix]_achieved_value` (reviewer's own achieved value)
+2. `submission.achieved_value` (self-level achieved value)
 
-Wait -- this would change behavior for 6-stage pipelines where manager currently sets `manager_check` and auditor picks it up. Let me re-examine.
+It does **not** fall back to the latest `org_kpi_values` data. If the org value was recently updated but not yet re-propagated, the reviewer sees stale data. The `SelfReviewSheet` correctly prefills from org data (line 246-247), but the reviewer sheet does not.
 
-Actually, looking at the auditor's `resolveReviewableStatuses` and `resolvePendingStatuses`: the auditor accepts both `manager_check` (preceding stage) and `audit` as reviewable. So if manager sets status to `audit` instead of `manager_check`, the auditor would still see it. But this is a behavioral change for the 6-stage pipeline.
+#### RC-3: Reviewer Score Cascade Missing Org KPI Prefill (MEDIUM)  
+When a manager hasn't scored yet (`manager_score` is null), `openReviewSheet` sets `reviewerScore = null`. For org KPIs, it should inherit the self_score (which was set by propagation) so the reviewer sees the propagated rating and can approve or override it.
 
-**Safer approach**: Only change behavior when manager is the terminal reviewer (i.e., `manager_check` is immediately followed by `approved`):
+### Data Verification
+Database query confirmed the propagation RPC correctly writes `achieved_value`, `self_score`, `self_rating`, and `self_remarks` to `review_submissions`. The specific KPI in the screenshot has:
+- `org_kpi_values.achieved_value = 5`, `remarks = "Zero Fatal"`, `status = "propagated"`
+- `review_submissions.achieved_value = 5`, `self_score = 0`, `self_remarks = "Zero Fatal"`
 
+Both are in sync, confirming propagation works. The issue is the **display layer** not reading the data correctly.
+
+---
+
+## CAPA (Corrective and Preventive Actions)
+
+### Fix 1: Pass `getOrgKpiValue` to Desktop KpiDetailsTable
+**File:** `src/components/review/UnifiedScorecard.tsx` (line ~1133)
+
+Add the missing `getOrgKpiValue` prop to the desktop `KpiDetailsTable` component, matching the mobile view. This ensures org KPI values are visible in the table for all reviewer views on desktop.
+
+### Fix 2: Prefill Reviewer Achieved Value from Org KPI Data
+**File:** `src/components/review/UnifiedScorecard.tsx` (function `openReviewSheet`, line ~663)
+
+After falling back to `submission.achieved_value`, add a final fallback to `getOrgKpiValue(kpi)?.achieved_value` for org-level KPIs. This ensures reviewers see the latest org data even if the submission field is empty.
+
+```text
+Current chain:  prefix_achieved_value -> achieved_value -> null
+Fixed chain:    prefix_achieved_value -> achieved_value -> orgKpiValue -> null
 ```
-case 'manager': {
-  const next = resolveNextStatus('manager_check', workflowStages);
-  return next === 'approved' ? 'approved' : 'manager_check';
-}
+
+### Fix 3: Prefill Reviewer Score from Previous Level for Org KPIs
+**File:** `src/components/review/UnifiedScorecard.tsx` (function `openReviewSheet`, line ~651)
+
+Update the `scoreFieldMap` fallback logic so that when a reviewer hasn't scored yet, they inherit the **previous level's score**. For manager: fall back to `self_score`. This ensures the propagated rating is visible to the reviewer immediately upon opening.
+
+```text
+Current:  manager: () => existing?.manager_score ?? null
+Fixed:    manager: () => existing?.manager_score ?? existing?.self_score ?? null
 ```
 
-This preserves the existing convention for standard pipelines while fixing short ones.
+Wait -- looking at this more carefully, the manager scoreFieldMap already has the correct pattern for other levels (e.g., `skip_level` falls back to `manager_score`). The `manager` case is the only one that doesn't fall back to `self_score`. This was intentional to avoid pre-filling the manager's score with the employee's self-assessment. However, for **org-level KPIs** where the self_score is system-calculated (not employee-entered), inheriting it makes sense.
 
-### File: `src/lib/workflowEngine.test.ts`
+**Refined Fix 3:** Only prefill from self_score for org-level KPIs:
+```text
+manager: () => existing?.manager_score ?? (kpi.is_org_level ? existing?.self_score ?? null : null)
+```
 
-Add test cases:
-- Manager in short pipeline `['kra_set', 'self_review', 'manager_check', 'approved']` returns `'approved'`
-- Manager in 6-stage and 8-stage pipelines still returns `'manager_check'`
+### Summary of Changes
 
-## Files Changed
+| File | Change | Risk |
+|------|--------|------|
+| `UnifiedScorecard.tsx` | Pass `getOrgKpiValue` to desktop `KpiDetailsTable` | None - additive prop |
+| `UnifiedScorecard.tsx` | Prefill `reviewerAchievedValue` from org data | Low - only for org KPIs |
+| `UnifiedScorecard.tsx` | Prefill `reviewerScore` from self_score for org KPIs | Low - manager can still override |
 
-| File | Change |
-|------|--------|
-| `src/lib/workflowEngine.ts` | Fix `resolveForwardStatus('manager')` to return `'approved'` when manager is the terminal reviewer |
-| `src/lib/workflowEngine.test.ts` | Add test for short pipeline manager approval |
-
-## Risk Assessment
-
-| Aspect | Risk | Mitigation |
-|--------|------|------------|
-| Data impact | None -- only affects future transitions | Existing stuck KPIs may need manual status update |
-| Regression | Low -- 6/8-stage pipelines unchanged | Conditional logic only triggers when next stage is `approved` |
-| Final score sync | Automatically handled | `UnifiedScorecard` already syncs `final_score` when `forwardStatus === 'approved'` |
-
-## Note on Existing Stuck KPIs
-
-The 11 KPIs currently at `manager_check` for this employee (and any similar cases) will need to be manually advanced or re-approved after this fix is deployed. The fix only affects future approvals.
-
+All changes are in a single file and are display-layer only. No schema, RLS, or propagation logic changes needed.
