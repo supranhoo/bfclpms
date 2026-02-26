@@ -167,8 +167,10 @@ export function resolveForwardStatus(
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): string {
   switch (viewLevel) {
-    case 'manager':
-      return 'manager_check';
+    case 'manager': {
+      const next = resolveNextStatus('manager_check', workflowStages);
+      return next === 'approved' ? 'approved' : 'manager_check';
+    }
     case 'skip_level':
       // Use resolveNextStatus so skip_level advances past its own stage
       // even if future templates place 'approved' directly after skip_level_check.
