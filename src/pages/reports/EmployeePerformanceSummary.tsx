@@ -52,6 +52,7 @@ interface EmployeePerformance {
   employeeId: string;
   employeeCode: string;
   fullName: string;
+  division: string;
   department: string;
   designation: string;
   reportingManager: string;
@@ -141,7 +142,7 @@ export default function EmployeePerformanceSummary() {
           full_name,
           designation,
           reporting_manager_id,
-          departments (name)
+          departments (name, business_units (name, divisions (name)))
         `);
       if (profilesError) throw profilesError;
 
@@ -190,6 +191,7 @@ export default function EmployeePerformanceSummary() {
             employeeId: kpi.employee_id,
             employeeCode: profile.employee_code || '-',
             fullName: profile.full_name || 'Unknown',
+            division: (profile.departments as any)?.business_units?.divisions?.name || '-',
             department: (profile.departments as any)?.name || '-',
             designation: profile.designation || '-',
             reportingManager: manager?.full_name || '-',
@@ -320,8 +322,9 @@ export default function EmployeePerformanceSummary() {
         if (selectedStatus !== 'all' && row.status !== selectedStatus) return false;
         // Search filter
         return (
-          row.fullName.toLowerCase().includes(term) ||
+      row.fullName.toLowerCase().includes(term) ||
           row.employeeCode.toLowerCase().includes(term) ||
+          row.division.toLowerCase().includes(term) ||
           row.department.toLowerCase().includes(term) ||
           row.designation.toLowerCase().includes(term) ||
           row.reportingManager.toLowerCase().includes(term)
@@ -447,6 +450,7 @@ export default function EmployeePerformanceSummary() {
         'Month': formatPeriod(row.reviewPeriod, row.reviewYear),
         'Employee ID': row.employeeCode,
         'Full Name': row.fullName,
+        'Division': row.division,
         'Department': row.department,
         'Designation': row.designation,
         'Reporting Manager': row.reportingManager,
@@ -463,7 +467,7 @@ export default function EmployeePerformanceSummary() {
     XLSX.utils.book_append_sheet(wb, ws, 'Employee Performance Summary');
     
     ws['!cols'] = [
-      { wch: 10 }, { wch: 12 }, { wch: 30 }, { wch: 35 }, { wch: 30 },
+      { wch: 10 }, { wch: 12 }, { wch: 30 }, { wch: 25 }, { wch: 35 }, { wch: 30 },
       { wch: 30 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
     ];
 
@@ -620,6 +624,7 @@ export default function EmployeePerformanceSummary() {
                           <TableHead>Month</TableHead>
                           <TableHead>Employee ID</TableHead>
                           <TableHead>Full Name</TableHead>
+                          <TableHead>Division</TableHead>
                           <TableHead>Department</TableHead>
                           <TableHead>Designation</TableHead>
                           <TableHead>Reporting Manager</TableHead>
@@ -633,7 +638,7 @@ export default function EmployeePerformanceSummary() {
                       <TableBody>
                         {paginatedData.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                            <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                               No data found for the selected filters
                             </TableCell>
                           </TableRow>
@@ -651,6 +656,7 @@ export default function EmployeePerformanceSummary() {
                                 </TableCell>
                                 <TableCell>{row.employeeCode}</TableCell>
                                 <TableCell>{row.fullName}</TableCell>
+                                <TableCell>{row.division}</TableCell>
                                 <TableCell>{row.department}</TableCell>
                                 <TableCell>{row.designation}</TableCell>
                                 <TableCell>{row.reportingManager}</TableCell>
