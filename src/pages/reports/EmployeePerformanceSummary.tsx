@@ -49,6 +49,12 @@ const STATUS_LABELS: Record<string, string> = {
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
+/** Workflow priority order (lowest = earliest stage) */
+const STATUS_PRIORITY_ORDER = [
+  'kra_set', 'self_review', 'manager_check', 'skip_level_check',
+  'hr_pms_review', 'audit', 'management_review', 'approved',
+];
+
 interface EmployeePerformance {
   employeeId: string;
   employeeCode: string;
@@ -59,7 +65,7 @@ interface EmployeePerformance {
   reportingManager: string;
   reviewPeriod: string;
   reviewYear: number;
-  status: string;
+  statusCounts: Record<string, number>;
   totalScore: number;
   outOfScore: number;
   totalWeight: number;
@@ -181,14 +187,14 @@ export default function EmployeePerformanceSummary() {
         const weightedScore = score * weight;
         const maxScore = weight * 5;
 
+        const kpiStatus = kpi.status || 'kra_set';
+
         if (existing) {
           existing.totalScore += weightedScore;
           existing.outOfScore += maxScore;
           existing.totalWeight += weight;
           existing.kpiCount += 1;
-          if (getStatusPriority(kpi.status || 'kra_set') > getStatusPriority(existing.status)) {
-            existing.status = kpi.status || 'kra_set';
-          }
+          existing.statusCounts[kpiStatus] = (existing.statusCounts[kpiStatus] || 0) + 1;
         } else {
           employeePeriodMap.set(key, {
             employeeId: kpi.employee_id,
@@ -200,7 +206,7 @@ export default function EmployeePerformanceSummary() {
             reportingManager: manager?.full_name || '-',
             reviewPeriod: kpi.review_period || '-',
             reviewYear: kpi.review_year || year,
-            status: kpi.status || 'kra_set',
+            statusCounts: { [kpiStatus]: 1 },
             totalScore: weightedScore,
             outOfScore: maxScore,
             totalWeight: weight,
@@ -302,19 +308,7 @@ export default function EmployeePerformanceSummary() {
     enabled: activeTab === 'comparison',
   });
 
-  function getStatusPriority(status: string): number {
-    const priorities: Record<string, number> = {
-      'approved': 8,
-      'management_review': 7,
-      'audit': 6,
-      'hr_pms_review': 5,
-      'skip_level_check': 4,
-      'manager_check': 3,
-      'self_review': 2,
-      'kra_set': 1,
-    };
-    return priorities[status] || 0;
-  }
+  // getStatusPriority removed — statusCounts map replaces single-status logic
 
   // Filter and sort data by percentage descending (matching Excel format)
   const filteredData = useMemo(() => {
@@ -324,7 +318,7 @@ export default function EmployeePerformanceSummary() {
     return performanceData
       .filter(row => {
         // Status filter
-        if (selectedStatus !== 'all' && row.status !== selectedStatus) return false;
+        if (selectedStatus !== 'all' && !(row.statusCounts[selectedStatus] > 0)) return false;
         // Search filter
         return (
       row.fullName.toLowerCase().includes(term) ||
@@ -459,7 +453,14 @@ export default function EmployeePerformanceSummary() {
         'Department': row.department,
         'Designation': row.designation,
         'Reporting Manager': row.reportingManager,
-        'Review Status': STATUS_LABELS[row.status] || row.status,
+        'Review Status': STATUS_PRIORITY_ORDER
+          .filter(s => (row.statusCounts[s] || 0) > 0)
+          .map(s => {
+            const count = row.statusCounts[s];
+            const label = STATUS_LABELS[s] || s;
+            return count > 1 ? `${label} (${count})` : label;
+          })
+          .join(', '),
         'Total Score': row.totalScore,
         'Out of Score': row.outOfScore,
         'Overall Rating': rating,
@@ -482,7 +483,10 @@ export default function EmployeePerformanceSummary() {
   const summaryStats = useMemo(() => {
     if (!filteredData.length) return { total: 0, approved: 0, avgScore: 0 };
     
-    const approved = filteredData.filter(r => r.status === 'approved').length;
+    const approved = filteredData.filter(r => {
+      const statuses = Object.keys(r.statusCounts);
+      return statuses.length === 1 && statuses[0] === 'approved';
+    }).length;
     const totalPercentage = filteredData.reduce((sum, r) => {
       return sum + (r.outOfScore > 0 ? (r.totalScore / r.outOfScore) * 100 : 0);
     }, 0);
@@ -668,12 +672,26 @@ export default function EmployeePerformanceSummary() {
                                 <TableCell>{row.designation}</TableCell>
                                 <TableCell>{row.reportingManager}</TableCell>
                                 <TableCell>
-                                  <Badge 
-                                    variant="outline" 
-                                    className={STATUS_COLORS[row.status] || 'bg-muted'}
-                                  >
-                                    {STATUS_LABELS[row.status] || row.status}
-                                  </Badge>
+                                  <div className="flex flex-wrap gap-1">
+                                    {(() => {
+                                      const statuses = Object.keys(row.statusCounts);
+                                      const allApproved = statuses.length === 1 && statuses[0] === 'approved';
+                                      if (allApproved) {
+                                        return (
+                                          <Badge variant="outline" className={STATUS_COLORS['approved']}>
+                                            Approved
+                                          </Badge>
+                                        );
+                                      }
+                                      return STATUS_PRIORITY_ORDER
+                                        .filter(s => (row.statusCounts[s] || 0) > 0)
+                                        .map(s => (
+                                          <Badge key={s} variant="outline" className={`text-[11px] px-1.5 py-0 ${STATUS_COLORS[s] || 'bg-muted'}`}>
+                                            {STATUS_LABELS[s] || s}{row.statusCounts[s] > 1 ? ` (${row.statusCounts[s]})` : ''}
+                                          </Badge>
+                                        ));
+                                    })()}
+                                  </div>
                                 </TableCell>
                                 <TableCell className="text-right font-medium">
                                   {row.totalScore.toFixed(1)}
