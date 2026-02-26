@@ -642,7 +642,7 @@ export function UnifiedScorecard({
     
     // Get the appropriate previous score based on view level
     const scoreFieldMap: Record<string, () => number | null> = {
-      manager: () => existing?.manager_score ?? null,
+      manager: () => existing?.manager_score ?? (kpi.is_org_level ? existing?.self_score ?? null : null),
       skip_level: () => (existing as any)?.skip_level_score ?? existing?.manager_score ?? null,
       hr_pms: () => (existing as any)?.hr_pms_score ?? (existing as any)?.skip_level_score ?? null,
       auditor: () => existing?.auditor_score ?? existing?.manager_score ?? null,
@@ -663,7 +663,7 @@ export function UnifiedScorecard({
     setReviewerAchievedValue(
       (existing as any)?.[`${config.scoreFieldPrefix}_achieved_value`] ?? 
       existing?.achieved_value ?? 
-      null
+      (kpi.is_org_level ? getOrgKpiValue(kpi)?.achieved_value ?? null : null)
     );
     
     // Reset state
@@ -1145,6 +1145,7 @@ export function UnifiedScorecard({
               onToggleExpand={toggleDailyExpand}
               workflowStages={effectiveStages}
               auditKpiAssignments={auditKpiAssignments}
+              getOrgKpiValue={getOrgKpiValue}
             />
           )}
         </CardContent>
