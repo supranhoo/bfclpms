@@ -184,6 +184,9 @@ export function usePropagateOrgKpiValue() {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
       if (result.propagatedCount > 0) {
@@ -242,6 +245,9 @@ export function useBulkPropagateOrgKpiValues() {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
       if (result.propagatedCount > 0) {
