@@ -329,11 +329,13 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
       <TableCell className="py-1.5 w-24 text-center">
         {rowIsNa || numVal === null ? (
           <span className="text-xs text-muted-foreground">—</span>
+        ) : (row.uomType === 'binary' || (row.uomType === 'tiered' && row.qualitativeOptions?.length)) ? (
+          <RatingBadge score={numVal} short className="text-[10px] h-5 px-1.5" />
         ) : (
           <RatingBadge
             score={calculateRating(
               numVal, effectiveTarget, ratingThresholds || { r5: null, r4: null, r3: null, r2: null, r1: null },
-              criteria, 0, row.uomType || 'numeric', row.qualitativeOptions, effectiveUom
+              criteria, 0, 'numeric', null, effectiveUom
             ).rating}
             short
             className="text-[10px] h-5 px-1.5"
@@ -452,11 +454,13 @@ function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom,
       <TableCell className="py-1.5 w-24 text-center">
         {rowIsNa || row.achievedValue === null ? (
           <span className="text-xs text-muted-foreground">—</span>
+        ) : (row.uomType === 'binary' || (row.uomType === 'tiered' && row.qualitativeOptions?.length)) ? (
+          <RatingBadge score={row.achievedValue} short className="text-[10px] h-5 px-1.5" />
         ) : (
           <RatingBadge
             score={calculateRating(
               row.achievedValue, effectiveTarget, ratingThresholds || { r5: null, r4: null, r3: null, r2: null, r1: null },
-              criteria, 0, row.uomType || 'numeric', row.qualitativeOptions, effectiveUom
+              criteria, 0, 'numeric', null, effectiveUom
             ).rating}
             short
             className="text-[10px] h-5 px-1.5"
