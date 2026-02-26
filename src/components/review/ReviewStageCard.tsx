@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { LucideIcon, FileText, ExternalLink } from 'lucide-react';
 import { openStorageFile } from '@/lib/storageDownload';
 import { Badge } from '@/components/ui/badge';
@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils';
 import { RatingLevel } from '@/hooks/useKpis';
 import { getRatingLevelColor, ratingLevelToLabel } from '@/lib/reviewConstants';
-import { useIsMobile } from '@/hooks/use-mobile';
 
 export type StageStatus = 'completed' | 'current' | 'pending';
 
@@ -65,8 +64,15 @@ export function ReviewStageCard({
 }: ReviewStageCardProps) {
   const isPending = status === 'pending';
   const isCurrent = status === 'current';
-  const isMobile = useIsMobile();
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [remarksExpanded, setRemarksExpanded] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia('(pointer: coarse)');
+    setIsTouchDevice(mql.matches);
+    const onChange = () => setIsTouchDevice(mql.matches);
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
 
   return (
     <div
@@ -117,9 +123,9 @@ export function ReviewStageCard({
 
       {/* Remarks - truncated with tooltip */}
       {remarks ? (
-        isMobile ? (
+        isTouchDevice ? (
           <p
-            onClick={() => setRemarksExpanded(!remarksExpanded)}
+            onClick={() => setRemarksExpanded(prev => !prev)}
             className={cn(
               'text-xs text-muted-foreground cursor-pointer min-h-[2rem]',
               !remarksExpanded && 'line-clamp-2'
