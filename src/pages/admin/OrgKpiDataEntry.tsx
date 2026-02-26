@@ -431,6 +431,7 @@ export default function OrgKpiDataEntry() {
       isNa: existing?.is_na ?? false,
       uomType: (kpi as any).uom_type || 'numeric',
       qualitativeOptions: (kpi as any).qualitative_options || null,
+      criteria: (kpi as any).criteria || null,
     };
   }, [existingValuesMap, prevValuesMap, departments, allProfiles, prev, employeeCountMap, mappedDepartmentsMap, mappedEmployeesMap, employeeTargetMap]);
 

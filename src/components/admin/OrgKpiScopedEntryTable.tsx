@@ -8,7 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
-import { isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
+import { isValueOutOfRange, RatingThresholds, calculateRating } from '@/lib/ratingCalculation';
+import { RatingBadge } from '@/components/ui/RatingBadge';
 import { QualitativeSelect } from '@/components/review/QualitativeSelect';
 import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
 import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown } from 'lucide-react';
@@ -39,15 +40,16 @@ interface OrgKpiScopedEntryTableProps {
   rows: ScopedRow[];
   onValueChange: (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa', value: string | null) => void;
   scopeLabel: string; // "Department" or "Employee"
-  // For out-of-range warnings
+  // For out-of-range warnings and rating calculation
   ratingThresholds?: RatingThresholds;
   targetValue?: number | null;
   uom?: string | null;
+  criteria?: string;
   // Observation counts per employee
   observationCounts?: Map<string, ObservationCounts>;
 }
 
-export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, observationCounts }: OrgKpiScopedEntryTableProps) {
+export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, observationCounts }: OrgKpiScopedEntryTableProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [bulkFillValue, setBulkFillValue] = useState('');
 
@@ -143,6 +145,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                 <TableHead className="text-xs w-24 text-center">Target</TableHead>
                 <TableHead className="text-xs w-16 text-center">N/A</TableHead>
                 <TableHead className="text-xs w-28 text-center">Achieved</TableHead>
+                <TableHead className="text-xs w-24 text-center">Rating</TableHead>
                 <TableHead className="text-xs min-w-[220px]">Remark</TableHead>
                 <TableHead className="text-xs w-24">File</TableHead>
               </TableRow>
@@ -154,7 +157,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                   <>
                     {/* Department group header */}
                     <TableRow key={`group-${group.dept ?? 'none'}`} className="bg-muted/50 hover:bg-muted/50">
-                      <TableCell colSpan={6} className="py-1.5 px-3">
+                      <TableCell colSpan={7} className="py-1.5 px-3">
                         <div className="flex items-center gap-2">
                           <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           <span className="text-xs font-semibold text-muted-foreground">
@@ -175,6 +178,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                         ratingThresholds={ratingThresholds}
                         targetValue={targetValue}
                         uom={uom}
+                        criteria={criteria}
                         observationCounts={observationCounts?.get(row.scopeId)}
                       />
                     ))}
@@ -183,7 +187,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
               ) : (
                 // Department scope — flat sorted list
                 sortedRows.map(row => (
-                  <DepartmentRow key={row.scopeId} row={row} onValueChange={onValueChange} />
+                  <DepartmentRow key={row.scopeId} row={row} onValueChange={onValueChange} ratingThresholds={ratingThresholds} targetValue={targetValue} uom={uom} criteria={criteria} />
                 ))
               )}
             </TableBody>
@@ -201,10 +205,11 @@ interface EmployeeRowProps {
   ratingThresholds?: RatingThresholds;
   targetValue?: number | null;
   uom?: string | null;
+  criteria?: string;
   observationCounts?: ObservationCounts;
 }
 
-function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, observationCounts }: EmployeeRowProps) {
+function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observationCounts }: EmployeeRowProps) {
   // Prefer per-employee target over card-level fallback
   const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
   const effectiveUom = row.uom != null ? row.uom : uom;
@@ -320,6 +325,22 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, o
         )}
       </TableCell>
 
+      {/* Rating (read-only) */}
+      <TableCell className="py-1.5 w-24 text-center">
+        {rowIsNa || numVal === null ? (
+          <span className="text-xs text-muted-foreground">—</span>
+        ) : (
+          <RatingBadge
+            score={calculateRating(
+              numVal, effectiveTarget, ratingThresholds || { r5: null, r4: null, r3: null, r2: null, r1: null },
+              criteria, 0, row.uomType || 'numeric', row.qualitativeOptions, effectiveUom
+            ).rating}
+            short
+            className="text-[10px] h-5 px-1.5"
+          />
+        )}
+      </TableCell>
+
       {/* Remark textarea */}
       <TableCell className="py-1.5 min-w-[220px]">
         {rowIsNa ? (
@@ -359,10 +380,16 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, o
 interface DepartmentRowProps {
   row: ScopedRow;
   onValueChange: (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa', value: string | null) => void;
+  ratingThresholds?: RatingThresholds;
+  targetValue?: number | null;
+  uom?: string | null;
+  criteria?: string;
 }
 
-function DepartmentRow({ row, onValueChange }: DepartmentRowProps) {
+function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria }: DepartmentRowProps) {
   const rowIsNa = row.isNa ?? false;
+  const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
+  const effectiveUom = row.uom != null ? row.uom : uom;
 
   return (
     <TableRow className={rowIsNa ? 'opacity-60' : ''}>
@@ -421,6 +448,22 @@ function DepartmentRow({ row, onValueChange }: DepartmentRowProps) {
           />
         )}
       </TableCell>
+      {/* Rating (read-only) */}
+      <TableCell className="py-1.5 w-24 text-center">
+        {rowIsNa || row.achievedValue === null ? (
+          <span className="text-xs text-muted-foreground">—</span>
+        ) : (
+          <RatingBadge
+            score={calculateRating(
+              row.achievedValue, effectiveTarget, ratingThresholds || { r5: null, r4: null, r3: null, r2: null, r1: null },
+              criteria, 0, row.uomType || 'numeric', row.qualitativeOptions, effectiveUom
+            ).rating}
+            short
+            className="text-[10px] h-5 px-1.5"
+          />
+        )}
+      </TableCell>
+
       <TableCell className="py-1.5 min-w-[220px]">
         {rowIsNa ? (
           <Textarea
