@@ -1,53 +1,32 @@
 
 
-# Fix: Review Journey Remarks Not Readable on Mobile/Tablet (v1.46.13)
+# Fix: Tap-to-Expand Remarks on All Touch Devices (v1.46.14)
 
 ## Problem
 
-The Review Journey stage cards truncate remarks to 2 lines and rely on a **hover tooltip** to reveal the full text. On mobile and tablet devices, there is no hover interaction, so the full remarks are completely inaccessible to users.
+The `useIsMobile` hook has a 768px breakpoint, so tablets (768px+) are classified as "desktop" and get hover tooltips instead of tap-to-expand. Tablets are touch devices with no hover capability, making remarks unreadable.
 
 ## Solution
 
-Replace the tooltip-based approach with a **tap-to-expand** pattern on mobile/tablet. On desktop, the tooltip continues to work as before.
-
-- On small screens: tapping the remarks text toggles between truncated (`line-clamp-2`) and full display
-- On desktop: the existing tooltip behavior is preserved
+Replace the `useIsMobile` check with a **touch-capability detection** using the CSS media query `(pointer: coarse)`, which correctly identifies all touch-first devices (phones AND tablets) regardless of screen width.
 
 ## File to Change
 
 **`src/components/review/ReviewStageCard.tsx`**
 
-1. Add a `useState` for `expanded` toggle
-2. Import `useIsMobile` from `@/hooks/use-mobile`
-3. For mobile: render the remarks as a tappable `<p>` that toggles between `line-clamp-2` and full text, with a small visual hint ("tap to read")
-4. For desktop: keep the existing `TooltipProvider` / `Tooltip` behavior unchanged
+Replace `useIsMobile()` with a `useTouchDevice()` check using `window.matchMedia('(pointer: coarse)')`. This way:
+- Phones and tablets --> tap-to-expand
+- Desktop with mouse --> tooltip on hover
 
-## Technical Detail
+### Implementation
 
-```text
-Mobile/Tablet (touch):
-+---------------------------+
-| 58 joined, training       |
-| imparted to 58 as per...  |  <-- tap to expand
-+---------------------------+
-         |  tap
-         v
-+---------------------------+
-| 58 joined, training       |
-| imparted to 58 as per     |
-| the compliance            |
-| requirement successfully  |  <-- tap to collapse
-+---------------------------+
-
-Desktop (mouse):
-  Unchanged -- tooltip on hover
-```
+Add a local `isTouchDevice` state using `matchMedia('(pointer: coarse)')` instead of the width-based `useIsMobile` hook. The rest of the component logic stays identical -- just swap the boolean used in the conditional.
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
 | Data impact | None | UI-only change |
-| Regression | None | Desktop tooltip behavior unchanged |
-| UX | Positive | Remarks become fully readable on touch devices |
+| Regression | None | Desktop hover behavior unchanged; phones keep tap behavior |
+| Device coverage | Positive | Now covers tablets, foldables, and all touch-first devices |
 
