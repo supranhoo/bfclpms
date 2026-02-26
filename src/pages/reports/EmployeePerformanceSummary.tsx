@@ -82,13 +82,13 @@ export default function EmployeePerformanceSummary() {
 
   // (review_periods query removed – month filter is now static)
 
-  // Fetch all KPIs with batching for large datasets
+  // Fetch all KPIs with separate submission query to avoid RLS timeout
   const { data: performanceData, isLoading } = useQuery({
     queryKey: ['employee-performance-summary', selectedYear, selectedPeriod],
     queryFn: async () => {
       const year = parseInt(selectedYear);
       
-      // Batch fetch KPIs to handle large datasets (1000 row limit)
+      // Step 1: Fetch KPIs only (no join) — RLS evaluated on kpis table alone
       const allKpis: any[] = [];
       let offset = 0;
       const batchSize = 1000;
@@ -97,26 +97,7 @@ export default function EmployeePerformanceSummary() {
       while (hasMore) {
         let query = supabase
           .from('kpis')
-          .select(`
-            id,
-            employee_id,
-            kra_name,
-            kpi_name,
-            weightage,
-            status,
-            review_period,
-            review_year,
-            review_submissions (
-              final_score,
-              self_score,
-              manager_score,
-              skip_level_score,
-              hr_pms_score,
-              auditor_score,
-              management_score,
-              is_na
-            )
-          `)
+          .select('id, employee_id, kra_name, kpi_name, weightage, status, review_period, review_year')
           .eq('review_year', year)
           .range(offset, offset + batchSize - 1);
 
@@ -135,6 +116,25 @@ export default function EmployeePerformanceSummary() {
           hasMore = false;
         }
       }
+
+      // Step 2: Fetch submissions separately for those KPI IDs
+      const kpiIds = allKpis.map(k => k.id);
+      const submissionMap = new Map<string, any>();
+      
+      for (let i = 0; i < kpiIds.length; i += batchSize) {
+        const batch = kpiIds.slice(i, i + batchSize);
+        const { data: subs, error: subError } = await supabase
+          .from('review_submissions')
+          .select('kpi_id, final_score, self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, is_na')
+          .in('kpi_id', batch);
+        if (subError) throw subError;
+        subs?.forEach(s => submissionMap.set(s.kpi_id, s));
+      }
+
+      // Merge submissions into KPIs
+      allKpis.forEach(kpi => {
+        kpi.review_submissions = submissionMap.get(kpi.id) || null;
+      });
 
       // Fetch all profiles with department info
       const { data: profiles, error: profilesError } = await supabase
@@ -219,7 +219,7 @@ export default function EmployeePerformanceSummary() {
     queryFn: async () => {
       const year = parseInt(selectedYear);
       
-      // Batch fetch all KPIs for the year
+      // Step 1: Fetch KPIs without join
       const allKpis: any[] = [];
       let offset = 0;
       const batchSize = 1000;
@@ -228,24 +228,7 @@ export default function EmployeePerformanceSummary() {
       while (hasMore) {
         const { data: kpis, error } = await supabase
           .from('kpis')
-          .select(`
-            id,
-            employee_id,
-            weightage,
-            status,
-            review_period,
-            review_year,
-            review_submissions (
-              final_score,
-              self_score,
-              manager_score,
-              skip_level_score,
-              hr_pms_score,
-              auditor_score,
-              management_score,
-              is_na
-            )
-          `)
+          .select('id, employee_id, weightage, status, review_period, review_year')
           .eq('review_year', year)
           .range(offset, offset + batchSize - 1);
 
@@ -259,6 +242,25 @@ export default function EmployeePerformanceSummary() {
           hasMore = false;
         }
       }
+
+      // Step 2: Fetch submissions separately
+      const kpiIds = allKpis.map(k => k.id);
+      const submissionMap = new Map<string, any>();
+      
+      for (let i = 0; i < kpiIds.length; i += batchSize) {
+        const batch = kpiIds.slice(i, i + batchSize);
+        const { data: subs, error: subError } = await supabase
+          .from('review_submissions')
+          .select('kpi_id, final_score, self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, is_na')
+          .in('kpi_id', batch);
+        if (subError) throw subError;
+        subs?.forEach(s => submissionMap.set(s.kpi_id, s));
+      }
+
+      // Merge
+      allKpis.forEach(kpi => {
+        kpi.review_submissions = submissionMap.get(kpi.id) || null;
+      });
 
       // Group by employee and period (weighted scoring matching Dashboard)
       const employeeTrends = new Map<string, Map<string, { totalScore: number; outOfScore: number; totalWeight: number }>>();
