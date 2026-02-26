@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { LucideIcon, FileText, ExternalLink } from 'lucide-react';
 import { openStorageFile } from '@/lib/storageDownload';
 import { Badge } from '@/components/ui/badge';
@@ -5,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils';
 import { RatingLevel } from '@/hooks/useKpis';
 import { getRatingLevelColor, ratingLevelToLabel } from '@/lib/reviewConstants';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export type StageStatus = 'completed' | 'current' | 'pending';
 
@@ -63,6 +65,8 @@ export function ReviewStageCard({
 }: ReviewStageCardProps) {
   const isPending = status === 'pending';
   const isCurrent = status === 'current';
+  const isMobile = useIsMobile();
+  const [remarksExpanded, setRemarksExpanded] = useState(false);
 
   return (
     <div
@@ -113,18 +117,30 @@ export function ReviewStageCard({
 
       {/* Remarks - truncated with tooltip */}
       {remarks ? (
-        <TooltipProvider delayDuration={200}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <p className="text-xs text-muted-foreground line-clamp-2 cursor-help min-h-[2rem]">
-                {remarks}
-              </p>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-sm">
-              <p className="text-sm whitespace-pre-wrap">{remarks}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        isMobile ? (
+          <p
+            onClick={() => setRemarksExpanded(!remarksExpanded)}
+            className={cn(
+              'text-xs text-muted-foreground cursor-pointer min-h-[2rem]',
+              !remarksExpanded && 'line-clamp-2'
+            )}
+          >
+            {remarks}
+          </p>
+        ) : (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="text-xs text-muted-foreground line-clamp-2 cursor-help min-h-[2rem]">
+                  {remarks}
+                </p>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm">
+                <p className="text-sm whitespace-pre-wrap">{remarks}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )
       ) : (
         <p className="text-xs text-muted-foreground/50 italic min-h-[2rem]">
           No remarks
