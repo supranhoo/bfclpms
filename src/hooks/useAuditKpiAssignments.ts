@@ -9,6 +9,7 @@ export interface AuditKpiAssignment {
 
 /**
  * Fetch KPI-level audit assignments for a set of KPI IDs.
+ * Uses a two-step fetch to avoid ambiguous FK join errors.
  * Returns a Map<kpi_id, AuditKpiAssignment>.
  */
 export function useAuditKpiAssignments(kpiIds: string[]) {
@@ -17,18 +18,32 @@ export function useAuditKpiAssignments(kpiIds: string[]) {
     queryFn: async () => {
       if (!kpiIds.length) return new Map<string, AuditKpiAssignment>();
 
+      // Step 1: Fetch assignment rows (no join)
       const { data, error } = await supabase
-        .from('audit_kpi_level_assignments' as any)
-        .select('kpi_id, auditor_id, profiles!audit_kpi_level_assignments_auditor_id_fkey(full_name)')
+        .from('audit_kpi_level_assignments')
+        .select('kpi_id, auditor_id')
         .in('kpi_id', kpiIds);
 
       if (error) throw error;
+      if (!data?.length) return new Map<string, AuditKpiAssignment>();
 
+      // Step 2: Fetch auditor names from profiles
+      const auditorIds = [...new Set(data.map(r => r.auditor_id))];
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', auditorIds);
+
+      const nameMap = new Map<string, string>(
+        (profiles || []).map(p => [p.id, p.full_name || 'Unknown'])
+      );
+
+      // Step 3: Build result map
       const map = new Map<string, AuditKpiAssignment>();
-      (data || []).forEach((row: any) => {
+      data.forEach(row => {
         map.set(row.kpi_id, {
           auditor_id: row.auditor_id,
-          auditor_name: row.profiles?.full_name || 'Unknown',
+          auditor_name: nameMap.get(row.auditor_id) || 'Unknown',
         });
       });
       return map;
@@ -45,7 +60,7 @@ export function useAssignKpiToAuditor() {
   return useMutation({
     mutationFn: async ({ kpiId, auditorId }: { kpiId: string; auditorId: string }) => {
       const { error } = await supabase
-        .from('audit_kpi_level_assignments' as any)
+        .from('audit_kpi_level_assignments')
         .upsert(
           { kpi_id: kpiId, auditor_id: auditorId, assigned_by: user?.id },
           { onConflict: 'kpi_id' }
@@ -65,7 +80,7 @@ export function useRemoveKpiAuditAssignment() {
   return useMutation({
     mutationFn: async ({ kpiId }: { kpiId: string }) => {
       const { error } = await supabase
-        .from('audit_kpi_level_assignments' as any)
+        .from('audit_kpi_level_assignments')
         .delete()
         .eq('kpi_id', kpiId);
       if (error) throw error;
