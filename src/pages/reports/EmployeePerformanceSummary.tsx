@@ -127,8 +127,9 @@ export default function EmployeePerformanceSummary() {
       const kpiIds = allKpis.map(k => k.id);
       const submissionMap = new Map<string, any>();
       
-      for (let i = 0; i < kpiIds.length; i += batchSize) {
-        const batch = kpiIds.slice(i, i + batchSize);
+      const inBatchSize = 300; // Smaller batch for .in() to avoid URL length limits
+      for (let i = 0; i < kpiIds.length; i += inBatchSize) {
+        const batch = kpiIds.slice(i, i + inBatchSize);
         const { data: subs, error: subError } = await supabase
           .from('review_submissions')
           .select('kpi_id, final_score, self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, is_na')
@@ -253,8 +254,9 @@ export default function EmployeePerformanceSummary() {
       const kpiIds = allKpis.map(k => k.id);
       const submissionMap = new Map<string, any>();
       
-      for (let i = 0; i < kpiIds.length; i += batchSize) {
-        const batch = kpiIds.slice(i, i + batchSize);
+      const inBatchSize = 300;
+      for (let i = 0; i < kpiIds.length; i += inBatchSize) {
+        const batch = kpiIds.slice(i, i + inBatchSize);
         const { data: subs, error: subError } = await supabase
           .from('review_submissions')
           .select('kpi_id, final_score, self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, is_na')
