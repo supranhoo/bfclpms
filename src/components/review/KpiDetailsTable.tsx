@@ -17,8 +17,10 @@ import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { canReviewKpi as workflowCanReview, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { 
   Info, Lock, CheckCircle2, Calendar, ChevronDown, ChevronUp, Undo2, Eye, 
-  Building2, Users, User, FileCheck, Clock
+  Building2, Users, User, FileCheck, Clock, UserPlus
 } from 'lucide-react';
+import { AuditKpiAssignPopover } from '@/components/review/AuditKpiAssignPopover';
+import type { AuditKpiAssignment } from '@/hooks/useAuditKpiAssignments';
 
 // Stage-to-column mapping: workflow stage name -> score column definition
 const STAGE_COLUMN_MAP: Record<string, { key: string; label: string }> = {
@@ -82,6 +84,7 @@ interface KpiDetailsTableProps {
   isKpiLocked?: (kpi: KPI) => boolean;
   workflowStages?: string[];
   sentBackKpiIds?: Set<string>;
+  auditKpiAssignments?: Map<string, AuditKpiAssignment>;
 }
 
 /**
@@ -141,6 +144,7 @@ export function KpiDetailsTable({
   isKpiLocked,
   workflowStages,
   sentBackKpiIds,
+  auditKpiAssignments,
 }: KpiDetailsTableProps) {
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const scoreColumns = buildScoreColumns(effectiveStages);
@@ -432,7 +436,7 @@ export function KpiDetailsTable({
                 
                 {/* Status */}
                 <TableCell>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 flex-wrap">
                     {locked && <Lock className="h-3 w-3 text-muted-foreground" />}
                     <Badge className={statusColors[kpi.status || 'kra_set']}>
                       {statusLabels[kpi.status || 'kra_set']}
@@ -441,6 +445,12 @@ export function KpiDetailsTable({
                       <Badge variant="destructive" className="ml-1">
                         {openQueries.length} query
                       </Badge>
+                    )}
+                    {viewType === 'audit' && (
+                      <AuditKpiAssignPopover
+                        kpiId={kpi.id}
+                        currentAssignment={auditKpiAssignments?.get(kpi.id) || null}
+                      />
                     )}
                   </div>
                 </TableCell>
