@@ -1,5 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useMyAuditAssignments } from '@/hooks/useAuditAssignments';
+import { AuditAssignmentDialog } from '@/components/admin/AuditAssignmentDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeamMembers, useProfiles, useSkipLevelTeamMembers, useProfilesByWorkflowStage } from '@/hooks/useOrganization';
 import { useKpisByPeriodRanges, KPI } from '@/hooks/useKpis';
@@ -8,12 +10,13 @@ import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import { resolvePendingStatuses, resolveReviewableStatuses, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ReviewPeriodSelectorEnhanced, type PeriodSelection } from '@/components/ui/ReviewPeriodSelectorEnhanced';
 import { EmployeeFilters } from '@/components/review/EmployeeFilters';
 import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { supabase } from '@/integrations/supabase/client';
-import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2 } from 'lucide-react';
 import { ViewMode } from './ViewModeToggle';
 
 interface EmployeeProfile {
@@ -59,6 +62,7 @@ const STATUS_OPTIONS_BY_LEVEL: Record<Exclude<ViewMode, 'self'>, Array<{ value: 
   ],
   audit: [
     { value: 'all', label: 'All Employees' },
+    { value: 'my_assigned', label: 'My Assignments' },
     { value: 'pending', label: 'With Pending Audit' },
     { value: 'in_audit', label: 'In Audit' },
     { value: 'forwarded', label: 'Forwarded' },
@@ -144,6 +148,10 @@ export function EmployeeSelectorGrid({
   const [selectedDesignation, setSelectedDesignation] = useState<string | null>(null);
   const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
   const [selectedManager, setSelectedManager] = useState<string | null>(null);
+  const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
+
+  // Audit assignments: fetch current user's assigned employees
+  const { data: myAssignedEmployeeIds } = useMyAuditAssignments();
 
   // Fix 1 & 3: Use multi-period hook so YTD/QTD/custom modes fetch ALL relevant months
   const { data: periodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
@@ -337,7 +345,9 @@ export function EmployeeSelectorGrid({
     }
 
     // Status-based filtering using per-employee workflow resolution
-    if (statusFilter !== 'all' && periodKpis) {
+    if (statusFilter === 'my_assigned' && viewLevel === 'audit' && myAssignedEmployeeIds) {
+      filtered = filtered?.filter(m => myAssignedEmployeeIds instanceof Set && myAssignedEmployeeIds.has(m.id));
+    } else if (statusFilter !== 'all' && statusFilter !== 'my_assigned' && periodKpis) {
       const employeeIds = new Set<string>();
       // For merged team view, build skip-level member set for relationship detection
       const skipIds = viewLevel === 'team' ? new Set(skipLevelMembers?.map(m => m.id) || []) : new Set<string>();
@@ -421,7 +431,21 @@ export function EmployeeSelectorGrid({
     });
 
     return filtered;
-  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers]);
+  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers, myAssignedEmployeeIds]);
+
+  // Split display members into assigned/others for audit view
+  const { assignedMembers, otherMembers } = useMemo(() => {
+    if (viewLevel !== 'audit' || !myAssignedEmployeeIds || !(myAssignedEmployeeIds instanceof Set) || myAssignedEmployeeIds.size === 0 || statusFilter === 'my_assigned') {
+      return { assignedMembers: [], otherMembers: displayMembers || [] };
+    }
+    const assigned: EmployeeProfile[] = [];
+    const others: EmployeeProfile[] = [];
+    (displayMembers || []).forEach(m => {
+      if (myAssignedEmployeeIds.has(m.id)) assigned.push(m);
+      else others.push(m);
+    });
+    return { assignedMembers: assigned, otherMembers: others };
+  }, [displayMembers, viewLevel, myAssignedEmployeeIds, statusFilter]);
 
   // Calculate stats using per-employee workflow-aware resolution
   const stats = useMemo(() => {
@@ -756,6 +780,59 @@ export function EmployeeSelectorGrid({
     );
   };
 
+  const renderEmployeeCard = (member: EmployeeProfile) => {
+    const managerName = getManagerName(member.reporting_manager_id);
+    const isAssigned = viewLevel === 'audit' && myAssignedEmployeeIds instanceof Set && myAssignedEmployeeIds.has(member.id);
+    return (
+      <Card
+        key={member.id}
+        className={`cursor-pointer transition-all hover:shadow-md hover:border-primary/50 group ${isAssigned ? 'ring-1 ring-primary/30 border-primary/20' : ''}`}
+        onClick={() => handleEmployeeClick(member)}
+      >
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <Avatar className="h-12 w-12">
+              <AvatarImage src={member.avatar_url || undefined} />
+              <AvatarFallback>{getInitials(member.full_name)}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                {isFullAccess ? (
+                  <EmployeeContactCard
+                    employee={member}
+                    departmentName={(member as any).departments?.name ?? undefined}
+                    onViewKpis={() => handleEmployeeClick(member)}
+                  >
+                    <span
+                      className="font-medium truncate group-hover:text-primary transition-colors cursor-pointer hover:underline"
+                      title="Click to view contact info"
+                    >
+                      {member.full_name || member.email}
+                    </span>
+                  </EmployeeContactCard>
+                ) : (
+                  <p className="font-medium truncate group-hover:text-primary transition-colors">
+                    {member.full_name || member.email}
+                  </p>
+                )}
+                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0 ml-2" />
+              </div>
+              <p className="text-sm text-muted-foreground truncate">
+                {member.designation || member.email}
+              </p>
+              {isFullAccess && managerName && (
+                <p className="text-xs text-muted-foreground truncate mt-1">
+                  Manager: {managerName}
+                </p>
+              )}
+              {renderEmployeeBadges(member)}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -789,12 +866,20 @@ export function EmployeeSelectorGrid({
           </div>
         </div>
         
-        {/* Compact Period Selector */}
-        <div className="p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
-          <ReviewPeriodSelectorEnhanced
-            value={periodSelection}
-            onChange={onPeriodSelectionChange}
-          />
+        <div className="flex items-center gap-2">
+          {viewLevel === 'audit' && (
+            <Button variant="outline" size="sm" onClick={() => setAssignmentDialogOpen(true)}>
+              <Settings2 className="h-4 w-4 mr-1.5" />
+              Manage Assignments
+            </Button>
+          )}
+          {/* Compact Period Selector */}
+          <div className="p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
+            <ReviewPeriodSelectorEnhanced
+              value={periodSelection}
+              onChange={onPeriodSelectionChange}
+            />
+          </div>
         </div>
       </div>
 
@@ -835,61 +920,41 @@ export function EmployeeSelectorGrid({
         </CardHeader>
         <CardContent>
           {displayMembers && displayMembers.length > 0 ? (
-            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {displayMembers.map(member => {
-                const managerName = getManagerName(member.reporting_manager_id);
-                
-                return (
-                  <Card
-                    key={member.id}
-                    className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50 group"
-                    onClick={() => handleEmployeeClick(member)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-start gap-3">
-                        <Avatar className="h-12 w-12">
-                          <AvatarImage src={member.avatar_url || undefined} />
-                          <AvatarFallback>{getInitials(member.full_name)}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            {isFullAccess ? (
-                              <EmployeeContactCard
-                                employee={member}
-                                departmentName={(member as any).departments?.name ?? undefined}
-                                onViewKpis={() => handleEmployeeClick(member)}
-                              >
-                                <span
-                                  className="font-medium truncate group-hover:text-primary transition-colors cursor-pointer hover:underline"
-                                  title="Click to view contact info"
-                                >
-                                  {member.full_name || member.email}
-                                </span>
-                              </EmployeeContactCard>
-                            ) : (
-                              <p className="font-medium truncate group-hover:text-primary transition-colors">
-                                {member.full_name || member.email}
-                              </p>
-                            )}
-                            <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0 ml-2" />
-                          </div>
-                          <p className="text-sm text-muted-foreground truncate">
-                            {member.designation || member.email}
-                          </p>
-                          {isFullAccess && managerName && (
-                            <p className="text-xs text-muted-foreground truncate mt-1">
-                              Manager: {managerName}
-                            </p>
-                          )}
-                          {renderEmployeeBadges(member)}
-                          
-                        </div>
+            <>
+              {/* Audit grouped view: Assigned to Me + All Others */}
+              {viewLevel === 'audit' && assignedMembers.length > 0 && statusFilter !== 'my_assigned' ? (
+                <div className="space-y-6">
+                  {/* Assigned Section */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Badge variant="default" className="text-xs">
+                        My Assignments ({assignedMembers.length})
+                      </Badge>
+                    </div>
+                    <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                      {assignedMembers.map(member => renderEmployeeCard(member))}
+                    </div>
+                  </div>
+                  {/* Separator */}
+                  {otherMembers.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Badge variant="outline" className="text-xs">
+                          All Others ({otherMembers.length})
+                        </Badge>
                       </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+                      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                        {otherMembers.map(member => renderEmployeeCard(member))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                  {displayMembers.map(member => renderEmployeeCard(member))}
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-center py-12 text-muted-foreground">
               <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -905,6 +970,11 @@ export function EmployeeSelectorGrid({
           )}
         </CardContent>
       </Card>
+
+      {/* Audit Assignment Dialog */}
+      {viewLevel === 'audit' && (
+        <AuditAssignmentDialog open={assignmentDialogOpen} onOpenChange={setAssignmentDialogOpen} />
+      )}
     </div>
   );
 }
