@@ -186,7 +186,7 @@ export type Database = {
           {
             foreignKeyName: "audit_kpi_level_assignments_kpi_id_fkey"
             columns: ["kpi_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "kpis"
             referencedColumns: ["id"]
           },

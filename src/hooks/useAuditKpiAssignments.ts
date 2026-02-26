@@ -48,7 +48,7 @@ export function useAssignKpiToAuditor() {
         .from('audit_kpi_level_assignments' as any)
         .upsert(
           { kpi_id: kpiId, auditor_id: auditorId, assigned_by: user?.id },
-          { onConflict: 'kpi_id,auditor_id' }
+          { onConflict: 'kpi_id' }
         );
       if (error) throw error;
     },
