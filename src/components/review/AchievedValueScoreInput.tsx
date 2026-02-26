@@ -7,7 +7,7 @@ import { ScoreSelector } from './ScoreSelector';
 import { QualitativeValueInput } from './QualitativeValueInput';
 import { useScoreCalculationMode } from '@/hooks/useSystemSettings';
 import { calculateRating, RatingLevel, isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
-import { UomType, QualitativeOption } from '@/lib/qualitativeUom';
+import { UomType, QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Calculator, Check, Edit2, AlertTriangle } from 'lucide-react';
 import { DateCalendarInput } from './DateCalendarInput';
@@ -173,7 +173,16 @@ export function AchievedValueScoreInput({
       <QualitativeValueInput
         uomType={uomType as 'binary' | 'tiered'}
         qualitativeOptions={kpi.qualitative_options || null}
-        value={typeof achievedValue === 'string' ? achievedValue : null}
+        value={(() => {
+          if (typeof achievedValue === 'string') return achievedValue;
+          if (typeof achievedValue === 'number') {
+            const opts = kpi.qualitative_options?.length
+              ? kpi.qualitative_options
+              : (uomType === 'binary' ? BINARY_OPTIONS : []);
+            return opts.find(o => o.rating === achievedValue)?.label || null;
+          }
+          return null;
+        })()}
         onChange={(value, rating, ratingLevel) => {
           // For qualitative, update both the string value AND the score
           onAchievedValueChange(value);
