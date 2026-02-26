@@ -1,85 +1,53 @@
 
 
-# Fix: Org KPI Propagated Data Not Reflecting on Employee Dashboard
+# Add "Rating" Column to Org KPI Scoped Entry Table
 
-## Corrected Data Verification
+## Overview
+Add a read-only "Rating" column next to the "Achieved" column in the `OrgKpiScopedEntryTable` component. This column will display the calculated rating (0-5) as a color-coded `RatingBadge` based on the achieved value and the KPI's scoring thresholds. This is an admin-only view since the table itself is only rendered on the admin Org KPI Data Entry page.
 
-The actual database state (verified via direct query):
+## Changes
 
-| Field | org_kpi_values | review_submissions |
-|-------|---------------|-------------------|
-| achieved_value | 5 (numeric) | 5.00 |
-| self_score | N/A | 0.00 |
-| self_rating | N/A | red |
-| self_remarks | "Zero Fatal" | "Zero Fatal" |
-| status | propagated | N/A |
-| kpi status | N/A | self_review |
+### File: `src/components/admin/OrgKpiScopedEntryTable.tsx`
 
-The `self_score` is **0**, not 5. This is because the KPI's scoring logic is: "Rating 5: 0, Rating 0: Any Fatal" -- meaning zero fatals (Yes) correctly maps to score 0 based on how the rating thresholds are defined for this KPI. The propagation RPC is working correctly.
+1. **Import** `calculateRating` from `@/lib/ratingCalculation` and `RatingBadge` from `@/components/ui/RatingBadge`.
 
-## Root Cause: Missing Cache Invalidation
+2. **Add props** to pass scoring context into the table:
+   - `criteria?: string` (e.g., "Higher is Better" / "Lower is Better")
+   - `uomType` and `qualitativeOptions` are already available per-row via `ScopedRow`
 
-The propagation hooks (`usePropagateOrgKpiValue` and `useBulkPropagateOrgKpiValues`) only invalidate these query keys:
-- `['kpis']`
-- `['review-submissions']`
-- `['org-kpi-values']`
+3. **Add "Rating" table header** between the "Achieved" and "Remark" columns in the `TableHeader`.
 
-But they are **missing** the keys that the employee dashboard and other views depend on:
-- `['my-kpis']` -- used by `useMyKpis()` on the employee Dashboard
-- `['all-kpis']` -- used by admin reports
-- `['kpis-by-period']` -- used by period-filtered views
+4. **Add "Rating" cell** in the `EmployeeRow` component:
+   - Call `calculateRating(row.achievedValue, effectiveTarget, ratingThresholds, criteria, 0, row.uomType, row.qualitativeOptions, effectiveUom)` when `achievedValue` is not null and not N/A.
+   - Render the result using `RatingBadge` with `short={true}` for compact display.
+   - Show "---" or empty when no value is entered or row is N/A.
 
-Every other mutation in the codebase that modifies KPI data invalidates all these keys (verified in `useKpis.ts` lines 366-370, 394-398, 503-507, 531-535, 663-667, 731-734). The propagation hooks are the only ones that don't follow this pattern.
+5. **Add "Rating" cell** in the `DepartmentRow` component with the same logic (passing thresholds and criteria as additional props).
 
-Without invalidating `['my-kpis']`, the employee's dashboard continues showing stale cached data (old status, no score) until they manually refresh the browser.
+6. **Update column span** for the department group header row from `colSpan={6}` to `colSpan={7}`.
 
-## Fix
+7. **Pass `criteria` prop** from `OrgKpiEntryCard.tsx` down to `OrgKpiScopedEntryTable`. The card data (`OrgKpiCardData`) will need a `criteria` field, sourced from the KPI's `criteria` column in the database.
 
-**File:** `src/hooks/usePropagateOrgKpiValue.ts`
+### File: `src/components/admin/OrgKpiEntryCard.tsx`
 
-Add the missing cache invalidation keys to both hooks' `onSuccess` callbacks:
+8. **Add `criteria` field** to `OrgKpiCardData` interface.
+9. **Pass `criteria` prop** to `OrgKpiScopedEntryTable`.
 
-### usePropagateOrgKpiValue (line 185-188)
-```text
-Current:
-  queryClient.invalidateQueries({ queryKey: ['kpis'] });
-  queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
-  queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
+### File: `src/pages/admin/OrgKpiDataEntry.tsx` (or wherever card data is assembled)
 
-Fixed:
-  queryClient.invalidateQueries({ queryKey: ['kpis'] });
-  queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
-  queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
-  queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
-  queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
-  queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
-```
+10. **Map `criteria`** from the KPI record into `OrgKpiCardData` when building card data.
 
-### useBulkPropagateOrgKpiValues (line 243-246)
-Same additions applied.
+## Technical Details
 
-## Impact
-
-- Employee dashboards will immediately reflect propagated org KPI values, scores, and status changes
-- Admin report views will also refresh automatically
-- No database or schema changes needed
-- Display-only fix, zero regression risk
+- The `calculateRating` function already handles all UOM types (numeric, binary, tiered, percentage, date).
+- The `RatingBadge` component renders the canonical color-coded badge (blue/green/yellow/red gradient) with the score number and label.
+- Rating is computed client-side from the current achieved value in real-time, so it updates as the admin types.
+- No database changes are required -- this is a display-only enhancement.
 
 ## Risk Assessment
 
 | Aspect | Risk | Notes |
 |--------|------|-------|
-| Data | None | Cache invalidation only triggers refetch |
-| Regression | None | Aligns with pattern used by every other KPI mutation |
-| Performance | Negligible | A few extra cache invalidation calls |
-
-## Note on Cross-Session Updates
-
-This fix works for the admin who propagates (same browser session). Employees on a different browser/device will need to refresh their page. Real-time cross-session sync would require enabling Realtime subscriptions (separate enhancement).
-
-## Files Changed
-
-| File | Change |
-|------|--------|
-| `src/hooks/usePropagateOrgKpiValue.ts` | Add `my-kpis`, `all-kpis`, `kpis-by-period` to cache invalidation in both hooks |
-
+| Data | None | Read-only display, no writes |
+| Regression | Very low | Adding a column to an existing table; no existing logic modified |
+| Performance | Negligible | `calculateRating` is a lightweight pure function |
