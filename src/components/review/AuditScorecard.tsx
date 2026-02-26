@@ -49,6 +49,7 @@ import { NaConfirmationCard } from '@/components/review/NaConfirmationCard';
 import { OrgKpiRatingOverrideWarning } from '@/components/review/OrgKpiRatingOverrideWarning';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { useSentBackKpis } from '@/hooks/useSentBackKpis';
+import { useAuditKpiAssignments } from '@/hooks/useAuditKpiAssignments';
 import { 
   DEFAULT_WORKFLOW_STAGES, 
   resolveForwardStatus, 
@@ -137,6 +138,7 @@ export function AuditScorecard({
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const { data: sentBackKpiIds } = useSentBackKpis(kpiIds);
   const { data: queries } = useKpiQueries(kpiIds);
+  const { data: auditKpiAssignments } = useAuditKpiAssignments(kpiIds);
 
   // Fetch ALL-period submissions for tracker modal & review panel history
   const allKpiIds = useMemo(() => allKpis?.map(k => k.id) || [], [allKpis]);
@@ -769,6 +771,7 @@ export function AuditScorecard({
               onToggleExpand={toggleDailyExpand}
               workflowStages={effectiveStages}
               sentBackKpiIds={sentBackKpiIds}
+              auditKpiAssignments={auditKpiAssignments}
             />
           )}
         </CardContent>

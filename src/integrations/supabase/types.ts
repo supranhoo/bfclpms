@@ -132,6 +132,66 @@ export type Database = {
           },
         ]
       }
+      audit_kpi_level_assignments: {
+        Row: {
+          assigned_by: string | null
+          auditor_id: string
+          created_at: string
+          id: string
+          kpi_id: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          auditor_id: string
+          created_at?: string
+          id?: string
+          kpi_id: string
+        }
+        Update: {
+          assigned_by?: string | null
+          auditor_id?: string
+          created_at?: string
+          id?: string
+          kpi_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_kpi_level_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_kpi_level_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_kpi_level_assignments_auditor_id_fkey"
+            columns: ["auditor_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_kpi_level_assignments_auditor_id_fkey"
+            columns: ["auditor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_kpi_level_assignments_kpi_id_fkey"
+            columns: ["kpi_id"]
+            isOneToOne: false
+            referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       backup_logs: {
         Row: {
           backup_type: string
