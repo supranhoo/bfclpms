@@ -296,10 +296,13 @@ export function EmployeeSelectorGrid({
         total: empKpis.length,
       };
     } else {
+      const pending = empKpis.filter(k => k.status === 'management_review').length;
+      const approved = empKpis.filter(k => k.status === 'approved').length;
+      const inPipeline = empKpis.length - pending - approved;
       return {
-        badge1: empKpis.filter(k => k.status === 'management_review').length,
-        badge2: empKpis.filter(k => k.status === 'approved').length,
-        badge3: 0,
+        badge1: pending,
+        badge2: approved,
+        badge3: inPipeline,
         total: empKpis.length,
       };
     }
@@ -609,6 +612,10 @@ export function EmployeeSelectorGrid({
       // 3-tier: badge3=done, badge2=in-progress, badge1=pending
       return { done: kpiStats.badge3, inProgress: kpiStats.badge2, total: kpiStats.total };
     }
+    if (viewLevel === 'management') {
+      // 3-tier for management: done=approved(badge2), inProgress=in-pipeline(badge3), pending=management_review(badge1)
+      return { done: kpiStats.badge2, inProgress: kpiStats.badge3, total: kpiStats.total };
+    }
     // 2-tier: badge2=done, badge1=pending
     return { done: kpiStats.badge2, inProgress: 0, total: kpiStats.total };
   };
@@ -716,6 +723,11 @@ export function EmployeeSelectorGrid({
             {kpiStats.badge1 > 0 && (
               <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800">
                 {kpiStats.badge1} pending
+              </Badge>
+            )}
+            {kpiStats.badge3 > 0 && (
+              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                {kpiStats.badge3} in pipeline
               </Badge>
             )}
             {kpiStats.badge2 > 0 && (
