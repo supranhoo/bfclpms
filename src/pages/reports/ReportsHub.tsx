@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { useReportAccess } from '@/hooks/useReportAccess';
 import { 
   BarChart3, 
   FileText, 
@@ -22,6 +23,7 @@ interface ReportCard {
   icon: React.ElementType;
   path: string;
   color: string;
+  reportKey: string;
 }
 
 const reports: ReportCard[] = [
@@ -31,6 +33,7 @@ const reports: ReportCard[] = [
     icon: Users,
     path: '/reports/employee-summary',
     color: 'text-emerald-500',
+    reportKey: 'employee-summary',
   },
   {
     title: 'Performance Report',
@@ -38,6 +41,7 @@ const reports: ReportCard[] = [
     icon: BarChart3,
     path: '/reports/performance',
     color: 'text-primary',
+    reportKey: 'performance',
   },
   {
     title: 'Monthly Scorecard',
@@ -45,6 +49,7 @@ const reports: ReportCard[] = [
     icon: FileText,
     path: '/reports/monthly-scorecard',
     color: 'text-blue-500',
+    reportKey: 'monthly-scorecard',
   },
   {
     title: 'KRA Issuance Report',
@@ -52,6 +57,7 @@ const reports: ReportCard[] = [
     icon: FileText,
     path: '/reports/kra-issuance',
     color: 'text-cyan-500',
+    reportKey: 'kra-issuance',
   },
   {
     title: 'Query Report',
@@ -59,6 +65,7 @@ const reports: ReportCard[] = [
     icon: AlertTriangle,
     path: '/reports/queries',
     color: 'text-warning',
+    reportKey: 'queries',
   },
   {
     title: 'Unified Issues Report',
@@ -66,6 +73,7 @@ const reports: ReportCard[] = [
     icon: AlertTriangle,
     path: '/reports/issues',
     color: 'text-destructive',
+    reportKey: 'issues',
   },
   {
     title: 'Completion Rate Report',
@@ -73,6 +81,7 @@ const reports: ReportCard[] = [
     icon: TrendingUp,
     path: '/reports/completion',
     color: 'text-green-500',
+    reportKey: 'completion',
   },
   {
     title: 'Department Summary',
@@ -80,6 +89,7 @@ const reports: ReportCard[] = [
     icon: Building2,
     path: '/reports/department',
     color: 'text-purple-500',
+    reportKey: 'department',
   },
   {
     title: 'Manager Team Report',
@@ -87,6 +97,7 @@ const reports: ReportCard[] = [
     icon: Users,
     path: '/reports/manager-team',
     color: 'text-cyan-500',
+    reportKey: 'department',
   },
   {
     title: 'Audit Trail Report',
@@ -94,6 +105,7 @@ const reports: ReportCard[] = [
     icon: ClipboardList,
     path: '/reports/audit-trail',
     color: 'text-orange-500',
+    reportKey: 'audit-trail',
   },
   {
     title: 'Period Comparison',
@@ -101,6 +113,7 @@ const reports: ReportCard[] = [
     icon: Calendar,
     path: '/reports/period-comparison',
     color: 'text-indigo-500',
+    reportKey: 'employee-summary',
   },
   {
     title: 'Training Needs (TNI)',
@@ -108,6 +121,7 @@ const reports: ReportCard[] = [
     icon: GraduationCap,
     path: '/reports/tni',
     color: 'text-rose-500',
+    reportKey: 'tni',
   },
   {
     title: 'KPI Detail Report',
@@ -115,6 +129,7 @@ const reports: ReportCard[] = [
     icon: Table2,
     path: '/reports/kpi-detail',
     color: 'text-violet-500',
+    reportKey: 'kpi-detail',
   },
   {
     title: 'KPI Mapping Matrix',
@@ -122,6 +137,7 @@ const reports: ReportCard[] = [
     icon: Grid3X3,
     path: '/admin/kpi-mapping',
     color: 'text-teal-500',
+    reportKey: 'kpi-detail',
   },
   {
     title: 'Workflow Bottleneck Report',
@@ -129,11 +145,15 @@ const reports: ReportCard[] = [
     icon: Workflow,
     path: '/reports/bottleneck',
     color: 'text-amber-500',
+    reportKey: 'bottleneck',
   },
 ];
 
 export default function ReportsHub() {
   const navigate = useNavigate();
+  const { canView, isLoading } = useReportAccess();
+
+  const visibleReports = reports.filter(r => canView(r.reportKey));
 
   return (
     <div className="space-y-6">
@@ -144,7 +164,7 @@ export default function ReportsHub() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {reports.map((report) => (
+        {visibleReports.map((report) => (
           <Card 
             key={report.path} 
             className="hover:shadow-md transition-shadow cursor-pointer group"

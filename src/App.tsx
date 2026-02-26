@@ -60,6 +60,9 @@ const IssuesReport = lazy(() => import("./pages/reports/IssuesReport"));
 const KpiDetailReport = lazy(() => import("./pages/reports/KpiDetailReport"));
 const BottleneckReport = lazy(() => import("./pages/reports/BottleneckReport"));
 
+// Layout components
+import { ReportRoute } from "./components/layout/ReportRoute";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -194,71 +197,71 @@ const App = () => (
                   </ProtectedRoute>
                 } />
                 
-                {/* Report routes */}
+                {/* Report routes - dynamic access from report_access_config */}
                 <Route path="/reports" element={
-                  <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management']}>
+                  <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management', 'employee', 'hr_pms', 'skip_level']}>
                     <ReportsHub />
                   </ProtectedRoute>
                 } />
                 <Route path="/reports/performance" element={
-                  <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management']}>
+                  <ReportRoute reportKey="performance">
                     <PerformanceReport />
-                  </ProtectedRoute>
+                  </ReportRoute>
                 } />
                 <Route path="/reports/kra-issuance" element={
-                  <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>
+                  <ReportRoute reportKey="kra-issuance">
                     <KRAIssuance />
-                  </ProtectedRoute>
+                  </ReportRoute>
                 } />
                 <Route path="/reports/queries" element={
-                  <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management']}>
+                  <ReportRoute reportKey="queries">
                     <QueryReport />
-                  </ProtectedRoute>
+                  </ReportRoute>
                 } />
                 <Route path="/reports/department" element={
-                  <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>
+                  <ReportRoute reportKey="department">
                     <DepartmentReport />
-                  </ProtectedRoute>
+                  </ReportRoute>
                 } />
                 <Route path="/reports/completion" element={
-                  <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>
+                  <ReportRoute reportKey="completion">
                     <CompletionReport />
-                  </ProtectedRoute>
+                  </ReportRoute>
                 } />
                 <Route path="/reports/audit-trail" element={
-                  <ProtectedRoute allowedRoles={['admin', 'auditor']}>
+                  <ReportRoute reportKey="audit-trail">
                     <AuditTrailReport />
-                  </ProtectedRoute>
+                  </ReportRoute>
                 } />
                 <Route path="/reports/monthly-scorecard" element={
-                  <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management']}>
+                  <ReportRoute reportKey="monthly-scorecard">
                     <MonthlyScorecardReport />
-                  </ProtectedRoute>
+                  </ReportRoute>
                 } />
                 <Route path="/reports/employee-summary" element={
-                  <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management']}>
+                  <ReportRoute reportKey="employee-summary">
                     <EmployeePerformanceSummary />
-                  </ProtectedRoute>
+                  </ReportRoute>
                 } />
                 <Route path="/reports/tni" element={
-                  <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>
+                  <ReportRoute reportKey="tni">
                     <TNIReport />
-                  </ProtectedRoute>
+                  </ReportRoute>
                 } />
                 <Route path="/reports/issues" element={
-                  <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management']}>
+                  <ReportRoute reportKey="issues">
                     <IssuesReport />
-                  </ProtectedRoute>
+                  </ReportRoute>
                 } />
                 <Route path="/reports/kpi-detail" element={
-                  <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management', 'hr_pms']}>
+                  <ReportRoute reportKey="kpi-detail">
                     <Suspense fallback={<PageFallback />}><KpiDetailReport /></Suspense>
-                  </ProtectedRoute>
+                  </ReportRoute>
                 } />
                 <Route path="/reports/bottleneck" element={
-                  <ProtectedRoute allowedRoles={['admin', 'auditor', 'management']}>
+                  <ReportRoute reportKey="bottleneck">
                     <Suspense fallback={<PageFallback />}><BottleneckReport /></Suspense>
-                  </ProtectedRoute>
+                  </ReportRoute>
                 } />
                 <Route path="/admin/pip" element={
                   <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>

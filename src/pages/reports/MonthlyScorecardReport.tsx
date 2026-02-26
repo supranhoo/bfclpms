@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useReportAccess } from '@/hooks/useReportAccess';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,6 +29,8 @@ const RATING_COLORS: Record<string, string> = {
 };
 
 export default function MonthlyScorecardReport() {
+  const { canDownload } = useReportAccess();
+  const canExport = canDownload('monthly-scorecard');
   const currentYear = new Date().getFullYear();
   const currentMonth = MONTHS[new Date().getMonth()];
   
@@ -471,16 +474,18 @@ export default function MonthlyScorecardReport() {
         description={`Employee performance scorecards for ${selectedPeriod} ${selectedYear}`}
         backTo="/reports"
         actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" className="gap-2" onClick={handleExportExcel}>
-              <FileSpreadsheet className="h-4 w-4" />
-              Excel
-            </Button>
-            <Button variant="outline" className="gap-2" onClick={handleExportAllPdf}>
-              <FileText className="h-4 w-4" />
-              PDF
-            </Button>
-          </div>
+          canExport ? (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" className="gap-2" onClick={handleExportExcel}>
+                <FileSpreadsheet className="h-4 w-4" />
+                Excel
+              </Button>
+              <Button variant="outline" className="gap-2" onClick={handleExportAllPdf}>
+                <FileText className="h-4 w-4" />
+                PDF
+              </Button>
+            </div>
+          ) : undefined
         }
       />
 

@@ -2232,6 +2232,95 @@ export type Database = {
           },
         ]
       }
+      report_access_config: {
+        Row: {
+          created_at: string
+          download_roles: Database["public"]["Enums"]["app_role"][]
+          id: string
+          report_key: string
+          report_name: string
+          updated_at: string
+          view_roles: Database["public"]["Enums"]["app_role"][]
+        }
+        Insert: {
+          created_at?: string
+          download_roles?: Database["public"]["Enums"]["app_role"][]
+          id?: string
+          report_key: string
+          report_name: string
+          updated_at?: string
+          view_roles?: Database["public"]["Enums"]["app_role"][]
+        }
+        Update: {
+          created_at?: string
+          download_roles?: Database["public"]["Enums"]["app_role"][]
+          id?: string
+          report_key?: string
+          report_name?: string
+          updated_at?: string
+          view_roles?: Database["public"]["Enums"]["app_role"][]
+        }
+        Relationships: []
+      }
+      report_access_user_overrides: {
+        Row: {
+          can_download: boolean
+          can_view: boolean
+          created_at: string
+          granted_by: string | null
+          id: string
+          report_key: string
+          user_id: string
+        }
+        Insert: {
+          can_download?: boolean
+          can_view?: boolean
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          report_key: string
+          user_id: string
+        }
+        Update: {
+          can_download?: boolean
+          can_view?: boolean
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          report_key?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_access_user_overrides_granted_by_fkey"
+            columns: ["granted_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_access_user_overrides_granted_by_fkey"
+            columns: ["granted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_access_user_overrides_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_access_user_overrides_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       review_periods: {
         Row: {
           created_at: string

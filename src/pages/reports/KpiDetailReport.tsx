@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useReportAccess } from '@/hooks/useReportAccess';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -83,6 +84,8 @@ function CalcCell({ value, isNa, format }: { value: number | null; isNa: boolean
 }
 
 export default function KpiDetailReport() {
+  const { canDownload } = useReportAccess();
+  const canExport = canDownload('kpi-detail');
   const currentYear = new Date().getFullYear();
 
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
@@ -309,10 +312,12 @@ export default function KpiDetailReport() {
         description="KPI-level drill-down showing all stage scores with weighted totals. N/A KPIs are shown with N/A labels."
         backTo="/reports"
         actions={
-          <Button onClick={handleExport} disabled={!filteredRows.length}>
-            <Download className="mr-2 h-4 w-4" />
-            Export Excel
-          </Button>
+          canExport ? (
+            <Button onClick={handleExport} disabled={!filteredRows.length}>
+              <Download className="mr-2 h-4 w-4" />
+              Export Excel
+            </Button>
+          ) : undefined
         }
       />
 

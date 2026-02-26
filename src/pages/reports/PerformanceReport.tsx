@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { useReportAccess } from '@/hooks/useReportAccess';
 import { useAllKpis, useReviewSubmissions } from '@/hooks/useKpis';
 import { useProfiles, useKraCategories } from '@/hooks/useOrganization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +19,8 @@ const ratingColors = {
 };
 
 export default function PerformanceReport() {
+  const { canDownload } = useReportAccess();
+  const canExport = canDownload('performance');
   const [categorySortBy, setCategorySortBy] = useState<'weightage-desc' | 'weightage-asc' | 'score-desc' | 'score-asc'>('score-desc');
   const { data: allKpis, isLoading: kpisLoading } = useAllKpis();
   const { data: profiles } = useProfiles();
@@ -96,10 +99,12 @@ export default function PerformanceReport() {
         description="Organization-wide performance analytics"
         backTo="/reports"
         actions={
-          <Button variant="outline" onClick={handleExportExcel}>
-            <Download className="h-4 w-4 mr-2" />
-            Export Excel
-          </Button>
+          canExport ? (
+            <Button variant="outline" onClick={handleExportExcel}>
+              <Download className="h-4 w-4 mr-2" />
+              Export Excel
+            </Button>
+          ) : undefined
         }
       />
 
