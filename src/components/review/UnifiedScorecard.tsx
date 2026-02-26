@@ -57,6 +57,7 @@ import { OrgKpiRatingOverrideWarning } from '@/components/review/OrgKpiRatingOve
 import { RollbackRequestBanner } from '@/components/review/RollbackRequestBanner';
 import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog';
 import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
+import { useAuditKpiAssignments } from '@/hooks/useAuditKpiAssignments';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { 
   resolveForwardStatus, 
@@ -168,6 +169,10 @@ export function UnifiedScorecard({
   // Fetch the employee's workflow stages dynamically
   const { data: workflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(employee.id);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
+
+  // Fetch KPI-level audit assignments when in auditor view
+  const auditKpiIdList = useMemo(() => (allKpis || []).map(k => k.id), [allKpis]);
+  const { data: auditKpiAssignments } = useAuditKpiAssignments(viewLevel === 'auditor' ? auditKpiIdList : []);
   
   // Build dynamic config from workflow stages
   const config = useMemo(() => {
@@ -1139,6 +1144,7 @@ export function UnifiedScorecard({
               expandedKpis={expandedDailyKpis}
               onToggleExpand={toggleDailyExpand}
               workflowStages={effectiveStages}
+              auditKpiAssignments={auditKpiAssignments}
             />
           )}
         </CardContent>
