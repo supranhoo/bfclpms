@@ -1,71 +1,85 @@
 
 
-# Fix: Binary Org KPI Value and Rating Not Displaying in Reviewer Input
+# Fix: Org KPI Propagated Data Not Reflecting on Employee Dashboard
 
-## Root Cause Analysis
+## Corrected Data Verification
 
-The value and rating are correctly stored in the database (`achieved_value=5`, `self_score=0`) and correctly displayed in the **Review Journey** cards (Self stage shows "Value: 5, Rating: 0"). However, the **reviewer's input fields** (the Yes/No selector below the review panel) appear empty.
+The actual database state (verified via direct query):
 
-### Root Cause: Numeric-to-String Type Mismatch
+| Field | org_kpi_values | review_submissions |
+|-------|---------------|-------------------|
+| achieved_value | 5 (numeric) | 5.00 |
+| self_score | N/A | 0.00 |
+| self_rating | N/A | red |
+| self_remarks | "Zero Fatal" | "Zero Fatal" |
+| status | propagated | N/A |
+| kpi status | N/A | self_review |
 
-In `AchievedValueScoreInput.tsx` (line 176), the value is passed to `QualitativeValueInput` with this logic:
+The `self_score` is **0**, not 5. This is because the KPI's scoring logic is: "Rating 5: 0, Rating 0: Any Fatal" -- meaning zero fatals (Yes) correctly maps to score 0 based on how the rating thresholds are defined for this KPI. The propagation RPC is working correctly.
 
-```text
-value={typeof achievedValue === 'string' ? achievedValue : null}
-```
+## Root Cause: Missing Cache Invalidation
 
-For org-level binary KPIs, `reviewerAchievedValue` is initialized from `existing?.achieved_value`, which is a **NUMBER** (5), not a **STRING** ("Yes"). Since `typeof 5 !== 'string'`, the value is passed as `null` to `QualitativeValueInput`, which then shows no button selected and no score displayed.
+The propagation hooks (`usePropagateOrgKpiValue` and `useBulkPropagateOrgKpiValues`) only invalidate these query keys:
+- `['kpis']`
+- `['review-submissions']`
+- `['org-kpi-values']`
 
-The `QualitativeValueInput` component finds the selected option by matching `opt.label === value` (line 70 of that file). When `value` is `null`, nothing matches, so the UI shows blank -- the "Yes"/"No" buttons appear unselected.
+But they are **missing** the keys that the employee dashboard and other views depend on:
+- `['my-kpis']` -- used by `useMyKpis()` on the employee Dashboard
+- `['all-kpis']` -- used by admin reports
+- `['kpis-by-period']` -- used by period-filtered views
 
-### Why Remarks Work but Value Doesn't
+Every other mutation in the codebase that modifies KPI data invalidates all these keys (verified in `useKpis.ts` lines 366-370, 394-398, 503-507, 531-535, 663-667, 731-734). The propagation hooks are the only ones that don't follow this pattern.
 
-Remarks are stored as plain strings (`self_remarks`) and read directly. The achieved value goes through the qualitative rendering pipeline which expects string labels ("Yes"/"No"), not their numeric mappings (5/0).
+Without invalidating `['my-kpis']`, the employee's dashboard continues showing stale cached data (old status, no score) until they manually refresh the browser.
 
 ## Fix
 
-### File: `src/components/review/AchievedValueScoreInput.tsx` (line ~171-186)
+**File:** `src/hooks/usePropagateOrgKpiValue.ts`
 
-Before passing to `QualitativeValueInput`, reverse-map numeric achieved values back to their qualitative label using the option definitions (BINARY_OPTIONS or custom qualitative_options).
+Add the missing cache invalidation keys to both hooks' `onSuccess` callbacks:
 
+### usePropagateOrgKpiValue (line 185-188)
 ```text
-Current (line 176):
-  value={typeof achievedValue === 'string' ? achievedValue : null}
+Current:
+  queryClient.invalidateQueries({ queryKey: ['kpis'] });
+  queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+  queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
 
 Fixed:
-  value={(() => {
-    if (typeof achievedValue === 'string') return achievedValue;
-    if (typeof achievedValue === 'number') {
-      const opts = kpi.qualitative_options?.length
-        ? kpi.qualitative_options
-        : (uomType === 'binary' ? BINARY_OPTIONS : []);
-      return opts.find(o => o.rating === achievedValue)?.label || null;
-    }
-    return null;
-  })()}
+  queryClient.invalidateQueries({ queryKey: ['kpis'] });
+  queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
+  queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+  queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
+  queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+  queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
 ```
 
-This requires importing `BINARY_OPTIONS` from `@/lib/qualitativeUom` (it's already imported indirectly via the type import but needs a direct value import).
+### useBulkPropagateOrgKpiValues (line 243-246)
+Same additions applied.
 
-### Impact
+## Impact
 
-- **Binary KPIs**: numeric 5 maps to "Yes", numeric 0 maps to "No" -- buttons correctly highlighted
-- **Tiered KPIs**: numeric values map back to their custom option labels
-- **Non-qualitative KPIs**: unaffected (they use the numeric input path, not QualitativeValueInput)
-- **Self-review**: unaffected (SelfReviewSheet stores string values directly)
-- **All reviewer levels**: fixed (manager, auditor, skip-level, HR PMS, management)
+- Employee dashboards will immediately reflect propagated org KPI values, scores, and status changes
+- Admin report views will also refresh automatically
+- No database or schema changes needed
+- Display-only fix, zero regression risk
 
 ## Risk Assessment
 
-| Aspect | Risk | Mitigation |
-|--------|------|------------|
-| Data | None -- display-only change | No database writes affected |
-| Regression | Very low -- only affects qualitative input path | Non-qualitative KPIs use a different code branch |
-| Edge case | Multiple options with same rating | `find()` returns first match, which is acceptable |
+| Aspect | Risk | Notes |
+|--------|------|-------|
+| Data | None | Cache invalidation only triggers refetch |
+| Regression | None | Aligns with pattern used by every other KPI mutation |
+| Performance | Negligible | A few extra cache invalidation calls |
+
+## Note on Cross-Session Updates
+
+This fix works for the admin who propagates (same browser session). Employees on a different browser/device will need to refresh their page. Real-time cross-session sync would require enabling Realtime subscriptions (separate enhancement).
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/review/AchievedValueScoreInput.tsx` | Add numeric-to-label reverse mapping for qualitative value prop |
+| `src/hooks/usePropagateOrgKpiValue.ts` | Add `my-kpis`, `all-kpis`, `kpis-by-period` to cache invalidation in both hooks |
 
