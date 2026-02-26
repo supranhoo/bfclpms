@@ -170,10 +170,6 @@ export function UnifiedScorecard({
   const { data: workflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(employee.id);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
 
-  // Fetch KPI-level audit assignments when in auditor view
-  const auditKpiIdList = useMemo(() => (allKpis || []).map(k => k.id), [allKpis]);
-  const { data: auditKpiAssignments } = useAuditKpiAssignments(viewLevel === 'auditor' ? auditKpiIdList : []);
-  
   // Build dynamic config from workflow stages
   const config = useMemo(() => {
     // For hr_pms: the "previous score" field depends on which stage precedes hr_pms_review.
@@ -222,6 +218,10 @@ export function UnifiedScorecard({
     const yearMatch = k.review_year === selectedYear;
     return periodMatch && yearMatch;
   }), [allKpis, selectedPeriod, selectedYear]);
+
+  // Fetch KPI-level audit assignments (period-filtered to avoid URL length limits)
+  const auditKpiIdList = useMemo(() => (kpis || []).map(k => k.id), [kpis]);
+  const { data: auditKpiAssignments } = useAuditKpiAssignments(viewLevel === 'auditor' ? auditKpiIdList : []);
 
   // Fetch org KPI values for this period
   const { data: orgKpiValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
