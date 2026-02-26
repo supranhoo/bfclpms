@@ -332,6 +332,21 @@ export function EmployeeSelectorGrid({
       filtered = filtered?.filter(m => employeeIds.has(m.id));
     }
 
+    // Auto-sort by urgency: most pending KPIs first
+    filtered?.sort((a, b) => {
+      const statsA = getEmployeeKpiStats(a.id, a.relationship);
+      const statsB = getEmployeeKpiStats(b.id, b.relationship);
+      // Employees with 0 KPIs sink to bottom
+      if (statsA.total === 0 && statsB.total > 0) return 1;
+      if (statsB.total === 0 && statsA.total > 0) return -1;
+      // Most pending first
+      if (statsB.badge1 !== statsA.badge1) return statsB.badge1 - statsA.badge1;
+      // More total KPIs = higher priority
+      if (statsB.total !== statsA.total) return statsB.total - statsA.total;
+      // Alphabetical fallback
+      return (a.full_name || '').localeCompare(b.full_name || '');
+    });
+
     return filtered;
   }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers]);
 
@@ -587,115 +602,140 @@ export function EmployeeSelectorGrid({
     }
   };
 
+  // Compute progress bar segments from kpiStats based on view level
+  const getProgressSegments = (kpiStats: { badge1: number; badge2: number; badge3: number; total: number }) => {
+    // badge1 = pending, badge2 = in-progress or done (depends on level), badge3 = done (for 3-tier levels)
+    if (viewLevel === 'hr_pms' || viewLevel === 'audit') {
+      // 3-tier: badge3=done, badge2=in-progress, badge1=pending
+      return { done: kpiStats.badge3, inProgress: kpiStats.badge2, total: kpiStats.total };
+    }
+    // 2-tier: badge2=done, badge1=pending
+    return { done: kpiStats.badge2, inProgress: 0, total: kpiStats.total };
+  };
+
   // Render badge based on view level
   const renderEmployeeBadges = (member: EmployeeProfile) => {
     const kpiStats = getEmployeeKpiStats(member.id, member.relationship);
     
     if (kpiStats.total === 0) {
       return (
-        <Badge variant="outline" className="bg-muted text-muted-foreground border-muted text-xs">
-          No KPIs
-        </Badge>
+        <div className="mt-2">
+          <Badge variant="outline" className="bg-muted text-muted-foreground border-muted text-xs">
+            No KPIs
+          </Badge>
+        </div>
       );
     }
 
-    if (viewLevel === 'team') {
-      return (
-        <>
-          {/* Relationship badge */}
-          {member.relationship === 'indirect' && (
-            <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200 text-xs dark:bg-teal-900/20 dark:text-teal-400 dark:border-teal-800">
-              Indirect
-            </Badge>
-          )}
-          {member.relationship === 'direct' && (
-            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
-              Direct
-            </Badge>
-          )}
-          {kpiStats.badge1 > 0 && (
-            <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800">
-              {kpiStats.badge1} pending
-            </Badge>
-          )}
-          {kpiStats.badge2 > 0 && (
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
-              {kpiStats.badge2} reviewed
-            </Badge>
-          )}
-        </>
-      );
-    } else if (viewLevel === 'skip_level') {
-      return (
-        <>
-          {kpiStats.badge1 > 0 && (
-            <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200 text-xs dark:bg-teal-900/20 dark:text-teal-400 dark:border-teal-800">
-              {kpiStats.badge1} pending
-            </Badge>
-          )}
-          {kpiStats.badge2 > 0 && (
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
-              {kpiStats.badge2} reviewed
-            </Badge>
-          )}
-        </>
-      );
-    } else if (viewLevel === 'hr_pms') {
-      return (
-        <>
-          {kpiStats.badge1 > 0 && (
-            <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200 text-xs dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800">
-              {kpiStats.badge1} pending
-            </Badge>
-          )}
-          {kpiStats.badge2 > 0 && (
-            <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">
-              {kpiStats.badge2} in review
-            </Badge>
-          )}
-          {kpiStats.badge3 > 0 && (
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
-              {kpiStats.badge3} reviewed
-            </Badge>
-          )}
-        </>
-      );
-    } else if (viewLevel === 'audit') {
-      return (
-        <>
-          {kpiStats.badge1 > 0 && (
-            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800">
-              {kpiStats.badge1} pending
-            </Badge>
-          )}
-          {kpiStats.badge2 > 0 && (
-            <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">
-              {kpiStats.badge2} in audit
-            </Badge>
-          )}
-          {kpiStats.badge3 > 0 && (
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
-              {kpiStats.badge3} forwarded
-            </Badge>
-          )}
-        </>
-      );
-    } else {
-      return (
-        <>
-          {kpiStats.badge1 > 0 && (
-            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800">
-              {kpiStats.badge1} pending
-            </Badge>
-          )}
-          {kpiStats.badge2 > 0 && (
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
-              {kpiStats.badge2} approved
-            </Badge>
-          )}
-        </>
-      );
-    }
+    const segments = getProgressSegments(kpiStats);
+
+    const renderBadges = () => {
+      if (viewLevel === 'team') {
+        return (
+          <>
+            {member.relationship === 'indirect' && (
+              <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200 text-xs dark:bg-teal-900/20 dark:text-teal-400 dark:border-teal-800">
+                Indirect
+              </Badge>
+            )}
+            {member.relationship === 'direct' && (
+              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                Direct
+              </Badge>
+            )}
+            {kpiStats.badge1 > 0 && (
+              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800">
+                {kpiStats.badge1} pending
+              </Badge>
+            )}
+            {kpiStats.badge2 > 0 && (
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                {kpiStats.badge2} reviewed
+              </Badge>
+            )}
+          </>
+        );
+      } else if (viewLevel === 'skip_level') {
+        return (
+          <>
+            {kpiStats.badge1 > 0 && (
+              <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200 text-xs dark:bg-teal-900/20 dark:text-teal-400 dark:border-teal-800">
+                {kpiStats.badge1} pending
+              </Badge>
+            )}
+            {kpiStats.badge2 > 0 && (
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                {kpiStats.badge2} reviewed
+              </Badge>
+            )}
+          </>
+        );
+      } else if (viewLevel === 'hr_pms') {
+        return (
+          <>
+            {kpiStats.badge1 > 0 && (
+              <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200 text-xs dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800">
+                {kpiStats.badge1} pending
+              </Badge>
+            )}
+            {kpiStats.badge2 > 0 && (
+              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">
+                {kpiStats.badge2} in review
+              </Badge>
+            )}
+            {kpiStats.badge3 > 0 && (
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                {kpiStats.badge3} reviewed
+              </Badge>
+            )}
+          </>
+        );
+      } else if (viewLevel === 'audit') {
+        return (
+          <>
+            {kpiStats.badge1 > 0 && (
+              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800">
+                {kpiStats.badge1} pending
+              </Badge>
+            )}
+            {kpiStats.badge2 > 0 && (
+              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">
+                {kpiStats.badge2} in audit
+              </Badge>
+            )}
+            {kpiStats.badge3 > 0 && (
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                {kpiStats.badge3} forwarded
+              </Badge>
+            )}
+          </>
+        );
+      } else {
+        return (
+          <>
+            {kpiStats.badge1 > 0 && (
+              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800">
+                {kpiStats.badge1} pending
+              </Badge>
+            )}
+            {kpiStats.badge2 > 0 && (
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                {kpiStats.badge2} approved
+              </Badge>
+            )}
+          </>
+        );
+      }
+    };
+
+    return (
+      <div className="space-y-2 mt-2 w-full">
+        <EmployeeProgressBar done={segments.done} inProgress={segments.inProgress} total={segments.total} />
+        <div className="flex items-center gap-2 flex-wrap">
+          {renderBadges()}
+        </div>
+      </div>
+    );
   };
 
   if (isLoading) {
@@ -823,9 +863,8 @@ export function EmployeeSelectorGrid({
                               Manager: {managerName}
                             </p>
                           )}
-                          <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            {renderEmployeeBadges(member)}
-                          </div>
+                          {renderEmployeeBadges(member)}
+                          
                         </div>
                       </div>
                     </CardContent>
@@ -896,5 +935,27 @@ function StatCard({ icon: Icon, label, value, color, subtitle, className = '', o
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// Mini progress bar for employee cards
+function EmployeeProgressBar({ done, inProgress, total }: { done: number; inProgress: number; total: number }) {
+  if (total === 0) return null;
+  const donePct = (done / total) * 100;
+  const inProgressPct = (inProgress / total) * 100;
+  return (
+    <div className="flex items-center gap-2 w-full">
+      <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden flex flex-row">
+        {donePct > 0 && (
+          <div className="h-full bg-green-500 dark:bg-green-400" style={{ width: `${donePct}%` }} />
+        )}
+        {inProgressPct > 0 && (
+          <div className="h-full bg-amber-400 dark:bg-amber-500" style={{ width: `${inProgressPct}%` }} />
+        )}
+      </div>
+      <span className="text-xs text-muted-foreground whitespace-nowrap font-medium">
+        {done + inProgress}/{total}
+      </span>
+    </div>
   );
 }
