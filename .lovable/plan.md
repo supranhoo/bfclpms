@@ -1,55 +1,114 @@
 
 
-# Fix: Progress Bar Fraction Shows KPIs Past KRA SET (v1.46.18)
+# Audit KPI Delegation System (v1.46.19)
 
-## Problem
+## Overview
 
-The fraction text on employee cards (e.g., "6/28") currently shows `done + inProgress` which varies by view level. The user wants a consistent, universally meaningful number: **how many KPIs have cleared the KRA SET stage**. This helps all reviewer levels instantly understand how many KPIs are actively in the review pipeline.
+Enable the Audit Lead (e.g., Shekhar) to assign specific employees to audit team members (e.g., Mayank, Ayush). All auditors continue to see all employees and KPIs -- nothing is hidden. However, assigned employees are visually separated and highlighted in the audit view so each auditor can focus on their workload.
 
-## Solution
+## How It Works
 
-Update the `EmployeeProgressBar` component to accept a new `clearedKraSet` count and display that as the fraction numerator instead of `done + inProgress`. The `getEmployeeKpiStats` function will compute this count for every view level.
+- Shekhar (Audit Lead) opens a new "Audit Assignments" management panel
+- He assigns specific employees to Mayank or Ayush
+- When Mayank logs into the Audit view, he sees two sections:
+  - **"Assigned to Me"** (top) -- employees specifically assigned to him, highlighted
+  - **"All Others"** (below) -- remaining employees, still fully accessible
+- Shekhar sees everything as before (he can optionally filter by assignee)
+- New team members added later can receive assignments the same way
 
 ## Visual Result
 
 ```text
-Before: [=========-------] 6/28   (done + inProgress)
-After:  [=========-------] 27/28  (KPIs past kra_set)
+Audit View for Mayank:
++------------------------------------------+
+| [Filter: Assigned to Me | All]           |
++------------------------------------------+
+| -- MY ASSIGNMENTS (3 employees) -------- |
+| [Employee A]  [5 pending] [2 in audit]   |
+| [Employee B]  [3 pending]                |
+| [Employee C]  [1 in audit] [4 forwarded] |
+|                                          |
+| -- ALL OTHERS (47 employees) ----------- |
+| [Employee D]  [2 pending]                |
+| [Employee E]  [1 in audit]               |
+| ...                                      |
++------------------------------------------+
 ```
 
-## File to Change
+## Database Changes
 
-**`src/components/review/EmployeeSelectorGrid.tsx`**
+### New Table: `audit_kpi_assignments`
 
-### 1. Add `clearedKraSet` to stats (~line 246-308)
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid (PK) | Auto-generated |
+| auditor_id | uuid (FK profiles) | The auditor receiving the assignment |
+| employee_id | uuid (FK profiles) | The employee whose KPIs are assigned |
+| assigned_by | uuid | Who made the assignment |
+| created_at | timestamptz | Auto timestamp |
 
-In `getEmployeeKpiStats`, add a `clearedKraSet` field that counts KPIs where `status !== 'kra_set'`:
+Unique constraint on `(auditor_id, employee_id)` to prevent duplicates.
+
+### RLS Policies
+
+- **SELECT**: All authenticated auditors can read assignments (needed to display grouping)
+- **INSERT/UPDATE/DELETE**: Only admins and auditors (lead can manage assignments)
+
+## Code Changes
+
+### 1. New Hook: `src/hooks/useAuditAssignments.ts`
+
+- `useAuditAssignments()` -- fetch all audit assignments
+- `useMyAuditAssignments()` -- fetch assignments for current user
+- `useAssignAuditEmployee()` -- mutation to assign employee to auditor
+- `useRemoveAuditAssignment()` -- mutation to remove assignment
+- Follows the same pattern as `useOrgKpiDataOwner.ts`
+
+### 2. New Component: `src/components/admin/AuditAssignmentDialog.tsx`
+
+- Dialog for audit lead to manage assignments
+- Shows list of auditors with their assigned employees
+- Search/select employees to assign to each auditor
+- Remove existing assignments
+- Accessible from the Audit view header (gear icon or "Manage Assignments" button)
+
+### 3. Update: `src/components/review/EmployeeSelectorGrid.tsx`
+
+- Import `useMyAuditAssignments` hook
+- When `viewLevel === 'audit'`, fetch the current user's assignments
+- Split `displayMembers` into two groups: "assigned" and "others"
+- Add a new filter option: `{ value: 'my_assigned', label: 'My Assignments' }` to the audit status options
+- Render a section divider between the two groups
+- Add a "Manage Assignments" button in the audit header (visible to all auditors)
+
+### 4. Update: `src/components/review/EmployeeSelectorGrid.tsx` -- Status Filter
+
+Add to the audit status options:
 
 ```typescript
-const clearedKraSet = empKpis.filter(k => k.status !== 'kra_set').length;
+audit: [
+  { value: 'all', label: 'All Employees' },
+  { value: 'my_assigned', label: 'My Assignments' },  // NEW
+  { value: 'pending', label: 'With Pending Audit' },
+  { value: 'in_audit', label: 'In Audit' },
+  { value: 'forwarded', label: 'Forwarded' },
+],
 ```
 
-This will be computed once at the top of the function and included in every return object.
+## What Does NOT Change
 
-### 2. Pass `clearedKraSet` through to progress bar (~line 637, 745)
-
-Update `getProgressSegments` return and `EmployeeProgressBar` call to carry the `clearedKraSet` value.
-
-### 3. Update `EmployeeProgressBar` fraction display (~line 968-969)
-
-Change the fraction from `{done + inProgress}/{total}` to `{clearedKraSet}/{total}`:
-
-```tsx
-<span className="text-xs text-muted-foreground whitespace-nowrap font-medium">
-  {clearedKraSet}/{total}
-</span>
-```
+- RLS policies on `kpis` table -- all auditors still see all KPIs
+- The actual audit review workflow (scoring, forwarding, send-back)
+- Other view levels (team, skip-level, HR PMS, management)
+- The AuditScorecard component -- once an employee is clicked, the review experience is identical
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | None | UI-only, no DB changes |
-| Regression | None | Progress bar segments unchanged; only the text label changes |
-| Clarity | Positive | Consistent meaning across all view levels |
+| Data impact | Low | New table only; no existing tables modified |
+| Workflow impact | None | Assignments are a UI filter, not an access restriction |
+| Regression | None | Other view levels untouched; audit RLS unchanged |
+| Scalability | Good | Adding new auditors = just create new assignments |
+| Security | None | Read-only visibility grouping; no privilege changes |
 
