@@ -1,54 +1,45 @@
 
 
-# Fix: Allow Auditors to See Other Auditors in Assignment Popover (v1.46.23)
+# Fix: Show Auditor Assignment Badge After KPI Assignment (v1.46.24)
 
 ## Root Cause
 
-The `user_roles` table has two RLS policies:
-1. **Admins can manage all roles** (ALL) -- admins see everything
-2. **Users can view their own roles** (SELECT where `user_id = auth.uid()`) -- everyone else only sees their own row
+The `audit_kpi_level_assignments` table has **two foreign keys** pointing to `profiles`:
+- `auditor_id` -> `profiles(id)`
+- `assigned_by` -> `profiles(id)`
 
-When an auditor opens the "Assign to Auditor" popover, the `useAuditorsList` hook queries `user_roles` for all rows where `role = 'auditor'`. But RLS filters it down to **only the current user's row**. The popover either shows just the logged-in auditor (useless for delegation) or appears empty if the join fails.
-
-## Solution
-
-Add a new RLS policy on `user_roles` that allows auditors to see other auditor role entries. This is a targeted, read-only policy -- auditors still cannot modify anyone else's roles.
-
-## Changes Required
-
-### 1. Database Migration -- New RLS Policy on `user_roles`
-
-Add a SELECT policy allowing auditors to view rows where `role = 'auditor'`:
-
-```sql
-CREATE POLICY "Auditors can view auditor roles"
-ON public.user_roles
-FOR SELECT
-TO authenticated
-USING (
-  role = 'auditor'
-  AND has_role(auth.uid(), 'auditor'::app_role)
-);
+The `useAuditKpiAssignments` hook fetches data with:
+```typescript
+.select('kpi_id, auditor_id, profiles(full_name)')
 ```
 
-This means: if you are an auditor, you can see all rows where `role = 'auditor'`. You still cannot see admin, manager, or other role entries. This is the minimum-privilege approach.
+PostgREST cannot determine which FK to use for the `profiles` join, so it returns an **ambiguity error**. The query fails silently, `auditKpiAssignments` map is empty, and the badge never renders -- even though the assignment data exists in the database.
 
-### 2. No Code Changes Required
+## Fix
 
-The `useAuditorsList` hook and `AuditKpiAssignPopover` component are already correctly implemented. Once the RLS policy allows auditors to read other auditor rows, the popover will populate with the full list of auditors.
+### 1. Update `src/hooks/useAuditKpiAssignments.ts`
+
+Change the `useAuditKpiAssignments` fetch query to use an explicit FK hint:
+
+```typescript
+// Before (ambiguous)
+.select('kpi_id, auditor_id, profiles(full_name)')
+
+// After (explicit)
+.select('kpi_id, auditor_id, profiles!audit_kpi_level_assignments_auditor_id_fkey(full_name)')
+```
+
+### 2. No Other Changes Needed
+
+- No database migration required -- FKs are already correct.
+- No UI changes needed -- the `AuditKpiAssignPopover` already renders the badge when `currentAssignment` is non-null.
+- RLS policies are correct (admin and auditor can SELECT).
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
-|--------|------|------------|
-| Data exposure | Minimal | Policy is scoped: auditors can only see `role = 'auditor'` rows, not admin/manager roles |
-| Privilege escalation | None | Read-only policy; no INSERT/UPDATE/DELETE granted |
-| Regression | None | Additive policy; existing "view own roles" and "admin manage all" policies unaffected |
-| Integrity | Safe | No data modification involved |
-
-## Technical Details
-
-- **Table**: `user_roles`
-- **New policy**: SELECT-only, scoped to `role = 'auditor'` rows, only for users who themselves have the auditor role
-- **Migration file**: Single `CREATE POLICY` statement
+|--------|------|-----------|
+| Data impact | None | Read-only query fix |
+| Regression | None | Only disambiguates an already-failing query |
+| Scope | Single line change | Minimal surface area |
 
