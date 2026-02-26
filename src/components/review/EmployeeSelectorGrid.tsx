@@ -244,8 +244,9 @@ export function EmployeeSelectorGrid({
 
   // Get employee KPI stats using workflow-aware resolution
   const getEmployeeKpiStats = (employeeId: string, relationship?: 'direct' | 'indirect') => {
-    if (!periodKpis) return { badge1: 0, badge2: 0, badge3: 0, total: 0 };
+    if (!periodKpis) return { badge1: 0, badge2: 0, badge3: 0, total: 0, clearedKraSet: 0 };
     const empKpis = periodKpis.filter(k => k.employee_id === employeeId);
+    const clearedKraSet = empKpis.filter(k => k.status !== 'kra_set').length;
     const stages = getStages(employeeId);
 
     if (viewLevel === 'team') {
@@ -259,6 +260,7 @@ export function EmployeeSelectorGrid({
           badge2: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
           badge3: 0,
           total: empKpis.length,
+          clearedKraSet,
         };
       }
       return {
@@ -266,6 +268,7 @@ export function EmployeeSelectorGrid({
         badge2: empKpis.filter(k => !['kra_set', 'self_review'].includes(k.status || '')).length,
         badge3: 0,
         total: empKpis.length,
+        clearedKraSet,
       };
     } else if (viewLevel === 'skip_level') {
       const reviewable = resolveReviewableStatuses('skip_level', stages);
@@ -276,6 +279,7 @@ export function EmployeeSelectorGrid({
         badge2: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
         badge3: 0,
         total: empKpis.length,
+        clearedKraSet,
       };
     } else if (viewLevel === 'hr_pms') {
       const reviewable = resolveReviewableStatuses('hr_pms', stages);
@@ -286,6 +290,7 @@ export function EmployeeSelectorGrid({
         badge2: empKpis.filter(k => k.status === 'hr_pms_review').length,
         badge3: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
         total: empKpis.length,
+        clearedKraSet,
       };
     } else if (viewLevel === 'audit') {
       const reviewable = resolveReviewableStatuses('auditor', stages);
@@ -294,6 +299,7 @@ export function EmployeeSelectorGrid({
         badge2: empKpis.filter(k => k.status === 'audit').length,
         badge3: empKpis.filter(k => ['management_review', 'approved'].includes(k.status || '')).length,
         total: empKpis.length,
+        clearedKraSet,
       };
     } else {
       const pending = empKpis.filter(k => k.status === 'management_review').length;
@@ -304,6 +310,7 @@ export function EmployeeSelectorGrid({
         badge2: approved,
         badge3: inPipeline,
         total: empKpis.length,
+        clearedKraSet,
       };
     }
   };
@@ -606,18 +613,17 @@ export function EmployeeSelectorGrid({
   };
 
   // Compute progress bar segments from kpiStats based on view level
-  const getProgressSegments = (kpiStats: { badge1: number; badge2: number; badge3: number; total: number }) => {
+  const getProgressSegments = (kpiStats: { badge1: number; badge2: number; badge3: number; total: number; clearedKraSet: number }) => {
     // badge1 = pending, badge2 = in-progress or done (depends on level), badge3 = done (for 3-tier levels)
     if (viewLevel === 'hr_pms' || viewLevel === 'audit') {
       // 3-tier: badge3=done, badge2=in-progress, badge1=pending
-      return { done: kpiStats.badge3, inProgress: kpiStats.badge2, total: kpiStats.total };
+      return { done: kpiStats.badge3, inProgress: kpiStats.badge2, total: kpiStats.total, clearedKraSet: kpiStats.clearedKraSet };
     }
     if (viewLevel === 'management') {
-      // 3-tier for management: done=approved(badge2), inProgress=in-pipeline(badge3), pending=management_review(badge1)
-      return { done: kpiStats.badge2, inProgress: kpiStats.badge3, total: kpiStats.total };
+      return { done: kpiStats.badge2, inProgress: kpiStats.badge3, total: kpiStats.total, clearedKraSet: kpiStats.clearedKraSet };
     }
     // 2-tier: badge2=done, badge1=pending
-    return { done: kpiStats.badge2, inProgress: 0, total: kpiStats.total };
+    return { done: kpiStats.badge2, inProgress: 0, total: kpiStats.total, clearedKraSet: kpiStats.clearedKraSet };
   };
 
   // Render badge based on view level
@@ -742,7 +748,7 @@ export function EmployeeSelectorGrid({
 
     return (
       <div className="space-y-2 mt-2 w-full">
-        <EmployeeProgressBar done={segments.done} inProgress={segments.inProgress} total={segments.total} />
+        <EmployeeProgressBar done={segments.done} inProgress={segments.inProgress} total={segments.total} clearedKraSet={segments.clearedKraSet} />
         <div className="flex items-center gap-2 flex-wrap">
           {renderBadges()}
         </div>
@@ -951,7 +957,7 @@ function StatCard({ icon: Icon, label, value, color, subtitle, className = '', o
 }
 
 // Mini progress bar for employee cards
-function EmployeeProgressBar({ done, inProgress, total }: { done: number; inProgress: number; total: number }) {
+function EmployeeProgressBar({ done, inProgress, total, clearedKraSet }: { done: number; inProgress: number; total: number; clearedKraSet: number }) {
   if (total === 0) return null;
   const donePct = (done / total) * 100;
   const inProgressPct = (inProgress / total) * 100;
@@ -966,7 +972,7 @@ function EmployeeProgressBar({ done, inProgress, total }: { done: number; inProg
         )}
       </div>
       <span className="text-xs text-muted-foreground whitespace-nowrap font-medium">
-        {done + inProgress}/{total}
+        {clearedKraSet}/{total}
       </span>
     </div>
   );
