@@ -52,7 +52,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
   const [bulkFillValue, setBulkFillValue] = useState('');
 
   const naCount = rows.filter(r => r.isNa).length;
-  const allQualitative = rows.length > 0 && rows.every(r => (r.uomType === 'binary' || r.uomType === 'tiered') && r.qualitativeOptions?.length);
+  const allQualitative = rows.length > 0 && rows.every(r => r.uomType === 'binary' || (r.uomType === 'tiered' && r.qualitativeOptions?.length));
   const enteredCount = rows.filter(r => r.achievedValue !== null || r.isNa).length;
   const allEntered = rows.length > 0 && enteredCount === rows.length;
 
@@ -278,7 +278,7 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, o
             <Ban className="h-3.5 w-3.5" />
             <span className="text-xs font-medium">N/A</span>
           </div>
-        ) : (row.uomType === 'binary' || row.uomType === 'tiered') && row.qualitativeOptions?.length ? (
+        ) : row.uomType === 'binary' || (row.uomType === 'tiered' && row.qualitativeOptions?.length) ? (
           <QualitativeSelect
             uomType={row.uomType}
             qualitativeOptions={(row.qualitativeOptions as QualitativeOption[]) || null}
@@ -394,7 +394,7 @@ function DepartmentRow({ row, onValueChange }: DepartmentRowProps) {
             <Ban className="h-3.5 w-3.5" />
             <span className="text-xs font-medium">N/A</span>
           </div>
-        ) : (row.uomType === 'binary' || row.uomType === 'tiered') && row.qualitativeOptions?.length ? (
+        ) : row.uomType === 'binary' || (row.uomType === 'tiered' && row.qualitativeOptions?.length) ? (
           <QualitativeSelect
             uomType={row.uomType}
             qualitativeOptions={(row.qualitativeOptions as QualitativeOption[]) || null}
