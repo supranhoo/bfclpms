@@ -100,9 +100,13 @@ describe('workflowEngine', () => {
   });
 
   describe('resolveForwardStatus', () => {
-    it('manager always forwards to manager_check', () => {
+    it('manager forwards to manager_check in standard pipelines', () => {
       expect(resolveForwardStatus('manager')).toBe('manager_check');
       expect(resolveForwardStatus('manager', EIGHT_STAGE_PIPELINE)).toBe('manager_check');
+    });
+
+    it('manager forwards to approved in short pipeline (terminal reviewer)', () => {
+      expect(resolveForwardStatus('manager', MINIMAL_STAGES)).toBe('approved');
     });
 
     it('skip_level advances PAST skip_level_check to the next stage', () => {
