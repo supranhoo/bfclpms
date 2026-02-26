@@ -1,68 +1,63 @@
 
 
-# Fix: Auditor Assignment Badge Not Displaying (v1.46.25)
+# Fix: Binary KPIs Showing Numeric Input Instead of Yes/No Options (v1.46.26)
 
 ## Root Cause
 
-After investigating the database, RLS policies, and FK constraints, the data is correctly saved (the POST returns 200 and the row exists). The problem is in the **SELECT query** used by `useAuditKpiAssignments`.
-
-The `audit_kpi_level_assignments` table has FKs that point to **both** `profiles` and `eligible_login_users` views for the same column (`auditor_id`). When the query uses:
+The "Total Recordable Injury (LTI)" KPI has `uom_type = 'binary'` in the database, but most employee records have `qualitative_options = NULL`. The UI condition that decides whether to show a qualitative dropdown vs a numeric input is:
 
 ```
-profiles!audit_kpi_level_assignments_auditor_id_fkey(full_name)
+(row.uomType === 'binary' || row.uomType === 'tiered') && row.qualitativeOptions?.length
 ```
 
-PostgREST may fail with an ambiguity error because the same FK name resolves to two different targets. The `as any` TypeScript cast hides the error, and the `throw error` only fires if `error` is truthy -- but PostgREST sometimes returns empty data instead of an explicit error for ambiguous joins.
+Since `qualitativeOptions` is null, the second half fails, and it falls through to a numeric text input -- even though `uom_type` is clearly `'binary'`.
+
+The system already has a `BINARY_OPTIONS` constant (Yes=5 / No=0) designed as a fallback, but the display condition doesn't account for this fallback.
 
 ## Solution
 
-Replace the FK-based join with a **two-step fetch** approach: first fetch the assignment rows, then fetch the auditor names separately. This completely avoids the ambiguous FK join issue.
+Update the display condition in **both** the `OrgKpiScopedEntryTable` (Employee/Department rows) and `OrgKpiEntryCard` (Org-wide scope) to treat `uom_type === 'binary'` as sufficient to show the qualitative selector, falling back to `BINARY_OPTIONS` when `qualitativeOptions` is null/empty.
 
 ## Changes
 
-### 1. Update `src/hooks/useAuditKpiAssignments.ts` -- `useAuditKpiAssignments` function
+### 1. `src/components/admin/OrgKpiScopedEntryTable.tsx` -- EmployeeRow component
 
-Replace the single query with FK join:
-
+**Current condition** (line ~281):
 ```typescript
-// Step 1: Fetch assignment rows (no join)
-const { data, error } = await supabase
-  .from('audit_kpi_level_assignments')
-  .select('kpi_id, auditor_id')
-  .in('kpi_id', kpiIds);
-
-if (error) throw error;
-if (!data?.length) return new Map();
-
-// Step 2: Fetch auditor names from profiles
-const auditorIds = [...new Set(data.map(r => r.auditor_id))];
-const { data: profiles } = await supabase
-  .from('profiles')
-  .select('id, full_name')
-  .in('id', auditorIds);
-
-const nameMap = new Map(profiles?.map(p => [p.id, p.full_name]) || []);
-
-// Step 3: Build result map
-const map = new Map();
-data.forEach(row => {
-  map.set(row.kpi_id, {
-    auditor_id: row.auditor_id,
-    auditor_name: nameMap.get(row.auditor_id) || 'Unknown',
-  });
-});
-return map;
+(row.uomType === 'binary' || row.uomType === 'tiered') && row.qualitativeOptions?.length
 ```
 
-### 2. Remove `as any` casts from mutation functions
+**New condition**:
+```typescript
+row.uomType === 'binary' || (row.uomType === 'tiered' && row.qualitativeOptions?.length)
+```
 
-Remove the `as any` casts on `useAssignKpiToAuditor` and `useRemoveKpiAuditAssignment` since `audit_kpi_level_assignments` is now in the generated types file.
+For binary KPIs, always show the qualitative selector. The `QualitativeSelect` component already handles the fallback to `BINARY_OPTIONS` internally when `qualitativeOptions` is null.
+
+Apply the same fix to the DepartmentRow component (line ~397).
+
+Also update the `allQualitative` check (line ~55) used to hide the bulk-fill numeric input for qualitative KPIs.
+
+### 2. `src/components/admin/OrgKpiEntryCard.tsx` -- Org-scope input
+
+**Current condition** (line ~329):
+```typescript
+(data.uomType === 'binary' || data.uomType === 'tiered') && data.qualitativeOptions?.length
+```
+
+**New condition**:
+```typescript
+data.uomType === 'binary' || (data.uomType === 'tiered' && data.qualitativeOptions?.length)
+```
+
+### 3. No database changes needed
+
+The data is correct (`uom_type = 'binary'`). The issue is purely a UI display condition.
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | None | Read-only query refactor |
-| Performance | Negligible | One extra query per load, but avoids join failures |
-| Regression | None | Same data, different fetch strategy |
-
+| Data impact | None | Read-only display fix |
+| Regression | Low | Only changes which input widget is shown; `QualitativeSelect` already handles `BINARY_OPTIONS` fallback |
+| Scope | 2 files, ~4 line changes | Minimal surface area |
