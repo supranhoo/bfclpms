@@ -1,53 +1,63 @@
 
 
-# Add "Rating" Column to Org KPI Scoped Entry Table
+# Fix: Binary/Tiered KPI Rating Mismatch Between Org Data Entry and Manager Review
 
-## Overview
-Add a read-only "Rating" column next to the "Achieved" column in the `OrgKpiScopedEntryTable` component. This column will display the calculated rating (0-5) as a color-coded `RatingBadge` based on the achieved value and the KPI's scoring thresholds. This is an admin-only view since the table itself is only rendered on the admin Org KPI Data Entry page.
+## Root Cause
 
-## Changes
+In the Org KPI Scoped Entry Table, binary KPIs store the **rating number** as `achievedValue` (e.g., "No" stores `0`, "Yes" stores `5`). When the Rating column calls `calculateRating(0, target=0, uomType='binary')`, the function fails to match a label (because the value is numeric, not the string "No") and falls back to numeric threshold logic. With `achieved=0` and `target=0`, this incorrectly produces **Rating 5 (Outstanding)**.
 
-### File: `src/components/admin/OrgKpiScopedEntryTable.tsx`
+In the Manager Review, the `QualitativeValueInput` component directly uses the option's rating value, so "No" correctly shows **Score: 0**.
 
-1. **Import** `calculateRating` from `@/lib/ratingCalculation` and `RatingBadge` from `@/components/ui/RatingBadge`.
+## Fix
 
-2. **Add props** to pass scoring context into the table:
-   - `criteria?: string` (e.g., "Higher is Better" / "Lower is Better")
-   - `uomType` and `qualitativeOptions` are already available per-row via `ScopedRow`
+**File: `src/components/admin/OrgKpiScopedEntryTable.tsx`**
 
-3. **Add "Rating" table header** between the "Achieved" and "Remark" columns in the `TableHeader`.
+In both `EmployeeRow` and `DepartmentRow`, update the Rating cell logic: for binary/tiered KPIs, use the `achievedValue` directly as the rating score (since it already IS the rating), instead of passing it through `calculateRating()`.
 
-4. **Add "Rating" cell** in the `EmployeeRow` component:
-   - Call `calculateRating(row.achievedValue, effectiveTarget, ratingThresholds, criteria, 0, row.uomType, row.qualitativeOptions, effectiveUom)` when `achievedValue` is not null and not N/A.
-   - Render the result using `RatingBadge` with `short={true}` for compact display.
-   - Show "---" or empty when no value is entered or row is N/A.
+### EmployeeRow Rating cell (lines 329-342):
 
-5. **Add "Rating" cell** in the `DepartmentRow` component with the same logic (passing thresholds and criteria as additional props).
+```typescript
+<TableCell className="py-1.5 w-24 text-center">
+  {rowIsNa || numVal === null ? (
+    <span className="text-xs text-muted-foreground">-</span>
+  ) : (row.uomType === 'binary' || (row.uomType === 'tiered' && row.qualitativeOptions?.length)) ? (
+    // For qualitative KPIs, achievedValue IS the rating score
+    <RatingBadge score={numVal} short className="text-[10px] h-5 px-1.5" />
+  ) : (
+    <RatingBadge
+      score={calculateRating(
+        numVal, effectiveTarget, ratingThresholds || { r5: null, r4: null, r3: null, r2: null, r1: null },
+        criteria, 0, 'numeric', null, effectiveUom
+      ).rating}
+      short
+      className="text-[10px] h-5 px-1.5"
+    />
+  )}
+</TableCell>
+```
 
-6. **Update column span** for the department group header row from `colSpan={6}` to `colSpan={7}`.
+### DepartmentRow Rating cell:
 
-7. **Pass `criteria` prop** from `OrgKpiEntryCard.tsx` down to `OrgKpiScopedEntryTable`. The card data (`OrgKpiCardData`) will need a `criteria` field, sourced from the KPI's `criteria` column in the database.
+Same pattern applied -- check `row.uomType` for binary/tiered and use `numVal` directly as the score.
 
-### File: `src/components/admin/OrgKpiEntryCard.tsx`
+## Impact
 
-8. **Add `criteria` field** to `OrgKpiCardData` interface.
-9. **Pass `criteria` prop** to `OrgKpiScopedEntryTable`.
-
-### File: `src/pages/admin/OrgKpiDataEntry.tsx` (or wherever card data is assembled)
-
-10. **Map `criteria`** from the KPI record into `OrgKpiCardData` when building card data.
-
-## Technical Details
-
-- The `calculateRating` function already handles all UOM types (numeric, binary, tiered, percentage, date).
-- The `RatingBadge` component renders the canonical color-coded badge (blue/green/yellow/red gradient) with the score number and label.
-- Rating is computed client-side from the current achieved value in real-time, so it updates as the admin types.
-- No database changes are required -- this is a display-only enhancement.
+- "No" (achievedValue=0) will correctly show **Rating 0 - Not Achieved** (deep maroon badge)
+- "Yes" (achievedValue=5) will correctly show **Rating 5 - Outstanding** (blue badge)
+- Numeric KPIs continue to use `calculateRating()` as before
+- Consistent behavior between Org KPI Data Entry and Manager Review
 
 ## Risk Assessment
 
 | Aspect | Risk | Notes |
 |--------|------|-------|
-| Data | None | Read-only display, no writes |
-| Regression | Very low | Adding a column to an existing table; no existing logic modified |
-| Performance | Negligible | `calculateRating` is a lightweight pure function |
+| Data | None | Display-only change, no writes |
+| Regression | None | Only affects qualitative KPI rating display |
+| Consistency | Improved | Aligns Org KPI table with Manager Review logic |
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `src/components/admin/OrgKpiScopedEntryTable.tsx` | Branch rating display logic for binary/tiered vs numeric KPIs in both EmployeeRow and DepartmentRow |
+
