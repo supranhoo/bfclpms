@@ -1,46 +1,61 @@
 
 
-# Fix: Employee Performance Summary Query Timeout
+# Show Multiple Review Statuses per Employee
 
-## Root Cause
-The Employee Performance Summary report query is failing with a **database statement timeout** (error code 57014). This happens because:
+## Problem
+Currently, each employee row in the Employee Performance Summary shows only **one** status badge -- the highest-priority status among their KPIs. When an employee has KPIs at different stages (e.g., 2 at Self Review, 9 at Management, 2 Approved), only the highest stage is shown, which is misleading.
 
-1. **Missing indexes**: The `kpis` table has no index on `review_year` or `review_period`, forcing full table scans
-2. **Heavy RLS policies**: Multiple SELECT policies on `kpis` and `review_submissions` run subqueries (like `get_skip_level_manager()`) for every row, compounding the scan cost
-3. The query fetches KPIs joined with review_submissions, and RLS is evaluated on both tables
+## Solution
+Change the `status` field from a single string to a **map of status counts**, then render multiple badges (e.g., "Self Review (2)", "Management (9)", "Approved (2)"). If all KPIs are approved, show a single "Approved" badge.
 
-## Fix (2 steps)
+## Changes
 
-### Step 1: Add Database Indexes
-Create a composite index on `kpis(review_year, review_period)` and an index on `kpis(employee_id)` to speed up both the filter and the RLS policy lookups.
+### File: `src/pages/reports/EmployeePerformanceSummary.tsx`
 
+1. **Update `EmployeePerformance` interface** (line 62):
+   - Change `status: string` to `statusCounts: Record<string, number>` to store count per status
+   - Keep a derived `primaryStatus` for sorting/filtering compatibility
+
+2. **Update KPI grouping logic** (lines 184-209):
+   - Instead of picking the highest-priority status, accumulate counts per status
+   - e.g., `{ self_review: 2, management_review: 9, approved: 2 }`
+
+3. **Update table rendering** (lines 670-677):
+   - If all KPIs are approved, show single "Approved" badge
+   - Otherwise, render a badge for each non-zero status with a count suffix: "Manager Check (2)"
+   - Badges sorted by workflow priority (earliest stage first)
+
+4. **Update status filter logic** (line 327):
+   - Filter matches if the employee has **any** KPIs in the selected status
+
+5. **Update Excel export** (lines 448-467):
+   - Export as comma-separated list: "Manager Check (2), Management (9), Approved (2)"
+
+6. **Update `summaryStats` approved count** (line 485):
+   - An employee row counts as "approved" only if all their KPIs are approved (i.e., only status in the map is "approved")
+
+## Technical Details
+
+### Data Structure Change
 ```text
-CREATE INDEX idx_kpis_review_year_period ON kpis(review_year, review_period);
-CREATE INDEX idx_kpis_employee_id ON kpis(employee_id);
-CREATE INDEX idx_review_submissions_kpi_id ON review_submissions(kpi_id);
-CREATE INDEX idx_profiles_reporting_manager_id ON profiles(reporting_manager_id);
+Before: { status: "management_review" }
+After:  { statusCounts: { self_review: 2, management_review: 9, approved: 2 } }
 ```
 
-Note: `review_submissions` already has a unique index on `kpi_id`, but we'll add the others.
+### Badge Rendering Logic
+- Sort statuses by workflow priority (kra_set first, approved last)
+- Show each as: Badge with count in parentheses when count > 1
+- Compact layout using flex-wrap with small gap
 
-### Step 2: Optimize the Report Query
-Restructure the query in `EmployeePerformanceSummary.tsx` to:
-- Fetch KPIs and submissions in **separate queries** instead of a nested select (avoids RLS evaluation on both tables simultaneously)
-- First fetch KPI IDs matching the year/period filter, then fetch submissions for those IDs
-- This reduces the RLS overhead since each table's policies are evaluated independently
-
-## Files Changed
-
-| File | Change |
-|------|--------|
-| New database migration | Add indexes on `kpis` and `profiles` |
-| `src/pages/reports/EmployeePerformanceSummary.tsx` | Split nested query into two separate queries to reduce RLS overhead |
+### Filter Compatibility
+- Status dropdown filter checks if `statusCounts[selectedStatus] > 0`
+- "All Status" shows everything as before
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|------------|
-| Data impact | Index-only addition, no schema changes | Indexes are non-destructive |
-| Regression | None -- same data, faster queries | Query logic unchanged |
-| Performance | Significant improvement expected | Composite index directly targets the filter pattern |
+| Data impact | None -- display-only change | No schema changes |
+| Regression | Low -- same data, different presentation | Status filter logic preserved |
+| UI overflow | Multiple badges may widen the column | Use flex-wrap and smaller badge text |
 
