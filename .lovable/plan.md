@@ -1,91 +1,55 @@
 
 
-# Fix: Show All KPI Statuses on Management Employee Cards (v1.46.17)
+# Fix: Progress Bar Fraction Shows KPIs Past KRA SET (v1.46.18)
 
 ## Problem
 
-In the Management view, employee cards only show "pending" (at `management_review`) and "approved" badges. KPIs still progressing through earlier stages (audit, HR PMS, manager check, etc.) are invisible -- the counts don't add up to the total.
-
-Example: 9 pending + 2 approved = 11, but total is 13. The missing 2 are in earlier pipeline stages.
+The fraction text on employee cards (e.g., "6/28") currently shows `done + inProgress` which varies by view level. The user wants a consistent, universally meaningful number: **how many KPIs have cleared the KRA SET stage**. This helps all reviewer levels instantly understand how many KPIs are actively in the review pipeline.
 
 ## Solution
 
-Add a third badge ("in pipeline") for the management view to show KPIs that haven't yet reached `management_review`. This makes all KPIs visible and the progress bar accurate.
+Update the `EmployeeProgressBar` component to accept a new `clearedKraSet` count and display that as the fraction numerator instead of `done + inProgress`. The `getEmployeeKpiStats` function will compute this count for every view level.
 
 ## Visual Result
 
 ```text
-+--------------------------------------+
-| [Avatar] Jaspal                   -> |
-|          Senior General Manager      |
-|          Manager: Gaurav Budhia      |
-|          [=========-------] 2/13     |
-|          [9 pending] [2 in pipeline] |
-|          [2 approved]                |
-+--------------------------------------+
+Before: [=========-------] 6/28   (done + inProgress)
+After:  [=========-------] 27/28  (KPIs past kra_set)
 ```
 
 ## File to Change
 
 **`src/components/review/EmployeeSelectorGrid.tsx`**
 
-### 1. Update `getEmployeeKpiStats` management branch (~line 298-305)
+### 1. Add `clearedKraSet` to stats (~line 246-308)
 
-Add `badge3` to count KPIs NOT at `management_review` and NOT `approved` (i.e., still in earlier stages):
-
-```typescript
-} else {
-  const pending = empKpis.filter(k => k.status === 'management_review').length;
-  const approved = empKpis.filter(k => k.status === 'approved').length;
-  const inPipeline = empKpis.length - pending - approved;
-  return {
-    badge1: pending,
-    badge2: approved,
-    badge3: inPipeline,
-    total: empKpis.length,
-  };
-}
-```
-
-### 2. Update `getProgressSegments` (~line 606-614)
-
-Include management in the 3-tier logic so the progress bar correctly shows all segments:
+In `getEmployeeKpiStats`, add a `clearedKraSet` field that counts KPIs where `status !== 'kra_set'`:
 
 ```typescript
-if (viewLevel === 'hr_pms' || viewLevel === 'audit' || viewLevel === 'management') {
-  return { done: kpiStats.badge2, inProgress: kpiStats.badge3, total: kpiStats.total };
-}
+const clearedKraSet = empKpis.filter(k => k.status !== 'kra_set').length;
 ```
 
-For management: done = approved (badge2), inProgress = in-pipeline (badge3), pending = management_review (badge1).
+This will be computed once at the top of the function and included in every return object.
 
-### 3. Update management badge rendering (~line 713-728)
+### 2. Pass `clearedKraSet` through to progress bar (~line 637, 745)
 
-Add "in pipeline" badge between pending and approved:
+Update `getProgressSegments` return and `EmployeeProgressBar` call to carry the `clearedKraSet` value.
+
+### 3. Update `EmployeeProgressBar` fraction display (~line 968-969)
+
+Change the fraction from `{done + inProgress}/{total}` to `{clearedKraSet}/{total}`:
 
 ```tsx
-{kpiStats.badge1 > 0 && (
-  <Badge ...>{kpiStats.badge1} pending</Badge>
-)}
-{kpiStats.badge3 > 0 && (
-  <Badge variant="outline" className="bg-blue-50 text-blue-700 ...">
-    {kpiStats.badge3} in pipeline
-  </Badge>
-)}
-{kpiStats.badge2 > 0 && (
-  <Badge ...>{kpiStats.badge2} approved</Badge>
-)}
+<span className="text-xs text-muted-foreground whitespace-nowrap font-medium">
+  {clearedKraSet}/{total}
+</span>
 ```
-
-### 4. Update global stats computation (~line 491-498)
-
-Add the "in pipeline" count to the management stats block so the stat cards can optionally reflect it.
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | None | UI-only, reads existing KPI statuses |
-| Regression | None | Only management view changes; other levels untouched |
-| Accuracy | Positive | All KPIs now accounted for -- counts always sum to total |
+| Data impact | None | UI-only, no DB changes |
+| Regression | None | Progress bar segments unchanged; only the text label changes |
+| Clarity | Positive | Consistent meaning across all view levels |
 
