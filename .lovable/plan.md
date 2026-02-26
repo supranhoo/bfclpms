@@ -1,38 +1,31 @@
 
-# Fix: Audit KPI Assignment Badge Not Rendering for Auditors (v1.46.28)
 
-## Root Cause
+# Confirmation: Auditor Mapping Already Restricted to Admin/Auditor Only
 
-In `UnifiedScorecard.tsx`, the `useAuditKpiAssignments` hook is called with `allKpis` (ALL KPIs across ALL periods — up to 138+ per employee), instead of `kpis` (period-filtered, typically ~23).
+## Current State (Already Correct)
 
-This creates a Supabase `.in('kpi_id', [...138 UUIDs])` query that generates a URL exceeding PostgREST's URL length limit (~4000-5000 chars). The request silently fails or returns empty data. The result: `auditKpiAssignments` is an empty Map, so no badges render.
+The auditor mapping badges (e.g., "-> Shekhar") are already restricted and NOT visible to employees. Here is how:
 
-The old `AuditScorecard` component works because it uses period-filtered `kpiIds` (line 137-141), which is only ~20-30 IDs.
+### Backend (Database Security)
+- The `audit_kpi_level_assignments` table has RLS policies that only allow **admin** and **auditor** roles to SELECT data
+- Employees cannot query this table at all -- the database will return zero rows
 
-## Solution
+### Frontend (Rendering Guard)
+- The `AuditKpiAssignPopover` component only renders when `viewType === 'audit'`
+- The `useAuditKpiAssignments` hook only fetches data when `viewLevel === 'auditor'`
+- The employee "My Dashboard" page does not import or use audit assignment data at all
 
-Change `auditKpiIdList` in `UnifiedScorecard.tsx` to use `kpis` (period-filtered) instead of `allKpis`. Move its declaration below the `kpis` computation (line 220).
+### No Changes Needed
 
-## Changes
+The previous plan (v1.46.29) proposed adding auditor badges to the employee's self-view Dashboard. Based on your clarification, that plan should be **abandoned** -- employees should NOT see auditor mapping.
 
-### `src/components/review/UnifiedScorecard.tsx`
+The v1.46.28 fix (switching from `allKpis` to period-filtered `kpis` to avoid URL length limits) should resolve Shekhar's issue of not seeing the badges when logged in as an auditor. This fix is already implemented.
 
-1. **Remove** the current `auditKpiIdList` + `useAuditKpiAssignments` block at lines 173-175
-2. **Add** the same logic after `kpis` is defined (after line 224), using `kpis` instead of `allKpis`:
+## Recommended Action
 
-```typescript
-const auditKpiIdList = useMemo(() => (kpis || []).map(k => k.id), [kpis]);
-const { data: auditKpiAssignments } = useAuditKpiAssignments(
-  viewLevel === 'auditor' ? auditKpiIdList : []
-);
-```
+Please test the following to confirm everything works:
+1. Log in as **Shekhar (auditor)** -- verify the auditor badge (e.g., "-> Shekhar") appears next to assigned KPIs in the Audit view
+2. Log in as **Admin** -- verify auditor badges are visible in the Audit view
+3. Log in as any **Employee** -- verify NO auditor mapping badges appear anywhere on their Dashboard
 
-This reduces the `.in()` clause from 138+ IDs to ~23, well within URL limits.
-
-## Risk Assessment
-
-| Aspect | Risk | Mitigation |
-|--------|------|-----------|
-| Data impact | None | Read-only query change |
-| Regression | None | Only affects which KPI IDs are queried; badges only matter for displayed KPIs |
-| Performance | Improved | Fewer IDs = smaller query = faster response |
+If Shekhar still cannot see badges after the v1.46.28 fix, the issue may be browser cache -- try a hard refresh (Ctrl+Shift+R).
