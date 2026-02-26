@@ -1,50 +1,54 @@
 
 
-# Fix: Make "Assign to Auditor" Button Functional (v1.46.22)
+# Fix: Allow Auditors to See Other Auditors in Assignment Popover (v1.46.23)
 
 ## Root Cause
 
-The "Assign to Auditor" popover renders but shows **no auditors** because the `useAuditorsList` query returns a **400 error** from the database API:
+The `user_roles` table has two RLS policies:
+1. **Admins can manage all roles** (ALL) -- admins see everything
+2. **Users can view their own roles** (SELECT where `user_id = auth.uid()`) -- everyone else only sees their own row
 
-```
-Could not find a relationship between 'user_roles' and 'profiles'
-using the hint 'user_roles_user_id_fkey'
-```
+When an auditor opens the "Assign to Auditor" popover, the `useAuditorsList` hook queries `user_roles` for all rows where `role = 'auditor'`. But RLS filters it down to **only the current user's row**. The popover either shows just the logged-in auditor (useless for delegation) or appears empty if the join fails.
 
-The `user_roles` table has **no foreign key** to `profiles`. The current code tries to do a PostgREST join (`profiles!user_roles_user_id_fkey(...)`) which fails silently -- the popover opens but the auditor list is empty, so nothing happens.
+## Solution
 
-A secondary issue: the `useAuditKpiAssignments` fetch query uses `profiles!audit_kpi_level_assignments_auditor_id_fkey(full_name)`, which also needs verification since the FK references `auth.users`, not `profiles`.
+Add a new RLS policy on `user_roles` that allows auditors to see other auditor role entries. This is a targeted, read-only policy -- auditors still cannot modify anyone else's roles.
 
 ## Changes Required
 
-### 1. Database Migration -- Add FK from `user_roles` to `profiles`
+### 1. Database Migration -- New RLS Policy on `user_roles`
 
-Add a foreign key from `user_roles.user_id` to `profiles.id`. This enables PostgREST to resolve the join. The `profiles` table already mirrors `auth.users` IDs, so this is safe.
+Add a SELECT policy allowing auditors to view rows where `role = 'auditor'`:
 
 ```sql
-ALTER TABLE public.user_roles
-  ADD CONSTRAINT user_roles_user_id_profiles_fkey
-  FOREIGN KEY (user_id) REFERENCES public.profiles(id);
+CREATE POLICY "Auditors can view auditor roles"
+ON public.user_roles
+FOR SELECT
+TO authenticated
+USING (
+  role = 'auditor'
+  AND has_role(auth.uid(), 'auditor'::app_role)
+);
 ```
 
-### 2. Update Hook: `src/hooks/useAuditKpiAssignments.ts`
+This means: if you are an auditor, you can see all rows where `role = 'auditor'`. You still cannot see admin, manager, or other role entries. This is the minimum-privilege approach.
 
-**`useAuditorsList`**: Change the FK hint to the new constraint name:
-```typescript
-.select('user_id, profiles!user_roles_user_id_profiles_fkey(id, full_name, employee_code)')
-```
+### 2. No Code Changes Required
 
-**`useAuditKpiAssignments`**: Verify and fix the FK hint for the auditor join to use the correct relationship name pointing to `profiles`.
-
-### 3. No UI Changes Needed
-
-The `AuditKpiAssignPopover` component is already correct. Once the query returns auditor data, the popover will populate and assignments will work.
+The `useAuditorsList` hook and `AuditKpiAssignPopover` component are already correctly implemented. Once the RLS policy allows auditors to read other auditor rows, the popover will populate with the full list of auditors.
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
-|--------|------|-----------|
-| Data impact | None | Adding a FK constraint only; no data modification |
-| Regression | Low | The FK is additive; existing queries unaffected |
-| Integrity | Safe | All `user_roles.user_id` values already exist in `profiles` |
+|--------|------|------------|
+| Data exposure | Minimal | Policy is scoped: auditors can only see `role = 'auditor'` rows, not admin/manager roles |
+| Privilege escalation | None | Read-only policy; no INSERT/UPDATE/DELETE granted |
+| Regression | None | Additive policy; existing "view own roles" and "admin manage all" policies unaffected |
+| Integrity | Safe | No data modification involved |
+
+## Technical Details
+
+- **Table**: `user_roles`
+- **New policy**: SELECT-only, scoped to `role = 'auditor'` rows, only for users who themselves have the auditor role
+- **Migration file**: Single `CREATE POLICY` statement
 
