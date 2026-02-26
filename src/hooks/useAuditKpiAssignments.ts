@@ -19,7 +19,7 @@ export function useAuditKpiAssignments(kpiIds: string[]) {
 
       const { data, error } = await supabase
         .from('audit_kpi_level_assignments' as any)
-        .select('kpi_id, auditor_id, profiles(full_name)')
+        .select('kpi_id, auditor_id, profiles!audit_kpi_level_assignments_auditor_id_fkey(full_name)')
         .in('kpi_id', kpiIds);
 
       if (error) throw error;
