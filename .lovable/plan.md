@@ -1,63 +1,44 @@
 
 
-# Fix: Binary KPIs Showing Numeric Input Instead of Yes/No Options (v1.46.26)
+# Fix: Auditor Assignment Badge Not Visible in Dashboard Audit View (v1.46.27)
 
 ## Root Cause
 
-The "Total Recordable Injury (LTI)" KPI has `uom_type = 'binary'` in the database, but most employee records have `qualitative_options = NULL`. The UI condition that decides whether to show a qualitative dropdown vs a numeric input is:
+The dashboard uses `UnifiedScorecard` for all reviewer views (manager, auditor, HR PMS, management). However, `UnifiedScorecard` never imports `useAuditKpiAssignments` and never passes the `auditKpiAssignments` prop to `KpiDetailsTable`.
 
-```
-(row.uomType === 'binary' || row.uomType === 'tiered') && row.qualitativeOptions?.length
-```
+Inside `KpiDetailsTable`, the `AuditKpiAssignPopover` renders when `viewType === 'audit'`, but it receives `auditKpiAssignments?.get(kpi.id)` which is always `undefined` (since the prop is never provided). This means:
+- The popover trigger shows the generic `UserPlus` icon button (no badge)
+- `currentAssignment` is always `null`, so the auditor name badge never appears
 
-Since `qualitativeOptions` is null, the second half fails, and it falls through to a numeric text input -- even though `uom_type` is clearly `'binary'`.
-
-The system already has a `BINARY_OPTIONS` constant (Yes=5 / No=0) designed as a fallback, but the display condition doesn't account for this fallback.
+The old `AuditScorecard` component correctly fetches and passes this data, but it is no longer used on the dashboard -- it was replaced by `UnifiedScorecard`.
 
 ## Solution
 
-Update the display condition in **both** the `OrgKpiScopedEntryTable` (Employee/Department rows) and `OrgKpiEntryCard` (Org-wide scope) to treat `uom_type === 'binary'` as sufficient to show the qualitative selector, falling back to `BINARY_OPTIONS` when `qualitativeOptions` is null/empty.
+Add `useAuditKpiAssignments` to `UnifiedScorecard` so it fetches KPI-level audit assignments when the view is in audit mode, and passes them to `KpiDetailsTable`.
 
 ## Changes
 
-### 1. `src/components/admin/OrgKpiScopedEntryTable.tsx` -- EmployeeRow component
+### 1. `src/components/review/UnifiedScorecard.tsx`
 
-**Current condition** (line ~281):
-```typescript
-(row.uomType === 'binary' || row.uomType === 'tiered') && row.qualitativeOptions?.length
-```
+- **Import** `useAuditKpiAssignments` from the hook file
+- **Call the hook** conditionally when `viewLevel === 'auditor'`, passing the current KPI IDs
+- **Pass** `auditKpiAssignments` prop to `KpiDetailsTable`
 
-**New condition**:
-```typescript
-row.uomType === 'binary' || (row.uomType === 'tiered' && row.qualitativeOptions?.length)
-```
+This is the same pattern already used in `AuditScorecard.tsx` (lines 52, 141, 774).
 
-For binary KPIs, always show the qualitative selector. The `QualitativeSelect` component already handles the fallback to `BINARY_OPTIONS` internally when `qualitativeOptions` is null.
+### 2. No other changes needed
 
-Apply the same fix to the DepartmentRow component (line ~397).
-
-Also update the `allQualitative` check (line ~55) used to hide the bulk-fill numeric input for qualitative KPIs.
-
-### 2. `src/components/admin/OrgKpiEntryCard.tsx` -- Org-scope input
-
-**Current condition** (line ~329):
-```typescript
-(data.uomType === 'binary' || data.uomType === 'tiered') && data.qualitativeOptions?.length
-```
-
-**New condition**:
-```typescript
-data.uomType === 'binary' || (data.uomType === 'tiered' && data.qualitativeOptions?.length)
-```
-
-### 3. No database changes needed
-
-The data is correct (`uom_type = 'binary'`). The issue is purely a UI display condition.
+- The hook (`useAuditKpiAssignments`) already uses a two-step fetch and works correctly
+- The `KpiDetailsTable` already accepts and renders the `auditKpiAssignments` prop
+- The `AuditKpiAssignPopover` already displays the badge when `currentAssignment` is non-null
+- RLS policies already allow auditors and admins to SELECT from the table
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | None | Read-only display fix |
-| Regression | Low | Only changes which input widget is shown; `QualitativeSelect` already handles `BINARY_OPTIONS` fallback |
-| Scope | 2 files, ~4 line changes | Minimal surface area |
+| Data impact | None | Read-only query addition |
+| Performance | Negligible | Hook is disabled when not in audit view; query only runs for auditors |
+| Regression | None | Adds missing data flow; no existing behavior changes |
+| Scope | 1 file, ~5 lines added | Minimal surface area |
+
