@@ -1,32 +1,117 @@
 
 
-# Fix: Tap-to-Expand Remarks on All Touch Devices (v1.46.14)
+# Enhanced Employee Cards: Progress Bar + Auto-Prioritization (v1.46.15)
 
-## Problem
+## What Changes
 
-The `useIsMobile` hook has a 768px breakpoint, so tablets (768px+) are classified as "desktop" and get hover tooltips instead of tap-to-expand. Tablets are touch devices with no hover capability, making remarks unreadable.
+Each employee card in the reviewer grid will be enhanced with:
 
-## Solution
+1. **Mini progress bar** showing how many KPIs have been actioned vs total, with color-coded segments
+2. **Fraction text** like "7/13 reviewed" so reviewers instantly see scope
+3. **Auto-sort by urgency** -- employees with the most pending KPIs appear first
 
-Replace the `useIsMobile` check with a **touch-capability detection** using the CSS media query `(pointer: coarse)`, which correctly identifies all touch-first devices (phones AND tablets) regardless of screen width.
+## Visual Design
+
+```text
+Current card:
++--------------------------------------+
+| [Avatar] Jaspal                   -> |
+|          Senior General Manager      |
+|          Manager: Gaurav Budhia      |
+|          [2 pending] [11 forwarded]  |
++--------------------------------------+
+
+Enhanced card:
++--------------------------------------+
+| [Avatar] Jaspal                   -> |
+|          Senior General Manager      |
+|          Manager: Gaurav Budhia      |
+|          [=========-------] 11/13    |
+|          [2 pending] [11 forwarded]  |
++--------------------------------------+
+```
+
+The progress bar will show:
+- Green segment = completed/forwarded/reviewed KPIs
+- Amber/yellow segment = in-progress (in audit, in review, etc.)
+- Gray = remaining/pending
+- Fraction text to the right: "11/13"
+
+## Level-Specific Progress Logic
+
+| View Level | "Done" = | "In Progress" = | "Pending" = |
+|------------|----------|-----------------|-------------|
+| Team (Direct) | reviewed (badge2) | -- | pending (badge1) |
+| Team (Indirect) | reviewed (badge2) | -- | pending (badge1) |
+| Skip-Level | reviewed (badge2) | -- | pending (badge1) |
+| HR PMS | reviewed (badge3) | in review (badge2) | pending (badge1) |
+| Audit | forwarded (badge3) | in audit (badge2) | pending (badge1) |
+| Management | approved (badge2) | -- | pending (badge1) |
+
+## Auto-Sort Logic
+
+Employees will be sorted by:
+1. **Pending count descending** (most urgent first)
+2. **Total KPIs descending** (tie-breaker)
+3. **Name alphabetically** (final tie-breaker)
+
+Employees with 0 KPIs sink to the bottom.
 
 ## File to Change
 
-**`src/components/review/ReviewStageCard.tsx`**
+**`src/components/review/EmployeeSelectorGrid.tsx`**
 
-Replace `useIsMobile()` with a `useTouchDevice()` check using `window.matchMedia('(pointer: coarse)')`. This way:
-- Phones and tablets --> tap-to-expand
-- Desktop with mouse --> tooltip on hover
+### Changes:
 
-### Implementation
+1. **Update `renderEmployeeBadges`** (lines 591-699): Add a mini progress bar above the existing badges. The bar uses the existing `getEmployeeKpiStats` data (badge1, badge2, badge3, total) to compute segment widths.
 
-Add a local `isTouchDevice` state using `matchMedia('(pointer: coarse)')` instead of the width-based `useIsMobile` hook. The rest of the component logic stays identical -- just swap the boolean used in the conditional.
+2. **Sort `displayMembers`** (around line 336): After all filtering, sort by pending KPI count descending using the same `getEmployeeKpiStats` function.
+
+3. **Progress bar component**: Add a small inline `EmployeeProgressBar` component at the bottom of the file (similar to `StatCard`) that renders a thin colored bar with fraction text.
+
+## Technical Detail
+
+### Progress Bar Component
+```typescript
+function EmployeeProgressBar({ done, inProgress, total }: { done: number; inProgress: number; total: number }) {
+  if (total === 0) return null;
+  const donePct = (done / total) * 100;
+  const inProgressPct = (inProgress / total) * 100;
+  return (
+    <div className="flex items-center gap-2 w-full">
+      <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+        <div className="h-full bg-green-500" style={{ width: `${donePct}%` }} />
+        <!-- in-progress segment stacked after done -->
+      </div>
+      <span className="text-xs text-muted-foreground whitespace-nowrap">
+        {done + inProgress}/{total}
+      </span>
+    </div>
+  );
+}
+```
+
+### Sorting (in `displayMembers` useMemo)
+After filtering, sort the array:
+```typescript
+filtered?.sort((a, b) => {
+  const statsA = getEmployeeKpiStats(a.id, a.relationship);
+  const statsB = getEmployeeKpiStats(b.id, b.relationship);
+  // Most pending first
+  if (statsB.badge1 !== statsA.badge1) return statsB.badge1 - statsA.badge1;
+  // More total KPIs = higher priority
+  if (statsB.total !== statsA.total) return statsB.total - statsA.total;
+  // Alphabetical fallback
+  return (a.full_name || '').localeCompare(b.full_name || '');
+});
+```
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|-----------|
-| Data impact | None | UI-only change |
-| Regression | None | Desktop hover behavior unchanged; phones keep tap behavior |
-| Device coverage | Positive | Now covers tablets, foldables, and all touch-first devices |
+| Data impact | None | UI-only, no DB changes |
+| Regression | Low | Existing badges preserved; progress bar is additive |
+| Performance | None | Uses already-fetched `periodKpis` data, no new queries |
+| Sorting stability | Low | Sort is deterministic with 3-tier comparison |
 
