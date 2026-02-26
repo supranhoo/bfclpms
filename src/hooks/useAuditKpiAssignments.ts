@@ -19,7 +19,7 @@ export function useAuditKpiAssignments(kpiIds: string[]) {
 
       const { data, error } = await supabase
         .from('audit_kpi_level_assignments' as any)
-        .select('kpi_id, auditor_id, profiles!audit_kpi_level_assignments_auditor_id_fkey(full_name)')
+        .select('kpi_id, auditor_id, profiles(full_name)')
         .in('kpi_id', kpiIds);
 
       if (error) throw error;
@@ -83,7 +83,7 @@ export function useAuditorsList() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('user_roles')
-        .select('user_id, profiles!user_roles_user_id_fkey(id, full_name, employee_code)')
+        .select('user_id, profiles!user_roles_user_id_profiles_fkey(id, full_name, employee_code)')
         .eq('role', 'auditor');
 
       if (error) throw error;
