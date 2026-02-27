@@ -132,7 +132,7 @@ describe('RLS Policies — Documentation Cross-Reference', () => {
   });
 
   it('should use SECURITY DEFINER functions to avoid recursion', () => {
-    // Documenting the 7 security definer functions that prevent
+    // Documenting the 8 security definer functions that prevent
     // infinite recursion in RLS policies:
     const securityDefinerFunctions = [
       'has_role',
@@ -142,7 +142,8 @@ describe('RLS Policies — Documentation Cross-Reference', () => {
       'is_data_owner_for_employee',
       'is_period_locked',
       'check_template_has_active_kpis',
+      'has_report_access_override',
     ];
-    expect(securityDefinerFunctions).toHaveLength(7);
+    expect(securityDefinerFunctions).toHaveLength(8);
   });
 });
