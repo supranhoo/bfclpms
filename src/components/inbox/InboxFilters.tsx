@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Search, X, Filter, Info } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { hasAdvancedSyntax } from '@/lib/inboxSearchParser';
 
 export interface InboxFiltersState {
@@ -47,6 +49,8 @@ const NOTIFICATION_TYPES = [
 ];
 
 export function InboxFilters({ filters, onFiltersChange, totalCount, showingCount, activeTab = 'notifications' }: InboxFiltersProps) {
+  const isMobile = useIsMobile();
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [searchValue, setSearchValue] = useState(filters.search);
 
   // Debounce search
@@ -79,48 +83,10 @@ export function InboxFilters({ filters, onFiltersChange, totalCount, showingCoun
 
   const hasActiveFilters = activeFilterCount > 0;
 
-  return (
-    <div className="space-y-3">
-      {/* Row 1: Search + core filters */}
+  const filterDropdowns = (
+    <>
+      {/* Row 1: Status/Query filters + Date */}
       <div className="flex flex-col sm:flex-row gap-3">
-        {/* Search with advanced syntax support */}
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={isQueryTab ? 'Search queries... (try type:query status:open)' : 'Search notifications...'}
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-            className="pl-9 pr-16"
-          />
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            {searchValue && (
-              <button
-                onClick={() => setSearchValue('')}
-                className="text-muted-foreground hover:text-foreground p-0.5"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button className="text-muted-foreground hover:text-foreground p-0.5">
-                    <Info className="h-3.5 w-3.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-xs text-xs">
-                  <p className="font-semibold mb-1">Advanced search syntax:</p>
-                  <p><code>type:query</code> or <code>type:notification</code></p>
-                  <p><code>status:open</code>, <code>status:responded</code>, <code>status:resolved</code></p>
-                  <p><code>sla:overdue</code>, <code>sla:at-risk</code>, <code>sla:on-time</code></p>
-                  <p><code>period:Q4</code>, <code>notiftype:kpi_submitted</code></p>
-                  <p className="mt-1 text-muted-foreground">Combine with text: <code>type:query status:open target</code></p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        </div>
-
         {/* Status Filter (Read/Unread) — notifications only */}
         {isNotificationTab && (
           <Select
@@ -217,6 +183,78 @@ export function InboxFilters({ filters, onFiltersChange, totalCount, showingCoun
           </Select>
         )}
       </div>
+    </>
+  );
+
+  return (
+    <div className="space-y-3">
+      {/* Search bar — always visible */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder={isQueryTab ? 'Search queries... (try type:query status:open)' : 'Search notifications...'}
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+            className="pl-9 pr-16"
+          />
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            {searchValue && (
+              <button
+                onClick={() => setSearchValue('')}
+                className="text-muted-foreground hover:text-foreground p-0.5"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="text-muted-foreground hover:text-foreground p-0.5">
+                    <Info className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs text-xs">
+                  <p className="font-semibold mb-1">Advanced search syntax:</p>
+                  <p><code>type:query</code> or <code>type:notification</code></p>
+                  <p><code>status:open</code>, <code>status:responded</code>, <code>status:resolved</code></p>
+                  <p><code>sla:overdue</code>, <code>sla:at-risk</code>, <code>sla:on-time</code></p>
+                  <p><code>period:Q4</code>, <code>notiftype:kpi_submitted</code></p>
+                  <p className="mt-1 text-muted-foreground">Combine with text: <code>type:query status:open target</code></p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </div>
+
+        {/* Mobile: Filter toggle button */}
+        {isMobile && (
+          <Button
+            variant={hasActiveFilters ? 'secondary' : 'outline'}
+            size="icon"
+            onClick={() => setFiltersOpen(prev => !prev)}
+            className="shrink-0 min-h-[44px] min-w-[44px]"
+          >
+            <Filter className="h-4 w-4" />
+            {activeFilterCount > 0 && (
+              <Badge variant="destructive" className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[10px]">
+                {activeFilterCount}
+              </Badge>
+            )}
+          </Button>
+        )}
+      </div>
+
+      {/* Filter dropdowns — collapsible on mobile, always visible on desktop */}
+      {isMobile ? (
+        <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <CollapsibleContent className="space-y-3">
+            {filterDropdowns}
+          </CollapsibleContent>
+        </Collapsible>
+      ) : (
+        <div className="space-y-3">{filterDropdowns}</div>
+      )}
 
       {/* Active Filters Summary */}
       <div className="flex items-center justify-between text-sm">
