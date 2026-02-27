@@ -281,6 +281,17 @@ The system includes a full-database backup and restore feature accessible from *
 
 **Storage**: `database-backups` private bucket (admin-only). **Edge Functions**: `create-backup`, `restore-backup`, `update-backup-schedule`. **Excluded**: `auth.users` (managed by auth system). **Restore Warnings**: If the restore completes with warnings (e.g. FK constraint issues), the full list of warning messages is displayed in the toast notification for 15 seconds so admins can diagnose issues. The `password_rollout_logs` table is included in the backup/restore dependency chain to prevent FK constraint failures when clearing `profiles`.
 
+> ⚠️ **MANDATORY — New Table Backup Checklist**
+>
+> When **any new table** is created via a database migration, the following files **MUST** be updated in the **same change**:
+>
+> | File | What to update |
+> |------|----------------|
+> | `supabase/functions/create-backup/index.ts` | Add the table to the `TABLES_TO_BACKUP` array in the correct **foreign-key dependency order** |
+> | `supabase/functions/restore-backup/index.ts` | Add the table to **both** `INSERT_ORDER` (parent-first) and `DELETE_ORDER` (leaf-first) arrays |
+>
+> **Backup Coverage Policy**: No table may exist in the production schema without being included in the scheduled backup system. Any migration that creates a new table without updating the backup/restore functions is considered **incomplete**.
+
 #### Workflow Settings Categories
 
 | Category | Setting Key | Default | Range | Description |
