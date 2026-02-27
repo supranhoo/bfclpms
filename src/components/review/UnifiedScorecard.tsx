@@ -58,6 +58,8 @@ import { RollbackRequestBanner } from '@/components/review/RollbackRequestBanner
 import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog';
 import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
 import { useAuditKpiAssignments } from '@/hooks/useAuditKpiAssignments';
+import { KraExportMenu } from '@/components/review/KraExportMenu';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { 
   resolveForwardStatus, 
@@ -1095,10 +1097,23 @@ export function UnifiedScorecard({
               <CardTitle>KPI Details</CardTitle>
               <CardDescription>Click on a KPI to review and update scores</CardDescription>
             </div>
-            {isMobile 
-              ? <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} compact />
-              : <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />
-            }
+            <div className="flex items-center gap-2">
+              <KraExportMenu
+                kpis={kpis || []}
+                employeeProfile={{
+                  full_name: employee.full_name,
+                  employee_code: employee.employee_code,
+                  designation: employee.designation,
+                }}
+                department="-"
+                period={selectedPeriod}
+                year={selectedYear}
+              />
+              {isMobile 
+                ? <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} compact />
+                : <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />
+              }
+            </div>
           </div>
         </CardHeader>
         <CardContent className="px-3 sm:px-6">

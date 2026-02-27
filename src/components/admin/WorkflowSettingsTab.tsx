@@ -4,9 +4,13 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Clock, AlertTriangle, FileCheck, Eye } from 'lucide-react';
+import { Clock, AlertTriangle, FileCheck, Eye, FileDown } from 'lucide-react';
 import { useAllWorkflowSettings, useUpdateWorkflowSetting, WorkflowSetting, SettingCategory } from '@/hooks/useWorkflowSettings';
 import { useState, useEffect } from 'react';
+import { ALL_APP_ROLES } from '@/lib/roles';
+import { ALL_COLUMN_KEYS, COLUMN_REGISTRY } from '@/lib/kraExport';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface SettingInputProps {
   setting: WorkflowSetting;
@@ -35,6 +39,89 @@ function SettingInput({ setting, onUpdate, isPending }: SettingInputProps) {
     }
   };
   
+  // Role array setting (for export role configs)
+  if (setting.setting_key.endsWith('_roles') && setting.category === 'export') {
+    const currentRoles: string[] = (() => {
+      try {
+        const val = typeof localValue === 'string' ? JSON.parse(localValue) : localValue;
+        return Array.isArray(val) ? val : [];
+      } catch { return []; }
+    })();
+
+    const toggleRole = (role: string) => {
+      const updated = currentRoles.includes(role)
+        ? currentRoles.filter(r => r !== role)
+        : [...currentRoles, role];
+      const json = JSON.stringify(updated);
+      handleChange(json);
+      onUpdate(setting.setting_key, json);
+    };
+
+    return (
+      <div className="py-4 border-b last:border-0 space-y-3">
+        <div className="space-y-1">
+          <Label className="text-base font-medium">{setting.label}</Label>
+          <p className="text-sm text-muted-foreground">{setting.description}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {ALL_APP_ROLES.map(role => (
+            <label key={role} className="flex items-center gap-1.5 cursor-pointer">
+              <Checkbox
+                checked={currentRoles.includes(role)}
+                onCheckedChange={() => toggleRole(role)}
+                disabled={isPending}
+              />
+              <span className="text-sm capitalize">{role.replace(/_/g, ' ')}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Column array setting (for export columns)
+  if (setting.setting_key === 'kra_export_columns') {
+    const currentCols: string[] = (() => {
+      try {
+        const val = typeof localValue === 'string' ? JSON.parse(localValue) : localValue;
+        return Array.isArray(val) ? val : [];
+      } catch { return []; }
+    })();
+
+    const toggleCol = (col: string) => {
+      const updated = currentCols.includes(col)
+        ? currentCols.filter(c => c !== col)
+        : [...currentCols, col];
+      const json = JSON.stringify(updated);
+      handleChange(json);
+      onUpdate(setting.setting_key, json);
+    };
+
+    return (
+      <div className="py-4 border-b last:border-0 space-y-3">
+        <div className="space-y-1">
+          <Label className="text-base font-medium">{setting.label}</Label>
+          <p className="text-sm text-muted-foreground">{setting.description}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {ALL_COLUMN_KEYS.map(col => {
+            const def = COLUMN_REGISTRY[col];
+            return (
+              <label key={col} className="flex items-center gap-1.5 cursor-pointer">
+                <Checkbox
+                  checked={currentCols.includes(col)}
+                  onCheckedChange={() => toggleCol(col)}
+                  disabled={isPending}
+                />
+                <span className="text-sm">{def?.header || col}</span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   // Boolean switch
   if (setting.min_value === null && setting.max_value === null && typeof setting.setting_value === 'boolean') {
     return (
@@ -132,9 +219,14 @@ const CATEGORY_CONFIG: Record<SettingCategory, { title: string; description: str
     description: 'Configure how observations impact scores',
     icon: <Eye className="h-5 w-5" />,
   },
+  export: {
+    title: 'Export Settings',
+    description: 'Configure KRA export permissions, visible columns, and PDF layout',
+    icon: <FileDown className="h-5 w-5" />,
+  },
 };
 
-const CATEGORY_ORDER: SettingCategory[] = ['submission', 'sla', 'validation', 'observation'];
+const CATEGORY_ORDER: SettingCategory[] = ['submission', 'sla', 'validation', 'observation', 'export'];
 
 export function WorkflowSettingsTab() {
   const { grouped, isLoading, error } = useAllWorkflowSettings();
