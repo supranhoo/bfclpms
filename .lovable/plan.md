@@ -1,138 +1,129 @@
 
-
-# Internal (Audit-Only) Observations
+# Enhance Audit Panel with KPI-Level Assignment Visibility
 
 ## Problem
 
-Currently, all observations on a KPI are visible to every role that can see that KPI. Auditors need the ability to mark an observation as **"Internal"** so it is only visible to Auditors and Admins -- not to the employee, their manager, or other reviewers.
+Currently the Audit Panel has two separate assignment systems that don't talk to each other on the grid screen:
 
-## Solution: Two-Layer Visibility Control
+1. **Employee-level assignments** (`audit_kpi_assignments`) -- Shows in "My Assignments" section on the grid. This maps entire employees to an auditor.
+2. **KPI-level assignments** (`audit_kpi_level_assignments`) -- Only visible INSIDE an employee's scorecard via the `AuditKpiAssignPopover`. This assigns individual KPIs to specific auditors.
 
-### Layer 1: Database Column + RLS (Enforced Security)
+An auditor who has been assigned 5 specific KPIs across 3 employees has no way to see those on the Audit Panel grid. They must open each employee's scorecard manually to discover their KPI-level assignments.
 
-Add an `visibility` column to `kpi_observations` with two values: `'public'` (default, current behavior) and `'internal'` (restricted to Auditor + Admin). This is enforced at the database level via updated RLS policies so that even if the frontend has a bug, internal observations can never leak.
+## Solution
 
-### Layer 2: Admin-Configurable Visibility Roles (Extensibility)
-
-Add a `workflow_settings` row (`observation_internal_visible_roles`) so the Admin can control which roles see internal observations. Default: `["auditor", "admin"]`. This means if the organization later wants Management to also see internal notes, Admin simply adds `"management"` to the setting -- no code change needed.
-
-### Layer 3: Frontend -- Toggle in Add/Edit Dialog + Visual Badge
-
-- Auditors and Admins see a "Mark as Internal (Audit Only)" toggle when creating/editing observations
-- Internal observations display a distinctive "Internal" badge with a lock icon
-- The `KpiObservationsSection` filters out internal observations for users not in the allowed roles list
+Merge KPI-level assignment awareness into the Audit Panel grid so auditors see a unified view of all their assignments -- both employee-level and KPI-level.
 
 ---
 
-## Detailed Changes
+## Changes
 
-### 1. Database Migration
+### 1. New Hook: `src/hooks/useMyKpiLevelAssignments.ts`
 
-Add `visibility` column to `kpi_observations`:
+Create a lightweight hook that fetches the current auditor's KPI-level assignments and groups them by employee:
 
-```sql
-ALTER TABLE kpi_observations
-  ADD COLUMN visibility text NOT NULL DEFAULT 'public';
+- Queries `audit_kpi_level_assignments` where `auditor_id = current user`
+- Joins with `kpis` to get `employee_id` for each assigned KPI
+- Returns:
+  - `assignedKpisByEmployee`: `Map<employee_id, kpi_id[]>` -- how many KPIs per employee
+  - `allAssignedEmployeeIds`: `Set<employee_id>` -- all employees with at least one KPI assigned
+  - `totalAssignedKpis`: number -- total count for stats
+
+This uses the same two-step fetch pattern (no joins to profiles) established in `useAuditKpiAssignments.ts` to avoid ambiguous FK errors.
+
+### 2. Update: `src/components/review/EmployeeSelectorGrid.tsx`
+
+**2a. Import and fetch KPI-level assignments**
+
+Add the new hook alongside the existing `useMyAuditAssignments`. Merge both sets to create a unified "My Assignments" employee list.
+
+**2b. Update the "My Assignments" grouping logic**
+
+Currently (line ~437), `assignedMembers` only checks `myAssignedEmployeeIds` (employee-level). Update to also include employees who have KPI-level assignments to the current auditor:
+
+```
+const isMyAssignment = employeeLevelAssigned.has(id) || kpiLevelAssigned.has(id);
 ```
 
-Update RLS SELECT policies: Add a condition so that rows with `visibility = 'internal'` are only returned to users who are auditors or admins. This uses the existing `has_role()` security definer function to avoid recursion.
+**2c. Show KPI-level assignment count on employee cards**
 
-The key RLS logic for SELECT:
+When an employee has KPI-level assignments to the current auditor, show an additional badge on their card:
 
-```sql
--- Existing SELECT policies get an additional filter:
--- WHERE (visibility = 'public' OR has_role(auth.uid(), 'auditor') OR has_role(auth.uid(), 'admin'))
+```
+[3 KPIs assigned to you]
 ```
 
-This ensures internal observations are **never returned** from the database for unauthorized roles, regardless of frontend logic.
+This appears alongside the existing pending/in-audit/forwarded badges, styled in an indigo color to match the existing KPI-assignment badge pattern used inside the scorecard.
 
-### 2. Seed `workflow_settings` Row
+**2d. Update stat cards**
 
-Insert one new row for admin configurability:
+Add a 5th stat card (or update the existing layout) to show "My KPIs" count -- the total number of KPIs specifically assigned to this auditor via KPI-level mapping. This gives instant visibility of their workload.
 
-| Key | Category | Default |
-|-----|----------|---------|
-| `observation_internal_visible_roles` | `observations` | `["auditor", "admin"]` |
+**2e. Update the "My Assignments" filter**
 
-### 3. Update `src/hooks/useKpiObservations.ts`
+The `my_assigned` status filter currently only checks employee-level assignments. Update it to also include employees with KPI-level assignments.
 
-- Add `visibility` field to `KpiObservation` interface (`'public' | 'internal'`)
-- Add `visibility` field to `CreateObservationInput` and `UpdateObservationInput`
-- No query changes needed -- RLS handles filtering automatically
+### 3. Update: `src/hooks/useMyAuditAssignments.ts` (minor)
 
-### 4. Update `src/components/review/AddObservationDialog.tsx`
-
-- Add a `Switch` toggle: "Internal (Audit Team Only)" -- only visible when `observerRole` is `'auditor'` or `'admin'`
-- When toggled on, set `visibility: 'internal'` in the submit payload
-- Show a helper text: "This observation will only be visible to Auditors and Admins"
-
-### 5. Update `src/components/review/ObservationCard.tsx`
-
-- When `visibility === 'internal'`, show a distinctive badge with a Lock icon and "Internal" label, styled in a muted purple/indigo color to differentiate from status badges
-- This provides a clear visual signal that the note is restricted
-
-### 6. Update `src/components/review/KpiObservationsSection.tsx`
-
-- Add a secondary client-side filter as defense-in-depth: even though RLS blocks internal observations for unauthorized users, the frontend also checks the user's role against the `observation_internal_visible_roles` setting before rendering
-- Show an "Internal" filter tab for auditors/admins so they can toggle between "All" and "Internal Only" views
-
-### 7. Update `src/components/admin/WorkflowSettingsTab.tsx`
-
-- Add an "Observations" settings card with the role selector for `observation_internal_visible_roles`
-- Uses the same `ALL_APP_ROLES` pattern as the export settings
-
-### 8. Update `src/pages/admin/ObservationsOverview.tsx`
-
-- Add a visibility column to the admin table showing Public/Internal badge
-- Add a filter option for visibility type
-
-### 9. Update `DOCUMENTATION.md`
-
-- Document the internal observation feature and its admin controls
+No changes needed -- this hook stays as-is for employee-level assignments. The new KPI-level hook operates independently and the merge happens in the grid component.
 
 ---
 
-## Technical Architecture
+## Technical Details
+
+### Data Flow
 
 ```text
-+------------------+     +------------------+     +-------------------+
-|  AddObservation  |     |  kpi_observations|     |  workflow_settings|
-|  Dialog          |---->|  visibility col  |<----|  internal_visible |
-|  [Internal?] tog |     |  RLS enforced    |     |  _roles config    |
-+------------------+     +------------------+     +-------------------+
-                               |                         |
-                    RLS filters out                Frontend reads
-                    internal rows for              allowed roles for
-                    non-auditor/admin              UI-level defense
-                               |                         |
-                          +----v-------------------------v----+
-                          |  KpiObservationsSection           |
-                          |  - Shows internal badge           |
-                          |  - Filter tab for auditors        |
-                          +-----------------------------------+
+Audit Panel Grid
+  |
+  +-- useMyAuditAssignments()      --> Set<employee_id>  (employee-level)
+  +-- useMyKpiLevelAssignments()   --> Map<employee_id, kpi_id[]>  (KPI-level)
+  |
+  +-- Merge into unified "My Assignments" section
+  |     - Employee-level: full card highlight
+  |     - KPI-level: card highlight + "X KPIs assigned" badge
+  |
+  +-- "My Assignments" filter includes both types
 ```
+
+### Employee Card Visual (Audit View)
+
+```text
++--------------------------------------------------+
+| [Avatar]  Abhas Luharuwalla            -->        |
+|           Deputy General Manager                  |
+|           Manager: Gaurav Budhia                  |
+|           [============================] 15/24    |
+|           [5 pending] [10 forwarded]              |
+|           [3 KPIs assigned to you]   <-- NEW      |
++--------------------------------------------------+
+```
+
+The "KPIs assigned to you" badge only appears when KPI-level assignments exist for that employee-auditor pair. It uses indigo styling consistent with the existing `AuditKpiAssignPopover` badge.
+
+### Stat Cards (Audit View) -- Updated Layout
+
+```text
+| Total Employees | Pending Audit | In Audit | Forwarded | My KPIs |
+|       37        |     223       |    30    |    127    |   12    |
+```
+
+The "My KPIs" stat card shows the total count of KPI-level assignments for the current auditor. Clicking it filters to show only employees with KPI-level assignments.
+
+---
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|------------|
-| Data | Low | New column with default `'public'` -- all existing observations remain visible to everyone |
-| Security | None | RLS is the primary enforcement; frontend filtering is defense-in-depth only |
-| Regression | Low | Default value `'public'` means zero behavior change for existing observations |
-| Workflow | None | Only adds a new optional toggle -- no existing flows are altered |
-| Extensibility | Built-in | Admin can add more roles to the visibility list without code changes |
+| Data | None | Read-only query on existing `audit_kpi_level_assignments` table; no schema changes |
+| Regression | Low | Existing employee-level assignment logic untouched; KPI-level is additive |
+| Performance | Low | Single query for KPI-level assignments, cached by React Query |
+| Security | None | RLS already restricts `audit_kpi_level_assignments` to auditor + admin roles |
 
 ## Files Summary
 
 | File | Action | Description |
 |------|--------|-------------|
-| `kpi_observations` (DB) | Migrate | Add `visibility` column, update RLS SELECT policies |
-| `workflow_settings` (DB) | Insert | `observation_internal_visible_roles` config row |
-| `src/hooks/useKpiObservations.ts` | Edit | Add `visibility` to interfaces |
-| `src/components/review/AddObservationDialog.tsx` | Edit | Add Internal toggle for auditor/admin |
-| `src/components/review/ObservationCard.tsx` | Edit | Show Internal badge with lock icon |
-| `src/components/review/KpiObservationsSection.tsx` | Edit | Add Internal filter tab for auditors |
-| `src/components/admin/WorkflowSettingsTab.tsx` | Edit | Add Observations settings card |
-| `src/pages/admin/ObservationsOverview.tsx` | Edit | Add visibility column and filter |
-| `DOCUMENTATION.md` | Edit | Document feature |
-
+| `src/hooks/useMyKpiLevelAssignments.ts` | Create | Hook to fetch current auditor's KPI-level assignments grouped by employee |
+| `src/components/review/EmployeeSelectorGrid.tsx` | Edit | Merge KPI-level assignments into grid, badges, stat cards, and filters |
