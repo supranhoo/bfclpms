@@ -1,9 +1,4 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
+/* Legacy Vite defaults removed – the dashboard layout handles its own constraints */
 
 .logo {
   height: 6em;

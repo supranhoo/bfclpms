@@ -17,12 +17,12 @@ function DashboardContent() {
   return (
     <>
       {showFloatingTrigger && (
-        <div className="fixed top-4 left-4 z-50">
-          <SidebarTrigger className="bg-background border shadow-sm rounded-md p-2 hover:bg-accent" />
+        <div className="fixed top-3 left-3 z-50 sm:top-4 sm:left-4">
+          <SidebarTrigger className="bg-background border shadow-sm rounded-md p-2 hover:bg-accent min-h-[44px] min-w-[44px]" />
         </div>
       )}
       <SidebarInset>
-        <main className="flex-1 overflow-auto p-6 bg-muted/30">
+        <main className="flex-1 overflow-auto p-3 sm:p-6 bg-muted/30">
           <ErrorBoundary>
             <Suspense fallback={
               <div className="min-h-[200px] flex items-center justify-center">
