@@ -170,12 +170,47 @@ export function useUpdateBackupSchedule() {
 export function useDownloadBackup() {
   return useMutation({
     mutationFn: async (filePath: string) => {
-      const { data, error } = await supabase.storage
-        .from('database-backups')
-        .download(filePath);
+      const isChunked = filePath.endsWith('manifest.json');
 
-      if (error) throw error;
-      return { blob: data, fileName: filePath };
+      if (isChunked) {
+        // Download manifest first
+        const { data: manifestBlob, error: manifestError } = await supabase.storage
+          .from('database-backups')
+          .download(filePath);
+        if (manifestError || !manifestBlob) throw manifestError || new Error('Failed to download manifest');
+
+        const manifest = JSON.parse(await manifestBlob.text());
+        const tables = manifest.tables as Array<{ table: string; rows: number; file: string }>;
+
+        // Download each table file and combine into single backup JSON
+        const combinedData: Record<string, unknown[]> = {};
+        for (const entry of tables) {
+          try {
+            const { data: tableBlob, error: tableError } = await supabase.storage
+              .from('database-backups')
+              .download(entry.file);
+            if (tableError || !tableBlob) continue;
+            combinedData[entry.table] = JSON.parse(await tableBlob.text());
+          } catch {
+            console.warn(`Skipping table ${entry.table} during download`);
+          }
+        }
+
+        const combinedJson = JSON.stringify({
+          metadata: { ...manifest, tables: undefined },
+          data: combinedData,
+        }, null, 2);
+        const blob = new Blob([combinedJson], { type: 'application/json' });
+        const fileName = filePath.replace('/manifest.json', '').split('/').pop() + '-backup.json';
+        return { blob, fileName };
+      } else {
+        // Legacy single-file download
+        const { data, error } = await supabase.storage
+          .from('database-backups')
+          .download(filePath);
+        if (error) throw error;
+        return { blob: data, fileName: filePath };
+      }
     },
     onSuccess: ({ blob, fileName }) => {
       const url = URL.createObjectURL(blob);
