@@ -1095,7 +1095,10 @@ export function UnifiedScorecard({
               <CardTitle>KPI Details</CardTitle>
               <CardDescription>Click on a KPI to review and update scores</CardDescription>
             </div>
-            {!isMobile && <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />}
+            {isMobile 
+              ? <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} compact />
+              : <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />
+            }
           </div>
         </CardHeader>
         <CardContent className="px-3 sm:px-6">
