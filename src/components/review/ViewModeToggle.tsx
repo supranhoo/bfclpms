@@ -27,7 +27,7 @@ export function ViewModeToggle({ currentMode, availableModes, onModeChange }: Vi
   const visibleModes = availableModes.filter(m => m !== 'skip_level');
 
   return (
-    <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 border">
+    <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 border overflow-x-auto scrollbar-none">
       {visibleModes.map(mode => {
         const config = modeConfig[mode];
         const Icon = config.icon;

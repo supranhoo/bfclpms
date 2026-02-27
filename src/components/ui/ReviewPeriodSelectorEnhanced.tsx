@@ -232,7 +232,7 @@ export function ReviewPeriodSelectorEnhanced({
   }, [value, onChange]);
 
   return (
-    <div className={cn('flex items-center gap-2 flex-wrap', className)}>
+    <div className={cn('flex items-center gap-2 flex-wrap w-full sm:w-auto', className)}>
       {/* Mode Toggle - Clean buttons */}
       {showModeToggle && (
         <>
