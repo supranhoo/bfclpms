@@ -40,7 +40,7 @@ function SettingInput({ setting, onUpdate, isPending }: SettingInputProps) {
   };
   
   // Role array setting (for export role configs)
-  if (setting.setting_key.endsWith('_roles') && setting.category === 'export') {
+  if (setting.setting_key.endsWith('_roles') && (setting.category === 'export' || setting.category === 'observation')) {
     const currentRoles: string[] = (() => {
       try {
         const val = typeof localValue === 'string' ? JSON.parse(localValue) : localValue;

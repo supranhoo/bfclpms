@@ -6,6 +6,7 @@ export type ObservationType = 'positive' | 'concern' | 'neutral';
 export type ObserverRole = 'self' | 'manager' | 'auditor' | 'management' | 'admin';
 
 export type ObservationStatus = 'open' | 'acknowledged' | 'resolved';
+export type ObservationVisibility = 'public' | 'internal';
 
 export interface KpiObservation {
   id: string;
@@ -19,6 +20,7 @@ export interface KpiObservation {
   evidence_url: string | null;
   evidence_urls: string[] | null;
   status: ObservationStatus;
+  visibility: ObservationVisibility;
   is_applied: boolean;
   reviewed_by: string | null;
   reviewed_at: string | null;
@@ -42,6 +44,7 @@ export interface CreateObservationInput {
   description?: string;
   evidence_url?: string;
   is_applied?: boolean;
+  visibility?: ObservationVisibility;
 }
 
 export interface UpdateObservationInput {
@@ -54,6 +57,7 @@ export interface UpdateObservationInput {
   is_applied?: boolean;
   reviewed_by?: string;
   reviewed_at?: string;
+  visibility?: ObservationVisibility;
 }
 
 // Fetch observations for a single KPI

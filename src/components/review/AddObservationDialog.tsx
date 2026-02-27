@@ -12,7 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { TrendingUp, TrendingDown, Minus, Lock } from 'lucide-react';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
@@ -57,6 +58,9 @@ export function AddObservationDialog({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
+  const [isInternal, setIsInternal] = useState(false);
+  
+  const canMarkInternal = observerRole === 'auditor' || observerRole === 'admin';
 
   useEffect(() => {
     if (editingObservation) {
@@ -64,11 +68,13 @@ export function AddObservationDialog({
       setTitle(editingObservation.title);
       setDescription(editingObservation.description || '');
       setEvidenceUrls((editingObservation as any).evidence_urls || []);
+      setIsInternal(editingObservation.visibility === 'internal');
     } else {
       setObservationType('neutral');
       setTitle('');
       setDescription('');
       setEvidenceUrls([]);
+      setIsInternal(false);
     }
   }, [editingObservation, open]);
 
@@ -78,6 +84,7 @@ export function AddObservationDialog({
       setTitle(editingObservation?.title || '');
       setDescription(editingObservation?.description || '');
       setEvidenceUrls((editingObservation as any)?.evidence_urls || []);
+      setIsInternal(editingObservation?.visibility === 'internal');
     }
     onOpenChange(newOpen);
   };
@@ -93,6 +100,7 @@ export function AddObservationDialog({
         title: title.trim(),
         description: description.trim() || undefined,
         evidence_urls: evidenceUrls.length > 0 ? evidenceUrls : undefined,
+        visibility: canMarkInternal ? (isInternal ? 'internal' : 'public') : undefined,
       } as any);
     } else {
       onSubmit({
@@ -104,6 +112,7 @@ export function AddObservationDialog({
         description: description.trim() || undefined,
         evidence_urls: evidenceUrls.length > 0 ? evidenceUrls : undefined,
         is_applied: autoApply,
+        visibility: canMarkInternal && isInternal ? 'internal' : 'public',
       } as any);
     }
     
@@ -201,6 +210,24 @@ export function AddObservationDialog({
               maxFiles={5}
               label="Evidence (Optional)"
             />
+          )}
+
+          {/* Internal Visibility Toggle */}
+          {canMarkInternal && (
+            <div className="flex items-center justify-between rounded-lg border border-border p-3 bg-muted/30">
+              <div className="flex items-center gap-2">
+                <Lock className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <Label htmlFor="internal-toggle" className="text-sm font-medium">Internal (Audit Team Only)</Label>
+                  <p className="text-xs text-muted-foreground">Only visible to Auditors and Admins</p>
+                </div>
+              </div>
+              <Switch
+                id="internal-toggle"
+                checked={isInternal}
+                onCheckedChange={setIsInternal}
+              />
+            </div>
           )}
         </div>
 

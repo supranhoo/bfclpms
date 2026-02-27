@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from '@/components/ui/table';
-import { Search, Eye, MessageCircle, CheckCircle2, AlertCircle, Clock, Download } from 'lucide-react';
+import { Search, Eye, MessageCircle, CheckCircle2, AlertCircle, Clock, Download, Lock, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
@@ -22,6 +22,7 @@ interface AdminObservation {
   observation_type: 'positive' | 'concern' | 'neutral';
   observer_role: string;
   status: string;
+  visibility: string;
   created_at: string;
   updated_at: string;
   created_by_profile: { full_name: string | null; email: string } | null;
@@ -36,7 +37,7 @@ function useAllObservations() {
       const { data, error } = await supabase
         .from('kpi_observations')
         .select(`
-          id, kpi_id, title, description, observation_type, observer_role, status, created_at, updated_at, ticket_number,
+          id, kpi_id, title, description, observation_type, observer_role, status, visibility, created_at, updated_at, ticket_number,
           created_by_profile:profiles!kpi_observations_created_by_fkey(full_name, email)
         `)
         .order('created_at', { ascending: false });
@@ -129,6 +130,7 @@ export default function ObservationsOverview() {
       'KRA': obs.kpi?.kra_name || '',
       'KPI': obs.kpi?.kpi_name || '',
       'Type': typeConfig[obs.observation_type]?.label || obs.observation_type,
+      'Visibility': obs.visibility === 'internal' ? 'Internal' : 'Public',
       'Observer': obs.created_by_profile?.full_name || '',
       'Observer Role': obs.observer_role,
       'Status': statusConfig[obs.status]?.label || obs.status,
@@ -212,6 +214,7 @@ export default function ObservationsOverview() {
                   <TableHead>Employee</TableHead>
                   <TableHead>KRA / KPI</TableHead>
                   <TableHead>Type</TableHead>
+                  <TableHead>Visibility</TableHead>
                   <TableHead>Observer</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Date</TableHead>
@@ -238,6 +241,19 @@ export default function ObservationsOverview() {
                       </TableCell>
                       <TableCell>
                         <Badge className={tp.className} variant="secondary">{tp.label}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {obs.visibility === 'internal' ? (
+                          <Badge variant="outline" className="gap-1 border-violet-300 dark:border-violet-700 bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400">
+                            <Lock className="h-3 w-3" />
+                            Internal
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="gap-1 text-muted-foreground">
+                            <Globe className="h-3 w-3" />
+                            Public
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">{obs.created_by_profile?.full_name || '—'}</div>
