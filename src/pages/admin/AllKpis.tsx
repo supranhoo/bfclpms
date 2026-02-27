@@ -353,27 +353,27 @@ export default function AllKpis() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Admin KPI Dashboard</h1>
-          <p className="text-muted-foreground">Monitor KPI status across all employees and workflow stages</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Admin KPI Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Monitor KPI status across all employees and workflow stages</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleExportExcel}>
-            <Download className="h-4 w-4 mr-2" />
-            Export Excel
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={handleExportExcel}>
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Export Excel</span>
           </Button>
-          <Button variant="outline" onClick={() => setIsCopyKrasOpen(true)}>
-            <Copy className="h-4 w-4 mr-2" />
-            Copy KRAs
+          <Button variant="outline" size="sm" onClick={() => setIsCopyKrasOpen(true)}>
+            <Copy className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Copy KRAs</span>
           </Button>
-          <Button variant="outline" onClick={() => setIsBulkAssignOpen(true)}>
-            <Library className="h-4 w-4 mr-2" />
-            Bulk Assign
+          <Button variant="outline" size="sm" onClick={() => setIsBulkAssignOpen(true)}>
+            <Library className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Bulk Assign</span>
           </Button>
-          <Button onClick={() => setIsCreateDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Assign KRA
+          <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Assign KRA</span>
           </Button>
         </div>
       </div>

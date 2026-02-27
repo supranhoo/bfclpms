@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useProfiles, useDepartments } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,7 @@ const roleColors: Record<AppRole, string> = {
 const ITEMS_PER_PAGE = 10;
 
 export default function UserManagement() {
+  const isMobile = useIsMobile();
   const { data: profiles, isLoading } = useProfiles();
   const { data: departments } = useDepartments();
   const queryClient = useQueryClient();
@@ -529,14 +531,14 @@ export default function UserManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">User Management</h1>
-          <p className="text-muted-foreground">Manage users, roles, and reporting structure</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">User Management</h1>
+          <p className="text-sm text-muted-foreground">Manage users, roles, and reporting structure</p>
         </div>
-        <Button onClick={() => setCreateDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add User
+        <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+          <Plus className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Add User</span>
         </Button>
       </div>
 
@@ -573,7 +575,7 @@ export default function UserManagement() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-4">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
+        <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search users..."
@@ -625,133 +627,192 @@ export default function UserManagement() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">
-                  <Checkbox
-                    checked={paginatedProfiles.length > 0 && selectedUserIds.size === paginatedProfiles.length}
-                    onCheckedChange={toggleSelectAll}
-                  />
-                </TableHead>
-                <TableHead>User</TableHead>
-                <TableHead>Employee Code</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Designation</TableHead>
-                <TableHead>PMS Grade</TableHead>
-                <TableHead>Mobile</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Reporting To</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          {isMobile ? (
+            /* Mobile Card View */
+            <div className="space-y-3">
               {paginatedProfiles.map(profile => {
                 const role = (profile.user_roles as any)?.[0]?.role || 'employee';
                 const manager = profiles?.find(p => p.id === profile.reporting_manager_id);
                 return (
-                  <TableRow key={profile.id}>
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedUserIds.has(profile.id)}
-                        onCheckedChange={() => toggleSelectUser(profile.id)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={profile.avatar_url || undefined} />
-                          <AvatarFallback className="text-xs">{getInitials(profile.full_name)}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">{profile.full_name}</p>
-                          <p className="text-xs text-muted-foreground">{profile.email}</p>
-                        </div>
+                  <div key={profile.id} className="border rounded-lg p-3 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={profile.avatar_url || undefined} />
+                        <AvatarFallback className="text-xs">{getInitials(profile.full_name)}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{profile.full_name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
                       </div>
-                    </TableCell>
-                    <TableCell>{profile.employee_code || '-'}</TableCell>
-                    <TableCell>{(profile.departments as any)?.name || '-'}</TableCell>
-                    <TableCell>{profile.designation || '-'}</TableCell>
-                    <TableCell>{profile.pms_grade || '-'}</TableCell>
-                    <TableCell>
-                      {(profile as any).mobile_number ? (
-                        <a
-                          href={`tel:${(profile as any).mobile_number}`}
-                          className="flex items-center gap-1 text-sm text-foreground hover:text-primary transition-colors"
-                          onClick={e => e.stopPropagation()}
-                        >
-                          <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          {(profile as any).mobile_number}
-                        </a>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
                       <Badge className={roleColors[role as AppRole]}>{role}</Badge>
-                    </TableCell>
-                    <TableCell>{manager?.full_name || '-'}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} title="Edit">
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          onClick={() => {
-                            const role = (profile.user_roles as any)?.[0]?.role || 'employee';
-                            setAssignTargetUser({
-                              id: profile.id,
-                              name: profile.full_name || profile.email,
-                              departmentId: profile.department_id,
-                              role,
-                            });
-                            setSmartAssignDialogOpen(true);
-                          }} 
-                          title="Assign KRAs"
-                        >
-                          <Package className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          onClick={() => openResetDialog(profile)} 
-                          title="Reset Password"
-                        >
-                          <KeyRound className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setWorkingDaysEmployee({
-                              id: profile.id,
-                              full_name: profile.full_name,
-                              email: profile.email,
-                              employee_code: profile.employee_code,
-                            });
-                            setWorkingDaysDialogOpen(true);
-                          }}
-                          title="Working Days"
-                        >
-                          <Calendar className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => confirmDelete(profile.id, profile.full_name || profile.email)}
-                          title="Remove Employee"
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
+                      <span>Code: {profile.employee_code || '-'}</span>
+                      <span>Dept: {(profile.departments as any)?.name || '-'}</span>
+                      <span>Grade: {profile.pms_grade || '-'}</span>
+                      <span>Manager: {manager?.full_name || '-'}</span>
+                    </div>
+                    <div className="flex items-center gap-1 pt-1 border-t">
+                      <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} className="min-h-[44px]">
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => {
+                        const r = (profile.user_roles as any)?.[0]?.role || 'employee';
+                        setAssignTargetUser({ id: profile.id, name: profile.full_name || profile.email, departmentId: profile.department_id, role: r });
+                        setSmartAssignDialogOpen(true);
+                      }} className="min-h-[44px]">
+                        <Package className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => openResetDialog(profile)} className="min-h-[44px]">
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => {
+                        setWorkingDaysEmployee({ id: profile.id, full_name: profile.full_name, email: profile.email, employee_code: profile.employee_code });
+                        setWorkingDaysDialogOpen(true);
+                      }} className="min-h-[44px]">
+                        <Calendar className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => confirmDelete(profile.id, profile.full_name || profile.email)} className="min-h-[44px]">
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
                 );
               })}
-            </TableBody>
-          </Table>
+              {paginatedProfiles.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">No users found</div>
+              )}
+            </div>
+          ) : (
+            /* Desktop Table View */
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={paginatedProfiles.length > 0 && selectedUserIds.size === paginatedProfiles.length}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </TableHead>
+                  <TableHead>User</TableHead>
+                  <TableHead>Employee Code</TableHead>
+                  <TableHead>Department</TableHead>
+                  <TableHead>Designation</TableHead>
+                  <TableHead>PMS Grade</TableHead>
+                  <TableHead>Mobile</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Reporting To</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginatedProfiles.map(profile => {
+                  const role = (profile.user_roles as any)?.[0]?.role || 'employee';
+                  const manager = profiles?.find(p => p.id === profile.reporting_manager_id);
+                  return (
+                    <TableRow key={profile.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedUserIds.has(profile.id)}
+                          onCheckedChange={() => toggleSelectUser(profile.id)}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={profile.avatar_url || undefined} />
+                            <AvatarFallback className="text-xs">{getInitials(profile.full_name)}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium">{profile.full_name}</p>
+                            <p className="text-xs text-muted-foreground">{profile.email}</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>{profile.employee_code || '-'}</TableCell>
+                      <TableCell>{(profile.departments as any)?.name || '-'}</TableCell>
+                      <TableCell>{profile.designation || '-'}</TableCell>
+                      <TableCell>{profile.pms_grade || '-'}</TableCell>
+                      <TableCell>
+                        {(profile as any).mobile_number ? (
+                          <a
+                            href={`tel:${(profile as any).mobile_number}`}
+                            className="flex items-center gap-1 text-sm text-foreground hover:text-primary transition-colors"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            {(profile as any).mobile_number}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={roleColors[role as AppRole]}>{role}</Badge>
+                      </TableCell>
+                      <TableCell>{manager?.full_name || '-'}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} title="Edit">
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            onClick={() => {
+                              const role = (profile.user_roles as any)?.[0]?.role || 'employee';
+                              setAssignTargetUser({
+                                id: profile.id,
+                                name: profile.full_name || profile.email,
+                                departmentId: profile.department_id,
+                                role,
+                              });
+                              setSmartAssignDialogOpen(true);
+                            }} 
+                            title="Assign KRAs"
+                          >
+                            <Package className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            onClick={() => openResetDialog(profile)} 
+                            title="Reset Password"
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setWorkingDaysEmployee({
+                                id: profile.id,
+                                full_name: profile.full_name,
+                                email: profile.email,
+                                employee_code: profile.employee_code,
+                              });
+                              setWorkingDaysDialogOpen(true);
+                            }}
+                            title="Working Days"
+                          >
+                            <Calendar className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => confirmDelete(profile.id, profile.full_name || profile.email)}
+                            title="Remove Employee"
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (
