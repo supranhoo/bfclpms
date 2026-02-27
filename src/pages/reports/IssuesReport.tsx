@@ -127,7 +127,7 @@ export default function IssuesReport() {
       <IssuesDashboardCards summary={summary} />
 
       {/* Charts Row */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2">
         <IssuesByTypeChart summary={summary} />
         <IssuesHeatmap summary={summary} onDepartmentClick={handleDepartmentClick} />
       </div>
