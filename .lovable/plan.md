@@ -1,79 +1,63 @@
 
 
-# Fix: N/A KPIs Show "Pending" Status Even After Save/Propagation
+# Update Backup System: Add 10 Missing Tables
 
-## Problem
+## Summary
 
-When all employees in a scoped KPI are marked as N/A, the card always shows **"Pending"** even after saving and propagating. This happens because:
+The scheduled backup edge function (`create-backup`) is missing 10 tables that were added to the database after the backup system was originally built. This plan adds them to the `TABLES_TO_BACKUP` list.
 
-1. N/A entries store `achieved_value = null` in the database (by design -- there's no numeric value for N/A)
-2. The `getKpiStatus` helper only considers entries where `achieved_value` is NOT null
-3. Since all N/A entries have null values, the helper finds zero matching entries and returns `'pending'`
+## Missing Tables
 
-The same bug exists in the progress statistics calculation (entered/propagated counts), which also filters on `achieved_value !== null`.
+| Table | Category | Why It Matters |
+|---|---|---|
+| `levels` | Organization Structure | Org hierarchy levels |
+| `email_logs` | Communications | Email delivery audit trail |
+| `audit_kpi_assignments` | Review Workflow | Auditor-to-employee assignments |
+| `audit_kpi_level_assignments` | Review Workflow | Auditor level-based assignments |
+| `kpi_observation_replies` | Review Data | Threaded replies on observations |
+| `kpi_rollback_requests` | Review Data | Rollback request history |
+| `org_kpi_data_entry_logs` | Org KPI | Data entry audit trail |
+| `org_kpi_value_history` | Org KPI | Value change history |
+| `report_access_config` | Admin Config | Report visibility rules |
+| `report_access_user_overrides` | Admin Config | Per-user report access overrides |
 
-## Root Cause (Technical)
+## Change
 
-In `src/pages/admin/OrgKpiDataEntry.tsx`, three places filter entries using `v.achieved_value !== null`:
+**File: `supabase/functions/create-backup/index.ts`**
 
-- **`getKpiStatus`** (line 166, 173): Determines the card badge (Pending/Entered/Propagated)
-- **Progress stats `useMemo`** (line 279, ~285): Calculates entered/propagated counts for the header
-- **Data owner tiles** (line 219): Determines per-owner completion ratios
+Add the 10 missing tables to the `TABLES_TO_BACKUP` array in the correct dependency order:
 
-All three need to also consider `v.is_na === true` as a valid "entered" state.
-
-## Fix
-
-**File: `src/pages/admin/OrgKpiDataEntry.tsx`**
-
-Update the value-presence check in all three locations to include N/A entries:
-
-### 1. `getKpiStatus` helper (lines 161-179)
-
-For organization scope (line 166):
-```typescript
-// BEFORE:
-if (val?.achieved_value !== null && val?.achieved_value !== undefined) {
-
-// AFTER:
-if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
-```
-
-For department/employee scope (line 173):
-```typescript
-// BEFORE:
-k.startsWith(prefix) && v.achieved_value !== null && v.achieved_value !== undefined
-
-// AFTER:
-k.startsWith(prefix) && (v.achieved_value !== null && v.achieved_value !== undefined || v.is_na)
-```
-
-### 2. Progress stats calculation (~lines 276-291)
-
-Same pattern -- include `is_na` entries in the entered/propagated count.
-
-### 3. Data owner tile completion (~line 219)
-
-Same pattern -- count N/A entries as "entered".
-
-## Impact
-
-- N/A-only KPIs will correctly show **"Entered"** after saving and **"Propagated"** after propagation
-- Progress bars and completion ratios will accurately include N/A entries
-- Data owner tiles will show correct completion counts
-- No data or schema changes required -- display-only fix
+- `levels` -- after parent org tables (no FK dependencies)
+- `email_logs` -- after notifications
+- `audit_kpi_assignments` -- after profiles
+- `audit_kpi_level_assignments` -- after audit_kpi_assignments
+- `kpi_observation_replies` -- after kpi_observations
+- `kpi_rollback_requests` -- after kpis
+- `org_kpi_data_entry_logs` -- after org_kpi_values
+- `org_kpi_value_history` -- after org_kpi_values
+- `report_access_config` -- standalone config
+- `report_access_user_overrides` -- after report_access_config
 
 ## Risk Assessment
 
 | Aspect | Risk | Notes |
-|--------|------|-------|
-| Data | None | Read-only display logic |
-| Regression | None | Only adds N/A awareness to existing status checks |
-| Consistency | Improved | N/A entries are treated as valid data entries across the board |
+|---|---|---|
+| Data | None | Read-only backup; no schema or data modifications |
+| Regression | None | Existing tables unaffected; only adds new entries to the array |
+| Performance | Minimal | 10 additional table reads during backup; negligible impact |
+| Restore | Compatible | The restore function already handles arbitrary table keys from the JSON file |
 
-## Files Changed
+## Technical Details
+
+### File Changed
 
 | File | Change |
-|------|--------|
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Update 3 locations to treat `is_na = true` entries as valid (not pending) |
+|---|---|
+| `supabase/functions/create-backup/index.ts` | Add 10 missing tables to `TABLES_TO_BACKUP` array |
+
+### Documentation Updates
+
+| File | Change |
+|---|---|
+| `DOCUMENTATION.md` | Update backup section to reflect 10 new tables (total ~50 tables) |
 
