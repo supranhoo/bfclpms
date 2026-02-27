@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-24  
-> **Version:** 1.45.99 — Bulk update all org-level KPI scopes (department/organization → employee)
+> **Version:** 1.46.0 — Report access overrides grant full data scope via RLS
 > **Maintainer:** Lovable AI
 
 ---
@@ -291,6 +291,10 @@ The system includes a full-database backup and restore feature accessible from *
 > | `supabase/functions/restore-backup/index.ts` | Add the table to **both** `INSERT_ORDER` (parent-first) and `DELETE_ORDER` (leaf-first) arrays |
 >
 > **Backup Coverage Policy**: No table may exist in the production schema without being included in the scheduled backup system. Any migration that creates a new table without updating the backup/restore functions is considered **incomplete**.
+
+> ℹ️ **Report Access Override — Full Data Scope**
+>
+> When an admin grants a user View or Download access to a report via **User-Level Overrides** (`report_access_user_overrides`), that user gains full SELECT access to the `kpis`, `review_submissions`, and `profiles` tables via the `has_report_access_override()` SECURITY DEFINER function. This ensures override users see the complete organization-wide report, not just their team-scoped data. The override is read-only (SELECT only) and explicitly admin-granted.
 
 #### Workflow Settings Categories
 

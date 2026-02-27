@@ -39,6 +39,7 @@
 | Data owners can view org kpi employee profiles | SELECT | authenticated | `is_data_owner_for_employee(id, auth.uid())` |
 | Users can view their own profile | SELECT | authenticated | `auth.uid() = id` |
 | Users can update their own profile | UPDATE | authenticated | `auth.uid() = id` |
+| Report override users can view all profiles | SELECT | authenticated | `has_report_access_override(auth.uid())` |
 
 ---
 
@@ -64,6 +65,7 @@
 | Data owners can update org-level KPI status | UPDATE | authenticated | `is_org_level = true AND owner matches in org_kpi_data_owners` |
 | Employees can view their own KPIs | SELECT | authenticated | `employee_id = auth.uid()` |
 | Users can update their own KPIs | UPDATE | public | `employee_id = auth.uid()` |
+| Report override users can view all KPIs | SELECT | authenticated | `has_report_access_override(auth.uid())` |
 
 ### `review_submissions`
 | Policy | Cmd | Roles | Condition |
@@ -85,6 +87,7 @@
 | Data owners can insert org-level submissions | INSERT | authenticated | `kpi.is_org_level = true AND owner matches in org_kpi_data_owners` |
 | Employees can update self review fields | UPDATE | authenticated | `kpi.employee_id = auth.uid()` |
 | Data owners can update org-level submissions | UPDATE | authenticated | `kpi.is_org_level = true AND owner matches in org_kpi_data_owners` |
+| Report override users can view all submissions | SELECT | authenticated | `has_report_access_override(auth.uid())` |
 
 ### `sub_period_submissions`
 | Policy | Cmd | Roles | Condition |
@@ -445,3 +448,4 @@
 | `is_data_owner_for_employee(uuid, uuid)` | SECURITY DEFINER | Checks org KPI data ownership chain |
 | `is_period_locked(text, int)` | SECURITY DEFINER | Checks if review period is locked |
 | `check_template_has_active_kpis(uuid)` | SECURITY DEFINER | Checks if workflow template has in-progress KPIs |
+| `has_report_access_override(uuid)` | SECURITY DEFINER | Checks if user has any report access override in `report_access_user_overrides` |
