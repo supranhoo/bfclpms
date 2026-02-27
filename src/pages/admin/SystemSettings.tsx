@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database, KeyRound, Upload, Shield } from 'lucide-react';
 import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useDailyAggregationMethod, DailyAggregationMethod, useSystemSetting } from '@/hooks/useSystemSettings';
 import { useState, useEffect } from 'react';
@@ -20,6 +19,26 @@ import { FrequencyCycleSettings } from '@/components/admin/FrequencyCycleSetting
 import { RolloverDialog } from '@/components/admin/RolloverDialog';
 import { PasswordPolicyTab } from '@/components/admin/PasswordPolicyTab';
 import { ReportAccessTab } from '@/components/admin/ReportAccessTab';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
+
+const SETTINGS_SECTIONS = [
+  { key: 'branding', label: 'Branding', icon: Building2 },
+  { key: 'general', label: 'General', icon: RefreshCw },
+  { key: 'scoring', label: 'Scoring', icon: Calculator },
+  { key: 'cycles', label: 'Cycles', icon: CalendarDays },
+  { key: 'controls', label: 'Controls', icon: SlidersHorizontal },
+  { key: 'reports', label: 'Report Access', icon: Shield },
+  { key: 'email', label: 'Email', icon: Mail },
+  { key: 'templates', label: 'Templates', icon: FileText },
+  { key: 'passwords', label: 'Passwords', icon: KeyRound },
+  { key: 'backups', label: 'Backups', icon: Database },
+] as const;
+
+type SectionKey = typeof SETTINGS_SECTIONS[number]['key'];
 
 const scoreCalculationOptions: { 
   value: ScoreCalculationMode; 
@@ -74,7 +93,9 @@ export default function SystemSettings() {
   const { data: rolloverLogs, isLoading: logsLoading } = useRolloverLogs();
   const { data: uploadLimitSetting, isLoading: uploadLimitLoading } = useSystemSetting('max_upload_size_mb');
   const updateSetting = useUpdateSystemSetting();
+  const isMobile = useIsMobile();
   
+  const [activeSection, setActiveSection] = useState<SectionKey>('branding');
   const [selectedMode, setSelectedMode] = useState<ScoreCalculationMode>(mode);
   const [selectedDailyMethod, setSelectedDailyMethod] = useState<DailyAggregationMethod>(dailyMethod);
   const [hasChanges, setHasChanges] = useState(false);
@@ -84,15 +105,11 @@ export default function SystemSettings() {
   const [hasUploadLimitChanges, setHasUploadLimitChanges] = useState(false);
 
   useEffect(() => {
-    if (mode) {
-      setSelectedMode(mode);
-    }
+    if (mode) setSelectedMode(mode);
   }, [mode]);
 
   useEffect(() => {
-    if (dailyMethod) {
-      setSelectedDailyMethod(dailyMethod);
-    }
+    if (dailyMethod) setSelectedDailyMethod(dailyMethod);
   }, [dailyMethod]);
 
   useEffect(() => {
@@ -158,7 +175,7 @@ export default function SystemSettings() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto p-6 max-w-4xl">
+      <div className="container mx-auto p-6">
         <div className="flex items-center gap-3 mb-6">
           <Settings className="h-8 w-8 text-primary" />
           <h1 className="text-3xl font-bold">System Settings</h1>
@@ -171,352 +188,363 @@ export default function SystemSettings() {
     );
   }
 
+  const renderSectionContent = () => {
+    switch (activeSection) {
+      case 'branding':
+        return <GlobalBrandingSettings />;
+      case 'general':
+        return (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <RefreshCw className="h-5 w-5" />
+                  Auto KRA Rollover
+                </CardTitle>
+                <CardDescription>
+                  Automatically copy KRA definitions from the previous month to the new month on the 1st of each month.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between p-4 rounded-lg border">
+                  <div className="space-y-1">
+                    <Label htmlFor="auto-rollover" className="text-base font-medium">
+                      Enable Auto-Rollover
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      When enabled, KPIs will be automatically copied on the 1st of each month.
+                    </p>
+                  </div>
+                  <Switch
+                    id="auto-rollover"
+                    checked={rolloverEnabled}
+                    onCheckedChange={handleRolloverToggle}
+                    disabled={updateSetting.isPending}
+                  />
+                </div>
+
+                {lastRollover && (
+                  <div className="p-4 rounded-lg bg-muted/50 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Last Rollover</span>
+                      <Badge variant={lastRollover.status === 'completed' ? 'default' : 'destructive'}>
+                        {lastRollover.status}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span>{format(new Date(lastRollover.created_at), 'dd MMM yyyy, hh:mm a')}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span>{lastRollover.kpis_copied} KPIs copied</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        <span>{lastRollover.employees_affected} employees</span>
+                      </div>
+                      <div className="text-muted-foreground">
+                        {lastRollover.source_period} {lastRollover.source_year} → {lastRollover.target_period} {lastRollover.target_year}
+                      </div>
+                    </div>
+                    {lastRollover.error_message && (
+                      <div className="flex items-center gap-2 text-sm text-destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <span>{lastRollover.error_message}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 border-t pt-4">
+                  <Button variant="outline" onClick={handleManualRollover}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Rollover KPIs
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Configure source/target period, preview conflicts, and rollover selectively.
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <RolloverDialog open={rolloverDialogOpen} onOpenChange={setRolloverDialogOpen} />
+
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Upload className="h-5 w-5" />
+                  File Upload Limit
+                </CardTitle>
+                <CardDescription>
+                  Set the maximum allowed file size for evidence uploads, attachments, and branding assets across the system.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4 p-4 rounded-lg border">
+                  <div className="flex-1 space-y-1">
+                    <Label htmlFor="upload-limit" className="text-base font-medium">
+                      Max Upload Size (MB)
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Applies to all evidence, attachment, and branding uploads. Range: 1–50 MB.
+                    </p>
+                  </div>
+                  <Input
+                    id="upload-limit"
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={uploadLimitMb}
+                    onChange={(e) => handleUploadLimitChange(e.target.value)}
+                    className="w-24"
+                  />
+                </div>
+                <div className="mt-4 flex items-center justify-between border-t pt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Current limit: <span className="font-medium text-foreground">{uploadLimitMb} MB</span>
+                  </p>
+                  <Button
+                    onClick={handleSaveUploadLimit}
+                    disabled={!hasUploadLimitChanges || updateSetting.isPending}
+                    className="gap-2"
+                  >
+                    <Save className="h-4 w-4" />
+                    {updateSetting.isPending ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        );
+      case 'scoring':
+        return (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calculator className="h-5 w-5" />
+                  Score Calculation Mode
+                </CardTitle>
+                <CardDescription>
+                  Configure how scores are calculated during the review process (Manager, Auditor, and Management stages).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RadioGroup
+                  value={selectedMode}
+                  onValueChange={(value) => handleModeChange(value as ScoreCalculationMode)}
+                  className="space-y-4"
+                >
+                  {scoreCalculationOptions.map((option) => (
+                    <div
+                      key={option.value}
+                      className={`flex items-start space-x-4 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                        selectedMode === option.value
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:border-muted-foreground/30'
+                      }`}
+                      onClick={() => handleModeChange(option.value)}
+                    >
+                      <RadioGroupItem value={option.value} id={option.value} className="mt-1" />
+                      <div className="flex-1">
+                        <Label
+                          htmlFor={option.value}
+                          className="flex items-center gap-2 text-base font-medium cursor-pointer"
+                        >
+                          {option.icon}
+                          {option.label}
+                        </Label>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {option.description}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </RadioGroup>
+
+                <div className="mt-6 flex items-center justify-between border-t pt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Current mode: <span className="font-medium text-foreground">{
+                      scoreCalculationOptions.find(o => o.value === mode)?.label || mode
+                    }</span>
+                  </p>
+                  <Button 
+                    onClick={handleSave} 
+                    disabled={!hasChanges || updateSetting.isPending}
+                    className="gap-2"
+                  >
+                    <Save className="h-4 w-4" />
+                    {updateSetting.isPending ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CalendarDays className="h-5 w-5" />
+                  Daily KPI Aggregation Method
+                </CardTitle>
+                <CardDescription>
+                  Configure how daily submission entries are aggregated into a monthly score.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RadioGroup
+                  value={selectedDailyMethod}
+                  onValueChange={(value) => handleDailyMethodChange(value as DailyAggregationMethod)}
+                  className="space-y-4"
+                >
+                  {dailyAggregationOptions.map((option) => (
+                    <div
+                      key={option.value}
+                      className={`flex items-start space-x-4 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                        selectedDailyMethod === option.value
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:border-muted-foreground/30'
+                      }`}
+                      onClick={() => handleDailyMethodChange(option.value)}
+                    >
+                      <RadioGroupItem value={option.value} id={`daily-${option.value}`} className="mt-1" />
+                      <div className="flex-1">
+                        <Label
+                          htmlFor={`daily-${option.value}`}
+                          className="flex items-center gap-2 text-base font-medium cursor-pointer"
+                        >
+                          {option.icon}
+                          {option.label}
+                        </Label>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {option.description}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </RadioGroup>
+
+                <div className="mt-6 flex items-center justify-between border-t pt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Current method: <span className="font-medium text-foreground">{
+                      dailyAggregationOptions.find(o => o.value === dailyMethod)?.label || dailyMethod
+                    }</span>
+                  </p>
+                  <Button 
+                    onClick={handleSaveDailyMethod} 
+                    disabled={!hasDailyChanges || updateSetting.isPending}
+                    className="gap-2"
+                  >
+                    <Save className="h-4 w-4" />
+                    {updateSetting.isPending ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      case 'cycles':
+        return <FrequencyCycleSettings />;
+      case 'controls':
+        return <WorkflowSettingsTab />;
+      case 'reports':
+        return <ReportAccessTab />;
+      case 'email':
+        return <EmailNotificationSettings />;
+      case 'templates':
+        return <EmailTemplateEditor />;
+      case 'passwords':
+        return <PasswordPolicyTab />;
+      case 'backups':
+        return <BackupRestoreTab />;
+      default:
+        return null;
+    }
+  };
+
+  const SidebarNav = () => (
+    <ScrollArea className="h-full">
+      <nav className="space-y-1 p-3">
+        {SETTINGS_SECTIONS.map((section) => {
+          const Icon = section.icon;
+          const isActive = activeSection === section.key;
+          return (
+            <button
+              key={section.key}
+              onClick={() => setActiveSection(section.key)}
+              className={cn(
+                'flex items-center gap-3 w-full rounded-md px-3 py-2.5 text-sm font-medium transition-colors text-left',
+                isActive
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {section.label}
+            </button>
+          );
+        })}
+      </nav>
+    </ScrollArea>
+  );
+
+  // Mobile layout
+  if (isMobile) {
+    return (
+      <div className="container mx-auto p-3">
+        <div className="flex items-center gap-3 mb-4">
+          <Settings className="h-7 w-7 text-primary" />
+          <h1 className="text-2xl font-bold">System Settings</h1>
+        </div>
+        <Select value={activeSection} onValueChange={(v) => setActiveSection(v as SectionKey)}>
+          <SelectTrigger className="mb-4">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SETTINGS_SECTIONS.map((section) => {
+              const Icon = section.icon;
+              return (
+                <SelectItem key={section.key} value={section.key}>
+                  <span className="flex items-center gap-2">
+                    <Icon className="h-4 w-4" />
+                    {section.label}
+                  </span>
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+        <div>{renderSectionContent()}</div>
+      </div>
+    );
+  }
+
+  // Desktop layout
   return (
-    <div className="container mx-auto p-6 max-w-4xl">
+    <div className="container mx-auto p-6 max-w-7xl">
       <div className="flex items-center gap-3 mb-6">
         <Settings className="h-8 w-8 text-primary" />
         <h1 className="text-3xl font-bold">System Settings</h1>
       </div>
 
-      <Tabs defaultValue="branding" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-10">
-          <TabsTrigger value="branding" className="gap-2">
-            <Building2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Branding</span>
-          </TabsTrigger>
-          <TabsTrigger value="general" className="gap-2">
-            <RefreshCw className="h-4 w-4" />
-            <span className="hidden sm:inline">General</span>
-          </TabsTrigger>
-          <TabsTrigger value="scoring" className="gap-2">
-            <Calculator className="h-4 w-4" />
-            <span className="hidden sm:inline">Scoring</span>
-          </TabsTrigger>
-          <TabsTrigger value="cycles" className="gap-2">
-            <CalendarDays className="h-4 w-4" />
-            <span className="hidden sm:inline">Cycles</span>
-          </TabsTrigger>
-          <TabsTrigger value="controls" className="gap-2">
-            <SlidersHorizontal className="h-4 w-4" />
-            <span className="hidden sm:inline">Controls</span>
-          </TabsTrigger>
-          <TabsTrigger value="reports" className="gap-2">
-            <Shield className="h-4 w-4" />
-            <span className="hidden sm:inline">Reports</span>
-          </TabsTrigger>
-          <TabsTrigger value="email" className="gap-2">
-            <Mail className="h-4 w-4" />
-            <span className="hidden sm:inline">Email</span>
-          </TabsTrigger>
-          <TabsTrigger value="templates" className="gap-2">
-            <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">Templates</span>
-          </TabsTrigger>
-          <TabsTrigger value="passwords" className="gap-2">
-            <KeyRound className="h-4 w-4" />
-            <span className="hidden sm:inline">Passwords</span>
-          </TabsTrigger>
-          <TabsTrigger value="backups" className="gap-2">
-            <Database className="h-4 w-4" />
-            <span className="hidden sm:inline">Backups</span>
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Branding Tab */}
-        <TabsContent value="branding">
-          <GlobalBrandingSettings />
-        </TabsContent>
-
-        {/* General Tab - Auto KRA Rollover */}
-        <TabsContent value="general">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <RefreshCw className="h-5 w-5" />
-                Auto KRA Rollover
-              </CardTitle>
-              <CardDescription>
-                Automatically copy KRA definitions from the previous month to the new month on the 1st of each month.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 rounded-lg border">
-                <div className="space-y-1">
-                  <Label htmlFor="auto-rollover" className="text-base font-medium">
-                    Enable Auto-Rollover
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    When enabled, KPIs will be automatically copied on the 1st of each month.
-                  </p>
-                </div>
-                <Switch
-                  id="auto-rollover"
-                  checked={rolloverEnabled}
-                  onCheckedChange={handleRolloverToggle}
-                  disabled={updateSetting.isPending}
-                />
+      <div className="rounded-lg border bg-card" style={{ height: 'calc(100vh - 180px)' }}>
+        <ResizablePanelGroup direction="horizontal">
+          <ResizablePanel defaultSize={18} minSize={14} maxSize={25}>
+            <div className="h-full border-r">
+              <SidebarNav />
+            </div>
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={82}>
+            <ScrollArea className="h-full">
+              <div className="p-6">
+                {renderSectionContent()}
               </div>
-
-              {lastRollover && (
-                <div className="p-4 rounded-lg bg-muted/50 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Last Rollover</span>
-                    <Badge variant={lastRollover.status === 'completed' ? 'default' : 'destructive'}>
-                      {lastRollover.status}
-                    </Badge>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span>{format(new Date(lastRollover.created_at), 'dd MMM yyyy, hh:mm a')}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      <span>{lastRollover.kpis_copied} KPIs copied</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                      <span>{lastRollover.employees_affected} employees</span>
-                    </div>
-                    <div className="text-muted-foreground">
-                      {lastRollover.source_period} {lastRollover.source_year} → {lastRollover.target_period} {lastRollover.target_year}
-                    </div>
-                  </div>
-                  {lastRollover.error_message && (
-                    <div className="flex items-center gap-2 text-sm text-destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <span>{lastRollover.error_message}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="flex items-center gap-3 border-t pt-4">
-                <Button
-                  variant="outline"
-                  onClick={handleManualRollover}
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Rollover KPIs
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  Configure source/target period, preview conflicts, and rollover selectively.
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <RolloverDialog open={rolloverDialogOpen} onOpenChange={setRolloverDialogOpen} />
-
-          {/* Max Upload Size */}
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Upload className="h-5 w-5" />
-                File Upload Limit
-              </CardTitle>
-              <CardDescription>
-                Set the maximum allowed file size for evidence uploads, attachments, and branding assets across the system.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-4 p-4 rounded-lg border">
-                <div className="flex-1 space-y-1">
-                  <Label htmlFor="upload-limit" className="text-base font-medium">
-                    Max Upload Size (MB)
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Applies to all evidence, attachment, and branding uploads. Range: 1–50 MB.
-                  </p>
-                </div>
-                <Input
-                  id="upload-limit"
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={uploadLimitMb}
-                  onChange={(e) => handleUploadLimitChange(e.target.value)}
-                  className="w-24"
-                />
-              </div>
-              <div className="mt-4 flex items-center justify-between border-t pt-4">
-                <p className="text-sm text-muted-foreground">
-                  Current limit: <span className="font-medium text-foreground">{uploadLimitMb} MB</span>
-                </p>
-                <Button
-                  onClick={handleSaveUploadLimit}
-                  disabled={!hasUploadLimitChanges || updateSetting.isPending}
-                  className="gap-2"
-                >
-                  <Save className="h-4 w-4" />
-                  {updateSetting.isPending ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Scoring Tab */}
-        <TabsContent value="scoring" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calculator className="h-5 w-5" />
-                Score Calculation Mode
-              </CardTitle>
-              <CardDescription>
-                Configure how scores are calculated during the review process (Manager, Auditor, and Management stages).
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <RadioGroup
-                value={selectedMode}
-                onValueChange={(value) => handleModeChange(value as ScoreCalculationMode)}
-                className="space-y-4"
-              >
-                {scoreCalculationOptions.map((option) => (
-                  <div
-                    key={option.value}
-                    className={`flex items-start space-x-4 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                      selectedMode === option.value
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:border-muted-foreground/30'
-                    }`}
-                    onClick={() => handleModeChange(option.value)}
-                  >
-                    <RadioGroupItem value={option.value} id={option.value} className="mt-1" />
-                    <div className="flex-1">
-                      <Label
-                        htmlFor={option.value}
-                        className="flex items-center gap-2 text-base font-medium cursor-pointer"
-                      >
-                        {option.icon}
-                        {option.label}
-                      </Label>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {option.description}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </RadioGroup>
-
-              <div className="mt-6 flex items-center justify-between border-t pt-4">
-                <p className="text-sm text-muted-foreground">
-                  Current mode: <span className="font-medium text-foreground">{
-                    scoreCalculationOptions.find(o => o.value === mode)?.label || mode
-                  }</span>
-                </p>
-                <Button 
-                  onClick={handleSave} 
-                  disabled={!hasChanges || updateSetting.isPending}
-                  className="gap-2"
-                >
-                  <Save className="h-4 w-4" />
-                  {updateSetting.isPending ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Daily KPI Aggregation Method */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CalendarDays className="h-5 w-5" />
-                Daily KPI Aggregation Method
-              </CardTitle>
-              <CardDescription>
-                Configure how daily submission entries are aggregated into a monthly score.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <RadioGroup
-                value={selectedDailyMethod}
-                onValueChange={(value) => handleDailyMethodChange(value as DailyAggregationMethod)}
-                className="space-y-4"
-              >
-                {dailyAggregationOptions.map((option) => (
-                  <div
-                    key={option.value}
-                    className={`flex items-start space-x-4 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                      selectedDailyMethod === option.value
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:border-muted-foreground/30'
-                    }`}
-                    onClick={() => handleDailyMethodChange(option.value)}
-                  >
-                    <RadioGroupItem value={option.value} id={`daily-${option.value}`} className="mt-1" />
-                    <div className="flex-1">
-                      <Label
-                        htmlFor={`daily-${option.value}`}
-                        className="flex items-center gap-2 text-base font-medium cursor-pointer"
-                      >
-                        {option.icon}
-                        {option.label}
-                      </Label>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {option.description}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </RadioGroup>
-
-              <div className="mt-6 flex items-center justify-between border-t pt-4">
-                <p className="text-sm text-muted-foreground">
-                  Current method: <span className="font-medium text-foreground">{
-                    dailyAggregationOptions.find(o => o.value === dailyMethod)?.label || dailyMethod
-                  }</span>
-                </p>
-                <Button 
-                  onClick={handleSaveDailyMethod} 
-                  disabled={!hasDailyChanges || updateSetting.isPending}
-                  className="gap-2"
-                >
-                  <Save className="h-4 w-4" />
-                  {updateSetting.isPending ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Cycles Tab */}
-        <TabsContent value="cycles">
-          <FrequencyCycleSettings />
-        </TabsContent>
-
-        {/* Controls Tab */}
-        <TabsContent value="controls">
-          <WorkflowSettingsTab />
-        </TabsContent>
-
-        {/* Reports Access Tab */}
-        <TabsContent value="reports">
-          <ReportAccessTab />
-        </TabsContent>
-
-        {/* Email Tab */}
-        <TabsContent value="email">
-          <EmailNotificationSettings />
-        </TabsContent>
-
-        {/* Templates Tab */}
-        <TabsContent value="templates">
-          <EmailTemplateEditor />
-        </TabsContent>
-
-        {/* Passwords Tab */}
-        <TabsContent value="passwords">
-          <PasswordPolicyTab />
-        </TabsContent>
-
-        {/* Backups Tab */}
-        <TabsContent value="backups">
-          <BackupRestoreTab />
-        </TabsContent>
-      </Tabs>
+            </ScrollArea>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>
     </div>
   );
 }
