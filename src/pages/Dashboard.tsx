@@ -38,6 +38,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { calculateOverallCumulativeScore, calculateCategoryCumulative, getScoreForPeriod } from '@/lib/cumulativeScoring';
 import { FrequencyLockBadge } from '@/components/review/FrequencyLockedOverlay';
+import { KraExportMenu } from '@/components/review/KraExportMenu';
+import { useAppSettings } from '@/hooks/useAppSettings';
 
 const MONTH_ORDER = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -667,10 +669,23 @@ export default function Dashboard() {
                 {sortedKpis.length} KPIs {activeCategory !== 'All' ? `in ${activeCategory}` : ''} for {selectedPeriod} {selectedYear}
               </CardDescription>
             </div>
-            {isMobile 
-              ? <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} compact />
-              : <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />
-            }
+            <div className="flex items-center gap-2">
+              <KraExportMenu
+                kpis={periodFilteredKpis}
+                employeeProfile={{
+                  full_name: profile?.full_name,
+                  employee_code: profile?.employee_code,
+                  designation: profile?.designation,
+                }}
+                department="-"
+                period={selectedPeriod}
+                year={selectedYear}
+              />
+              {isMobile 
+                ? <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} compact />
+                : <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />
+              }
+            </div>
           </div>
         </CardHeader>
         <CardContent>
