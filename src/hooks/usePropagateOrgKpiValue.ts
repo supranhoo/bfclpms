@@ -67,29 +67,44 @@ function buildRatingsPayload(
         self_rating: null,
       });
     } else {
-      const thresholds: RatingThresholds = {
-        r5: kpi.r5, r4: kpi.r4, r3: kpi.r3,
-        r2: kpi.r2, r1: kpi.r1, r0: kpi.r0,
-      };
+      const uomType = (kpi.uom_type as string) || 'numeric';
+      const isBinaryOrTiered = uomType === 'binary' || 
+        (uomType === 'tiered' && Array.isArray(kpi.qualitative_options) && (kpi.qualitative_options as any[]).length > 0);
 
-      const ratingResult = calculateRating(
-        achievedValue,
-        kpi.target_value,
-        thresholds,
-        kpi.criteria || 'Higher is Better',
-        kpi.weightage || 0,
-        (kpi.uom_type as any) || 'numeric',
-        kpi.qualitative_options as any,
-        kpi.uom,
-        (kpi as any).threshold_mode || 'absolute'
-      );
+      if (isBinaryOrTiered) {
+        // For qualitative KPIs, achievedValue IS the rating score
+        const directRating = achievedValue ?? 0;
+        kpiRatings.push({
+          kpi_id: kpi.id,
+          achieved_value: achievedValue,
+          self_score: directRating,
+          self_rating: scoreToRating(directRating),
+        });
+      } else {
+        const thresholds: RatingThresholds = {
+          r5: kpi.r5, r4: kpi.r4, r3: kpi.r3,
+          r2: kpi.r2, r1: kpi.r1, r0: kpi.r0,
+        };
 
-      kpiRatings.push({
-        kpi_id: kpi.id,
-        achieved_value: achievedValue,
-        self_score: ratingResult.rating,
-        self_rating: scoreToRating(ratingResult.rating),
-      });
+        const ratingResult = calculateRating(
+          achievedValue,
+          kpi.target_value,
+          thresholds,
+          kpi.criteria || 'Higher is Better',
+          kpi.weightage || 0,
+          'numeric',
+          null,
+          kpi.uom,
+          (kpi as any).threshold_mode || 'absolute'
+        );
+
+        kpiRatings.push({
+          kpi_id: kpi.id,
+          achieved_value: achievedValue,
+          self_score: ratingResult.rating,
+          self_rating: scoreToRating(ratingResult.rating),
+        });
+      }
     }
   }
 
