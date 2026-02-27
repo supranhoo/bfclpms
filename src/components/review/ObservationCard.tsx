@@ -11,9 +11,10 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
+  Lock,
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { KpiObservation, ObservationType, ObserverRole } from '@/hooks/useKpiObservations';
+import { KpiObservation, ObservationType, ObserverRole, ObservationVisibility } from '@/hooks/useKpiObservations';
 import { ObservationReplyThread } from './ObservationReplyThread';
 import { cn } from '@/lib/utils';
 
@@ -109,6 +110,12 @@ export function ObservationCard({
             <Badge variant="outline" className={cn('text-xs border', statusCfg.className)}>
               {statusCfg.label}
             </Badge>
+            {observation.visibility === 'internal' && (
+              <Badge variant="outline" className="text-xs border border-violet-300 dark:border-violet-700 bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400 gap-1">
+                <Lock className="h-3 w-3" />
+                Internal
+              </Badge>
+            )}
           </div>
 
           {canEditDelete && (
