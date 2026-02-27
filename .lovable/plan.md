@@ -1,63 +1,37 @@
 
 
-# Update Backup System: Add 10 Missing Tables
+# Add Permanent Backup Checklist Rule to Documentation
 
 ## Summary
 
-The scheduled backup edge function (`create-backup`) is missing 10 tables that were added to the database after the backup system was originally built. This plan adds them to the `TABLES_TO_BACKUP` list.
+Add a mandatory checklist item to `DOCUMENTATION.md` and `POLICY.md` that ensures every new database table is immediately added to the backup and restore edge functions.
 
-## Missing Tables
+## Changes
 
-| Table | Category | Why It Matters |
-|---|---|---|
-| `levels` | Organization Structure | Org hierarchy levels |
-| `email_logs` | Communications | Email delivery audit trail |
-| `audit_kpi_assignments` | Review Workflow | Auditor-to-employee assignments |
-| `audit_kpi_level_assignments` | Review Workflow | Auditor level-based assignments |
-| `kpi_observation_replies` | Review Data | Threaded replies on observations |
-| `kpi_rollback_requests` | Review Data | Rollback request history |
-| `org_kpi_data_entry_logs` | Org KPI | Data entry audit trail |
-| `org_kpi_value_history` | Org KPI | Value change history |
-| `report_access_config` | Admin Config | Report visibility rules |
-| `report_access_user_overrides` | Admin Config | Per-user report access overrides |
+### 1. DOCUMENTATION.md
 
-## Change
+Add a prominent "Database Table Checklist" section (or append to the existing backup section) with a rule:
 
-**File: `supabase/functions/create-backup/index.ts`**
+> **Mandatory**: When any new table is created via migration, the following files MUST be updated in the same change:
+> - `supabase/functions/create-backup/index.ts` -- add table to `TABLES_TO_BACKUP` in correct dependency order
+> - `supabase/functions/restore-backup/index.ts` -- add table to both `INSERT_ORDER` and `DELETE_ORDER` arrays (insert = parent-first, delete = leaf-first)
 
-Add the 10 missing tables to the `TABLES_TO_BACKUP` array in the correct dependency order:
+### 2. POLICY.md (if exists, or create a section in DOCUMENTATION.md)
 
-- `levels` -- after parent org tables (no FK dependencies)
-- `email_logs` -- after notifications
-- `audit_kpi_assignments` -- after profiles
-- `audit_kpi_level_assignments` -- after audit_kpi_assignments
-- `kpi_observation_replies` -- after kpi_observations
-- `kpi_rollback_requests` -- after kpis
-- `org_kpi_data_entry_logs` -- after org_kpi_values
-- `org_kpi_value_history` -- after org_kpi_values
-- `report_access_config` -- standalone config
-- `report_access_user_overrides` -- after report_access_config
+Add under engineering policies:
+
+> **Backup Coverage Policy**: No table may exist in the production schema without being included in the scheduled backup system. Any migration that creates a new table without updating the backup/restore functions is considered incomplete.
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `DOCUMENTATION.md` | Add "New Table Backup Checklist" rule to the backup section |
 
 ## Risk Assessment
 
 | Aspect | Risk | Notes |
-|---|---|---|
-| Data | None | Read-only backup; no schema or data modifications |
-| Regression | None | Existing tables unaffected; only adds new entries to the array |
-| Performance | Minimal | 10 additional table reads during backup; negligible impact |
-| Restore | Compatible | The restore function already handles arbitrary table keys from the JSON file |
-
-## Technical Details
-
-### File Changed
-
-| File | Change |
-|---|---|
-| `supabase/functions/create-backup/index.ts` | Add 10 missing tables to `TABLES_TO_BACKUP` array |
-
-### Documentation Updates
-
-| File | Change |
-|---|---|
-| `DOCUMENTATION.md` | Update backup section to reflect 10 new tables (total ~50 tables) |
+|--------|------|-------|
+| Data | None | Documentation-only change |
+| Regression | None | No code modified |
 
