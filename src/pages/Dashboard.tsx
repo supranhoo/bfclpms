@@ -667,7 +667,10 @@ export default function Dashboard() {
                 {sortedKpis.length} KPIs {activeCategory !== 'All' ? `in ${activeCategory}` : ''} for {selectedPeriod} {selectedYear}
               </CardDescription>
             </div>
-            {!isMobile && <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />}
+            {isMobile 
+              ? <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} compact />
+              : <KpiSortControl sortConfig={sortConfig} onSortChange={setSort} />
+            }
           </div>
         </CardHeader>
         <CardContent>

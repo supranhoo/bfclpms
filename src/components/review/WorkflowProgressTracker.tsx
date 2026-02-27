@@ -169,10 +169,11 @@ export function WorkflowProgressTracker({
       <CardContent className={cn("py-3 px-4", compact && "py-2 px-3")}>
         {/* Stage Cards Row */}
         <div className={cn(
-          "grid gap-2",
-          isMobile || compact 
-            ? "grid-cols-3" 
-            : effectiveStageConfig.length <= 4 ? "grid-cols-4" : effectiveStageConfig.length === 5 ? "grid-cols-5" : "grid-cols-6"
+          "flex gap-2 overflow-x-auto scrollbar-none pb-1 sm:pb-0",
+          !isMobile && !compact && (
+            effectiveStageConfig.length <= 4 ? "sm:grid sm:grid-cols-4" : effectiveStageConfig.length === 5 ? "sm:grid sm:grid-cols-5" : "sm:grid sm:grid-cols-6"
+          ),
+          (isMobile || compact) && "flex-nowrap"
         )}>
           {effectiveStageConfig.map((stage, index) => {
             const count = statusCounts[stage.key];
@@ -192,7 +193,8 @@ export function WorkflowProgressTracker({
                         isClickable && "cursor-pointer hover:shadow-md",
                         isActive && "ring-2 ring-primary ring-offset-2",
                         !isActive && activeFilter && "opacity-60",
-                        compact ? "p-2" : "p-3"
+                        compact ? "p-2" : "p-3",
+                        (isMobile || compact) && "min-w-[90px] min-h-[80px]"
                       )}
                       onClick={() => isClickable && onFilterChange?.(isActive ? null : stage.key)}
                     >
