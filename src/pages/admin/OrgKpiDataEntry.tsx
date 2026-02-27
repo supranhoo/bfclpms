@@ -323,11 +323,8 @@ export default function OrgKpiDataEntry() {
     const previousValue = prevValuesMap.get(prevKey) ?? null;
     const empCount = employeeCountMap.get(prevKey) ?? 0;
 
-    // Determine status
-    let status: 'pending' | 'entered' | 'propagated' = 'pending';
-    if (existing?.achieved_value !== null && existing?.achieved_value !== undefined) {
-      status = existing?.status === 'propagated' ? 'propagated' : 'entered';
-    }
+    // Determine status using the shared helper (handles all scopes correctly)
+    const status = getKpiStatus(kpi);
 
     // Build scoped rows for dept/employee
     let scopedRows: OrgKpiCardData['scopedRows'] = undefined;
