@@ -17,6 +17,8 @@ const TABLES_TO_BACKUP = [
   'workflow_templates',
   'frequency_config',
   'review_periods',
+  'levels',
+  'report_access_config',
   // Tables depending on divisions
   'business_units',
   // Tables depending on business_units
@@ -30,6 +32,7 @@ const TABLES_TO_BACKUP = [
   'password_rollout_logs',
   'employee_working_days',
   'org_kpi_data_owners',
+  'audit_kpi_assignments',
   'kpi_templates',
   // Template bundles
   'template_bundles',
@@ -40,6 +43,9 @@ const TABLES_TO_BACKUP = [
   'workflow_settings',
   // KPIs depend on profiles + categories
   'kpis',
+  'kpi_rollback_requests',
+  // Audit KPI level assignments depend on kpis
+  'audit_kpi_level_assignments',
   // Review data depends on KPIs
   'review_submissions',
   'sub_period_submissions',
@@ -47,9 +53,14 @@ const TABLES_TO_BACKUP = [
   'kpi_queries',
   'kpi_audit_logs',
   'kpi_observations',
+  'kpi_observation_replies',
   'notifications',
+  'email_logs',
   'kra_rollover_logs',
   'org_kpi_values',
+  'org_kpi_data_entry_logs',
+  'org_kpi_value_history',
+  'report_access_user_overrides',
   'import_progress',
   // PIP tables
   'performance_improvement_plans',
