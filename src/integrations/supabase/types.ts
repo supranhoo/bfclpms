@@ -194,6 +194,7 @@ export type Database = {
       }
       backup_logs: {
         Row: {
+          backup_format: string
           backup_type: string
           completed_at: string | null
           created_at: string
@@ -207,6 +208,7 @@ export type Database = {
           total_rows: number | null
         }
         Insert: {
+          backup_format?: string
           backup_type?: string
           completed_at?: string | null
           created_at?: string
@@ -220,6 +222,7 @@ export type Database = {
           total_rows?: number | null
         }
         Update: {
+          backup_format?: string
           backup_type?: string
           completed_at?: string | null
           created_at?: string

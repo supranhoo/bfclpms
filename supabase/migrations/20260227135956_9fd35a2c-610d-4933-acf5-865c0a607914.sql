@@ -1,0 +1,1 @@
+ALTER TABLE public.backup_logs ADD COLUMN IF NOT EXISTS backup_format text NOT NULL DEFAULT 'single';
