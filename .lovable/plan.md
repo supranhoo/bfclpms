@@ -1,110 +1,92 @@
 
 
-# System Settings -- Vertical Sidebar Layout Redesign
+# Fix Manual Backup: Memory Limit Exceeded
 
-## Problem
+## Root Cause
 
-The System Settings page crams **10 tabs** into a single horizontal `grid-cols-10` TabsList. On most screens, the tab labels are hidden (icon-only via `hidden sm:inline`), making them hard to identify. As more settings are added (export, observations, etc.), this will only get worse.
+The `create-backup` Edge Function loads ALL table data (~48K rows, ~45MB JSON) into memory simultaneously before uploading to storage. This exceeds the Edge Function memory limit (~150MB), causing it to crash with "Memory limit exceeded".
 
-## Solution: Resizable Two-Panel Layout
+**Scheduled backups work** because they're invoked via `pg_cron` + `net.http_post` which runs in a different execution context with more memory headroom. Manual backups (invoked via `supabase.functions.invoke`) hit the stricter Edge Function memory limit.
 
-Replace the horizontal tab bar with a **vertical sidebar + content panel** layout using the existing `react-resizable-panels` library (already installed). This gives each section room to breathe and makes the page feel like a proper settings experience.
+## Evidence
+
+- `backup_logs` shows a manual backup from today stuck in "running" status (never completed)
+- Edge function logs show: `ERROR: Memory limit exceeded` when invoked manually
+- Data size: ~48K rows across 40 tables, producing ~45MB JSON
+- Biggest tables: `notifications` (26K), `email_logs` (7K), `kpi_audit_logs` (7K)
+
+## Solution: Chunked Upload with Streaming
+
+Instead of building the entire backup JSON in memory, process tables one at a time and upload each as a separate file, then create a manifest file that ties them together. This keeps peak memory usage under control.
+
+### Architecture Change
 
 ```text
-+---------------------------+----------------------------------------+
-|  [drag handle]            |                                        |
-|  System Settings          |    [Active Section Content]            |
-|                           |                                        |
-|  > Branding        (*)    |    Global Branding Settings            |
-|    General                |    ...                                 |
-|    Scoring                |                                        |
-|    Cycles                 |                                        |
-|    Controls               |                                        |
-|    Report Access          |                                        |
-|    Email                  |                                        |
-|    Templates              |                                        |
-|    Passwords              |                                        |
-|    Backups                |                                        |
-+---------------------------+----------------------------------------+
+BEFORE (single file):
+  backup-2026-02-27.json  (45MB in memory at once)
+
+AFTER (chunked files):
+  backups/backup-2026-02-27/manifest.json     (~1KB)
+  backups/backup-2026-02-27/notifications.json (~15MB, streamed)
+  backups/backup-2026-02-27/email_logs.json    (~5MB, streamed)
+  backups/backup-2026-02-27/kpis.json          (~3MB, streamed)
+  ... (one file per table)
 ```
 
-## Key Design Decisions
+Each table is fetched, serialized, uploaded to storage, and then **released from memory** before moving to the next table. Peak memory usage drops from ~45MB to ~15MB (the largest single table).
 
-1. **Vertical nav list on the left** -- Each item shows icon + full label at all times. Active item is highlighted with primary background. No more guessing which icon is which.
+### Changes
 
-2. **Resizable panels** -- Uses `ResizablePanelGroup` (already in the project) so admins can drag to resize the sidebar vs content area. Default split: 20% sidebar / 80% content.
+#### 1. Update `supabase/functions/create-backup/index.ts`
 
-3. **Mobile: dropdown selector** -- On mobile (`< md`), the vertical sidebar collapses into a `Select` dropdown at the top, followed by the content below. This maintains full usability on small screens.
+- Process tables sequentially: fetch -> serialize -> upload -> release memory
+- Upload each table as a separate JSON file under a timestamped folder
+- Create a `manifest.json` with metadata (table list, row counts, timestamps)
+- Keep backward compatibility: the `file_path` in `backup_logs` points to the manifest
+- Add a `backup_format` field to distinguish old single-file backups from new chunked ones
 
-4. **Remove max-w-4xl constraint** -- The current `max-w-4xl` container limits the page to ~896px. With a sidebar layout, the page should use the full available width (`max-w-6xl` or full width), giving the content panel significantly more room.
+#### 2. Update `supabase/functions/restore-backup/index.ts`
 
-5. **URL hash sync (optional enhancement)** -- Active tab stored in URL hash (`#branding`, `#scoring`) so users can bookmark or share direct links to specific settings sections.
+- Detect backup format: if `file_path` ends with `manifest.json`, use chunked restore
+- For chunked backups: read manifest, then download and restore each table file individually
+- For legacy single-file backups: keep existing behavior unchanged
 
-## Changes
+#### 3. Update `src/hooks/useBackups.ts` (useDownloadBackup)
 
-### 1. Rewrite `src/pages/admin/SystemSettings.tsx` Layout
+- For chunked backups: download the manifest, then download all table files, combine into a single JSON for the user's download
+- Alternatively, download the manifest and show individual table files (simpler)
 
-- Replace `Tabs` + horizontal `TabsList` with `ResizablePanelGroup` (horizontal direction)
-- Left panel: Vertical navigation list with icons + labels, styled as clickable items
-- Right panel: Renders the active section component
-- State managed with `useState` for `activeSection`
-- On mobile (`useIsMobile()`): render a `Select` dropdown instead of the sidebar panel
+#### 4. Clean up stuck backup
 
-### 2. Widen Container
+- The stuck "running" backup log entry from today will be cleaned up by adding a check at the start of the function: if a backup has been "running" for more than 30 minutes, mark it as "failed" with a timeout message
 
-Change `max-w-4xl` to `max-w-7xl` (or remove entirely) to give the content panel more horizontal space.
+### Database Migration
 
-### 3. Mobile Adaptation
+Add `backup_format` column to `backup_logs`:
 
-- Detect mobile via existing `useIsMobile()` hook
-- Render a `Select` component with all 10 sections as options
-- Content renders below the selector, using full width
+```sql
+ALTER TABLE backup_logs ADD COLUMN IF NOT EXISTS backup_format text NOT NULL DEFAULT 'single';
+```
+
+Values: `'single'` (legacy) or `'chunked'` (new format).
 
 ---
 
-## Technical Details
-
-### Navigation Items Config
-
-```text
-const SETTINGS_SECTIONS = [
-  { key: 'branding',  label: 'Branding',       icon: Building2 },
-  { key: 'general',   label: 'General',         icon: RefreshCw },
-  { key: 'scoring',   label: 'Scoring',         icon: Calculator },
-  { key: 'cycles',    label: 'Cycles',          icon: CalendarDays },
-  { key: 'controls',  label: 'Controls',        icon: SlidersHorizontal },
-  { key: 'reports',   label: 'Report Access',   icon: Shield },
-  { key: 'email',     label: 'Email',           icon: Mail },
-  { key: 'templates', label: 'Templates',       icon: FileText },
-  { key: 'passwords', label: 'Passwords',       icon: KeyRound },
-  { key: 'backups',   label: 'Backups',         icon: Database },
-];
-```
-
-### Desktop Layout Structure
-
-```text
-ResizablePanelGroup (horizontal)
-  ResizablePanel (defaultSize=18, minSize=14, maxSize=25)
-    -> Vertical nav list with scroll
-  ResizableHandle (withHandle)
-  ResizablePanel (defaultSize=82)
-    -> Active section content (same components as today)
-```
-
-### Files Changed
+## Files Summary
 
 | File | Action | Description |
 |------|--------|-------------|
-| `src/pages/admin/SystemSettings.tsx` | Rewrite layout | Replace horizontal tabs with vertical resizable sidebar + content panel |
-
-No new files, no database changes, no new dependencies. All existing section components (`GlobalBrandingSettings`, `WorkflowSettingsTab`, etc.) remain completely untouched.
+| DB migration | Create | Add `backup_format` column to `backup_logs` |
+| `supabase/functions/create-backup/index.ts` | Rewrite | Chunked per-table upload to stay under memory limit |
+| `supabase/functions/restore-backup/index.ts` | Update | Support both single-file and chunked restore |
+| `src/hooks/useBackups.ts` | Update | Handle chunked download format |
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|------------|
-| Regression | None | Section components are unchanged; only the container layout changes |
-| Mobile | None | Falls back to Select dropdown, same as current icon-only tabs but more usable |
-| Performance | None | No additional data fetching; same lazy-loaded content |
+| Data | None | Existing backups remain downloadable/restorable (legacy format supported) |
+| Regression | Low | Restore function handles both formats; old backups still work |
+| Memory | Fixed | Peak usage drops from ~45MB to ~15MB (largest single table) |
+| Scheduled backups | None | Same function, just more efficient now |
 
