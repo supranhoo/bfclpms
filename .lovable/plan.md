@@ -1,39 +1,66 @@
 
 
-# Fix: Employee-Scoped KPI Status Always Shows "Pending" After Propagation
+# Fix: N/A KPIs Show "Pending" Status Even After Save/Propagation
 
-## Root Cause
+## Problem
 
-The `buildCardData` function in `OrgKpiDataEntry.tsx` determines the card status using a lookup key of `${categoryId}||${kraName}||${kpiName}||null||null`. This key only matches **organization-scoped** KPIs in the `existingValuesMap`.
+When all employees in a scoped KPI are marked as N/A, the card always shows **"Pending"** even after saving and propagating. This happens because:
 
-For **employee-scoped** KPIs (like "Zero Fatal"), the values are stored with employee-specific keys (e.g., `...||null||${employeeId}`), so the lookup returns `undefined` and status defaults to `'pending'` — even after propagation.
+1. N/A entries store `achieved_value = null` in the database (by design -- there's no numeric value for N/A)
+2. The `getKpiStatus` helper only considers entries where `achieved_value` is NOT null
+3. Since all N/A entries have null values, the helper finds zero matching entries and returns `'pending'`
 
-Interestingly, a correct implementation already exists in the `getKpiStatus` helper (lines 161-179), which checks all matching entries by prefix. But `buildCardData` does not use it.
+The same bug exists in the progress statistics calculation (entered/propagated counts), which also filters on `achieved_value !== null`.
+
+## Root Cause (Technical)
+
+In `src/pages/admin/OrgKpiDataEntry.tsx`, three places filter entries using `v.achieved_value !== null`:
+
+- **`getKpiStatus`** (line 166, 173): Determines the card badge (Pending/Entered/Propagated)
+- **Progress stats `useMemo`** (line 279, ~285): Calculates entered/propagated counts for the header
+- **Data owner tiles** (line 219): Determines per-owner completion ratios
+
+All three need to also consider `v.is_na === true` as a valid "entered" state.
 
 ## Fix
 
-**File: `src/pages/admin/OrgKpiDataEntry.tsx`** -- `buildCardData` function (around lines 326-330)
+**File: `src/pages/admin/OrgKpiDataEntry.tsx`**
 
-Replace the inline status logic with a call to the existing `getKpiStatus` helper, which already handles all three scopes correctly:
+Update the value-presence check in all three locations to include N/A entries:
 
+### 1. `getKpiStatus` helper (lines 161-179)
+
+For organization scope (line 166):
 ```typescript
-// BEFORE (broken for non-org scopes):
-let status: 'pending' | 'entered' | 'propagated' = 'pending';
-if (existing?.achieved_value !== null && existing?.achieved_value !== undefined) {
-  status = existing?.status === 'propagated' ? 'propagated' : 'entered';
-}
+// BEFORE:
+if (val?.achieved_value !== null && val?.achieved_value !== undefined) {
 
-// AFTER (reuse existing helper):
-const status = getKpiStatus(kpi);
+// AFTER:
+if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
 ```
 
-This single-line change eliminates the duplicated (and incomplete) status logic and ensures all scopes (organization, department, employee) correctly reflect Pending, Entered, and Propagated states.
+For department/employee scope (line 173):
+```typescript
+// BEFORE:
+k.startsWith(prefix) && v.achieved_value !== null && v.achieved_value !== undefined
+
+// AFTER:
+k.startsWith(prefix) && (v.achieved_value !== null && v.achieved_value !== undefined || v.is_na)
+```
+
+### 2. Progress stats calculation (~lines 276-291)
+
+Same pattern -- include `is_na` entries in the entered/propagated count.
+
+### 3. Data owner tile completion (~line 219)
+
+Same pattern -- count N/A entries as "entered".
 
 ## Impact
 
-- Employee-scoped KPIs will correctly show "Propagated" (green badge) after propagation
-- Department-scoped KPIs will also benefit from the same fix
-- Organization-scoped KPIs continue to work as before (the helper uses the same logic)
+- N/A-only KPIs will correctly show **"Entered"** after saving and **"Propagated"** after propagation
+- Progress bars and completion ratios will accurately include N/A entries
+- Data owner tiles will show correct completion counts
 - No data or schema changes required -- display-only fix
 
 ## Risk Assessment
@@ -41,12 +68,12 @@ This single-line change eliminates the duplicated (and incomplete) status logic 
 | Aspect | Risk | Notes |
 |--------|------|-------|
 | Data | None | Read-only display logic |
-| Regression | None | `getKpiStatus` already powers filtering and progress stats correctly |
-| Consistency | Improved | Single source of truth for status derivation |
+| Regression | None | Only adds N/A awareness to existing status checks |
+| Consistency | Improved | N/A entries are treated as valid data entries across the board |
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/pages/admin/OrgKpiDataEntry.tsx` | Replace inline status logic in `buildCardData` with call to `getKpiStatus(kpi)` |
+| `src/pages/admin/OrgKpiDataEntry.tsx` | Update 3 locations to treat `is_na = true` entries as valid (not pending) |
 
