@@ -1,63 +1,67 @@
 
 
-# Fix: Binary/Tiered KPI Rating Mismatch Between Org Data Entry and Manager Review
+# Fix: Binary KPI Propagation Produces Wrong Rating (0 Instead of 5)
 
 ## Root Cause
 
-In the Org KPI Scoped Entry Table, binary KPIs store the **rating number** as `achievedValue` (e.g., "No" stores `0`, "Yes" stores `5`). When the Rating column calls `calculateRating(0, target=0, uomType='binary')`, the function fails to match a label (because the value is numeric, not the string "No") and falls back to numeric threshold logic. With `achieved=0` and `target=0`, this incorrectly produces **Rating 5 (Outstanding)**.
+When an admin selects "Yes" for a binary KPI in the Org KPI Data Entry table, the system stores the **rating score** (5) as the `achievedValue`. During propagation, the `buildRatingsPayload` function in `usePropagateOrgKpiValue.ts` passes this numeric `5` to `calculateRating()`.
 
-In the Manager Review, the `QualitativeValueInput` component directly uses the option's rating value, so "No" correctly shows **Score: 0**.
+Inside `calculateRating`, for binary UOM types:
+1. It first tries **label matching** (looking for "Yes"/"No" string) -- fails because `5` is a number, not a string
+2. Falls through to **numeric threshold fallback** -- calls `calculateAbsoluteRating(5, thresholds, "Lower is Better")`
+3. With thresholds like `r5 = 0` (zero fatals = outstanding), the value `5` with "Lower is Better" criteria yields **Rating 0**
+
+This is why the Review Journey shows `Value: 5, Rating: 0` -- the database has `self_score = 0` because the propagation incorrectly recalculated the score.
 
 ## Fix
 
-**File: `src/components/admin/OrgKpiScopedEntryTable.tsx`**
+**File: `src/hooks/usePropagateOrgKpiValue.ts`** -- `buildRatingsPayload` function (lines 70-93)
 
-In both `EmployeeRow` and `DepartmentRow`, update the Rating cell logic: for binary/tiered KPIs, use the `achievedValue` directly as the rating score (since it already IS the rating), instead of passing it through `calculateRating()`.
-
-### EmployeeRow Rating cell (lines 329-342):
+For binary and tiered KPIs, the `achievedValue` already IS the rating score (mapped from "Yes"=5, "No"=0 by the QualitativeSelect component). Skip `calculateRating()` and use it directly:
 
 ```typescript
-<TableCell className="py-1.5 w-24 text-center">
-  {rowIsNa || numVal === null ? (
-    <span className="text-xs text-muted-foreground">-</span>
-  ) : (row.uomType === 'binary' || (row.uomType === 'tiered' && row.qualitativeOptions?.length)) ? (
-    // For qualitative KPIs, achievedValue IS the rating score
-    <RatingBadge score={numVal} short className="text-[10px] h-5 px-1.5" />
-  ) : (
-    <RatingBadge
-      score={calculateRating(
-        numVal, effectiveTarget, ratingThresholds || { r5: null, r4: null, r3: null, r2: null, r1: null },
-        criteria, 0, 'numeric', null, effectiveUom
-      ).rating}
-      short
-      className="text-[10px] h-5 px-1.5"
-    />
-  )}
-</TableCell>
+// Before threshold calculation, check if this is a qualitative KPI
+const uomType = (kpi.uom_type as string) || 'numeric';
+const isBinaryOrTiered = uomType === 'binary' || 
+  (uomType === 'tiered' && Array.isArray(kpi.qualitative_options) && kpi.qualitative_options.length > 0);
+
+if (isBinaryOrTiered) {
+  // achievedValue IS the rating for qualitative KPIs
+  const directRating = achievedValue ?? 0;
+  kpiRatings.push({
+    kpi_id: kpi.id,
+    achieved_value: achievedValue,
+    self_score: directRating,
+    self_rating: scoreToRating(directRating),
+  });
+} else {
+  // Existing calculateRating logic for numeric KPIs
+  const ratingResult = calculateRating(...);
+  kpiRatings.push({ ... });
+}
 ```
-
-### DepartmentRow Rating cell:
-
-Same pattern applied -- check `row.uomType` for binary/tiered and use `numVal` directly as the score.
 
 ## Impact
 
-- "No" (achievedValue=0) will correctly show **Rating 0 - Not Achieved** (deep maroon badge)
-- "Yes" (achievedValue=5) will correctly show **Rating 5 - Outstanding** (blue badge)
+- "Yes" (achievedValue=5) will correctly propagate as `self_score=5, self_rating=blue`
+- "No" (achievedValue=0) will correctly propagate as `self_score=0, self_rating=red`
 - Numeric KPIs continue to use `calculateRating()` as before
-- Consistent behavior between Org KPI Data Entry and Manager Review
+- The Review Journey will correctly display **Rating: 5** for binary "Yes" selections
+
+## Existing Data
+
+Any previously propagated binary KPIs will have incorrect `self_score` values in the database. The admin can re-propagate affected KPIs from the Org KPI Data Entry page to fix them.
 
 ## Risk Assessment
 
 | Aspect | Risk | Notes |
 |--------|------|-------|
-| Data | None | Display-only change, no writes |
-| Regression | None | Only affects qualitative KPI rating display |
-| Consistency | Improved | Aligns Org KPI table with Manager Review logic |
+| Data | None | Only affects future propagations; re-propagation fixes historical data |
+| Regression | None | Numeric KPIs unchanged; only binary/tiered path added |
+| Consistency | Improved | Aligns propagation with Org KPI table display and Manager Review logic |
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/admin/OrgKpiScopedEntryTable.tsx` | Branch rating display logic for binary/tiered vs numeric KPIs in both EmployeeRow and DepartmentRow |
-
+| `src/hooks/usePropagateOrgKpiValue.ts` | Short-circuit `buildRatingsPayload` for binary/tiered KPIs to use achievedValue directly as the rating score |
