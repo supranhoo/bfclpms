@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMyAuditAssignments } from '@/hooks/useAuditAssignments';
+import { useMyKpiLevelAssignments } from '@/hooks/useMyKpiLevelAssignments';
 import { AuditAssignmentDialog } from '@/components/admin/AuditAssignmentDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTeamMembers, useProfiles, useSkipLevelTeamMembers, useProfilesByWorkflowStage } from '@/hooks/useOrganization';
@@ -152,6 +153,7 @@ export function EmployeeSelectorGrid({
 
   // Audit assignments: fetch current user's assigned employees
   const { data: myAssignedEmployeeIds } = useMyAuditAssignments();
+  const { data: myKpiLevelData } = useMyKpiLevelAssignments();
 
   // Fix 1 & 3: Use multi-period hook so YTD/QTD/custom modes fetch ALL relevant months
   const { data: periodKpis } = useKpisByPeriodRanges(periodSelection.periodRanges);
@@ -345,8 +347,11 @@ export function EmployeeSelectorGrid({
     }
 
     // Status-based filtering using per-employee workflow resolution
-    if (statusFilter === 'my_assigned' && viewLevel === 'audit' && myAssignedEmployeeIds) {
-      filtered = filtered?.filter(m => myAssignedEmployeeIds instanceof Set && myAssignedEmployeeIds.has(m.id));
+    if (statusFilter === 'my_assigned' && viewLevel === 'audit') {
+      filtered = filtered?.filter(m => 
+        (myAssignedEmployeeIds instanceof Set && myAssignedEmployeeIds.has(m.id)) ||
+        (myKpiLevelData?.allAssignedEmployeeIds?.has(m.id))
+      );
     } else if (statusFilter !== 'all' && statusFilter !== 'my_assigned' && periodKpis) {
       const employeeIds = new Set<string>();
       // For merged team view, build skip-level member set for relationship detection
@@ -431,21 +436,25 @@ export function EmployeeSelectorGrid({
     });
 
     return filtered;
-  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers, myAssignedEmployeeIds]);
+  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers, myAssignedEmployeeIds, myKpiLevelData]);
 
   // Split display members into assigned/others for audit view
   const { assignedMembers, otherMembers } = useMemo(() => {
-    if (viewLevel !== 'audit' || !myAssignedEmployeeIds || !(myAssignedEmployeeIds instanceof Set) || myAssignedEmployeeIds.size === 0 || statusFilter === 'my_assigned') {
+    const employeeLevelSet = (myAssignedEmployeeIds instanceof Set) ? myAssignedEmployeeIds : new Set<string>();
+    const kpiLevelSet = myKpiLevelData?.allAssignedEmployeeIds || new Set<string>();
+    const hasAnyAssignments = employeeLevelSet.size > 0 || kpiLevelSet.size > 0;
+
+    if (viewLevel !== 'audit' || !hasAnyAssignments || statusFilter === 'my_assigned') {
       return { assignedMembers: [], otherMembers: displayMembers || [] };
     }
     const assigned: EmployeeProfile[] = [];
     const others: EmployeeProfile[] = [];
     (displayMembers || []).forEach(m => {
-      if (myAssignedEmployeeIds.has(m.id)) assigned.push(m);
+      if (employeeLevelSet.has(m.id) || kpiLevelSet.has(m.id)) assigned.push(m);
       else others.push(m);
     });
     return { assignedMembers: assigned, otherMembers: others };
-  }, [displayMembers, viewLevel, myAssignedEmployeeIds, statusFilter]);
+  }, [displayMembers, viewLevel, myAssignedEmployeeIds, myKpiLevelData, statusFilter]);
 
   // Calculate stats using per-employee workflow-aware resolution
   const stats = useMemo(() => {
@@ -617,11 +626,12 @@ export function EmployeeSelectorGrid({
       );
     } else if (viewLevel === 'audit') {
       return (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
           <StatCard icon={Clock} label="Pending Audit" value={stats.stat1} color="amber" subtitle="KPIs awaiting audit" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
           <StatCard icon={FileCheck} label="In Audit" value={stats.stat2} color="purple" subtitle="Currently reviewing" onClick={() => toggleStatusFilter('in_audit')} active={statusFilter === 'in_audit'} />
           <StatCard icon={CheckCircle2} label="Forwarded" value={stats.stat3} color="green" subtitle="Sent for management" onClick={() => toggleStatusFilter('forwarded')} active={statusFilter === 'forwarded'} />
+          <StatCard icon={Target} label="My KPIs" value={myKpiLevelData?.totalAssignedKpis || 0} color="blue" subtitle="KPIs assigned to you" onClick={() => toggleStatusFilter('my_assigned')} active={statusFilter === 'my_assigned'} />
         </div>
       );
     } else {
@@ -745,6 +755,14 @@ export function EmployeeSelectorGrid({
                 {kpiStats.badge3} forwarded
               </Badge>
             )}
+            {(() => {
+              const kpiCount = myKpiLevelData?.assignedKpisByEmployee?.get(member.id)?.length;
+              return kpiCount ? (
+                <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-300 text-xs dark:bg-indigo-900/20 dark:text-indigo-400 dark:border-indigo-600">
+                  {kpiCount} KPIs assigned to you
+                </Badge>
+              ) : null;
+            })()}
           </>
         );
       } else {
@@ -782,7 +800,10 @@ export function EmployeeSelectorGrid({
 
   const renderEmployeeCard = (member: EmployeeProfile) => {
     const managerName = getManagerName(member.reporting_manager_id);
-    const isAssigned = viewLevel === 'audit' && myAssignedEmployeeIds instanceof Set && myAssignedEmployeeIds.has(member.id);
+    const isAssigned = viewLevel === 'audit' && (
+      (myAssignedEmployeeIds instanceof Set && myAssignedEmployeeIds.has(member.id)) ||
+      (myKpiLevelData?.allAssignedEmployeeIds?.has(member.id))
+    );
     return (
       <Card
         key={member.id}
