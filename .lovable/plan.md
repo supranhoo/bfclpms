@@ -1,129 +1,110 @@
 
-# Enhance Audit Panel with KPI-Level Assignment Visibility
+
+# System Settings -- Vertical Sidebar Layout Redesign
 
 ## Problem
 
-Currently the Audit Panel has two separate assignment systems that don't talk to each other on the grid screen:
+The System Settings page crams **10 tabs** into a single horizontal `grid-cols-10` TabsList. On most screens, the tab labels are hidden (icon-only via `hidden sm:inline`), making them hard to identify. As more settings are added (export, observations, etc.), this will only get worse.
 
-1. **Employee-level assignments** (`audit_kpi_assignments`) -- Shows in "My Assignments" section on the grid. This maps entire employees to an auditor.
-2. **KPI-level assignments** (`audit_kpi_level_assignments`) -- Only visible INSIDE an employee's scorecard via the `AuditKpiAssignPopover`. This assigns individual KPIs to specific auditors.
+## Solution: Resizable Two-Panel Layout
 
-An auditor who has been assigned 5 specific KPIs across 3 employees has no way to see those on the Audit Panel grid. They must open each employee's scorecard manually to discover their KPI-level assignments.
+Replace the horizontal tab bar with a **vertical sidebar + content panel** layout using the existing `react-resizable-panels` library (already installed). This gives each section room to breathe and makes the page feel like a proper settings experience.
 
-## Solution
+```text
++---------------------------+----------------------------------------+
+|  [drag handle]            |                                        |
+|  System Settings          |    [Active Section Content]            |
+|                           |                                        |
+|  > Branding        (*)    |    Global Branding Settings            |
+|    General                |    ...                                 |
+|    Scoring                |                                        |
+|    Cycles                 |                                        |
+|    Controls               |                                        |
+|    Report Access          |                                        |
+|    Email                  |                                        |
+|    Templates              |                                        |
+|    Passwords              |                                        |
+|    Backups                |                                        |
++---------------------------+----------------------------------------+
+```
 
-Merge KPI-level assignment awareness into the Audit Panel grid so auditors see a unified view of all their assignments -- both employee-level and KPI-level.
+## Key Design Decisions
 
----
+1. **Vertical nav list on the left** -- Each item shows icon + full label at all times. Active item is highlighted with primary background. No more guessing which icon is which.
+
+2. **Resizable panels** -- Uses `ResizablePanelGroup` (already in the project) so admins can drag to resize the sidebar vs content area. Default split: 20% sidebar / 80% content.
+
+3. **Mobile: dropdown selector** -- On mobile (`< md`), the vertical sidebar collapses into a `Select` dropdown at the top, followed by the content below. This maintains full usability on small screens.
+
+4. **Remove max-w-4xl constraint** -- The current `max-w-4xl` container limits the page to ~896px. With a sidebar layout, the page should use the full available width (`max-w-6xl` or full width), giving the content panel significantly more room.
+
+5. **URL hash sync (optional enhancement)** -- Active tab stored in URL hash (`#branding`, `#scoring`) so users can bookmark or share direct links to specific settings sections.
 
 ## Changes
 
-### 1. New Hook: `src/hooks/useMyKpiLevelAssignments.ts`
+### 1. Rewrite `src/pages/admin/SystemSettings.tsx` Layout
 
-Create a lightweight hook that fetches the current auditor's KPI-level assignments and groups them by employee:
+- Replace `Tabs` + horizontal `TabsList` with `ResizablePanelGroup` (horizontal direction)
+- Left panel: Vertical navigation list with icons + labels, styled as clickable items
+- Right panel: Renders the active section component
+- State managed with `useState` for `activeSection`
+- On mobile (`useIsMobile()`): render a `Select` dropdown instead of the sidebar panel
 
-- Queries `audit_kpi_level_assignments` where `auditor_id = current user`
-- Joins with `kpis` to get `employee_id` for each assigned KPI
-- Returns:
-  - `assignedKpisByEmployee`: `Map<employee_id, kpi_id[]>` -- how many KPIs per employee
-  - `allAssignedEmployeeIds`: `Set<employee_id>` -- all employees with at least one KPI assigned
-  - `totalAssignedKpis`: number -- total count for stats
+### 2. Widen Container
 
-This uses the same two-step fetch pattern (no joins to profiles) established in `useAuditKpiAssignments.ts` to avoid ambiguous FK errors.
+Change `max-w-4xl` to `max-w-7xl` (or remove entirely) to give the content panel more horizontal space.
 
-### 2. Update: `src/components/review/EmployeeSelectorGrid.tsx`
+### 3. Mobile Adaptation
 
-**2a. Import and fetch KPI-level assignments**
-
-Add the new hook alongside the existing `useMyAuditAssignments`. Merge both sets to create a unified "My Assignments" employee list.
-
-**2b. Update the "My Assignments" grouping logic**
-
-Currently (line ~437), `assignedMembers` only checks `myAssignedEmployeeIds` (employee-level). Update to also include employees who have KPI-level assignments to the current auditor:
-
-```
-const isMyAssignment = employeeLevelAssigned.has(id) || kpiLevelAssigned.has(id);
-```
-
-**2c. Show KPI-level assignment count on employee cards**
-
-When an employee has KPI-level assignments to the current auditor, show an additional badge on their card:
-
-```
-[3 KPIs assigned to you]
-```
-
-This appears alongside the existing pending/in-audit/forwarded badges, styled in an indigo color to match the existing KPI-assignment badge pattern used inside the scorecard.
-
-**2d. Update stat cards**
-
-Add a 5th stat card (or update the existing layout) to show "My KPIs" count -- the total number of KPIs specifically assigned to this auditor via KPI-level mapping. This gives instant visibility of their workload.
-
-**2e. Update the "My Assignments" filter**
-
-The `my_assigned` status filter currently only checks employee-level assignments. Update it to also include employees with KPI-level assignments.
-
-### 3. Update: `src/hooks/useMyAuditAssignments.ts` (minor)
-
-No changes needed -- this hook stays as-is for employee-level assignments. The new KPI-level hook operates independently and the merge happens in the grid component.
+- Detect mobile via existing `useIsMobile()` hook
+- Render a `Select` component with all 10 sections as options
+- Content renders below the selector, using full width
 
 ---
 
 ## Technical Details
 
-### Data Flow
+### Navigation Items Config
 
 ```text
-Audit Panel Grid
-  |
-  +-- useMyAuditAssignments()      --> Set<employee_id>  (employee-level)
-  +-- useMyKpiLevelAssignments()   --> Map<employee_id, kpi_id[]>  (KPI-level)
-  |
-  +-- Merge into unified "My Assignments" section
-  |     - Employee-level: full card highlight
-  |     - KPI-level: card highlight + "X KPIs assigned" badge
-  |
-  +-- "My Assignments" filter includes both types
+const SETTINGS_SECTIONS = [
+  { key: 'branding',  label: 'Branding',       icon: Building2 },
+  { key: 'general',   label: 'General',         icon: RefreshCw },
+  { key: 'scoring',   label: 'Scoring',         icon: Calculator },
+  { key: 'cycles',    label: 'Cycles',          icon: CalendarDays },
+  { key: 'controls',  label: 'Controls',        icon: SlidersHorizontal },
+  { key: 'reports',   label: 'Report Access',   icon: Shield },
+  { key: 'email',     label: 'Email',           icon: Mail },
+  { key: 'templates', label: 'Templates',       icon: FileText },
+  { key: 'passwords', label: 'Passwords',       icon: KeyRound },
+  { key: 'backups',   label: 'Backups',         icon: Database },
+];
 ```
 
-### Employee Card Visual (Audit View)
+### Desktop Layout Structure
 
 ```text
-+--------------------------------------------------+
-| [Avatar]  Abhas Luharuwalla            -->        |
-|           Deputy General Manager                  |
-|           Manager: Gaurav Budhia                  |
-|           [============================] 15/24    |
-|           [5 pending] [10 forwarded]              |
-|           [3 KPIs assigned to you]   <-- NEW      |
-+--------------------------------------------------+
+ResizablePanelGroup (horizontal)
+  ResizablePanel (defaultSize=18, minSize=14, maxSize=25)
+    -> Vertical nav list with scroll
+  ResizableHandle (withHandle)
+  ResizablePanel (defaultSize=82)
+    -> Active section content (same components as today)
 ```
 
-The "KPIs assigned to you" badge only appears when KPI-level assignments exist for that employee-auditor pair. It uses indigo styling consistent with the existing `AuditKpiAssignPopover` badge.
+### Files Changed
 
-### Stat Cards (Audit View) -- Updated Layout
+| File | Action | Description |
+|------|--------|-------------|
+| `src/pages/admin/SystemSettings.tsx` | Rewrite layout | Replace horizontal tabs with vertical resizable sidebar + content panel |
 
-```text
-| Total Employees | Pending Audit | In Audit | Forwarded | My KPIs |
-|       37        |     223       |    30    |    127    |   12    |
-```
-
-The "My KPIs" stat card shows the total count of KPI-level assignments for the current auditor. Clicking it filters to show only employees with KPI-level assignments.
-
----
+No new files, no database changes, no new dependencies. All existing section components (`GlobalBrandingSettings`, `WorkflowSettingsTab`, etc.) remain completely untouched.
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|------------|
-| Data | None | Read-only query on existing `audit_kpi_level_assignments` table; no schema changes |
-| Regression | Low | Existing employee-level assignment logic untouched; KPI-level is additive |
-| Performance | Low | Single query for KPI-level assignments, cached by React Query |
-| Security | None | RLS already restricts `audit_kpi_level_assignments` to auditor + admin roles |
+| Regression | None | Section components are unchanged; only the container layout changes |
+| Mobile | None | Falls back to Select dropdown, same as current icon-only tabs but more usable |
+| Performance | None | No additional data fetching; same lazy-loaded content |
 
-## Files Summary
-
-| File | Action | Description |
-|------|--------|-------------|
-| `src/hooks/useMyKpiLevelAssignments.ts` | Create | Hook to fetch current auditor's KPI-level assignments grouped by employee |
-| `src/components/review/EmployeeSelectorGrid.tsx` | Edit | Merge KPI-level assignments into grid, badges, stat cards, and filters |
