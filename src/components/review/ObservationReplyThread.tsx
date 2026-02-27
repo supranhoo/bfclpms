@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { MessageCircle, Send, ChevronDown, ChevronUp, CheckCircle2, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { openStorageFile } from '@/lib/storageDownload';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
 import {
   useObservationReplies,
@@ -141,15 +142,14 @@ export function ObservationReplyThread({
                   {reply.evidence_urls && reply.evidence_urls.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
                       {reply.evidence_urls.map((url, i) => (
-                        <a
+                        <button
                           key={i}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                          type="button"
+                          onClick={() => openStorageFile(url as string)}
                           className="text-[10px] text-primary hover:underline"
                         >
                           Attachment {i + 1}
-                        </a>
+                        </button>
                       ))}
                     </div>
                   )}

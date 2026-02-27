@@ -32,9 +32,20 @@ export async function openStorageFile(publicUrl: string): Promise<void> {
     }
 
     const blobUrl = URL.createObjectURL(data);
-    window.open(blobUrl, '_blank');
 
-    // Clean up blob URL after a delay to allow the new tab to load
+    // Use anchor click instead of window.open — works on tablets
+    const anchor = document.createElement('a');
+    anchor.href = blobUrl;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+
+    const fileName = decodedPath.split('/').pop() || 'evidence';
+    anchor.download = fileName;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+
     setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
   } catch {
     // Graceful fallback
