@@ -163,14 +163,14 @@ export default function OrgKpiDataEntry() {
     if (scope === 'organization') {
       const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
       const val = existingValuesMap.get(key);
-      if (val?.achieved_value !== null && val?.achieved_value !== undefined) {
+      if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
         return val?.status === 'propagated' ? 'propagated' : 'entered';
       }
       return 'pending';
     }
     const prefix = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||`;
     const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) =>
-      k.startsWith(prefix) && v.achieved_value !== null && v.achieved_value !== undefined
+      k.startsWith(prefix) && ((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)
     );
     if (matching.length > 0) {
       return matching.every(([, v]) => v.status === 'propagated') ? 'propagated' : 'entered';
@@ -276,13 +276,13 @@ export default function OrgKpiDataEntry() {
       if (scope === 'organization') {
         const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
         const val = existingValuesMap.get(key);
-        if (val?.achieved_value !== null && val?.achieved_value !== undefined) {
+        if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
           status = val?.status === 'propagated' ? 'propagated' : 'entered';
         }
       } else {
         const prefix = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||`;
         const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) =>
-          k.startsWith(prefix) && v.achieved_value !== null && v.achieved_value !== undefined
+          k.startsWith(prefix) && ((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)
         );
         if (matching.length > 0) {
           const allPropagated = matching.every(([, v]) => v.status === 'propagated');
