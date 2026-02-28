@@ -8,14 +8,14 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
 import { TrendingUp, TrendingDown, Minus, Lock } from 'lucide-react';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
+import { MentionTextarea } from '@/components/ui/MentionTextarea';
 import { useAuth } from '@/contexts/AuthContext';
+import { parseMentions } from '@/lib/mentionUtils';
 import { 
   ObservationType, 
   ObserverRole, 
@@ -59,6 +59,8 @@ export function AddObservationDialog({
   const [description, setDescription] = useState('');
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   const [isInternal, setIsInternal] = useState(false);
+  const [titleMentionIds, setTitleMentionIds] = useState<string[]>([]);
+  const [descMentionIds, setDescMentionIds] = useState<string[]>([]);
   
   const canMarkInternal = observerRole === 'auditor' || observerRole === 'admin';
 
@@ -91,6 +93,12 @@ export function AddObservationDialog({
 
   const handleSubmit = () => {
     if (!title.trim()) return;
+
+    // Collect all mentioned user IDs from title and description
+    const allMentionIds = [...new Set([
+      ...parseMentions(title).map(m => m.userId),
+      ...parseMentions(description).map(m => m.userId),
+    ])];
     
     if (isEditing && editingObservation) {
       onSubmit({
@@ -101,6 +109,7 @@ export function AddObservationDialog({
         description: description.trim() || undefined,
         evidence_urls: evidenceUrls.length > 0 ? evidenceUrls : undefined,
         visibility: canMarkInternal ? (isInternal ? 'internal' : 'public') : undefined,
+        mentionedUserIds: allMentionIds.length > 0 ? allMentionIds : undefined,
       } as any);
     } else {
       onSubmit({
@@ -113,6 +122,7 @@ export function AddObservationDialog({
         evidence_urls: evidenceUrls.length > 0 ? evidenceUrls : undefined,
         is_applied: autoApply,
         visibility: canMarkInternal && isInternal ? 'internal' : 'public',
+        mentionedUserIds: allMentionIds.length > 0 ? allMentionIds : undefined,
       } as any);
     }
     
@@ -178,24 +188,26 @@ export function AddObservationDialog({
           {/* Title */}
           <div className="space-y-2">
             <Label htmlFor="title">Title *</Label>
-            <Input
-              id="title"
+            <MentionTextarea
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Brief observation title..."
-              maxLength={100}
+              onChange={setTitle}
+              onMentionsChange={setTitleMentionIds}
+              placeholder="Brief observation title — @ to mention"
+              rows={1}
+              className="text-sm"
             />
           </div>
 
           {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
+            <MentionTextarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Provide details about this observation..."
+              onChange={setDescription}
+              onMentionsChange={setDescMentionIds}
+              placeholder="Provide details — @ to mention someone"
               rows={3}
+              className="text-sm"
             />
           </div>
 
