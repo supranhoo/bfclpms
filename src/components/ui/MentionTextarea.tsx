@@ -146,7 +146,7 @@ export function MentionTextarea({
         ref={overlayRef}
         aria-hidden="true"
         className={cn(
-          'absolute inset-0 min-h-[80px] w-full rounded-md px-3 py-2 text-sm pointer-events-none overflow-hidden whitespace-pre-wrap break-words',
+          'absolute inset-0 min-h-[80px] w-full rounded-md px-3 py-2 text-sm text-muted-foreground pointer-events-none overflow-hidden whitespace-pre-wrap break-words',
           className
         )}
       >
