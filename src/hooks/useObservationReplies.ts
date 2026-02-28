@@ -42,10 +42,12 @@ export function useCreateObservationReply() {
       observationId,
       replyText,
       evidenceUrls,
+      mentionedUserIds,
     }: {
       observationId: string;
       replyText: string;
       evidenceUrls?: string[];
+      mentionedUserIds?: string[];
     }) => {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) throw new Error('Not authenticated');
@@ -69,6 +71,53 @@ export function useCreateObservationReply() {
         .update({ status: 'acknowledged' })
         .eq('id', observationId)
         .eq('status', 'open');
+
+      // Insert @mention notifications
+      if (mentionedUserIds && mentionedUserIds.length > 0) {
+        // Get observation details for notification context
+        const { data: obsData } = await supabase
+          .from('kpi_observations')
+          .select('kpi_id, ticket_number')
+          .eq('id', observationId)
+          .single();
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', userData.user.id)
+          .single();
+
+        const mentionerName = profile?.full_name || profile?.email || 'Someone';
+
+        if (obsData) {
+          // Get employee_id from KPI
+          const { data: kpiData } = await supabase
+            .from('kpis')
+            .select('employee_id, kpi_name')
+            .eq('id', obsData.kpi_id)
+            .single();
+
+          const uniqueIds = [...new Set(mentionedUserIds)].filter(id => id !== userData.user.id);
+
+          if (uniqueIds.length > 0) {
+            const notifications = uniqueIds.map(userId => ({
+              user_id: userId,
+              type: 'observation_mention',
+              title: '@Mentioned in Observation',
+              message: `${mentionerName} mentioned you in observation ${obsData.ticket_number || ''} on ${kpiData?.kpi_name || 'a KPI'}`,
+              kpi_id: obsData.kpi_id,
+              related_user_id: userData.user.id,
+              metadata: {
+                employee_id: kpiData?.employee_id || null,
+                observation_id: observationId,
+                ticket_number: obsData.ticket_number || null,
+              },
+            }));
+
+            await supabase.from('notifications').insert(notifications);
+          }
+        }
+      }
 
       return data;
     },

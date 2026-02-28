@@ -95,6 +95,7 @@ export function getNotificationTypeLabel(type: string): string {
     observation_raised: 'Observation Raised',
     observation_reply: 'Observation Reply',
     observation_resolved: 'Observation Resolved',
+    observation_mention: '@Mentioned in Observation',
     period_locked: 'Period Locked',
     pip_initiated: 'PIP Initiated',
     pip_completed: 'PIP Completed',
@@ -277,7 +278,8 @@ export function getNotificationNavigationPath(item: InboxItem, currentUserId?: s
     // Observations — context-aware: if sent TO the employee about their own KPI, use self view
     case 'observation_raised':
     case 'observation_reply':
-    case 'observation_resolved': {
+    case 'observation_resolved':
+    case 'observation_mention': {
       if (isSelfTargeted) {
         return selfKpiLink(item.kpiId);
       }
