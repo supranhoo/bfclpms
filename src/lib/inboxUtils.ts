@@ -284,15 +284,19 @@ export function getNotificationNavigationPath(item: InboxItem, currentUserId?: s
         return selfKpiLink(item.kpiId);
       }
       // For mentioned users: use mentioned_kpi param so Dashboard opens the read-only sheet
-      // instead of trying to load the team view (which requires manager role)
-      const obsEmployeeId = metaEmployeeId || item.fromUser?.id || null;
-      if (obsEmployeeId && item.kpiId) {
+      const obsKpiId = item.kpiId || (item.metadata as any)?.kpi_id || null;
+      const obsEmployeeId = metaEmployeeId || (item.metadata as any)?.employee_id || item.fromUser?.id || null;
+      if (obsKpiId && obsEmployeeId) {
         const params = new URLSearchParams();
-        params.set('mentioned_kpi', item.kpiId);
+        params.set('mentioned_kpi', obsKpiId);
         params.set('mentioned_employee', obsEmployeeId);
         return `/dashboard?${params.toString()}`;
       }
-      return selfKpiLink(item.kpiId);
+      if (obsKpiId) {
+        return `/dashboard?mentioned_kpi=${obsKpiId}`;
+      }
+      // Ultimate fallback — at least land on the dashboard
+      return '/dashboard';
     }
 
     // Period events

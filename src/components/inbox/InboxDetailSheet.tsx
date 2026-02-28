@@ -35,9 +35,22 @@ export function InboxDetailSheet({
 
   const navigationPath = getNotificationNavigationPath(item, currentUserId);
 
+  // Fallback for @mention notifications: construct deep-link from metadata if standard path is null
+  const effectiveNavigationPath = navigationPath || (() => {
+    if (item.notificationType === 'observation_mention') {
+      const meta = (item.metadata || {}) as Record<string, any>;
+      const kpi = item.kpiId || meta.kpi_id;
+      const emp = meta.employee_id;
+      if (kpi && emp) return `/dashboard?mentioned_kpi=${kpi}&mentioned_employee=${emp}`;
+      if (kpi) return `/dashboard?mentioned_kpi=${kpi}`;
+      return '/dashboard';
+    }
+    return null;
+  })();
+
   const handleNavigate = () => {
-    if (navigationPath && onNavigate) {
-      onNavigate(navigationPath);
+    if (effectiveNavigationPath && onNavigate) {
+      onNavigate(effectiveNavigationPath);
       onOpenChange(false);
     }
   };
@@ -193,7 +206,7 @@ export function InboxDetailSheet({
             )}
 
             {/* Notification Navigation */}
-            {!isQuery && navigationPath && (
+            {!isQuery && effectiveNavigationPath && (
               <Button onClick={handleNavigate} className="w-full">
                 <ExternalLink className="h-4 w-4 mr-2" />
                 Open in App
