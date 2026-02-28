@@ -302,7 +302,7 @@
 |--------|-----|-------|-----------|
 | Users can view own notifications | SELECT | public | `user_id = auth.uid()` |
 | Users can update own notifications | UPDATE | public | `user_id = auth.uid()` |
-| Users and admins can insert notifications | INSERT | authenticated | `user_id = auth.uid() OR has_role(auth.uid(), 'admin')` |
+| Authenticated users can insert notifications | INSERT | authenticated | `true` |
 
 ---
 
