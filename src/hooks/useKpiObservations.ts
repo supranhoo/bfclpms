@@ -158,6 +158,9 @@ export function useCreateObservation() {
           .eq('id', input.kpi_id)
           .single();
 
+        // Truncate KPI name to avoid wall-of-text in notifications
+        const shortKpiName = (kpiData?.kpi_name || 'a KPI').split(/[\n\r:]/)[0].trim().slice(0, 80);
+
         const uniqueIds = [...new Set(mentionedUserIds)].filter(id => id !== userData.user.id);
 
         if (uniqueIds.length > 0) {
@@ -165,7 +168,7 @@ export function useCreateObservation() {
             user_id: userId,
             type: 'observation_mention',
             title: '@Mentioned in Observation',
-            message: `${mentionerName} mentioned you in observation "${getDisplayText(input.title)}" on ${kpiData?.kpi_name || 'a KPI'}`,
+            message: `${mentionerName} mentioned you in observation "${getDisplayText(input.title)}" on ${shortKpiName}`,
             kpi_id: input.kpi_id,
             related_user_id: userData.user.id,
             metadata: {
