@@ -1,104 +1,83 @@
 
 
-# Fix: Enable Mentioned Users to View KPIs from Notification Deep-Links
+# Fix: Missing "Open in App" Button for @Mention Notifications
 
 ## Problem
 
-When Shekhar receives an `observation_mention` notification and clicks "Open in App", the deep-link navigates to `/dashboard?view=team&employee=...&kpi=...`. However, the Dashboard's "team" view is only available to managers, auditors, and admins. An employee-role user like Shekhar cannot access this view, so nothing loads -- the KPI is invisible even though RLS grants them read access via `kpi_mention_access`.
+When Shekhar opens an `observation_mention` notification in the inbox detail sheet, there is no "Open in App" button — only a "Close" button. This means the user has no way to navigate to the KPI and view the observation.
 
-Additionally, the notification message includes the full KPI description (formula, scoring logic, etc.) making it unnecessarily long.
+## Root Cause
+
+The `InboxDetailSheet` conditionally renders the "Open in App" button only when `getNotificationNavigationPath()` returns a non-null value. For `observation_mention` notifications, this function relies on `item.kpiId` and `item.metadata.employee_id` being populated. If either is missing or the logic falls through, the button disappears silently with no fallback.
 
 ## Solution
 
-### 1. Add a "mentioned" navigation path in `inboxUtils.ts`
+Add a dedicated fallback in `InboxDetailSheet` specifically for `observation_mention` notifications. If the standard `navigationPath` is null but the item has the necessary metadata (`kpi_id` in metadata or the item's `kpiId`, plus `employee_id` in metadata), construct the deep-link URL directly from the metadata. This ensures the button always appears for mention notifications.
 
-For `observation_mention` notifications where the current user is NOT the KPI owner and NOT a manager, generate a deep-link using a new `mentioned_kpi` parameter instead of the `team` view:
+### Changes
 
-```
-/dashboard?mentioned_kpi=<kpi_id>&mentioned_employee=<employee_id>
-```
+**1. `src/components/inbox/InboxDetailSheet.tsx`**
 
-This avoids relying on the `team` view which requires manager privileges.
+Add a fallback navigation path computation for `observation_mention` notifications:
 
-### 2. Handle `mentioned_kpi` param in `Dashboard.tsx`
+- After computing `navigationPath`, if it is null and `item.notificationType === 'observation_mention'`, build the URL from `item.metadata.employee_id` and `item.kpiId` (or `item.metadata.kpi_id`).
+- This guarantees the "Open in App" button always renders for mention notifications.
 
-Add a new `useEffect` branch in the Dashboard's URL-parameter initialization to detect `mentioned_kpi`. When found:
+```text
+Before:
+  navigationPath = getNotificationNavigationPath(item, currentUserId)
+  Button shows only if navigationPath is truthy
 
-- Fetch the KPI record directly (RLS allows it via `kpi_mention_access`)
-- Fetch the KPI owner's basic profile for display context
-- Open the KPI in a read-only detail panel (reuse the existing `KpiReviewPanel` or `KpiTrackerModal` in read-only mode)
-- This keeps the user in their own "self" view but overlays the mentioned KPI details
-
-### 3. Create a lightweight `MentionedKpiSheet` component
-
-A new sheet/dialog component (`src/components/review/MentionedKpiSheet.tsx`) that:
-
-- Fetches and displays the specific KPI details (name, target, achieved, score)
-- Shows the KPI owner's name and designation for context
-- Displays observations on this KPI (filtered to `visibility = 'public'`)
-- Shows the observation reply thread
-- Is entirely read-only -- no edit capabilities
-- Has a clear "Read-Only Access via @Mention" badge
-
-### 4. Trim notification message length
-
-Update the notification creation in `useKpiObservations.ts` to use only `kpiData?.kpi_name` without appending the full description. The current message includes everything after the KPI name (Description, Formula, Scoring Logic) which creates a wall of text in notifications.
-
-Change the message from:
-```
-mentioned you in observation "title" on <full_kpi_name_with_description>
-```
-To:
-```
-mentioned you in observation "title" on <short_kpi_name>
+After:
+  navigationPath = getNotificationNavigationPath(item, currentUserId)
+  If null AND item is observation_mention:
+    Build /dashboard?mentioned_kpi=...&mentioned_employee=... from metadata
+  Button shows if finalPath is truthy
 ```
 
-Where `short_kpi_name` truncates at the first line break or colon separator.
+**2. `src/lib/inboxUtils.ts`** (defensive fix)
 
-## Technical Details
+In the `observation_mention` case, add a broader fallback: if `obsEmployeeId` or `item.kpiId` is missing, try extracting values from `item.metadata` (which stores `employee_id`) and fall back to a generic `/dashboard` link rather than returning `null`.
 
-### Files to Create
+### Technical Detail
 
-| File | Description |
-|------|-------------|
-| `src/components/review/MentionedKpiSheet.tsx` | Read-only KPI detail sheet for mentioned users |
+The `InboxDetailSheet` change (approximately 5 lines):
+
+```tsx
+// After line 36
+const navigationPath = getNotificationNavigationPath(item, currentUserId);
+
+// Add fallback for @mention notifications
+const effectiveNavigationPath = navigationPath || (() => {
+  if (item.notificationType === 'observation_mention') {
+    const meta = item.metadata || {};
+    const kpi = item.kpiId || meta.kpi_id;
+    const emp = meta.employee_id;
+    if (kpi && emp) {
+      return `/dashboard?mentioned_kpi=${kpi}&mentioned_employee=${emp}`;
+    }
+    if (kpi) {
+      return `/dashboard?kpi=${kpi}`;
+    }
+  }
+  return null;
+})();
+```
+
+Then use `effectiveNavigationPath` in both the condition and the handler.
+
+### Risk Assessment
+
+| Aspect | Risk | Mitigation |
+|--------|------|------------|
+| Regression | None | Only adds a fallback; existing navigation paths remain unchanged |
+| Data access | Low | Uses same `mentioned_kpi` param already handled by Dashboard |
+| UI | None | Button appearance is additive only |
 
 ### Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/lib/inboxUtils.ts` | Update `observation_mention` case to use `mentioned_kpi` param when user is not the KPI owner's manager |
-| `src/pages/Dashboard.tsx` | Add `mentioned_kpi` URL param handler to open `MentionedKpiSheet` |
-| `src/hooks/useKpiObservations.ts` | Truncate KPI name in notification message to avoid showing full description |
-| `src/hooks/useObservationReplies.ts` | Same truncation fix for reply mention notifications |
-| `DOCUMENTATION.md` | Document the mentioned-KPI deep-link flow |
-
-### Navigation Flow
-
-```text
-Notification Detail Sheet
-  -> "Open in App" button
-  -> /dashboard?mentioned_kpi=<kpi_id>&mentioned_employee=<emp_id>
-  -> Dashboard detects mentioned_kpi param
-  -> Opens MentionedKpiSheet (read-only overlay)
-  -> Shows KPI info + public observations + reply threads
-```
-
-### MentionedKpiSheet Data Fetching
-
-The sheet will fetch:
-1. KPI record from `kpis` table (accessible via `kpi_mention_access` RLS)
-2. KPI owner profile from `profiles` table
-3. Public observations from `kpi_observations` (accessible via RLS, filtered to `visibility = 'public'`)
-4. Observation replies (accessible via RLS)
-
-All queries leverage the existing `kpi_mention_access` RLS policies already in place.
-
-## Risk Assessment
-
-| Aspect | Risk | Mitigation |
-|--------|------|------------|
-| Data exposure | Low | Only public observations shown; existing RLS policies enforce access |
-| Regression | None | New param handler is additive; existing deep-links unaffected |
-| UI consistency | Low | Sheet reuses existing design patterns (similar to KpiReviewPanel) |
+| `src/components/inbox/InboxDetailSheet.tsx` | Add fallback navigation path for `observation_mention` |
+| `src/lib/inboxUtils.ts` | Defensive fallback in `observation_mention` case to avoid returning null |
 
