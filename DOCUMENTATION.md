@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-02-24  
-> **Version:** 1.46.0 — Report access overrides grant full data scope via RLS
+> **Version:** 1.47.0 — Mention-based read-only KPI access via kpi_mention_access
 > **Maintainer:** Lovable AI
 
 ---
@@ -3834,6 +3834,21 @@ All Inbox access gaps for `hr_pms` and `skip_level` roles have been closed:
 | `src/components/review/UnifiedScorecard.tsx` | Removed `is_issued !== false` from KPI filter |
 | `src/components/review/ManagementScorecard.tsx` | Removed `is_issued !== false` from KPI filter |
 | `src/hooks/useBottleneckReport.ts` | Removed `is_issued !== false` from both filter calls |
+
+---
+
+### Mention-Based Read-Only KPI Access (v1.47.0)
+
+**Summary:** When a user is @mentioned in an observation (title, description, or reply), they automatically receive read-only access to that specific KPI and its public observations. This is implemented via the `kpi_mention_access` junction table and additive SELECT policies on `kpis`, `kpi_observations`, and `kpi_observation_replies`.
+
+| File | Change |
+|---|---|
+| DB migration | Created `kpi_mention_access` table with RLS + additive SELECT policies on `kpis`, `kpi_observations`, `kpi_observation_replies` |
+| `src/hooks/useKpiObservations.ts` | Upserts `kpi_mention_access` rows when creating observations with mentions |
+| `src/hooks/useObservationReplies.ts` | Upserts `kpi_mention_access` rows when creating replies with mentions |
+| `docs/rls-policies.md` | Documented new `kpi_mention_access` table and three additive SELECT policies |
+
+**Security:** Access is read-only (SELECT only), scoped to a single KPI, and observations are restricted to `visibility = 'public'`. The `granted_by` and `created_at` columns provide an audit trail. Admins can revoke access by deleting rows from `kpi_mention_access`.
 
 ---
 

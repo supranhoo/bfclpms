@@ -129,6 +129,7 @@
 | Users can create observations | INSERT | authenticated | `created_by = auth.uid()` AND (owns KPI or has manager/auditor/management/admin role) |
 | Users can update own observations | UPDATE | authenticated | `created_by = auth.uid()` OR admin or management |
 | Users can delete own observations | DELETE | authenticated | `created_by = auth.uid()` OR admin |
+| Mentioned users can view public observations | SELECT | authenticated | `visibility = 'public' AND EXISTS kpi_mention_access match` |
 
 ### `kpi_observation_replies`
 | Policy | Cmd | Roles | Condition |
@@ -136,6 +137,14 @@
 | Authenticated users can view observation replies | SELECT | public | `auth.uid() IS NOT NULL` |
 | Authenticated users can create observation replies | INSERT | public | `auth.uid() = reply_by` |
 | Users can delete their own replies | DELETE | public | `auth.uid() = reply_by` |
+| Mentioned users can view observation replies | SELECT | authenticated | `EXISTS kpi_mention_access match via kpi_observations join` |
+
+### `kpi_mention_access`
+| Policy | Cmd | Roles | Condition |
+|--------|-----|-------|-----------|
+| Admins can manage all mention access | ALL | authenticated | `has_role(auth.uid(), 'admin')` |
+| Users can view their own mention access grants | SELECT | authenticated | `user_id = auth.uid()` |
+| Authenticated users can insert mention access grants | INSERT | authenticated | `granted_by = auth.uid()` |
 
 ### `kpi_queries`
 | Policy | Cmd | Roles | Condition |

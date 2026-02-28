@@ -177,6 +177,16 @@ export function useCreateObservation() {
           }));
 
           await supabase.from('notifications').insert(notifications);
+
+            // Grant mentioned users read-only access to this KPI
+            await supabase.from('kpi_mention_access').upsert(
+              uniqueIds.map(userId => ({
+                kpi_id: input.kpi_id,
+                user_id: userId,
+                granted_by: userData.user.id,
+              })),
+              { onConflict: 'kpi_id,user_id', ignoreDuplicates: true }
+            );
         }
       }
 
