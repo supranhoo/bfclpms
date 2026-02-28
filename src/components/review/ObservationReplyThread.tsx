@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -8,6 +7,8 @@ import { MessageCircle, Send, ChevronDown, ChevronUp, CheckCircle2, Loader2 } fr
 import { format } from 'date-fns';
 import { openStorageFile } from '@/lib/storageDownload';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
+import { MentionTextarea } from '@/components/ui/MentionTextarea';
+import { renderMentionText } from '@/lib/mentionUtils';
 import {
   useObservationReplies,
   useCreateObservationReply,
@@ -33,6 +34,7 @@ export function ObservationReplyThread({
   const [replyText, setReplyText] = useState('');
   const [replyEvidenceUrls, setReplyEvidenceUrls] = useState<string[]>([]);
   const [showReplyForm, setShowReplyForm] = useState(false);
+  const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([]);
 
   const { data: replies = [], isLoading } = useObservationReplies(isOpen ? observationId : undefined);
   const createReplyMutation = useCreateObservationReply();
@@ -48,12 +50,14 @@ export function ObservationReplyThread({
         observationId,
         replyText: replyText.trim(),
         evidenceUrls: replyEvidenceUrls.length > 0 ? replyEvidenceUrls : undefined,
+        mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : undefined,
       },
       {
         onSuccess: () => {
           setReplyText('');
           setReplyEvidenceUrls([]);
           setShowReplyForm(false);
+          setMentionedUserIds([]);
         },
       }
     );
@@ -138,7 +142,9 @@ export function ObservationReplyThread({
                       {format(new Date(reply.created_at), 'dd MMM yyyy, HH:mm')}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{reply.reply_text}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {renderMentionText(reply.reply_text)}
+                  </p>
                   {reply.evidence_urls && reply.evidence_urls.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
                       {reply.evidence_urls.map((url, i) => (
@@ -162,10 +168,11 @@ export function ObservationReplyThread({
         {/* Reply Form */}
         {showReplyForm && !isReadOnly && (
           <div className="space-y-2 pt-1">
-            <Textarea
+            <MentionTextarea
               value={replyText}
-              onChange={(e) => setReplyText(e.target.value)}
-              placeholder="Write a reply..."
+              onChange={setReplyText}
+              onMentionsChange={setMentionedUserIds}
+              placeholder="Write a reply... Use @ to mention someone"
               rows={2}
               className="text-sm"
             />
@@ -195,6 +202,7 @@ export function ObservationReplyThread({
                   setShowReplyForm(false);
                   setReplyText('');
                   setReplyEvidenceUrls([]);
+                  setMentionedUserIds([]);
                 }}
               >
                 Cancel
