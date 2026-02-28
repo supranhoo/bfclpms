@@ -3138,6 +3138,10 @@ export type Database = {
           template_name: string
         }[]
       }
+      get_kpi_accessible_user_ids: {
+        Args: { p_kpi_id: string }
+        Returns: string[]
+      }
       get_skip_level_manager: {
         Args: { employee_uuid: string }
         Returns: string

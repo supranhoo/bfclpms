@@ -12,6 +12,8 @@ interface MentionTextareaProps {
   placeholder?: string;
   rows?: number;
   className?: string;
+  /** When provided, the @mention dropdown only shows users with RLS access to this KPI */
+  kpiId?: string;
 }
 
 export function MentionTextarea({
@@ -21,6 +23,7 @@ export function MentionTextarea({
   placeholder,
   rows = 2,
   className,
+  kpiId,
 }: MentionTextareaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -29,7 +32,7 @@ export function MentionTextarea({
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const { results, isLoading } = useMentionSearch(showDropdown ? mentionQuery : '');
+  const { results, isLoading } = useMentionSearch(showDropdown ? mentionQuery : '', kpiId);
 
   // Detect @ trigger on input change
   const handleInput = useCallback(
