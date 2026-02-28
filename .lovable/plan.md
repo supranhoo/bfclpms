@@ -1,67 +1,68 @@
 
 
-# Fix: Hide UUIDs in Mention Textarea
+# @Mention Enhancements: Observation Dialog, Email Notifications, and UI Polish
 
-## Problem
+## 1. Add @Mention Support in Observation Title and Description
 
-When a user selects an @mention, the textarea shows the raw storage syntax including the UUID:
-```
-I need @[Gaurav Budhia](550e8400-e29b-41d4-a716-446655440000) to verify
-```
-This is confusing and unprofessional. Users should only see `@Gaurav Budhia` highlighted.
+Replace the plain `<Input>` (title) and `<Textarea>` (description) in `AddObservationDialog.tsx` with `MentionTextarea` so users can @mention people when creating or editing observations.
 
-## Solution: Transparent Text + Visual Overlay
+### Changes to `src/components/review/AddObservationDialog.tsx`
+- Replace `import { Input }` and `import { Textarea }` with `import { MentionTextarea }`
+- Add `mentionedUserIds` state to track all mentioned users across both title and description fields
+- Replace the title `<Input>` with a `<MentionTextarea rows={1}>` (single-line feel)
+- Replace the description `<Textarea>` with a `<MentionTextarea rows={3}>`
+- Parse mentions from both title and description on submit
+- Import `parseMentions` from mentionUtils
 
-Use the well-known "highlight overlay" technique: the textarea's text color is set to `transparent` (so the raw syntax is invisible but still editable), while a `div` overlay behind it renders the formatted version with styled @mentions. The user sees clean highlighted names while the actual value still contains the `@[Name](uuid)` syntax needed for storage.
+### Changes to `src/hooks/useKpiObservations.ts`
+- Update `useCreateObservation` mutation to accept optional `mentionedUserIds: string[]`
+- After inserting the observation, insert `observation_mention` notifications for each mentioned user (same pattern as in `useObservationReplies.ts`)
+- Update `useUpdateObservation` similarly to handle mentions on edit
 
-```text
-+--------------------------------------------------+
-|  Overlay div (pointer-events: none, z-0)         |
-|  "I need @Gaurav Budhia to verify this data..."  |
-|        ^^^^^^^^^^^^^^^ (bold, primary color)     |
-|                                                  |
-|  Textarea (transparent text color, z-10)         |
-|  "I need @[Gaurav](uuid-...) to verify this..."  |
-|  (invisible but handles all input/selection)      |
-+--------------------------------------------------+
-```
+---
 
-This approach:
-- Preserves all existing keyboard navigation, cursor positioning, and selection behavior
-- No contentEditable complexity -- stays as a plain textarea
-- The overlay div mirrors the textarea's font, padding, and scroll position exactly
-- Caret color is set explicitly so the cursor remains visible
+## 2. Add Email Notifications for @Mentions
 
-## Changes
+Currently the `send_email_on_notification` database trigger maps notification types to email event types. We need to add `observation_mention` to this pipeline.
 
-### 1. Update `src/components/ui/MentionTextarea.tsx`
+### Changes to `send_email_on_notification` DB function (migration)
+- Add a new `WHEN 'observation_mention' THEN mapped_event_type := 'observation_mention';` case to the trigger's CASE statement
 
-- Add a `div` sibling positioned absolutely behind the textarea
-- Textarea gets `text-transparent` + `caret-black dark:caret-white` classes
-- The overlay div uses `renderMentionText()` to display formatted text with highlighted @mentions
-- Sync the overlay's `scrollTop` with the textarea's scroll position via an `onScroll` handler
-- Both elements share identical font-size, padding, line-height, and word-wrap styles
+### Changes to `supabase/functions/send-email-notification/index.ts`
+- Add `observation_mention` to the default email templates:
+  - Subject: `[PMS] You were mentioned in an Observation`
+  - Body: Template with `{{actor_name}}`, `{{kpi_name}}`, `{{observation_title}}` placeholders
+- Add `observation_mention` to the email styling map with a distinctive color/emoji (e.g., `{ color: '#3b82f6', emoji: '@', title: 'Mentioned in Observation' }`)
 
-### 2. Update `src/lib/mentionUtils.ts`
+---
 
-- Add a new function `getDisplayText(text: string): string` that strips the `(uuid)` part for plain-text display, returning `@Name` instead of `@[Name](uuid)` -- used by the overlay renderer
+## 3. Polish the Reply Placeholder Text
 
-No database changes. No new files. Single component update + one utility function.
+The current placeholder `"Write a reply... Use @ to mention someone"` feels heavy. Change it to a lighter, more subtle hint.
 
-## Technical Detail
+### Change in `src/components/review/ObservationReplyThread.tsx`
+- Update placeholder to: `"Write a reply — @ to mention"`
 
-The overlay div must match the textarea pixel-perfectly:
-- Same `px-3 py-2 text-sm` padding and font
-- `whitespace-pre-wrap` + `word-break: break-word` to match textarea wrapping
-- `overflow: hidden` on the overlay (textarea handles scrolling)
-- `pointer-events: none` so all clicks pass through to the textarea
-- Scroll sync: `onScroll` on textarea sets `overlayRef.current.scrollTop = e.target.scrollTop`
+This is shorter, uses an em-dash for visual lightness, and removes redundant words.
+
+---
+
+## Files Summary
+
+| File | Action | Description |
+|------|--------|-------------|
+| `src/components/review/AddObservationDialog.tsx` | Update | Replace Input/Textarea with MentionTextarea for title and description |
+| `src/hooks/useKpiObservations.ts` | Update | Add mention notification logic to create/update observation mutations |
+| DB migration | Create | Add `observation_mention` case to `send_email_on_notification` trigger |
+| `supabase/functions/send-email-notification/index.ts` | Update | Add `observation_mention` email template and styling |
+| `src/components/review/ObservationReplyThread.tsx` | Update | Lighten placeholder text |
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|------------|
-| Regression | None | Only changes how text is displayed, not stored |
-| Cursor/Selection | None | Textarea still handles all input natively |
-| Scrolling | Low | Scroll sync keeps overlay aligned; tested pattern |
+| Data | None | No schema changes; uses existing notifications table |
+| Regression | None | Existing observation create/edit flow preserved; mention is additive |
+| Email | Low | Follows established pattern for observation email events |
+| UI | None | MentionTextarea is a drop-in replacement with same sizing props |
 
