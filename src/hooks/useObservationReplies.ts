@@ -98,13 +98,15 @@ export function useCreateObservationReply() {
             .single();
 
           const uniqueIds = [...new Set(mentionedUserIds)].filter(id => id !== userData.user.id);
+          // Truncate KPI name to avoid wall-of-text in notifications
+          const shortKpiName = (kpiData?.kpi_name || 'a KPI').split(/[\n\r:]/)[0].trim().slice(0, 80);
 
           if (uniqueIds.length > 0) {
             const notifications = uniqueIds.map(userId => ({
               user_id: userId,
               type: 'observation_mention',
               title: '@Mentioned in Observation',
-              message: `${mentionerName} mentioned you in observation ${obsData.ticket_number || ''} on ${kpiData?.kpi_name || 'a KPI'}`,
+              message: `${mentionerName} mentioned you in observation ${obsData.ticket_number || ''} on ${shortKpiName}`,
               kpi_id: obsData.kpi_id,
               related_user_id: userData.user.id,
               metadata: {

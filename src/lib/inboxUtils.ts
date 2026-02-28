@@ -283,10 +283,14 @@ export function getNotificationNavigationPath(item: InboxItem, currentUserId?: s
       if (isSelfTargeted) {
         return selfKpiLink(item.kpiId);
       }
-      // Reviewer viewing another employee's observation
+      // For mentioned users: use mentioned_kpi param so Dashboard opens the read-only sheet
+      // instead of trying to load the team view (which requires manager role)
       const obsEmployeeId = metaEmployeeId || item.fromUser?.id || null;
       if (obsEmployeeId && item.kpiId) {
-        return buildEmployeeDeepLink('team', obsEmployeeId, item.kpiId);
+        const params = new URLSearchParams();
+        params.set('mentioned_kpi', item.kpiId);
+        params.set('mentioned_employee', obsEmployeeId);
+        return `/dashboard?${params.toString()}`;
       }
       return selfKpiLink(item.kpiId);
     }

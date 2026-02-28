@@ -28,6 +28,7 @@ import { TrendArrow } from '@/components/dashboard/KpiTrendIndicator';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { ReviewPeriodSelectorEnhanced, useDefaultPeriodSelection, type PeriodSelection } from '@/components/ui/ReviewPeriodSelectorEnhanced';
 import { SelfReviewSheet } from '@/components/review/SelfReviewSheet';
+import { MentionedKpiSheet } from '@/components/review/MentionedKpiSheet';
 import { ViewModeToggle, ViewMode } from '@/components/review/ViewModeToggle';
 import { EmployeeSelectorGrid } from '@/components/review/EmployeeSelectorGrid';
 import { UnifiedScorecard } from '@/components/review/UnifiedScorecard';
@@ -93,6 +94,7 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<ViewMode>('self');
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeProfile | null>(null);
   const [autoOpenKpiId, setAutoOpenKpiId] = useState<string | null>(null);
+  const [mentionedKpi, setMentionedKpi] = useState<{ kpiId: string; employeeId: string } | null>(null);
   
   // Cumulative KPI data (only fetched in cumulative modes)
   const cumulativeData = useCumulativeKpis({
@@ -204,6 +206,21 @@ export default function Dashboard() {
     if (['management', 'admin'].includes(role || '')) modes.push('management');
     return modes;
   }, [role, hasSkipLevelSubordinates]);
+
+  // Handle mentioned_kpi deep-link (read-only @mention access)
+  useEffect(() => {
+    const mentionedKpiParam = searchParams.get('mentioned_kpi');
+    const mentionedEmployeeParam = searchParams.get('mentioned_employee');
+    if (mentionedKpiParam && mentionedEmployeeParam) {
+      setMentionedKpi({ kpiId: mentionedKpiParam, employeeId: mentionedEmployeeParam });
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('mentioned_kpi');
+        next.delete('mentioned_employee');
+        return next;
+      }, { replace: true });
+    }
+  }, [searchParams]);
 
   // Initialize from URL query param
   useEffect(() => {
@@ -914,6 +931,15 @@ export default function Dashboard() {
         onClose={() => setSelectedKpiLogic(null)}
         kpi={selectedKpiLogic}
       />
+
+      {mentionedKpi && (
+        <MentionedKpiSheet
+          kpiId={mentionedKpi.kpiId}
+          employeeId={mentionedKpi.employeeId}
+          open={!!mentionedKpi}
+          onOpenChange={(open) => { if (!open) setMentionedKpi(null); }}
+        />
+      )}
     </div>
   );
 }
