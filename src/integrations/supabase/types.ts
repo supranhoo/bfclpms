@@ -674,6 +674,38 @@ export type Database = {
           },
         ]
       }
+      kpi_mention_access: {
+        Row: {
+          created_at: string
+          granted_by: string | null
+          id: string
+          kpi_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          kpi_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          kpi_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_mention_access_kpi_id_fkey"
+            columns: ["kpi_id"]
+            isOneToOne: false
+            referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpi_observation_replies: {
         Row: {
           created_at: string
