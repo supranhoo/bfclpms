@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
+import { renderMentionText } from '@/lib/mentionUtils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -141,13 +142,13 @@ export function ObservationCard({
         </div>
 
         {/* Title */}
-        <p className="text-sm font-medium">{observation.title}</p>
+        <p className="text-sm font-medium">{renderMentionText(observation.title)}</p>
 
         {/* Description (Expandable) */}
         {hasDescription && (
           <div>
             <p className={cn('text-sm text-muted-foreground', !isExpanded && 'line-clamp-2')}>
-              {observation.description}
+              {renderMentionText(observation.description!)}
             </p>
             {observation.description && observation.description.length > 100 && (
               <Button variant="ghost" size="sm" className="h-6 px-1 text-xs" onClick={() => setIsExpanded(!isExpanded)}>

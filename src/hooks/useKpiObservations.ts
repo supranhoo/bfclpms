@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { getDisplayText } from '@/lib/mentionUtils';
 
 export type ObservationType = 'positive' | 'concern' | 'neutral';
 export type ObserverRole = 'self' | 'manager' | 'auditor' | 'management' | 'admin';
@@ -164,7 +165,7 @@ export function useCreateObservation() {
             user_id: userId,
             type: 'observation_mention',
             title: '@Mentioned in Observation',
-            message: `${mentionerName} mentioned you in observation "${input.title}" on ${kpiData?.kpi_name || 'a KPI'}`,
+            message: `${mentionerName} mentioned you in observation "${getDisplayText(input.title)}" on ${kpiData?.kpi_name || 'a KPI'}`,
             kpi_id: input.kpi_id,
             related_user_id: userData.user.id,
             metadata: {
