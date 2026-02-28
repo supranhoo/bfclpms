@@ -35,18 +35,27 @@ export function InboxDetailSheet({
 
   const navigationPath = getNotificationNavigationPath(item, currentUserId);
 
-  // Fallback for @mention notifications: construct deep-link from metadata if standard path is null
-  const effectiveNavigationPath = navigationPath || (() => {
-    if (item.notificationType === 'observation_mention') {
-      const meta = (item.metadata || {}) as Record<string, any>;
-      const kpi = item.kpiId || meta.kpi_id;
-      const emp = meta.employee_id;
-      if (kpi && emp) return `/dashboard?mentioned_kpi=${kpi}&mentioned_employee=${emp}`;
-      if (kpi) return `/dashboard?mentioned_kpi=${kpi}`;
-      return '/dashboard';
-    }
-    return null;
-  })();
+  // Explicit fallback for @mention notifications (no IIFE)
+  let effectiveNavigationPath: string | null = navigationPath;
+  if (!effectiveNavigationPath && item.notificationType === 'observation_mention') {
+    const meta = (item.metadata || {}) as Record<string, any>;
+    const kpi = item.kpiId || meta.kpi_id;
+    const emp = meta.employee_id;
+    if (kpi && emp) effectiveNavigationPath = `/dashboard?mentioned_kpi=${kpi}&mentioned_employee=${emp}`;
+    else if (kpi) effectiveNavigationPath = `/dashboard?mentioned_kpi=${kpi}`;
+    else effectiveNavigationPath = '/dashboard';
+  }
+
+  // Debug: log navigation resolution for @mention notifications
+  if (item.notificationType === 'observation_mention') {
+    console.log('[InboxDetailSheet] observation_mention nav debug', {
+      navigationPath,
+      effectiveNavigationPath,
+      kpiId: item.kpiId,
+      metadata: item.metadata,
+      isQuery,
+    });
+  }
 
   const handleNavigate = () => {
     if (effectiveNavigationPath && onNavigate) {
@@ -205,8 +214,8 @@ export function InboxDetailSheet({
               </Button>
             )}
 
-            {/* Notification Navigation */}
-            {!isQuery && effectiveNavigationPath && (
+            {/* Notification Navigation — show for any non-query with a resolved path */}
+            {effectiveNavigationPath && (
               <Button onClick={handleNavigate} className="w-full">
                 <ExternalLink className="h-4 w-4 mr-2" />
                 Open in App
