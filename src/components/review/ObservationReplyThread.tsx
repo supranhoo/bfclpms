@@ -175,6 +175,7 @@ export function ObservationReplyThread({
               placeholder="Write a reply — @ to mention"
               rows={2}
               className="text-sm"
+              kpiId={kpiId}
             />
             {user && (
               <MultiFileUpload

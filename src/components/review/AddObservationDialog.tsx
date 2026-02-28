@@ -195,6 +195,7 @@ export function AddObservationDialog({
               placeholder="Brief observation title — @ to mention"
               rows={1}
               className="text-sm"
+              kpiId={kpiId}
             />
           </div>
 
@@ -208,6 +209,7 @@ export function AddObservationDialog({
               placeholder="Provide details — @ to mention someone"
               rows={3}
               className="text-sm"
+              kpiId={kpiId}
             />
           </div>
 
