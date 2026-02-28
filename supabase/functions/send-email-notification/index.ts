@@ -560,6 +560,19 @@ Observation: {{observation_title}}
 
 No further action is needed on this observation.`,
   },
+  observation_mention: {
+    subject: '[PMS] You were mentioned in an Observation',
+    body: `Hi {{recipient_name}},
+
+{{actor_name}} mentioned you in an observation.
+
+KPI: {{kpi_name}}
+Observation: {{observation_title}}
+Type: {{observation_type}}
+Description: {{observation_description}}
+
+Please log in to review the observation and respond if needed.`,
+  },
 };
 
 const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string }> = {
@@ -591,6 +604,7 @@ const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string
   observation_raised: { color: '#f97316', emoji: '👁️', title: 'Observation Raised' },
   observation_reply: { color: '#8b5cf6', emoji: '💬', title: 'Observation Reply' },
   observation_resolved: { color: '#10b981', emoji: '✅', title: 'Observation Resolved' },
+  observation_mention: { color: '#3b82f6', emoji: '@', title: 'Mentioned in Observation' },
 };
 
 // Build KRA table HTML for batch assignment emails

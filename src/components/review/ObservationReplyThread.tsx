@@ -172,7 +172,7 @@ export function ObservationReplyThread({
               value={replyText}
               onChange={setReplyText}
               onMentionsChange={setMentionedUserIds}
-              placeholder="Write a reply... Use @ to mention someone"
+              placeholder="Write a reply — @ to mention"
               rows={2}
               className="text-sm"
             />

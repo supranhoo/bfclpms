@@ -45,6 +45,7 @@ export interface CreateObservationInput {
   evidence_url?: string;
   is_applied?: boolean;
   visibility?: ObservationVisibility;
+  mentionedUserIds?: string[];
 }
 
 export interface UpdateObservationInput {
@@ -126,17 +127,59 @@ export function useCreateObservation() {
     mutationFn: async (input: CreateObservationInput) => {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) throw new Error('Not authenticated');
+
+      const { mentionedUserIds, ...insertData } = input;
       
       const { data, error } = await supabase
         .from('kpi_observations')
         .insert({
-          ...input,
+          ...insertData,
           created_by: userData.user.id,
         })
         .select()
         .single();
 
       if (error) throw error;
+
+      // Insert @mention notifications
+      if (mentionedUserIds && mentionedUserIds.length > 0) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', userData.user.id)
+          .single();
+
+        const mentionerName = profile?.full_name || profile?.email || 'Someone';
+
+        const { data: kpiData } = await supabase
+          .from('kpis')
+          .select('employee_id, kpi_name')
+          .eq('id', input.kpi_id)
+          .single();
+
+        const uniqueIds = [...new Set(mentionedUserIds)].filter(id => id !== userData.user.id);
+
+        if (uniqueIds.length > 0) {
+          const notifications = uniqueIds.map(userId => ({
+            user_id: userId,
+            type: 'observation_mention',
+            title: '@Mentioned in Observation',
+            message: `${mentionerName} mentioned you in observation "${input.title}" on ${kpiData?.kpi_name || 'a KPI'}`,
+            kpi_id: input.kpi_id,
+            related_user_id: userData.user.id,
+            metadata: {
+              employee_id: kpiData?.employee_id || null,
+              observation_id: data.id,
+              observation_title: input.title,
+              observation_type: input.observation_type,
+              observation_description: input.description || null,
+            },
+          }));
+
+          await supabase.from('notifications').insert(notifications);
+        }
+      }
+
       return data;
     },
     onSuccess: (data) => {
