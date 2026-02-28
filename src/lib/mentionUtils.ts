@@ -61,6 +61,14 @@ export function renderMentionText(text: string): React.ReactNode[] {
 /**
  * Insert a mention at the cursor position, replacing the @query text.
  */
+/**
+ * Convert raw mention syntax to display text, stripping UUIDs.
+ * e.g. "Hello @[Gaurav](uuid) world" -> "Hello @Gaurav world"
+ */
+export function getDisplayText(text: string): string {
+  return text.replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1');
+}
+
 export function insertMention(
   text: string,
   cursorPos: number,
