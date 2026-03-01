@@ -1,37 +1,40 @@
 
 
-# Add Auditor Reassignment to Self-Dashboard KPI Table
+# Fix: AuditKpiAssignPopover Not Responding to Clicks
 
-## Problem
-The "Reassign Auditor" popover (the "→ Shekhar" badge) currently only appears in the **Audit panel** view of KpiDetailsTable. When viewing the employee's own dashboard at `/dashboard`, the Status column only shows the status badge without any auditor assignment info or reassignment capability.
+## Root Cause
 
-## Solution
-Show the `AuditKpiAssignPopover` in the self-dashboard's KPI table (Status column) for users who have auditor or admin roles. This lets auditors/admins reassign KPIs to different auditors without switching to the Audit panel.
+The `Badge` component (`src/components/ui/badge.tsx`) is a plain function component that does **not** use `React.forwardRef`. When used inside `PopoverTrigger asChild`, Radix UI needs to attach a `ref` to the child element to manage positioning and click handling. Since `Badge` can't accept a ref, the popover opens momentarily but immediately closes, making it appear as if nothing happened.
+
+The console confirms this: *"Function components cannot be given refs. Attempts to access this ref will fail."*
+
+## Fix (Two Options -- will apply both)
+
+### Option A: Make `Badge` support refs (recommended long-term fix)
+
+Update `src/components/ui/badge.tsx` to use `React.forwardRef`. This fixes the issue everywhere `Badge` is used as a trigger child, not just in this popover.
+
+### Option B: Wrap the Badge trigger in a native element (backup)
+
+In `AuditKpiAssignPopover.tsx`, wrap the `Badge` inside a `<button>` element so Radix can attach its ref to the native element instead.
+
+**I will apply Option A** since it's the proper fix and prevents the same issue from recurring elsewhere.
 
 ## Changes
 
-### 1. `src/pages/Dashboard.tsx`
-- Import `useAuditKpiAssignments` hook and `AuditKpiAssignPopover` component
-- Fetch KPI-level audit assignments for the current user's KPIs (only when user has auditor/admin role)
-- In the Status column (around line 833), render the `AuditKpiAssignPopover` below the status badge when the user has auditor/admin privileges
-- In the `MobileKpiCard` section, pass audit assignment data so mobile users also see the auditor badge
+### `src/components/ui/badge.tsx`
+- Convert `Badge` from a plain function to `React.forwardRef` so it properly forwards refs to its underlying `div` element.
 
-### 2. `src/components/dashboard/MobileKpiCard.tsx`
-- Accept an optional `auditAssignment` prop
-- Render the `AuditKpiAssignPopover` next to the status badge when an assignment exists or user is an auditor/admin
-
-## Technical Details
+### Files Summary
 
 | File | Change |
 |------|--------|
-| `src/pages/Dashboard.tsx` | Import hooks/components, fetch audit assignments, render popover in Status column |
-| `src/components/dashboard/MobileKpiCard.tsx` | Add optional `auditAssignment` prop, render popover |
+| `src/components/ui/badge.tsx` | Add `React.forwardRef` to `Badge` component |
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|------------|
-| Data Impact | None | Read-only query for non-auditor users; existing RLS policies apply |
-| Regression | Low | Popover only renders for auditor/admin roles; self-review employees see no change |
-| Performance | Low | Query only fires when user has auditor/admin role |
+| Regression | None | `forwardRef` is additive; existing Badge usage is unaffected |
+| Data Impact | None | UI-only change |
 
