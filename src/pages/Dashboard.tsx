@@ -41,6 +41,8 @@ import { calculateOverallCumulativeScore, calculateCategoryCumulative, getScoreF
 import { FrequencyLockBadge } from '@/components/review/FrequencyLockedOverlay';
 import { KraExportMenu } from '@/components/review/KraExportMenu';
 import { useAppSettings } from '@/hooks/useAppSettings';
+import { useAuditKpiAssignments } from '@/hooks/useAuditKpiAssignments';
+import { AuditKpiAssignPopover } from '@/components/review/AuditKpiAssignPopover';
 
 const MONTH_ORDER = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -72,6 +74,10 @@ export default function Dashboard() {
   const selfWorkflowStages = selfWorkflowStagesData || DEFAULT_WORKFLOW_STAGES;
   const kpiIds = kpis?.map(k => k.id) || [];
   const { data: submissions } = useReviewSubmissions(kpiIds);
+
+  // Audit KPI-level assignments (only for auditor/admin roles)
+  const isAuditCapable = role === 'auditor' || role === 'admin';
+  const { data: auditKpiAssignments } = useAuditKpiAssignments(isAuditCapable ? kpiIds : []);
 
   const [selectedKpiTracker, setSelectedKpiTracker] = useState<KPI | null>(null);
   const [selectedKpiLogic, setSelectedKpiLogic] = useState<KPI | null>(null);
@@ -716,6 +722,8 @@ export default function Dashboard() {
                   statusColors={statusColors}
                   statusLabels={statusLabels}
                   orgKpiValue={kpi.is_org_level ? getOrgKpiValue(kpi) : undefined}
+                  auditAssignment={isAuditCapable ? (auditKpiAssignments?.get(kpi.id) || null) : undefined}
+                  isAuditCapable={isAuditCapable}
                   onViewLogic={setSelectedKpiLogic}
                   onViewTracker={setSelectedKpiTracker}
                   onReview={(kpi) => {
@@ -831,9 +839,17 @@ export default function Dashboard() {
                         ) : '-'}
                       </TableCell>
                       <TableCell className="text-center">
-                        <Badge className={statusColors[kpi.status]}>
-                          {statusLabels[kpi.status]}
-                        </Badge>
+                        <div className="flex flex-col items-center gap-1">
+                          <Badge className={statusColors[kpi.status]}>
+                            {statusLabels[kpi.status]}
+                          </Badge>
+                          {isAuditCapable && (
+                            <AuditKpiAssignPopover
+                              kpiId={kpi.id}
+                              currentAssignment={auditKpiAssignments?.get(kpi.id) || null}
+                            />
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-center gap-1">
