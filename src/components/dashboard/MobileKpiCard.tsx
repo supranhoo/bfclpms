@@ -5,6 +5,8 @@ import { Info, BarChart3, ClipboardEdit, Building2, Users, User } from 'lucide-r
 import { KPI } from '@/hooks/useKpis';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
+import { AuditKpiAssignPopover } from '@/components/review/AuditKpiAssignPopover';
+import type { AuditKpiAssignment } from '@/hooks/useAuditKpiAssignments';
 
 interface MobileKpiCardProps {
   kpi: KPI;
@@ -19,6 +21,8 @@ interface MobileKpiCardProps {
   statusLabels: Record<string, string>;
   score?: number | null;
   orgKpiValue?: { achieved_value: number | null; data_source: string | null; entered_by_name: string | null } | null;
+  auditAssignment?: AuditKpiAssignment | null;
+  isAuditCapable?: boolean;
   onViewLogic: (kpi: KPI) => void;
   onViewTracker: (kpi: KPI) => void;
   onReview?: (kpi: KPI) => void;
@@ -31,6 +35,8 @@ export function MobileKpiCard({
   statusLabels,
   score: scoreProp,
   orgKpiValue,
+  auditAssignment,
+  isAuditCapable,
   onViewLogic,
   onViewTracker,
   onReview,
@@ -74,6 +80,12 @@ export function MobileKpiCard({
           <Badge className={`text-xs ${statusColors[kpi.status || 'kra_set']}`}>
             {statusLabels[kpi.status || 'kra_set']}
           </Badge>
+          {isAuditCapable && (
+            <AuditKpiAssignPopover
+              kpiId={kpi.id}
+              currentAssignment={auditAssignment || null}
+            />
+          )}
         </div>
       </div>
 
