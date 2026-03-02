@@ -126,18 +126,31 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch source KPIs
-    let sourceQuery = supabase
-      .from('kpis')
-      .select('*, profiles!kpis_employee_id_fkey(full_name, employee_code, department_id, departments:department_id(name))')
-      .eq('review_period', sourceMonth)
-      .eq('review_year', sourceYear);
+    // Fetch source KPIs (paginated to avoid 1000-row default limit)
+    const sourceKpis: any[] = [];
+    const PAGE_SIZE = 1000;
+    let page = 0;
+    let fetchError: any = null;
 
-    if (employee_ids && employee_ids.length > 0) {
-      sourceQuery = sourceQuery.in('employee_id', employee_ids);
+    while (true) {
+      let sourceQuery = supabase
+        .from('kpis')
+        .select('*, profiles!kpis_employee_id_fkey(full_name, employee_code, department_id, departments:department_id(name))')
+        .eq('review_period', sourceMonth)
+        .eq('review_year', sourceYear)
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+      if (employee_ids && employee_ids.length > 0) {
+        sourceQuery = sourceQuery.in('employee_id', employee_ids);
+      }
+
+      const { data, error } = await sourceQuery;
+      if (error) { fetchError = error; break; }
+      if (!data || data.length === 0) break;
+      sourceKpis.push(...data);
+      if (data.length < PAGE_SIZE) break;
+      page++;
     }
-
-    const { data: sourceKpis, error: fetchError } = await sourceQuery;
     if (fetchError) throw new Error(`Failed to fetch source KPIs: ${fetchError.message}`);
 
     if (!sourceKpis || sourceKpis.length === 0) {
@@ -162,14 +175,27 @@ Deno.serve(async (req) => {
       employeeKpis[kpi.employee_id].push(kpi);
     }
 
-    // Fetch existing target KPIs for all relevant employees
+    // Fetch existing target KPIs for all relevant employees (paginated)
     const empIds = Object.keys(employeeKpis);
-    const { data: targetKpis } = await supabase
-      .from('kpis')
-      .select('employee_id, kra_name, kpi_name')
-      .eq('review_period', targetMonth)
-      .eq('review_year', targetYear)
-      .in('employee_id', empIds);
+    const targetKpis: any[] = [];
+    // Process in chunks of 50 employee IDs to avoid URL length limits
+    for (let i = 0; i < empIds.length; i += 50) {
+      const chunk = empIds.slice(i, i + 50);
+      let tPage = 0;
+      while (true) {
+        const { data } = await supabase
+          .from('kpis')
+          .select('employee_id, kra_name, kpi_name')
+          .eq('review_period', targetMonth)
+          .eq('review_year', targetYear)
+          .in('employee_id', chunk)
+          .range(tPage * PAGE_SIZE, (tPage + 1) * PAGE_SIZE - 1);
+        if (!data || data.length === 0) break;
+        targetKpis.push(...data);
+        if (data.length < PAGE_SIZE) break;
+        tPage++;
+      }
+    }
 
     const targetByEmployee: Record<string, Set<string>> = {};
     if (targetKpis) {

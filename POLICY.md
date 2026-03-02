@@ -526,6 +526,7 @@ When an admin marks a KPI as **N/A** via the Admin Data Entry dialog:
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.3.0 | 2026-03-02 | Data correction: deleted duplicate Org KPIs in Feb/March, ran manual Feb→March rollover, fixed rollover pagination bug (1000-row limit) |
 | 1.2.0 | 2026-03-02 | Fixed auto-rollover cron job authentication (§20) — added X-Cron-Secret header |
 | 1.1.0 | 2026-03-02 | Added Admin NA Score Clearing Policy (§19) — admin NA toggle now clears all scoring fields |
 | 1.0.0 | 2026-03-02 | Initial POLICY.md creation — documented all existing business rules, workflow policies, configurable settings, and the new mandatory remarks feature |
