@@ -1,27 +1,66 @@
 
 
-# Fix January Weightage for Amit Kumar Shaw (101804)
+# Admin KPI Weightage Dashboard
 
-## Issue
-The KPI "On-Time Submission of Accurate MIS Reports" has **3% weightage in January** but **5% in February**, causing the January total to be only **98%** instead of 100%.
+## Overview
+A new admin-only page at `/admin/kpi-weightage-dashboard` that displays a matrix/pivot table showing each employee's KRAs and KPIs with their weightage values across all months, making it easy to spot mismatches and ensure consistency.
 
-## Action
-Update the weightage from **3% to 5%** for the following record:
+## Layout
 
-- **KPI ID**: `a239a397-5d56-4c9f-a0cf-6ac486e43664`
-- **Employee**: Amit Kumar Shaw (101804)
-- **Period**: January 2026
-- **Change**: weightage 3 --> 5
+```text
++---------------------------------------------------------------+
+| KPI Weightage Dashboard                          [Year: 2026] |
+| [Employee Filter] [Department Filter] [Category Filter]       |
++---------------------------------------------------------------+
+| Employee: Amit Kumar Shaw (101804)          Total Weightage:   |
+|                                             Jan:100 Feb:100... |
++-----------------------------+-----+-----+-----+-----+-----+---+
+| KRA / KPI                   | Jan | Feb | Mar | Apr | ... |   |
++-----------------------------+-----+-----+-----+-----+-----+---+
+| > Safety & Compliance       |     |     |     |     |     |   |
+|   Follow safety norms       |  5% |  5% |  5% |  -- |     |   |
+|   5S audit score             |  3% |  2% |  3% |  -- |     |   |
+| > Operations                |     |     |     |     |     |   |
+|   On-time MIS reports       |  5% |  5% |  5% |  -- |     |   |
++-----------------------------+-----+-----+-----+-----+-----+---+
+| Employee: Piyush Bansal (100076)            Total Weightage:   |
+| ...                                                            |
++---------------------------------------------------------------+
+```
 
-## Risk Assessment
+- Mismatched cells (where weightage differs from January baseline) highlighted in amber/red
+- Month columns only show months that have KPI data
+- Collapsible employee sections for easy navigation
+- Export to Excel option
 
-| Aspect | Risk | Mitigation |
-|--------|------|------------|
-| Data Impact | Minimal -- single field update | Only affects one KPI record |
-| Weightage | Corrective | Brings January total from 98% to 100% |
-| Scoring | No impact | KPI is in `kra_set` or early review status |
+## New Files
 
-## Technical Step
-1. Execute UPDATE on the `kpis` table setting `weightage = 5` where `id = 'a239a397-5d56-4c9f-a0cf-6ac486e43664'`
-2. Verify January total weightage is now 100%
+1. **`src/pages/admin/KpiWeightageDashboard.tsx`** -- Main page component with:
+   - Year selector (default: current year)
+   - Employee, department, and category filters
+   - Fetches all KPIs for the selected year grouped by employee
+   - Renders a pivot table: rows = KRA/KPI, columns = months
+   - Color-coded cells: green (matches baseline), amber (mismatch), gray (no data)
+   - Per-employee total weightage row per month
+   - Excel export button
+
+2. **`src/hooks/useKpiWeightageMatrix.ts`** -- Data hook that:
+   - Queries `kpis` table for all employees in a given year
+   - Joins with `profiles` for employee info and `kra_categories` for category names
+   - Groups data into: `Employee -> KRA -> KPI -> { month: weightage }`
+   - Computes per-month totals and flags mismatches
+
+## Changes to Existing Files
+
+3. **`src/App.tsx`** -- Add lazy import and route `/admin/kpi-weightage-dashboard` under admin ProtectedRoute
+
+4. **`src/components/layout/AppSidebar.tsx`** -- Add sidebar entry "Weightage Matrix" with `PercentIcon` icon in the admin section
+
+## Technical Details
+
+- Query uses the existing `kpis` table filtered by `review_year`
+- Groups by `employee_id`, `kra_name`, `kpi_name`, `review_period`
+- No database changes needed
+- Follows existing patterns: lazy loading, ProtectedRoute, card-based layout, shadcn Table component
+- Mismatch detection: compares each month's weightage to the first available month (January baseline)
 
