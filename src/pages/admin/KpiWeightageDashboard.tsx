@@ -29,8 +29,8 @@ function KpiWeightageDashboard() {
 
   const { data, isLoading } = useKpiWeightageMatrix(year, {
     employeeSearch: employeeSearch || undefined,
-    departmentId: departmentId || undefined,
-    categoryId: categoryId || undefined,
+    departmentId: departmentId && departmentId !== 'all' ? departmentId : undefined,
+    categoryId: categoryId && categoryId !== 'all' ? categoryId : undefined,
   });
 
   const { data: departments } = useQuery({

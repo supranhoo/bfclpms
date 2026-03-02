@@ -62,10 +62,6 @@ export function useKpiWeightageMatrix(year: number, filters?: {
           .order('employee_id')
           .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-        if (filters?.departmentId) {
-          // Filter by department through profiles
-          query = query.eq('profiles.department_id', filters.departmentId);
-        }
         if (filters?.categoryId) {
           query = query.eq('category_id', filters.categoryId);
         }
@@ -88,6 +84,11 @@ export function useKpiWeightageMatrix(year: number, filters?: {
         const fullName = profile.full_name || 'Unknown';
         const employeeCode = profile.employee_code || '';
         const departmentName = profile.departments?.name || 'Unknown';
+
+        // Apply department filter client-side (embedded resource can't filter server-side)
+        if (filters?.departmentId && profile.department_id !== filters.departmentId) {
+          continue;
+        }
 
         // Apply employee search filter client-side
         if (filters?.employeeSearch) {
