@@ -502,8 +502,19 @@ Configured via role arrays and column arrays in `workflow_settings`.
 
 ---
 
-## 19. Version History
+## 19. Admin NA Score Clearing Policy
+
+When an admin marks a KPI as **N/A** via the Admin Data Entry dialog:
+- All scoring fields are **nullified**: `final_score`, `final_rating`, `achieved_value`, and all role-level scores/ratings (`self_score`, `manager_score`, `skip_level_score`, `hr_pms_score`, `auditor_score`, `management_score` + their rating counterparts).
+- This applies regardless of the KPI's current workflow status (including `approved`).
+- The action is fully reversible: toggling NA OFF allows re-entry of scores.
+- All cleared values are preserved in the `kpi_audit_logs` (`old_value` field).
+
+---
+
+## 20. Version History
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.1.0 | 2026-03-02 | Added Admin NA Score Clearing Policy (§19) — admin NA toggle now clears all scoring fields |
 | 1.0.0 | 2026-03-02 | Initial POLICY.md creation — documented all existing business rules, workflow policies, configurable settings, and the new mandatory remarks feature |
