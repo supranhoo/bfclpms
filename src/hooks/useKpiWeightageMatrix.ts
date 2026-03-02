@@ -27,52 +27,64 @@ export interface EmployeeMatrix {
   activeMonths: string[];
 }
 
-const MONTH_ORDER = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+// Fiscal year order: July to June
+const MONTH_ORDER = ['July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March', 'April', 'May', 'June'];
 
-export function useKpiWeightageMatrix(year: number, filters?: {
+export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
   employeeSearch?: string;
   departmentId?: string;
   categoryId?: string;
 }) {
   return useQuery({
-    queryKey: ['kpi-weightage-matrix', year, filters?.employeeSearch, filters?.departmentId, filters?.categoryId],
+    queryKey: ['kpi-weightage-matrix', fiscalStartYear, filters?.employeeSearch, filters?.departmentId, filters?.categoryId],
     queryFn: async () => {
-      // Fetch all KPIs for the year with profile + category info
-      // Use batched fetching to bypass 1000 row limit
+      // Fiscal year spans two calendar years: fiscalStartYear (Jul-Dec) and fiscalStartYear+1 (Jan-Jun)
       const PAGE_SIZE = 1000;
-      let allKpis: any[] = [];
-      let page = 0;
-      let hasMore = true;
 
-      while (hasMore) {
-        let query = supabase
-          .from('kpis')
-          .select(`
-            id,
-            employee_id,
-            kra_name,
-            kpi_name,
-            weightage,
-            review_period,
-            category_id,
-            profiles!kpis_employee_id_fkey(full_name, employee_code, department_id, departments!profiles_department_id_fkey(name)),
-            kra_categories!kpis_category_id_fkey(name)
-          `)
-          .eq('review_year', year)
-          .order('employee_id')
-          .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+      const fetchYear = async (reviewYear: number) => {
+        let allKpis: any[] = [];
+        let page = 0;
+        let hasMore = true;
 
-        if (filters?.categoryId) {
-          query = query.eq('category_id', filters.categoryId);
+        while (hasMore) {
+          let query = supabase
+            .from('kpis')
+            .select(`
+              id,
+              employee_id,
+              kra_name,
+              kpi_name,
+              weightage,
+              review_period,
+              category_id,
+              profiles!kpis_employee_id_fkey(full_name, employee_code, department_id, departments!profiles_department_id_fkey(name)),
+              kra_categories!kpis_category_id_fkey(name)
+            `)
+            .eq('review_year', reviewYear)
+            .order('employee_id')
+            .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+          if (filters?.categoryId) {
+            query = query.eq('category_id', filters.categoryId);
+          }
+
+          const { data, error } = await query;
+          if (error) throw error;
+
+          allKpis = allKpis.concat(data || []);
+          hasMore = (data?.length || 0) === PAGE_SIZE;
+          page++;
         }
+        return allKpis;
+      };
 
-        const { data, error } = await query;
-        if (error) throw error;
+      // Fetch both halves of the fiscal year in parallel
+      const [kpisFirstHalf, kpisSecondHalf] = await Promise.all([
+        fetchYear(fiscalStartYear),       // Jul-Dec
+        fetchYear(fiscalStartYear + 1),   // Jan-Jun
+      ]);
 
-        allKpis = allKpis.concat(data || []);
-        hasMore = (data?.length || 0) === PAGE_SIZE;
-        page++;
-      }
+      const allKpis = [...kpisFirstHalf, ...kpisSecondHalf];
 
       // Group by employee
       const employeeMap = new Map<string, EmployeeMatrix>();
