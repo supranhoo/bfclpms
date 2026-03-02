@@ -20,14 +20,17 @@ const SHORT_MONTHS: Record<string, string> = {
 };
 
 function KpiWeightageDashboard() {
-  const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState(currentYear);
+  const now = new Date();
+  const currentFiscalYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+  const [fiscalYear, setFiscalYear] = useState(currentFiscalYear);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [departmentId, setDepartmentId] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
   const [openEmployees, setOpenEmployees] = useState<Set<string>>(new Set());
 
-  const { data, isLoading } = useKpiWeightageMatrix(year, {
+  const fiscalLabel = (y: number) => `${y}-${String(y + 1).slice(-2)}`;
+
+  const { data, isLoading } = useKpiWeightageMatrix(fiscalYear, {
     employeeSearch: employeeSearch || undefined,
     departmentId: departmentId && departmentId !== 'all' ? departmentId : undefined,
     categoryId: categoryId && categoryId !== 'all' ? categoryId : undefined,
@@ -115,7 +118,7 @@ function KpiWeightageDashboard() {
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Weightage Matrix');
-    XLSX.writeFile(wb, `KPI_Weightage_Matrix_${year}.xlsx`);
+    XLSX.writeFile(wb, `KPI_Weightage_Matrix_${fiscalLabel(fiscalYear)}.xlsx`);
   };
 
   return (
@@ -127,12 +130,12 @@ function KpiWeightageDashboard() {
         <CardContent className="pt-6">
           <div className="flex flex-wrap gap-3 items-end">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Year</label>
-              <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
-                <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+              <label className="text-xs font-medium text-muted-foreground">Assessment Year</label>
+              <Select value={String(fiscalYear)} onValueChange={v => setFiscalYear(Number(v))}>
+                <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {[currentYear - 1, currentYear, currentYear + 1].map(y => (
-                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  {[currentFiscalYear - 1, currentFiscalYear, currentFiscalYear + 1].map(y => (
+                    <SelectItem key={y} value={String(y)}>{fiscalLabel(y)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -208,7 +211,7 @@ function KpiWeightageDashboard() {
       {!isLoading && employees.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            No KPI data found for {year}.
+            No KPI data found for {fiscalLabel(fiscalYear)}.
           </CardContent>
         </Card>
       )}
