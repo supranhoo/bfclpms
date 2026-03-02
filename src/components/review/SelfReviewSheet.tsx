@@ -3,6 +3,8 @@ import { safeParseFloat } from '@/lib/utils';
 import { openStorageFile } from '@/lib/storageDownload';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubmitSelfReview, RatingLevel, KPI, OrgLevelScope, ReviewSubmission } from '@/hooks/useKpis';
+import { useRemarksMandatorySettings } from '@/hooks/useWorkflowSettings';
+import { useToast } from '@/hooks/use-toast';
 import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useDailyAggregationMethod } from '@/hooks/useSystemSettings';
 import { calculateDailyAggregatedScore } from '@/lib/dailyAggregation';
@@ -112,6 +114,8 @@ export function SelfReviewSheet({
   const { method: dailyAggregationMethod } = useDailyAggregationMethod();
   const submitReview = useSubmitSelfReview();
   const submitSubPeriod = useSubmitSubPeriod();
+  const { toast } = useToast();
+  const remarksMandatory = useRemarksMandatorySettings();
 
   // Rollback state
   const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false);
@@ -337,6 +341,13 @@ export function SelfReviewSheet({
 
   const handleSubmitMonthlyReview = async () => {
     if (!selectedKpi) return;
+
+    // Validate mandatory remarks for self review (monthly submit)
+    if (remarksMandatory.self && !selfRemarks.trim()) {
+      toast({ title: 'Remarks Required', description: 'Remarks are required for Self Review', variant: 'destructive' });
+      return;
+    }
+
     const values = selectedKpiSubPeriods
       .filter(s => s.achieved_value !== null)
       .map(s => s.achieved_value as number);
@@ -414,6 +425,12 @@ export function SelfReviewSheet({
     }
 
     if (!isNa && !achievedValue) return;
+
+    // Validate mandatory remarks for self review
+    if (remarksMandatory.self && !selfRemarks.trim()) {
+      toast({ title: 'Remarks Required', description: 'Remarks are required for Self Review', variant: 'destructive' });
+      return;
+    }
 
     const selfRating = isNa
       ? null
@@ -688,7 +705,7 @@ export function SelfReviewSheet({
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">
                         <Label htmlFor="remarks" className="text-sm">
-                          {isNa ? 'Reason for N/A *' : 'Justification'}
+                          {isNa ? 'Reason for N/A *' : <>Justification{remarksMandatory.self && <span className="text-destructive ml-1">*</span>}</>}
                         </Label>
                         {isNa && (
                           <span className={`text-xs ${selfRemarks.trim().length < 50 ? 'text-destructive' : 'text-muted-foreground'}`}>
