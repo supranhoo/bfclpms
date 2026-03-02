@@ -55,6 +55,14 @@ const DEFAULT_VALUES: Record<string, string | number | boolean> = {
   // Observation Settings
   max_observation_impact: 5,
   self_observation_auto_apply: false,
+  
+  // Remarks Mandatory Settings
+  remarks_mandatory_self: true,
+  remarks_mandatory_manager: true,
+  remarks_mandatory_skip_level: true,
+  remarks_mandatory_hr_pms: true,
+  remarks_mandatory_auditor: true,
+  remarks_mandatory_management: false,
 };
 
 function parseSettingValue(value: unknown): string | number | boolean {
@@ -298,4 +306,30 @@ export function useAllWorkflowSettings() {
   }, {} as Record<SettingCategory, WorkflowSetting[]>);
   
   return { grouped, settings, isLoading, error };
+}
+
+/**
+ * Get remarks mandatory settings per review level
+ */
+export function useRemarksMandatorySettings() {
+  const { data: settings = [], isLoading } = useWorkflowSettings('validation');
+  
+  const getBool = (key: string, defaultValue: boolean): boolean => {
+    const setting = settings.find(s => s.setting_key === key);
+    if (!setting) return defaultValue;
+    if (typeof setting.setting_value === 'boolean') return setting.setting_value;
+    if (setting.setting_value === 'true') return true;
+    if (setting.setting_value === 'false') return false;
+    return defaultValue;
+  };
+  
+  return {
+    isLoading,
+    self: getBool('remarks_mandatory_self', true),
+    manager: getBool('remarks_mandatory_manager', true),
+    skip_level: getBool('remarks_mandatory_skip_level', true),
+    hr_pms: getBool('remarks_mandatory_hr_pms', true),
+    auditor: getBool('remarks_mandatory_auditor', true),
+    management: getBool('remarks_mandatory_management', false),
+  };
 }

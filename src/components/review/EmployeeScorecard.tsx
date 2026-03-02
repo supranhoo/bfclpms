@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { resolveForwardStatus, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
+import { useRemarksMandatorySettings } from '@/hooks/useWorkflowSettings';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -82,6 +83,7 @@ export function EmployeeScorecard({
   const { data: allKpis, isLoading } = useKpisByEmployee(employee.id);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const remarksMandatory = useRemarksMandatorySettings();
   
   // Fetch workflow stages for this employee
   const { data: workflowStages } = useEmployeeWorkflowStages(employee.id);
@@ -326,6 +328,13 @@ export function EmployeeScorecard({
 
   const handleSubmitReview = () => {
     if (!selectedKpi || managerScore === null) return;
+
+    // Validate mandatory remarks for manager review
+    if (remarksMandatory.manager && !managerRemarks.trim()) {
+      toast({ title: 'Remarks Required', description: 'Remarks are required for Manager review', variant: 'destructive' });
+      return;
+    }
+
     const rating = scoreToRating(managerScore);
     submitManagerReview.mutate({
       kpi_id: selectedKpi.id,
@@ -873,7 +882,7 @@ export function EmployeeScorecard({
 
                   {/* Remarks */}
                   <div className="space-y-2">
-                    <Label>Manager Remarks</Label>
+                    <Label>Manager Remarks{remarksMandatory.manager && <span className="text-destructive ml-1">*</span>}</Label>
                     <Textarea
                       value={managerRemarks}
                       onChange={(e) => setManagerRemarks(e.target.value)}
@@ -900,7 +909,7 @@ export function EmployeeScorecard({
               {!reviewerMarkNa && (!submissionMap.get(selectedKpi.id)?.is_na || naOverridden) && selectedKpi.status === 'self_review' && selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary' && managerAgrees !== null && (
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Manager Remarks</Label>
+                    <Label>Manager Remarks{remarksMandatory.manager && <span className="text-destructive ml-1">*</span>}</Label>
                     <Textarea
                       value={managerRemarks}
                       onChange={(e) => setManagerRemarks(e.target.value)}

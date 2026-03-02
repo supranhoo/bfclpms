@@ -61,6 +61,7 @@ import { useAuditKpiAssignments } from '@/hooks/useAuditKpiAssignments';
 import { KraExportMenu } from '@/components/review/KraExportMenu';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
+import { useRemarksMandatorySettings } from '@/hooks/useWorkflowSettings';
 import { 
   resolveForwardStatus, 
   resolvePendingStatuses, 
@@ -165,6 +166,7 @@ export function UnifiedScorecard({
   const { data: allKpis, isLoading } = useKpisByEmployee(employee.id);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const remarksMandatory = useRemarksMandatorySettings();
   
   const staticConfig = VIEW_LEVEL_STATIC[viewLevel];
   
@@ -843,6 +845,14 @@ export function UnifiedScorecard({
     
     // Regular KPI flow
     if (reviewerScore === null) return;
+
+    // Validate mandatory remarks for this review level
+    const isRemarksMandatory = remarksMandatory[viewLevel as keyof typeof remarksMandatory];
+    if (isRemarksMandatory && !reviewerRemarks.trim()) {
+      const levelLabel = viewLevel.charAt(0).toUpperCase() + viewLevel.slice(1).replace(/_/g, ' ');
+      toast({ title: 'Remarks Required', description: `Remarks are required for ${levelLabel} review`, variant: 'destructive' });
+      return;
+    }
     
     const isDailyBinary = selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary';
     
@@ -1283,7 +1293,7 @@ export function UnifiedScorecard({
                   />
 
                   <div className="space-y-2">
-                    <Label>{viewLevel.charAt(0).toUpperCase() + viewLevel.slice(1)} Remarks</Label>
+                    <Label>{viewLevel.charAt(0).toUpperCase() + viewLevel.slice(1)} Remarks{remarksMandatory[viewLevel as keyof typeof remarksMandatory] && <span className="text-destructive ml-1">*</span>}</Label>
                     <Textarea
                       value={reviewerRemarks}
                       onChange={(e) => setReviewerRemarks(e.target.value)}
@@ -1309,7 +1319,7 @@ export function UnifiedScorecard({
               {!reviewerMarkNa && (!submissionMap.get(selectedKpi.id)?.is_na || naOverridden) && isReviewable(selectedKpi) && selectedKpi.frequency === 'Daily' && selectedKpi.uom_type === 'binary' && reviewerAgrees !== null && (
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>{viewLevel.charAt(0).toUpperCase() + viewLevel.slice(1)} Remarks</Label>
+                    <Label>{viewLevel.charAt(0).toUpperCase() + viewLevel.slice(1)} Remarks{remarksMandatory[viewLevel as keyof typeof remarksMandatory] && <span className="text-destructive ml-1">*</span>}</Label>
                     <Textarea
                       value={reviewerRemarks}
                       onChange={(e) => setReviewerRemarks(e.target.value)}
