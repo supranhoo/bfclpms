@@ -1,32 +1,34 @@
 
-# Fix: KPI Weightage Dashboard showing no data
 
-## Root Cause
+# Fix: KPI Weightage Dashboard - Fiscal Year & Data Fetching
 
-Two bugs in `useKpiWeightageMatrix.ts` prevent data from loading:
+## Problem
 
-1. **"all" value leaks as a filter**: The Select dropdowns use `"all"` as the value for "All Departments"/"All Categories". The dashboard passes `departmentId || undefined`, but `"all"` is truthy, so `.eq('profiles.department_id', 'all')` is applied, matching zero rows.
+Two issues preventing data from showing:
 
-2. **PostgREST embedded filter behavior**: Even when a valid department UUID is passed, `.eq('profiles.department_id', ...)` on an embedded/joined resource doesn't filter parent rows in PostgREST. Instead, it returns the KPI row with `profiles: null`, and the code skips it with `if (!profile) continue`.
+1. **Fiscal Year Mismatch**: The assessment year runs July-June (e.g., "2025-26" = Jul 2025 to Jun 2026). KPIs in Jul-Dec have `review_year = 2025`, while Jan-Jun have `review_year = 2026`. The current hook only queries one `review_year`, so it always misses half the data.
+
+2. **Year Selector**: The dashboard uses a plain calendar year (2026), but should use a fiscal year picker matching the existing KPI Mapping Matrix pattern.
 
 ## Fix Plan
 
-### File 1: `src/pages/admin/KpiWeightageDashboard.tsx`
+### File: `src/hooks/useKpiWeightageMatrix.ts`
 
-- Change the filter values passed to the hook to treat `"all"` the same as empty:
-  - `departmentId: departmentId && departmentId !== 'all' ? departmentId : undefined`
-  - `categoryId: categoryId && categoryId !== 'all' ? categoryId : undefined`
+- Change the `year` parameter to represent the fiscal year **start** year (e.g., 2025 for "2025-26")
+- Fetch KPIs from **both** `review_year = year` (Jul-Dec) and `review_year = year + 1` (Jan-Jun), matching the pattern used in `useAdminReports.ts`
+- Update `MONTH_ORDER` to fiscal order: July, August, ..., May, June
+- The baseline month becomes July (first month of the fiscal year) instead of January
 
-### File 2: `src/hooks/useKpiWeightageMatrix.ts`
+### File: `src/pages/admin/KpiWeightageDashboard.tsx`
 
-- Remove the server-side `.eq('profiles.department_id', ...)` filter (it doesn't work correctly with PostgREST embedded resources)
-- Move department filtering to the client-side loop (same approach already used for employee search)
-- Keep `.eq('category_id', ...)` since `category_id` is a direct column on the `kpis` table and works correctly
+- Change year selector to fiscal year format: show "2025-26", "2024-25", etc. (matching `KpiMappingMatrix.tsx` pattern)
+- Compute default fiscal year: if current month is before July, default to `currentYear - 1`; otherwise `currentYear`
+- Update export filename to include fiscal year label
 
 ## Technical Details
 
+- Follows the exact same fiscal year pattern already used in `useAdminReports.ts` (fetches two `review_year` values via `Promise.all`)
 - No database changes needed
-- No new files needed
-- Only 2 files modified with minimal changes
-- Department filtering joins through profiles (embedded resource), so it must be client-side
-- Category filtering works server-side because `category_id` is a direct column on `kpis`
+- Only 2 files modified
+- Month columns will display in fiscal order: Jul, Aug, Sep, Oct, Nov, Dec, Jan, Feb, Mar, Apr, May, Jun
+
