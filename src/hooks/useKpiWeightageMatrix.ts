@@ -57,8 +57,8 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
               weightage,
               review_period,
               category_id,
-              profiles!kpis_employee_id_fkey(full_name, employee_code, department_id, departments!profiles_department_id_fkey(name)),
-              kra_categories!kpis_category_id_fkey(name)
+              profiles!kpis_employee_id_fkey(full_name, employee_code, department_id, departments(name)),
+              kra_categories(name)
             `)
             .eq('review_year', reviewYear)
             .order('employee_id')
