@@ -1,67 +1,78 @@
 
 
-# Fix: Weightage Distribution Broken After Org KPI Replication
+# Fix: Remaining Weightage Fluctuations in March 2026
 
-## Root Cause Analysis
+## Root Cause
 
-Three distinct issues are causing the weightage fluctuations:
+The earlier org-KPI replication from **January to March** and the subsequent **Feb-to-March rollover** both inserted KPIs into March, but they used **different KPI names for the same KRA**. Since deduplication uses exact `kra_name + kpi_name`, both versions ended up in March, causing:
 
-### Issue 1: Duplicate Org KPIs in February (15 employees over 100%)
-The org KPI replication done today (Mar 2) used exact `kpi_name` matching for deduplication. However, some Org KPIs have the **same KRA name** but slightly different KPI name text (e.g., typo "Adherenec" vs "Adherence"). This caused the replication to insert a second KPI under the same KRA for 10 employees, adding 1.5-7% extra weightage on top of their existing 100%.
+**7 employees over 100%** -- They have duplicate KPIs under the same KRA (one from January's org-replication, one from February's rollover) with different `kpi_name` text but overlapping weightage.
 
-**Affected**: 10 duplicate KPI records in February, all created on Mar 2.
+**10 employees under 100%** -- Some February KPIs were NOT rolled over to March. These employees are missing KPIs that exist in Feb (100% there) but are absent in March. In many cases, a sibling KPI under the same KRA exists in March with a different name and different weightage, causing shortfalls of 1-13%.
 
-### Issue 2: March Rollover Never Ran (46 employees under 100%)
-The cron job fix (adding `X-Cron-Secret`) was applied today. The March 1 cron used the **old broken cron** (no `X-Cron-Secret`), so it failed silently. March currently has only:
-- 60 KPIs for 4 manually-rolled employees
-- 1,146 org-only KPIs added by today's replication for 89 employees
+## Summary of Affected Employees
 
-Most March employees only have their org KPIs (5-30% weightage) but are missing all their non-org KPIs, resulting in totals far below 100%.
+### Over 100% (7 employees)
+| Employee | March Total | Excess | Cause |
+|----------|-------------|--------|-------|
+| Dummy | 152% | +52% | 11 extra KPIs from org-replication (entirely different KPI set from Feb) |
+| Amit Kumar Shaw | 110% | +10% | 2 duplicate KRAs: "Timely Payment" and "Timely submission of reports" |
+| Vivek Kumar Dansena | 110% | +10% | Duplicate KRAs from org-replication |
+| Dileshwar Mahto | 103% | +3% | Duplicate "Automation & Digitalization" KRA |
+| Biswajit Sahoo | 101.5% | +1.5% | Duplicate "Logistics & Dispatch" KRA |
+| Parshu Ram Shukla | 101.5% | +1.5% | 4 KPIs under "Ensure Zero Harm workplace" (legitimate, not duplicates) |
+| V.A.V.S.S. Ganapathi Varma | 101.5% | +1.5% | Same pattern as Parshu Ram |
 
-### Issue 3: Rollover Edge Function Doesn't Carry Org Flags (Future Risk)
-The `buildNewKpi` function already copies `is_org_level` and `org_level_scope` -- so this is actually fine. No code change needed here.
+### Under 100% (10 employees, 8 with missing Feb KPIs)
+| Employee | March Total | Missing | Cause |
+|----------|-------------|---------|-------|
+| Anant Shankar Shet | 87% | 13% | 2 Feb KPIs not rolled (different kpi_name siblings exist in March) |
+| Piyush Bansal | 95% | 5% | 1 missing KPI |
+| Sanjay Kumar Dubey | 95% | 5% | 1 missing KPI |
+| Sanjeeb Kumar Jena | 96% | 4% | 2 missing safety KPIs |
+| Bhoopendra Kumar Sinha | 98% | 2% | 1 missing safety KPI |
+| Anil Kumar Pathak | 99% | 1% | 1 missing safety KPI |
 
 ## Fix Plan
 
-### Step 1: Delete 10 duplicate February KPIs
-Remove the duplicate org KPIs created on Mar 2 that have a same-KRA sibling from before Mar 2. This restores all 10 affected employees back to exactly 100%.
+### Step 1: Delete duplicate March KPIs (over-100% employees)
 
-```sql
-DELETE FROM kpis WHERE id IN (
-  '4747a86e-...', 'af82da41-...', ... -- 10 specific IDs
-);
-```
+For employees whose March total exceeds 100%, identify KPIs that are duplicates under the same KRA. Delete the version that came from the January org-replication (since February is the correct source month for March).
 
-### Step 2: Run Manual Feb-to-March Rollover
-Trigger the `auto-rollover-kpis` edge function manually with:
-- `source_month: February`, `source_year: 2026`
-- `target_month: March`, `target_year: 2026`
-- `force: true`
+**Logic**: For each over-100% employee in March, find KRA names that have multiple KPIs. Compare against February: keep the KPI name that matches February, delete the one that only matches January.
 
-This will copy all non-org KPIs from February to March. The `NOT EXISTS` check will skip org KPIs that already exist from today's replication.
+**Special case -- Dummy user**: This user has an entirely different KPI set in February vs January. Delete all 8 KPIs created on Mar 2 (from rollover) that don't exist in February, since their Feb set (created Feb 13) is already correct.
 
-### Step 3: Delete any resulting March duplicates
-After rollover, check if any March employees exceed 100% due to same-KRA duplicates (same pattern as Feb). Delete any duplicates found.
+**Special case -- Parshu Ram and Ganapathi Varma**: These have 4 legitimate KPIs under "Ensure Zero Harm workplace" (all org-level, all distinct). Their 101.5% likely reflects a genuine weightage configuration issue in the source data, not a duplication bug. These will be flagged for admin review rather than auto-fixed.
 
-### Step 4: Flag rolled-over March KPIs as Org-level
-The Feb-to-March rollover will carry `is_org_level` flags (since `buildNewKpi` copies them). But verify and flag any that were missed.
+### Step 2: Insert missing March KPIs (under-100% employees)
 
-### Step 5: Update POLICY.md
-Add a note about the data correction and the duplicate-detection logic for org KPI replication.
+For employees whose March total is under 100% but February total is 100%, copy the missing February KPIs to March.
+
+**Logic**: For each under-100% employee, find Feb KPIs where no March record exists with the same `kra_name + kpi_name`. Insert them with `status = 'kra_set'`, copying all configuration from February.
+
+### Step 3: Fix the rollover edge function dedup logic
+
+The root cause is that the rollover function uses exact `kra_name + kpi_name` matching, but the org-KPI replication from January used January's KPI names which differ from February's. To prevent this in future:
+
+- Update the rollover function's `NOT EXISTS` check to also match on `kra_name` alone when there's only one KPI per KRA, preventing same-KRA duplicates.
+- This is a code change to `supabase/functions/auto-rollover-kpis/index.ts`.
+
+### Step 4: Update POLICY.md
+
+Document the data correction and the improved dedup logic.
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|------------|
-| Data Impact | Low -- deleting only confirmed duplicates by specific ID | Pre-verified: all 10 affected employees go from 107% back to 100% |
-| Rollover Safety | Low -- uses existing edge function with NOT EXISTS check | Org KPIs already in March will be skipped |
-| Regression | None -- no code changes, only data correction + manual rollover trigger | |
+| Data Impact | Low | Deleting only confirmed duplicates; inserting only confirmed missing records |
+| Workflow Impact | None | New records start as `kra_set` |
+| Code Change | Low | Rollover dedup improvement is additive, doesn't change existing matching |
 
 ## Expected Outcome
 
-| Period | Before Fix | After Fix |
-|--------|-----------|-----------|
-| January | 78 at 100%, 2 over, 1 under | No change |
-| February | 74 at 100%, 15 over, 3 under | ~89 at 100%, ~0 over, ~3 under |
-| March | 37 at 100%, 9 over, 46 under | ~88 at 100%, ~0 over, ~4 under |
+| Period | Before | After |
+|--------|--------|-------|
+| March | 77 at 100%, 7 over, 10 under | ~87 at 100%, ~2 flagged for review, ~3 pre-existing under |
 
