@@ -1,53 +1,53 @@
 
 
-# Fix: Duplicate KPIs in February and March 2026
+# Add STI KPI for 8 Employees (January and February 2026)
 
-## Root Cause
+## Context
 
-The original KPI import on Feb 17 created exact duplicate records for 6 employees (same employee, same KRA name, same KPI name, same period). These duplicates were then carried forward to March during the rollover, creating 14 more duplicates there. The duplicates affect multiple KPI types (LTI, Preventive Maintenance, Power Generation, etc.) across 8 employees.
+LTI (Lost Time Injury) and STI (Short Time Injury) are **separate KPIs** under "Ensure Zero Harm workplace". Most employees already have both. However, 8 employees currently only have LTI and are missing STI for January and February 2026.
 
-## Impact
+## Affected Employees (Missing STI)
 
-- **February**: 15 duplicate KPI records across 8 employees
-- **March**: 14 duplicate KPI records across 8 employees  
-- **Total**: 29 records to delete
-- This causes doubled weightage for affected KPIs (e.g., 2% LTI appearing twice = 4% total)
+| # | Employee | Jan LTI Status | Feb LTI Status |
+|---|----------|---------------|----------------|
+| 1 | Badal Kumar Ravi | approved | self_review |
+| 2 | Deepak Kumar | hr_pms_review | self_review |
+| 3 | Gaurav Tiwari | hr_pms_review | manager_check |
+| 4 | Md Humayun | self_review | self_review |
+| 5 | Pradip Duary | hr_pms_review | self_review |
+| 6 | Rama Prasad Yadav | self_review | self_review |
+| 7 | Ritesh Kumar Singh | hr_pms_review | self_review |
+| 8 | Shiv Prakash Rai | approved | self_review |
 
-## Affected Employees
+## Action: Insert 16 new STI KPI records
 
-Badal Kumar Ravi, Deepak Kumar, Md Humayun, Pradip Duary, Ritesh Kumar Singh, Shiv Prakash Rai, Gaurav Tiwari, Dummy, and a few others.
+For each of the 8 employees, insert one STI KPI for January and one for February 2026 with the following properties (matching the existing STI KPIs other employees already have):
 
-## Fix Plan
+- **KRA**: Ensure Zero Harm workplace
+- **KPI Name**: Total Recordable Injury( STI): - Description: Measures workplace safety incidents (STI) - Formula: (Number of STI) - Scoring Logic: (Scoring: 5 for 0 STI, 2 for 1 STI, 0 for >=1 STI)
+- **Category**: Safety and Health (0b5bab71-35a9-4071-be58-a760b89bed86)
+- **Weightage**: 2%
+- **Target**: 0
+- **UOM**: Number (numeric)
+- **Criteria**: Lower is Better
+- **Scoring**: R5=0, R2=1, R0=>1
+- **Org-level**: Yes (employee scope)
+- **Frequency**: Monthly
+- **Status**: kra_set (new KPI, not yet reviewed)
 
-### Step 1: Delete 29 duplicate KPI records
+## Weightage Impact
 
-For each duplicate group (same employee + period + KRA + KPI name), keep the record with the most advanced workflow status (e.g., "approved" over "self_review" over "kra_set"). Delete the other.
-
-The 29 specific IDs have been identified and verified. All records to delete are either at `kra_set` or `self_review` status (none have progressed to approval), so no review data will be lost.
-
-### Step 2: Clean up orphaned review_submissions
-
-Check if any of the deleted KPI IDs have associated `review_submissions` records and clean them up.
-
-### Step 3: Verify weightage totals
-
-After deletion, confirm that the affected employees return to 100% weightage.
-
-### Step 4: Add unique constraint to prevent future duplicates
-
-Add a database unique index on `(employee_id, review_period, review_year, kra_name, kpi_name)` to prevent this class of duplicate from ever occurring again.
+Each employee will gain +2% from the new STI KPI. This is expected since STI was missing from their scorecards.
 
 ## Risk Assessment
 
 | Aspect | Risk | Mitigation |
 |--------|------|------------|
-| Data Impact | Low | Only deleting exact duplicates; keeping the more advanced record |
-| Review Data | None | All duplicates are at early stages (kra_set/self_review) |
-| Future Prevention | Unique index prevents recurrence |
+| Data Impact | None | Adding new records only, no existing data modified |
+| Unique Constraint | Safe | Different kpi_name (STI vs LTI), no conflict |
+| Weightage | +2% per employee | Expected correction |
 
-## Technical Details
+## Technical Steps
 
-- 29 specific record IDs identified via ranked deduplication query
-- February: 15 deletions, March: 14 deletions
-- Unique index will use COALESCE for nullable review_period column
-
+1. Insert 16 STI KPI records using the data insert tool (8 employees x 2 months)
+2. Verify all 8 employees now have both LTI and STI for Jan and Feb 2026
