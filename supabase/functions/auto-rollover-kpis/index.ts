@@ -198,10 +198,13 @@ Deno.serve(async (req) => {
     }
 
     const targetByEmployee: Record<string, Set<string>> = {};
+    const targetKrasByEmployee: Record<string, Set<string>> = {};
     if (targetKpis) {
       for (const tk of targetKpis) {
         if (!targetByEmployee[tk.employee_id]) targetByEmployee[tk.employee_id] = new Set();
+        if (!targetKrasByEmployee[tk.employee_id]) targetKrasByEmployee[tk.employee_id] = new Set();
         targetByEmployee[tk.employee_id].add(`${tk.kra_name}|||${tk.kpi_name}`);
+        targetKrasByEmployee[tk.employee_id].add(tk.kra_name);
       }
     }
 
@@ -226,8 +229,11 @@ Deno.serve(async (req) => {
       if (existingCount > 0) {
         // Has existing KPIs in target
         if (rollover_balance_only || dry_run) {
-          // Find missing KPIs
-          const missingKpis = kpis.filter(k => !existingKeys.has(`${k.kra_name}|||${k.kpi_name}`));
+          // Find missing KPIs (check both exact kra+kpi match AND kra-only match)
+          const existingKras = targetKrasByEmployee[empId] || new Set();
+          const missingKpis = kpis.filter(k => 
+            !existingKeys.has(`${k.kra_name}|||${k.kpi_name}`) && !existingKras.has(k.kra_name)
+          );
           
           if (dry_run) {
             // In dry_run, report as conflict so admin can decide
@@ -274,9 +280,14 @@ Deno.serve(async (req) => {
           });
         }
       } else {
-        // No existing KPIs - copy all
+        // No existing KPIs - copy all, but skip if same KRA already exists
+        // (prevents duplicates when org-KPI replication used different kpi_name)
+        const existingKras = targetKrasByEmployee[empId] || new Set();
+        const kpisToAdd = kpis.filter(k => !existingKras.has(k.kra_name));
+        const skippedByKra = kpis.length - kpisToAdd.length;
+
         if (!dry_run) {
-          for (const kpi of kpis) {
+          for (const kpi of kpisToAdd) {
             kpisToInsert.push(buildNewKpi(kpi, targetMonth, targetYear));
           }
         }
@@ -285,7 +296,7 @@ Deno.serve(async (req) => {
           employee_name: empName,
           employee_code: empCode,
           department: deptName,
-          kpis_copied: kpis.length,
+          kpis_copied: kpisToAdd.length,
           status: 'rolled_over',
           existing_kpi_count: 0,
           existing_kpi_names: [],
