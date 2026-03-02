@@ -1,34 +1,45 @@
 
 
-# Fix: KPI Weightage Dashboard - Fiscal Year & Data Fetching
+# Fix: KPI Weightage Dashboard - Incorrect Join Syntax
 
-## Problem
+## Root Cause
 
-Two issues preventing data from showing:
+The PostgREST nested join syntax in `useKpiWeightageMatrix.ts` uses an explicit foreign key hint for the departments relationship that doesn't match the actual constraint name:
 
-1. **Fiscal Year Mismatch**: The assessment year runs July-June (e.g., "2025-26" = Jul 2025 to Jun 2026). KPIs in Jul-Dec have `review_year = 2025`, while Jan-Jun have `review_year = 2026`. The current hook only queries one `review_year`, so it always misses half the data.
+```
+departments!profiles_department_id_fkey(name)
+```
 
-2. **Year Selector**: The dashboard uses a plain calendar year (2026), but should use a fiscal year picker matching the existing KPI Mapping Matrix pattern.
+Every other hook in the codebase (e.g., `ImportData.tsx`, `OrgKpiMappingDashboard.tsx`, `usePropagateOrgKpiValue.ts`) uses the simpler implicit join:
 
-## Fix Plan
+```
+departments(name)
+```
 
-### File: `src/hooks/useKpiWeightageMatrix.ts`
+This mismatch causes PostgREST to either error or return null for the profiles join. Since the code has `if (!profile) continue`, all KPI records are silently skipped, resulting in 0 employees shown.
 
-- Change the `year` parameter to represent the fiscal year **start** year (e.g., 2025 for "2025-26")
-- Fetch KPIs from **both** `review_year = year` (Jul-Dec) and `review_year = year + 1` (Jan-Jun), matching the pattern used in `useAdminReports.ts`
-- Update `MONTH_ORDER` to fiscal order: July, August, ..., May, June
-- The baseline month becomes July (first month of the fiscal year) instead of January
+Similarly, `kra_categories!kpis_category_id_fkey(name)` should be simplified to `kra_categories(name)` to match the pattern used elsewhere.
 
-### File: `src/pages/admin/KpiWeightageDashboard.tsx`
+## Fix
 
-- Change year selector to fiscal year format: show "2025-26", "2024-25", etc. (matching `KpiMappingMatrix.tsx` pattern)
-- Compute default fiscal year: if current month is before July, default to `currentYear - 1`; otherwise `currentYear`
-- Update export filename to include fiscal year label
+**File: `src/hooks/useKpiWeightageMatrix.ts`** (lines 52-62)
+
+Change the select query from:
+```
+profiles!kpis_employee_id_fkey(full_name, employee_code, department_id, departments!profiles_department_id_fkey(name)),
+kra_categories!kpis_category_id_fkey(name)
+```
+
+To:
+```
+profiles!kpis_employee_id_fkey(full_name, employee_code, department_id, departments(name)),
+kra_categories(name)
+```
+
+This matches the exact pattern used successfully in `ImportData.tsx`, `usePropagateOrgKpiValue.ts`, and other hooks across the codebase.
 
 ## Technical Details
-
-- Follows the exact same fiscal year pattern already used in `useAdminReports.ts` (fetches two `review_year` values via `Promise.all`)
+- Single file change, 2 lines modified
 - No database changes needed
-- Only 2 files modified
-- Month columns will display in fiscal order: Jul, Aug, Sep, Oct, Nov, Dec, Jan, Feb, Mar, Apr, May, Jun
-
+- Keeps `profiles!kpis_employee_id_fkey` (which is used everywhere and works) but fixes the nested `departments` join to use the implicit form
+- Simplifies `kra_categories` join to implicit form as well
