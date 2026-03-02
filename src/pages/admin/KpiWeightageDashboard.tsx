@@ -1,0 +1,354 @@
+import { useState, useMemo } from 'react';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, ChevronRight, Download, Search, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { useKpiWeightageMatrix, type EmployeeMatrix } from '@/hooks/useKpiWeightageMatrix';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
+import * as XLSX from 'xlsx';
+
+const SHORT_MONTHS: Record<string, string> = {
+  January: 'Jan', February: 'Feb', March: 'Mar', April: 'Apr',
+  May: 'May', June: 'Jun', July: 'Jul', August: 'Aug',
+  September: 'Sep', October: 'Oct', November: 'Nov', December: 'Dec',
+};
+
+function KpiWeightageDashboard() {
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(currentYear);
+  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [departmentId, setDepartmentId] = useState<string>('');
+  const [categoryId, setCategoryId] = useState<string>('');
+  const [openEmployees, setOpenEmployees] = useState<Set<string>>(new Set());
+
+  const { data, isLoading } = useKpiWeightageMatrix(year, {
+    employeeSearch: employeeSearch || undefined,
+    departmentId: departmentId || undefined,
+    categoryId: categoryId || undefined,
+  });
+
+  const { data: departments } = useQuery({
+    queryKey: ['departments-list'],
+    queryFn: async () => {
+      const { data } = await supabase.from('departments').select('id, name').order('name');
+      return data || [];
+    },
+  });
+
+  const { data: categories } = useQuery({
+    queryKey: ['kra-categories-list'],
+    queryFn: async () => {
+      const { data } = await supabase.from('kra_categories').select('id, name').order('name');
+      return data || [];
+    },
+  });
+
+  const employees = data?.employees || [];
+  const globalMonths = data?.globalActiveMonths || [];
+
+  const toggleEmployee = (id: string) => {
+    setOpenEmployees(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const expandAll = () => setOpenEmployees(new Set(employees.map(e => e.employeeId)));
+  const collapseAll = () => setOpenEmployees(new Set());
+
+  const mismatchCount = useMemo(() => {
+    let count = 0;
+    for (const emp of employees) {
+      for (const kras of Object.values(emp.kras)) {
+        for (const kpi of kras) {
+          if (kpi.hasMismatch) count++;
+        }
+      }
+    }
+    return count;
+  }, [employees]);
+
+  const handleExport = () => {
+    const rows: any[] = [];
+    for (const emp of employees) {
+      const sortedKras = Object.keys(emp.kras).sort();
+      for (const kraName of sortedKras) {
+        for (const kpi of emp.kras[kraName]) {
+          const row: any = {
+            'Employee': emp.fullName,
+            'Employee Code': emp.employeeCode,
+            'Department': emp.departmentName,
+            'KRA': kraName,
+            'KPI': kpi.kpiName,
+            'Category': kpi.categoryName,
+          };
+          for (const m of globalMonths) {
+            row[SHORT_MONTHS[m] || m] = kpi.months[m] != null ? `${kpi.months[m]}%` : '--';
+          }
+          row['Mismatch'] = kpi.hasMismatch ? 'Yes' : 'No';
+          rows.push(row);
+        }
+      }
+      // Add totals row
+      const totalRow: any = {
+        'Employee': emp.fullName,
+        'Employee Code': emp.employeeCode,
+        'Department': emp.departmentName,
+        'KRA': '** TOTAL **',
+        'KPI': '',
+        'Category': '',
+      };
+      for (const m of globalMonths) {
+        totalRow[SHORT_MONTHS[m] || m] = emp.monthTotals[m] != null ? `${emp.monthTotals[m]}%` : '--';
+      }
+      totalRow['Mismatch'] = '';
+      rows.push(totalRow);
+    }
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Weightage Matrix');
+    XLSX.writeFile(wb, `KPI_Weightage_Matrix_${year}.xlsx`);
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="KPI Weightage Dashboard" description="View KRA/KPI weightage distribution across months for all employees" />
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Year</label>
+              <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
+                <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[currentYear - 1, currentYear, currentYear + 1].map(y => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1 flex-1 min-w-[200px]">
+              <label className="text-xs font-medium text-muted-foreground">Employee</label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name or code..."
+                  value={employeeSearch}
+                  onChange={e => setEmployeeSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Department</label>
+              <Select value={departmentId} onValueChange={setDepartmentId}>
+                <SelectTrigger className="w-[180px]"><SelectValue placeholder="All" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {departments?.map(d => (
+                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Category</label>
+              <Select value={categoryId} onValueChange={setCategoryId}>
+                <SelectTrigger className="w-[180px]"><SelectValue placeholder="All" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {categories?.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleExport} disabled={!employees.length}>
+              <Download className="h-4 w-4 mr-1.5" />Export
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Summary */}
+      <div className="flex gap-3 flex-wrap">
+        <Badge variant="secondary" className="text-sm py-1 px-3">
+          {employees.length} Employees
+        </Badge>
+        <Badge variant={mismatchCount > 0 ? 'destructive' : 'secondary'} className="text-sm py-1 px-3">
+          {mismatchCount > 0 ? <AlertTriangle className="h-3.5 w-3.5 mr-1" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
+          {mismatchCount} Mismatches
+        </Badge>
+        {employees.length > 0 && (
+          <div className="ml-auto flex gap-2">
+            <Button variant="ghost" size="sm" onClick={expandAll}>Expand All</Button>
+            <Button variant="ghost" size="sm" onClick={collapseAll}>Collapse All</Button>
+          </div>
+        )}
+      </div>
+
+      {/* Loading */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      )}
+
+      {/* Empty */}
+      {!isLoading && employees.length === 0 && (
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            No KPI data found for {year}.
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Employee Sections */}
+      {employees.map(emp => (
+        <EmployeeSection
+          key={emp.employeeId}
+          employee={emp}
+          months={globalMonths}
+          isOpen={openEmployees.has(emp.employeeId)}
+          onToggle={() => toggleEmployee(emp.employeeId)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function EmployeeSection({ employee, months, isOpen, onToggle }: {
+  employee: EmployeeMatrix;
+  months: string[];
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  const sortedKras = Object.keys(employee.kras).sort();
+  const hasMismatches = sortedKras.some(kra => employee.kras[kra].some(k => k.hasMismatch));
+  const totalMismatch = months.some(m => {
+    const total = employee.monthTotals[m];
+    return total != null && total !== 100;
+  });
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={onToggle}>
+      <Card className={hasMismatches ? 'border-destructive/30' : ''}>
+        <CollapsibleTrigger asChild>
+          <button className="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/50 transition-colors rounded-t-lg">
+            <div className="flex items-center gap-3">
+              <ChevronRight className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+              <div className="text-left">
+                <span className="font-medium">{employee.fullName}</span>
+                <span className="text-muted-foreground ml-2 text-sm">({employee.employeeCode})</span>
+                <span className="text-muted-foreground ml-2 text-xs">• {employee.departmentName}</span>
+              </div>
+              {hasMismatches && <Badge variant="destructive" className="text-xs">Mismatch</Badge>}
+            </div>
+            <div className="flex gap-2 flex-wrap justify-end">
+              {months.map(m => {
+                const total = employee.monthTotals[m];
+                if (total == null) return null;
+                const isOk = total === 100;
+                return (
+                  <span
+                    key={m}
+                    className={`text-xs px-1.5 py-0.5 rounded ${
+                      isOk ? 'bg-primary/10 text-primary' : 'bg-destructive/10 text-destructive'
+                    }`}
+                  >
+                    {SHORT_MONTHS[m]}: {total}%
+                  </span>
+                );
+              })}
+            </div>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[250px] sticky left-0 bg-background z-10">KRA / KPI</TableHead>
+                  {months.map(m => (
+                    <TableHead key={m} className="text-center min-w-[70px]">{SHORT_MONTHS[m]}</TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedKras.map(kraName => (
+                  <>
+                    <TableRow key={`kra-${kraName}`} className="bg-muted/30">
+                      <TableCell colSpan={months.length + 1} className="font-medium text-sm py-2">
+                        {kraName}
+                      </TableCell>
+                    </TableRow>
+                    {employee.kras[kraName].map(kpi => (
+                      <TableRow key={`kpi-${kpi.kpiName}-${kraName}`}>
+                        <TableCell className="pl-8 text-sm sticky left-0 bg-background z-10">
+                          <div className="flex items-center gap-2">
+                            {kpi.kpiName}
+                            {kpi.hasMismatch && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />}
+                          </div>
+                        </TableCell>
+                        {months.map(m => {
+                          const w = kpi.months[m];
+                          const isMismatch = w != null && kpi.baselineWeightage != null && w !== kpi.baselineWeightage;
+                          const noData = w == null;
+                          return (
+                            <TableCell
+                              key={m}
+                              className={`text-center text-sm ${
+                                noData
+                                  ? 'text-muted-foreground/40'
+                                  : isMismatch
+                                    ? 'bg-destructive/10 text-destructive font-medium'
+                                    : ''
+                              }`}
+                            >
+                              {noData ? '--' : `${w}%`}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    ))}
+                  </>
+                ))}
+                {/* Totals row */}
+                <TableRow className="bg-muted/50 font-medium">
+                  <TableCell className="sticky left-0 bg-muted/50 z-10 text-sm">Total Weightage</TableCell>
+                  {months.map(m => {
+                    const total = employee.monthTotals[m];
+                    const isOk = total === 100;
+                    return (
+                      <TableCell
+                        key={m}
+                        className={`text-center text-sm ${
+                          total == null ? 'text-muted-foreground/40' :
+                          isOk ? 'text-primary' : 'text-destructive font-bold'
+                        }`}
+                      >
+                        {total != null ? `${total}%` : '--'}
+                      </TableCell>
+                    );
+                  })}
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  );
+}
+
+export default KpiWeightageDashboard;

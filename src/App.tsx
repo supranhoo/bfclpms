@@ -44,6 +44,7 @@ const EmailLogs = lazy(() => import("./pages/admin/EmailLogs"));
 const ObservationsOverview = lazy(() => import("./pages/admin/ObservationsOverview"));
 const RollbackRequests = lazy(() => import("./pages/admin/RollbackRequests"));
 const KpiMappingMatrix = lazy(() => import("./pages/admin/KpiMappingMatrix"));
+const KpiWeightageDashboard = lazy(() => import("./pages/admin/KpiWeightageDashboard"));
 
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
@@ -286,6 +287,11 @@ const App = () => (
                 <Route path="/admin/kpi-mapping" element={
                   <ProtectedRoute allowedRoles={['admin']}>
                     <Suspense fallback={<PageFallback />}><KpiMappingMatrix /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/kpi-weightage" element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <Suspense fallback={<PageFallback />}><KpiWeightageDashboard /></Suspense>
                   </ProtectedRoute>
                 } />
               </Route>
