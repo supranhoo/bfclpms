@@ -512,9 +512,20 @@ When an admin marks a KPI as **N/A** via the Admin Data Entry dialog:
 
 ---
 
-## 20. Version History
+## 20. Auto KRA Rollover Cron Schedule
+
+- **Schedule:** 1st of every month at 00:00 UTC (`0 0 1 * *`)
+- **Authentication:** Uses `X-Cron-Secret` header (matching `CRON_SECRET` env var) + Bearer anon key for gateway auth
+- **Body:** `{"triggered_by": "cron"}` — triggers the system path which checks the `auto_kra_rollover` setting before proceeding
+- **Edge Function:** `auto-rollover-kpis` — copies KPIs from previous month to current month for all employees
+- **Disabling:** Set `auto_kra_rollover` to any value other than `enabled` in `system_settings`
+
+---
+
+## 21. Version History
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.2.0 | 2026-03-02 | Fixed auto-rollover cron job authentication (§20) — added X-Cron-Secret header |
 | 1.1.0 | 2026-03-02 | Added Admin NA Score Clearing Policy (§19) — admin NA toggle now clears all scoring fields |
 | 1.0.0 | 2026-03-02 | Initial POLICY.md creation — documented all existing business rules, workflow policies, configurable settings, and the new mandatory remarks feature |
