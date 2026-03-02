@@ -135,6 +135,24 @@ export function useAdminSubmitReviewData() {
       if (is_na !== undefined) {
         updateFields.is_na = is_na;
         updateFields.na_marked_by_role = is_na ? 'admin' : null;
+        // When marking NA, clear ALL scoring fields so dashboard reflects N/A immediately
+        if (is_na) {
+          updateFields.final_score = null;
+          updateFields.final_rating = null;
+          updateFields.achieved_value = null;
+          updateFields.self_score = null;
+          updateFields.self_rating = null;
+          updateFields.manager_score = null;
+          updateFields.manager_rating = null;
+          updateFields.skip_level_score = null;
+          updateFields.skip_level_rating = null;
+          updateFields.hr_pms_score = null;
+          updateFields.hr_pms_rating = null;
+          updateFields.auditor_score = null;
+          updateFields.auditor_rating = null;
+          updateFields.management_score = null;
+          updateFields.management_rating = null;
+        }
       } else if (achieved_value !== undefined && achieved_value !== null) {
         updateFields.is_na = false;
       }
@@ -269,6 +287,7 @@ export function useAdminSubmitReviewData() {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
       queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
+      queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
       toast({ 
         title: 'Data entered successfully', 
         description: 'Audit log created and employee notified.' 
