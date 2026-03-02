@@ -1,69 +1,59 @@
 
 
-# Fix: Admin NA Marking Not Updating Score for Approved KPIs
+# Fix: Auto KRA Rollover Cron Job Authentication
 
 ## Problem
-When an admin marks a KPI as "Not Applicable" (NA) via the Admin Data Entry dialog, the system:
-1. Sets `is_na = true` on `review_submissions`
-2. Sets `na_marked_by_role = 'admin'`
 
-But it does NOT:
-- Clear `final_score` and `final_rating` (which the dashboard uses to display scores for approved KPIs)
-- Clear `self_score`, `manager_score`, etc. (the role-level scores that feed into calculations)
+The cron job `auto-kra-rollover-monthly` exists and runs on the 1st of each month, but it **fails silently** because:
 
-Since Jaspal's December KPI is already in `approved` status, the dashboard reads `final_score` directly, ignoring the `is_na` flag for display purposes.
+- It sends the **anon key** as a `Bearer` token in the `Authorization` header
+- The edge function expects EITHER an `X-Cron-Secret` header OR a valid admin user JWT
+- The anon key is neither -- it's not a user token, so `getUser()` fails, and there's no `X-Cron-Secret` header
 
-## Root Cause
-In `src/hooks/useAdminDataEntry.ts`, lines 133-140, the NA handling only sets the boolean flag but doesn't nullify the scoring fields. The scoring engine's 8-stage fallback chain (`final_score -> management -> auditor -> ... -> 0`) doesn't check `is_na` before returning a value.
+Meanwhile, the `weekly-database-backup` cron works correctly because it includes the `X-Cron-Secret` header.
 
-## Fix Details
+## Fix
 
-### File: `src/hooks/useAdminDataEntry.ts`
+**Re-create the cron job** with the correct headers (matching the backup cron pattern):
 
-After setting `is_na = true` (around line 136), also clear all scoring fields when NA is toggled ON:
+1. **Unschedule** the existing broken cron job `auto-kra-rollover-monthly`
+2. **Re-create** it with proper `X-Cron-Secret` header for authentication
 
-```
-if (is_na) {
-  updateFields.final_score = null;
-  updateFields.final_rating = null;
-  updateFields.achieved_value = null;
-  updateFields.self_score = null;
-  updateFields.self_rating = null;
-  updateFields.manager_score = null;
-  updateFields.manager_rating = null;
-  updateFields.skip_level_score = null;
-  updateFields.skip_level_rating = null;
-  updateFields.hr_pms_score = null;
-  updateFields.hr_pms_rating = null;
-  updateFields.auditor_score = null;
-  updateFields.auditor_rating = null;
-  updateFields.management_score = null;
-  updateFields.management_rating = null;
-}
-```
+The new cron will include:
+- `X-Cron-Secret` header (matches `CRON_SECRET` env var in the edge function)
+- `Authorization: Bearer <anon_key>` (needed for the Supabase gateway)
+- `triggered_by: "cron"` in the body (so the function skips the admin-only setting check)
 
-This ensures that:
-- The dashboard immediately shows no score (or "N/A") for the KPI
-- Weighted score calculations exclude this KPI
-- The change is reflected on the employee's dashboard without needing a rollback
+## Technical Details
 
-### File: `src/hooks/useAdminDataEntry.ts` (query invalidation)
+### SQL to execute (via insert tool, not migration):
 
-Add `my-kpis` to the `onSuccess` invalidation list so the employee's dashboard refreshes:
+```sql
+-- Remove old broken cron
+SELECT cron.unschedule('auto-kra-rollover-monthly');
 
-```
-queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
+-- Create fixed cron with X-Cron-Secret header
+SELECT cron.schedule(
+  'auto-kra-rollover-monthly',
+  '0 0 1 * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://jdvsvqiyptijplyhmqqn.supabase.co/functions/v1/auto-rollover-kpis',
+    headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpkdnN2cWl5cHRpanBseWhtcXFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyMjA0MjQsImV4cCI6MjA4MTc5NjQyNH0.T8egtqpDIhC84CM3w_Zxwqqe9zjw5ZunYHnnQJ4eut4", "X-Cron-Secret": "KLFASh_YrnFmgE5"}'::jsonb,
+    body := '{"triggered_by": "cron"}'::jsonb
+  ) AS request_id;
+  $$
+);
 ```
 
-### File: `POLICY.md`
-
-Add a policy note under the Admin Data Entry section documenting that marking a KPI as NA from admin clears all scoring fields across all review levels.
-
-## Risk Assessment
+### Risk Assessment
 
 | Aspect | Risk | Mitigation |
-|---|---|---|
-| Data Impact | Medium -- clears existing scores | Only triggered when admin explicitly toggles NA ON; scores are preserved in audit log (old_value) |
-| Regression | Low | The NA toggle is explicit; normal data entry (non-NA) is unaffected |
-| Reversibility | Full | Admin can toggle NA OFF and re-enter scores, or use the existing audit trail to restore values |
+|--------|------|------------|
+| Data Impact | Low -- identical rollover logic, just fixing auth | Same edge function, same behavior |
+| Regression | None -- the cron was already failing silently | Fix only changes headers |
+| Security | Uses existing `CRON_SECRET` already in use by backup cron | Consistent with established pattern |
 
+### Documentation Update
+
+Update `POLICY.md` to note the cron schedule and authentication method for auto-rollover.
