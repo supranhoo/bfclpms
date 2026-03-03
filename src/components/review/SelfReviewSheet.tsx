@@ -4,6 +4,7 @@ import { openStorageFile } from '@/lib/storageDownload';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubmitSelfReview, RatingLevel, KPI, OrgLevelScope, ReviewSubmission } from '@/hooks/useKpis';
 import { useRemarksMandatorySettings, useOrgKpiSelfEntryAllowed } from '@/hooks/useWorkflowSettings';
+import { useIsOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
 import { useToast } from '@/hooks/use-toast';
 import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useDailyAggregationMethod } from '@/hooks/useSystemSettings';
@@ -468,7 +469,12 @@ export function SelfReviewSheet({
   })();
   const selectedKpiOrgValue = isSelectedKpiOrgLevel ? orgKpiValuesMap.get(orgKey) || null : null;
   const hasOrgData = isSelectedKpiOrgLevel && selectedKpiOrgValue?.achieved_value != null;
-  const isOrgLocked = isSelectedKpiOrgLevel && !orgKpiSelfEntryAllowed;
+  const { data: ownerCheck } = useIsOrgKpiDataOwner(
+    selectedKpi?.category_id || '',
+    selectedKpi?.kra_name || '',
+    selectedKpi?.kpi_name || ''
+  );
+  const isOrgLocked = isSelectedKpiOrgLevel && !orgKpiSelfEntryAllowed && !ownerCheck?.canEdit;
   const isKraSet = selectedKpi?.status === 'kra_set';
   const needsSubPeriodForKpi = selectedKpi ? requiresSubPeriodSelection(selectedKpi.frequency as FrequencyType) : false;
   const isSelfReview = selectedKpi?.status === 'self_review';
