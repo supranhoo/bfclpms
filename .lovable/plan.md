@@ -1,49 +1,33 @@
 
 
-# Fix: Observation Reply Email Not Showing Actual Reply Content
+# Fix: Strip Mention UUIDs from Email Notifications
+
+## Problem
+When a reply contains an @mention (e.g., `@[Ankit Choudhary](535d9a14-e4aa-4676-af92-f535373ffc8d)`), the raw syntax including the UUID is displayed in the email notification. The UUID should be stripped so the email shows just `@Ankit Choudhary`.
 
 ## Root Cause
-
-The code pipeline is correct — the DB trigger captures `reply_content` in metadata, `send_email_on_notification` passes it to the edge function, and the edge function's **default** template includes `{{reply_content}}`.
-
-However, as visible in the screenshot, there is a **custom email template** saved in `system_settings` (key: `email_template_observation_reply`) that was created **before** the `{{reply_content}}` placeholder existed. This custom template overrides the default (lines 1152-1164 of the edge function). The saved custom template body is:
-
-```
-Hi {{recipient_name}},
-
-{{actor_name}} has replied to an observation on {{kpi_name}}.
-
-Observation: {{observation_title}}
-
-Please check the observation thread for the latest update.
-```
-
-It is missing `{{reply_content}}`, `{{observation_type}}`, and `{{observation_description}}`.
+The edge function receives `reply_content` as-is from the DB trigger and passes it into the email template without converting mention syntax to display text.
 
 ## Fix
 
-**Database migration** — Update the saved custom template in `system_settings` to include the new placeholders:
+### File: `supabase/functions/send-email-notification/index.ts`
 
-```sql
-UPDATE system_settings
-SET setting_value = jsonb_build_object(
-  'subject', 'PMS - New Reply on Observation - {{kpi_name}}',
-  'body', E'Hi {{recipient_name}},\n\n{{actor_name}} has replied to an observation on {{kpi_name}}:\n\nObservation: {{observation_title}}\nType: {{observation_type}}\nDescription: {{observation_description}}\n\nReply:\n{{reply_content}}\n\nPlease check the observation thread for the latest update.'
-)
-WHERE setting_key = 'email_template_observation_reply';
+Add a utility function to strip mention syntax:
+
+```typescript
+function stripMentionSyntax(text: string): string {
+  return text.replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1');
+}
 ```
 
-This is a single DB migration. No code changes needed — the edge function already handles all the placeholders correctly.
+Apply it to `reply_content` (and `observation_description` for safety) before placing them in `placeholderData`:
 
-## Summary
+```typescript
+reply_content: reply_content ? stripMentionSyntax(reply_content) : reply_content,
+observation_description: observation_description ? stripMentionSyntax(observation_description) : observation_description,
+```
 
-| Layer | Status |
-|---|---|
-| DB trigger `notify_on_observation_reply` | Already correct — stores `reply_content` in metadata |
-| DB trigger `send_email_on_notification` | Already correct — passes `reply_content` to edge function |
-| Edge function default template | Already correct — includes `{{reply_content}}` |
-| **Saved custom template in DB** | **Outdated — missing `{{reply_content}}`** ← the fix |
+This converts `@[Ankit Choudhary](535d9a14-...)` → `@Ankit Choudhary` in emails.
 
-- 1 DB migration to update the stored custom template
-- No code changes needed
+**1 file change, no DB migration needed.**
 
