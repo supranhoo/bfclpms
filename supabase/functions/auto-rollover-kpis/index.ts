@@ -232,7 +232,7 @@ Deno.serve(async (req) => {
           // Find missing KPIs (check both exact kra+kpi match AND kra-only match)
           const existingKras = targetKrasByEmployee[empId] || new Set();
           const missingKpis = kpis.filter(k => 
-            !existingKeys.has(`${k.kra_name}|||${k.kpi_name}`) && !existingKras.has(k.kra_name)
+            !existingKeys.has(`${k.kra_name}|||${k.kpi_name}`)
           );
           
           if (dry_run) {
