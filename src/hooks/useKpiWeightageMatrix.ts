@@ -62,6 +62,7 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
             `)
             .eq('review_year', reviewYear)
             .order('employee_id')
+            .order('id')
             .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
           if (filters?.categoryId) {
