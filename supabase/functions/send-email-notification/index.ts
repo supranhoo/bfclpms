@@ -639,6 +639,11 @@ const buildKraTableHtml = (kraList: Array<{ kra_name: string; kpi_name: string; 
   </table>`;
 };
 
+// Strip @[Name](uuid) mention syntax to plain @Name for emails
+const stripMentionSyntax = (text: string): string => {
+  return text.replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1');
+};
+
 // Replace placeholders in template
 const replacePlaceholders = (
   template: string,
@@ -1193,8 +1198,8 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       new_email,
       observation_title,
       observation_type,
-      observation_description,
-      reply_content,
+      observation_description: observation_description ? stripMentionSyntax(observation_description) : observation_description,
+      reply_content: reply_content ? stripMentionSyntax(reply_content) : reply_content,
     };
 
     // For kra_batch_assigned, inject the KRA table HTML into the placeholder
