@@ -1,39 +1,25 @@
 
 
-# Fix: Correct Stale `final_score` on 3 Approved KPIs
+# Fix: Toast Notifications Persist Too Long and Block UI
 
 ## Problem
-3 KPIs across the system have `status = 'approved'` but `final_score = 0` even though a later-stage reviewer (Auditor, HR PMS, or Management) gave a score of 5. This is a **data integrity issue** from approvals processed before the `final_score` sync logic was added.
-
-### Affected Records
-| Employee | KPI | Period | Auditor | Mgmt | Final (wrong) |
-|---|---|---|---|---|---|
-| 100264 – Sajid Raza | Incoming Quality of RM | Dec | 0 | 5 | 0 |
-| 100894 – Parshu Ram Shukla | Customer Complaints | Jan | 0 | 5 | 0 |
-| 100633 – Ramchandra Reddy | Adherence to Manning Norms | Dec | 5 | — | 0 |
+The radix-based toast system (`useToast` / `use-toast.ts`) has `TOAST_REMOVE_DELAY = 1000000` (over 16 minutes). Toasts like "Forwarded successfully" stay on screen indefinitely, blocking buttons underneath. The close button only appears on hover, which is not obvious to users.
 
 ## Root Cause
-These KPIs were approved through a code path (likely ManagementScorecard or admin step-back) before the `final_score` sync logic existed. The current code already handles this correctly — no code fix needed.
+Two issues in `src/hooks/use-toast.ts`:
+1. **Line 6**: `TOAST_REMOVE_DELAY = 1000000` — absurdly long timeout, toasts never auto-dismiss
+2. The radix `ToastViewport` renders at **bottom-right on desktop** (`sm:bottom-0 sm:right-0`), which overlaps action buttons in review pages
 
-## Fix: One-Time Data Migration
+## Fix
 
-Run a SQL migration to retroactively fix all approved KPIs where `final_score` doesn't match the authoritative fallback chain:
+### 1. Auto-dismiss after 5 seconds (`use-toast.ts`)
+Change `TOAST_REMOVE_DELAY` from `1000000` to `5000` (5 seconds). This makes all radix toasts auto-dismiss.
 
-```sql
-UPDATE review_submissions rs
-SET 
-  final_score = COALESCE(rs.management_score, rs.auditor_score, rs.hr_pms_score, rs.skip_level_score, rs.manager_score, rs.self_score),
-  final_rating = COALESCE(rs.management_rating, rs.auditor_rating, rs.hr_pms_rating, rs.skip_level_rating, rs.manager_rating, rs.self_rating)
-FROM kpis k
-WHERE rs.kpi_id = k.id
-  AND k.status = 'approved'
-  AND rs.final_score = 0
-  AND (
-    COALESCE(rs.management_score, rs.auditor_score, rs.hr_pms_score, rs.skip_level_score, rs.manager_score) > 0
-  );
-```
+### 2. Always show close button (`toast.tsx`)
+Remove `opacity-0 group-hover:opacity-100` from `ToastClose` so the X button is always visible, not just on hover.
 
-This updates only the 3 affected rows. No code changes needed — the existing approval paths already sync `final_score` correctly.
+### 3. Move toast position to top-right (`toast.tsx`)
+Change `ToastViewport` from bottom-right to **top-right** on all screen sizes. This avoids overlapping action buttons in the review scorecards. Update classes to: `fixed top-0 right-0 z-[100] flex max-h-screen w-full flex-col p-4 md:max-w-[420px]`.
 
-**1 DB migration, 0 file changes.**
+**3 lines changed across 2 files. No DB migration.**
 
