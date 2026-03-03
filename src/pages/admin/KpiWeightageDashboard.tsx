@@ -303,19 +303,22 @@ function EmployeeSection({ employee, months, isOpen, onToggle }: {
                             {kpi.hasMismatch && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />}
                           </div>
                         </TableCell>
-                        {months.map(m => {
+                        {months.map((m, mIdx) => {
                           const w = kpi.months[m];
                           const isMismatch = w != null && kpi.baselineWeightage != null && w !== kpi.baselineWeightage;
                           const noData = w == null;
+                          const isEliminated = noData && months.slice(0, mIdx).some(prev => kpi.months[prev] != null);
                           return (
                             <TableCell
                               key={m}
                               className={`text-center text-sm ${
-                                noData
-                                  ? 'text-muted-foreground/40'
-                                  : isMismatch
-                                    ? 'bg-destructive/10 text-destructive font-medium'
-                                    : ''
+                                isEliminated
+                                  ? 'bg-destructive/10 text-destructive font-medium'
+                                  : noData
+                                    ? 'text-muted-foreground/40'
+                                    : isMismatch
+                                      ? 'bg-destructive/10 text-destructive font-medium'
+                                      : ''
                               }`}
                             >
                               {noData ? '--' : `${w}%`}
