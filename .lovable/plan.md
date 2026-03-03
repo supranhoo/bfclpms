@@ -1,46 +1,47 @@
 
 
-# Fix: KRA Rollover Balance-Only Mode Skips Legitimate Missing KPIs
+# Fix: Highlight Eliminated KPI Months in Light Red
 
 ## Problem
-Employee 200086 (Deepak Kumar) has 19 KPIs in February and 18 in March. The dry-run correctly identified 2 missing KPIs ("Proactive Safety Reporting" and a duplicate "Total Recordable Injury (STI)"), but the actual rollover copied 0.
+When a KPI exists in earlier months but disappears (shows `--`) in later months, the `--` is displayed in faint grey. The user wants these "eliminated" cells highlighted in light red, matching the mismatch styling, to make it visually obvious that a KPI was dropped.
 
-## Root Cause
-The deduplication logic at line 234-235 in `auto-rollover-kpis/index.ts` is **too aggressive**:
+## Logic
 
-```typescript
-const missingKpis = kpis.filter(k => 
-  !existingKeys.has(`${k.kra_name}|||${k.kpi_name}`) && !existingKras.has(k.kra_name)
-);
-```
+Current code (line 309-321) treats all `null` months the same — faint grey text. The fix adds a check: if a KPI has data in any **earlier** month but is `null` in the current month, it is considered "eliminated" and gets the red highlight.
 
-This requires **both** conditions:
-1. No exact `kra_name + kpi_name` match in target — ✅ correct
-2. No KRA with same `kra_name` exists at all in target — ❌ too aggressive
+**Detection**: For each `--` cell, check if any preceding month (in fiscal order) had a non-null weightage. If yes → eliminated → light red background.
 
-The KRA "Ensure Zero Harm workplace" already has 4 KPIs in March. So the `!existingKras.has(k.kra_name)` check returns `false` for ALL source KPIs under that KRA, including the genuinely missing "Proactive Safety Reporting" KPI.
+## File Change
 
-The KRA-level check was added to prevent duplicates when org-KPI replication uses different `kpi_name` variants. But it should only apply in the "no existing KPIs" branch (line 282-305), not in the "balance only" branch (line 231-267) where exact `kra+kpi` matching is already done.
-
-## Fix
-
-**File: `supabase/functions/auto-rollover-kpis/index.ts`**
-
-Remove the `!existingKras.has(k.kra_name)` condition from the balance-only branch (line 234-235). The exact `kra_name|||kpi_name` check is sufficient to prevent duplicates:
+**`src/pages/admin/KpiWeightageDashboard.tsx`** — lines 306-322
 
 ```typescript
-// Before (line 234-235):
-const missingKpis = kpis.filter(k => 
-  !existingKeys.has(`${k.kra_name}|||${k.kpi_name}`) && !existingKras.has(k.kra_name)
-);
-
-// After:
-const missingKpis = kpis.filter(k => 
-  !existingKeys.has(`${k.kra_name}|||${k.kpi_name}`)
-);
+{months.map((m, mIdx) => {
+  const w = kpi.months[m];
+  const isMismatch = w != null && kpi.baselineWeightage != null && w !== kpi.baselineWeightage;
+  const noData = w == null;
+  // "Eliminated" = no data this month, but had data in a prior month
+  const isEliminated = noData && months.slice(0, mIdx).some(prev => kpi.months[prev] != null);
+  return (
+    <TableCell
+      key={m}
+      className={`text-center text-sm ${
+        isEliminated
+          ? 'bg-destructive/10 text-destructive font-medium'
+          : noData
+            ? 'text-muted-foreground/40'
+            : isMismatch
+              ? 'bg-destructive/10 text-destructive font-medium'
+              : ''
+      }`}
+    >
+      {noData ? '--' : `${w}%`}
+    </TableCell>
+  );
+})}
 ```
 
-The KRA-level guard remains in the "no existing KPIs" branch (line 286) where it serves its intended purpose of preventing duplicates from org-KPI naming variants.
+Also update `hasMismatch` detection in `useKpiWeightageMatrix.ts` to flag KPIs that have eliminated months (optional — the visual highlight is the primary ask).
 
-**1 file change + redeploy. No DB migration.**
+**1 file change, no DB migration.**
 
