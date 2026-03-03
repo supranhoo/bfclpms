@@ -4,7 +4,7 @@ import { openStorageFile } from '@/lib/storageDownload';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubmitSelfReview, RatingLevel, KPI, OrgLevelScope, ReviewSubmission } from '@/hooks/useKpis';
 import { useRemarksMandatorySettings, useOrgKpiSelfEntryAllowed } from '@/hooks/useWorkflowSettings';
-import { useIsOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
+import { useIsOrgKpiDataOwner, useOrgKpiOwners } from '@/hooks/useOrgKpiDataOwner';
 import { useToast } from '@/hooks/use-toast';
 import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useDailyAggregationMethod } from '@/hooks/useSystemSettings';
@@ -124,6 +124,21 @@ export function SelfReviewSheet({
   const { data: pendingRollback } = usePendingRollbackRequest(selectedKpi?.id);
   const { data: employeeWorkflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(profile?.id);
   const effectiveStages = employeeWorkflowStages || DEFAULT_WORKFLOW_STAGES;
+  const { data: ownerCheck } = useIsOrgKpiDataOwner(
+    selectedKpi?.category_id || '',
+    selectedKpi?.kra_name || '',
+    selectedKpi?.kpi_name || ''
+  );
+  const { data: orgKpiOwnersData } = useOrgKpiOwners(
+    selectedKpi?.category_id || '',
+    selectedKpi?.kra_name || '',
+    selectedKpi?.kpi_name || ''
+  );
+
+  const orgKpiOwnerNames = useMemo(() =>
+    (orgKpiOwnersData || []).map(o => o.owner?.full_name || o.owner?.email || 'Unknown').filter(Boolean),
+    [orgKpiOwnersData]
+  );
 
   // Frequency lock state
   const { config: frequencyConfig } = useFrequencyConfig(selectedKpi?.frequency);
@@ -469,11 +484,6 @@ export function SelfReviewSheet({
   })();
   const selectedKpiOrgValue = isSelectedKpiOrgLevel ? orgKpiValuesMap.get(orgKey) || null : null;
   const hasOrgData = isSelectedKpiOrgLevel && selectedKpiOrgValue?.achieved_value != null;
-  const { data: ownerCheck } = useIsOrgKpiDataOwner(
-    selectedKpi?.category_id || '',
-    selectedKpi?.kra_name || '',
-    selectedKpi?.kpi_name || ''
-  );
   const isOrgLocked = isSelectedKpiOrgLevel && !orgKpiSelfEntryAllowed && !ownerCheck?.canEdit;
   const isKraSet = selectedKpi?.status === 'kra_set';
   const needsSubPeriodForKpi = selectedKpi ? requiresSubPeriodSelection(selectedKpi.frequency as FrequencyType) : false;
@@ -578,9 +588,42 @@ export function SelfReviewSheet({
                       </div>
                     </div>
                     <h3 className="font-semibold text-foreground">Organization KPI</h3>
-                    <p className="text-sm text-muted-foreground">
-                      This is an Organization KPI. Data will be entered by the designated Data Owner.
-                    </p>
+
+                    {/* Status badge */}
+                    {(() => {
+                      const val = selectedKpiOrgValue;
+                      if (hasOrgData && selectedKpi?.status && ['manager_review','reviewer_review','final','completed'].includes(selectedKpi.status)) {
+                        return (
+                          <Badge className="bg-green-600/15 text-green-700 border-green-300 dark:text-green-400 dark:border-green-700">
+                            ✓ Propagated — Value: {val?.achieved_value}
+                          </Badge>
+                        );
+                      }
+                      if (hasOrgData) {
+                        return (
+                          <Badge className="bg-blue-600/15 text-blue-700 border-blue-300 dark:text-blue-400 dark:border-blue-700">
+                            Data entered — awaiting propagation
+                          </Badge>
+                        );
+                      }
+                      return (
+                        <Badge className="bg-amber-600/15 text-amber-700 border-amber-300 dark:text-amber-400 dark:border-amber-700">
+                          Pending — awaiting data entry
+                        </Badge>
+                      );
+                    })()}
+
+                    {/* Data Owner names */}
+                    {orgKpiOwnerNames && orgKpiOwnerNames.length > 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Assigned to: <span className="font-medium text-foreground">{orgKpiOwnerNames.join(', ')}</span>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No Data Owner assigned yet.
+                      </p>
+                    )}
+
                     <Badge variant="outline" className="mt-2">
                       <Lock className="h-3 w-3 mr-1" />
                       Self-entry disabled
