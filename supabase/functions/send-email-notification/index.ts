@@ -539,15 +539,19 @@ Description: {{observation_description}}
 Please log in to review the observation and respond if needed.`,
   },
   observation_reply: {
-    subject: '[PMS] New Reply on Observation',
+    subject: '[PMS] New Reply on Observation - {{observation_title}}',
     body: `Hi {{recipient_name}},
 
-{{actor_name}} has replied to an observation on your KPI.
+{{actor_name}} has replied to an observation on {{kpi_name}}:
 
-KPI: {{kpi_name}}
 Observation: {{observation_title}}
+Type: {{observation_type}}
+Description: {{observation_description}}
 
-Please log in to view the reply and continue the conversation.`,
+Reply:
+{{reply_content}}
+
+Please check the observation thread for the latest update.`,
   },
   observation_resolved: {
     subject: '[PMS] Observation Resolved',
@@ -1041,7 +1045,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       send_back_reason, generated_password, login_email, employee_code, app_name,
       kra_list, kra_count, employee_name, total_weightage,
       old_email, new_email,
-      observation_title, observation_type, observation_description } = body;
+      observation_title, observation_type, observation_description, reply_content } = body;
 
     // Check if email notifications are enabled
     const { data: enabledSetting } = await supabase
@@ -1190,6 +1194,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       observation_title,
       observation_type,
       observation_description,
+      reply_content,
     };
 
     // For kra_batch_assigned, inject the KRA table HTML into the placeholder
