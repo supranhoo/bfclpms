@@ -1,36 +1,32 @@
 
 
-# Fix: Org KPI Self-Entry Lock Should Exempt Data Owners
+# Enhance Org KPI Locked Card with Data Owner Status Transparency
 
-## Current Behavior (Switch OFF)
-- `isOrgLocked = isSelectedKpiOrgLevel && !orgKpiSelfEntryAllowed`
-- This blanket-locks every employee, including someone who is both an employee AND a Data Owner for that specific KPI.
+## Problem
+When an employee sees a locked Org KPI in their self-review, the card only shows a generic message: "Data will be entered by the designated Data Owner." The employee has no visibility into:
+- **Who** the Data Owner is
+- **Whether** data has already been entered (just not propagated yet)
+- The current **status** of the data pipeline (Pending → Entered → Propagated)
 
-## Correct Behavior
+## Solution
+Enhance the locked card in `SelfReviewSheet.tsx` to display:
+1. **Data Owner name(s)** — fetched via the existing `useOrgKpiOwners` hook
+2. **Entry status** — derived from `orgKpiValue` (the existing variable already in scope):
+   - **Pending** (no value entered yet) — amber badge
+   - **Entered** (value exists but not propagated) — blue badge
+   - **Propagated** (value pushed to scorecard) — green badge, plus the achieved value
 
-| Scenario | Switch OFF | Switch ON |
-|---|---|---|
-| Regular employee, org KPI | **Locked** — sees "Data Owner will enter" | Allowed to self-enter |
-| Employee who IS Data Owner for this KPI | **Allowed** — they are the designated provider | Allowed |
-| Admin | Always allowed | Always allowed |
+## Changes
 
-## Fix: `SelfReviewSheet.tsx` (1 line change)
+### `SelfReviewSheet.tsx` — enhance the `isOrgLocked` block (~lines 572-589)
 
-Import `useIsOrgKpiDataOwner` and check if the current user is the Data Owner for the selected KPI. If they are, skip the lock:
+- Import `useOrgKpiOwners` from `useOrgKpiDataOwner.ts`
+- Call `useOrgKpiOwners(selectedKpi.category_id, selectedKpi.kra_name, selectedKpi.kpi_name)`
+- Replace the static message with:
+  - A status indicator (Pending / Entered / Propagated) with color-coded badge
+  - Data Owner names listed (e.g., "Assigned to: John Smith, Jane Doe")
+  - If propagated, show the achieved value
+  - If pending, show "Awaiting data entry from [Owner Name]"
 
-```typescript
-const { data: ownerCheck } = useIsOrgKpiDataOwner(
-  selectedKpi?.category_id || '',
-  selectedKpi?.kra_name || '',
-  selectedKpi?.kpi_name || ''
-);
-
-const isOrgLocked = isSelectedKpiOrgLevel 
-  && !orgKpiSelfEntryAllowed 
-  && !ownerCheck?.canEdit;  // Data Owners & Admins bypass the lock
-```
-
-This uses the existing `useIsOrgKpiDataOwner` hook which already returns `{ canEdit: true }` for admins and designated Data Owners.
-
-**1 file, ~5 lines changed. No DB migration.**
+**1 file changed, ~20 lines modified. No DB migration.**
 
