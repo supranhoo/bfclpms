@@ -1,25 +1,39 @@
 
 
-# Fix: Toast Notifications Persist Too Long and Block UI
+# System Control: Lock Org KPI Self-Entry by Employees
 
 ## Problem
-The radix-based toast system (`useToast` / `use-toast.ts`) has `TOAST_REMOVE_DELAY = 1000000` (over 16 minutes). Toasts like "Forwarded successfully" stay on screen indefinitely, blocking buttons underneath. The close button only appears on hover, which is not obvious to users.
+Currently, employees can enter achieved values for org-level KPIs in their Self Review sheet before a Data Owner has propagated data. The `hasOrgData` guard only locks the field **after** propagation — it doesn't prevent early entry. The business requirement is that org KPI data should **only** be entered by designated Data Owners (or admins), never by employees themselves.
 
-## Root Cause
-Two issues in `src/hooks/use-toast.ts`:
-1. **Line 6**: `TOAST_REMOVE_DELAY = 1000000` — absurdly long timeout, toasts never auto-dismiss
-2. The radix `ToastViewport` renders at **bottom-right on desktop** (`sm:bottom-0 sm:right-0`), which overlaps action buttons in review pages
+## Design
 
-## Fix
+Add a new **boolean system control** in `workflow_settings` called `org_kpi_employee_self_entry`. Default: `false` (locked). When `false`, employees cannot enter achieved values for any KPI flagged `is_org_level = true` in their self-review — the form shows a locked state with a message like "This is an Organization KPI. Data will be entered by the designated Data Owner."
 
-### 1. Auto-dismiss after 5 seconds (`use-toast.ts`)
-Change `TOAST_REMOVE_DELAY` from `1000000` to `5000` (5 seconds). This makes all radix toasts auto-dismiss.
+When `true`, the current behavior is preserved (employees can enter data).
 
-### 2. Always show close button (`toast.tsx`)
-Remove `opacity-0 group-hover:opacity-100` from `ToastClose` so the X button is always visible, not just on hover.
+## Changes
 
-### 3. Move toast position to top-right (`toast.tsx`)
-Change `ToastViewport` from bottom-right to **top-right** on all screen sizes. This avoids overlapping action buttons in the review scorecards. Update classes to: `fixed top-0 right-0 z-[100] flex max-h-screen w-full flex-col p-4 md:max-w-[420px]`.
+### 1. Database: Insert new workflow setting
+Insert one row into `workflow_settings`:
+- `category`: `'validation'`
+- `setting_key`: `'org_kpi_employee_self_entry'`
+- `setting_value`: `false`
+- `label`: `'Allow Employee Self-Entry for Org KPIs'`
+- `description`: `'When disabled, employees cannot enter achieved values for Organization-level KPIs. Only designated Data Owners and Admins can enter data.'`
 
-**3 lines changed across 2 files. No DB migration.**
+### 2. Hook: `useWorkflowSettings.ts`
+Add a convenience hook `useOrgKpiSelfEntryAllowed()` that reads the setting and returns a boolean (default `false`).
+
+### 3. UI Lock: `SelfReviewSheet.tsx`
+- Import the new hook
+- Compute `isOrgLocked = isSelectedKpiOrgLevel && !orgKpiSelfEntryAllowed`
+- When `isOrgLocked`:
+  - Show a locked card (similar to frequency lock) instead of the assessment form
+  - Message: "This is an Organization KPI. Data will be entered by the designated Data Owner."
+  - The employee can still view KPI details, history, and observations — just not edit
+
+### 4. Admin UI: `WorkflowSettingsTab.tsx`
+No change needed — the existing boolean switch renderer will automatically pick up the new `validation` category setting and display it as a toggle.
+
+**1 DB insert (data, not schema), 2 file edits. No migration needed.**
 
