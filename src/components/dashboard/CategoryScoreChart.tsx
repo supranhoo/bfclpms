@@ -32,7 +32,7 @@ export function CategoryScoreChart({ data, sortBy = 'score-desc', onSortChange }
     if (!containerRef.current) return;
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        setYAxisWidth(Math.round(entry.contentRect.width * 0.3));
+        setYAxisWidth(Math.max(220, Math.round(entry.contentRect.width * 0.35)));
       }
     });
     observer.observe(containerRef.current);
