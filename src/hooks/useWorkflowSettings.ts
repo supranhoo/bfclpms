@@ -63,6 +63,9 @@ const DEFAULT_VALUES: Record<string, string | number | boolean> = {
   remarks_mandatory_hr_pms: true,
   remarks_mandatory_auditor: true,
   remarks_mandatory_management: false,
+  
+  // Org KPI self-entry
+  org_kpi_employee_self_entry: false,
 };
 
 function parseSettingValue(value: unknown): string | number | boolean {
@@ -332,4 +335,20 @@ export function useRemarksMandatorySettings() {
     auditor: getBool('remarks_mandatory_auditor', true),
     management: getBool('remarks_mandatory_management', false),
   };
+}
+
+/**
+ * Check if employees are allowed to self-enter achieved values for Org KPIs.
+ * Default: false (locked — only Data Owners / Admins can enter).
+ */
+export function useOrgKpiSelfEntryAllowed(): boolean {
+  const { data, isLoading } = useWorkflowSetting('org_kpi_employee_self_entry');
+
+  if (isLoading || !data) {
+    return DEFAULT_VALUES.org_kpi_employee_self_entry as boolean;
+  }
+
+  if (typeof data.setting_value === 'boolean') return data.setting_value;
+  if (data.setting_value === 'true') return true;
+  return false;
 }

@@ -3,7 +3,7 @@ import { safeParseFloat } from '@/lib/utils';
 import { openStorageFile } from '@/lib/storageDownload';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubmitSelfReview, RatingLevel, KPI, OrgLevelScope, ReviewSubmission } from '@/hooks/useKpis';
-import { useRemarksMandatorySettings } from '@/hooks/useWorkflowSettings';
+import { useRemarksMandatorySettings, useOrgKpiSelfEntryAllowed } from '@/hooks/useWorkflowSettings';
 import { useToast } from '@/hooks/use-toast';
 import { useSubPeriodSubmissionsByKpis, useSubmitSubPeriod, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useDailyAggregationMethod } from '@/hooks/useSystemSettings';
@@ -116,6 +116,7 @@ export function SelfReviewSheet({
   const submitSubPeriod = useSubmitSubPeriod();
   const { toast } = useToast();
   const remarksMandatory = useRemarksMandatorySettings();
+  const orgKpiSelfEntryAllowed = useOrgKpiSelfEntryAllowed();
 
   // Rollback state
   const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false);
@@ -467,6 +468,7 @@ export function SelfReviewSheet({
   })();
   const selectedKpiOrgValue = isSelectedKpiOrgLevel ? orgKpiValuesMap.get(orgKey) || null : null;
   const hasOrgData = isSelectedKpiOrgLevel && selectedKpiOrgValue?.achieved_value != null;
+  const isOrgLocked = isSelectedKpiOrgLevel && !orgKpiSelfEntryAllowed;
   const isKraSet = selectedKpi?.status === 'kra_set';
   const needsSubPeriodForKpi = selectedKpi ? requiresSubPeriodSelection(selectedKpi.frequency as FrequencyType) : false;
   const isSelfReview = selectedKpi?.status === 'self_review';
@@ -540,7 +542,7 @@ export function SelfReviewSheet({
             {/* Self Assessment Form - Only in edit mode */}
             {!isReadOnly && selectedKpi && (
               <>
-              {/* Frequency Lock: show locked card instead of form when KPI is locked */}
+              {/* Frequency Lock */}
               {isKraSet && isFrequencyLocked ? (
                 <Card>
                   <CardContent className="py-12 text-center space-y-3">
@@ -559,6 +561,24 @@ export function SelfReviewSheet({
                       For Quarterly KPIs (Jan–Mar), entry opens in <strong>March</strong>.
                       For Bi-Monthly KPIs (Feb–Mar), entry opens in <strong>March</strong>.
                     </p>
+                  </CardContent>
+                </Card>
+              ) : isOrgLocked ? (
+                <Card>
+                  <CardContent className="py-12 text-center space-y-3">
+                    <div className="flex justify-center">
+                      <div className="p-3 rounded-full bg-muted">
+                        <Building2 className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                    </div>
+                    <h3 className="font-semibold text-foreground">Organization KPI</h3>
+                    <p className="text-sm text-muted-foreground">
+                      This is an Organization KPI. Data will be entered by the designated Data Owner.
+                    </p>
+                    <Badge variant="outline" className="mt-2">
+                      <Lock className="h-3 w-3 mr-1" />
+                      Self-entry disabled
+                    </Badge>
                   </CardContent>
                 </Card>
               ) : (
