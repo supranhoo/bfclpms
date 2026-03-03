@@ -1,47 +1,39 @@
 
 
-# Fix: Highlight Eliminated KPI Months in Light Red
+# Fix: Correct Stale `final_score` on 3 Approved KPIs
 
 ## Problem
-When a KPI exists in earlier months but disappears (shows `--`) in later months, the `--` is displayed in faint grey. The user wants these "eliminated" cells highlighted in light red, matching the mismatch styling, to make it visually obvious that a KPI was dropped.
+3 KPIs across the system have `status = 'approved'` but `final_score = 0` even though a later-stage reviewer (Auditor, HR PMS, or Management) gave a score of 5. This is a **data integrity issue** from approvals processed before the `final_score` sync logic was added.
 
-## Logic
+### Affected Records
+| Employee | KPI | Period | Auditor | Mgmt | Final (wrong) |
+|---|---|---|---|---|---|
+| 100264 – Sajid Raza | Incoming Quality of RM | Dec | 0 | 5 | 0 |
+| 100894 – Parshu Ram Shukla | Customer Complaints | Jan | 0 | 5 | 0 |
+| 100633 – Ramchandra Reddy | Adherence to Manning Norms | Dec | 5 | — | 0 |
 
-Current code (line 309-321) treats all `null` months the same — faint grey text. The fix adds a check: if a KPI has data in any **earlier** month but is `null` in the current month, it is considered "eliminated" and gets the red highlight.
+## Root Cause
+These KPIs were approved through a code path (likely ManagementScorecard or admin step-back) before the `final_score` sync logic existed. The current code already handles this correctly — no code fix needed.
 
-**Detection**: For each `--` cell, check if any preceding month (in fiscal order) had a non-null weightage. If yes → eliminated → light red background.
+## Fix: One-Time Data Migration
 
-## File Change
+Run a SQL migration to retroactively fix all approved KPIs where `final_score` doesn't match the authoritative fallback chain:
 
-**`src/pages/admin/KpiWeightageDashboard.tsx`** — lines 306-322
-
-```typescript
-{months.map((m, mIdx) => {
-  const w = kpi.months[m];
-  const isMismatch = w != null && kpi.baselineWeightage != null && w !== kpi.baselineWeightage;
-  const noData = w == null;
-  // "Eliminated" = no data this month, but had data in a prior month
-  const isEliminated = noData && months.slice(0, mIdx).some(prev => kpi.months[prev] != null);
-  return (
-    <TableCell
-      key={m}
-      className={`text-center text-sm ${
-        isEliminated
-          ? 'bg-destructive/10 text-destructive font-medium'
-          : noData
-            ? 'text-muted-foreground/40'
-            : isMismatch
-              ? 'bg-destructive/10 text-destructive font-medium'
-              : ''
-      }`}
-    >
-      {noData ? '--' : `${w}%`}
-    </TableCell>
+```sql
+UPDATE review_submissions rs
+SET 
+  final_score = COALESCE(rs.management_score, rs.auditor_score, rs.hr_pms_score, rs.skip_level_score, rs.manager_score, rs.self_score),
+  final_rating = COALESCE(rs.management_rating, rs.auditor_rating, rs.hr_pms_rating, rs.skip_level_rating, rs.manager_rating, rs.self_rating)
+FROM kpis k
+WHERE rs.kpi_id = k.id
+  AND k.status = 'approved'
+  AND rs.final_score = 0
+  AND (
+    COALESCE(rs.management_score, rs.auditor_score, rs.hr_pms_score, rs.skip_level_score, rs.manager_score) > 0
   );
-})}
 ```
 
-Also update `hasMismatch` detection in `useKpiWeightageMatrix.ts` to flag KPIs that have eliminated months (optional — the visual highlight is the primary ask).
+This updates only the 3 affected rows. No code changes needed — the existing approval paths already sync `final_score` correctly.
 
-**1 file change, no DB migration.**
+**1 DB migration, 0 file changes.**
 
