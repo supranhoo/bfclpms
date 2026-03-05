@@ -368,6 +368,43 @@ const getThresholdScaleFactor = (row: KpiImportRow): number => {
   return 100;
 };
 
+/**
+ * Resolve review_period to the active/terminal month for multi-month frequencies.
+ * E.g. Quarterly January → March, Bi-Monthly January → February.
+ */
+const resolveToActiveMonth = (
+  period: string | null,
+  frequency: string | null,
+  frequencyCycleStart: string | null
+): string | null => {
+  if (!period || !frequency) return period;
+
+  const MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const monthNum = MONTHS.indexOf(period) + 1;
+  if (monthNum === 0) return period; // Not a standard month name, return as-is
+
+  switch (frequency) {
+    case 'Bi-Monthly':
+      return monthNum % 2 === 0 ? period : MONTHS[monthNum]; // odd→next month
+    case 'Quarterly':
+      const quarterEnd = Math.ceil(monthNum / 3) * 3;
+      return MONTHS[quarterEnd - 1];
+    case 'Half-Yearly':
+      return monthNum <= 6 ? 'June' : 'December';
+    case 'Yearly': {
+      const cycle = frequencyCycleStart || 'Jan-Dec';
+      if (cycle === 'Jul-Jun') return 'June';
+      if (cycle === 'Apr-Mar') return 'March';
+      return 'December';
+    }
+    default:
+      return period;
+  }
+};
+
 const getRandomColor = () => {
   const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
   return colors[Math.floor(Math.random() * colors.length)];
@@ -800,6 +837,9 @@ async function processImport(
         }
       }
       
+      // Auto-resolve review_period to the cycle's active/terminal month for multi-month frequencies
+      const resolvedPeriod = resolveToActiveMonth(reviewPeriod, row.frequency || null, row.frequencyCycleStart || null);
+
       kpiRecords.push({
         id: kpiId,
         employee_id: employeeId,
@@ -813,7 +853,7 @@ async function processImport(
         weightage: row.kpiWeightage || row.kpiWeightageScore || 0,
         criteria: row.criteria || (uomType === 'numeric' ? 'Higher is Better' : null),
         status: determineReviewStatus(row),
-        review_period: reviewPeriod,
+        review_period: resolvedPeriod,
         review_year: reviewYear,
         r5: formatRatingThreshold(row.r5, { mode: thresholdMode, factor: thresholdFactor }),
         r4: formatRatingThreshold(row.r4, { mode: thresholdMode, factor: thresholdFactor }),
