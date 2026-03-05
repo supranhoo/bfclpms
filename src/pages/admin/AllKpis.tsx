@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
 import { useAllKpis, useKpisByPeriod, useOpenQueryCounts, useDistinctKpiPeriods, useAdminDeleteKpi, KPI } from '@/hooks/useKpis';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
 import { useKraCategories, useProfiles, useDivisions, useDepartments } from '@/hooks/useOrganization';
 import { getStageLabel } from '@/hooks/useWorkflowConfig';
 import * as XLSX from 'xlsx';
@@ -47,6 +49,7 @@ interface EmployeeKpiData {
   managerName: string;
   totalKpis: number;
   orgLevelKpis: number;
+  orgLevelFilledKpis: number;
   stageCounts: Record<string, number>;
   stageQueryCounts: Record<string, number>;
   totalWeightage: number;
@@ -98,6 +101,36 @@ export default function AllKpis() {
   const kpiIds = useMemo(() => kpis?.map(k => k.id) || [], [kpis]);
   const { data: openQueryCountByKpi } = useOpenQueryCounts(kpiIds);
   const queryCountMap = openQueryCountByKpi || new Map<string, number>();
+
+  // Fetch org_kpi_values filled status for the selected period/year
+  const { data: orgKpiFilledSet } = useQuery({
+    queryKey: ['org-kpi-filled-set', selectedPeriod, selectedYear],
+    queryFn: async () => {
+      let query = supabase
+        .from('org_kpi_values')
+        .select('category_id, kra_name, kpi_name, employee_id, achieved_value, is_na')
+        .not('employee_id', 'is', null);
+
+      if (selectedPeriod !== 'all') {
+        query = query.eq('review_period', selectedPeriod);
+      }
+      if (selectedYear !== 'all') {
+        query = query.eq('review_year', parseInt(selectedYear));
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const filled = new Set<string>();
+      data?.forEach(row => {
+        if (row.achieved_value !== null || row.is_na) {
+          filled.add(`${row.category_id}||${row.kra_name}||${row.kpi_name}||${row.employee_id}`);
+        }
+      });
+      return filled;
+    },
+    enabled: !!kpis && kpis.length > 0,
+  });
 
   // Dialog states
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
@@ -201,8 +234,9 @@ export default function AllKpis() {
           employeeCode: employee.employee_code || '',
           departmentName: dept?.name || '-',
           managerName: manager?.full_name || '-',
-          totalKpis: 0,
+        totalKpis: 0,
           orgLevelKpis: 0,
+          orgLevelFilledKpis: 0,
           stageCounts: {},
           stageQueryCounts: {},
           totalWeightage: 0,
@@ -214,6 +248,10 @@ export default function AllKpis() {
       data.totalWeightage += (kpi.weightage ?? 0);
       if (kpi.is_org_level) {
         data.orgLevelKpis++;
+        const filledKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${kpi.employee_id}`;
+        if (orgKpiFilledSet?.has(filledKey)) {
+          data.orgLevelFilledKpis++;
+        }
       }
 
       // Count by stage
@@ -228,7 +266,7 @@ export default function AllKpis() {
     });
 
     return Array.from(employeeMap.values()).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-  }, [filteredKpis, profiles, departments, queryCountMap]);
+  }, [filteredKpis, profiles, departments, queryCountMap, orgKpiFilledSet]);
 
   // Get KPIs for a specific employee
   const getEmployeeKpis = useCallback((employeeId: string): KPI[] => {
@@ -604,8 +642,17 @@ export default function AllKpis() {
                         </TableCell>
                         <TableCell className="text-center">
                           {emp.orgLevelKpis > 0 ? (
-                            <Badge variant="outline" className="font-mono text-primary border-primary/50">
-                              {emp.orgLevelKpis}
+                            <Badge 
+                              variant="outline" 
+                              className={`font-mono border-primary/50 ${
+                                emp.orgLevelFilledKpis === emp.orgLevelKpis 
+                                  ? 'text-green-600 dark:text-green-400 border-green-500/50' 
+                                  : emp.orgLevelFilledKpis > 0 
+                                    ? 'text-amber-600 dark:text-amber-400 border-amber-500/50' 
+                                    : 'text-primary'
+                              }`}
+                            >
+                              {emp.orgLevelFilledKpis}/{emp.orgLevelKpis}
                             </Badge>
                           ) : (
                             <span className="text-muted-foreground">-</span>
