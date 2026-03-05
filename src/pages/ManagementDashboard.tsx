@@ -151,9 +151,10 @@ export default function ManagementDashboard() {
 
   // Main dashboard data query
   const stableEmployeeKey = filteredEmployeeIds.join(',');
-  const { data: dashboardData, isLoading: dataLoading } = useQuery({
+  const { data: dashboardData, isLoading: dataLoading, isError, refetch } = useQuery({
     queryKey: ['management-dashboard', selectedFiscalYear, selectedMonths, stableEmployeeKey, filters.divisionId, filters.businessUnitId, filters.departmentId, filters.managerId, filters.employeeId],
     queryFn: async () => {
+     try {
       // Detect if any hierarchy filter is active to avoid .in() overflow with 454+ UUIDs
       const hasActiveHierarchyFilters = !!(filters.divisionId || filters.businessUnitId || filters.departmentId || filters.managerId || filters.employeeId);
 
@@ -414,6 +415,10 @@ export default function ManagementDashboard() {
         orgMeanPct,
         overdueReviews,
       };
+     } catch (error) {
+        console.error('Management dashboard query error:', error);
+        throw error;
+     }
     },
     enabled: !filtersLoading,
   });
@@ -496,6 +501,26 @@ export default function ManagementDashboard() {
           ))}
         </div>
         <Skeleton className="h-96" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Management Dashboard" description="Executive overview of organizational performance" backTo="/dashboard" />
+        <Card className="max-w-lg mx-auto">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
+              <AlertCircle className="h-6 w-6 text-destructive" />
+            </div>
+            <CardTitle>Failed to load dashboard</CardTitle>
+            <CardDescription>An error occurred while fetching data. Please try again.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex justify-center">
+            <Button onClick={() => refetch()}>Retry</Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
