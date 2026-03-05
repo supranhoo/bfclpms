@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
@@ -22,6 +22,7 @@ import { ReviewerAnalyticsTable } from '@/components/management/ReviewerAnalytic
 import { TrainingGapSummary } from '@/components/management/TrainingGapSummary';
 import { RecentAuditLog } from '@/components/management/RecentAuditLog';
 import { NotificationsSummary } from '@/components/management/NotificationsSummary';
+import { Toggle } from '@/components/ui/toggle';
 import {
   Users,
   Target,
@@ -81,12 +82,36 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+/** Fiscal year order: Jul → Jun */
+const FISCAL_MONTHS = [
+  'July', 'August', 'September', 'October', 'November', 'December',
+  'January', 'February', 'March', 'April', 'May', 'June'
+];
+
+const FISCAL_MONTHS_SHORT = FISCAL_MONTHS.map(m => m.substring(0, 3));
+
+/**
+ * For a fiscal year starting in `startYear`, returns {month, calendarYear} pairs
+ * for the selected months.
+ */
+function getFiscalPeriodRanges(fiscalStartYear: number, selectedMonths: string[]): Array<{ month: string; year: number }> {
+  return selectedMonths.map(month => {
+    const monthIndex = MONTHS.indexOf(month);
+    // Jul-Dec belong to the start year, Jan-Jun belong to the next year
+    const calendarYear = monthIndex >= 6 ? fiscalStartYear : fiscalStartYear + 1;
+    return { month, year: calendarYear };
+  });
+}
+
 export default function ManagementDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const currentYear = new Date().getFullYear();
-  const [selectedYear, setSelectedYear] = useState(currentYear.toString());
-  const [selectedPeriod, setSelectedPeriod] = useState('all');
+  const currentMonth = new Date().getMonth(); // 0-indexed
+  // Default fiscal year: if we're in Jul+ use current year, else previous year
+  const defaultFiscalYear = currentMonth >= 6 ? currentYear : currentYear - 1;
+  const [selectedFiscalYear, setSelectedFiscalYear] = useState(defaultFiscalYear);
+  const [selectedMonths, setSelectedMonths] = useState<string[]>(FISCAL_MONTHS);
 
   const {
     filters,
@@ -101,71 +126,73 @@ export default function ManagementDashboard() {
     isLoading: filtersLoading,
   } = useKpiFilters();
 
+  // rollbackCounts already declared below
+
+  // Compute fiscal period ranges for the query
+  const fiscalPeriodRanges = useMemo(() => getFiscalPeriodRanges(selectedFiscalYear, selectedMonths), [selectedFiscalYear, selectedMonths]);
+  const isSingleMonth = selectedMonths.length === 1;
+  const fiscalYearLabel = `FY ${selectedFiscalYear}-${(selectedFiscalYear + 1).toString().slice(-2)}`;
+
+  // Toggle month selection
+  const toggleMonth = useCallback((month: string) => {
+    setSelectedMonths(prev => {
+      if (prev.includes(month)) {
+        // Don't allow deselecting all
+        if (prev.length === 1) return prev;
+        return prev.filter(m => m !== month);
+      }
+      return [...prev, month];
+    });
+  }, []);
+
+  const selectAllMonths = useCallback(() => setSelectedMonths(FISCAL_MONTHS), []);
+
   const { data: rollbackCounts } = useRollbackStatusCounts();
-
-  // Fetch review periods
-  const { data: reviewPeriods } = useQuery({
-    queryKey: ['review-periods', selectedYear],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('review_periods')
-        .select('*')
-        .eq('review_year', parseInt(selectedYear))
-        .order('period_name');
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  // Helper to get previous period
-  const getPreviousPeriod = (currentPeriod: string, periods: typeof reviewPeriods): string | null => {
-    if (!periods || periods.length === 0) return null;
-    const sortedPeriods = [...periods].sort((a, b) => a.period_name.localeCompare(b.period_name));
-    const currentIndex = sortedPeriods.findIndex(p => p.period_name === currentPeriod);
-    if (currentIndex > 0) return sortedPeriods[currentIndex - 1].period_name;
-    return null;
-  };
-
-  const previousPeriod = selectedPeriod !== 'all' ? getPreviousPeriod(selectedPeriod, reviewPeriods || []) : null;
 
   // Main dashboard data query
   const { data: dashboardData, isLoading: dataLoading } = useQuery({
-    queryKey: ['management-dashboard', selectedYear, selectedPeriod, filteredEmployeeIds, previousPeriod, filters.divisionId, filters.businessUnitId, filters.departmentId, filters.managerId, filters.employeeId],
+    queryKey: ['management-dashboard', selectedFiscalYear, selectedMonths, filteredEmployeeIds, filters.divisionId, filters.businessUnitId, filters.departmentId, filters.managerId, filters.employeeId],
     queryFn: async () => {
-      const year = parseInt(selectedYear);
-
       // Detect if any hierarchy filter is active to avoid .in() overflow with 454+ UUIDs
       const hasActiveHierarchyFilters = !!(filters.divisionId || filters.businessUnitId || filters.departmentId || filters.managerId || filters.employeeId);
 
-      const fetchPeriodData = async (periodFilter: string | null) => {
+      // Group selected months by calendar year for efficient querying
+      const monthsByYear = new Map<number, string[]>();
+      fiscalPeriodRanges.forEach(({ month, year }) => {
+        if (!monthsByYear.has(year)) monthsByYear.set(year, []);
+        monthsByYear.get(year)!.push(month);
+      });
+
+      const fetchFiscalData = async (): Promise<any[]> => {
         const allKpis: any[] = [];
-        let offset = 0;
-        const batchSize = 1000;
-        let hasMore = true;
-        while (hasMore) {
-          let query = supabase
-            .from('kpis')
-            .select(`
-              id, employee_id, status, weightage, review_period, review_year,
-              review_submissions ( final_score, management_score, auditor_score, manager_score, self_score )
-            `)
-            .eq('review_year', year)
-            .range(offset, offset + batchSize - 1);
-          if (periodFilter && periodFilter !== 'all') query = query.eq('review_period', periodFilter);
-          // Only apply .in() when hierarchy filters are active to avoid URL length overflow
-          if (hasActiveHierarchyFilters && filteredEmployeeIds.length > 0) {
-            query = query.in('employee_id', filteredEmployeeIds);
+        // Fetch each calendar year chunk separately
+        for (const [calYear, months] of monthsByYear.entries()) {
+          let offset = 0;
+          const batchSize = 1000;
+          let hasMore = true;
+          while (hasMore) {
+            let query = supabase
+              .from('kpis')
+              .select(`
+                id, employee_id, status, weightage, review_period, review_year,
+                review_submissions ( final_score, management_score, auditor_score, manager_score, self_score )
+              `)
+              .eq('review_year', calYear)
+              .in('review_period', months)
+              .range(offset, offset + batchSize - 1);
+            if (hasActiveHierarchyFilters && filteredEmployeeIds.length > 0) {
+              query = query.in('employee_id', filteredEmployeeIds);
+            }
+            const { data, error } = await query;
+            if (error) throw error;
+            if (data && data.length > 0) { allKpis.push(...data); offset += batchSize; hasMore = data.length === batchSize; } else { hasMore = false; }
           }
-          const { data, error } = await query;
-          if (error) throw error;
-          if (data && data.length > 0) { allKpis.push(...data); offset += batchSize; hasMore = data.length === batchSize; } else { hasMore = false; }
         }
         return allKpis;
       };
 
-      const [currentKpis, previousKpis, profilesResult, queriesResult, departmentsResult] = await Promise.all([
-        fetchPeriodData(selectedPeriod),
-        previousPeriod ? fetchPeriodData(previousPeriod) : Promise.resolve([]),
+      const [currentKpis, profilesResult, queriesResult, departmentsResult] = await Promise.all([
+        fetchFiscalData(),
         supabase.from('profiles').select('id, full_name, employee_code, department_id, reporting_manager_id, departments (name)'),
         supabase.from('kpi_queries').select('*', { count: 'exact', head: true }).eq('status', 'open').eq('query_type', 'query'),
         supabase.from('departments').select('id, name'),
@@ -196,7 +223,8 @@ export default function ManagementDashboard() {
       };
 
       const currentMetrics = calculateMetrics(kpis);
-      const previousMetrics = previousKpis.length > 0 ? calculateMetrics(previousKpis) : null;
+      // No previous period comparison in multi-month mode
+      const previousMetrics = null;
 
       const calculateTrend = (current: number, previous: number | null): { change: number; direction: 'up' | 'down' | 'stable' } => {
         if (previous === null || previous === 0) return { change: 0, direction: 'stable' };
@@ -286,11 +314,8 @@ export default function ManagementDashboard() {
       const topPerformers = employeePerformers.slice(0, 5);
       const bottomPerformers = [...employeePerformers].sort((a, b) => a.score - b.score).slice(0, 5);
 
-      // Performance trend by period (for all months in year)
+      // Performance trend by period (in fiscal order)
       const periodScores = new Map<string, { total: number; weightage: number }>();
-      // Use ALL kpis for the year (not filtered by period) for trend
-      const allYearKpis = selectedPeriod === 'all' ? kpis : currentKpis;
-      // We need to fetch all year KPIs for trend — use currentKpis if 'all', else refetch
       kpis.forEach(kpi => {
         const period = kpi.review_period || 'Unknown';
         const score = getScore(kpi);
@@ -299,7 +324,7 @@ export default function ManagementDashboard() {
         if (existing) { existing.total += score; existing.weightage += w; }
         else periodScores.set(period, { total: score, weightage: w });
       });
-      const trendData = MONTHS
+      const trendData = FISCAL_MONTHS
         .filter(m => periodScores.has(m))
         .map(m => ({ period: m, avgScore: periodScores.get(m)!.weightage > 0 ? (periodScores.get(m)!.total / periodScores.get(m)!.weightage) * 100 : 0 }));
 
@@ -363,8 +388,8 @@ export default function ManagementDashboard() {
         completionRate: currentMetrics.completionRate,
         avgScore: currentMetrics.avgScore,
         trends,
-        hasPreviousPeriod: !!previousPeriod && previousKpis.length > 0,
-        previousPeriodName: previousPeriod,
+        hasPreviousPeriod: false,
+        previousPeriodName: null,
         topPerformers,
         bottomPerformers,
         trendData,
@@ -389,7 +414,7 @@ export default function ManagementDashboard() {
     );
   };
 
-  const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+  
 
   const getScoreColor = (score: number) => {
     if (score >= 85) return RATING_COLORS.excellent;
@@ -406,7 +431,7 @@ export default function ManagementDashboard() {
     doc.setFontSize(18);
     doc.text('Management Dashboard Report', 14, 22);
     doc.setFontSize(10);
-    doc.text(`Year: ${selectedYear} | Period: ${selectedPeriod === 'all' ? 'All' : selectedPeriod}`, 14, 30);
+    doc.text(`${fiscalYearLabel} | Months: ${selectedMonths.length === 12 ? 'All' : selectedMonths.map(m => m.substring(0, 3)).join(', ')}`, 14, 30);
     doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 36);
 
     // Summary stats
@@ -438,7 +463,7 @@ export default function ManagementDashboard() {
       });
     }
 
-    doc.save(`management-dashboard-${selectedYear}-${selectedPeriod}.pdf`);
+    doc.save(`management-dashboard-${fiscalYearLabel}.pdf`);
   };
 
   const isLoading = filtersLoading || dataLoading;
@@ -465,27 +490,55 @@ export default function ManagementDashboard() {
         description="Executive overview of organizational performance"
         backTo="/dashboard"
         actions={
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleExport}>
               <Download className="h-4 w-4 mr-1" />
-              Export Report
+              Export
             </Button>
-            <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+            <Select value={selectedFiscalYear.toString()} onValueChange={(v) => setSelectedFiscalYear(parseInt(v))}>
+              <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {years.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger className="w-[150px]"><SelectValue placeholder="All Periods" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Periods</SelectItem>
-                {reviewPeriods?.map(period => <SelectItem key={period.id} value={period.period_name}>{period.period_name}</SelectItem>)}
+                {[currentYear, currentYear - 1, currentYear - 2].map(y => (
+                  <SelectItem key={y} value={y.toString()}>FY {y}-{(y + 1).toString().slice(-2)}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
         }
       />
+
+      {/* Multi-Month Toggle Grid */}
+      <Card>
+        <CardContent className="pt-4 pb-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant={selectedMonths.length === 12 ? 'default' : 'outline'}
+              size="sm"
+              className="text-xs h-7 px-2"
+              onClick={selectAllMonths}
+            >
+              All
+            </Button>
+            <div className="h-5 w-px bg-border" />
+            {FISCAL_MONTHS.map((month, i) => (
+              <Toggle
+                key={month}
+                pressed={selectedMonths.includes(month)}
+                onPressedChange={() => toggleMonth(month)}
+                size="sm"
+                className="text-xs h-7 px-2"
+              >
+                {FISCAL_MONTHS_SHORT[i]}
+              </Toggle>
+            ))}
+            {selectedMonths.length < 12 && (
+              <Badge variant="secondary" className="text-xs h-6 px-2 ml-1">
+                {selectedMonths.length} {selectedMonths.length === 1 ? 'month' : 'months'}
+              </Badge>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <Card>
@@ -713,8 +766,8 @@ export default function ManagementDashboard() {
           orgMean={dashboardData?.orgMeanPct || 0}
         />
         <TrainingGapSummary
-          reviewPeriod={selectedPeriod !== 'all' ? selectedPeriod : undefined}
-          reviewYear={parseInt(selectedYear)}
+          reviewPeriod={isSingleMonth ? selectedMonths[0] : undefined}
+          reviewYear={selectedFiscalYear}
         />
       </div>
 
