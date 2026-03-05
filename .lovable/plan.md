@@ -1,26 +1,48 @@
 
+# KPI Score Calculation Bug: Inherited Score Not Recalculated from Achieved Value
 
-# Add Reporting Manager Name to KPI Header
+## Root Cause Analysis
 
-## Problem
-The KPI detail panel (visible in all review scorecards) doesn't show who the employee's reporting manager is. The user wants it displayed below the Timeline button in the top-right corner.
+The screenshot shows:
+- **Self**: Value 91.36, Rating **4** (correct: 91.36 ≤ 95 → R4)
+- **Manager**: Value 98, Rating **3** (correct: 98 ≤ 100 → R3)
+- **Skip-Level**: Value 91.36, Rating **3** (WRONG: 91.36 ≤ 95 → should be R4)
+- **HR PMS**: Value 91.36, Rating **3** (WRONG: 91.36 ≤ 95 → should be R4)
 
-## Approach
-Fetch the reporting manager name directly inside `KpiHeaderSection` using `kpi.employee_id`. This avoids adding a new prop to `KpiReviewPanel` and all 7+ consumer components.
+The bug is in `UnifiedScorecard.tsx` → `openReviewSheet()` (lines 642-684).
 
-**Self-contained query**: Use a single Supabase query joining the employee profile to their manager's profile via `reporting_manager_id`, cached by react-query.
+When a reviewer opens a KPI sheet, the score is initialized by **inheriting the previous reviewer's score** rather than recalculating from the achieved value:
 
-## Changes
+```typescript
+// Line 650: Skip-level inherits manager's score (3) even though the achieved value (91.36) warrants a 4
+skip_level: () => (existing as any)?.skip_level_score ?? existing?.manager_score ?? null,
+```
 
-### File: `src/components/review/KpiHeaderSection.tsx`
-1. Import `useQuery` from `@tanstack/react-query` and `supabase` client
-2. Add a query that fetches the reporting manager's `full_name` for the given `kpi.employee_id`:
-   - Query `profiles` for `reporting_manager_id` where `id = kpi.employee_id`
-   - Then fetch the manager's `full_name` from `profiles` where `id = reporting_manager_id`
-   - Cache key: `['kpi-reporting-manager', kpi.employee_id]`
-3. Display the manager name as a small text line below the badges row, right-aligned, showing: `👤 Reporting Manager: [Name]`
-   - Uses `text-xs text-muted-foreground` styling, positioned in the top-right area after the badges/Timeline row
-   - Only renders when manager name is available (not null)
+The `AchievedValueScoreInput` component has auto-calculation logic, but it only fires when `score === null` (line 73):
+```typescript
+if (mode === 'auto_calculate' && score === null && achievedValue !== null ...)
+```
 
-No database changes, no new props needed. The query is lightweight and cached per employee.
+Since the score is pre-populated to 3 (inherited), auto-calculation never triggers.
 
+## Fix
+
+### File: `src/components/review/UnifiedScorecard.tsx` (lines 642-684)
+
+In `openReviewSheet()`, after determining the achieved value, if the reviewer's **own** score field is null (they haven't reviewed yet), recalculate the score from the achieved value using `calculateRating()` instead of blindly inheriting from the previous level.
+
+**Logic change:**
+1. Check if the reviewer's own score (`existing?.[prefix_score]`) is null
+2. If null AND an achieved value is available AND thresholds exist → call `calculateRating()` to compute the correct score
+3. Use the recalculated score instead of the inherited one
+
+This ensures that when a reviewer opens a KPI for the first time, the displayed score matches the achieved value against thresholds, rather than inheriting a potentially incorrect score from a prior stage that used a different achieved value.
+
+### File: `src/components/review/AchievedValueScoreInput.tsx` (line 73)
+
+As a secondary safety net, also update the auto-calc effect to trigger recalculation when the current score doesn't match what the achieved value should produce — not just when score is null. This handles cases where the component receives a mismatched score/value pair.
+
+## Risk Assessment
+- **Data Impact**: No schema changes. Only affects future review sessions — already-saved scores are unaffected.
+- **Regression Risk**: Low. The recalculation uses the same `calculateRating()` function already used everywhere. If the reviewer has already entered their own score, it's preserved (no recalculation).
+- **Workflow Impact**: None. The fix is scoped to score initialization logic only.
