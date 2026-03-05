@@ -85,6 +85,9 @@ const actionConfig: Record<string, { icon: React.ElementType; color: string; lab
   'ADMIN_STATUS_STEP_BACK': { icon: UserCog, color: 'bg-rose-600', label: 'Admin Status Step Back' },
   'AUDITOR_FORWARDED': { icon: CheckCircle, color: 'bg-indigo-500', label: 'Auditor Forwarded' },
   'MANAGER_FORWARDED': { icon: CheckCircle, color: 'bg-green-500', label: 'Manager Forwarded' },
+  // Org KPI Propagation actions
+  'ORG_KPI_PROPAGATED': { icon: Briefcase, color: 'bg-teal-500', label: 'Org KPI Data Entered' },
+  'ORG_KPI_VALUE_UPDATED': { icon: Edit, color: 'bg-teal-500', label: 'Org KPI Value Updated' },
 };
 
 export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }: KpiTimelineProps) {
@@ -149,14 +152,25 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
     if (log.metadata?.reason) details.push(`Admin Reason: ${String(log.metadata.reason)}`);
     
     if (log.new_value) {
-      if (log.new_value.self_score) details.push(`Self Score: ${log.new_value.self_score}`);
-      if (log.new_value.manager_score) details.push(`Manager Score: ${log.new_value.manager_score}`);
-      if (log.new_value.auditor_score) details.push(`Auditor Score: ${log.new_value.auditor_score}`);
-      if (log.new_value.management_score) details.push(`Management Score: ${log.new_value.management_score}`);
-      if (log.new_value.self_rating) details.push(`Rating: ${log.new_value.self_rating}`);
-      if (log.new_value.manager_rating) details.push(`Rating: ${log.new_value.manager_rating}`);
-      if (log.new_value.auditor_rating) details.push(`Rating: ${log.new_value.auditor_rating}`);
-      if (log.new_value.management_rating) details.push(`Rating: ${log.new_value.management_rating}`);
+      // Org KPI propagation details
+      if (log.new_value.source === 'org_kpi_data_owner') {
+        if (log.new_value.is_na) {
+          details.push('Marked as N/A');
+        } else if (log.new_value.achieved_value !== undefined && log.new_value.achieved_value !== null) {
+          details.push(`Achieved Value: ${log.new_value.achieved_value}`);
+        }
+        if (log.new_value.self_score) details.push(`Score: ${log.new_value.self_score}`);
+        if (log.new_value.self_rating) details.push(`Rating: ${log.new_value.self_rating}`);
+      } else {
+        if (log.new_value.self_score) details.push(`Self Score: ${log.new_value.self_score}`);
+        if (log.new_value.manager_score) details.push(`Manager Score: ${log.new_value.manager_score}`);
+        if (log.new_value.auditor_score) details.push(`Auditor Score: ${log.new_value.auditor_score}`);
+        if (log.new_value.management_score) details.push(`Management Score: ${log.new_value.management_score}`);
+        if (log.new_value.self_rating) details.push(`Rating: ${log.new_value.self_rating}`);
+        if (log.new_value.manager_rating) details.push(`Rating: ${log.new_value.manager_rating}`);
+        if (log.new_value.auditor_rating) details.push(`Rating: ${log.new_value.auditor_rating}`);
+        if (log.new_value.management_rating) details.push(`Rating: ${log.new_value.management_rating}`);
+      }
       if (log.new_value.reason) details.push(`Reason: ${log.new_value.reason}`);
       if (log.new_value.resolution_notes) details.push(`Resolution: ${log.new_value.resolution_notes}`);
       if (log.new_value.target) details.push(`Sent to: ${log.new_value.target}`);
@@ -164,9 +178,7 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
         const label = statusLabels[String(log.new_value.status)] || String(log.new_value.status).replace(/_/g, ' ');
         details.push(`New Status: ${label}`);
       }
-      // N/A confirmation details
       if (log.new_value.na_remarks) details.push(`N/A Remarks: ${log.new_value.na_remarks}`);
-      // Reviewer remarks
       if (log.new_value.self_remarks) details.push(`Self Remarks: ${log.new_value.self_remarks}`);
       if (log.new_value.manager_remarks) details.push(`Manager Remarks: ${log.new_value.manager_remarks}`);
       if (log.new_value.auditor_remarks) details.push(`Auditor Remarks: ${log.new_value.auditor_remarks}`);
