@@ -130,9 +130,12 @@ export default function ManagementDashboard() {
 
   // Main dashboard data query
   const { data: dashboardData, isLoading: dataLoading } = useQuery({
-    queryKey: ['management-dashboard', selectedYear, selectedPeriod, filteredEmployeeIds, previousPeriod],
+    queryKey: ['management-dashboard', selectedYear, selectedPeriod, filteredEmployeeIds, previousPeriod, filters.divisionId, filters.businessUnitId, filters.departmentId, filters.managerId, filters.employeeId],
     queryFn: async () => {
       const year = parseInt(selectedYear);
+
+      // Detect if any hierarchy filter is active to avoid .in() overflow with 454+ UUIDs
+      const hasActiveHierarchyFilters = !!(filters.divisionId || filters.businessUnitId || filters.departmentId || filters.managerId || filters.employeeId);
 
       const fetchPeriodData = async (periodFilter: string | null) => {
         const allKpis: any[] = [];
@@ -149,7 +152,10 @@ export default function ManagementDashboard() {
             .eq('review_year', year)
             .range(offset, offset + batchSize - 1);
           if (periodFilter && periodFilter !== 'all') query = query.eq('review_period', periodFilter);
-          if (filteredEmployeeIds.length > 0) query = query.in('employee_id', filteredEmployeeIds);
+          // Only apply .in() when hierarchy filters are active to avoid URL length overflow
+          if (hasActiveHierarchyFilters && filteredEmployeeIds.length > 0) {
+            query = query.in('employee_id', filteredEmployeeIds);
+          }
           const { data, error } = await query;
           if (error) throw error;
           if (data && data.length > 0) { allKpis.push(...data); offset += batchSize; hasMore = data.length === batchSize; } else { hasMore = false; }
@@ -339,7 +345,7 @@ export default function ManagementDashboard() {
       ).length;
 
       return {
-        totalEmployees: profiles.length,
+        totalEmployees: hasActiveHierarchyFilters ? filteredEmployeeIds.length : profiles.length,
         employeesWithKpis: employeeScoreMap.size,
         totalKpis: kpis.length,
         openQueries,
