@@ -308,10 +308,11 @@ export default function ManagementDashboard() {
       });
       employeeScoreMap.forEach(({ total, weightage }) => {
         const avgScore = weightage > 0 ? total / weightage : 0;
-        if (avgScore >= 4.5) ratingCounts.band5++;
-        else if (avgScore >= 4) ratingCounts.band4++;
-        else if (avgScore >= 3.5) ratingCounts.band3++;
-        else if (avgScore >= 3) ratingCounts.band2++;
+        const rounded = Math.round(Math.min(5, Math.max(0, avgScore)));
+        if (rounded >= 5) ratingCounts.band5++;
+        else if (rounded >= 4) ratingCounts.band4++;
+        else if (rounded >= 3) ratingCounts.band3++;
+        else if (rounded >= 2) ratingCounts.band2++;
         else ratingCounts.band1++;
       });
 
@@ -397,11 +398,11 @@ export default function ManagementDashboard() {
         pendingReviews: pendingReviews.slice(0, 10),
         departmentPerformance: departmentPerformance.slice(0, 10),
         ratingDistribution: [
-          { name: 'Outstanding (5–4.5)', value: ratingCounts.band5, color: CHART_COLORS[0] },
-          { name: 'Exceeds Expectations (4.5–4)', value: ratingCounts.band4, color: CHART_COLORS[1] },
-          { name: 'Meets Expectations (4–3.5)', value: ratingCounts.band3, color: CHART_COLORS[2] },
-          { name: 'Needs Improvement (3.5–3)', value: ratingCounts.band2, color: CHART_COLORS[3] },
-          { name: 'Below Expectations (<3)', value: ratingCounts.band1, color: CHART_COLORS[4] },
+          { name: 'Outstanding (5)', value: ratingCounts.band5, color: CHART_COLORS[0] },
+          { name: 'Exceeds Expectations (4)', value: ratingCounts.band4, color: CHART_COLORS[1] },
+          { name: 'Meets Expectations (3)', value: ratingCounts.band3, color: CHART_COLORS[2] },
+          { name: 'Needs Improvement (2)', value: ratingCounts.band2, color: CHART_COLORS[3] },
+          { name: 'Below Expectations (0-1)', value: ratingCounts.band1, color: CHART_COLORS[4] },
         ],
         meanScore,
         stdDev,

@@ -13,11 +13,11 @@ interface RatingHistogramProps {
 }
 
 const SHORT_LABELS: Record<string, string> = {
-  'Outstanding (5–4.5)': 'Outstanding',
-  'Exceeds Expectations (4.5–4)': 'Exceeds',
-  'Meets Expectations (4–3.5)': 'Meets',
-  'Needs Improvement (3.5–3)': 'Needs Imp.',
-  'Below Expectations (<3)': 'Below',
+  'Outstanding (5)': 'Outstanding',
+  'Exceeds Expectations (4)': 'Exceeds',
+  'Meets Expectations (3)': 'Meets',
+  'Needs Improvement (2)': 'Needs Imp.',
+  'Below Expectations (0-1)': 'Below',
 };
 
 export function RatingHistogram({ data }: RatingHistogramProps) {
