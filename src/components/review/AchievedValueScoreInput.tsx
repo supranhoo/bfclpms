@@ -68,18 +68,19 @@ export function AchievedValueScoreInput({
     setLocalAchievedValue(achievedValue?.toString() || '');
   }, [achievedValue]);
 
-  // Auto-calculate score on mount or when achievedValue changes but score is null
+  // Auto-calculate score on mount or when achievedValue changes
+  // Also recalculates when current score doesn't match the achieved value (safety net for inherited mismatches)
   useEffect(() => {
-    if (mode === 'auto_calculate' && score === null && achievedValue !== null && achievedValue !== '') {
+    if (mode === 'auto_calculate' && achievedValue !== null && achievedValue !== '') {
       const numValue = typeof achievedValue === 'number' ? achievedValue : parseFloat(String(achievedValue));
       if (!isNaN(numValue)) {
-        // Use a microtask to avoid React state batching issues on mount
-        Promise.resolve().then(() => {
-          const result = calculateScoreFromValue(numValue);
-          if (result) {
+        const result = calculateScoreFromValue(numValue);
+        if (result && result.rating !== score) {
+          // Use a microtask to avoid React state batching issues on mount
+          Promise.resolve().then(() => {
             onScoreChange(result.rating, result.ratingLevel);
-          }
-        });
+          });
+        }
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

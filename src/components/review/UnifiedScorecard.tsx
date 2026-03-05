@@ -35,6 +35,7 @@ import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { KpiDetailsTable } from '@/components/review/KpiDetailsTable';
 import { SendBackOrgKpiDialog } from '@/components/review/SendBackOrgKpiDialog';
 import { scoreToRating } from '@/components/review/ScoreSelector';
+import { calculateRating } from '@/lib/ratingCalculation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -644,15 +645,53 @@ export function UnifiedScorecard({
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
     
-    // Get the appropriate previous score based on view level
-    const scoreFieldMap: Record<string, () => number | null> = {
-      manager: () => existing?.manager_score ?? (kpi.is_org_level ? existing?.self_score ?? null : null),
-      skip_level: () => (existing as any)?.skip_level_score ?? existing?.manager_score ?? null,
-      hr_pms: () => (existing as any)?.hr_pms_score ?? (existing as any)?.skip_level_score ?? null,
-      auditor: () => existing?.auditor_score ?? existing?.manager_score ?? null,
-      management: () => existing?.management_score ?? existing?.auditor_score ?? null,
+    // Get the reviewer's OWN score (not inherited)
+    const ownScoreFieldMap: Record<string, number | null | undefined> = {
+      manager: existing?.manager_score,
+      skip_level: (existing as any)?.skip_level_score,
+      hr_pms: (existing as any)?.hr_pms_score,
+      auditor: existing?.auditor_score,
+      management: existing?.management_score,
     };
-    const prevScore = (scoreFieldMap[viewLevel] || (() => null))();
+    const ownScore = ownScoreFieldMap[viewLevel] ?? null;
+
+    // Determine the achieved value for this level
+    const achievedVal = (existing as any)?.[`${config.scoreFieldPrefix}_achieved_value`] ?? 
+      existing?.achieved_value ?? 
+      (kpi.is_org_level ? getOrgKpiValue(kpi)?.achieved_value ?? null : null);
+
+    let prevScore: number | null = ownScore;
+
+    // If the reviewer hasn't scored yet (own score is null), recalculate from achieved value
+    if (prevScore === null && achievedVal !== null && achievedVal !== '') {
+      const numVal = typeof achievedVal === 'number' ? achievedVal : parseFloat(String(achievedVal));
+      if (!isNaN(numVal)) {
+        const result = calculateRating(
+          numVal,
+          kpi.target_value,
+          { r5: kpi.r5, r4: kpi.r4, r3: kpi.r3, r2: kpi.r2, r1: kpi.r1, r0: kpi.r0 },
+          kpi.criteria || 'Higher is Better',
+          kpi.weightage || 0,
+          (kpi.uom_type as any) || 'numeric',
+          kpi.qualitative_options as any,
+          kpi.uom,
+          (kpi as any).threshold_mode || 'absolute'
+        );
+        prevScore = result.rating;
+      }
+    }
+
+    // Fallback: if still null, inherit from previous level (legacy behavior)
+    if (prevScore === null) {
+      const fallbackMap: Record<string, () => number | null> = {
+        manager: () => kpi.is_org_level ? existing?.self_score ?? null : null,
+        skip_level: () => existing?.manager_score ?? null,
+        hr_pms: () => (existing as any)?.skip_level_score ?? null,
+        auditor: () => existing?.manager_score ?? null,
+        management: () => existing?.auditor_score ?? null,
+      };
+      prevScore = (fallbackMap[viewLevel] || (() => null))();
+    }
     
     setReviewerScore(prevScore);
     setReviewerRemarks((existing as any)?.[`${config.scoreFieldPrefix}_remarks`] || '');
