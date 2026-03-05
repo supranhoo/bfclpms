@@ -18,6 +18,7 @@ import { DailySubmissionSummary } from '@/components/review/DailySubmissionSumma
 import { ReviewLevelOverrideEditor, calculateOverriddenScore } from '@/components/review/ReviewLevelOverrideEditor';
 import { useReviewerSubPeriodOverride } from '@/hooks/useReviewerSubPeriodOverride';
 import { QualitativeOption } from '@/lib/qualitativeUom';
+import { calculateRating } from '@/lib/ratingCalculation';
 import { useAuth } from '@/contexts/AuthContext';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
@@ -442,14 +443,39 @@ export function ManagementScorecard({
   const openReviewSheet = (kpi: KPI) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
-    setManagementScore(existing?.management_score ?? existing?.auditor_score ?? null);
+    const mgmtAchieved = (existing as any)?.management_achieved_value ?? (existing as any)?.auditor_achieved_value ?? existing?.achieved_value ?? null;
+    
+    // Recalculate score from achieved value if management hasn't reviewed yet
+    let initialMgmtScore: number | null = existing?.management_score ?? null;
+    if (initialMgmtScore === null && mgmtAchieved !== null && mgmtAchieved !== '') {
+      const numVal = typeof mgmtAchieved === 'number' ? mgmtAchieved : parseFloat(String(mgmtAchieved));
+      if (!isNaN(numVal)) {
+        const result = calculateRating(
+          numVal,
+          kpi.target_value,
+          { r5: kpi.r5, r4: kpi.r4, r3: kpi.r3, r2: kpi.r2, r1: kpi.r1, r0: kpi.r0 },
+          kpi.criteria || 'Higher is Better',
+          kpi.weightage || 0,
+          (kpi as any).uom_type || 'numeric',
+          (kpi as any).qualitative_options || null,
+          kpi.uom || null,
+          (kpi as any).threshold_mode || 'absolute'
+        );
+        initialMgmtScore = result.rating;
+      }
+    }
+    // Legacy fallback: inherit auditor's score only if recalculation wasn't possible
+    if (initialMgmtScore === null) {
+      initialMgmtScore = existing?.auditor_score ?? null;
+    }
+    setManagementScore(initialMgmtScore);
     setManagementRemarks(existing?.management_remarks || '');
     // Support both new array and legacy single URL
     const existingUrls = (existing as any)?.management_evidence_urls;
     setManagementEvidenceUrls(Array.isArray(existingUrls) && existingUrls.length > 0 
       ? existingUrls 
       : existing?.management_evidence_url ? [existing.management_evidence_url] : []);
-    setManagementAchievedValue((existing as any)?.management_achieved_value ?? (existing as any)?.auditor_achieved_value ?? existing?.achieved_value ?? null);
+    setManagementAchievedValue(mgmtAchieved);
     // Reset override state
     setManagementAgrees(null);
     setDailyOverrides(new Map());
