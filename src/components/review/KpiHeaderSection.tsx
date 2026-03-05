@@ -88,14 +88,14 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
             </Button>
           )}
       </div>
+      </div>
 
       {/* Reporting Manager */}
       {managerName && (
-        <div className="text-xs text-muted-foreground text-right">
+        <div className="text-xs text-muted-foreground text-right -mt-1 mb-2">
           👤 Reporting Manager: {managerName}
         </div>
       )}
-      </div>
 
       {/* Org KPI Badge Row */}
       {kpi.is_org_level && (
