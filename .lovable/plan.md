@@ -1,28 +1,46 @@
 
 
-# Show "X reviewed" Badge for Indirect Reports in Team View
+# Reuse KpiReviewPanel in MentionedKpiSheet
 
-## Problem
-In the Team Members grid, Direct reports show a "2 reviewed" badge (green), but Indirect reports (e.g., Vivek Kumar Tripathi) show no such badge — only the "Indirect" label appears. This is because the reviewed count for indirect employees (`badge2`) uses a stricter definition: it only counts KPIs that have passed the `skip_level_check` stage. KPIs that have been reviewed by the manager but haven't yet reached the skip-level reviewer show as 0 reviewed.
+## Approach
+Instead of building custom cards, replace the entire body of `MentionedKpiSheet` with the existing `KpiReviewPanel` component. This gives mentioned users the exact same rich view that reviewers see: header with status, metrics, review journey stages, history, and observations -- all for free.
 
-## Root Cause
-In `getEmployeeKpiStats` (lines 264-275), for indirect reports:
-- `badge1` = KPIs reviewable at skip-level (pending for this reviewer)
-- `badge2` = KPIs that have passed skip-level check (done stages)
+## Data Requirements
+`KpiReviewPanel` needs: `KPI` (full shape with `kra_categories`), `ReviewSubmission`, `allKpis` (for history), `allSubmissions`, and optional `queries`. The current `MentionedKpiSheet` only fetches a partial KPI record and no submission data. We need to:
 
-KPIs reviewed by the manager but not yet at skip-level are counted in neither badge — they fall into a gap.
+1. **Expand the KPI query** to fetch all fields (including `kra_categories`) matching the `KPI` type
+2. **Add a submission query** to fetch the `review_submissions` row for this KPI
+3. **Pass them into `KpiReviewPanel`** with `viewLevel="employee"` and `isReadOnly` semantics
 
-## Fix
-**File: `src/components/review/EmployeeSelectorGrid.tsx`**
+## File Changes
 
-In the `renderBadges` block for `viewLevel === 'team'` (lines 680-703), the "reviewed" badge is already rendered for both Direct and Indirect when `badge2 > 0`. The issue is in the stats calculation. For indirect reports, `badge2` should count all KPIs that have progressed past `kra_set` and `self_review` (i.e., have been reviewed by at least the manager level), matching the same definition used for direct reports.
+### `src/components/review/MentionedKpiSheet.tsx`
 
-**Change in `getEmployeeKpiStats`** (lines 264-275): For indirect employees in team view, set `badge2` to count KPIs that are beyond `self_review` (same as direct reports), so the reviewer sees how many KPIs have been reviewed overall. Keep `badge1` as skip-level pending count.
+1. **Replace `useKpiDetails`** -- fetch full KPI record with `kra_categories` join (matching the shape from `useKpis`)
+2. **Add `useSubmissionForKpi`** -- new local query fetching `review_submissions` for this `kpi_id`
+3. **Remove custom `ObservationItem` component** -- no longer needed since `KpiObservationsSection` inside `KpiReviewPanel` handles it
+4. **Replace the sheet body** with:
+   - Employee info card (keep as-is -- the profile header with avatar)
+   - `KpiReviewPanel` with `viewLevel="employee"`, `isReadOnly` implied, passing the fetched KPI + submission
+   - The observations section inside `KpiReviewPanel` will handle public observations with reply capability
+5. **Update badge** from "Read-Only via @Mention" to "Via @Mention" since replies will be enabled through the observations section
+6. **Sheet width** -- widen to `sm:max-w-2xl` to accommodate the two-column layout of `KpiReviewPanel`
 
-```typescript
-// For indirect in team view:
-badge2: empKpis.filter(k => !['kra_set', 'self_review'].includes(k.status || '')).length,
-```
+### `src/components/review/KpiObservationsSection.tsx`
 
-**1 file, ~2 lines changed.**
+No changes needed -- the `viewLevel="employee"` + `isOwnKpi=false` combination already restricts write access appropriately. Mentioned users can view observations but the add/edit/delete controls are gated by role checks within the component.
+
+## What the mentioned user will now see
+- Full KPI header with status badge, category, weightage, period
+- Metrics section (target, UOM, criteria, rating thresholds)
+- Complete Review Journey with scores at each completed stage (Self, Manager, etc.)
+- Historical trend card
+- Observations section with reply threads
+
+## Risk Assessment
+- **Data access**: KPI data is accessible via `kpi_mention_access` RLS policy already in place
+- **No write risk**: `KpiReviewPanel` is purely a display component; all write operations are in separate input components not rendered here
+- **UI fit**: The panel's responsive grid (collapses to single column) works well inside a sheet
+
+**1 file changed, ~40 lines net (removal of custom components offsets additions).**
 
