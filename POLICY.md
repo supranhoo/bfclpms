@@ -1,7 +1,7 @@
 # PMS — Business Policy Document
 
-> **Last Updated:** 2026-03-02  
-> **Version:** 1.0.0  
+> **Last Updated:** 2026-03-05  
+> **Version:** 1.6.0
 > **Maintainer:** Lovable AI  
 > **Companion Document:** [DOCUMENTATION.md](DOCUMENTATION.md) (Technical Reference)
 
@@ -27,7 +27,10 @@
 16. [Data Backup & Retention Policy](#16-data-backup--retention-policy)
 17. [Export & Report Access Policy](#17-export--report-access-policy)
 18. [Admin Configurable Settings Reference](#18-admin-configurable-settings-reference)
-19. [Version History](#19-version-history)
+19. [Admin NA Score Clearing Policy](#19-admin-na-score-clearing-policy)
+20. [Auto KRA Rollover Cron Schedule](#20-auto-kra-rollover-cron-schedule)
+21. [Frequency Period Auto-Resolution Policy](#22-frequency-period-auto-resolution-policy)
+22. [Version History](#23-version-history)
 
 ---
 
@@ -522,10 +525,42 @@ When an admin marks a KPI as **N/A** via the Admin Data Entry dialog:
 
 ---
 
-## 21. Version History
+## 22. Frequency Period Auto-Resolution Policy
+
+### 22.1 Auto-Resolution at Import/Creation
+
+When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Monthly, Half-Yearly, Annual), the system auto-resolves `review_period` to the cycle's **active terminal month** — i.e., the last month of the cycle that is not locked.
+
+| Frequency | Cycle Example | Terminal Month |
+|-----------|--------------|----------------|
+| Quarterly | Jan–Mar | March |
+| Bi-Monthly | Jan–Feb | February |
+| Half-Yearly | Jan–Jun | June |
+| Annual | Jan–Dec | December |
+
+### 22.2 DB Trigger Enforcement
+
+- The `enforce_frequency_lock` trigger fires on INSERT to `kpis`
+- If the resolved `review_period` falls on a locked month (per `frequency_config.locked_months`), the INSERT is **blocked** with an error
+- Admin users are exempt from this enforcement
+- This prevents data corruption from KPIs being assigned to months where they cannot be reviewed
+
+### 22.3 Affected Code Paths
+
+| Path | Resolution Logic |
+|------|-----------------|
+| `import-kpis` edge function | `resolveToActiveMonth()` applied before INSERT |
+| `AdminKpiCreateDialog.tsx` | `resolveToActiveMonth()` applied before INSERT |
+| DB trigger | Final enforcement gate at INSERT time |
+
+---
+
+## 23. Version History
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.6.0 | 2026-03-05 | Bug bounty fixes (BUG-001–BUG-009): full 7-role coverage in User Management, email validation hardening, XSS sanitization in PolicyRenderer, SendBack character limit, stable React keys, pagination reset on filter, server-side unread notification count, Dashboard lazy-loading of allSubmissions |
+| 1.5.0 | 2026-03-05 | Frequency Period Auto-Resolution Policy (§22): KPI import/creation auto-resolves multi-month frequency periods to terminal month. DB trigger blocks INSERT of KPIs with locked-month review_period for non-admin users |
 | 1.4.0 | 2026-03-02 | Data correction: deleted 17 duplicate March KPIs (from Jan org-replication), inserted 12 missing KPIs from Feb, fixed Dileshwar weightage mismatch. Improved rollover dedup to also check kra_name-level existence preventing cross-source duplicates. 4 employees flagged for admin review (pre-existing source data issues). |
 | 1.3.0 | 2026-03-02 | Data correction: deleted duplicate Org KPIs in Feb/March, ran manual Feb→March rollover, fixed rollover pagination bug (1000-row limit) |
 | 1.2.0 | 2026-03-02 | Fixed auto-rollover cron job authentication (§20) — added X-Cron-Secret header |

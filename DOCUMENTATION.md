@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-02-24  
-> **Version:** 1.47.0 — Mention-based read-only KPI access via kpi_mention_access
+> **Last Updated:** 2026-03-05  
+> **Version:** 1.48.0 — Bug bounty audit fixes (BUG-001–BUG-009), frequency lock data correction, dashboard lazy-loading
 > **Maintainer:** Lovable AI
 
 ---
@@ -102,6 +102,8 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | **Code Splitting** | All 28+ page components use `React.lazy()` with `Suspense` boundaries | Each page is a separate chunk; initial bundle reduced significantly |
 | **QueryClient Caching** | `staleTime: 5min`, `gcTime: 10min`, `refetchOnWindowFocus: false`, `retry: 1` | Cached data reused for 5 minutes; ~50% fewer API calls |
 | **Memoization** | Targeted `useMemo`/`useCallback` in Dashboard.tsx, QueryInbox.tsx, AuditScorecard.tsx, ManagementScorecard.tsx, PerformanceReport.tsx, and KpiTrackerModal.tsx for derived data (submissionMap, queryMap), handlers, and insights props | Reduced unnecessary re-renders in heavy components |
+| **Lazy Query Loading** | `Dashboard.tsx`: `allSubmissions` query is conditional on `selectedKpiReview` — only fetches when a KPI review panel is open | Eliminates eager fetch of 1000+ submission rows on every dashboard load |
+| **Server-Side Unread Count** | `QueryInbox.tsx`: Replaced local `useMemo` filter with `useUnreadNotificationCount()` hook (server-side `SELECT count(*)`) | Accurate unread count across all pages, not just the first loaded page |
 | **Error Boundaries** | Top-level `ErrorBoundary` in App.tsx + per-route boundary in DashboardLayout with Suspense | Graceful error recovery instead of white screen |
 | **AuthContext Init Guard** | `useRef` flag ensures `fetchProfile`/`fetchRole` fire exactly once on mount, preventing race between `onAuthStateChange` and `getSession()`. Try/catch with toast on fetch failure prevents "forever loading" | Eliminates duplicate fetches and silent auth failures |
 | **Inbox Filter Stability** | `usePaginatedNotifications` keeps stale items visible during filter changes instead of clearing them eagerly; loading guard uses `\|\|` not `&&` | No more "No notifications yet" flash on tab/filter switch |
@@ -3356,7 +3358,7 @@ The PMS Policy page was converted from an external iframe-based viewer to a full
 **Components Created:**
 | Component | Purpose |
 |---|---|
-| `src/components/policy/PolicyRenderer.tsx` | Parses markdown content and renders as structured HTML with auto-generated Table of Contents sidebar, styled tables, headings, lists, code blocks |
+| `src/components/policy/PolicyRenderer.tsx` | Parses markdown content and renders as structured HTML with auto-generated Table of Contents sidebar, styled tables, headings, lists, code blocks. **XSS-safe:** All user content is passed through `escapeHtml()` before `dangerouslySetInnerHTML` rendering (added in v1.48.0). |
 | `src/components/policy/PolicyEditorDialog.tsx` | Full-screen dialog with textarea for admins to edit policy content |
 
 **Page Behavior:**
@@ -3849,6 +3851,36 @@ All Inbox access gaps for `hr_pms` and `skip_level` roles have been closed:
 | `docs/rls-policies.md` | Documented new `kpi_mention_access` table and three additive SELECT policies |
 
 **Security:** Access is read-only (SELECT only), scoped to a single KPI, and observations are restricted to `visibility = 'public'`. The `granted_by` and `created_at` columns provide an audit trail. Admins can revoke access by deleting rows from `kpi_mention_access`.
+
+---
+
+### Bug Bounty Audit Fixes & Frequency Lock Correction (v1.48.0)
+
+**Summary:** Comprehensive security/quality audit (BUG-001 through BUG-009) plus a data correction for frequency-locked KPIs.
+
+**Bug Bounty Fixes:**
+
+| Bug ID | File | Change |
+|---|---|---|
+| BUG-001 | `src/pages/admin/UserManagement.tsx` | Imported canonical `AppRole` from `@/lib/roles`; added `hr_pms` and `skip_level` role support (colors, filter dropdown, assignment). DB migration added `skip_level` to `app_role` enum. All 7 roles now fully supported. |
+| BUG-002 | `src/pages/admin/UserManagement.tsx` | Added email regex validation and whitespace trimming to `handleCreateUser` |
+| BUG-003 | `src/components/policy/PolicyRenderer.tsx` | Added `escapeHtml()` sanitization before `dangerouslySetInnerHTML` rendering to prevent XSS |
+| BUG-004 | `src/components/review/SendBackDialog.tsx` | Added `maxLength={2000}` with character counter on reason textarea |
+| BUG-005 | `src/components/admin/TieredOptionsBuilder.tsx` | Replaced array-index React keys with stable composite keys (`rating-label`) |
+| BUG-007 | `src/pages/admin/UserManagement.tsx` | Pagination resets to page 1 on filter/search change |
+| BUG-006 | `src/pages/QueryInbox.tsx` | Replaced local `useMemo` unread count with server-side `useUnreadNotificationCount()` hook for accurate count across all pages |
+| BUG-009 | `src/pages/Dashboard.tsx` | Lazy-loads `allSubmissions` query — only fetches when KPI review panel is open (`selectedKpiReview ? allKpiIds : []`) |
+
+**Tests:** Created `src/test/bugBountyFixes.test.ts` with 11 regression tests covering email validation, HTML escaping, send-back length limits, tiered key stability, and more.
+
+**Frequency Lock Data Correction:**
+
+| File | Change |
+|---|---|
+| DB migration | Corrected `review_period` for quarterly/bi-monthly KPIs stuck on locked months |
+| `supabase/functions/import-kpis/index.ts` | Added `resolveToActiveMonth` logic to auto-resolve multi-month frequency periods to the cycle's active terminal month |
+| `src/components/admin/AdminKpiCreateDialog.tsx` | Same `resolveToActiveMonth` logic applied at KPI creation time |
+| DB trigger | Enhanced `enforce_frequency_lock` trigger to block INSERT of KPIs with locked-month `review_period` for non-admin users |
 
 ---
 
