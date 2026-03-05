@@ -15,7 +15,7 @@ import { useKpiFilters } from '@/hooks/useKpiFilters';
 import { KpiFilterBar } from '@/components/ui/KpiFilterBar';
 import { useRollbackStatusCounts } from '@/hooks/useAllRollbackRequests';
 import { PerformanceTrendChart } from '@/components/management/PerformanceTrendChart';
-import { RatingHistogram } from '@/components/management/RatingHistogram';
+import { RatingBellCurve } from '@/components/management/RatingBellCurve';
 import { TopBottomPerformers } from '@/components/management/TopBottomPerformers';
 import { ActionItemsCards } from '@/components/management/ActionItemsCards';
 import { ReviewerAnalyticsTable } from '@/components/management/ReviewerAnalyticsTable';
@@ -312,6 +312,14 @@ export default function ManagementDashboard() {
         else ratingCounts.band1++;
       });
 
+      // Compute mean and standard deviation
+      const allAvgScores: number[] = [];
+      employeeScoreMap.forEach(({ total, count }) => {
+        if (count > 0) allAvgScores.push(total / count);
+      });
+      const meanScore = allAvgScores.length > 0 ? allAvgScores.reduce((a, b) => a + b, 0) / allAvgScores.length : 0;
+      const stdDev = allAvgScores.length > 0 ? Math.sqrt(allAvgScores.reduce((sq, n) => sq + Math.pow(n - meanScore, 2), 0) / allAvgScores.length) : 0;
+
       // Top & Bottom performers
       const employeePerformers = Array.from(employeeScoreMap.entries()).map(([eid, { total, weightage }]) => {
         const p = profileMap.get(eid);
@@ -392,6 +400,8 @@ export default function ManagementDashboard() {
           { name: 'Needs Improvement (3.5–3)', value: ratingCounts.band2, color: CHART_COLORS[3] },
           { name: 'Below Expectations (<3)', value: ratingCounts.band1, color: CHART_COLORS[4] },
         ],
+        meanScore,
+        stdDev,
         completionRate: currentMetrics.completionRate,
         avgScore: currentMetrics.avgScore,
         trends,
@@ -639,7 +649,7 @@ export default function ManagementDashboard() {
       {/* Performance Trend + Rating Histogram */}
       <div className="grid gap-4 lg:grid-cols-2">
         <PerformanceTrendChart data={dashboardData?.trendData || []} />
-        <RatingHistogram data={dashboardData?.ratingDistribution || []} />
+        <RatingBellCurve data={dashboardData?.ratingDistribution || []} meanScore={dashboardData?.meanScore ?? 0} stdDev={dashboardData?.stdDev ?? 0} />
       </div>
 
       {/* Department Performance Table with Risk Flags */}
