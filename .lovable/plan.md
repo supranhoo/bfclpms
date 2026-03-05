@@ -1,44 +1,44 @@
 
 
-# Fix: Inaccurate Bell Curve Rating Distribution
+# Fix: Use 0-5 Integer Rating Scale for Bell Curve
 
-## Root Cause
-
-Two issues in `src/pages/ManagementDashboard.tsx`:
-
-1. **Missing fallback scores**: The `getScore` function (line 213) skips `hr_pms_score` and `skip_level_score` from the 8-stage fallback chain. Employees reviewed at these stages get a score of 0 instead of their actual rating.
-
-2. **Unweighted averaging**: The bell curve calculation (lines 300-313) uses a **simple average** (`total / count`) of raw KPI scores to classify employees into rating bands. This ignores KPI weightage, so a high-weight KPI scoring 5 and a low-weight KPI scoring 2 yields 3.5 instead of the correct weighted result. This drags employees into lower bands than they belong.
+## Problem
+The bell curve currently classifies employees using decimal score ranges (4.5-5, 4-4.5, etc.). The system's canonical rating scale uses integer scores 0-5 as defined in `RATING_SCALE` from `reviewConstants.ts`. This mismatch causes inaccurate band counts — the user expects Outstanding:1, Exceeds:0, Meets:4, Needs Imp:18, Below:76 based on the standard rating logic.
 
 ## Changes
 
 ### File: `src/pages/ManagementDashboard.tsx`
 
-**Fix 1 — Complete the fallback chain (line 213-215):**
+**Update band classification to use integer-based rounding (lines 309-315):**
 ```typescript
-const getScore = (kpi: any) => {
-  const s = kpi.review_submissions;
-  return s?.final_score ?? s?.management_score ?? s?.auditor_score 
-    ?? s?.hr_pms_score ?? s?.skip_level_score 
-    ?? s?.manager_score ?? s?.self_score ?? 0;
-};
+// Round weighted average to nearest integer, then classify
+const rounded = Math.round(Math.min(5, Math.max(0, avgScore)));
+if (rounded >= 5) ratingCounts.band5++;      // Outstanding (5)
+else if (rounded >= 4) ratingCounts.band4++;  // Exceeds (4)
+else if (rounded >= 3) ratingCounts.band3++;  // Meets (3)
+else if (rounded >= 2) ratingCounts.band2++;  // Needs Improvement (2)
+else ratingCounts.band1++;                    // Below (0-1)
 ```
 
-**Fix 2 — Use weighted average for band classification (lines 300-313):**
-Change from `total / count` to `(sum of score * weightage) / (sum of weightage)`:
+**Update band labels in ratingDistribution output (lines 399-404):**
 ```typescript
-employeeScoreMap.forEach(({ total, weightage }) => {
-  const avgScore = weightage > 0 ? total / weightage : 0;
-  // ... band classification
-});
+{ name: 'Outstanding (5)', value: ratingCounts.band5, ... },
+{ name: 'Exceeds Expectations (4)', value: ratingCounts.band4, ... },
+{ name: 'Meets Expectations (3)', value: ratingCounts.band3, ... },
+{ name: 'Needs Improvement (2)', value: ratingCounts.band2, ... },
+{ name: 'Below Expectations (0-1)', value: ratingCounts.band1, ... },
 ```
-Where `total` accumulates `score * weightage` (not just `score`), and `weightage` accumulates the raw weightage values. This aligns the bell curve with how scores are calculated everywhere else in the system.
 
-**Fix 3 — Update mean/stdDev calculation (lines 317-322):**
-Use the same weighted average for computing mean and standard deviation.
+### File: `src/components/management/RatingBellCurve.tsx`
 
-## Risk Assessment
-- **Data Impact**: None — read-only, no schema changes
-- **Regression Risk**: Low — only changes how scores are aggregated for the bell curve display; the top/bottom performers section already uses weighted scores correctly (line 327)
-- **UI Impact**: Positive — employees will be classified into the correct rating bands
+Update `SHORT_LABELS`, `BAND_ORDER`, `BAND_MIDPOINTS`, and `getMeanBandIndex` to match the new integer-based band names.
+
+### File: `src/components/management/RatingHistogram.tsx`
+
+Update `SHORT_LABELS` to match the new band names.
+
+## Risk
+- **Data Impact**: None — read-only display change
+- **Regression Risk**: Low — only affects bell curve/histogram labels and classification thresholds
+- **UI Impact**: Positive — bands now align with the canonical 0-5 rating scale used everywhere else
 
