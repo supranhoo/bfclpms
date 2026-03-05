@@ -1,25 +1,33 @@
 
 
-# Show "Filled / Total" for Org-Level KPIs in All KPIs Page
-
-## Problem
-The "Org-Level" column currently shows only the total count of org-level KPIs per employee. The user wants it to show how many have data filled (e.g., "3/4") vs just "4".
-
-## Approach
-For each employee, count how many of their org-level KPIs have a corresponding `org_kpi_values` row with data entered (`achieved_value IS NOT NULL` or `is_na = true`). This requires fetching `org_kpi_values` for the selected period/year.
+# Add Excel Export to KRA Export Menu with Role-Based Access
 
 ## Changes
 
-### File: `src/pages/admin/AllKpis.tsx`
+### 1. `src/hooks/useKraExportConfig.ts`
+- Add `excelRoles: string[]` to `KraExportConfig` interface
+- Parse `kra_export_excel_roles` from workflow_settings
 
-1. **Add `orgLevelFilledKpis` to the `EmployeeKpiData` interface** (line 49) — new field to track filled count.
+### 2. `src/lib/kraExport.ts`
+- Add `generateKraSheetExcel(data: KraSheetData, config: KraExportConfig): void` function
+- Uses `xlsx` library (already installed) to produce an `.xlsx` file with the same dynamic columns from `COLUMN_REGISTRY` based on `visibleColumns`
+- Includes employee details header rows (if `showEmployeeDetails` is true) and the KPI data table with proper column widths
 
-2. **Fetch org_kpi_values for the selected period** — Add a query using `supabase.from('org_kpi_values')` filtered by `review_period` and `review_year`, scoped to employee-level entries. Build a lookup Set of filled keys (`category_id||kra_name||kpi_name||employee_id`).
+### 3. `src/components/review/KraExportMenu.tsx`
+- Import `FileSpreadsheet` icon from lucide-react
+- Add `canExcel = canAccess(exportConfig.excelRoles, effectiveRole)` check
+- Add "Download Excel" menu item gated by `canExcel`
+- Call `generateKraSheetExcel` on click
+- Update visibility check to include `canExcel`
 
-3. **Count filled org KPIs per employee** (lines 215-217) — When an org-level KPI is encountered, check if a matching filled value exists in the lookup Set. Increment `orgLevelFilledKpis` accordingly.
+### 4. `src/components/admin/WorkflowSettingsTab.tsx`
+- No code changes needed — the existing `setting_key.endsWith('_roles')` pattern automatically renders the role-checkbox UI for `kra_export_excel_roles`
 
-4. **Update the badge display** (lines 606-612) — Change from showing just `{emp.orgLevelKpis}` to showing `{emp.orgLevelFilledKpis}/{emp.orgLevelKpis}` with color coding:
-   - Green text when all filled (`filledCount === totalCount`)
-   - Amber/default when partially filled
-   - Current style when none filled
+### 5. Database: Insert new workflow_setting row
+- Insert `kra_export_excel_roles` into `workflow_settings` (category: `export`) with default value of `["admin"]` so admins can immediately configure which roles get Excel access
+
+## Risk Assessment
+- **No schema changes** — just one new settings row
+- **xlsx already installed** — no new dependency
+- **Existing pattern** — follows the exact same role-gating approach as Preview/Download/Email
 
