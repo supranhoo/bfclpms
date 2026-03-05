@@ -1,36 +1,29 @@
 
 
-# Replace Period Selector with Multi-Month + Fiscal Year (Jul-Jun)
+# Fix: Management Dashboard Stuck in Loading State
 
-## Current State
-The dashboard has a calendar-year dropdown (2024/2025/2026) and a single "All Periods" month picker. The user wants:
-1. **Multi-month selection** — ability to pick multiple months at once
-2. **Fiscal year scale** — July to June (e.g., "FY 2025-26" = Jul 2025 → Jun 2026)
+## Root Cause
 
-## Plan
+The dashboard query is getting **restarted mid-flight**, creating an apparent infinite loading loop:
 
-### 1. Replace Year Selector with Fiscal Year Selector
-- Options like: `FY 2025-26`, `FY 2024-25`, `FY 2023-24`
-- Selecting `FY 2025-26` means months July 2025 through June 2026
-- State changes from `selectedYear: string` to `selectedFiscalYear: number` (the start year, e.g. 2025 for FY 2025-26)
+1. Component mounts with `filtersLoading = true`. The `filteredEmployeeIds` array is empty `[]`.
+2. The management-dashboard query starts immediately (no `enabled` guard) with the empty array in the query key.
+3. The query is slow — it paginates sequentially across 2 calendar years (5-6 HTTP requests, ~15-20 seconds total).
+4. While the query is mid-flight, the profiles-hierarchy query completes. `filteredEmployeeIds` changes from `[]` to `[...454 ids]`.
+5. React Query detects the query key changed and **cancels and restarts** the entire query from scratch.
+6. The cycle can repeat if any other key dependency updates during execution.
 
-### 2. Replace Single Period Dropdown with Multi-Month Toggle Grid
-- Display 12 months in fiscal order: Jul, Aug, Sep, Oct, Nov, Dec, Jan, Feb, Mar, Apr, May, Jun
-- Each month is a toggle button (click to select/deselect)
-- "All" button to select all months at once
-- State changes from `selectedPeriod: string` to `selectedMonths: string[]`
+## Fix Plan
 
-### 3. Update Query Logic
-- Currently queries with `.eq('review_year', year)` and optionally `.eq('review_period', period)`
-- New: query with `.in('review_period', selectedMonths)` and handle cross-year fiscal periods by querying two calendar years (Jul-Dec of start year + Jan-Jun of end year)
-- The `fetchPeriodData` function will accept an array of `{month, year}` pairs instead of a single period
+### `src/pages/ManagementDashboard.tsx`
 
-### 4. Update Previous Period Comparison
-- When multiple months are selected, disable or skip the "compare with previous period" logic (it only makes sense for single-month view)
+**Change 1 — Add `enabled: !filtersLoading`** to the `useQuery` call (line 153). This prevents the query from starting before profiles are loaded, eliminating the restart.
 
-### 5. Update PDF Export
-- Change filename and header to reflect fiscal year and selected months
+**Change 2 — Remove `filteredEmployeeIds` from query key.** Replace it with a stable string representation: `filteredEmployeeIds.join(',')`. This prevents array reference changes from triggering restarts while still properly cache-busting when the actual filter values change.
 
-### Files to Modify
-1. `src/pages/ManagementDashboard.tsx` — All changes contained here (state, header UI, query logic, export)
+**Change 3 — Parallelize calendar year fetches.** Change the `for...of` loop (line 169) to use `Promise.all` so both calendar years fetch concurrently instead of sequentially, cutting load time roughly in half.
+
+### Risk Assessment
+- No schema changes. Read-only display fix.
+- Low regression risk — only affects query timing and caching behavior.
 
