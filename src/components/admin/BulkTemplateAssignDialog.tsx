@@ -13,8 +13,11 @@ import { useProfiles, useDepartments } from '@/hooks/useOrganization';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { EffectiveMonthSelector } from './EffectiveMonthSelector';
+import { getActiveMonthForCycle } from '@/lib/frequencyUtils';
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 interface BulkTemplateAssignDialogProps {
   isOpen: boolean;
@@ -29,7 +32,6 @@ export function BulkTemplateAssignDialog({ isOpen, onClose }: BulkTemplateAssign
   const { data: templates } = useKpiTemplates();
   const { data: profiles } = useProfiles();
   const { data: departments } = useDepartments();
-  const { data: settingsArray } = useSystemSettings();
 
   // Template selection state
   const [templateSearch, setTemplateSearch] = useState('');
@@ -46,16 +48,12 @@ export function BulkTemplateAssignDialog({ isOpen, onClose }: BulkTemplateAssign
   // Duplicate detection state
   const [duplicateWarning, setDuplicateWarning] = useState<{ duplicates: string[]; newIds: string[] } | null>(null);
 
-  // Get current review period and year from system settings
-  const currentPeriodSetting = useMemo(() => {
-    const setting = settingsArray?.find(s => s.setting_key === 'current_review_period');
-    return setting?.setting_value as string | undefined;
-  }, [settingsArray]);
+  // Effective month/year — defaults to current calendar month
+  const [selectedMonth, setSelectedMonth] = useState(() => MONTH_NAMES[new Date().getMonth()]);
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
 
-  const currentPeriod = currentPeriodSetting?.split(' ')[0] || 'January';
-  const currentYear = currentPeriodSetting
-    ? parseInt(currentPeriodSetting.split(' ')[1])
-    : new Date().getFullYear();
+  const currentPeriod = selectedMonth;
+  const currentYear = selectedYear;
 
   const activeTemplates = useMemo(() => templates?.filter(t => t.is_active) || [], [templates]);
 
@@ -161,6 +159,7 @@ export function BulkTemplateAssignDialog({ isOpen, onClose }: BulkTemplateAssign
       const idsToUse = employeeIds || Array.from(selectedEmployeeIds);
       if (idsToUse.length === 0) throw new Error('No employees to assign');
 
+      const resolvedPeriod = getActiveMonthForCycle(selectedTemplate.frequency, currentPeriod, currentYear);
       const kpisToInsert = idsToUse.map(employeeId => ({
         employee_id: employeeId,
         category_id: selectedTemplate.category_id!,
@@ -178,7 +177,7 @@ export function BulkTemplateAssignDialog({ isOpen, onClose }: BulkTemplateAssign
         r2: selectedTemplate.r2,
         r1: selectedTemplate.r1,
         r0: selectedTemplate.r0,
-        review_period: currentPeriod,
+        review_period: resolvedPeriod,
         review_year: currentYear,
         is_org_level: false,
       }));
@@ -265,6 +264,14 @@ export function BulkTemplateAssignDialog({ isOpen, onClose }: BulkTemplateAssign
 
         <ScrollArea className="flex-1 pr-2">
           <div className="space-y-4 py-2">
+            {/* Effective Month Selector */}
+            <EffectiveMonthSelector
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+              onMonthChange={setSelectedMonth}
+              onYearChange={setSelectedYear}
+            />
+
             {/* Template Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

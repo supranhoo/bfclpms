@@ -10,12 +10,14 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useTemplateBundles, useLogBundleAssignment, TemplateBundle } from '@/hooks/useTemplateBundles';
 import { useKpiTemplates, KpiTemplate } from '@/hooks/useKpiTemplates';
 import { useDepartments } from '@/hooks/useOrganization';
-import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Package, FileText, Target, Sparkles, CheckCircle, AlertTriangle, Copy } from 'lucide-react';
+import { EffectiveMonthSelector } from './EffectiveMonthSelector';
+import { getActiveMonthForCycle } from '@/lib/frequencyUtils';
 
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 type AppRole = 'employee' | 'manager' | 'auditor' | 'admin' | 'management';
 
@@ -39,25 +41,16 @@ export function SmartAssignmentDialog({
   const { data: bundles } = useTemplateBundles();
   const { data: templates } = useKpiTemplates();
   const { data: departments } = useDepartments();
-  const { data: settings } = useSystemSettings();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const logAssignment = useLogBundleAssignment();
 
-  // Current review period
-  const currentPeriod = useMemo(() => {
-    const setting = settings?.find(s => s.setting_key === 'current_review_period');
-    return typeof setting?.setting_value === 'string' ? setting.setting_value.split(' ')[0] : 'January';
-  }, [settings]);
+  // Effective month/year — defaults to current calendar month
+  const [selectedMonth, setSelectedMonth] = useState(() => MONTH_NAMES[new Date().getMonth()]);
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
 
-  const currentYear = useMemo(() => {
-    const setting = settings?.find(s => s.setting_key === 'current_review_period');
-    const value = setting?.setting_value;
-    if (typeof value === 'string' && value.includes(' ')) {
-      return parseInt(value.split(' ')[1]) || new Date().getFullYear();
-    }
-    return new Date().getFullYear();
-  }, [settings]);
+  const currentPeriod = selectedMonth;
+  const currentYear = selectedYear;
 
   // State
   const [activeTab, setActiveTab] = useState<'bundles' | 'templates'>('bundles');
@@ -225,28 +218,31 @@ export function SmartAssignmentDialog({
         return { kpisCreated: 0, skipped: selectedBundle.template_bundle_items.length };
       }
 
-      const kpisToInsert = itemsToInsert.map(item => ({
-        employee_id: employeeId,
-        kra_name: item.kpi_templates.kra_name,
-        kpi_name: item.kpi_templates.kpi_name,
-        category_id: item.kpi_templates.kra_categories?.id || null,
-        weightage: item.kpi_templates.weightage,
-        uom: item.kpi_templates.uom,
-        target_value: item.kpi_templates.target_value,
-        criteria: item.kpi_templates.criteria,
-        frequency: item.kpi_templates.frequency,
-        source_of_data: item.kpi_templates.source_of_data,
-        r5: item.kpi_templates.r5,
-        r4: item.kpi_templates.r4,
-        r3: item.kpi_templates.r3,
-        r2: item.kpi_templates.r2,
-        r1: item.kpi_templates.r1,
-        r0: item.kpi_templates.r0,
-        review_period: currentPeriod,
-        review_year: currentYear,
-        status: 'kra_set' as const,
-        is_org_level: false,
-      }));
+      const kpisToInsert = itemsToInsert.map(item => {
+        const resolvedPeriod = getActiveMonthForCycle(item.kpi_templates.frequency, currentPeriod, currentYear);
+        return {
+          employee_id: employeeId,
+          kra_name: item.kpi_templates.kra_name,
+          kpi_name: item.kpi_templates.kpi_name,
+          category_id: item.kpi_templates.kra_categories?.id || null,
+          weightage: item.kpi_templates.weightage,
+          uom: item.kpi_templates.uom,
+          target_value: item.kpi_templates.target_value,
+          criteria: item.kpi_templates.criteria,
+          frequency: item.kpi_templates.frequency,
+          source_of_data: item.kpi_templates.source_of_data,
+          r5: item.kpi_templates.r5,
+          r4: item.kpi_templates.r4,
+          r3: item.kpi_templates.r3,
+          r2: item.kpi_templates.r2,
+          r1: item.kpi_templates.r1,
+          r0: item.kpi_templates.r0,
+          review_period: resolvedPeriod,
+          review_year: currentYear,
+          status: 'kra_set' as const,
+          is_org_level: false,
+        };
+      });
 
       const { error } = await supabase.from('kpis').insert(kpisToInsert);
       if (error) throw error;
@@ -306,28 +302,31 @@ export function SmartAssignmentDialog({
         return { created: 0, skipped };
       }
 
-      const kpisToInsert = selectedTemplates.map(template => ({
-        employee_id: employeeId,
-        category_id: template.category_id!,
-        kra_name: template.kra_name,
-        kpi_name: template.kpi_name,
-        uom: template.uom,
-        target_value: template.target_value,
-        weightage: template.weightage,
-        criteria: template.criteria,
-        frequency: template.frequency,
-        source_of_data: template.source_of_data,
-        r5: template.r5,
-        r4: template.r4,
-        r3: template.r3,
-        r2: template.r2,
-        r1: template.r1,
-        r0: template.r0,
-        review_period: currentPeriod,
-        review_year: currentYear,
-        is_org_level: false,
-        status: 'kra_set' as const,
-      }));
+      const kpisToInsert = selectedTemplates.map(template => {
+        const resolvedPeriod = getActiveMonthForCycle(template.frequency, currentPeriod, currentYear);
+        return {
+          employee_id: employeeId,
+          category_id: template.category_id!,
+          kra_name: template.kra_name,
+          kpi_name: template.kpi_name,
+          uom: template.uom,
+          target_value: template.target_value,
+          weightage: template.weightage,
+          criteria: template.criteria,
+          frequency: template.frequency,
+          source_of_data: template.source_of_data,
+          r5: template.r5,
+          r4: template.r4,
+          r3: template.r3,
+          r2: template.r2,
+          r1: template.r1,
+          r0: template.r0,
+          review_period: resolvedPeriod,
+          review_year: currentYear,
+          is_org_level: false,
+          status: 'kra_set' as const,
+        };
+      });
 
       const { error } = await supabase.from('kpis').insert(kpisToInsert);
       if (error) throw error;
@@ -405,7 +404,14 @@ export function SmartAssignmentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'bundles' | 'templates')} className="flex-1 flex flex-col overflow-hidden">
+        <EffectiveMonthSelector
+          selectedMonth={selectedMonth}
+          selectedYear={selectedYear}
+          onMonthChange={setSelectedMonth}
+          onYearChange={setSelectedYear}
+        />
+
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'bundles' | 'templates')} className="flex-1 flex flex-col overflow-hidden mt-3">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="bundles" className="flex items-center gap-2">
               <Package className="h-4 w-4" />
