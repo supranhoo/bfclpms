@@ -267,7 +267,7 @@ export function EmployeeSelectorGrid({
         const doneStatuses = slIdx >= 0 ? stages.slice(slIdx) : [];
         return {
           badge1: empKpis.filter(k => reviewable.includes(k.status || '')).length,
-          badge2: empKpis.filter(k => doneStatuses.includes(k.status || '')).length,
+          badge2: empKpis.filter(k => !['kra_set', 'self_review'].includes(k.status || '')).length,
           badge3: 0,
           total: empKpis.length,
           clearedKraSet,
