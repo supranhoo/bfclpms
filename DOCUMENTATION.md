@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-05  
-> **Version:** 1.49.0 — Effective Month selector in KRA assignment dialogs; frequency auto-resolution at assignment time
+> **Version:** 1.50.0 — Management Dashboard redesign: performance trend line chart, rating histogram, top/bottom performers, action items, reviewer analytics (score bias), training gap insights, recent audit log, notifications summary, department risk flags, PDF export
 > **Maintainer:** Lovable AI
 
 ---
