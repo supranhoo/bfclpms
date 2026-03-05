@@ -77,7 +77,7 @@ export function RatingBellCurve({ data, meanScore, stdDev }: RatingBellCurveProp
       <CardContent>
         <div className="h-[280px]">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={sortedData} layout="vertical" margin={{ top: 10, right: 20, bottom: 5, left: 80 }}>
+            <AreaChart data={sortedData} margin={{ top: 10, right: 20, bottom: 5, left: 10 }}>
               <defs>
                 <linearGradient id="bellCurveGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={sortedData[0]?.color} stopOpacity={0.8} />
@@ -89,15 +89,14 @@ export function RatingBellCurve({ data, meanScore, stdDev }: RatingBellCurveProp
               </defs>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis
-                type="number"
-                allowDecimals={false}
-                tick={{ fontSize: 11 }}
-              />
-              <YAxis
                 dataKey="shortName"
                 type="category"
                 tick={{ fontSize: 11 }}
-                width={75}
+              />
+              <YAxis
+                type="number"
+                allowDecimals={false}
+                tick={{ fontSize: 11 }}
               />
               <Tooltip
                 formatter={(value: number) => [value, 'Employees']}
@@ -109,13 +108,13 @@ export function RatingBellCurve({ data, meanScore, stdDev }: RatingBellCurveProp
                 labelFormatter={(label) => label}
               />
               <ReferenceLine
-                y={sortedData[meanIndex]?.shortName}
+                x={sortedData[meanIndex]?.shortName}
                 stroke="hsl(var(--foreground))"
                 strokeDasharray="5 5"
                 strokeWidth={2}
                 label={{
                   value: `Mean: ${meanScore.toFixed(1)}`,
-                  position: 'right',
+                  position: 'top',
                   fontSize: 11,
                   fill: 'hsl(var(--foreground))',
                 }}
