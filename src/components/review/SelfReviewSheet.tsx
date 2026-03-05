@@ -192,15 +192,16 @@ export function SelfReviewSheet({
     return selectedKpi ? subPeriodSubmissions?.filter(s => s.kpi_id === selectedKpi.id) || [] : [];
   }, [selectedKpi, subPeriodSubmissions]);
 
-  const aggregatedSubPeriodScore = useMemo(() => {
+  const aggregatedSubPeriodResult = useMemo(() => {
     if (selectedKpiSubPeriods.length === 0) return null;
     const values = selectedKpiSubPeriods
       .filter(s => s.achieved_value !== null)
       .map(s => s.achieved_value as number);
     const isBinaryKpi = selectedKpi?.uom_type === 'binary';
-    const result = calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear, isBinaryKpi);
-    return result.score;
+    return calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear, isBinaryKpi);
   }, [selectedKpiSubPeriods, dailyAggregationMethod, selectedPeriod, selectedYear, selectedKpi]);
+
+  const aggregatedSubPeriodScore = aggregatedSubPeriodResult?.score ?? null;
 
   // Score calculation
   const calculateScoreFromAchieved = useCallback((achieved: number, kpi: KPI) => {
@@ -371,7 +372,15 @@ export function SelfReviewSheet({
     const isBinaryKpi = selectedKpi?.uom_type === 'binary';
     const aggregationResult = calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear, isBinaryKpi);
     const aggregatedScore = aggregationResult.score;
-    if (aggregatedScore === null) return;
+
+    if (aggregatedScore === null) {
+      toast({
+        title: 'No valid entries found',
+        description: 'Please enter values for at least one day before submitting the month.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     setIsSubmittingMonthly(true);
     try {
@@ -1080,9 +1089,17 @@ export function SelfReviewSheet({
                 <p>Submit this {selectedKpi?.frequency} KPI for manager review?</p>
                 <div className="p-3 bg-muted rounded-lg space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Total Entries:</span>
-                    <strong className="text-foreground">{selectedKpiSubPeriods.length}</strong>
+                    <span className="text-muted-foreground">Submitted Days:</span>
+                    <strong className="text-foreground">
+                      {aggregatedSubPeriodResult?.submittedDays ?? selectedKpiSubPeriods.length} / {aggregatedSubPeriodResult?.totalDays ?? '—'}
+                    </strong>
                   </div>
+                  {(aggregatedSubPeriodResult?.missedDays ?? 0) > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Missed Days:</span>
+                      <strong className="text-destructive">{aggregatedSubPeriodResult?.missedDays}</strong>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Average Score:</span>
                     <strong className="text-foreground">{aggregatedSubPeriodScore?.toFixed(2) ?? '—'}</strong>
