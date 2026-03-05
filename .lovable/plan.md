@@ -1,28 +1,17 @@
 
 
-# Fix Bell Curve Axis Order
-
-## Problem
-The X-axis currently runs **Below → Outstanding** (left to right). The user wants it flipped to match their original specification: **Outstanding (5–4.5) on the left → Below (<3) on the right**.
+# Swap Bell Curve Axes (X ↔ Y)
 
 ## Change
 
+Rotate the bell curve so rating bands run along the **Y-axis** (vertical) and employee counts run along the **X-axis** (horizontal).
+
 ### File: `src/components/management/RatingBellCurve.tsx`
 
-Reverse the `BAND_ORDER` array so it reads highest-to-lowest:
-
-```typescript
-const BAND_ORDER = [
-  'Outstanding (5–4.5)',
-  'Exceeds Expectations (4.5–4)',
-  'Meets Expectations (4–3.5)',
-  'Needs Improvement (3.5–3)',
-  'Below Expectations (<3)',
-];
-```
-
-Also update `BAND_MIDPOINTS` indices accordingly and the `getMeanBandIndex` function to match the reversed order.
-
-## Risk
-- Purely visual — no data or schema impact.
+- Change `AreaChart` `layout` prop to `"vertical"`
+- Swap `XAxis` and `YAxis` configurations:
+  - `YAxis` → `dataKey="shortName"` (category axis, type="category")
+  - `XAxis` → numeric axis showing employee counts (type="number")
+- Update `ReferenceLine` from `x` to `y` prop for the mean indicator
+- Adjust chart margins for longer Y-axis labels
 
