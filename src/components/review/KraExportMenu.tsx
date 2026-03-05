@@ -6,12 +6,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { FileDown, Eye, Download, Mail } from 'lucide-react';
+import { FileDown, Eye, Download, Mail, FileSpreadsheet } from 'lucide-react';
 import { useKraExportConfig, canAccess } from '@/hooks/useKraExportConfig';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { useToast } from '@/hooks/use-toast';
-import { generateKraSheetPdf, generateKraSheetPdfBlob, buildKraSheetFromKpis, type KraExportConfig as PdfConfig } from '@/lib/kraExport';
+import { generateKraSheetPdf, generateKraSheetPdfBlob, generateKraSheetExcel, buildKraSheetFromKpis, type KraExportConfig as PdfConfig } from '@/lib/kraExport';
 import { KraPreviewDialog } from './KraPreviewDialog';
 
 interface KraExportMenuProps {
@@ -52,10 +52,11 @@ export function KraExportMenu({ kpis, employeeProfile, department, period, year 
   const canPreview = canAccess(exportConfig.previewRoles, effectiveRole);
   const canDownload = canAccess(exportConfig.downloadRoles, effectiveRole);
   const canEmail = canAccess(exportConfig.emailRoles, effectiveRole);
+  const canExcel = canAccess(exportConfig.excelRoles, effectiveRole);
 
   // If feature is disabled or no actions available, hide entirely
   if (!exportConfig.isEnabled || exportConfig.isLoading) return null;
-  if (!canPreview && !canDownload && !canEmail) return null;
+  if (!canPreview && !canDownload && !canEmail && !canExcel) return null;
   if (!kpis || kpis.length === 0) return null;
 
   const fileName = `KRA_${(employeeProfile.full_name || 'Employee').replace(/\s+/g, '_')}_${period}_${year}.pdf`;
@@ -70,6 +71,11 @@ export function KraExportMenu({ kpis, employeeProfile, department, period, year 
   const handleDownload = () => {
     const data = buildData();
     generateKraSheetPdf(data, pdfConfig);
+  };
+
+  const handleExcel = () => {
+    const data = buildData();
+    generateKraSheetExcel(data, pdfConfig);
   };
 
   const handleEmail = () => {
@@ -99,6 +105,12 @@ export function KraExportMenu({ kpis, employeeProfile, department, period, year 
             <DropdownMenuItem onClick={handleDownload}>
               <Download className="h-4 w-4 mr-2" />
               Download PDF
+            </DropdownMenuItem>
+          )}
+          {canExcel && (
+            <DropdownMenuItem onClick={handleExcel}>
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              Download Excel
             </DropdownMenuItem>
           )}
           {canEmail && (

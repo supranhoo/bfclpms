@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 // ============= Column Registry =============
 
@@ -206,6 +207,53 @@ export function generateKraSheetPdf(data: KraSheetData, config: KraExportConfig)
 export function generateKraSheetPdfBlob(data: KraSheetData, config: KraExportConfig): Blob {
   const doc = buildKraSheetDoc(data, config);
   return doc.output('blob');
+}
+
+// ============= Excel Builder =============
+
+export function generateKraSheetExcel(data: KraSheetData, config: KraExportConfig): void {
+  const cols = config.visibleColumns
+    .map(key => ({ key, def: COLUMN_REGISTRY[key] }))
+    .filter(c => c.def != null);
+
+  if (cols.length === 0) return;
+
+  const rows: (string | number)[][] = [];
+
+  // Employee details header rows
+  if (config.showEmployeeDetails) {
+    if (data.companyName) rows.push([data.companyName]);
+    rows.push(['KRA Assignment Sheet']);
+    rows.push([]);
+    rows.push(['Employee', data.employeeName, '', 'Code', data.employeeCode || '-']);
+    rows.push(['Designation', data.designation || '-', '', 'Department', data.department || '-']);
+    rows.push(['Period', `${data.period} ${data.year}`]);
+    rows.push([]);
+  }
+
+  // Column headers
+  rows.push(cols.map(c => c.def.header));
+
+  // Data rows
+  data.kpis.forEach((kpi, idx) => {
+    rows.push(cols.map(c => c.def.getValue(kpi, idx)));
+  });
+
+  // Summary row
+  rows.push([]);
+  const totalWeight = data.kpis.reduce((s, k) => s + (k.weightage || 0), 0);
+  rows.push([`Total KPIs: ${data.kpis.length}`, `Total Weightage: ${totalWeight}%`]);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+
+  // Set column widths
+  ws['!cols'] = cols.map(c => ({ wch: Math.max(c.def.width, 10) }));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'KRA Sheet');
+
+  const fileName = `KRA_${data.employeeName.replace(/\s+/g, '_')}_${data.period}_${data.year}.xlsx`;
+  XLSX.writeFile(wb, fileName);
 }
 
 /**
