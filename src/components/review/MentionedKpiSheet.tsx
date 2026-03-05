@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -71,6 +72,7 @@ function useEmployeeProfile(employeeId: string | undefined) {
 }
 
 export function MentionedKpiSheet({ kpiId, employeeId, open, onOpenChange }: MentionedKpiSheetProps) {
+  const { user } = useAuth();
   const { data: kpi, isLoading: kpiLoading } = useFullKpiDetails(kpiId);
   const { data: submission, isLoading: subLoading } = useSubmissionForKpi(kpiId);
   const { data: employee } = useEmployeeProfile(employeeId);
@@ -86,7 +88,7 @@ export function MentionedKpiSheet({ kpiId, employeeId, open, onOpenChange }: Men
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-hidden flex flex-col">
+      <SheetContent className="w-full sm:max-w-4xl overflow-hidden flex flex-col">
         <SheetHeader className="flex-shrink-0">
           <div className="flex items-center gap-2">
             <Eye className="h-4 w-4 text-muted-foreground" />
@@ -129,6 +131,7 @@ export function MentionedKpiSheet({ kpiId, employeeId, open, onOpenChange }: Men
                 allKpis={kpi ? [kpi] : []}
                 allSubmissions={submission ? [submission] : []}
                 viewLevel="employee"
+                currentUserId={user?.id}
                 selectedPeriod={kpi.review_period || ''}
                 selectedYear={kpi.review_year || new Date().getFullYear()}
               />
