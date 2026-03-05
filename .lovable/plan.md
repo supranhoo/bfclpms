@@ -1,38 +1,51 @@
 
 
-# Missing Org KPI Audit Trail in Review Timeline
+# Fix: Daily KPI Monthly Submission — Silent Failure and Missing Feedback
 
-## Problem
+## Root Cause Analysis
 
-The Review Timeline (`KpiTimeline.tsx`) reads from `kpi_audit_logs`. However, neither the Org KPI data entry flow (`useOrgKpiValues.ts`) nor the propagation flow (`usePropagateOrgKpiValue.ts`) writes to `kpi_audit_logs`. This means when a Data Owner enters a value and propagates it to employee scorecards, **zero entries** appear in the employee's Review Timeline for that KPI.
+After thorough code investigation, the system **does not** require all days to be submitted before allowing monthly submission. The aggregation logic (`calculateDailyAggregatedScore`) handles partial data correctly.
 
-The Org KPI data entry logs go to a separate `org_kpi_data_entry_logs` table, which the Review Timeline does not read.
+The actual bugs are:
 
-## Fix
+1. **Silent failure in `handleSubmitMonthlyReview`** (line 374): If the aggregation returns `null`, the function does a bare `return;` with no toast or error message. The employee clicks "Confirm & Submit" and nothing happens — no feedback whatsoever.
 
-### 1. `src/hooks/usePropagateOrgKpiValue.ts` — Log to `kpi_audit_logs` after propagation
+2. **No visibility into missing days**: The monthly submission confirmation dialog shows "Total Entries" count but doesn't show how many days are *missing*, giving no context about completeness.
 
-After the RPC call succeeds, insert one `kpi_audit_logs` entry **per affected employee KPI** with:
-- `action`: `'ORG_KPI_PROPAGATED'`
-- `performed_by`: current user ID
-- `new_value`: `{ achieved_value, self_score, self_rating, source: 'org_kpi_data_owner' }`
+3. **Edge case**: If all submitted entries have `achieved_value === null` (e.g., employee opened the form but didn't enter values), the filter at line 369 produces an empty array, aggregation returns `null`, and the submit silently fails.
 
-This uses the existing `kpiRatings` array which already has each `kpi_id` and its computed values.
+## Fix Plan
 
-### 2. `src/components/dashboard/KpiTimeline.tsx` — Add action config for new events
+### File: `src/components/review/SelfReviewSheet.tsx`
 
-Add to the `actionConfig` map:
-- `'ORG_KPI_PROPAGATED'`: icon `Briefcase`, color `bg-teal-500`, label `"Org KPI Data Entered"`
-- `'ORG_KPI_VALUE_UPDATED'`: icon `Edit`, color `bg-teal-500`, label `"Org KPI Value Updated"`
+**Fix 1 — Add error feedback on aggregation failure (~line 374)**
+Replace the silent `if (aggregatedScore === null) return;` with a toast that tells the employee what went wrong:
+```typescript
+if (aggregatedScore === null) {
+  toast({
+    title: 'No valid entries found',
+    description: 'Please enter values for at least one day before submitting the month.',
+    variant: 'destructive',
+  });
+  setIsSubmittingMonthly(false);
+  return;
+}
+```
 
-Also update `formatDetails` to display achieved value details from these entries.
+Also move `setIsSubmittingMonthly(true)` before the null check so the loading state is properly cleaned up.
 
-### 3. `src/hooks/usePropagateOrgKpiValue.ts` — Both single and bulk hooks
+**Fix 2 — Show missing days info in confirmation dialog (~line 1081)**
+Add a "Submitted / Total Days" line showing how many days have data vs expected, so employees understand partial submission is happening:
+```
+Submitted Days: 28 / 31
+```
+This uses the existing aggregation result which already tracks `submittedDays` and `totalDays`.
 
-Apply the same audit logging pattern in both `usePropagateOrgKpiValue` and `useBulkPropagateOrgKpiValues` mutation functions.
+**Fix 3 — Show missing days count in the confirmation dialog**
+Compute and display the aggregation result (including missed days) in the confirmation dialog so the employee sees exactly what will be submitted.
 
 ## Risk Assessment
-- **Data Impact**: Additive only — inserts new rows into `kpi_audit_logs`. No schema changes needed (table already supports arbitrary action strings).
-- **Regression Risk**: Very low. Audit logging is fire-and-forget; failures are caught silently to avoid blocking the main propagation workflow.
-- **Workflow Impact**: None. Purely informational — adds visibility without changing any business logic.
+- **Data Impact**: None — no schema changes, no saved data affected
+- **Regression Risk**: Very low — only adds user-facing feedback; core submission logic unchanged
+- **Workflow Impact**: None — employees who could submit before can still submit; those who couldn't now get a clear error message
 
