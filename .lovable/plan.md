@@ -1,22 +1,32 @@
 
 
-# Fix: Category Chart Y-Axis Width Truncating Long Names
+# Show Auto-Calculated Achieved Value to Reviewers
 
 ## Problem
-The Y-axis width for category names is calculated as `30%` of the container width (line 35). On certain screen sizes, this produces a width too narrow for long category names like "Service & Process Improvement (8.5%)", causing them to clip/break.
+When an employee submits a KPI with an auto-calculated achieved value (from daily aggregation or threshold-based auto-calculation), the next reviewer in the workflow cannot see this value in the main KPI table. The value IS stored in the database (`review_submissions.achieved_value`) and IS visible inside the review journey cards when you open a KPI, but the KPI Details Table -- the primary working surface for reviewers -- has no "Achieved" column.
 
-## Fix: `CategoryScoreChart.tsx`
+## Current State
+- **KpiDetailsTable columns**: Category, KRA/KPI, Target, Weightage, [Score columns], Status, Actions
+- **Missing**: No "Achieved Value" column to show what the employee actually achieved
+- The reviewer must click into each KPI individually to see what was achieved
 
-Set a **minimum width of 220px** and increase the ratio slightly to **35%** so labels have enough room. Also add `overflow: visible` to the SVG text to prevent hard clipping.
+## Solution
+Add an **"Achieved"** column to the `KpiDetailsTable` between "Weightage" and the first score column. This column will display:
 
-**Line 35 change:**
-```typescript
-// Before
-setYAxisWidth(Math.round(entry.contentRect.width * 0.3));
+1. For regular KPIs: `submission.achieved_value` (the employee's submitted or auto-aggregated value)
+2. For Org KPIs: the value from `getOrgKpiValue()` if available, falling back to `submission.achieved_value`
+3. The UOM suffix (e.g., "85%", "12 Days") for context
+4. A dash ("—") if no value has been entered yet
 
-// After
-setYAxisWidth(Math.max(220, Math.round(entry.contentRect.width * 0.35)));
-```
+## File Changes
 
-**1 file, 1 line changed.**
+### `src/components/review/KpiDetailsTable.tsx`
+
+1. Add a new "Achieved" column header after "Weightage" in the table header row
+2. Add a new cell in each table row that renders:
+   - `orgValue?.achieved_value ?? submission?.achieved_value` with the KPI's UOM unit appended
+3. Update `totalColumns` calculation to account for the new column (+1)
+4. For Org KPIs, use the `getOrgKpiValue` prop (already passed in) to show centrally-entered values
+
+**~15 lines changed across 3 locations in 1 file. No DB migration.**
 
