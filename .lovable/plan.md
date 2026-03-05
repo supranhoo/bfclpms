@@ -1,14 +1,25 @@
 
 
-# Widen MentionedKpiSheet and Enable Reply Capability
+# Show "Filled / Total" for Org-Level KPIs in All KPIs Page
+
+## Problem
+The "Org-Level" column currently shows only the total count of org-level KPIs per employee. The user wants it to show how many have data filled (e.g., "3/4") vs just "4".
+
+## Approach
+For each employee, count how many of their org-level KPIs have a corresponding `org_kpi_values` row with data entered (`achieved_value IS NOT NULL` or `is_na = true`). This requires fetching `org_kpi_values` for the selected period/year.
 
 ## Changes
 
-### File: `src/components/review/MentionedKpiSheet.tsx`
+### File: `src/pages/admin/AllKpis.tsx`
 
-**1. Widen the sheet** — Change `sm:max-w-2xl` to `sm:max-w-4xl` on the `SheetContent` className (line 89). The current 2xl (672px) truncates the two-column KpiReviewPanel layout; 4xl (896px) gives the Review Journey and Metrics columns proper breathing room.
+1. **Add `orgLevelFilledKpis` to the `EmployeeKpiData` interface** (line 49) — new field to track filled count.
 
-**2. Pass `currentUserId` to `KpiReviewPanel`** — The panel needs this to correctly identify the logged-in user for reply threads. Import `useAuth`, get the current user, and pass `currentUserId={user?.id}` to the panel (line 126-134). This ensures the `ObservationReplyThread` recognizes the mentioned user and enables the Reply button (the `isReadOnly={false}` path is already active in `KpiObservationsSection`).
+2. **Fetch org_kpi_values for the selected period** — Add a query using `supabase.from('org_kpi_values')` filtered by `review_period` and `review_year`, scoped to employee-level entries. Build a lookup Set of filled keys (`category_id||kra_name||kpi_name||employee_id`).
 
-Two lines changed, one import added. No database or RLS changes needed — reply INSERT policy already allows any authenticated user (`auth.uid() = reply_by`).
+3. **Count filled org KPIs per employee** (lines 215-217) — When an org-level KPI is encountered, check if a matching filled value exists in the lookup Set. Increment `orgLevelFilledKpis` accordingly.
+
+4. **Update the badge display** (lines 606-612) — Change from showing just `{emp.orgLevelKpis}` to showing `{emp.orgLevelFilledKpis}/{emp.orgLevelKpis}` with color coding:
+   - Green text when all filled (`filledCount === totalCount`)
+   - Amber/default when partially filled
+   - Current style when none filled
 
