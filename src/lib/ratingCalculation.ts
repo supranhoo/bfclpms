@@ -158,7 +158,24 @@ export function calculateRating(
       }
     }
 
-    // FALLBACK: If no label match (numeric value or missing qualitative options),
+    // Reverse-map: numeric achieved value → option by rating
+    // Fixes: DB stores numeric 5 for "Yes", but label match fails on "5"
+    const numericVal = typeof achievedValue === 'number'
+      ? achievedValue
+      : parseFloat(String(achievedValue ?? ''));
+    if (!isNaN(numericVal)) {
+      const matchedOption = options.find(opt => opt.rating === numericVal);
+      if (matchedOption) {
+        const rating = matchedOption.rating;
+        const ratingLevel = scoreToRatingLevel(rating);
+        const percentage = (rating / 5) * 100;
+        const weightedScore = weightage * rating;
+        const achievedWeight = rating / 5;
+        return { rating, ratingLevel, weightedScore, percentage, achievedWeight };
+      }
+    }
+
+    // FALLBACK: If no label or rating match (numeric value or missing qualitative options),
     // treat as numeric and use threshold-based calculation
     const numVal = typeof achievedValue === 'number'
       ? achievedValue
