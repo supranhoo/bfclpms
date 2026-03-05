@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { usePaginatedNotifications, useMarkNotificationRead, useMarkAllNotificationsRead, NotificationFilters } from '@/hooks/usePaginatedNotifications';
+import { useUnreadNotificationCount } from '@/hooks/useNotifications';
 import { useSnoozeNotification, useUnsnoozeNotification } from '@/hooks/useSnoozeNotification';
 import { useRespondToQuery, useAcceptQueryResponse, useSubordinateQueries, QueryStatusExtended } from '@/hooks/useQueryWorkflow';
 import { Button } from '@/components/ui/button';
@@ -117,10 +118,7 @@ export default function QueryInbox() {
   const markNotificationRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
 
-  const unreadNotificationsCount = useMemo(() =>
-    notifications?.filter(n => !n.is_read).length || 0,
-    [notifications]
-  );
+  const { data: unreadNotificationsCount = 0 } = useUnreadNotificationCount();
 
   // Fetch all queries for current user (both received and sent)
   const { data: allQueries, isLoading: loadingQueries } = useQuery({

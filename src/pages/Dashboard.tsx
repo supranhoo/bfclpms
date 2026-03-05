@@ -189,7 +189,7 @@ export default function Dashboard() {
 
   // Fetch ALL submissions across all periods for history
   const allKpiIds = useMemo(() => kpis?.map(k => k.id) || [], [kpis]);
-  const { data: allSubmissions } = useReviewSubmissions(allKpiIds);
+  const { data: allSubmissions } = useReviewSubmissions(selectedKpiReview ? allKpiIds : []);
 
   const isLoading = kpisLoading || categoriesLoading;
 
