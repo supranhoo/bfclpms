@@ -1,61 +1,27 @@
 
 
-# Replace Rating Histogram with Bell Curve Visualization
+# Fix: Management Dashboard goes blank on month selection
 
-## What We Will Build
+## Root Cause Analysis
 
-Replace the current bar chart with a smooth bell curve (area chart) that plots the 5-band rating distribution as a continuous curve, with colored zones under the curve for each performance band.
+The `queryFn` in the main `useQuery` hook (line 156) lacks a `try-catch` wrapper. When toggling a month, the query refetches with new parameters. If the Supabase query encounters any error (network timeout, malformed response, etc.), the unhandled rejection can crash the component, causing the ErrorBoundary to show a blank/error state.
+
+Additionally, the component has **no error state handling** — when the query errors, `isLoading` is false and `dashboardData` is undefined, but the component proceeds to render, potentially causing null-reference crashes on nested property access (e.g., `dashboardData?.trends`).
 
 ## Changes
 
-### 1. New File: `src/components/management/RatingBellCurve.tsx`
+### File: `src/pages/ManagementDashboard.tsx`
 
-Create a new component using Recharts `AreaChart` with `type="monotone"` to render a smooth bell curve:
+1. **Wrap `queryFn` in try-catch** (lines 156-417) — Catch any thrown errors inside the async function and return a safe default object so the dashboard renders with zeroed-out data instead of crashing.
 
-- **X-axis**: The 5 score bands plotted left-to-right (Below < 3, Needs Imp 3-3.5, Meets 3.5-4, Exceeds 4-4.5, Outstanding 4.5-5)
-- **Curve**: Smooth `Area` with `type="monotone"` or `"basis"` interpolation showing employee counts
-- **Gradient fill**: Use a `linearGradient` under the curve transitioning through the 5 band colors (red → orange → yellow → blue → green)
-- **Reference line**: Show the mean score as a vertical dashed reference line
-- **Stats subtitle**: Display Mean and Std Dev below the title
-- **Legend**: Keep the 5-band legend with employee counts at the bottom
+2. **Add error state from `useQuery`** (line 154) — Destructure `isError` from the query result.
 
-Props: `data` (same `RatingBand[]`), plus new `meanScore` and `stdDev` numbers.
+3. **Add error UI** (after line 501) — Before the main return, check `isError` and render a user-friendly error card with a "Retry" button instead of a blank page.
 
-### 2. Modify `src/pages/ManagementDashboard.tsx`
-
-- **Compute mean & stdDev** from `employeeScoreMap` after the bucketing loop (~line 313). Collect all avg scores into an array, compute mean and standard deviation.
-- **Add `meanScore` and `stdDev`** to the returned data object (~line 395).
-- **Swap import** from `RatingHistogram` to `RatingBellCurve`.
-- **Update JSX** (~line 642) to render `<RatingBellCurve>` passing `data`, `meanScore`, `stdDev`.
-
-### 3. Keep `src/components/management/RatingHistogram.tsx`
-
-Leave the file as-is for potential future use (toggle between views), but it will no longer be imported on the dashboard.
-
-## Visual Layout
-
-```text
-┌──────────────────────────────────────┐
-│  📊 Rating Distribution (Bell Curve) │
-│  Mean: 3.8  |  Std Dev: 0.6         │
-│                                      │
-│           ╱‾‾╲                       │
-│          ╱    ╲                      │
-│        ╱       ╲                     │
-│      ╱    ↑     ╲                    │
-│    ╱    mean      ╲                  │
-│  ╱                  ╲                │
-│ ╱────────────────────╲───            │
-│ Red  Orange  Yellow  Blue  Green     │
-│                                      │
-│ 🔴 Below: 12  🟠 Needs: 45          │
-│ 🟡 Meets: 89  🔵 Exceeds: 34        │
-│ 🟢 Outstanding: 8                   │
-└──────────────────────────────────────┘
-```
+4. **Guard child component props** — Ensure all child components receive safe defaults (already mostly done with `|| []` and `?? 0`, but verify `TrainingGapSummary` receives correct calendar year for the selected month, not the fiscal start year).
 
 ## Risk Assessment
-- No schema or DB changes -- purely UI/calculation logic
-- Low regression risk -- isolated to one chart on management dashboard
-- `RatingHistogram` preserved if toggle is desired later
+- **Data Impact**: None — read-only fix, no schema changes
+- **Regression Risk**: Very low — only adds error handling, no logic changes
+- **UI Impact**: Positive — users will see a retry option instead of a blank page
 
