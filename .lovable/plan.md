@@ -1,33 +1,26 @@
 
 
-# Add Excel Export to KRA Export Menu with Role-Based Access
+# Add Reporting Manager Name to KPI Header
+
+## Problem
+The KPI detail panel (visible in all review scorecards) doesn't show who the employee's reporting manager is. The user wants it displayed below the Timeline button in the top-right corner.
+
+## Approach
+Fetch the reporting manager name directly inside `KpiHeaderSection` using `kpi.employee_id`. This avoids adding a new prop to `KpiReviewPanel` and all 7+ consumer components.
+
+**Self-contained query**: Use a single Supabase query joining the employee profile to their manager's profile via `reporting_manager_id`, cached by react-query.
 
 ## Changes
 
-### 1. `src/hooks/useKraExportConfig.ts`
-- Add `excelRoles: string[]` to `KraExportConfig` interface
-- Parse `kra_export_excel_roles` from workflow_settings
+### File: `src/components/review/KpiHeaderSection.tsx`
+1. Import `useQuery` from `@tanstack/react-query` and `supabase` client
+2. Add a query that fetches the reporting manager's `full_name` for the given `kpi.employee_id`:
+   - Query `profiles` for `reporting_manager_id` where `id = kpi.employee_id`
+   - Then fetch the manager's `full_name` from `profiles` where `id = reporting_manager_id`
+   - Cache key: `['kpi-reporting-manager', kpi.employee_id]`
+3. Display the manager name as a small text line below the badges row, right-aligned, showing: `👤 Reporting Manager: [Name]`
+   - Uses `text-xs text-muted-foreground` styling, positioned in the top-right area after the badges/Timeline row
+   - Only renders when manager name is available (not null)
 
-### 2. `src/lib/kraExport.ts`
-- Add `generateKraSheetExcel(data: KraSheetData, config: KraExportConfig): void` function
-- Uses `xlsx` library (already installed) to produce an `.xlsx` file with the same dynamic columns from `COLUMN_REGISTRY` based on `visibleColumns`
-- Includes employee details header rows (if `showEmployeeDetails` is true) and the KPI data table with proper column widths
-
-### 3. `src/components/review/KraExportMenu.tsx`
-- Import `FileSpreadsheet` icon from lucide-react
-- Add `canExcel = canAccess(exportConfig.excelRoles, effectiveRole)` check
-- Add "Download Excel" menu item gated by `canExcel`
-- Call `generateKraSheetExcel` on click
-- Update visibility check to include `canExcel`
-
-### 4. `src/components/admin/WorkflowSettingsTab.tsx`
-- No code changes needed — the existing `setting_key.endsWith('_roles')` pattern automatically renders the role-checkbox UI for `kra_export_excel_roles`
-
-### 5. Database: Insert new workflow_setting row
-- Insert `kra_export_excel_roles` into `workflow_settings` (category: `export`) with default value of `["admin"]` so admins can immediately configure which roles get Excel access
-
-## Risk Assessment
-- **No schema changes** — just one new settings row
-- **xlsx already installed** — no new dependency
-- **Existing pattern** — follows the exact same role-gating approach as Preview/Download/Email
+No database changes, no new props needed. The query is lightweight and cached per employee.
 
