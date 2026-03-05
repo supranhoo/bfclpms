@@ -1,29 +1,43 @@
 
 
-# Fix: Management Dashboard Stuck in Loading State
+# Update Rating Distribution: 5 Bands Based on Score Scale (5 to <3)
 
-## Root Cause
+## Current State
+The Rating Distribution uses 4 percentage-based bands (85%+, 70-84%, 50-69%, <50%). The user wants 5 bands based on the 0-5 score scale instead.
 
-The dashboard query is getting **restarted mid-flight**, creating an apparent infinite loading loop:
+## New Bands (Top to Bottom)
+| Band | Range | Label |
+|------|-------|-------|
+| 1 | 5 to 4.5 | Outstanding (5–4.5) |
+| 2 | 4.5 to 4 | Exceeds Expectations (4.5–4) |
+| 3 | 4 to 3.5 | Meets Expectations (4–3.5) |
+| 4 | 3.5 to 3 | Needs Improvement (3.5–3) |
+| 5 | < 3 | Below Expectations (<3) |
 
-1. Component mounts with `filtersLoading = true`. The `filteredEmployeeIds` array is empty `[]`.
-2. The management-dashboard query starts immediately (no `enabled` guard) with the empty array in the query key.
-3. The query is slow — it paginates sequentially across 2 calendar years (5-6 HTTP requests, ~15-20 seconds total).
-4. While the query is mid-flight, the profiles-hierarchy query completes. `filteredEmployeeIds` changes from `[]` to `[...454 ids]`.
-5. React Query detects the query key changed and **cancels and restarts** the entire query from scratch.
-6. The cycle can repeat if any other key dependency updates during execution.
+## Changes
 
-## Fix Plan
+### File: `src/pages/ManagementDashboard.tsx`
 
-### `src/pages/ManagementDashboard.tsx`
+**1. Update `ratingCounts` object** (line 297)
+- Change from `{ excellent, good, average, poor }` to `{ band5, band4, band3, band2, band1 }` — five buckets.
 
-**Change 1 — Add `enabled: !filtersLoading`** to the `useQuery` call (line 153). This prevents the query from starting before profiles are loaded, eliminating the restart.
+**2. Update bucketing logic** (lines 306-312)
+- Currently computes a percentage and buckets into 4 bands.
+- New logic: compute a weighted average **score** (not percentage) per employee. The `getScore` function already returns the raw 0-5 score from `review_submissions`. Divide total score by count of KPIs (not by weightage-as-percentage) to get the average score on the 0-5 scale.
+- Bucket: `>=4.5` → band5, `>=4` → band4, `>=3.5` → band3, `>=3` → band2, `<3` → band1.
 
-**Change 2 — Remove `filteredEmployeeIds` from query key.** Replace it with a stable string representation: `filteredEmployeeIds.join(',')`. This prevents array reference changes from triggering restarts while still properly cache-busting when the actual filter values change.
+**3. Update `ratingDistribution` array** (lines 387-392)
+- Output 5 entries with the new labels and a 5th color from `CHART_COLORS[4]`.
 
-**Change 3 — Parallelize calendar year fetches.** Change the `for...of` loop (line 169) to use `Promise.all` so both calendar years fetch concurrently instead of sequentially, cutting load time roughly in half.
+### File: `src/components/management/RatingHistogram.tsx`
 
-### Risk Assessment
-- No schema changes. Read-only display fix.
-- Low regression risk — only affects query timing and caching behavior.
+**4. Update `SHORT_LABELS` map** (lines 21-25)
+- Replace the 4 old label mappings with 5 new short labels: "Outstanding", "Exceeds", "Meets", "Needs Imp.", "Below".
+
+**5. Adjust legend grid** (line 57)
+- Change from `grid-cols-2` to accommodate 5 items cleanly (e.g., keep `grid-cols-2` with the 5th wrapping, or use a flex layout).
+
+## Risk Assessment
+- No schema or DB changes — purely UI/calculation logic.
+- Low regression risk — isolated to one chart on the management dashboard.
 
