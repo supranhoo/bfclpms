@@ -340,6 +340,7 @@ export default function ManagementDashboard() {
 
       return {
         totalEmployees: profiles.length,
+        employeesWithKpis: employeeScoreMap.size,
         totalKpis: kpis.length,
         openQueries,
         managementPending: currentMetrics.managementPending,
@@ -409,7 +410,7 @@ export default function ManagementDashboard() {
       startY: 50,
       head: [['Metric', 'Value']],
       body: [
-        ['Total Employees', String(dashboardData?.totalEmployees || 0)],
+        ['Total Employees (KPI Coverage)', `${dashboardData?.employeesWithKpis || 0} / ${dashboardData?.totalEmployees || 0}`],
         ['Total KPIs', String(dashboardData?.totalKpis || 0)],
         ['Completion Rate', `${(dashboardData?.completionRate || 0).toFixed(1)}%`],
         ['Avg Score', `${(dashboardData?.avgScore || 0).toFixed(1)}%`],
@@ -507,8 +508,8 @@ export default function ManagementDashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboardData?.totalEmployees || 0}</div>
-            <p className="text-xs text-muted-foreground">In the system</p>
+            <div className="text-2xl font-bold">{dashboardData?.employeesWithKpis || 0} / {dashboardData?.totalEmployees || 0}</div>
+            <p className="text-xs text-muted-foreground">KPIs assigned / Total</p>
           </CardContent>
         </Card>
 
