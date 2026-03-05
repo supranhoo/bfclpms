@@ -212,7 +212,9 @@ export default function ManagementDashboard() {
       // Get score for a KPI
       const getScore = (kpi: any) => {
         const s = kpi.review_submissions;
-        return s?.final_score ?? s?.management_score ?? s?.auditor_score ?? s?.manager_score ?? s?.self_score ?? 0;
+        return s?.final_score ?? s?.management_score ?? s?.auditor_score 
+          ?? s?.hr_pms_score ?? s?.skip_level_score 
+          ?? s?.manager_score ?? s?.self_score ?? 0;
       };
 
       // Calculate metrics
@@ -301,11 +303,11 @@ export default function ManagementDashboard() {
         const score = getScore(kpi);
         const w = kpi.weightage || 100;
         const existing = employeeScoreMap.get(kpi.employee_id);
-        if (existing) { existing.total += score; existing.count++; existing.weightage += w; }
-        else employeeScoreMap.set(kpi.employee_id, { total: score, count: 1, weightage: w });
+        if (existing) { existing.total += score * w; existing.count++; existing.weightage += w; }
+        else employeeScoreMap.set(kpi.employee_id, { total: score * w, count: 1, weightage: w });
       });
-      employeeScoreMap.forEach(({ total, count }) => {
-        const avgScore = count > 0 ? total / count : 0;
+      employeeScoreMap.forEach(({ total, weightage }) => {
+        const avgScore = weightage > 0 ? total / weightage : 0;
         if (avgScore >= 4.5) ratingCounts.band5++;
         else if (avgScore >= 4) ratingCounts.band4++;
         else if (avgScore >= 3.5) ratingCounts.band3++;
@@ -313,10 +315,10 @@ export default function ManagementDashboard() {
         else ratingCounts.band1++;
       });
 
-      // Compute mean and standard deviation
+      // Compute mean and standard deviation using weighted averages
       const allAvgScores: number[] = [];
-      employeeScoreMap.forEach(({ total, count }) => {
-        if (count > 0) allAvgScores.push(total / count);
+      employeeScoreMap.forEach(({ total, weightage }) => {
+        if (weightage > 0) allAvgScores.push(total / weightage);
       });
       const meanScore = allAvgScores.length > 0 ? allAvgScores.reduce((a, b) => a + b, 0) / allAvgScores.length : 0;
       const stdDev = allAvgScores.length > 0 ? Math.sqrt(allAvgScores.reduce((sq, n) => sq + Math.pow(n - meanScore, 2), 0) / allAvgScores.length) : 0;
