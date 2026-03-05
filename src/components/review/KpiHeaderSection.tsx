@@ -5,6 +5,8 @@ import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getCycleLabel } from '@/lib/frequencyUtils';
 import { Clock, Building2, Users, User } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 interface KpiHeaderSectionProps {
   kpi: KPI;
@@ -20,6 +22,25 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   const status = kpi.status || 'kra_set';
   const weightage = kpi.weightage || 0;
   const scope = kpi.org_level_scope || 'employee';
+
+  const { data: managerName } = useQuery({
+    queryKey: ['kpi-reporting-manager', kpi.employee_id],
+    queryFn: async () => {
+      const { data: emp } = await supabase
+        .from('profiles')
+        .select('reporting_manager_id')
+        .eq('id', kpi.employee_id)
+        .single();
+      if (!emp?.reporting_manager_id) return null;
+      const { data: mgr } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', emp.reporting_manager_id)
+        .single();
+      return mgr?.full_name || null;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
   return (
     <div className="p-3 sm:p-4 bg-muted/30 rounded-lg border">
@@ -66,7 +87,14 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
               <span className="hidden sm:inline">Timeline</span>
             </Button>
           )}
+      </div>
+
+      {/* Reporting Manager */}
+      {managerName && (
+        <div className="text-xs text-muted-foreground text-right">
+          👤 Reporting Manager: {managerName}
         </div>
+      )}
       </div>
 
       {/* Org KPI Badge Row */}
