@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { FixCorruptedScoresDialog } from '@/components/admin/FixCorruptedScoresDialog';
 
 interface StageCount {
   stage: string;
@@ -296,6 +297,7 @@ export default function AdminDashboard() {
               </div>
               <ArrowRight className="h-4 w-4" />
             </Button>
+            <FixCorruptedScoresDialog />
           </div>
         </CardContent>
       </Card>

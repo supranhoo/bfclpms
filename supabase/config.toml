@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.update-user-profile]
 verify_jwt = false
+
+[functions.fix-corrupted-binary-scores]
+verify_jwt = false
