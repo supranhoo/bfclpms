@@ -10,12 +10,14 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTemplateBundles, useLogBundleAssignment, TemplateBundle } from '@/hooks/useTemplateBundles';
 import { useProfiles, useDepartments } from '@/hooks/useOrganization';
-import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Search, Package, Users, FileCheck, Sparkles } from 'lucide-react';
+import { EffectiveMonthSelector } from './EffectiveMonthSelector';
+import { getActiveMonthForCycle } from '@/lib/frequencyUtils';
 
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 interface BundleAssignDialogProps {
   isOpen: boolean;
@@ -29,7 +31,6 @@ export function BundleAssignDialog({ isOpen, onClose, preselectedEmployeeId }: B
   const { data: bundles } = useTemplateBundles();
   const { data: profiles } = useProfiles();
   const { data: departments } = useDepartments();
-  const { data: settings } = useSystemSettings();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const logAssignment = useLogBundleAssignment();
@@ -45,16 +46,12 @@ export function BundleAssignDialog({ isOpen, onClose, preselectedEmployeeId }: B
   const [departmentFilter, setDepartmentFilter] = useState<string>('');
   const [roleFilter, setRoleFilter] = useState<string>('');
 
-  const currentPeriod = useMemo(() => {
-    const setting = settings?.find(s => s.setting_key === 'current_review_period');
-    return typeof setting?.setting_value === 'string' ? setting.setting_value : '';
-  }, [settings]);
-  
-  const currentYear = useMemo(() => {
-    const setting = settings?.find(s => s.setting_key === 'current_review_year');
-    const value = setting?.setting_value;
-    return typeof value === 'number' ? value : parseInt(String(value) || new Date().getFullYear().toString());
-  }, [settings]);
+  // Effective month/year — defaults to current calendar month
+  const [selectedMonth, setSelectedMonth] = useState(() => MONTH_NAMES[new Date().getMonth()]);
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+
+  const currentPeriod = selectedMonth;
+  const currentYear = selectedYear;
 
   const selectedBundle = useMemo(() => 
     bundles?.find(b => b.id === selectedBundleId),
@@ -128,13 +125,14 @@ export function BundleAssignDialog({ isOpen, onClose, preselectedEmployeeId }: B
       for (const employeeId of selectedEmployeeIds) {
         for (const item of selectedBundle.template_bundle_items) {
           const template = item.kpi_templates;
+          const resolvedPeriod = getActiveMonthForCycle(template.frequency, currentPeriod, currentYear);
           kpisToInsert.push({
             employee_id: employeeId,
             kra_name: template.kra_name,
             kpi_name: template.kpi_name,
             category_id: template.kra_categories?.id || null,
             weightage: template.weightage,
-            review_period: currentPeriod,
+            review_period: resolvedPeriod,
             review_year: currentYear,
             status: 'kra_set',
           });
@@ -216,7 +214,14 @@ export function BundleAssignDialog({ isOpen, onClose, preselectedEmployeeId }: B
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
+        <EffectiveMonthSelector
+          selectedMonth={selectedMonth}
+          selectedYear={selectedYear}
+          onMonthChange={setSelectedMonth}
+          onYearChange={setSelectedYear}
+        />
+
+        <ScrollArea className="flex-1 pr-4 mt-3">
           {/* Step 1: Select Bundle */}
           {step === 'select-bundle' && (
             <div className="space-y-4 py-4">

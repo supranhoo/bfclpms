@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-05  
-> **Version:** 1.48.0 — Bug bounty audit fixes (BUG-001–BUG-009), frequency lock data correction, dashboard lazy-loading
+> **Version:** 1.49.0 — Effective Month selector in KRA assignment dialogs; frequency auto-resolution at assignment time
 > **Maintainer:** Lovable AI
 
 ---
@@ -3881,6 +3881,23 @@ All Inbox access gaps for `hr_pms` and `skip_level` roles have been closed:
 | `supabase/functions/import-kpis/index.ts` | Added `resolveToActiveMonth` logic to auto-resolve multi-month frequency periods to the cycle's active terminal month |
 | `src/components/admin/AdminKpiCreateDialog.tsx` | Same `resolveToActiveMonth` logic applied at KPI creation time |
 | DB trigger | Enhanced `enforce_frequency_lock` trigger to block INSERT of KPIs with locked-month `review_period` for non-admin users |
+
+---
+
+### Effective Month Selector in Assignment Dialogs (v1.49.0)
+
+**Problem:** All three KRA assignment dialogs (`SmartAssignmentDialog`, `BundleAssignDialog`, `BulkTemplateAssignDialog`) derived `review_period` from a non-existent `current_review_period` system setting, defaulting to "January". KPIs were inserted successfully but were invisible in the current month's view.
+
+**Solution:**
+
+| File | Change |
+|---|---|
+| `src/components/admin/EffectiveMonthSelector.tsx` | New shared component — compact month/year selector defaulting to current calendar month |
+| `src/components/admin/SmartAssignmentDialog.tsx` | Removed `useSystemSettings` lookup; added `EffectiveMonthSelector`; applies `getActiveMonthForCycle` per-template before insert |
+| `src/components/admin/BundleAssignDialog.tsx` | Same — removed broken `system_settings` lookup, added selector and frequency resolution |
+| `src/components/admin/BulkTemplateAssignDialog.tsx` | Same — removed broken `system_settings` lookup, added selector and frequency resolution |
+
+**Frequency Auto-Resolution:** For multi-month KPIs (Quarterly, Bi-Monthly, etc.), the selected month is auto-resolved to the cycle's terminal month via `getActiveMonthForCycle` before insert, preventing DB trigger rejections.
 
 ---
 
