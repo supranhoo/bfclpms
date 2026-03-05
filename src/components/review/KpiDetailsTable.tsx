@@ -148,7 +148,7 @@ export function KpiDetailsTable({
 }: KpiDetailsTableProps) {
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const scoreColumns = buildScoreColumns(effectiveStages);
-  const totalColumns = 4 + scoreColumns.length + 2; // Category, KRA/KPI, Target, Weightage + scores + Status, Actions
+  const totalColumns = 5 + scoreColumns.length + 2; // Category, KRA/KPI, Target, Weightage, Achieved + scores + Status, Actions
   
   const canReviewKpiCheck = (kpi: KPI): boolean => {
     // N/A KPIs are still reviewable — the reviewer decides whether to confirm or override N/A
@@ -295,6 +295,7 @@ export function KpiDetailsTable({
           <TableHead>KRA / KPI</TableHead>
           <TableHead>Target</TableHead>
           <TableHead>Weightage</TableHead>
+          <TableHead>Achieved</TableHead>
           {scoreColumns.map(col => (
             <TableHead key={col.key} className="text-center">{col.label}</TableHead>
           ))}
@@ -417,6 +418,21 @@ export function KpiDetailsTable({
                 {/* Weightage */}
                 <TableCell>
                   <span className="text-sm">{kpi.weightage ?? 0}%</span>
+                </TableCell>
+                {/* Achieved Value */}
+                <TableCell>
+                  {(() => {
+                    const achievedVal = orgValue?.achieved_value ?? submission?.achieved_value ?? null;
+                    if (achievedVal === null || achievedVal === undefined) {
+                      return <span className="text-muted-foreground">—</span>;
+                    }
+                    return (
+                      <span className="font-mono text-sm">
+                        {achievedVal}
+                        {kpi.uom && <span className="text-xs text-muted-foreground ml-1">{kpi.uom}</span>}
+                      </span>
+                    );
+                  })()}
                 </TableCell>
                 {/* Dynamic Score Columns */}
                 {scoreColumns.map(col => {
