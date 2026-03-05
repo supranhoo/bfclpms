@@ -1,35 +1,44 @@
 
 
-# RCA Complete: Binary/Tiered KPI Bug Scope Across All Reviewer Levels
+# Fix: Score Columns Showing "N/A" Instead of "—" for In-Progress Stages
 
-## Analysis Summary
+## Root Cause
 
-I audited every location where `calculateRating()` is called during score initialization across all reviewer types. Here are the results:
+In `KpiDetailsTable.tsx`, the `isStageCompleted` function (line 52) uses `>=` comparison:
 
-### Affected Components and Status
+```typescript
+return statusIdx >= stageIdx;
+```
 
-| Component | Reviewer Level | Uses `calculateRating()` | Fixed by deployed patch? |
-|---|---|---|---|
-| `UnifiedScorecard.tsx` (line 669) | Manager, Skip-Level, HR PMS | Yes — converts to `parseFloat` then calls `calculateRating` with `uom_type` + `qualitative_options` | **Yes** — reverse-mapping now handles numeric `5` → "Yes" → rating 5 |
-| `AuditScorecard.tsx` (line 388) | Auditor | Same pattern — `parseFloat` then `calculateRating` with full params | **Yes** — same fix applies |
-| `ManagementScorecard.tsx` (line 453) | Management | Same pattern — `parseFloat` then `calculateRating` with full params | **Yes** — same fix applies |
-| `AchievedValueScoreInput.tsx` (line 103) | All levels (auto-recalc effect) | Same — `parseFloat` then `calculateRating` | **Yes** — same fix applies |
-| `SelfReviewSheet.tsx` (line 226) | Employee (self) | Calls `calculateRating` with full params | **Yes** |
-| `AdminDataEntryDialog.tsx` (line 186) | Admin data entry | Calls `calculateRating` with full params | **Yes** |
-| `ScoringSimulatorPopover.tsx` (line 47) | Admin simulator | Calls `calculateRating` with full params | **Yes** |
+This means when a KPI is **at** a stage (e.g., status = `hr_pms_review`), the function considers that stage "completed." Combined with the score cell logic (line 441):
 
-### Conclusion
+```typescript
+const showNA = score === null && stageCompleted;
+```
 
-**No additional code changes are required.** The fix deployed in `src/lib/ratingCalculation.ts` (adding the numeric-to-option reverse-mapping block at line 161-175) is the single fix point. Since all 7 call sites pass `uom_type` and `qualitative_options` to the same `calculateRating` function, the fix propagates to every reviewer level automatically.
+If the reviewer hasn't scored yet (score is null) and the KPI is at their stage, it incorrectly shows **"N/A"** instead of **"—"** (pending).
 
-The bug affected: Manager, Skip-Level, HR PMS, Auditor, Management, and Admin Data Entry — essentially every reviewer type. All are now covered by the single engine-level fix.
+From the screenshot: KPIs like "Labour supply wages" are at `hr_pms_review` status. HR PMS hasn't scored yet, so `hr_pms_score` is null. But `statusIdx(hr_pms_review) >= stageIdx(hr_pms_review)` is true, triggering the N/A badge.
 
-### Already-Corrupted Data
+**A stage should only be considered "completed" if the KPI has moved PAST it** — strict greater-than.
 
-KPIs that were reviewed **before** this fix may have incorrect scores persisted in the database (e.g., `skip_level_score = 0` when it should be `5`). These need one of:
-1. The reviewer re-opens and re-submits the KPI (the correct score will now initialize)
-2. An admin sends the KPI back to the affected stage for re-review
-3. A direct database correction for known affected records
+## Fix
 
-No further code changes are needed — the deployed fix covers all reviewer levels comprehensively.
+### File: `src/components/review/KpiDetailsTable.tsx`
+
+**Line 52**: Change `>=` to `>`:
+
+```typescript
+return statusIdx > stageIdx;
+```
+
+This ensures:
+- KPI at `hr_pms_review` with null `hr_pms_score` → shows "—" (pending, correct)
+- KPI at `audit` with null `hr_pms_score` → shows "N/A" (stage passed without score, correct)
+- KPI at `manager_check` with `self_score = 5` → shows "5" (unchanged, correct)
+
+## Risk Assessment
+- **Data Impact**: None — display-only change
+- **Regression Risk**: Very low — only changes when "N/A" badge appears vs a dash
+- **Workflow Impact**: None
 
