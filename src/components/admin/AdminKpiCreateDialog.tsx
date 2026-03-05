@@ -17,6 +17,7 @@ import { UomType, QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom
 import { Badge } from '@/components/ui/badge';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
+import { getActiveMonthForCycle } from '@/lib/frequencyUtils';
 import { useKpiTemplates } from '@/hooks/useKpiTemplates';
 import { useAllKpis } from '@/hooks/useKpis';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -254,6 +255,9 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
       return;
     }
 
+    // Auto-resolve review_period to terminal month for multi-month frequencies
+    const resolvedPeriod = getActiveMonthForCycle(frequency, reviewPeriod, reviewYear, frequencyCycleStart || null);
+
     await createKpi.mutateAsync({
       employee_id: employeeId,
       category_id: categoryId,
@@ -271,7 +275,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
       r2: uomType === 'numeric' ? (r2 || null) : null,
       r1: uomType === 'numeric' ? (r1 || null) : null,
       r0: uomType === 'numeric' ? (r0 || null) : null,
-      review_period: reviewPeriod,
+      review_period: resolvedPeriod,
       review_year: reviewYear,
       status: 'kra_set' as ReviewStatus,
       is_org_level: false,
