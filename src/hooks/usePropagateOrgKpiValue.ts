@@ -179,6 +179,32 @@ async function callPropagationRpc(
 }
 
 /**
+ * Fire-and-forget audit logging to kpi_audit_logs so entries appear in KpiTimeline.
+ */
+async function logPropagationAudit(
+  kpiRatings: Array<{ kpi_id: string; achieved_value: number | null; self_score: number | null; self_rating: string | null }>,
+  isNa?: boolean
+) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const auditEntries = kpiRatings.map(r => ({
+    kpi_id: r.kpi_id,
+    action: 'ORG_KPI_PROPAGATED',
+    performed_by: user.id,
+    new_value: {
+      achieved_value: r.achieved_value,
+      self_score: r.self_score,
+      self_rating: r.self_rating,
+      is_na: !!isNa,
+      source: 'org_kpi_data_owner',
+    },
+  }));
+
+  await supabase.from('kpi_audit_logs').insert(auditEntries);
+}
+
+/**
  * Propagate org-level KPI values to review_submissions via server-side RPC.
  * Reduces dozens of individual DB calls to 2 (one SELECT, one RPC).
  */
@@ -195,7 +221,12 @@ export function usePropagateOrgKpiValue() {
         targetKpis, params.achievedValue, !!params.isNa
       );
 
-      return callPropagationRpc(kpiRatings, profileMap, !!params.isNa, params.remarks);
+      const result = await callPropagationRpc(kpiRatings, profileMap, !!params.isNa, params.remarks);
+
+      // Fire-and-forget: log to kpi_audit_logs for Review Timeline visibility
+      logPropagationAudit(kpiRatings, params.isNa).catch(() => {});
+
+      return result;
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
@@ -256,6 +287,10 @@ export function useBulkPropagateOrgKpiValues() {
       if (allRatings.length === 0) return { propagatedCount: 0, details: [] };
 
       const result = await callPropagationRpc(allRatings, globalProfileMap, hasNa, null);
+
+      // Fire-and-forget: log to kpi_audit_logs for Review Timeline visibility
+      logPropagationAudit(allRatings, hasNa).catch(() => {});
+
       return result;
     },
     onSuccess: (result) => {
