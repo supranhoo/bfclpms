@@ -150,8 +150,9 @@ export default function ManagementDashboard() {
   const { data: rollbackCounts } = useRollbackStatusCounts();
 
   // Main dashboard data query
+  const stableEmployeeKey = filteredEmployeeIds.join(',');
   const { data: dashboardData, isLoading: dataLoading } = useQuery({
-    queryKey: ['management-dashboard', selectedFiscalYear, selectedMonths, filteredEmployeeIds, filters.divisionId, filters.businessUnitId, filters.departmentId, filters.managerId, filters.employeeId],
+    queryKey: ['management-dashboard', selectedFiscalYear, selectedMonths, stableEmployeeKey, filters.divisionId, filters.businessUnitId, filters.departmentId, filters.managerId, filters.employeeId],
     queryFn: async () => {
       // Detect if any hierarchy filter is active to avoid .in() overflow with 454+ UUIDs
       const hasActiveHierarchyFilters = !!(filters.divisionId || filters.businessUnitId || filters.departmentId || filters.managerId || filters.employeeId);
@@ -165,30 +166,34 @@ export default function ManagementDashboard() {
 
       const fetchFiscalData = async (): Promise<any[]> => {
         const allKpis: any[] = [];
-        // Fetch each calendar year chunk separately
-        for (const [calYear, months] of monthsByYear.entries()) {
-          let offset = 0;
-          const batchSize = 1000;
-          let hasMore = true;
-          while (hasMore) {
-            let query = supabase
-              .from('kpis')
-              .select(`
-                id, employee_id, status, weightage, review_period, review_year,
-                review_submissions ( final_score, management_score, auditor_score, manager_score, self_score )
-              `)
-              .eq('review_year', calYear)
-              .in('review_period', months)
-              .range(offset, offset + batchSize - 1);
-            if (hasActiveHierarchyFilters && filteredEmployeeIds.length > 0) {
-              query = query.in('employee_id', filteredEmployeeIds);
+        // Fetch calendar year chunks in parallel
+        const yearResults = await Promise.all(
+          Array.from(monthsByYear.entries()).map(async ([calYear, months]) => {
+            const yearKpis: any[] = [];
+            let offset = 0;
+            const batchSize = 1000;
+            let hasMore = true;
+            while (hasMore) {
+              let query = supabase
+                .from('kpis')
+                .select(`
+                  id, employee_id, status, weightage, review_period, review_year,
+                  review_submissions ( final_score, management_score, auditor_score, manager_score, self_score )
+                `)
+                .eq('review_year', calYear)
+                .in('review_period', months)
+                .range(offset, offset + batchSize - 1);
+              if (hasActiveHierarchyFilters && filteredEmployeeIds.length > 0) {
+                query = query.in('employee_id', filteredEmployeeIds);
+              }
+              const { data, error } = await query;
+              if (error) throw error;
+              if (data && data.length > 0) { yearKpis.push(...data); offset += batchSize; hasMore = data.length === batchSize; } else { hasMore = false; }
             }
-            const { data, error } = await query;
-            if (error) throw error;
-            if (data && data.length > 0) { allKpis.push(...data); offset += batchSize; hasMore = data.length === batchSize; } else { hasMore = false; }
-          }
-        }
-        return allKpis;
+            return yearKpis;
+          })
+        );
+        return yearResults.flat();
       };
 
       const [currentKpis, profilesResult, queriesResult, departmentsResult] = await Promise.all([
@@ -398,6 +403,7 @@ export default function ManagementDashboard() {
         overdueReviews,
       };
     },
+    enabled: !filtersLoading,
   });
 
   // Trend indicator component
