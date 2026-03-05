@@ -24,28 +24,28 @@ const SHORT_LABELS: Record<string, string> = {
 
 // Order bands left-to-right: lowest to highest
 const BAND_ORDER = [
-  'Below Expectations (<3)',
-  'Needs Improvement (3.5–3)',
-  'Meets Expectations (4–3.5)',
-  'Exceeds Expectations (4.5–4)',
   'Outstanding (5–4.5)',
+  'Exceeds Expectations (4.5–4)',
+  'Meets Expectations (4–3.5)',
+  'Needs Improvement (3.5–3)',
+  'Below Expectations (<3)',
 ];
 
 // Map band name to x-axis midpoint for reference line positioning
 const BAND_MIDPOINTS: Record<string, number> = {
-  'Below Expectations (<3)': 0,
-  'Needs Improvement (3.5–3)': 1,
+  'Outstanding (5–4.5)': 0,
+  'Exceeds Expectations (4.5–4)': 1,
   'Meets Expectations (4–3.5)': 2,
-  'Exceeds Expectations (4.5–4)': 3,
-  'Outstanding (5–4.5)': 4,
+  'Needs Improvement (3.5–3)': 3,
+  'Below Expectations (<3)': 4,
 };
 
 function getMeanBandIndex(meanScore: number): number {
-  if (meanScore >= 4.5) return 4;
-  if (meanScore >= 4) return 3;
+  if (meanScore >= 4.5) return 0;
+  if (meanScore >= 4) return 1;
   if (meanScore >= 3.5) return 2;
-  if (meanScore >= 3) return 1;
-  return 0;
+  if (meanScore >= 3) return 3;
+  return 4;
 }
 
 export function RatingBellCurve({ data, meanScore, stdDev }: RatingBellCurveProps) {
