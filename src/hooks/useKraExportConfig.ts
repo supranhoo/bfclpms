@@ -6,6 +6,7 @@ export interface KraExportConfig {
   previewRoles: string[];
   downloadRoles: string[];
   emailRoles: string[];
+  excelRoles: string[];
   visibleColumns: string[];
   showLogo: boolean;
   showEmployeeDetails: boolean;
@@ -42,6 +43,7 @@ export function useKraExportConfig(): KraExportConfig {
     previewRoles: parseJsonArray(getValue('kra_export_preview_roles')),
     downloadRoles: parseJsonArray(getValue('kra_export_download_roles')),
     emailRoles: parseJsonArray(getValue('kra_export_email_roles')),
+    excelRoles: parseJsonArray(getValue('kra_export_excel_roles')),
     visibleColumns: parseJsonArray(getValue('kra_export_columns')),
     showLogo: parseBool(getValue('kra_export_show_logo') ?? true),
     showEmployeeDetails: parseBool(getValue('kra_export_show_employee_details') ?? true),
