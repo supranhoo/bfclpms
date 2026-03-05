@@ -20,7 +20,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { SmartAssignmentDialog } from '@/components/admin/SmartAssignmentDialog';
 import { EmployeeWorkingDaysDialog } from '@/components/admin/EmployeeWorkingDaysDialog';
 
-type AppRole = 'admin' | 'manager' | 'employee' | 'auditor' | 'management';
+import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
 
 const roleColors: Record<AppRole, string> = {
   admin: 'bg-destructive/10 text-destructive',
@@ -28,6 +28,18 @@ const roleColors: Record<AppRole, string> = {
   employee: 'bg-secondary text-secondary-foreground',
   auditor: 'bg-accent text-accent-foreground',
   management: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
+  hr_pms: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
+  skip_level: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
+};
+
+const ROLE_LABELS: Record<AppRole, string> = {
+  admin: 'Admin',
+  manager: 'Manager',
+  employee: 'Employee',
+  auditor: 'Auditor',
+  management: 'Management',
+  hr_pms: 'HR PMS',
+  skip_level: 'Skip Level',
 };
 
 const ITEMS_PER_PAGE = 10;
@@ -408,8 +420,12 @@ export default function UserManagement() {
   };
 
   const handleCreateUser = () => {
-    if (!newFullName || !newEmployeeCode) {
+    if (!newFullName.trim() || !newEmployeeCode.trim()) {
       toast({ title: 'Full name and employee code are required', variant: 'destructive' });
+      return;
+    }
+    if (newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
+      toast({ title: 'Invalid email format', variant: 'destructive' });
       return;
     }
     createUser.mutate({
@@ -590,12 +606,9 @@ export default function UserManagement() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Roles</SelectItem>
-            <SelectItem value="admin">Admin</SelectItem>
-            <SelectItem value="manager">Manager</SelectItem>
-            <SelectItem value="employee">Employee</SelectItem>
-            <SelectItem value="auditor">Auditor</SelectItem>
-            <SelectItem value="hr_pms">HR PMS</SelectItem>
-            <SelectItem value="management">Management</SelectItem>
+            {ALL_APP_ROLES.map(role => (
+              <SelectItem key={role} value={role}>{ROLE_LABELS[role]}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Select value={departmentFilter} onValueChange={(v) => { setDepartmentFilter(v); handleFilterChange(); }}>
@@ -886,12 +899,9 @@ export default function UserManagement() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="employee">Employee</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="auditor">Auditor</SelectItem>
-                  <SelectItem value="hr_pms">HR PMS</SelectItem>
-                  <SelectItem value="management">Management</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  {ALL_APP_ROLES.map(role => (
+                    <SelectItem key={role} value={role}>{ROLE_LABELS[role]}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -1012,12 +1022,9 @@ export default function UserManagement() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="employee">Employee</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="auditor">Auditor</SelectItem>
-                  <SelectItem value="hr_pms">HR PMS</SelectItem>
-                  <SelectItem value="management">Management</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  {ALL_APP_ROLES.map(role => (
+                    <SelectItem key={role} value={role}>{ROLE_LABELS[role]}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -1094,12 +1101,9 @@ export default function UserManagement() {
                   <SelectValue placeholder="Keep existing roles" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="employee">Employee</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="auditor">Auditor</SelectItem>
-                  <SelectItem value="hr_pms">HR PMS</SelectItem>
-                  <SelectItem value="management">Management</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  {ALL_APP_ROLES.map(role => (
+                    <SelectItem key={role} value={role}>{ROLE_LABELS[role]}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
