@@ -1,42 +1,38 @@
 
 
-# Fix Reporting Manager Placement in KPI Header
+# Missing Org KPI Audit Trail in Review Timeline
 
-## Issue
-The Reporting Manager label is currently nested inside the badges `justify-between` div, which disrupts the existing badge layout and looks misaligned. Users familiar with the old layout will find it confusing.
+## Problem
+
+The Review Timeline (`KpiTimeline.tsx`) reads from `kpi_audit_logs`. However, neither the Org KPI data entry flow (`useOrgKpiValues.ts`) nor the propagation flow (`usePropagateOrgKpiValue.ts`) writes to `kpi_audit_logs`. This means when a Data Owner enters a value and propagates it to employee scorecards, **zero entries** appear in the employee's Review Timeline for that KPI.
+
+The Org KPI data entry logs go to a separate `org_kpi_data_entry_logs` table, which the Review Timeline does not read.
 
 ## Fix
-Move the Reporting Manager display **out** of the badges row and into its own dedicated row directly below, right-aligned. This restores the original badge layout while giving the manager name a clean, distinct position.
 
-### File: `src/components/review/KpiHeaderSection.tsx`
+### 1. `src/hooks/usePropagateOrgKpiValue.ts` — Log to `kpi_audit_logs` after propagation
 
-**Current structure** (simplified):
-```
-<div badges-row justify-between>
-  <Badge category />
-  <div badges-right>
-    ...badges + Timeline...
-  </div>
-  {/* Manager is INSIDE this div — breaks layout */}
-  <div>👤 Reporting Manager: ...</div>
-</div>
-```
+After the RPC call succeeds, insert one `kpi_audit_logs` entry **per affected employee KPI** with:
+- `action`: `'ORG_KPI_PROPAGATED'`
+- `performed_by`: current user ID
+- `new_value`: `{ achieved_value, self_score, self_rating, source: 'org_kpi_data_owner' }`
 
-**New structure:**
-```
-<div badges-row justify-between>
-  <Badge category />
-  <div badges-right>
-    ...badges + Timeline...
-  </div>
-</div>
-{/* Manager on its OWN row, right-aligned */}
-{managerName && (
-  <div className="text-xs text-muted-foreground text-right -mt-1 mb-2">
-    👤 Reporting Manager: {managerName}
-  </div>
-)}
-```
+This uses the existing `kpiRatings` array which already has each `kpi_id` and its computed values.
 
-Move lines 92-97 out of the badges `div` (which closes at current line 98) and place them as a sibling element between the badges row and the Org KPI row. Use `-mt-1` to keep it visually tight beneath the badges row. This is a 6-line move with no logic changes.
+### 2. `src/components/dashboard/KpiTimeline.tsx` — Add action config for new events
+
+Add to the `actionConfig` map:
+- `'ORG_KPI_PROPAGATED'`: icon `Briefcase`, color `bg-teal-500`, label `"Org KPI Data Entered"`
+- `'ORG_KPI_VALUE_UPDATED'`: icon `Edit`, color `bg-teal-500`, label `"Org KPI Value Updated"`
+
+Also update `formatDetails` to display achieved value details from these entries.
+
+### 3. `src/hooks/usePropagateOrgKpiValue.ts` — Both single and bulk hooks
+
+Apply the same audit logging pattern in both `usePropagateOrgKpiValue` and `useBulkPropagateOrgKpiValues` mutation functions.
+
+## Risk Assessment
+- **Data Impact**: Additive only — inserts new rows into `kpi_audit_logs`. No schema changes needed (table already supports arbitrary action strings).
+- **Regression Risk**: Very low. Audit logging is fire-and-forget; failures are caught silently to avoid blocking the main propagation workflow.
+- **Workflow Impact**: None. Purely informational — adds visibility without changing any business logic.
 
