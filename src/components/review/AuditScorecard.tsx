@@ -16,6 +16,7 @@ import { DailySubmissionSummary } from '@/components/review/DailySubmissionSumma
 import { ReviewLevelOverrideEditor, calculateOverriddenScore } from '@/components/review/ReviewLevelOverrideEditor';
 import { useReviewerSubPeriodOverride } from '@/hooks/useReviewerSubPeriodOverride';
 import { QualitativeOption } from '@/lib/qualitativeUom';
+import { calculateRating } from '@/lib/ratingCalculation';
 import { useAuth } from '@/contexts/AuthContext';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import { OverallScoreChart } from '@/components/dashboard/OverallScoreChart';
@@ -377,14 +378,39 @@ export function AuditScorecard({
   const openReviewSheet = (kpi: KPI) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
-    setAuditorScore(existing?.auditor_score ?? existing?.manager_score ?? null);
+    const auditorAchieved = (existing as any)?.auditor_achieved_value ?? (existing as any)?.manager_achieved_value ?? existing?.achieved_value ?? null;
+    
+    // Recalculate score from achieved value if auditor hasn't reviewed yet
+    let initialAuditorScore: number | null = existing?.auditor_score ?? null;
+    if (initialAuditorScore === null && auditorAchieved !== null && auditorAchieved !== '') {
+      const numVal = typeof auditorAchieved === 'number' ? auditorAchieved : parseFloat(String(auditorAchieved));
+      if (!isNaN(numVal)) {
+        const result = calculateRating(
+          numVal,
+          kpi.target_value,
+          { r5: kpi.r5, r4: kpi.r4, r3: kpi.r3, r2: kpi.r2, r1: kpi.r1, r0: kpi.r0 },
+          kpi.criteria || 'Higher is Better',
+          kpi.weightage || 0,
+          (kpi as any).uom_type || 'numeric',
+          (kpi as any).qualitative_options || null,
+          kpi.uom || null,
+          (kpi as any).threshold_mode || 'absolute'
+        );
+        initialAuditorScore = result.rating;
+      }
+    }
+    // Legacy fallback: inherit manager's score only if recalculation wasn't possible
+    if (initialAuditorScore === null) {
+      initialAuditorScore = existing?.manager_score ?? null;
+    }
+    setAuditorScore(initialAuditorScore);
     setAuditorRemarks(existing?.auditor_remarks || '');
     // Support both new array and legacy single URL
     const existingUrls = (existing as any)?.auditor_evidence_urls;
     setAuditorEvidenceUrls(Array.isArray(existingUrls) && existingUrls.length > 0 
       ? existingUrls 
       : existing?.auditor_evidence_url ? [existing.auditor_evidence_url] : []);
-    setAuditorAchievedValue((existing as any)?.auditor_achieved_value ?? (existing as any)?.manager_achieved_value ?? existing?.achieved_value ?? null);
+    setAuditorAchievedValue(auditorAchieved);
     // Reset override state
     setAuditorAgrees(null);
     setDailyOverrides(new Map());
