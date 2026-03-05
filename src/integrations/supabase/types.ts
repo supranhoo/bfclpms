@@ -3188,6 +3188,7 @@ export type Database = {
         | "auditor"
         | "management"
         | "hr_pms"
+        | "skip_level"
       kpi_status: "open" | "submitted" | "approved_by_manager" | "locked"
       observation_type: "positive" | "concern" | "neutral"
       pip_milestone_status: "pending" | "met" | "partially_met" | "not_met"
@@ -3352,6 +3353,7 @@ export const Constants = {
         "auditor",
         "management",
         "hr_pms",
+        "skip_level",
       ],
       kpi_status: ["open", "submitted", "approved_by_manager", "locked"],
       observation_type: ["positive", "concern", "neutral"],

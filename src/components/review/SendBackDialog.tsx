@@ -97,7 +97,9 @@ export function SendBackDialog({
               onChange={(e) => onReasonChange(e.target.value)}
               placeholder="Please explain why this KPI needs revision..."
               rows={4}
+              maxLength={2000}
             />
+            <p className="text-xs text-muted-foreground text-right">{reason.length}/2000</p>
           </div>
         </div>
 
