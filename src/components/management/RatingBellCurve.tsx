@@ -15,36 +15,37 @@ interface RatingBellCurveProps {
 }
 
 const SHORT_LABELS: Record<string, string> = {
-  'Below Expectations (<3)': 'Below',
-  'Needs Improvement (3.5–3)': 'Needs Imp.',
-  'Meets Expectations (4–3.5)': 'Meets',
-  'Exceeds Expectations (4.5–4)': 'Exceeds',
-  'Outstanding (5–4.5)': 'Outstanding',
+  'Below Expectations (0-1)': 'Below',
+  'Needs Improvement (2)': 'Needs Imp.',
+  'Meets Expectations (3)': 'Meets',
+  'Exceeds Expectations (4)': 'Exceeds',
+  'Outstanding (5)': 'Outstanding',
 };
 
 // Order bands left-to-right: lowest to highest
 const BAND_ORDER = [
-  'Outstanding (5–4.5)',
-  'Exceeds Expectations (4.5–4)',
-  'Meets Expectations (4–3.5)',
-  'Needs Improvement (3.5–3)',
-  'Below Expectations (<3)',
+  'Outstanding (5)',
+  'Exceeds Expectations (4)',
+  'Meets Expectations (3)',
+  'Needs Improvement (2)',
+  'Below Expectations (0-1)',
 ];
 
 // Map band name to x-axis midpoint for reference line positioning
 const BAND_MIDPOINTS: Record<string, number> = {
-  'Outstanding (5–4.5)': 0,
-  'Exceeds Expectations (4.5–4)': 1,
-  'Meets Expectations (4–3.5)': 2,
-  'Needs Improvement (3.5–3)': 3,
-  'Below Expectations (<3)': 4,
+  'Outstanding (5)': 0,
+  'Exceeds Expectations (4)': 1,
+  'Meets Expectations (3)': 2,
+  'Needs Improvement (2)': 3,
+  'Below Expectations (0-1)': 4,
 };
 
 function getMeanBandIndex(meanScore: number): number {
-  if (meanScore >= 4.5) return 0;
-  if (meanScore >= 4) return 1;
-  if (meanScore >= 3.5) return 2;
-  if (meanScore >= 3) return 3;
+  const rounded = Math.round(Math.min(5, Math.max(0, meanScore)));
+  if (rounded >= 5) return 0;
+  if (rounded >= 4) return 1;
+  if (rounded >= 3) return 2;
+  if (rounded >= 2) return 3;
   return 4;
 }
 
