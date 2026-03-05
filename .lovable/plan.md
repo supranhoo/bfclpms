@@ -1,33 +1,36 @@
 
 
-# Fix: Management Dashboard Data Accuracy
+# Replace Period Selector with Multi-Month + Fiscal Year (Jul-Jun)
 
-## Root Cause Analysis
+## Current State
+The dashboard has a calendar-year dropdown (2024/2025/2026) and a single "All Periods" month picker. The user wants:
+1. **Multi-month selection** — ability to pick multiple months at once
+2. **Fiscal year scale** — July to June (e.g., "FY 2025-26" = Jul 2025 → Jun 2026)
 
-Two distinct bugs are causing incorrect data:
+## Plan
 
-### Bug 1: `.in()` with 454 UUIDs overflows
-When no filters are active, `filteredEmployeeIds` contains ALL 454 employee UUIDs. Line 152 passes them to `.in('employee_id', filteredEmployeeIds)`, which generates a URL that exceeds practical limits and silently returns empty/partial results. This is why January shows "0" even though the database has 1,345 KPIs for 81 employees in January 2026.
+### 1. Replace Year Selector with Fiscal Year Selector
+- Options like: `FY 2025-26`, `FY 2024-25`, `FY 2023-24`
+- Selecting `FY 2025-26` means months July 2025 through June 2026
+- State changes from `selectedYear: string` to `selectedFiscalYear: number` (the start year, e.g. 2025 for FY 2025-26)
 
-**DB verification**: `SELECT count(*) FROM kpis WHERE review_year=2026 AND review_period='January'` returns **1,345 KPIs across 81 employees**.
+### 2. Replace Single Period Dropdown with Multi-Month Toggle Grid
+- Display 12 months in fiscal order: Jul, Aug, Sep, Oct, Nov, Dec, Jan, Feb, Mar, Apr, May, Jun
+- Each month is a toggle button (click to select/deselect)
+- "All" button to select all months at once
+- State changes from `selectedPeriod: string` to `selectedMonths: string[]`
 
-### Bug 2: Denominator ignores active filters
-`totalEmployees` uses `profiles.length` (always 454) instead of `filteredEmployeeIds.length`. When a manager like Gaurav is selected, the denominator should reflect only his reportees.
+### 3. Update Query Logic
+- Currently queries with `.eq('review_year', year)` and optionally `.eq('review_period', period)`
+- New: query with `.in('review_period', selectedMonths)` and handle cross-year fiscal periods by querying two calendar years (Jul-Dec of start year + Jan-Jun of end year)
+- The `fetchPeriodData` function will accept an array of `{month, year}` pairs instead of a single period
 
-## Fix Plan
+### 4. Update Previous Period Comparison
+- When multiple months are selected, disable or skip the "compare with previous period" logic (it only makes sense for single-month view)
 
-### `src/pages/ManagementDashboard.tsx`
+### 5. Update PDF Export
+- Change filename and header to reflect fiscal year and selected months
 
-**Fix 1 — Skip `.in()` when no filters are active** (line 152):
-- Change the condition: only apply `.in('employee_id', filteredEmployeeIds)` when at least one hierarchy filter is active (i.e., `filteredEmployeeIds.length < totalProfileCount`). When no filters are set, omit the `.in()` clause entirely so the query fetches all KPIs for the year/period without a massive UUID list.
-- Detect "no filters active" by checking if any filter in the filter state is non-null.
-
-**Fix 2 — Use filtered denominator** (line 342):
-- Replace `totalEmployees: profiles.length` with `totalEmployees: hasActiveFilters ? filteredEmployeeIds.length : profiles.length`
-- This ensures "5 / 15" when Gaurav is selected, not "5 / 454"
-
-**Fix 3 — Update PDF export** to match.
-
-### Files
-1. `src/pages/ManagementDashboard.tsx`
+### Files to Modify
+1. `src/pages/ManagementDashboard.tsx` — All changes contained here (state, header UI, query logic, export)
 
