@@ -294,21 +294,22 @@ export default function ManagementDashboard() {
         .sort((a, b) => b.avgScore - a.avgScore);
 
       // Rating distribution
-      const ratingCounts = { excellent: 0, good: 0, average: 0, poor: 0 };
-      const employeeScoreMap = new Map<string, { total: number; weightage: number }>();
+      const ratingCounts = { band5: 0, band4: 0, band3: 0, band2: 0, band1: 0 };
+      const employeeScoreMap = new Map<string, { total: number; count: number; weightage: number }>();
       kpis.forEach(kpi => {
         const score = getScore(kpi);
         const w = kpi.weightage || 100;
         const existing = employeeScoreMap.get(kpi.employee_id);
-        if (existing) { existing.total += score; existing.weightage += w; }
-        else employeeScoreMap.set(kpi.employee_id, { total: score, weightage: w });
+        if (existing) { existing.total += score; existing.count++; existing.weightage += w; }
+        else employeeScoreMap.set(kpi.employee_id, { total: score, count: 1, weightage: w });
       });
-      employeeScoreMap.forEach(({ total, weightage }) => {
-        const pct = weightage > 0 ? (total / weightage) * 100 : 0;
-        if (pct >= 85) ratingCounts.excellent++;
-        else if (pct >= 70) ratingCounts.good++;
-        else if (pct >= 50) ratingCounts.average++;
-        else ratingCounts.poor++;
+      employeeScoreMap.forEach(({ total, count }) => {
+        const avgScore = count > 0 ? total / count : 0;
+        if (avgScore >= 4.5) ratingCounts.band5++;
+        else if (avgScore >= 4) ratingCounts.band4++;
+        else if (avgScore >= 3.5) ratingCounts.band3++;
+        else if (avgScore >= 3) ratingCounts.band2++;
+        else ratingCounts.band1++;
       });
 
       // Top & Bottom performers
@@ -385,10 +386,11 @@ export default function ManagementDashboard() {
         pendingReviews: pendingReviews.slice(0, 10),
         departmentPerformance: departmentPerformance.slice(0, 10),
         ratingDistribution: [
-          { name: 'Excellent (85%+)', value: ratingCounts.excellent, color: CHART_COLORS[0] },
-          { name: 'Good (70-84%)', value: ratingCounts.good, color: CHART_COLORS[1] },
-          { name: 'Average (50-69%)', value: ratingCounts.average, color: CHART_COLORS[2] },
-          { name: 'Needs Improvement (<50%)', value: ratingCounts.poor, color: CHART_COLORS[3] },
+          { name: 'Outstanding (5–4.5)', value: ratingCounts.band5, color: CHART_COLORS[0] },
+          { name: 'Exceeds Expectations (4.5–4)', value: ratingCounts.band4, color: CHART_COLORS[1] },
+          { name: 'Meets Expectations (4–3.5)', value: ratingCounts.band3, color: CHART_COLORS[2] },
+          { name: 'Needs Improvement (3.5–3)', value: ratingCounts.band2, color: CHART_COLORS[3] },
+          { name: 'Below Expectations (<3)', value: ratingCounts.band1, color: CHART_COLORS[4] },
         ],
         completionRate: currentMetrics.completionRate,
         avgScore: currentMetrics.avgScore,

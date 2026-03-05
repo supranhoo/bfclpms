@@ -13,10 +13,11 @@ interface RatingHistogramProps {
 }
 
 const SHORT_LABELS: Record<string, string> = {
-  'Excellent (85%+)': 'Excellent',
-  'Good (70-84%)': 'Good',
-  'Average (50-69%)': 'Average',
-  'Needs Improvement (<50%)': 'Needs Imp.',
+  'Outstanding (5–4.5)': 'Outstanding',
+  'Exceeds Expectations (4.5–4)': 'Exceeds',
+  'Meets Expectations (4–3.5)': 'Meets',
+  'Needs Improvement (3.5–3)': 'Needs Imp.',
+  'Below Expectations (<3)': 'Below',
 };
 
 export function RatingHistogram({ data }: RatingHistogramProps) {
@@ -56,7 +57,7 @@ export function RatingHistogram({ data }: RatingHistogramProps) {
             </BarChart>
           </ResponsiveContainer>
         </div>
-        <div className="grid grid-cols-2 gap-2 mt-4">
+        <div className="flex flex-wrap gap-x-4 gap-y-2 mt-4">
           {data.map((item) => (
             <div key={item.name} className="flex items-center gap-2 text-sm">
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
