@@ -180,7 +180,7 @@ export default function ManagementDashboard() {
                 .from('kpis')
                 .select(`
                   id, employee_id, status, weightage, review_period, review_year,
-                  review_submissions ( final_score, management_score, auditor_score, manager_score, self_score )
+                  review_submissions ( final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score )
                 `)
                 .eq('review_year', calYear)
                 .in('review_period', months)
@@ -229,8 +229,15 @@ export default function ManagementDashboard() {
         const approvedKpis = stageCounts['approved'] || 0;
         const completionRate = kpiList.length > 0 ? (approvedKpis / kpiList.length) * 100 : 0;
         let totalScore = 0, totalWeightage = 0;
-        kpiList.forEach(kpi => { totalScore += getScoreOrZero(kpi); totalWeightage += kpi.weightage || 100; });
-        const avgScore = totalWeightage > 0 ? (totalScore / totalWeightage) * 100 : 0;
+        kpiList.forEach(kpi => {
+          const s = getScore(kpi);
+          if (s !== null) {
+            const w = kpi.weightage || 100;
+            totalScore += s * w;
+            totalWeightage += w;
+          }
+        });
+        const avgScore = totalWeightage > 0 ? (totalScore / totalWeightage) : 0;
         return { totalKpis: kpiList.length, managementPending, approvedKpis, completionRate, avgScore, stageCounts };
       };
 
@@ -260,14 +267,14 @@ export default function ManagementDashboard() {
         const score = getScoreOrZero(kpi);
         const w = kpi.weightage || 100;
         const existing = employeePendingMap.get(kpi.employee_id);
-        if (existing) { existing.kpiCount++; existing.totalScore += score; existing.totalWeightage += w; }
-        else employeePendingMap.set(kpi.employee_id, { kpiCount: 1, totalScore: score, totalWeightage: w });
+        if (existing) { existing.kpiCount++; existing.totalScore += score * w; existing.totalWeightage += w; }
+        else employeePendingMap.set(kpi.employee_id, { kpiCount: 1, totalScore: score * w, totalWeightage: w });
       });
 
       const pendingReviews: PendingReview[] = Array.from(employeePendingMap.entries())
         .map(([eid, d]) => {
           const p = profileMap.get(eid);
-          return { employeeId: eid, employeeName: p?.full_name || 'Unknown', employeeCode: p?.employee_code || '-', department: (p?.departments as any)?.name || '-', kpiCount: d.kpiCount, currentStage: 'management_review', avgScore: d.totalWeightage > 0 ? (d.totalScore / d.totalWeightage) * 100 : 0 };
+          return { employeeId: eid, employeeName: p?.full_name || 'Unknown', employeeCode: p?.employee_code || '-', department: (p?.departments as any)?.name || '-', kpiCount: d.kpiCount, currentStage: 'management_review', avgScore: d.totalWeightage > 0 ? (d.totalScore / d.totalWeightage) : 0 };
         })
         .sort((a, b) => b.kpiCount - a.kpiCount);
 
@@ -282,12 +289,13 @@ export default function ManagementDashboard() {
         stats.employees.add(kpi.employee_id);
         stats.totalKpis++;
         const score = getScoreOrZero(kpi);
-        stats.totalScore += score;
-        stats.totalWeightage += kpi.weightage || 100;
+        const w = kpi.weightage || 100;
+        stats.totalScore += score * w;
+        stats.totalWeightage += w;
         if (kpi.status === 'approved') stats.approvedKpis++;
         if (kpi.status === 'management_review') stats.pendingReviews++;
         const es = stats.employeeScores.get(kpi.employee_id) || { s: 0, w: 0 };
-        es.s += score; es.w += (kpi.weightage || 100);
+        es.s += score * w; es.w += (kpi.weightage || 100);
         stats.employeeScores.set(kpi.employee_id, es);
       });
 
@@ -295,7 +303,7 @@ export default function ManagementDashboard() {
         .map(([division, stats]) => {
           let riskFlags = 0;
           stats.employeeScores.forEach(({ s, w }) => { if (w > 0 && (s / w) < 2.5) riskFlags++; });
-          return { division, totalEmployees: stats.employees.size, avgScore: stats.totalWeightage > 0 ? (stats.totalScore / stats.totalWeightage) * 100 : 0, completionRate: stats.totalKpis > 0 ? (stats.approvedKpis / stats.totalKpis) * 100 : 0, pendingReviews: stats.pendingReviews, riskFlags };
+          return { division, totalEmployees: stats.employees.size, avgScore: stats.totalWeightage > 0 ? (stats.totalScore / stats.totalWeightage) : 0, completionRate: stats.totalKpis > 0 ? (stats.approvedKpis / stats.totalKpis) * 100 : 0, pendingReviews: stats.pendingReviews, riskFlags };
         })
         .filter(d => d.division !== 'Unknown')
         .sort((a, b) => b.avgScore - a.avgScore);
@@ -375,7 +383,8 @@ export default function ManagementDashboard() {
       });
       const trendData = FISCAL_MONTHS
         .filter(m => periodScores.has(m) && periodScores.get(m)!.hasScores)
-        .map(m => ({ period: m, avgScore: periodScores.get(m)!.weightage > 0 ? (periodScores.get(m)!.total / periodScores.get(m)!.weightage) : 0 }));
+        .map(m => ({ period: m, avgScore: periodScores.get(m)!.weightage > 0 ? (periodScores.get(m)!.total / periodScores.get(m)!.weightage) : 0 }))
+        .filter(d => d.avgScore >= 0.1); // Skip months with essentially unprocessed data (near-zero averages)
 
       // Reviewer analytics — manager score bias
       const managerScores = new Map<string, { total: number; count: number }>();
@@ -473,9 +482,9 @@ export default function ManagementDashboard() {
 
 
   const getScoreColor = (score: number) => {
-    if (score >= 85) return RATING_COLORS.excellent;
-    if (score >= 70) return RATING_COLORS.good;
-    if (score >= 50) return RATING_COLORS.average;
+    if (score >= 4) return RATING_COLORS.excellent;
+    if (score >= 3) return RATING_COLORS.good;
+    if (score >= 2) return RATING_COLORS.average;
     return RATING_COLORS.poor;
   };
 
@@ -656,7 +665,7 @@ export default function ManagementDashboard() {
           <CardContent>
             <div className="flex items-center gap-2">
               <span className={`text-2xl font-bold ${getScoreColor(dashboardData?.avgScore || 0)}`}>
-                {(dashboardData?.avgScore || 0).toFixed(1)}%
+                {(dashboardData?.avgScore || 0).toFixed(2)} / 5
               </span>
               {dashboardData?.trends && <TrendIndicator trend={dashboardData.trends.avgScore} />}
             </div>
@@ -737,7 +746,7 @@ export default function ManagementDashboard() {
                     <TableCell className="font-medium">{div.division}</TableCell>
                     <TableCell className="text-center">{div.totalEmployees}</TableCell>
                     <TableCell className="text-right">
-                      <span className={getScoreColor(div.avgScore)}>{div.avgScore.toFixed(1)}%</span>
+                      <span className={getScoreColor(div.avgScore)}>{div.avgScore.toFixed(2)} / 5</span>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -825,7 +834,7 @@ export default function ManagementDashboard() {
                       <TableCell>{review.department}</TableCell>
                       <TableCell className="text-center"><Badge variant="secondary">{review.kpiCount}</Badge></TableCell>
                       <TableCell className="text-right">
-                        <span className={getScoreColor(review.avgScore)}>{review.avgScore.toFixed(1)}%</span>
+                        <span className={getScoreColor(review.avgScore)}>{review.avgScore.toFixed(2)} / 5</span>
                       </TableCell>
                       <TableCell>
                         <Button variant="ghost" size="sm" onClick={() => navigate('/management-review')}>
