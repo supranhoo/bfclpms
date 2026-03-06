@@ -1,37 +1,36 @@
 
 
-# Plan: Review Period Governance Explainer Page
+# Fix: Role Permission Matrix "Restricted" Status Logic
 
-## What to Build
+## Problem
 
-A dedicated, static explainer page at `/admin/governance-explainer` that serves as a comprehensive guide for the Review Period Governance system. This will be a well-structured, visually rich documentation page accessible from the Review Periods admin page.
+The screenshot shows every non-admin role as "Restricted" even though all operational permissions (Edit KPI, Self Review, Manager Review, etc.) are enabled. The cause is in the restriction check logic:
 
-## Approach
+```typescript
+const isRestricted = PERMISSION_KEYS.some(k => !perms[k]);
+```
 
-Create a single new page component that explains the governance system using cards, diagrams, and structured content sections. No database changes needed — this is purely a UI/informational page.
+Since `view_only` defaults to `false` (which is correct — you *don't* want view-only mode), this check treats it as a restriction. Every role where `view_only` is off gets flagged as "Restricted", which is misleading.
 
-## Content Sections
+## Fix
 
-1. **Overview** — What governance is and why it exists
-2. **Lifecycle Stages** — Visual pipeline (Planning → Self Review → Manager Review → Calibration → Approval → Closed) with descriptions of each stage
-3. **Lock Hierarchy** — Employee > Department > Role > Global, explaining override behavior
-4. **Permission Types** — Table explaining all 7 permissions (Edit KPI, Self Review, Manager Review, Approve, Edit Scores, Comments, View Only)
-5. **Auto-Lock Rules** — How deadline-based and event-based auto-locking works
-6. **Audit Trail** — What gets logged and why
-7. **FAQ** — Common questions (e.g., "What happens when a period is closed?", "Can I unlock a single employee?")
+Change the restriction check to exclude `view_only` from the calculation. A role should only be considered "Restricted" if any *operational* permission is disabled. `view_only` is a special flag — when it's `true`, it *restricts* access; when `false`, it means full access.
 
-## Files
+### File: `src/components/admin/ReviewPeriodRolePermissions.tsx`
 
-### New Files
-- `src/pages/admin/GovernanceExplainer.tsx` — The explainer page with accordion-based sections, visual stage pipeline, hierarchy diagram, and permission reference table
+Update the restriction logic in two places (the `handleSave` function and the render):
 
-### Modified Files
-- `src/App.tsx` — Add route `/admin/governance-explainer`
-- `src/pages/admin/ReviewPeriods.tsx` — Add a "Help / Explainer" button linking to the explainer page
-- `src/components/layout/AppSidebar.tsx` — No sidebar entry needed (accessed via Review Periods page button)
+```typescript
+// Exclude view_only from restriction check — false means "not restricted"
+const OPERATIONAL_KEYS = PERMISSION_KEYS.filter(k => k !== 'view_only');
+const isRestricted = OPERATIONAL_KEYS.some(k => !perms[k]) || !!perms['view_only'];
+```
 
-## Design
-- Uses existing UI components: Card, Accordion, Badge, Table, Alert
-- Consistent with the admin page styling
-- No external dependencies needed
+This means a role is "Restricted" if:
+- Any operational permission (edit_kpi, submit_self_review, etc.) is turned OFF, **OR**
+- `view_only` is turned ON
+
+Otherwise it shows "Full Access".
+
+No other files modified. No database changes.
 
