@@ -61,6 +61,9 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
         triggerCondition.default_score = 0;
         triggerCondition.target_stages = ['kra_set', 'self_review'];
       }
+      if (ruleType === 'scheduled_lock' && lockDate) {
+        triggerCondition.lock_date = lockDate.toISOString().split('T')[0];
+      }
       const actionPayload = ruleType === 'auto_advance_zero'
         ? { action_type: 'auto_advance', default_score: 0 }
         : { lock_type: 'employee', permissions: { view_only: true } };
