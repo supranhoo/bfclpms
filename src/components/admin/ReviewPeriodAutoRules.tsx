@@ -9,8 +9,11 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Plus, Zap, Trash2 } from 'lucide-react';
+import { Plus, Zap, Trash2, CalendarIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { format } from 'date-fns';
 
 interface Props {
   periodId: string;
@@ -22,6 +25,7 @@ const RULE_TYPES = [
   { value: 'approval_complete', label: 'Final Approval Complete', description: 'Lock record after final approval' },
   { value: 'calibration_complete', label: 'Calibration Complete', description: 'Lock department after calibration' },
   { value: 'auto_advance_zero', label: 'Auto-Advance with Zero Score', description: 'Auto-advance stuck KPIs with 0 score after deadline' },
+  { value: 'scheduled_lock', label: 'Scheduled Lock (Date-Based)', description: 'Lock period on a specific future date' },
 ];
 
 export default function ReviewPeriodAutoRules({ periodId }: Props) {

@@ -176,6 +176,48 @@ Deno.serve(async (req) => {
           break;
         }
 
+        case 'scheduled_lock': {
+          const schedCondition = rule.trigger_condition as { lock_date?: string };
+          if (!schedCondition.lock_date) break;
+          const lockDate = new Date(schedCondition.lock_date);
+          if (Date.now() >= lockDate.getTime()) {
+            // Check if already locked
+            const { data: existingLock } = await supabase
+              .from('review_period_locks')
+              .select('id')
+              .eq('review_period_id', period.id)
+              .eq('lock_type', 'global')
+              .eq('is_locked', true)
+              .maybeSingle();
+
+            if (!existingLock) {
+              await supabase.from('review_period_locks').insert({
+                review_period_id: period.id,
+                lock_type: 'global',
+                permissions: { view_only: true },
+                is_locked: true,
+                reason: `Scheduled lock activated on ${schedCondition.lock_date}`,
+              });
+              locksCreated++;
+
+              await supabase.from('review_period_audit_log').insert({
+                review_period_id: period.id,
+                action: 'global_locked',
+                reason: `Scheduled lock rule triggered (date: ${schedCondition.lock_date})`,
+                new_state: { rule_type: 'scheduled_lock', auto: true, lock_date: schedCondition.lock_date },
+              });
+              auditEntries++;
+            }
+
+            // Mark rule as executed so it doesn't re-fire
+            await supabase
+              .from('review_period_auto_rules')
+              .update({ is_active: false, updated_at: new Date().toISOString() })
+              .eq('id', rule.id);
+          }
+          break;
+        }
+
         case 'auto_advance_zero': {
           // Auto-advance stuck KPIs with 0 score after deadline
           const advanceCondition = rule.trigger_condition as { deadline_days?: number; default_score?: number; target_stages?: string[] };
