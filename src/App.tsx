@@ -31,6 +31,7 @@ const AllKpis = lazy(() => import("./pages/admin/AllKpis"));
 const Organization = lazy(() => import("./pages/admin/Organization"));
 const Categories = lazy(() => import("./pages/admin/Categories"));
 const ReviewPeriods = lazy(() => import("./pages/admin/ReviewPeriods"));
+const GovernanceExplainer = lazy(() => import("./pages/admin/GovernanceExplainer"));
 const ImportData = lazy(() => import("./pages/admin/ImportData"));
 const SystemSettings = lazy(() => import("./pages/admin/SystemSettings"));
 const WorkflowConfig = lazy(() => import("./pages/admin/WorkflowConfig"));
@@ -160,6 +161,11 @@ const App = () => (
                 <Route path="/admin/review-periods" element={
                   <ProtectedRoute allowedRoles={['admin']}>
                     <ReviewPeriods />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/governance-explainer" element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <GovernanceExplainer />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/import" element={
