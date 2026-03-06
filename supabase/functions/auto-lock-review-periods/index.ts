@@ -1,0 +1,221 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+};
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    // Validate cron secret
+    const cronSecret = req.headers.get('x-cron-secret');
+    const expectedSecret = Deno.env.get('CRON_SECRET');
+    if (expectedSecret && cronSecret !== expectedSecret) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    // Fetch all active auto-lock rules
+    const { data: rules, error: rulesErr } = await supabase
+      .from('review_period_auto_rules')
+      .select('*, review_periods!inner(id, period_name, review_year, current_stage)')
+      .eq('is_active', true);
+
+    if (rulesErr) throw rulesErr;
+
+    let locksCreated = 0;
+    let auditEntries = 0;
+
+    for (const rule of (rules || [])) {
+      const period = (rule as any).review_periods;
+      if (!period) continue;
+
+      let shouldTrigger = false;
+      const action = rule.action as { lock_type?: string; permissions?: Record<string, boolean> };
+
+      switch (rule.rule_type) {
+        case 'deadline_passed': {
+          // Check if self-review deadline has passed based on stage
+          if (period.current_stage !== 'self_review') break;
+          const condition = rule.trigger_condition as { deadline_days?: number };
+          // If no specific deadline, skip
+          if (!condition.deadline_days) break;
+          // Simple: lock if stage has been active for more than X days
+          const { data: stageRecord } = await supabase
+            .from('review_period_stages')
+            .select('started_at')
+            .eq('review_period_id', period.id)
+            .eq('stage', 'self_review')
+            .is('ended_at', null)
+            .maybeSingle();
+          if (stageRecord) {
+            const elapsed = (Date.now() - new Date(stageRecord.started_at).getTime()) / (1000 * 60 * 60 * 24);
+            if (elapsed > condition.deadline_days) shouldTrigger = true;
+          }
+          break;
+        }
+
+        case 'approval_complete': {
+          // Lock employees whose KPIs are all approved
+          const { data: kpis } = await supabase
+            .from('kpis')
+            .select('employee_id, status')
+            .eq('review_period', period.period_name)
+            .eq('review_year', period.review_year);
+
+          if (kpis && kpis.length > 0) {
+            // Group by employee
+            const empKpis: Record<string, string[]> = {};
+            kpis.forEach(k => {
+              if (!empKpis[k.employee_id]) empKpis[k.employee_id] = [];
+              empKpis[k.employee_id].push(k.status || '');
+            });
+
+            for (const [empId, statuses] of Object.entries(empKpis)) {
+              if (statuses.every(s => s === 'approved')) {
+                // Check if already locked
+                const { data: existing } = await supabase
+                  .from('review_period_locks')
+                  .select('id')
+                  .eq('review_period_id', period.id)
+                  .eq('lock_type', 'employee')
+                  .eq('target_id', empId)
+                  .eq('is_locked', true)
+                  .maybeSingle();
+
+                if (!existing) {
+                  const { error: lockErr } = await supabase
+                    .from('review_period_locks')
+                    .insert({
+                      review_period_id: period.id,
+                      lock_type: 'employee',
+                      target_id: empId,
+                      permissions: action.permissions || { view_only: true, edit_kpi: false, submit_self_review: false, submit_manager_review: false, approve: false, edit_scores: false, add_comments: false },
+                      is_locked: true,
+                      reason: 'Auto-locked: All KPIs approved',
+                    });
+                  if (!lockErr) {
+                    locksCreated++;
+                    await supabase.from('review_period_audit_log').insert({
+                      review_period_id: period.id,
+                      action: 'employee_locked',
+                      reason: 'Auto-lock rule: approval_complete',
+                      target_type: 'employee',
+                      target_id: empId,
+                      new_state: { rule_type: 'approval_complete', auto: true },
+                    });
+                    auditEntries++;
+                  }
+                }
+              }
+            }
+          }
+          break;
+        }
+
+        case 'review_submitted': {
+          // Lock employee after manager submits review (status = manager_check)
+          const { data: kpis } = await supabase
+            .from('kpis')
+            .select('employee_id, status')
+            .eq('review_period', period.period_name)
+            .eq('review_year', period.review_year)
+            .in('status', ['manager_check', 'audit', 'management_review', 'approved']);
+
+          if (kpis) {
+            const empKpis: Record<string, string[]> = {};
+            kpis.forEach(k => {
+              if (!empKpis[k.employee_id]) empKpis[k.employee_id] = [];
+              empKpis[k.employee_id].push(k.status || '');
+            });
+
+            for (const [empId, statuses] of Object.entries(empKpis)) {
+              if (statuses.every(s => s !== 'kra_set' && s !== 'self_review')) {
+                const { data: existing } = await supabase
+                  .from('review_period_locks')
+                  .select('id')
+                  .eq('review_period_id', period.id)
+                  .eq('lock_type', 'employee')
+                  .eq('target_id', empId)
+                  .eq('is_locked', true)
+                  .maybeSingle();
+
+                if (!existing) {
+                  await supabase.from('review_period_locks').insert({
+                    review_period_id: period.id,
+                    lock_type: 'employee',
+                    target_id: empId,
+                    permissions: { view_only: true, edit_kpi: false, submit_self_review: false, submit_manager_review: false, approve: false, edit_scores: false, add_comments: true },
+                    is_locked: true,
+                    reason: 'Auto-locked: Manager review submitted',
+                  });
+                  locksCreated++;
+                }
+              }
+            }
+          }
+          break;
+        }
+
+        case 'calibration_complete': {
+          // Lock all when calibration stage is done
+          if (period.current_stage === 'approval' || period.current_stage === 'closed') {
+            shouldTrigger = true;
+          }
+          break;
+        }
+      }
+
+      // Handle global trigger (deadline_passed, calibration_complete)
+      if (shouldTrigger && rule.rule_type !== 'approval_complete' && rule.rule_type !== 'review_submitted') {
+        const lockType = action.lock_type || 'global';
+        const { data: existing } = await supabase
+          .from('review_period_locks')
+          .select('id')
+          .eq('review_period_id', period.id)
+          .eq('lock_type', lockType)
+          .eq('is_locked', true)
+          .maybeSingle();
+
+        if (!existing) {
+          await supabase.from('review_period_locks').insert({
+            review_period_id: period.id,
+            lock_type: lockType,
+            permissions: action.permissions || { view_only: true },
+            is_locked: true,
+            reason: `Auto-locked: ${rule.rule_type}`,
+          });
+          locksCreated++;
+
+          await supabase.from('review_period_audit_log').insert({
+            review_period_id: period.id,
+            action: `${lockType}_locked`,
+            reason: `Auto-lock rule: ${rule.rule_type}`,
+            new_state: { rule_type: rule.rule_type, auto: true },
+          });
+          auditEntries++;
+        }
+      }
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, locksCreated, auditEntries, rulesEvaluated: (rules || []).length }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  } catch (err) {
+    return new Response(
+      JSON.stringify({ error: (err as Error).message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});

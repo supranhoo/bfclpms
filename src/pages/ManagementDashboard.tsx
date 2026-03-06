@@ -21,6 +21,7 @@ import { ActionItemsCards } from '@/components/management/ActionItemsCards';
 import { ReviewerAnalyticsTable } from '@/components/management/ReviewerAnalyticsTable';
 import { TrainingGapSummary } from '@/components/management/TrainingGapSummary';
 import { RecentAuditLog } from '@/components/management/RecentAuditLog';
+import { ReviewPeriodStatusWidget } from '@/components/management/ReviewPeriodStatusWidget';
 import { DirectReporteesMonitor } from '@/components/management/DirectReporteesMonitor';
 import { NotificationsSummary } from '@/components/management/NotificationsSummary';
 import { Toggle } from '@/components/ui/toggle';
@@ -864,8 +865,9 @@ export default function ManagementDashboard() {
         />
       </div>
 
-      {/* Audit Log + Notifications */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      {/* Review Period Status + Audit Log + Notifications */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <ReviewPeriodStatusWidget />
         <RecentAuditLog />
         <NotificationsSummary />
       </div>
