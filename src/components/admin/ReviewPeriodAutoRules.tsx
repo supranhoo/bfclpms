@@ -232,6 +232,8 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
                           />
                           <span>days from stage start date</span>
                         </div>
+                      ) : rule.rule_type === 'scheduled_lock' ? (
+                        <span>Lock on <strong>{(rule.trigger_condition as any)?.lock_date || 'N/A'}</strong></span>
                       ) : (
                         template?.description || (rule.trigger_condition as any)?.description || '—'
                       )}
