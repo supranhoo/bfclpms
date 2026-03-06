@@ -2613,6 +2613,7 @@ export type Database = {
           auditor_rating: Database["public"]["Enums"]["rating_level"] | null
           auditor_remarks: string | null
           auditor_score: number | null
+          auto_advance_reason: string | null
           final_rating: Database["public"]["Enums"]["rating_level"] | null
           final_score: number | null
           hr_pms_achieved_value: number | null
@@ -2661,6 +2662,7 @@ export type Database = {
           auditor_rating?: Database["public"]["Enums"]["rating_level"] | null
           auditor_remarks?: string | null
           auditor_score?: number | null
+          auto_advance_reason?: string | null
           final_rating?: Database["public"]["Enums"]["rating_level"] | null
           final_score?: number | null
           hr_pms_achieved_value?: number | null
@@ -2709,6 +2711,7 @@ export type Database = {
           auditor_rating?: Database["public"]["Enums"]["rating_level"] | null
           auditor_remarks?: string | null
           auditor_score?: number | null
+          auto_advance_reason?: string | null
           final_rating?: Database["public"]["Enums"]["rating_level"] | null
           final_score?: number | null
           hr_pms_achieved_value?: number | null
