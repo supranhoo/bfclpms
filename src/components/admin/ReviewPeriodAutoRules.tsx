@@ -49,14 +49,21 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
     mutationFn: async ({ ruleType, deadlineDays }: { ruleType: string; deadlineDays?: number }) => {
       const template = RULE_TYPES.find(r => r.value === ruleType);
       const triggerCondition: Record<string, unknown> = { description: template?.description || '' };
-      if (ruleType === 'deadline_passed' && deadlineDays) {
+      if ((ruleType === 'deadline_passed' || ruleType === 'auto_advance_zero') && deadlineDays) {
         triggerCondition.deadline_days = deadlineDays;
       }
+      if (ruleType === 'auto_advance_zero') {
+        triggerCondition.default_score = 0;
+        triggerCondition.target_stages = ['kra_set', 'self_review'];
+      }
+      const actionPayload = ruleType === 'auto_advance_zero'
+        ? { action_type: 'auto_advance', default_score: 0 }
+        : { lock_type: 'employee', permissions: { view_only: true } };
       const { error } = await supabase.from('review_period_auto_rules').insert([{
         review_period_id: periodId,
         rule_type: ruleType,
         trigger_condition: triggerCondition as any,
-        action: { lock_type: 'employee', permissions: { view_only: true } } as any,
+        action: actionPayload as any,
         is_active: true,
         created_by: user?.id,
       }]);
