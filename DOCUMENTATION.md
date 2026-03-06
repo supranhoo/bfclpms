@@ -257,6 +257,15 @@ The **Performance Management System (PMS)** is a comprehensive enterprise-grade 
 | `org_kpi_value_history` | Org KPI value audit trail | `org_kpi_value_id`, `old_achieved_value`, `new_achieved_value`, `changed_by`, `change_type` |
 | `import_progress` | Bulk import tracking | `id`, `status`, `total_rows`, `processed_rows` |
 | `employee_working_days` | Per-employee monthly working days configuration | `employee_id`, `month`, `year`, `working_days` |
+
+#### Review Period Governance
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `review_period_locks` | Lock records with hierarchy (Global > Role > Department > Employee) | `review_period_id`, `lock_type`, `target_id`, `permissions` (JSONB), `is_locked`, `locked_by`, `reason` |
+| `review_period_auto_rules` | Configurable auto-lock triggers | `review_period_id`, `rule_type` (deadline_passed/review_submitted/approval_complete/calibration_complete), `trigger_condition` (JSONB), `action` (JSONB), `is_active` |
+| `review_period_audit_log` | Immutable audit trail for all governance actions | `review_period_id`, `action`, `performed_by`, `previous_state` (JSONB), `new_state` (JSONB), `reason`, `target_type`, `target_id` |
+| `review_period_stages` | Stage lifecycle tracking | `review_period_id`, `stage`, `started_at`, `ended_at`, `started_by` |
 | `backup_logs` | Database backup history | `id`, `backup_type`, `status`, `file_path`, `file_size_bytes`, `tables_count`, `total_rows` |
 | `email_logs` | Email send audit trail | `id`, `event_type`, `recipient_email`, `recipient_name`, `subject`, `status` (sent/failed/skipped), `error_message`, `provider`, `metadata` (JSONB) |
 
@@ -3898,6 +3907,135 @@ All Inbox access gaps for `hr_pms` and `skip_level` roles have been closed:
 | `src/components/admin/BulkTemplateAssignDialog.tsx` | Same — removed broken `system_settings` lookup, added selector and frequency resolution |
 
 **Frequency Auto-Resolution:** For multi-month KPIs (Quarterly, Bi-Monthly, etc.), the selected month is auto-resolved to the cycle's terminal month via `getActiveMonthForCycle` before insert, preventing DB trigger rejections.
+
+---
+
+### 4.23 Review Period Governance System (v1.51.0)
+
+**Route:** `/admin/review-periods`
+
+The Review Period Governance System provides centralized control over the review lifecycle with a three-layer enforcement architecture.
+
+#### Three-Layer Architecture
+
+| Layer | Scope | Mechanism | Purpose |
+|-------|-------|-----------|---------|
+| **RLS (Row Level Security)** | Database | PostgreSQL policies | Prevents unauthorized data access at the database level |
+| **Workflow Engine** | Status transitions | `workflowEngine.ts` | Controls valid KPI status transitions (e.g., `self_review` → `manager_check`) |
+| **Governance** | UI permission gating | `useReviewPeriodPermissions` hook | Controls what actions users can perform during a review period (edit, submit, approve) |
+
+These layers are independent and complementary — RLS secures data access, Workflow controls status flow, and Governance gates UI actions based on admin-configured locks.
+
+#### Lock Hierarchy
+
+Locks are resolved in **most-specific-wins** order via the `check_review_period_permission` RPC:
+
+```
+Employee Lock (most specific) > Department Lock > Role Lock > Global Lock (broadest)
+```
+
+If an employee-level lock exists, it overrides any department, role, or global lock. If no employee lock exists, the system checks department, then role, then global. If no locks exist at all, all actions are permitted (fail-open).
+
+#### 7-Tab Governance Center
+
+| Tab | Component | Purpose |
+|-----|-----------|---------|
+| **Overview** | `ReviewPeriodOverview.tsx` | Period summary, current stage, completion percentage |
+| **Stage Control** | `ReviewPeriodStageController.tsx` | Advance/revert lifecycle stages (Planning → Self Review → Manager Review → Calibration → Approval → Closed) |
+| **Role Permissions** | `ReviewPeriodRolePermissions.tsx` | Matrix of 7 permissions × 7 roles. Admin role always has full access. A role is "Restricted" if any operational permission is disabled or `view_only` is enabled |
+| **Department Locks** | `ReviewPeriodDepartmentLocks.tsx` | Per-department lock/unlock with granular permissions |
+| **Employee Locks** | `ReviewPeriodEmployeeLocks.tsx` | Per-employee lock/unlock with granular permissions |
+| **Auto Rules** | `ReviewPeriodAutoRules.tsx` | Configure event-driven auto-lock rules |
+| **Audit Log** | `ReviewPeriodAuditLog.tsx` | Immutable trail of all governance actions |
+
+#### Permission Keys
+
+| Key | Label | Description |
+|-----|-------|-------------|
+| `edit_kpi` | Edit KPI | Modify KPI definitions |
+| `submit_self_review` | Self Review | Submit self-assessment |
+| `submit_manager_review` | Manager Review | Submit manager evaluation |
+| `approve` | Approve | Approve/forward KPIs |
+| `edit_scores` | Edit Scores | Modify achieved values and ratings |
+| `add_comments` | Comments | Add remarks and observations |
+| `view_only` | View Only | Read-only mode (overrides all above) |
+
+#### Auto-Lock Rules
+
+Four configurable rule types, managed per review period:
+
+| Rule Type | Trigger | Scope | Behavior |
+|-----------|---------|-------|----------|
+| `deadline_passed` | Self-review stage active > `deadline_days` | Global | Checks `review_period_stages.started_at` for the `self_review` stage. If elapsed days exceed `deadline_days`, applies a global lock. Only triggers when `current_stage = 'self_review'`. |
+| `review_submitted` | All employee KPIs past self-review | Per-employee | Groups KPIs by employee. If all statuses are `manager_check` or later, auto-locks that employee with `view_only` + `add_comments` permissions. |
+| `approval_complete` | All employee KPIs approved | Per-employee | Groups KPIs by employee. If all statuses are `approved`, creates an employee-level lock. |
+| `calibration_complete` | Stage advances past calibration | Global | Triggers when `current_stage` is `approval` or `closed`. |
+
+#### Enforcement Hook
+
+**File:** `src/hooks/useReviewPeriodPermissions.ts`
+
+The `useReviewPeriodPermissions(periodName, reviewYear)` hook is the central enforcement point. It calls `check_review_period_permission` RPC for all 7 permission keys in parallel and returns a `ReviewPeriodPermissions` object consumed by:
+
+| Component | What it gates |
+|-----------|---------------|
+| `SelfReviewSheet.tsx` | Self-review submission |
+| `EmployeeScorecard.tsx` | Score editing, manager review submission |
+| `ManagementScorecard.tsx` | Management approval |
+| `AuditScorecard.tsx` | Audit forwarding |
+| `KpiHeaderSection.tsx` | KPI edit actions |
+| `GovernanceLockBanner.tsx` | Contextual warning banner showing restricted actions |
+
+**Caching:** Results are cached for 30 seconds (`staleTime: 30_000`) to avoid excessive RPC calls. **Fail-open:** If any RPC call fails, that permission defaults to `true` (allowed).
+
+#### GovernanceLockBanner Component
+
+**File:** `src/components/review/GovernanceLockBanner.tsx`
+
+Displays contextual banners based on permission state:
+- **View-only mode:** Red destructive alert — "This review period is in view-only mode. No changes can be made."
+- **Partial restrictions:** Yellow warning alert — lists specific disabled actions (e.g., "score editing, approval disabled by governance policy")
+- **No restrictions:** Banner is hidden
+
+#### Edge Function: auto-lock-review-periods
+
+**File:** `supabase/functions/auto-lock-review-periods/index.ts`
+
+A cron-invoked edge function that evaluates all active `review_period_auto_rules` and creates locks when conditions are met:
+
+1. Fetches all active rules with their associated review periods
+2. Evaluates each rule based on `rule_type` and `trigger_condition`
+3. Creates `review_period_locks` entries for triggered rules (if not already locked)
+4. Logs all actions to `review_period_audit_log`
+5. Returns summary: `{ locksCreated, auditEntries, rulesEvaluated }`
+
+**Security:** Validates `x-cron-secret` header. Uses service role key for database access.
+
+#### Dashboard Widget: ReviewPeriodStatusWidget
+
+**File:** `src/components/management/ReviewPeriodStatusWidget.tsx`
+
+Displayed on the Management Dashboard, showing the current review period's governance status including stage, completion percentage, and lock summary.
+
+#### Governance Hook
+
+**File:** `src/hooks/useReviewPeriodGovernance.ts`
+
+Admin-facing hook for managing locks, stages, and audit log. Provides:
+- `locks` — all locks for the selected period
+- `stageHistory` — stage lifecycle records
+- `auditLog` — last 100 audit entries
+- `advanceStage(newStage, reason)` — transition to next stage with audit trail
+- `upsertLock(lock)` — create or update a lock with audit trail
+- `deleteLock(lockId)` — remove a lock with audit trail
+
+---
+
+### Review Period Governance — `deadline_days` UI Fix (v1.51.0)
+
+**Problem:** The `deadline_days` field in the Auto Rules tab used a generic `<Input>` element that was hard to discover and didn't validate input. The trigger condition JSON structure was not surfaced clearly in the UI.
+
+**Fix:** Added a dedicated numeric input field with label "Days after stage starts" that maps directly to `trigger_condition.deadline_days`. Only shown when `rule_type = 'deadline_passed'`. Validates minimum value of 1.
 
 ---
 
