@@ -34,6 +34,7 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
   const queryClient = useQueryClient();
   const [newRuleType, setNewRuleType] = useState('');
   const [newDeadlineDays, setNewDeadlineDays] = useState<number>(14);
+  const [newLockDate, setNewLockDate] = useState<Date | undefined>(undefined);
 
   const { data: rules, isLoading } = useQuery({
     queryKey: ['review-period-auto-rules', periodId],
