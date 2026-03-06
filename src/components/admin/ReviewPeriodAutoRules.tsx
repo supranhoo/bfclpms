@@ -21,6 +21,7 @@ const RULE_TYPES = [
   { value: 'review_submitted', label: 'Manager Review Submitted', description: 'Lock employee after manager submits review' },
   { value: 'approval_complete', label: 'Final Approval Complete', description: 'Lock record after final approval' },
   { value: 'calibration_complete', label: 'Calibration Complete', description: 'Lock department after calibration' },
+  { value: 'auto_advance_zero', label: 'Auto-Advance with Zero Score', description: 'Auto-advance stuck KPIs with 0 score after deadline' },
 ];
 
 export default function ReviewPeriodAutoRules({ periodId }: Props) {
