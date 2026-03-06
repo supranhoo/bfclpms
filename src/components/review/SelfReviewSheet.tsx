@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { safeParseFloat } from '@/lib/utils';
 import { openStorageFile } from '@/lib/storageDownload';
 import { useAuth } from '@/contexts/AuthContext';
@@ -497,7 +498,12 @@ export function SelfReviewSheet({
   const isKraSet = selectedKpi?.status === 'kra_set';
   const needsSubPeriodForKpi = selectedKpi ? requiresSubPeriodSelection(selectedKpi.frequency as FrequencyType) : false;
   const isSelfReview = selectedKpi?.status === 'self_review';
-  const isReadOnly = !isKraSet && !isSelfReview;
+
+  // Governance permissions
+  const govPerms = useReviewPeriodPermissions(selectedPeriod, selectedYear);
+  const isGovernanceLocked = !govPerms.submit_self_review || govPerms.view_only;
+
+  const isReadOnly = (!isKraSet && !isSelfReview) || isGovernanceLocked;
 
   return (
     <>

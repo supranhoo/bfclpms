@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-05  
-> **Version:** 1.50.0 — Management Dashboard redesign: performance trend line chart, rating histogram, top/bottom performers, action items, reviewer analytics (score bias), training gap insights, recent audit log, notifications summary, department risk flags, PDF export
+> **Last Updated:** 2026-03-06  
+> **Version:** 1.51.0 — Advanced Review Period Governance System: multi-layer locking (Global > Role > Department > Employee), 7-tab governance center, stage lifecycle engine, role permissions matrix, auto-lock rules, audit trail, dashboard widget, enforcement hook, stage change notifications
 > **Maintainer:** Lovable AI
 
 ---

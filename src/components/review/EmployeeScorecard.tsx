@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { resolveForwardStatus, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
+import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { useRemarksMandatorySettings } from '@/hooks/useWorkflowSettings';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -89,6 +90,10 @@ export function EmployeeScorecard({
   const { data: workflowStages } = useEmployeeWorkflowStages(employee.id);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const managerForwardStatus = resolveForwardStatus('manager', effectiveStages);
+
+  // Governance permissions for this period
+  const govPerms = useReviewPeriodPermissions(selectedPeriod, selectedYear);
+  const isGovernanceLocked = !govPerms.submit_manager_review || govPerms.view_only;
   
   // Filter KPIs by period and year
   const kpis = useMemo(() => allKpis?.filter(k => {
@@ -972,7 +977,7 @@ export function EmployeeScorecard({
                       variant="secondary"
                       className="w-full sm:w-auto"
                       onClick={handleSubmitReview}
-                      disabled={managerScore === null || submitManagerReview.isPending}
+                      disabled={isGovernanceLocked || managerScore === null || submitManagerReview.isPending}
                     >
                       {submitManagerReview.isPending ? 'Saving...' : 'Save Draft'}
                     </Button>
@@ -982,14 +987,15 @@ export function EmployeeScorecard({
                     className="w-full sm:w-auto bg-green-600 hover:bg-green-700"
                     onClick={handleApprove}
                     disabled={
-                      reviewerMarkNa ? !markNaRemarks.trim() :
+                      isGovernanceLocked ||
+                      (reviewerMarkNa ? !markNaRemarks.trim() :
                       (submissionMap.get(selectedKpi?.id || '')?.is_na && naOverridden) ? (!overrideNaRemarks.trim() || managerScore === null) :
                       submissionMap.get(selectedKpi?.id || '')?.is_na ? !naConfirmed :
                       (managerScore === null || 
                        approveKpi.isPending || 
                        isSavingOverrides ||
                        (selectedKpi?.frequency === 'Daily' && selectedKpi?.uom_type === 'binary' && managerAgrees === null) ||
-                       (selectedKpi?.frequency === 'Daily' && selectedKpi?.uom_type === 'binary' && managerAgrees === false && !overrideReason.trim()))
+                       (selectedKpi?.frequency === 'Daily' && selectedKpi?.uom_type === 'binary' && managerAgrees === false && !overrideReason.trim())))
                     }
                   >
                     <Check className="h-4 w-4 mr-2" />
