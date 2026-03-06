@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
 import { Plus, Zap, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -27,6 +28,7 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [newRuleType, setNewRuleType] = useState('');
+  const [newDeadlineDays, setNewDeadlineDays] = useState<number>(14);
 
   const { data: rules, isLoading } = useQuery({
     queryKey: ['review-period-auto-rules', periodId],
@@ -43,16 +45,20 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
   });
 
   const addRule = useMutation({
-    mutationFn: async (ruleType: string) => {
+    mutationFn: async ({ ruleType, deadlineDays }: { ruleType: string; deadlineDays?: number }) => {
       const template = RULE_TYPES.find(r => r.value === ruleType);
-      const { error } = await supabase.from('review_period_auto_rules').insert({
+      const triggerCondition: Record<string, unknown> = { description: template?.description || '' };
+      if (ruleType === 'deadline_passed' && deadlineDays) {
+        triggerCondition.deadline_days = deadlineDays;
+      }
+      const { error } = await supabase.from('review_period_auto_rules').insert([{
         review_period_id: periodId,
         rule_type: ruleType,
-        trigger_condition: { description: template?.description || '' },
-        action: { lock_type: 'employee', permissions: { view_only: true } },
+        trigger_condition: triggerCondition as any,
+        action: { lock_type: 'employee', permissions: { view_only: true } } as any,
         is_active: true,
         created_by: user?.id,
-      });
+      }]);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -89,6 +95,22 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
     },
   });
 
+  const updateDeadlineDays = useMutation({
+    mutationFn: async ({ ruleId, days }: { ruleId: string; days: number }) => {
+      const rule = (rules || []).find(r => r.id === ruleId);
+      const existing = (rule?.trigger_condition as any) || {};
+      const { error } = await supabase
+        .from('review_period_auto_rules')
+        .update({ trigger_condition: { ...existing, deadline_days: days } as any, updated_at: new Date().toISOString() })
+        .eq('id', ruleId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['review-period-auto-rules', periodId] });
+      toast({ title: 'Deadline updated' });
+    },
+  });
+
   return (
     <Card>
       <CardHeader>
@@ -101,7 +123,7 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
             </div>
           </div>
           <div className="flex gap-2 items-center">
-            <Select value={newRuleType} onValueChange={setNewRuleType}>
+             <Select value={newRuleType} onValueChange={setNewRuleType}>
               <SelectTrigger className="w-[220px]">
                 <SelectValue placeholder="Select rule type..." />
               </SelectTrigger>
@@ -111,10 +133,23 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
                 ))}
               </SelectContent>
             </Select>
+            {newRuleType === 'deadline_passed' && (
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={newDeadlineDays}
+                  onChange={e => setNewDeadlineDays(Number(e.target.value))}
+                  className="w-[80px]"
+                />
+                <span className="text-sm text-muted-foreground">days</span>
+              </div>
+            )}
             <Button
               size="sm"
-              onClick={() => newRuleType && addRule.mutate(newRuleType)}
-              disabled={!newRuleType || addRule.isPending}
+              onClick={() => newRuleType && addRule.mutate({ ruleType: newRuleType, deadlineDays: newRuleType === 'deadline_passed' ? newDeadlineDays : undefined })}
+              disabled={!newRuleType || addRule.isPending || (newRuleType === 'deadline_passed' && (!newDeadlineDays || newDeadlineDays < 1))}
             >
               <Plus className="h-4 w-4 mr-1" /> Add
             </Button>
@@ -145,7 +180,28 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
                       <Badge variant="outline">{template?.label || rule.rule_type}</Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {template?.description || (rule.trigger_condition as any)?.description || '—'}
+                      {rule.rule_type === 'deadline_passed' ? (
+                        <div className="flex items-center gap-2">
+                          <span>Lock self-review after</span>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={365}
+                            defaultValue={(rule.trigger_condition as any)?.deadline_days || ''}
+                            className="w-[70px] h-8"
+                            placeholder="days"
+                            onBlur={e => {
+                              const val = Number(e.target.value);
+                              if (val > 0 && val !== (rule.trigger_condition as any)?.deadline_days) {
+                                updateDeadlineDays.mutate({ ruleId: rule.id, days: val });
+                              }
+                            }}
+                          />
+                          <span>days</span>
+                        </div>
+                      ) : (
+                        template?.description || (rule.trigger_condition as any)?.description || '—'
+                      )}
                     </TableCell>
                     <TableCell>
                       <Switch
