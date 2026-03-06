@@ -1,50 +1,35 @@
 
 
-# Answers to Your Three Questions
+# Plan: Update DOCUMENTATION.md with Review Period Governance Section
 
-## 1. Why is "Days" only for Self Review?
+## Problem
+The `DOCUMENTATION.md` file references the Governance system only in the version header (line 4). There is no dedicated section documenting the architecture, database tables, components, hooks, edge function, or the three-layer enforcement model (RLS + Workflow + Governance).
 
-The deadline-based auto-lock is **hardcoded to the `self_review` stage only** in the edge function (`auto-lock-review-periods/index.ts`). Specifically, line 49:
+## What Will Be Added
 
-```typescript
-if (period.current_stage !== 'self_review') break;
-```
+### 1. Database Schema Section (under existing Tables Reference)
+Add documentation for the four governance tables:
+- `review_period_locks` — lock records with hierarchy (Global > Role > Department > Employee), permissions JSON, reason, is_locked
+- `review_period_auto_rules` — configurable auto-lock triggers (deadline_passed, review_submitted, approval_complete, calibration_complete) with `trigger_condition` and `action` JSON columns
+- `review_period_audit_log` — immutable audit trail for all governance actions
+- `review_period_stages` — stage lifecycle tracking (started_at, ended_at per stage)
 
-It checks if the self-review stage has been active for more than X days, then creates a global lock. The other rule types (`manager_review_submitted`, `approval_complete`, `calibration_complete`) are **event-driven** (they trigger based on KPI status changes), not time-based, so they don't need a "days" input.
+### 2. Feature Section: Review Period Governance
+A new subsection under "Detailed Feature Breakdown" covering:
+- **Three-Layer Architecture** — table showing RLS (database security), Workflow (status transitions), Governance (UI permission gating) and how they coexist
+- **Lock Hierarchy** — Employee > Department > Role > Global resolution order via `check_review_period_permission` RPC
+- **7-Tab Governance Center** — Overview, Global Locks, Role Permissions, Department Locks, Employee Locks, Auto Rules, Audit Log
+- **Auto-Lock Rules** — the four rule types, how `deadline_days` works for `deadline_passed`, event-driven triggers for the rest
+- **Enforcement Hook** — `useReviewPeriodPermissions` hook description, which components consume it (SelfReviewSheet, EmployeeScorecard, ManagementScorecard, AuditScorecard, KpiHeaderSection, GovernanceLockBanner)
+- **Edge Function** — `auto-lock-review-periods` cron function behavior
+- **Dashboard Widget** — `ReviewPeriodStatusWidget` on Management Dashboard
 
-However, the concept of a deadline could logically apply to **any stage** (e.g., "lock manager review after 21 days"). This is a limitation of the current implementation. If you want, I can extend the deadline rule to support any stage, not just self-review.
+### 3. Version History Entry
+Add entry for the `deadline_days` UI fix under Version History.
 
----
+## File Modified
+- `DOCUMENTATION.md` — Add governance documentation section and update tables reference
 
-## 2. What does "Lock employee after manager submits review" mean? Was this already in place?
-
-**What it does:** When a manager finishes reviewing all of an employee's KPIs (all statuses move past `self_review` / `kra_set`), this rule creates a **governance lock** on that specific employee. This prevents the employee from editing their KPIs, re-submitting self-reviews, or making any changes after the manager has already reviewed them.
-
-**Was this already in place?** **Partially, yes — but differently.** The existing workflow engine already prevents employees from editing KPIs once the status moves past `self_review` (status-based gating in the UI). What this governance rule adds is:
-- A **formal lock record** in `review_period_locks` with explicit permissions
-- **Audit trail** visibility in the governance center
-- **Admin override** capability — an admin can manually unlock an employee if needed
-- Works across the **governance permission hierarchy** (Employee > Dept > Role > Global)
-
-So the workflow status gating was implicit; the governance lock makes it explicit, auditable, and overridable.
-
----
-
-## 3. Does this Governance system impact existing RLS policies and Workflow policies?
-
-**Short answer: No, it does not modify or replace them. It adds an additional layer on top.**
-
-Here's how they coexist:
-
-| Layer | What it controls | Still active? |
-|-------|-----------------|---------------|
-| **RLS Policies** | Database-level row access (who can SELECT/INSERT/UPDATE which rows) | Yes, unchanged |
-| **Workflow Engine** | KPI status transitions (Self Review → Manager Check → Audit → Approved) | Yes, unchanged |
-| **Governance (new)** | UI-level permission gating (can this user edit/submit/approve during this period?) | Added on top |
-
-The governance system is enforced via the `useReviewPeriodPermissions` hook in **6 UI components** (SelfReviewSheet, EmployeeScorecard, ManagementScorecard, AuditScorecard, KpiHeaderSection, GovernanceLockBanner). It **disables buttons and shows lock banners** — it does not change database access rules or workflow transitions.
-
-**Key point:** If governance says "locked" but RLS says "allowed," the user sees a locked UI but the database would still technically accept writes. The governance layer is a **business logic guard**, not a security guard. RLS remains the security boundary.
-
-No plan needed — these are research/clarification questions only.
+## No database, RLS, or edge function changes needed
+This is a documentation-only update.
 
