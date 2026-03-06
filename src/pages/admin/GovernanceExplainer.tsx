@@ -237,6 +237,141 @@ export default function GovernanceExplainer() {
         </CardContent>
       </Card>
 
+      {/* 4b. Role Permission Matrix — How It Works */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-primary" /> Role Permission Matrix — How It Works
+          </CardTitle>
+          <CardDescription>
+            A detailed guide to the role × permission grid and how status is determined.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* What it is */}
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              The <strong className="text-foreground">Role Permission Matrix</strong> is a grid where each row represents a system role and each column represents a permission.
+              Toggle switches allow administrators to enable or disable individual permissions per role for the active review period.
+            </p>
+          </div>
+
+          {/* Role reference */}
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">The 7 System Roles</p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[130px]">Role</TableHead>
+                  <TableHead>Typical Responsibility</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[
+                  { role: 'Admin', desc: 'Full system control. Manages settings, users, governance, and all review operations.' },
+                  { role: 'Manager', desc: 'Reviews and scores direct reports. Forwards scorecards through the workflow.' },
+                  { role: 'Employee', desc: 'Submits self-review data — achieved values, evidence, and self-scores.' },
+                  { role: 'Auditor', desc: 'Independently verifies scores and evidence for assigned employees or KPIs.' },
+                  { role: 'Management', desc: 'Senior leadership. Participates in calibration and final approvals.' },
+                  { role: 'HR PMS', desc: 'HR team member responsible for PMS administration and compliance.' },
+                  { role: 'Skip Level', desc: 'Reviews employees one level below their direct reports for additional oversight.' },
+                ].map(item => (
+                  <TableRow key={item.role}>
+                    <TableCell><Badge variant="outline" className="text-xs">{item.role}</Badge></TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{item.desc}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <Separator />
+
+          {/* Status calculation */}
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">How "Full Access" vs "Restricted" Is Calculated</p>
+            <div className="text-sm text-muted-foreground space-y-1">
+              <p>The status badge next to each role is determined by this logic:</p>
+              <ul className="list-disc pl-6 space-y-1 text-xs">
+                <li>A role shows <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs mx-1">Full Access</Badge> when <strong className="text-foreground">all 6 operational permissions</strong> are ON and <strong className="text-foreground">View Only is OFF</strong>.</li>
+                <li>A role shows <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-xs mx-1">Restricted</Badge> when <strong className="text-foreground">any operational permission is OFF</strong>, <em>or</em> <strong className="text-foreground">View Only is ON</strong>.</li>
+              </ul>
+              <p className="text-xs italic mt-2">
+                The 6 operational permissions are: Edit KPI, Self Review, Manager Review, Approve, Edit Scores, and Add Comments. "View Only" is a special override — it is not counted as a missing permission when it is OFF.
+              </p>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Admin exception */}
+          <Alert>
+            <Shield className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Admin Exception:</strong> The Admin row's toggles are always disabled. Admins retain full access regardless of the matrix configuration. This prevents accidental lockout of the system administrator.
+            </AlertDescription>
+          </Alert>
+
+          {/* View Only */}
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">View Only — Special Behavior</p>
+            <div className="p-3 rounded-lg border bg-muted/30 text-sm text-muted-foreground space-y-1">
+              <p>When <strong className="text-foreground">View Only</strong> is toggled ON for a role:</p>
+              <ul className="list-disc pl-6 text-xs space-y-1">
+                <li>All other permissions are effectively overridden — the role can only <em>view</em> data, not act on it.</li>
+                <li>The status immediately changes to "Restricted" regardless of other toggles.</li>
+                <li>This is useful for roles that should monitor the process without participating (e.g., Auditor during Self Review).</li>
+              </ul>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Saving & enforcement */}
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">Saving &amp; Enforcement</p>
+            <ul className="list-disc pl-6 text-xs text-muted-foreground space-y-1">
+              <li>Clicking <strong className="text-foreground">Save Permissions</strong> creates or updates <em>role-level locks</em> in the lock hierarchy (priority level 3 — above Global, below Department and Employee).</li>
+              <li>Saved permissions are enforced server-side via the <code className="text-foreground bg-muted px-1 rounded">check_review_period_permission</code> function, which evaluates the lock hierarchy before allowing any action.</li>
+              <li>Every save is recorded in the governance audit log with the changed permissions and the administrator who made the change.</li>
+            </ul>
+          </div>
+
+          <Separator />
+
+          {/* Example scenarios */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-foreground">Example Scenarios</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="p-3 rounded-lg border bg-muted/30">
+                <p className="font-medium text-foreground text-xs mb-1">Restrict Employees During Manager Review</p>
+                <p className="text-xs text-muted-foreground">
+                  Turn OFF "Self Review" and "Edit KPI" for the Employee role. Employees can still view their scorecards but cannot modify submissions while managers are reviewing.
+                </p>
+              </div>
+              <div className="p-3 rounded-lg border bg-muted/30">
+                <p className="font-medium text-foreground text-xs mb-1">Set Auditors to View Only</p>
+                <p className="text-xs text-muted-foreground">
+                  Toggle "View Only" ON for the Auditor role. Auditors can inspect all data but cannot add comments or modify scores — ideal during the Calibration stage.
+                </p>
+              </div>
+              <div className="p-3 rounded-lg border bg-muted/30">
+                <p className="font-medium text-foreground text-xs mb-1">Lock Down Approvals</p>
+                <p className="text-xs text-muted-foreground">
+                  Turn OFF "Approve" for all roles except Management. Only senior leadership can give final sign-off on calibrated ratings.
+                </p>
+              </div>
+              <div className="p-3 rounded-lg border bg-muted/30">
+                <p className="font-medium text-foreground text-xs mb-1">Open All Permissions for Planning</p>
+                <p className="text-xs text-muted-foreground">
+                  During the Planning stage, ensure all operational permissions are ON for Manager and HR PMS so they can collaboratively build scorecards.
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* 5. Auto-Lock Rules */}
       <Card>
         <CardHeader>
