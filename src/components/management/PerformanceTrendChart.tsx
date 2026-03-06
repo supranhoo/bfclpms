@@ -36,9 +36,9 @@ export function PerformanceTrendChart({ data }: PerformanceTrendChartProps) {
                   tick={{ fontSize: 11 }}
                   tickFormatter={(v) => v.substring(0, 3)}
                 />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                <YAxis domain={[0, 5]} tick={{ fontSize: 11 }} />
                 <Tooltip
-                  formatter={(value: number) => [`${value.toFixed(1)}%`, 'Avg Score']}
+                  formatter={(value: number) => [`${value.toFixed(2)} / 5`, 'Avg Score']}
                   contentStyle={{
                     backgroundColor: 'hsl(var(--background))',
                     border: '1px solid hsl(var(--border))',
