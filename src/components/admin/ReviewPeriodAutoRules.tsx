@@ -141,7 +141,7 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
                 ))}
               </SelectContent>
             </Select>
-            {newRuleType === 'deadline_passed' && (
+            {(newRuleType === 'deadline_passed' || newRuleType === 'auto_advance_zero') && (
               <div className="flex items-center gap-1">
                 <Input
                   type="number"
