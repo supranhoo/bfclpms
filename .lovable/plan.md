@@ -1,47 +1,23 @@
 
 
-# Fix: Completion Percentage Showing 17% for All Months
+# Fix: Clarify Auto-Lock Rule Description
 
-## Root Cause
+## Problem
+The description "Lock self-review after 10 days" is ambiguous — it doesn't tell the admin *from when* the countdown begins.
 
-The "Completion" percentage is **never dynamically calculated** from actual KPI data. Here's what happens:
-
-1. The `completion_percentage` column in `review_periods` table defaults to `0`
-2. The `ReviewPeriodOverview` component uses: `period.completion_percentage || progressPct`
-3. Since `completion_percentage` is `0` (falsy), it falls back to `progressPct`
-4. `progressPct` is calculated from the governance stage index: `(currentIdx + 1) / 6 * 100`
-5. All periods are at `planning` stage (index 0), so: `1/6 ≈ 17%`
-
-The same issue affects the `ReviewPeriodStatusWidget` on the Management Dashboard.
+## Current Behavior
+The edge function (`auto-lock-review-periods`) calculates elapsed days from the `started_at` timestamp in the `review_period_stages` table for the `self_review` stage. So "10 days" means 10 days after the Self Review stage was activated.
 
 ## Fix
+Update the description text in `ReviewPeriodAutoRules.tsx` to read:
 
-Calculate completion dynamically from actual KPI workflow statuses when fetching period data, rather than relying on a static DB column.
+> "Lock self-review after **10** days from **stage start date**"
 
-### 1. Update `ReviewPeriods.tsx` query (data fetching)
+This is a single-line UI text change in the inline description row.
 
-Extend the existing query to also fetch KPI statuses per period. Calculate completion as:
+## File Modified
+- `src/components/admin/ReviewPeriodAutoRules.tsx` — update the description text for `deadline_passed` rule type
 
-```
-completion = (approved KPIs / total KPIs) * 100
-```
-
-Where "approved" means KPIs with `status = 'approved'`. This gives a real percentage based on how many KPIs have completed the full workflow.
-
-The query already fetches `review_period` and `review_year` from `kpis` — we add `status` to the select, then compute the ratio per period.
-
-### 2. Update `ReviewPeriodStatusWidget.tsx` query
-
-Same approach: fetch KPI statuses alongside period data to compute real completion instead of using the static DB value.
-
-### 3. Update `ReviewPeriodOverview.tsx` display logic
-
-Remove the `|| progressPct` fallback for the Completion card. The stage-based progress already has its own dedicated "Stage Progress" pipeline visualization — conflating it with KPI completion is misleading. The Completion card should show KPI-based completion only.
-
-### Files Modified
-- `src/pages/admin/ReviewPeriods.tsx` — compute real completion from KPI statuses
-- `src/components/management/ReviewPeriodStatusWidget.tsx` — compute real completion from KPI statuses
-- `src/components/admin/ReviewPeriodOverview.tsx` — remove misleading stage-based fallback
-
-### No database or RLS changes needed
+## No database, RLS, or logic changes needed
+The underlying calculation is correct; this is a label clarity fix only.
 
