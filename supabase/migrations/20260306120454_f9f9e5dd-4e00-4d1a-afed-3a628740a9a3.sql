@@ -1,0 +1,1 @@
+ALTER TABLE public.review_submissions ADD COLUMN IF NOT EXISTS auto_advance_reason TEXT DEFAULT NULL;

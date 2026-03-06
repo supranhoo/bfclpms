@@ -21,6 +21,7 @@ const RULE_TYPES = [
   { value: 'review_submitted', label: 'Manager Review Submitted', description: 'Lock employee after manager submits review' },
   { value: 'approval_complete', label: 'Final Approval Complete', description: 'Lock record after final approval' },
   { value: 'calibration_complete', label: 'Calibration Complete', description: 'Lock department after calibration' },
+  { value: 'auto_advance_zero', label: 'Auto-Advance with Zero Score', description: 'Auto-advance stuck KPIs with 0 score after deadline' },
 ];
 
 export default function ReviewPeriodAutoRules({ periodId }: Props) {
@@ -48,14 +49,21 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
     mutationFn: async ({ ruleType, deadlineDays }: { ruleType: string; deadlineDays?: number }) => {
       const template = RULE_TYPES.find(r => r.value === ruleType);
       const triggerCondition: Record<string, unknown> = { description: template?.description || '' };
-      if (ruleType === 'deadline_passed' && deadlineDays) {
+      if ((ruleType === 'deadline_passed' || ruleType === 'auto_advance_zero') && deadlineDays) {
         triggerCondition.deadline_days = deadlineDays;
       }
+      if (ruleType === 'auto_advance_zero') {
+        triggerCondition.default_score = 0;
+        triggerCondition.target_stages = ['kra_set', 'self_review'];
+      }
+      const actionPayload = ruleType === 'auto_advance_zero'
+        ? { action_type: 'auto_advance', default_score: 0 }
+        : { lock_type: 'employee', permissions: { view_only: true } };
       const { error } = await supabase.from('review_period_auto_rules').insert([{
         review_period_id: periodId,
         rule_type: ruleType,
         trigger_condition: triggerCondition as any,
-        action: { lock_type: 'employee', permissions: { view_only: true } } as any,
+        action: actionPayload as any,
         is_active: true,
         created_by: user?.id,
       }]);
@@ -133,7 +141,7 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
                 ))}
               </SelectContent>
             </Select>
-            {newRuleType === 'deadline_passed' && (
+            {(newRuleType === 'deadline_passed' || newRuleType === 'auto_advance_zero') && (
               <div className="flex items-center gap-1">
                 <Input
                   type="number"
@@ -148,8 +156,8 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
             )}
             <Button
               size="sm"
-              onClick={() => newRuleType && addRule.mutate({ ruleType: newRuleType, deadlineDays: newRuleType === 'deadline_passed' ? newDeadlineDays : undefined })}
-              disabled={!newRuleType || addRule.isPending || (newRuleType === 'deadline_passed' && (!newDeadlineDays || newDeadlineDays < 1))}
+              onClick={() => newRuleType && addRule.mutate({ ruleType: newRuleType, deadlineDays: (newRuleType === 'deadline_passed' || newRuleType === 'auto_advance_zero') ? newDeadlineDays : undefined })}
+              disabled={!newRuleType || addRule.isPending || ((newRuleType === 'deadline_passed' || newRuleType === 'auto_advance_zero') && (!newDeadlineDays || newDeadlineDays < 1))}
             >
               <Plus className="h-4 w-4 mr-1" /> Add
             </Button>
@@ -180,9 +188,9 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
                       <Badge variant="outline">{template?.label || rule.rule_type}</Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {rule.rule_type === 'deadline_passed' ? (
+                      {(rule.rule_type === 'deadline_passed' || rule.rule_type === 'auto_advance_zero') ? (
                         <div className="flex items-center gap-2">
-                          <span>Lock self-review after</span>
+                          <span>{rule.rule_type === 'auto_advance_zero' ? 'Auto-advance stuck KPIs after' : 'Lock self-review after'}</span>
                           <Input
                             type="number"
                             min={1}

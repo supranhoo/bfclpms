@@ -38,3 +38,9 @@ verify_jwt = false
 
 [functions.fix-corrupted-binary-scores]
 verify_jwt = false
+
+[functions.auto-lock-review-periods]
+verify_jwt = false
+
+[functions.update-user-email]
+verify_jwt = false

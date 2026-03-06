@@ -1,9 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ReviewStageCard, StageStatus } from './ReviewStageCard';
 import { KPI, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
-import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck } from 'lucide-react';
+import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle } from 'lucide-react';
 import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 
 type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
@@ -166,6 +167,16 @@ export function KpiJourneySection({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Auto-Advance Warning Banner */}
+        {(submission as any)?.auto_advance_reason && (
+          <Alert className="border-orange-500/30 bg-orange-500/5">
+            <AlertTriangle className="h-4 w-4 text-orange-600" />
+            <AlertDescription className="text-sm">
+              <strong>System Auto-Advanced:</strong> {(submission as any).auto_advance_reason}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Review Stages Grid */}
         <div className={`grid ${gridCols} gap-2 lg:gap-3`}>
         {visibleStages.map(stage => {

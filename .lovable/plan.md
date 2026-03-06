@@ -1,58 +1,51 @@
 
 
-# Plan: Auto-Progression System for Unsubmitted KPIs
+# Plan: Bulk Apply KPI Changes Across Months
 
 ## Problem
-When employees fail to submit their self-review within a deadline, their KPIs remain stuck at `kra_set` or `self_review`, blocking the entire review pipeline for managers, auditors, and management. The admin must manually intervene for each delinquent employee.
+When an admin edits a KPI's structural fields (target, thresholds, weightage, UOM, etc.) in the Admin KPI Editor, the change only applies to the single selected month. If the same KPI exists across 12 months, the admin must repeat the edit 12 times.
 
-## Solution: "Auto-Advance with Zero Score" Engine
+## Solution
+Add a **"Apply To" scope selector** in the Admin KPI Edit Dialog that lets the admin choose how broadly to apply structural changes:
 
-A new auto-rule type that, when triggered, automatically advances unsubmitted KPIs through the workflow with a 0 score, leaving a clear audit trail explaining why.
+1. **This month only** (default — current behavior)
+2. **All future months** — applies to months after the current KPI's month in the same year
+3. **All months** — applies to every month in the same year for this employee+KRA+KPI
 
-### How It Works
+## How It Works
 
-1. **New Auto-Rule Type**: `auto_advance_zero` — added to the existing `ReviewPeriodAutoRules` UI alongside `deadline_passed`, `review_submitted`, etc.
-2. **Configuration**: Admin sets a deadline (days from stage start). After the deadline, unsubmitted KPIs are auto-advanced.
-3. **Execution** (in the `auto-lock-review-periods` edge function):
-   - Find all KPIs for the period still at `kra_set` or `self_review`
-   - For each, create/update the `review_submissions` record with `self_score: 0`, `self_rating: 0`
-   - Advance the KPI status to the next workflow stage (e.g., `self_review` or `manager_check`)
-   - Insert an `auto_advance_reason` field in the submission: `"Auto-advanced: Employee did not submit self-review within X days"`
-   - Log each advancement in `review_period_audit_log`
-4. **Employee Awareness**:
-   - The `GovernanceLockBanner` and `KpiJourneySection` display a visible warning banner on auto-advanced KPIs
-   - A new `auto_advance_reason` column on `review_submissions` stores the system-generated explanation
-   - The Review Trail Card shows the auto-advance event with timestamp and reason
+### Sibling KPI Matching
+Find all KPIs with the same `employee_id`, `kra_name`, `kpi_name`, and `review_year` but different `review_period`. Filter by month index relative to the current KPI's month based on the selected scope.
 
-### Additional Capabilities to Explore
+### Fields That Propagate
+Structural/config fields only: `target_value`, `uom`, `weightage`, `criteria`, `r0`–`r5`, `frequency`, `frequency_cycle_start`, `source_of_data`, `is_org_level`, `org_level_scope`, `uom_type`, `qualitative_options`, `require_resubmit_reason`, `day_count_type`, `threshold_mode`.
 
-| Feature | Description |
-|---------|-------------|
-| **Grace Period Notification** | Send email notification X days before auto-advance warning employees to submit |
-| **Partial Auto-Advance** | Only auto-advance if employee submitted 0 out of N KPIs; if partial, leave all pending for manual review |
-| **Manager Override** | After auto-advance, manager can still assign a non-zero score (the 0 is a default, not final) |
-| **Configurable Default Score** | Admin chooses default score (0, 1, or N/A) instead of hardcoding 0 |
-| **Stage-Specific Rules** | Auto-advance not just self-review but any stage (e.g., if manager doesn't review within X days, auto-advance to auditor) |
-| **Dashboard Widget** | Show count of auto-advanced KPIs on Management Dashboard as a red alert card |
+### Fields That Do NOT Propagate
+- `review_period` (each KPI keeps its own month)
+- `status` (workflow position is per-month)
+- Achieved values / scores (data integrity)
 
-### Implementation Details
+### UI Placement
+A radio group placed above the "Reason for Change" textarea, inside a highlighted info box:
+- Radio: This month only | All future months | All months
+- Helper text explaining what will happen
 
-**Database Changes:**
-- Add column `auto_advance_reason TEXT` to `review_submissions` table
-- No new tables needed; the existing `review_period_auto_rules` table supports this via its flexible `trigger_condition` and `action` JSONB columns
+### Execution Flow
+1. Admin edits fields and selects scope
+2. On save: first update the current KPI (existing logic)
+3. If scope ≠ "this_month": query sibling KPIs by matching criteria, filter by month scope, batch-update them with the same structural fields
+4. Each sibling update gets its own audit log entry with `source: 'admin_bulk_apply'`
+5. Toast shows count: "KPI updated + X sibling months updated"
 
-**Files to Modify:**
+## Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/components/admin/ReviewPeriodAutoRules.tsx` | Add `auto_advance_zero` to `RULE_TYPES` with configurable deadline days and optional default score |
-| `supabase/functions/auto-lock-review-periods/index.ts` | Add `auto_advance_zero` case: query stuck KPIs, create 0-score submissions, advance status, audit log |
-| `src/components/review/KpiJourneySection.tsx` | Show auto-advance warning banner when `submission.auto_advance_reason` exists |
-| `src/components/review/ReviewTrailCard.tsx` | Display auto-advance events in the trail with distinct styling |
-| `DOCUMENTATION.md` | Document the auto-advance feature and configuration |
+| `src/components/admin/AdminKpiEditDialog.tsx` | Add apply-scope radio group state, pass scope to submit handler, implement sibling query + batch update logic after primary save |
+| `src/hooks/useKpis.ts` | No changes needed — the dialog will handle sibling updates directly since `useAdminUpdateKpi` already handles single-KPI updates with audit logging |
 
-**Risk Assessment:**
-- **Data Impact**: Only affects KPIs that are genuinely stuck (status = `kra_set`/`self_review` past deadline). Manager/auditor can still override the 0 score — it's a default, not a lock.
-- **Regression Risk**: Low — new rule type, existing rules unaffected. Default behavior unchanged until admin explicitly creates the rule.
-- **Reversibility**: Admin can send-back auto-advanced KPIs to the employee if needed.
+## Risk Assessment
+- **Data Impact**: Only structural fields propagate; scores and statuses are untouched. Each update is individually audited.
+- **Regression Risk**: Low — default is "this month only" which preserves current behavior exactly.
+- **Performance**: At most 11 additional updates (one per sibling month), each lightweight.
 
