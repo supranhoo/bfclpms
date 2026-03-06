@@ -1,74 +1,37 @@
 
 
-# Testing Plan for Review Period Governance System
+# Plan: Review Period Governance Explainer Page
 
-## What will be tested
+## What to Build
 
-The governance system spans 3 layers: pure logic/constants, hooks with RPC calls, and UI components. Testing will focus on the testable units that don't require a live database connection.
+A dedicated, static explainer page at `/admin/governance-explainer` that serves as a comprehensive guide for the Review Period Governance system. This will be a well-structured, visually rich documentation page accessible from the Review Periods admin page.
 
-## Test Files to Create
+## Approach
 
-### 1. `src/test/reviewPeriodGovernance.test.ts` — Constants & Logic Tests
-Tests for all exported constants and pure logic from `useReviewPeriodGovernance.ts`:
-- `GOVERNANCE_STAGES` array contains exactly 6 stages in correct order
-- `STAGE_LABELS` has entries for all stages
-- `PERMISSION_KEYS` contains all 7 permission types
-- `PERMISSION_LABELS` has labels for all permission keys
-- Stage index calculations (used by Overview and StageController)
-- Lock hierarchy logic validation (Employee > Dept > Role > Global — tested via mock scenarios)
+Create a single new page component that explains the governance system using cards, diagrams, and structured content sections. No database changes needed — this is purely a UI/informational page.
 
-### 2. `src/test/reviewPeriodPermissions.test.ts` — Permission Hook Logic Tests
-Tests for `useReviewPeriodPermissions.ts`:
-- Returns `DEFAULT_OPEN` when no user/period/year provided
-- Returns `isLoading: true` while query is in flight
-- Correctly maps RPC results to permission flags
-- Handles RPC errors gracefully (fail-open behavior)
-- Caches results for 30s (staleTime check)
+## Content Sections
 
-### 3. `src/components/review/GovernanceLockBanner.test.tsx` — Banner Component Tests
-- Renders nothing when `isLoading` is true
-- Shows destructive "view-only" alert when `view_only` is true
-- Shows restriction warning listing disabled permissions
-- Shows nothing when all permissions are open
-- Shows correct restrictions based on `viewLevel` (management shows "approval", auditor shows "forwarding", manager shows "manager review")
+1. **Overview** — What governance is and why it exists
+2. **Lifecycle Stages** — Visual pipeline (Planning → Self Review → Manager Review → Calibration → Approval → Closed) with descriptions of each stage
+3. **Lock Hierarchy** — Employee > Department > Role > Global, explaining override behavior
+4. **Permission Types** — Table explaining all 7 permissions (Edit KPI, Self Review, Manager Review, Approve, Edit Scores, Comments, View Only)
+5. **Auto-Lock Rules** — How deadline-based and event-based auto-locking works
+6. **Audit Trail** — What gets logged and why
+7. **FAQ** — Common questions (e.g., "What happens when a period is closed?", "Can I unlock a single employee?")
 
-### 4. `src/components/admin/ReviewPeriodOverview.test.tsx` — Overview Component Tests
-- Renders period name and year
-- Renders current stage badge with correct label
-- Calculates progress percentage from stage index
-- Shows global lock button with correct state (Locked vs Open)
-- Calls `onToggleGlobalLock` when button clicked
+## Files
 
-### 5. `src/components/admin/ReviewPeriodStageController.test.tsx` — Stage Controller Tests
-- Renders all 6 stages in pipeline
-- Highlights current stage, marks previous as complete
-- Advance button disabled when at last stage (closed)
-- Revert button disabled when at first stage (planning)
-- Calls `onAdvanceStage` with correct next/previous stage
-- Shows closed-stage warning when stage is "closed"
+### New Files
+- `src/pages/admin/GovernanceExplainer.tsx` — The explainer page with accordion-based sections, visual stage pipeline, hierarchy diagram, and permission reference table
 
-### 6. `src/components/admin/ReviewPeriodRolePermissions.test.tsx` — Role Matrix Tests
-- Renders all 7 roles from `ALL_APP_ROLES`
-- Renders all 7 permission columns
-- Admin role switches are disabled (always full access)
-- Save button disabled until a change is made (dirty state)
-- Toggling a switch marks the form as dirty
+### Modified Files
+- `src/App.tsx` — Add route `/admin/governance-explainer`
+- `src/pages/admin/ReviewPeriods.tsx` — Add a "Help / Explainer" button linking to the explainer page
+- `src/components/layout/AppSidebar.tsx` — No sidebar entry needed (accessed via Review Periods page button)
 
-## Technical Approach
-
-- All tests use Vitest + React Testing Library (existing project pattern)
-- Component tests mock `supabase` and `useAuth` via `vi.mock()`
-- No database calls — all data passed as props or mocked
-- Tests follow existing patterns from `workflowEngine.test.ts` and `ErrorBoundary.test.tsx`
-
-## Files Created
-- `src/test/reviewPeriodGovernance.test.ts`
-- `src/test/reviewPeriodPermissions.test.ts`
-- `src/components/review/GovernanceLockBanner.test.tsx`
-- `src/components/admin/ReviewPeriodOverview.test.tsx`
-- `src/components/admin/ReviewPeriodStageController.test.tsx`
-- `src/components/admin/ReviewPeriodRolePermissions.test.tsx`
-
-## Files Modified
-None — tests only.
+## Design
+- Uses existing UI components: Card, Accordion, Badge, Table, Alert
+- Consistent with the admin page styling
+- No external dependencies needed
 
