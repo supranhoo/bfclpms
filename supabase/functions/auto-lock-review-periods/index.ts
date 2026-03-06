@@ -35,6 +35,7 @@ Deno.serve(async (req) => {
 
     let locksCreated = 0;
     let auditEntries = 0;
+    let kpisAutoAdvanced = 0;
 
     for (const rule of (rules || [])) {
       const period = (rule as any).review_periods;
