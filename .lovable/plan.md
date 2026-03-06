@@ -1,51 +1,48 @@
 
 
-# Plan: Bulk Apply KPI Changes Across Months
+# Plan: Scheduled Lock (Lock from a Specific Date)
 
-## Problem
-When an admin edits a KPI's structural fields (target, thresholds, weightage, UOM, etc.) in the Admin KPI Editor, the change only applies to the single selected month. If the same KPI exists across 12 months, the admin must repeat the edit 12 times.
+## Current Gap
+Today, the governance system supports only:
+- **Immediate locking** — the Global Lock button locks the period right now
+- **Deadline-based auto-rules** — lock after X days from stage start
 
-## Solution
-Add a **"Apply To" scope selector** in the Admin KPI Edit Dialog that lets the admin choose how broadly to apply structural changes:
+There is no way to say "lock this period starting tomorrow at midnight" or any specific future date.
 
-1. **This month only** (default — current behavior)
-2. **All future months** — applies to months after the current KPI's month in the same year
-3. **All months** — applies to every month in the same year for this employee+KRA+KPI
+## Solution: Add a "Scheduled Lock" Feature
 
-## How It Works
+Add a new auto-rule type `scheduled_lock` that activates a global or role-level lock at a specific date/time set by the admin.
 
-### Sibling KPI Matching
-Find all KPIs with the same `employee_id`, `kra_name`, `kpi_name`, and `review_year` but different `review_period`. Filter by month index relative to the current KPI's month based on the selected scope.
+### How It Works
 
-### Fields That Propagate
-Structural/config fields only: `target_value`, `uom`, `weightage`, `criteria`, `r0`–`r5`, `frequency`, `frequency_cycle_start`, `source_of_data`, `is_org_level`, `org_level_scope`, `uom_type`, `qualitative_options`, `require_resubmit_reason`, `day_count_type`, `threshold_mode`.
+1. Admin adds a **"Scheduled Lock"** rule in the Auto Rules tab
+2. Instead of "days from stage start", the admin picks a **specific date** (e.g., tomorrow's date) using a date picker
+3. The `auto-lock-review-periods` edge function checks: if today >= scheduled date and rule is active, it activates the global lock and logs the event
+4. Once triggered, the rule is marked as `executed` so it doesn't re-fire
 
-### Fields That Do NOT Propagate
-- `review_period` (each KPI keeps its own month)
-- `status` (workflow position is per-month)
-- Achieved values / scores (data integrity)
+### UI Changes
 
-### UI Placement
-A radio group placed above the "Reason for Change" textarea, inside a highlighted info box:
-- Radio: This month only | All future months | All months
-- Helper text explaining what will happen
+In `ReviewPeriodAutoRules.tsx`:
+- Add `scheduled_lock` to `RULE_TYPES` with label "Scheduled Lock (Date-Based)"
+- When this rule type is selected, show a **date picker** instead of the "days" input
+- Store the target date in `trigger_condition.lock_date`
+- In the rules table, display the scheduled date for this rule type
 
-### Execution Flow
-1. Admin edits fields and selects scope
-2. On save: first update the current KPI (existing logic)
-3. If scope ≠ "this_month": query sibling KPIs by matching criteria, filter by month scope, batch-update them with the same structural fields
-4. Each sibling update gets its own audit log entry with `source: 'admin_bulk_apply'`
-5. Toast shows count: "KPI updated + X sibling months updated"
+### Edge Function Changes
 
-## Files to Modify
+In `auto-lock-review-periods/index.ts`:
+- Add a `scheduled_lock` case that compares `trigger_condition.lock_date` against the current date
+- When triggered: upsert a global lock (same as the manual Global Lock toggle), log to audit, and mark the rule as executed (`is_active: false` or add an `executed_at` field)
+
+### Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/components/admin/AdminKpiEditDialog.tsx` | Add apply-scope radio group state, pass scope to submit handler, implement sibling query + batch update logic after primary save |
-| `src/hooks/useKpis.ts` | No changes needed — the dialog will handle sibling updates directly since `useAdminUpdateKpi` already handles single-KPI updates with audit logging |
+| `src/components/admin/ReviewPeriodAutoRules.tsx` | Add `scheduled_lock` rule type with date picker UI |
+| `supabase/functions/auto-lock-review-periods/index.ts` | Add scheduled lock execution logic |
 
-## Risk Assessment
-- **Data Impact**: Only structural fields propagate; scores and statuses are untouched. Each update is individually audited.
-- **Regression Risk**: Low — default is "this month only" which preserves current behavior exactly.
-- **Performance**: At most 11 additional updates (one per sibling month), each lightweight.
+### Risk Assessment
+- **Data Impact**: None — uses existing lock infrastructure, just triggers it on a schedule
+- **Regression Risk**: None — new rule type, no changes to existing rules
+- **Reversibility**: Admin can delete the scheduled rule before it fires, or unlock manually after
 
