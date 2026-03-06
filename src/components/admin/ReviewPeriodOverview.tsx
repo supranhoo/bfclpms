@@ -69,8 +69,8 @@ export default function ReviewPeriodOverview({ period, globalLockActive, onToggl
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground mb-2">Completion</p>
             <div className="flex items-center gap-2">
-              <Progress value={period.completion_percentage || progressPct} className="flex-1" />
-              <span className="text-sm font-medium">{period.completion_percentage || progressPct}%</span>
+              <Progress value={period.completion_percentage} className="flex-1" />
+              <span className="text-sm font-medium">{period.completion_percentage}%</span>
             </div>
           </CardContent>
         </Card>
