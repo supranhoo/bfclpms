@@ -454,8 +454,8 @@ export default function Dashboard() {
     setAutoOpenKpiId(kpiId || null);
   }, []);
 
-  // Loading state only for self view
-  if (isLoading && viewMode === 'self') {
+  // Loading state — covers both self & reviewer views if profile not yet loaded
+  if (isLoading) {
     return <DashboardSkeleton />;
   }
 
