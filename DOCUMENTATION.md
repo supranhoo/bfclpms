@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-06  
-> **Version:** 1.51.0 — Advanced Review Period Governance System: multi-layer locking (Global > Role > Department > Employee), 7-tab governance center, stage lifecycle engine, role permissions matrix, auto-lock rules, audit trail, dashboard widget, enforcement hook, stage change notifications
+> **Version:** 1.52.0 — Org KPI Data Entry governance enforcement: Data Owners now respect review period locks (edit_scores, view_only) via useReviewPeriodPermissions hook; GovernanceLockBanner displayed when restrictions apply
 > **Maintainer:** Lovable AI
 
 ---
@@ -1841,6 +1841,13 @@ Full JSON format for maximum control:
 - **Non-owners**: No access (redirected to dashboard)
 - Route protected by `DataOwnerRoute` component (checks admin role OR ownership status)
 - Sidebar shows "Org KPI Data Entry" link under "Data Entry" section for data owners (non-admins)
+
+**Governance Integration:**
+- Data Owners inherit governance permissions from their base role (employee, manager, etc.)
+- The `useReviewPeriodPermissions` hook is checked on the Data Entry page for `edit_scores` and `view_only`
+- When governance locks restrict the user's role, all inputs, N/A toggles, and propagate buttons are disabled
+- A `GovernanceLockBanner` is displayed at the top of the page explaining which restrictions apply
+- Admins always retain full access regardless of governance locks
 
 **UI Component: `OrgKpiOwnerDialog`**
 - Opened via UserPlus button in Actions column of Org KPI Data Entry table

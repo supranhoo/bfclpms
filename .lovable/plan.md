@@ -1,40 +1,15 @@
 
+# Org KPI Data Owners & Governance — IMPLEMENTED
 
-# Analysis: Org KPI Data Owners & Governance Permissions
+## What Was Done
 
-## Current State
+### Gap Identified
+Data Owners could bypass governance locks because the Org KPI Data Entry page did not check `useReviewPeriodPermissions`.
 
-Data Owners are **not integrated** with the Role Permission Matrix. Here's why:
-
-1. **Data Owner is not a role** — It's a per-KPI assignment stored in `org_kpi_data_owners`, not part of the `app_role` enum (admin, manager, employee, etc.)
-2. **OrgKpiDataEntry page never checks governance permissions** — It imports `useOrgKpiOwnershipMap` for access control but does NOT import or use `useReviewPeriodPermissions`
-3. **The `check_review_period_permission` RPC** resolves permissions by Employee → Department → Role → Global hierarchy. It has no concept of "data owner" as a permission target
-
-## The Gap
-
-If an admin locks a review period (e.g., sets "Edit Scores" to OFF for the "employee" role), a Data Owner who holds the "employee" role would be blocked from the Role Permission Matrix — but the **Org KPI Data Entry page ignores governance entirely**, so they can still enter and propagate values freely.
-
-This means:
-- Governance locks on the Roles tab have **zero effect** on Org KPI data entry
-- A period could be fully locked, yet data owners can still modify and propagate values
-
-## Recommended Fix
-
-Add governance awareness to the Org KPI Data Entry page:
-
-### 1. Check governance permissions in `OrgKpiDataEntry.tsx`
-- Import `useReviewPeriodPermissions` 
-- Check `edit_scores` permission before allowing value entry
-- Check `view_only` to disable all inputs when the period is locked
-- Show the `GovernanceLockBanner` when restrictions apply
-
-### 2. No changes to the Role Permission Matrix itself
-Data Owners inherit their role's permissions (they are employees/managers who happen to also be data owners). The matrix already covers their underlying role — it just needs to be **enforced** on the data entry page.
-
-### Files to Modify
-- `src/pages/admin/OrgKpiDataEntry.tsx` — integrate `useReviewPeriodPermissions` hook, pass `isLocked` flag to entry cards, show governance banner
-- `src/components/admin/OrgKpiEntryCard.tsx` — accept and respect a `governanceLocked` prop to disable inputs
+### Fix Applied
+1. **`OrgKpiDataEntry.tsx`** — Added `useReviewPeriodPermissions` hook to check `edit_scores` and `view_only` permissions. Shows `GovernanceLockBanner` when restricted. Passes `governanceLocked` prop to all `OrgKpiEntryCard` instances.
+2. **`OrgKpiEntryCard.tsx`** — Accepts `governanceLocked` prop. When true, all inputs, N/A toggles, and propagate buttons are disabled (same behavior as post-propagation lock).
+3. **`DOCUMENTATION.md`** — Updated to v1.52.0 with governance integration section under Data Owner documentation.
 
 ### No database or RLS changes needed
-The RPC and lock infrastructure already exist; this is purely a frontend enforcement gap.
-
+The `check_review_period_permission` RPC already resolves permissions by the user's base role. This was purely a frontend enforcement gap.
