@@ -370,8 +370,8 @@ export default function ManagementDashboard() {
         if (score === null) return; // Skip KPIs with no actual score
         const w = kpi.weightage || 100;
         const existing = periodScores.get(period);
-        if (existing) { existing.total += score; existing.weightage += w; existing.hasScores = true; }
-        else periodScores.set(period, { total: score, weightage: w, hasScores: true });
+        if (existing) { existing.total += score * w; existing.weightage += w; existing.hasScores = true; }
+        else periodScores.set(period, { total: score * w, weightage: w, hasScores: true });
       });
       const trendData = FISCAL_MONTHS
         .filter(m => periodScores.has(m) && periodScores.get(m)!.hasScores)
