@@ -33,7 +33,6 @@ const stageColors: Record<string, string> = {
 
 export default function ReviewPeriodOverview({ period, globalLockActive, onToggleGlobalLock, lockPending }: Props) {
   const currentIdx = GOVERNANCE_STAGES.indexOf(period.current_stage as GovernanceStage);
-  const progressPct = currentIdx >= 0 ? Math.round(((currentIdx + 1) / GOVERNANCE_STAGES.length) * 100) : 0;
 
   return (
     <div className="space-y-6">

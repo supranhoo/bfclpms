@@ -8,7 +8,7 @@ const mockPeriod = {
   review_year: 2026,
   current_stage: 'manager_review',
   stage_started_at: '2026-02-01T10:00:00Z',
-  completion_percentage: 0,
+  completion_percentage: 65,
   is_locked: false,
   kpi_count: 42,
 };
@@ -88,5 +88,17 @@ describe('ReviewPeriodOverview', () => {
     );
     fireEvent.click(screen.getByText(/Open — Click to Lock/));
     expect(handler).toHaveBeenCalledWith(true);
+  });
+
+  it('renders completion percentage from period data', () => {
+    render(
+      <ReviewPeriodOverview
+        period={mockPeriod}
+        globalLockActive={false}
+        onToggleGlobalLock={() => {}}
+        lockPending={false}
+      />
+    );
+    expect(screen.getByText('65%')).toBeInTheDocument();
   });
 });
