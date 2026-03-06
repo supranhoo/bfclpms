@@ -4,7 +4,9 @@ import { KPI } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getCycleLabel } from '@/lib/frequencyUtils';
-import { Clock, Building2, Users, User } from 'lucide-react';
+import { Clock, Building2, Users, User, Lock } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -22,6 +24,9 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   const status = kpi.status || 'kra_set';
   const weightage = kpi.weightage || 0;
   const scope = kpi.org_level_scope || 'employee';
+  
+  const govPerms = useReviewPeriodPermissions(selectedPeriod, selectedYear);
+  const hasRestrictions = !govPerms.isLoading && (govPerms.view_only || !govPerms.edit_kpi || !govPerms.edit_scores);
 
   const { data: managerName } = useQuery({
     queryKey: ['kpi-reporting-manager', kpi.employee_id],
@@ -65,6 +70,20 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
           <Badge variant="secondary" className="text-xs">
             {weightage}%
           </Badge>
+          
+          {hasRestrictions && (
+            <Tooltip>
+              <TooltipTrigger>
+                <Badge variant="outline" className="text-xs border-destructive/50 text-destructive gap-1">
+                  <Lock className="h-3 w-3" />
+                  {govPerms.view_only ? 'View Only' : 'Restricted'}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">Governance lock active for this period{govPerms.periodStage ? ` (${govPerms.periodStage.replace(/_/g, ' ')})` : ''}</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
           
           {kpi.frequency === 'Bi-Monthly' && (
             <Badge variant="outline" className="text-xs border-violet-300 text-violet-700 dark:border-violet-600 dark:text-violet-400">

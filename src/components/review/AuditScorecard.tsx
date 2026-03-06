@@ -48,6 +48,8 @@ import {
 import { MobileKpiCard } from '@/components/review/MobileKpiCard';
 import { NaConfirmationCard } from '@/components/review/NaConfirmationCard';
 import { OrgKpiRatingOverrideWarning } from '@/components/review/OrgKpiRatingOverrideWarning';
+import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
+import { GovernanceLockBanner } from '@/components/review/GovernanceLockBanner';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { useSentBackKpis } from '@/hooks/useSentBackKpis';
 import { useAuditKpiAssignments } from '@/hooks/useAuditKpiAssignments';
@@ -95,6 +97,10 @@ export function AuditScorecard({
   // Fetch the employee's workflow stages dynamically
   const { data: workflowStages } = useEmployeeWorkflowStages(employee.id);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
+  
+  // Governance permissions
+  const govPerms = useReviewPeriodPermissions(selectedPeriod, selectedYear);
+  const isGovLocked = govPerms.view_only || (!govPerms.approve && !govPerms.edit_scores);
   
   // Filter KPIs by period and year, excluding non-issued (draft/template) KPIs (v1.45.94)
   const kpis = useMemo(() => allKpis?.filter(k => {
@@ -622,6 +628,9 @@ export function AuditScorecard({
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      {/* Governance Lock Banner */}
+      <GovernanceLockBanner permissions={govPerms} viewLevel="auditor" />
+
       {/* Header with Back Button */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
         <div className="flex items-center gap-3">
@@ -1003,14 +1012,15 @@ export function AuditScorecard({
               Cancel
             </Button>
             {(!submissionMap.get(selectedKpi?.id || '')?.is_na || naOverridden) && !reviewerMarkNa && (
-              <Button variant="secondary" className="w-full sm:w-auto" onClick={() => handleSubmitReview(false)} disabled={auditorScore === null || submitAuditReview.isPending}>Save Draft</Button>
+              <Button variant="secondary" className="w-full sm:w-auto" onClick={() => handleSubmitReview(false)} disabled={auditorScore === null || submitAuditReview.isPending || !govPerms.edit_scores}>Save Draft</Button>
             )}
             <Button className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700" onClick={() => handleSubmitReview(true)}
               disabled={
-                reviewerMarkNa ? !markNaRemarks.trim() :
+                isGovLocked ||
+                (reviewerMarkNa ? !markNaRemarks.trim() :
                 (submissionMap.get(selectedKpi?.id || '')?.is_na && naOverridden) ? (!overrideNaRemarks.trim() || auditorScore === null) :
                 submissionMap.get(selectedKpi?.id || '')?.is_na ? !naConfirmed :
-                (auditorScore === null || submitAuditReview.isPending)
+                (auditorScore === null || submitAuditReview.isPending))
               }
             >
               <Check className="h-4 w-4 mr-2" />
