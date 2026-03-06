@@ -123,14 +123,14 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
     );
   }
 
-  if (!data?.monthlyData?.length) return null;
+  const hasData = data?.monthlyData?.length > 0;
 
   // Only show months that have at least one score across all reportees
-  const activeMonths = selectedMonths.filter(m =>
-    data.monthlyData.some((r: any) => r.scores[m] !== null)
-  );
-
-  if (activeMonths.length === 0) return null;
+  const activeMonths = hasData
+    ? selectedMonths.filter(m =>
+        data.monthlyData.some((r: any) => r.scores[m] !== null)
+      )
+    : [];
 
   const handleRowClick = (employeeId: string, month: string, year: number) => {
     navigate(`/dashboard?employee=${employeeId}&period=${month}&year=${year}`);
@@ -148,52 +148,63 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="sticky left-0 bg-background z-10">Employee</TableHead>
-                {activeMonths.map(m => (
-                  <TableHead key={m} className="text-center min-w-[60px]">
-                    {m.substring(0, 3)}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.monthlyData.map((rep: any) => (
-                <TableRow key={rep.id}>
-                  <TableCell className="sticky left-0 bg-background z-10">
-                    <div>
-                      <p className="text-sm font-medium">{rep.full_name}</p>
-                      <p className="text-xs text-muted-foreground">{rep.employee_code} · {(rep.departments as any)?.name || '-'}</p>
-                    </div>
-                  </TableCell>
-                  {activeMonths.map(m => {
-                    const score = rep.scores[m];
-                    const monthIndex = MONTHS_ALL.indexOf(m);
-                    const calYear = monthIndex >= 6 ? fiscalStartYear : fiscalStartYear + 1;
-                    return (
-                      <TableCell key={m} className="text-center p-1">
-                        {score !== null ? (
-                          <button
-                            onClick={() => handleRowClick(rep.id, m, calYear)}
-                            className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all ${getScoreBg(score)}`}
-                          >
-                            {score.toFixed(1)}
-                            <ExternalLink className="h-3 w-3 opacity-50" />
-                          </button>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
-                      </TableCell>
-                    );
-                  })}
+        {!hasData || activeMonths.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+            <Users className="h-10 w-10 mb-2 opacity-40" />
+            <p className="text-sm">
+              {!hasData
+                ? 'No direct reportees found for your account.'
+                : 'No scored data available for the selected months.'}
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="sticky left-0 bg-background z-10">Employee</TableHead>
+                  {activeMonths.map(m => (
+                    <TableHead key={m} className="text-center min-w-[60px]">
+                      {m.substring(0, 3)}
+                    </TableHead>
+                  ))}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {data.monthlyData.map((rep: any) => (
+                  <TableRow key={rep.id}>
+                    <TableCell className="sticky left-0 bg-background z-10">
+                      <div>
+                        <p className="text-sm font-medium">{rep.full_name}</p>
+                        <p className="text-xs text-muted-foreground">{rep.employee_code} · {(rep.departments as any)?.name || '-'}</p>
+                      </div>
+                    </TableCell>
+                    {activeMonths.map(m => {
+                      const score = rep.scores[m];
+                      const monthIndex = MONTHS_ALL.indexOf(m);
+                      const calYear = monthIndex >= 6 ? fiscalStartYear : fiscalStartYear + 1;
+                      return (
+                        <TableCell key={m} className="text-center p-1">
+                          {score !== null ? (
+                            <button
+                              onClick={() => handleRowClick(rep.id, m, calYear)}
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all ${getScoreBg(score)}`}
+                            >
+                              {score.toFixed(1)}
+                              <ExternalLink className="h-3 w-3 opacity-50" />
+                            </button>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
