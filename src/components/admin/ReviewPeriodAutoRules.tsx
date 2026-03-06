@@ -9,8 +9,11 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Plus, Zap, Trash2 } from 'lucide-react';
+import { Plus, Zap, Trash2, CalendarIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { format } from 'date-fns';
 
 interface Props {
   periodId: string;
@@ -22,6 +25,7 @@ const RULE_TYPES = [
   { value: 'approval_complete', label: 'Final Approval Complete', description: 'Lock record after final approval' },
   { value: 'calibration_complete', label: 'Calibration Complete', description: 'Lock department after calibration' },
   { value: 'auto_advance_zero', label: 'Auto-Advance with Zero Score', description: 'Auto-advance stuck KPIs with 0 score after deadline' },
+  { value: 'scheduled_lock', label: 'Scheduled Lock (Date-Based)', description: 'Lock period on a specific future date' },
 ];
 
 export default function ReviewPeriodAutoRules({ periodId }: Props) {
@@ -30,6 +34,7 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
   const queryClient = useQueryClient();
   const [newRuleType, setNewRuleType] = useState('');
   const [newDeadlineDays, setNewDeadlineDays] = useState<number>(14);
+  const [newLockDate, setNewLockDate] = useState<Date | undefined>(undefined);
 
   const { data: rules, isLoading } = useQuery({
     queryKey: ['review-period-auto-rules', periodId],
@@ -46,7 +51,7 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
   });
 
   const addRule = useMutation({
-    mutationFn: async ({ ruleType, deadlineDays }: { ruleType: string; deadlineDays?: number }) => {
+    mutationFn: async ({ ruleType, deadlineDays, lockDate }: { ruleType: string; deadlineDays?: number; lockDate?: string }) => {
       const template = RULE_TYPES.find(r => r.value === ruleType);
       const triggerCondition: Record<string, unknown> = { description: template?.description || '' };
       if ((ruleType === 'deadline_passed' || ruleType === 'auto_advance_zero') && deadlineDays) {
@@ -55,6 +60,9 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
       if (ruleType === 'auto_advance_zero') {
         triggerCondition.default_score = 0;
         triggerCondition.target_stages = ['kra_set', 'self_review'];
+      }
+      if (ruleType === 'scheduled_lock' && lockDate) {
+        triggerCondition.lock_date = lockDate;
       }
       const actionPayload = ruleType === 'auto_advance_zero'
         ? { action_type: 'auto_advance', default_score: 0 }
@@ -72,6 +80,7 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['review-period-auto-rules', periodId] });
       setNewRuleType('');
+      setNewLockDate(undefined);
       toast({ title: 'Rule added' });
     },
     onError: (err: Error) => {
@@ -154,10 +163,27 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
                 <span className="text-sm text-muted-foreground">days</span>
               </div>
             )}
+            {newRuleType === 'scheduled_lock' && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-[160px] justify-start text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {newLockDate ? format(newLockDate, 'PPP') : 'Pick a date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar mode="single" selected={newLockDate} onSelect={setNewLockDate} disabled={(date) => date < new Date()} initialFocus />
+                </PopoverContent>
+              </Popover>
+            )}
             <Button
               size="sm"
-              onClick={() => newRuleType && addRule.mutate({ ruleType: newRuleType, deadlineDays: (newRuleType === 'deadline_passed' || newRuleType === 'auto_advance_zero') ? newDeadlineDays : undefined })}
-              disabled={!newRuleType || addRule.isPending || ((newRuleType === 'deadline_passed' || newRuleType === 'auto_advance_zero') && (!newDeadlineDays || newDeadlineDays < 1))}
+              onClick={() => newRuleType && addRule.mutate({
+                ruleType: newRuleType,
+                deadlineDays: (newRuleType === 'deadline_passed' || newRuleType === 'auto_advance_zero') ? newDeadlineDays : undefined,
+                lockDate: newRuleType === 'scheduled_lock' && newLockDate ? newLockDate.toISOString().split('T')[0] : undefined,
+              })}
+              disabled={!newRuleType || addRule.isPending || ((newRuleType === 'deadline_passed' || newRuleType === 'auto_advance_zero') && (!newDeadlineDays || newDeadlineDays < 1)) || (newRuleType === 'scheduled_lock' && !newLockDate)}
             >
               <Plus className="h-4 w-4 mr-1" /> Add
             </Button>
@@ -207,6 +233,8 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
                           />
                           <span>days from stage start date</span>
                         </div>
+                      ) : rule.rule_type === 'scheduled_lock' ? (
+                        <span>Lock on <strong>{(rule.trigger_condition as any)?.lock_date || 'N/A'}</strong></span>
                       ) : (
                         template?.description || (rule.trigger_condition as any)?.description || '—'
                       )}
