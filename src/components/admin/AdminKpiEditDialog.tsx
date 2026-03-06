@@ -6,14 +6,19 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useKraCategories, useProfiles } from '@/hooks/useOrganization';
 import { useAdminUpdateKpi, ReviewStatus, KPI } from '@/hooks/useKpis';
-import { Loader2, Building2 } from 'lucide-react';
+import { Loader2, Building2, Info } from 'lucide-react';
 import { UomTypeSelector } from '@/components/admin/UomTypeSelector';
 import { TieredOptionsBuilder } from '@/components/admin/TieredOptionsBuilder';
 import { UomType, QualitativeOption, validateQualitativeOptions } from '@/lib/qualitativeUom';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+type ApplyScope = 'this_month' | 'future_months' | 'all_months';
 
 interface AdminKpiEditDialogProps {
   isOpen: boolean;
@@ -73,6 +78,7 @@ const [formData, setFormData] = useState({
     threshold_mode: 'absolute' as 'absolute' | 'ratio',
   });
   const [reason, setReason] = useState('');
+  const [applyScope, setApplyScope] = useState<ApplyScope>('this_month');
   const originalStatus = kpi?.status;
   useEffect(() => {
     if (kpi) {
@@ -106,6 +112,7 @@ const [formData, setFormData] = useState({
         threshold_mode: (kpi.threshold_mode as 'absolute' | 'ratio') || 'absolute',
       });
       setReason('');
+      setApplyScope('this_month');
     }
   }, [kpi]);
 
@@ -117,23 +124,12 @@ const [formData, setFormData] = useState({
   const handleSubmit = async () => {
     if (!kpi) return;
     
-    // Require reason if status is changed
     const statusChanged = formData.status !== originalStatus;
-    if (statusChanged && !reason.trim()) {
-      return; // Form validation will show the required state
-    }
+    if (statusChanged && !reason.trim()) return;
+    if (formData.uom_type === 'tiered' && tieredValidationError) return;
 
-    // Validate tiered options if uom_type is tiered
-    if (formData.uom_type === 'tiered' && tieredValidationError) {
-      return;
-    }
-
-    await updateKpi.mutateAsync({
-      id: kpi.id,
-      employee_id: formData.employee_id,
-      category_id: formData.category_id,
-      kra_name: formData.kra_name,
-      kpi_name: formData.kpi_name,
+    // Build the structural fields payload
+    const structuralFields = {
       target_value: formData.uom_type === 'numeric' ? (formData.target_value ? parseFloat(formData.target_value) : null) : null,
       uom: formData.uom || null,
       weightage: formData.weightage ? parseFloat(formData.weightage) : null,
@@ -141,9 +137,6 @@ const [formData, setFormData] = useState({
       frequency_cycle_start: (formData.frequency_cycle_start && formData.frequency_cycle_start !== 'system_default') ? formData.frequency_cycle_start : null,
       criteria: formData.uom_type === 'numeric' ? (formData.criteria || null) : null,
       source_of_data: formData.source_of_data || null,
-      review_period: formData.review_period || null,
-      review_year: formData.review_year ? parseInt(formData.review_year) : null,
-      status: formData.status,
       r5: formData.uom_type === 'numeric' ? (formData.r5 || null) : null,
       r4: formData.uom_type === 'numeric' ? (formData.r4 || null) : null,
       r3: formData.uom_type === 'numeric' ? (formData.r3 || null) : null,
@@ -157,8 +150,88 @@ const [formData, setFormData] = useState({
       require_resubmit_reason: formData.require_resubmit_reason,
       day_count_type: formData.frequency === 'Daily' ? formData.day_count_type : null,
       threshold_mode: formData.uom_type === 'numeric' ? formData.threshold_mode : null,
+    };
+
+    // 1. Update the current KPI (existing behavior)
+    await updateKpi.mutateAsync({
+      id: kpi.id,
+      employee_id: formData.employee_id,
+      category_id: formData.category_id,
+      kra_name: formData.kra_name,
+      kpi_name: formData.kpi_name,
+      ...structuralFields,
+      review_period: formData.review_period || null,
+      review_year: formData.review_year ? parseInt(formData.review_year) : null,
+      status: formData.status,
       reason,
     });
+
+    // 2. If scope is broader, batch-update sibling KPIs
+    if (applyScope !== 'this_month' && kpi.review_year && kpi.review_period) {
+      try {
+        const currentMonthIndex = MONTHS.indexOf(kpi.review_period);
+        
+        // Query sibling KPIs
+        let query = supabase
+          .from('kpis')
+          .select('id, review_period')
+          .eq('employee_id', kpi.employee_id)
+          .eq('kra_name', kpi.kra_name)
+          .eq('kpi_name', kpi.kpi_name)
+          .eq('review_year', kpi.review_year)
+          .neq('id', kpi.id);
+
+        const { data: siblings, error: fetchError } = await query;
+        if (fetchError) throw fetchError;
+
+        // Filter by month scope
+        const filteredSiblings = (siblings || []).filter(s => {
+          if (!s.review_period) return false;
+          const siblingMonthIndex = MONTHS.indexOf(s.review_period);
+          if (siblingMonthIndex === -1) return false;
+          if (applyScope === 'future_months') return siblingMonthIndex > currentMonthIndex;
+          return true; // all_months
+        });
+
+        if (filteredSiblings.length > 0) {
+          const { data: { user } } = await supabase.auth.getUser();
+          
+          // Batch update each sibling
+          for (const sibling of filteredSiblings) {
+            const { error: updateError } = await supabase
+              .from('kpis')
+              .update({ ...(structuralFields as any), updated_at: new Date().toISOString() })
+              .eq('id', sibling.id);
+
+            if (updateError) {
+              console.error(`Failed to update sibling KPI ${sibling.id}:`, updateError);
+              continue;
+            }
+
+            // Audit log for each sibling
+            if (user) {
+              await supabase.from('kpi_audit_logs').insert({
+                kpi_id: sibling.id,
+                performed_by: user.id,
+                action: 'admin_bulk_apply',
+                new_value: structuralFields as any,
+                metadata: {
+                  source: 'admin_bulk_apply',
+                  source_kpi_id: kpi.id,
+                  source_month: kpi.review_period,
+                  reason: reason || 'Bulk applied from admin editor',
+                },
+              });
+            }
+          }
+
+          toast.success(`KPI updated + ${filteredSiblings.length} sibling month(s) updated`);
+        }
+      } catch (err) {
+        console.error('Sibling bulk update failed:', err);
+        toast.error('Primary KPI saved, but some sibling months failed to update');
+      }
+    }
 
     onClose();
   };
@@ -618,6 +691,43 @@ const [formData, setFormData] = useState({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Apply Scope Selector */}
+          <div className="p-4 border rounded-lg bg-primary/5 border-primary/20 space-y-3">
+            <div className="flex items-center gap-2">
+              <Info className="h-4 w-4 text-primary" />
+              <Label className="text-sm font-medium">Apply Changes To</Label>
+            </div>
+            <RadioGroup
+              value={applyScope}
+              onValueChange={(value) => setApplyScope(value as ApplyScope)}
+              className="flex flex-col gap-2"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="this_month" id="scope_this" />
+                <Label htmlFor="scope_this" className="text-sm font-normal cursor-pointer">
+                  This month only
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="future_months" id="scope_future" />
+                <Label htmlFor="scope_future" className="text-sm font-normal cursor-pointer">
+                  All future months <span className="text-muted-foreground">(same year, after {kpi?.review_period || 'current month'})</span>
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="all_months" id="scope_all" />
+                <Label htmlFor="scope_all" className="text-sm font-normal cursor-pointer">
+                  All months <span className="text-muted-foreground">(every month in {kpi?.review_year || 'this year'})</span>
+                </Label>
+              </div>
+            </RadioGroup>
+            {applyScope !== 'this_month' && (
+              <p className="text-xs text-muted-foreground">
+                Structural fields (target, thresholds, weightage, UOM, etc.) will be applied to matching sibling KPIs. Status and achieved values are never changed.
+              </p>
+            )}
           </div>
 
           {/* Reason for Change */}
