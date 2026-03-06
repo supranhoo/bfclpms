@@ -80,6 +80,7 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['review-period-auto-rules', periodId] });
       setNewRuleType('');
+      setNewLockDate(undefined);
       toast({ title: 'Rule added' });
     },
     onError: (err: Error) => {
