@@ -70,7 +70,8 @@ export default function ReviewPeriodRolePermissions({ locks, onSaveRoleLock, sav
       const perms = rolePerms[role];
       if (!perms) return;
       // Check if any permission is restricted (not all true)
-      const isRestricted = PERMISSION_KEYS.some(k => !perms[k]);
+      const OPERATIONAL_KEYS = PERMISSION_KEYS.filter(k => k !== 'view_only');
+      const isRestricted = OPERATIONAL_KEYS.some(k => !perms[k]) || !!perms['view_only'];
       onSaveRoleLock({
         lock_type: 'role',
         target_id: role,
@@ -115,7 +116,8 @@ export default function ReviewPeriodRolePermissions({ locks, onSaveRoleLock, sav
             <TableBody>
               {ALL_APP_ROLES.map(role => {
                 const perms = rolePerms[role] || DEFAULT_PERMISSIONS;
-                const isRestricted = PERMISSION_KEYS.some(k => !perms[k]);
+                const OPERATIONAL_KEYS = PERMISSION_KEYS.filter(k => k !== 'view_only');
+                const isRestricted = OPERATIONAL_KEYS.some(k => !perms[k]) || !!perms['view_only'];
                 return (
                   <TableRow key={role}>
                     <TableCell className="font-medium">{ROLE_LABELS[role] || role}</TableCell>
