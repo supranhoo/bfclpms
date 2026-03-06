@@ -44,6 +44,24 @@ export function ReviewTrailCard({
 
   return (
     <div className="space-y-4">
+      {/* Auto-Advance Warning */}
+      {(submission as any)?.auto_advance_reason && (
+        <Card className="border-orange-300 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800">
+          <CardContent className="pt-4">
+            <div className="flex items-start gap-3">
+              <div className="h-8 w-8 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-orange-800 dark:text-orange-200">Auto-Advanced by System</p>
+                <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
+                  {(submission as any).auto_advance_reason}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       {/* Query Alert if any open queries */}
       {openQueries.length > 0 && (
         <Card className="border-orange-300 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800">

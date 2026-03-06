@@ -167,6 +167,16 @@ export function KpiJourneySection({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Auto-Advance Warning Banner */}
+        {(submission as any)?.auto_advance_reason && (
+          <Alert className="border-orange-500/30 bg-orange-500/5">
+            <AlertTriangle className="h-4 w-4 text-orange-600" />
+            <AlertDescription className="text-sm">
+              <strong>System Auto-Advanced:</strong> {(submission as any).auto_advance_reason}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Review Stages Grid */}
         <div className={`grid ${gridCols} gap-2 lg:gap-3`}>
         {visibleStages.map(stage => {
