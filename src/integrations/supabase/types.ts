@@ -2359,9 +2359,193 @@ export type Database = {
           },
         ]
       }
-      review_periods: {
+      review_period_audit_log: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          new_state: Json | null
+          performed_by: string | null
+          previous_state: Json | null
+          reason: string | null
+          review_period_id: string
+          target_id: string | null
+          target_type: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          new_state?: Json | null
+          performed_by?: string | null
+          previous_state?: Json | null
+          reason?: string | null
+          review_period_id: string
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          new_state?: Json | null
+          performed_by?: string | null
+          previous_state?: Json | null
+          reason?: string | null
+          review_period_id?: string
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_period_audit_log_review_period_id_fkey"
+            columns: ["review_period_id"]
+            isOneToOne: false
+            referencedRelation: "review_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      review_period_auto_rules: {
+        Row: {
+          action: Json
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          review_period_id: string
+          rule_type: string
+          trigger_condition: Json
+          updated_at: string
+        }
+        Insert: {
+          action?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          review_period_id: string
+          rule_type: string
+          trigger_condition?: Json
+          updated_at?: string
+        }
+        Update: {
+          action?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          review_period_id?: string
+          rule_type?: string
+          trigger_condition?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_period_auto_rules_review_period_id_fkey"
+            columns: ["review_period_id"]
+            isOneToOne: false
+            referencedRelation: "review_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      review_period_locks: {
         Row: {
           created_at: string
+          id: string
+          is_locked: boolean
+          lock_type: string
+          locked_at: string | null
+          locked_by: string | null
+          permissions: Json
+          reason: string | null
+          review_period_id: string
+          target_id: string | null
+          unlock_reason: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_locked?: boolean
+          lock_type: string
+          locked_at?: string | null
+          locked_by?: string | null
+          permissions?: Json
+          reason?: string | null
+          review_period_id: string
+          target_id?: string | null
+          unlock_reason?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_locked?: boolean
+          lock_type?: string
+          locked_at?: string | null
+          locked_by?: string | null
+          permissions?: Json
+          reason?: string | null
+          review_period_id?: string
+          target_id?: string | null
+          unlock_reason?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_period_locks_review_period_id_fkey"
+            columns: ["review_period_id"]
+            isOneToOne: false
+            referencedRelation: "review_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      review_period_stages: {
+        Row: {
+          created_at: string
+          ended_at: string | null
+          id: string
+          review_period_id: string
+          stage: string
+          started_at: string
+          started_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          review_period_id: string
+          stage: string
+          started_at?: string
+          started_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          review_period_id?: string
+          stage?: string
+          started_at?: string
+          started_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_period_stages_review_period_id_fkey"
+            columns: ["review_period_id"]
+            isOneToOne: false
+            referencedRelation: "review_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      review_periods: {
+        Row: {
+          completion_percentage: number
+          created_at: string
+          current_stage: string
           end_date: string | null
           id: string
           is_locked: boolean
@@ -2369,11 +2553,14 @@ export type Database = {
           locked_by: string | null
           period_name: string
           review_year: number
+          stage_started_at: string | null
           start_date: string | null
           updated_at: string
         }
         Insert: {
+          completion_percentage?: number
           created_at?: string
+          current_stage?: string
           end_date?: string | null
           id?: string
           is_locked?: boolean
@@ -2381,11 +2568,14 @@ export type Database = {
           locked_by?: string | null
           period_name: string
           review_year: number
+          stage_started_at?: string | null
           start_date?: string | null
           updated_at?: string
         }
         Update: {
+          completion_percentage?: number
           created_at?: string
+          current_stage?: string
           end_date?: string | null
           id?: string
           is_locked?: boolean
@@ -2393,6 +2583,7 @@ export type Database = {
           locked_by?: string | null
           period_name?: string
           review_year?: number
+          stage_started_at?: string | null
           start_date?: string | null
           updated_at?: string
         }
@@ -3098,6 +3289,15 @@ export type Database = {
       aggregate_sub_period_scores: {
         Args: { p_kpi_id: string; p_month: string; p_year: number }
         Returns: number
+      }
+      check_review_period_permission: {
+        Args: {
+          p_action: string
+          p_period_name: string
+          p_review_year: number
+          p_user_id: string
+        }
+        Returns: boolean
       }
       check_template_has_active_kpis: {
         Args: { template_uuid: string }
