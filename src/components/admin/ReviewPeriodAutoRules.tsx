@@ -197,7 +197,7 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
                               }
                             }}
                           />
-                          <span>days</span>
+                          <span>days from stage start date</span>
                         </div>
                       ) : (
                         template?.description || (rule.trigger_condition as any)?.description || '—'
