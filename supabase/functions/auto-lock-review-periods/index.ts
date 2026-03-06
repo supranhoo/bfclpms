@@ -175,6 +175,103 @@ Deno.serve(async (req) => {
           }
           break;
         }
+
+        case 'auto_advance_zero': {
+          // Auto-advance stuck KPIs with 0 score after deadline
+          const advanceCondition = rule.trigger_condition as { deadline_days?: number; default_score?: number; target_stages?: string[] };
+          const deadlineDays = advanceCondition.deadline_days || 14;
+          const defaultScore = advanceCondition.default_score ?? 0;
+          const targetStages = advanceCondition.target_stages || ['kra_set', 'self_review'];
+
+          // Check if stage has been active long enough
+          const { data: stageRecord } = await supabase
+            .from('review_period_stages')
+            .select('started_at')
+            .eq('review_period_id', period.id)
+            .eq('stage', period.current_stage)
+            .is('ended_at', null)
+            .maybeSingle();
+
+          if (!stageRecord) break;
+
+          const elapsedDays = (Date.now() - new Date(stageRecord.started_at).getTime()) / (1000 * 60 * 60 * 24);
+          if (elapsedDays <= deadlineDays) break;
+
+          // Find all stuck KPIs for this period
+          const { data: stuckKpis } = await supabase
+            .from('kpis')
+            .select('id, employee_id, status, kpi_name, kra_name')
+            .eq('review_period', period.period_name)
+            .eq('review_year', period.review_year)
+            .in('status', targetStages);
+
+          if (!stuckKpis || stuckKpis.length === 0) break;
+
+          const autoAdvanceReason = `Auto-advanced with score ${defaultScore}: Employee did not submit within ${deadlineDays} days of stage start`;
+
+          for (const kpi of stuckKpis) {
+            // Determine next status based on current
+            let nextStatus = 'manager_check';
+            if (kpi.status === 'kra_set') nextStatus = 'self_review';
+
+            // Upsert review submission with 0 score
+            const { data: existingSub } = await supabase
+              .from('review_submissions')
+              .select('id')
+              .eq('kpi_id', kpi.id)
+              .maybeSingle();
+
+            if (existingSub) {
+              await supabase
+                .from('review_submissions')
+                .update({
+                  self_score: defaultScore,
+                  self_rating: defaultScore,
+                  self_remarks: autoAdvanceReason,
+                  auto_advance_reason: autoAdvanceReason,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', existingSub.id);
+            } else {
+              await supabase
+                .from('review_submissions')
+                .insert({
+                  kpi_id: kpi.id,
+                  self_score: defaultScore,
+                  self_rating: defaultScore,
+                  self_remarks: autoAdvanceReason,
+                  auto_advance_reason: autoAdvanceReason,
+                });
+            }
+
+            // Advance KPI status
+            await supabase
+              .from('kpis')
+              .update({ status: nextStatus, updated_at: new Date().toISOString() })
+              .eq('id', kpi.id);
+
+            // Audit log
+            await supabase.from('review_period_audit_log').insert({
+              review_period_id: period.id,
+              action: 'kpi_auto_advanced',
+              reason: autoAdvanceReason,
+              target_type: 'employee',
+              target_id: kpi.employee_id,
+              new_state: {
+                kpi_id: kpi.id,
+                kpi_name: kpi.kpi_name,
+                from_status: kpi.status,
+                to_status: nextStatus,
+                default_score: defaultScore,
+                auto: true,
+              },
+            });
+
+            kpisAutoAdvanced++;
+            auditEntries++;
+          }
+          break;
+        }
       }
 
       // Handle global trigger (deadline_passed, calibration_complete)
