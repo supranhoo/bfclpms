@@ -478,6 +478,9 @@ export function SelfReviewSheet({
     onOpenChange(false);
   };
 
+  // Governance permissions — must be called before any early return to satisfy Rules of Hooks
+  const govPerms = useReviewPeriodPermissions(selectedPeriod, selectedYear);
+
   if (!selectedKpi) return null;
 
   // Compute state
@@ -499,8 +502,6 @@ export function SelfReviewSheet({
   const needsSubPeriodForKpi = selectedKpi ? requiresSubPeriodSelection(selectedKpi.frequency as FrequencyType) : false;
   const isSelfReview = selectedKpi?.status === 'self_review';
 
-  // Governance permissions
-  const govPerms = useReviewPeriodPermissions(selectedPeriod, selectedYear);
   const isGovernanceLocked = !govPerms.submit_self_review || govPerms.view_only;
 
   const isReadOnly = (!isKraSet && !isSelfReview) || isGovernanceLocked;
