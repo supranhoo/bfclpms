@@ -31,6 +31,8 @@ import { Building2, AlertTriangle, Search, Copy, Upload, Users as UsersIcon, Lig
 import { isKpiLockedForPeriod, getActiveMonthForCycle } from '@/lib/frequencyUtils';
 import { differenceInDays, parse } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
+import { GovernanceLockBanner } from '@/components/review/GovernanceLockBanner';
 
 // Helper to get previous period
 function getPreviousPeriod(period: string, year: number): { period: string; year: number } {
@@ -96,6 +98,10 @@ export default function OrgKpiDataEntry() {
   const { ownershipMap, isAdmin } = useOrgKpiOwnershipMap();
   const bulkUpsert = useBulkUpsertOrgKpiValues();
   const propagate = usePropagateOrgKpiValue();
+
+  // Governance permissions check
+  const governancePerms = useReviewPeriodPermissions(selectedPeriod, selectedYear);
+  const governanceLocked = governancePerms.view_only || !governancePerms.edit_scores;
   const insertAuditLogs = useBatchInsertAuditLogs();
   const rollbackMutation = useRollbackOrgKpiPropagation();
   const bulkRollbackMutation = useBulkRollbackOrgKpiPropagation();
@@ -809,6 +815,11 @@ export default function OrgKpiDataEntry() {
         </p>
       </div>
 
+      {/* Governance Lock Banner */}
+      {!governancePerms.isLoading && governanceLocked && (
+        <GovernanceLockBanner permissions={governancePerms} viewLevel="employee" />
+      )}
+
       {/* No KPIs warning */}
       {orgLevelData && orgLevelData.totalOrgKpis === 0 && (
         <Card className="border-destructive/50 bg-destructive/5">
@@ -1037,6 +1048,7 @@ export default function OrgKpiDataEntry() {
                       reviewPeriod={selectedPeriod}
                       reviewYear={selectedYear}
                       isAdmin={isAdmin}
+                      governanceLocked={governanceLocked}
                       employeeKpiIds={empKpiIds}
                       onSave={(values) => handleCardSave(kpi, values)}
                       onSaveAndPropagate={(values) => handleCardSaveAndPropagate(kpi, values)}

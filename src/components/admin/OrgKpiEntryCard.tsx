@@ -61,6 +61,7 @@ interface OrgKpiEntryCardProps {
   reviewPeriod: string;
   reviewYear: number;
   isAdmin?: boolean;
+  governanceLocked?: boolean;
   employeeKpiIds?: string[];
   onSave: (values: {
     achievedValue: number | null;
@@ -97,8 +98,8 @@ const scopeIcons = {
   employee: User,
 };
 
-export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, employeeKpiIds, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg }: OrgKpiEntryCardProps) {
-  const isLocked = data.status === 'propagated' && !isAdmin;
+export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, governanceLocked, employeeKpiIds, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg }: OrgKpiEntryCardProps) {
+  const isLocked = (data.status === 'propagated' && !isAdmin) || (governanceLocked === true);
   const isPropagated = data.status === 'propagated';
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [isRollingBack, setIsRollingBack] = useState(false);
