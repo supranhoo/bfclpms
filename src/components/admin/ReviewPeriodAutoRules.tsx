@@ -188,9 +188,9 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
                       <Badge variant="outline">{template?.label || rule.rule_type}</Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {rule.rule_type === 'deadline_passed' ? (
+                      {(rule.rule_type === 'deadline_passed' || rule.rule_type === 'auto_advance_zero') ? (
                         <div className="flex items-center gap-2">
-                          <span>Lock self-review after</span>
+                          <span>{rule.rule_type === 'auto_advance_zero' ? 'Auto-advance stuck KPIs after' : 'Lock self-review after'}</span>
                           <Input
                             type="number"
                             min={1}
