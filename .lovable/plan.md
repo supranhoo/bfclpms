@@ -1,35 +1,47 @@
 
 
-# Plan: Update DOCUMENTATION.md with Review Period Governance Section
+# Fix: Completion Percentage Showing 17% for All Months
 
-## Problem
-The `DOCUMENTATION.md` file references the Governance system only in the version header (line 4). There is no dedicated section documenting the architecture, database tables, components, hooks, edge function, or the three-layer enforcement model (RLS + Workflow + Governance).
+## Root Cause
 
-## What Will Be Added
+The "Completion" percentage is **never dynamically calculated** from actual KPI data. Here's what happens:
 
-### 1. Database Schema Section (under existing Tables Reference)
-Add documentation for the four governance tables:
-- `review_period_locks` — lock records with hierarchy (Global > Role > Department > Employee), permissions JSON, reason, is_locked
-- `review_period_auto_rules` — configurable auto-lock triggers (deadline_passed, review_submitted, approval_complete, calibration_complete) with `trigger_condition` and `action` JSON columns
-- `review_period_audit_log` — immutable audit trail for all governance actions
-- `review_period_stages` — stage lifecycle tracking (started_at, ended_at per stage)
+1. The `completion_percentage` column in `review_periods` table defaults to `0`
+2. The `ReviewPeriodOverview` component uses: `period.completion_percentage || progressPct`
+3. Since `completion_percentage` is `0` (falsy), it falls back to `progressPct`
+4. `progressPct` is calculated from the governance stage index: `(currentIdx + 1) / 6 * 100`
+5. All periods are at `planning` stage (index 0), so: `1/6 ≈ 17%`
 
-### 2. Feature Section: Review Period Governance
-A new subsection under "Detailed Feature Breakdown" covering:
-- **Three-Layer Architecture** — table showing RLS (database security), Workflow (status transitions), Governance (UI permission gating) and how they coexist
-- **Lock Hierarchy** — Employee > Department > Role > Global resolution order via `check_review_period_permission` RPC
-- **7-Tab Governance Center** — Overview, Global Locks, Role Permissions, Department Locks, Employee Locks, Auto Rules, Audit Log
-- **Auto-Lock Rules** — the four rule types, how `deadline_days` works for `deadline_passed`, event-driven triggers for the rest
-- **Enforcement Hook** — `useReviewPeriodPermissions` hook description, which components consume it (SelfReviewSheet, EmployeeScorecard, ManagementScorecard, AuditScorecard, KpiHeaderSection, GovernanceLockBanner)
-- **Edge Function** — `auto-lock-review-periods` cron function behavior
-- **Dashboard Widget** — `ReviewPeriodStatusWidget` on Management Dashboard
+The same issue affects the `ReviewPeriodStatusWidget` on the Management Dashboard.
 
-### 3. Version History Entry
-Add entry for the `deadline_days` UI fix under Version History.
+## Fix
 
-## File Modified
-- `DOCUMENTATION.md` — Add governance documentation section and update tables reference
+Calculate completion dynamically from actual KPI workflow statuses when fetching period data, rather than relying on a static DB column.
 
-## No database, RLS, or edge function changes needed
-This is a documentation-only update.
+### 1. Update `ReviewPeriods.tsx` query (data fetching)
+
+Extend the existing query to also fetch KPI statuses per period. Calculate completion as:
+
+```
+completion = (approved KPIs / total KPIs) * 100
+```
+
+Where "approved" means KPIs with `status = 'approved'`. This gives a real percentage based on how many KPIs have completed the full workflow.
+
+The query already fetches `review_period` and `review_year` from `kpis` — we add `status` to the select, then compute the ratio per period.
+
+### 2. Update `ReviewPeriodStatusWidget.tsx` query
+
+Same approach: fetch KPI statuses alongside period data to compute real completion instead of using the static DB value.
+
+### 3. Update `ReviewPeriodOverview.tsx` display logic
+
+Remove the `|| progressPct` fallback for the Completion card. The stage-based progress already has its own dedicated "Stage Progress" pipeline visualization — conflating it with KPI completion is misleading. The Completion card should show KPI-based completion only.
+
+### Files Modified
+- `src/pages/admin/ReviewPeriods.tsx` — compute real completion from KPI statuses
+- `src/components/management/ReviewPeriodStatusWidget.tsx` — compute real completion from KPI statuses
+- `src/components/admin/ReviewPeriodOverview.tsx` — remove misleading stage-based fallback
+
+### No database or RLS changes needed
 
