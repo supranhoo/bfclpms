@@ -8,7 +8,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, Shield, Activity, Building2, User, Zap, ScrollText, FileText } from 'lucide-react';
+import { Calendar, Shield, Activity, Building2, User, Zap, ScrollText, FileText, HelpCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 import { STAGE_LABELS } from '@/hooks/useReviewPeriodGovernance';
 import ReviewPeriodOverview from '@/components/admin/ReviewPeriodOverview';
 import ReviewPeriodStageController from '@/components/admin/ReviewPeriodStageController';
@@ -157,23 +159,30 @@ export default function ReviewPeriods() {
           </div>
         </div>
 
-        {/* Period Selector */}
-        <Select
-          value={selectedPeriod ? `${selectedPeriod.period_name}-${selectedPeriod.review_year}` : ''}
-          onValueChange={handleSelectPeriod}
-        >
-          <SelectTrigger className="w-[280px]">
-            <SelectValue placeholder="Select a review period..." />
-          </SelectTrigger>
-          <SelectContent>
-            {(periods || []).map(p => (
-              <SelectItem key={`${p.period_name}-${p.review_year}`} value={`${p.period_name}-${p.review_year}`}>
-                {p.period_name} {p.review_year} — {p.kpi_count} KRAs
-                {p.is_locked && ' 🔒'}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Period Selector + Help */}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/admin/governance-explainer">
+              <HelpCircle className="h-4 w-4 mr-1" /> Explainer
+            </Link>
+          </Button>
+          <Select
+            value={selectedPeriod ? `${selectedPeriod.period_name}-${selectedPeriod.review_year}` : ''}
+            onValueChange={handleSelectPeriod}
+          >
+            <SelectTrigger className="w-[280px]">
+              <SelectValue placeholder="Select a review period..." />
+            </SelectTrigger>
+            <SelectContent>
+              {(periods || []).map(p => (
+                <SelectItem key={`${p.period_name}-${p.review_year}`} value={`${p.period_name}-${p.review_year}`}>
+                  {p.period_name} {p.review_year} — {p.kpi_count} KRAs
+                  {p.is_locked && ' 🔒'}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Loading / Empty */}
