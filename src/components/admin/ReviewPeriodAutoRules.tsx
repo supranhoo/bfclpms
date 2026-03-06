@@ -156,8 +156,8 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
             )}
             <Button
               size="sm"
-              onClick={() => newRuleType && addRule.mutate({ ruleType: newRuleType, deadlineDays: newRuleType === 'deadline_passed' ? newDeadlineDays : undefined })}
-              disabled={!newRuleType || addRule.isPending || (newRuleType === 'deadline_passed' && (!newDeadlineDays || newDeadlineDays < 1))}
+              onClick={() => newRuleType && addRule.mutate({ ruleType: newRuleType, deadlineDays: (newRuleType === 'deadline_passed' || newRuleType === 'auto_advance_zero') ? newDeadlineDays : undefined })}
+              disabled={!newRuleType || addRule.isPending || ((newRuleType === 'deadline_passed' || newRuleType === 'auto_advance_zero') && (!newDeadlineDays || newDeadlineDays < 1))}
             >
               <Plus className="h-4 w-4 mr-1" /> Add
             </Button>
