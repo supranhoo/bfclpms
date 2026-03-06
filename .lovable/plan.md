@@ -1,41 +1,40 @@
 
 
-# Impact Check: Recent Governance Changes & Gaps
+# Analysis: Org KPI Data Owners & Governance Permissions
 
-## Changes Made
-1. **Completion percentage fix** — Dynamic calculation from KPI statuses (`approved/total * 100`) in `ReviewPeriods.tsx` and `ReviewPeriodStatusWidget.tsx`; removed misleading `|| progressPct` fallback in `ReviewPeriodOverview.tsx`
-2. **Auto-lock label fix** — Clarified "days" to "days from stage start date" in `ReviewPeriodAutoRules.tsx`
-3. **DOCUMENTATION.md** — Added full governance section
+## Current State
 
-## Impact Assessment
+Data Owners are **not integrated** with the Role Permission Matrix. Here's why:
 
-### No Issues Found
-- **ReviewPeriods.tsx** — Already computes `completion_percentage` dynamically from KPI data; passes it correctly to `ReviewPeriodOverview`
-- **ReviewPeriodStatusWidget.tsx** — Same dynamic calculation; renders correctly via `<Progress>` and text
-- **ReviewPeriodOverview.tsx** — Now shows only `period.completion_percentage` (line 72-73), no fallback. The `progressPct` variable on line 36 is still computed but **never used** — dead code
+1. **Data Owner is not a role** — It's a per-KPI assignment stored in `org_kpi_data_owners`, not part of the `app_role` enum (admin, manager, employee, etc.)
+2. **OrgKpiDataEntry page never checks governance permissions** — It imports `useOrgKpiOwnershipMap` for access control but does NOT import or use `useReviewPeriodPermissions`
+3. **The `check_review_period_permission` RPC** resolves permissions by Employee → Department → Role → Global hierarchy. It has no concept of "data owner" as a permission target
 
-### Issues Found
+## The Gap
 
-| # | Issue | Severity | File |
-|---|-------|----------|------|
-| 1 | **Dead code**: `progressPct` variable (line 36) is computed but never referenced after the fallback removal | Low | `ReviewPeriodOverview.tsx` |
-| 2 | **Test uses stale data**: `ReviewPeriodOverview.test.tsx` sets `completion_percentage: 0` — the test still passes because nothing asserts on the completion value, but the test should verify the completion card renders the correct percentage | Medium | `ReviewPeriodOverview.test.tsx` |
-| 3 | **Period key splitting bug**: `ReviewPeriods.tsx` line 79 splits the key with `-`, but period names like "January" don't contain `-`. The split `key.split('-')` on a key like `January-2026` yields `['January', '2026']` — this works. However, if a period name ever contained `-` (e.g. "H1-2026" as a name with year 2026 → key "H1-2026-2026"), the split would break. Currently safe since period names are month names, but fragile | Low | `ReviewPeriods.tsx` |
+If an admin locks a review period (e.g., sets "Edit Scores" to OFF for the "employee" role), a Data Owner who holds the "employee" role would be blocked from the Role Permission Matrix — but the **Org KPI Data Entry page ignores governance entirely**, so they can still enter and propagate values freely.
 
-## Proposed Fixes
+This means:
+- Governance locks on the Roles tab have **zero effect** on Org KPI data entry
+- A period could be fully locked, yet data owners can still modify and propagate values
 
-### 1. Remove dead `progressPct` variable
-Delete line 36 in `ReviewPeriodOverview.tsx` — the stage pipeline visualization already handles stage progress visually without needing this computed value.
+## Recommended Fix
 
-### 2. Add completion percentage test assertion
-Update `ReviewPeriodOverview.test.tsx` to set `completion_percentage: 65` in mock data and assert `65%` renders in the UI. This validates the fix works and prevents regression.
+Add governance awareness to the Org KPI Data Entry page:
 
-### 3. No action on key splitting
-The period names come from month names only. Document as a known limitation but no code change needed.
+### 1. Check governance permissions in `OrgKpiDataEntry.tsx`
+- Import `useReviewPeriodPermissions` 
+- Check `edit_scores` permission before allowing value entry
+- Check `view_only` to disable all inputs when the period is locked
+- Show the `GovernanceLockBanner` when restrictions apply
 
-## Files to Modify
-- `src/components/admin/ReviewPeriodOverview.tsx` — remove dead `progressPct` line
-- `src/components/admin/ReviewPeriodOverview.test.tsx` — add completion percentage assertion
+### 2. No changes to the Role Permission Matrix itself
+Data Owners inherit their role's permissions (they are employees/managers who happen to also be data owners). The matrix already covers their underlying role — it just needs to be **enforced** on the data entry page.
 
-## No database, RLS, or edge function changes needed
+### Files to Modify
+- `src/pages/admin/OrgKpiDataEntry.tsx` — integrate `useReviewPeriodPermissions` hook, pass `isLocked` flag to entry cards, show governance banner
+- `src/components/admin/OrgKpiEntryCard.tsx` — accept and respect a `governanceLocked` prop to disable inputs
+
+### No database or RLS changes needed
+The RPC and lock infrastructure already exist; this is purely a frontend enforcement gap.
 
