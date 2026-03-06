@@ -1,52 +1,39 @@
 
 
-# Fix: Performance Trend Still Showing Low Scores
+# Fix: Incorrect Metric Cards (Total Employees & Avg Score)
 
 ## Root Cause Analysis
 
-After querying the database directly, the actual weighted averages per month are:
-- September 2025: **2.67**
-- October 2025: **2.93**
-- November 2025: **3.03**
-- December 2025: **3.07**
-- January 2026: **1.56**
-- February 2026: **0.03** (most KPIs scored 0)
+### Issue 1: "99 / 0" Total Employees
+Line 431: `totalEmployees: hasActiveHierarchyFilters ? filteredEmployeeIds.length : profiles.length`
 
-The trend chart code fix (multiplying `score * w`) is mathematically correct in the file. However, two additional issues remain:
+When `hasActiveHierarchyFilters` is true but `filteredEmployeeIds` is empty (e.g., filter yields no matches), `totalEmployees = 0`. Meanwhile, the KPI query (line 188) skips the employee filter when `filteredEmployeeIds.length === 0`, fetching ALL KPIs — so `employeesWithKpis` shows 99 (all employees with KPIs). Result: "99 / 0".
 
-1. **`calculateMetrics` has the same unfixed bug** (line 232): The main "Weighted Avg Score" metric card adds raw scores without multiplying by weightage, then divides by total weightage — producing deflated values. This affects the primary score card, not the trend chart.
+**Fix**: Always use `profiles.length` for the total denominator. It represents all employees in the organization regardless of filters. When filters are active, show the filtered count separately.
 
-2. **Missing fields in query**: The `review_submissions` select (line 183) does not fetch `hr_pms_score` or `skip_level_score`, which are referenced in the `getScore` fallback chain. If `final_score` is 0 (not null), the fallback won't trigger, but this is still a correctness gap.
+### Issue 2: "39.70 / 5" Avg Score
+The code fix (removing `* 100`, using `getScore` with null-skip) IS correctly applied in the file. However, the database confirms: `(17874 raw_total / 45214 total_weightage) * 100 = 39.53` — matching the OLD formula exactly. This means the preview is serving a stale build or cached computation.
 
-3. **Months with no real data still included**: February 2026 has 1503 KPIs but almost all scored 0.00 (weighted avg 0.033). March/April/May/June 2026 have KPIs with nil scores. The `getScore` function correctly returns `null` for nil scores (skipping them), but 0.00 final_scores ARE included. This is technically correct — those KPIs were scored 0 — but the chart shows these months dragging the trend down, which is misleading.
+Additionally, `employeeScoreMap` (line 315) still uses `getScoreOrZero` which includes ALL KPIs (even unscored ones with score=0), diluting scores for the bell curve and top/bottom performer calculations.
+
+**Fix**: Change `employeeScoreMap` to use `getScore` with null-skip (matching `calculateMetrics`). Also change `kpi.weightage || 100` to `kpi.weightage ?? 100` throughout — the `||` operator treats weightage=0 as falsy, incorrectly replacing it with 100.
 
 ## Changes
 
 ### File: `src/pages/ManagementDashboard.tsx`
 
-**Fix A — `calculateMetrics` weighted average (line 232)**
-Change:
-```typescript
-kpiList.forEach(kpi => { totalScore += getScoreOrZero(kpi); totalWeightage += kpi.weightage || 100; });
-const avgScore = totalWeightage > 0 ? (totalScore / totalWeightage) * 100 : 0;
-```
-To:
-```typescript
-kpiList.forEach(kpi => {
-  const s = getScore(kpi);
-  if (s !== null) {
-    const w = kpi.weightage || 100;
-    totalScore += s * w;
-    totalWeightage += w;
-  }
-});
-const avgScore = totalWeightage > 0 ? (totalScore / totalWeightage) : 0;
-```
-This fixes the same multiplication bug for metric cards, removes the `* 100` (scores are 0-5, not percentage), and skips KPIs with no submission data.
+1. **Line 235, 268, 292-298, 316-319**: Replace `|| 100` with `?? 100` for weightage fallback (prevents 0 → 100 coercion)
 
-**Fix B — Add missing fields to query (line 183)**
-Add `hr_pms_score, skip_level_score` to the `review_submissions` select for complete fallback chain coverage.
+2. **Line 315**: Change `getScoreOrZero(kpi)` to `getScore(kpi)` with null guard — skip unscored KPIs in `employeeScoreMap`
 
-**Fix C — Performance Trend: skip months where data is mostly unprocessed**
-The current filter only checks `hasScores: true`. Add a secondary filter: only include months where the weighted average is meaningful (at least 1 KPI with a non-zero score exists). This prevents months like Feb 2026 (avg 0.03) from distorting the trend when the data is essentially unprocessed.
+3. **Line 431**: Change totalEmployees to always use `profiles.length` — remove the conditional that uses `filteredEmployeeIds.length`
+
+4. **Line 188-189**: When `filteredEmployeeIds.length === 0` and filters are active, return empty array immediately instead of fetching all KPIs (prevents data/count mismatch)
+
+These are all within the same file and affect only the management dashboard data computation. No schema, RLS, or UI component changes needed.
+
+## Risk Assessment
+- **Data Impact**: None — read-only display corrections
+- **Regression Risk**: Low — only fixing math/display consistency within one page
+- **UI Impact**: Scores will display correctly on the 0-5 scale; Total Employees will show accurate organizational count
 
