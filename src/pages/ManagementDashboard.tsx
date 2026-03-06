@@ -185,7 +185,8 @@ export default function ManagementDashboard() {
                 .eq('review_year', calYear)
                 .in('review_period', months)
                 .range(offset, offset + batchSize - 1);
-              if (hasActiveHierarchyFilters && filteredEmployeeIds.length > 0) {
+              if (hasActiveHierarchyFilters) {
+                if (filteredEmployeeIds.length === 0) { hasMore = false; continue; }
                 query = query.in('employee_id', filteredEmployeeIds);
               }
               const { data, error } = await query;
@@ -232,7 +233,7 @@ export default function ManagementDashboard() {
         kpiList.forEach(kpi => {
           const s = getScore(kpi);
           if (s !== null) {
-            const w = kpi.weightage || 100;
+            const w = kpi.weightage ?? 100;
             totalScore += s * w;
             totalWeightage += w;
           }
@@ -265,7 +266,7 @@ export default function ManagementDashboard() {
       const employeePendingMap = new Map<string, { kpiCount: number; totalScore: number; totalWeightage: number }>();
       managementPendingKpis.forEach(kpi => {
         const score = getScoreOrZero(kpi);
-        const w = kpi.weightage || 100;
+        const w = kpi.weightage ?? 100;
         const existing = employeePendingMap.get(kpi.employee_id);
         if (existing) { existing.kpiCount++; existing.totalScore += score * w; existing.totalWeightage += w; }
         else employeePendingMap.set(kpi.employee_id, { kpiCount: 1, totalScore: score * w, totalWeightage: w });
@@ -289,13 +290,13 @@ export default function ManagementDashboard() {
         stats.employees.add(kpi.employee_id);
         stats.totalKpis++;
         const score = getScoreOrZero(kpi);
-        const w = kpi.weightage || 100;
+        const w = kpi.weightage ?? 100;
         stats.totalScore += score * w;
         stats.totalWeightage += w;
         if (kpi.status === 'approved') stats.approvedKpis++;
         if (kpi.status === 'management_review') stats.pendingReviews++;
         const es = stats.employeeScores.get(kpi.employee_id) || { s: 0, w: 0 };
-        es.s += score * w; es.w += (kpi.weightage || 100);
+        es.s += score * w; es.w += (kpi.weightage ?? 100);
         stats.employeeScores.set(kpi.employee_id, es);
       });
 
@@ -312,11 +313,12 @@ export default function ManagementDashboard() {
       const ratingCounts = { band5: 0, band4: 0, band3: 0, band2: 0, band1: 0 };
       const employeeScoreMap = new Map<string, { total: number; count: number; weightage: number }>();
       kpis.forEach(kpi => {
-        const score = getScoreOrZero(kpi);
-        const w = kpi.weightage || 100;
+        const s = getScore(kpi);
+        if (s === null) return;
+        const w = kpi.weightage ?? 100;
         const existing = employeeScoreMap.get(kpi.employee_id);
-        if (existing) { existing.total += score * w; existing.count++; existing.weightage += w; }
-        else employeeScoreMap.set(kpi.employee_id, { total: score * w, count: 1, weightage: w });
+        if (existing) { existing.total += s * w; existing.count++; existing.weightage += w; }
+        else employeeScoreMap.set(kpi.employee_id, { total: s * w, count: 1, weightage: w });
       });
       employeeScoreMap.forEach(({ total, weightage }) => {
         const avgScore = weightage > 0 ? total / weightage : 0;
@@ -428,7 +430,7 @@ export default function ManagementDashboard() {
       ).length;
 
       return {
-        totalEmployees: hasActiveHierarchyFilters ? filteredEmployeeIds.length : profiles.length,
+        totalEmployees: profiles.length,
         employeesWithKpis: employeeScoreMap.size,
         totalKpis: kpis.length,
         openQueries,
