@@ -191,7 +191,7 @@ export default function Dashboard() {
   const allKpiIds = useMemo(() => kpis?.map(k => k.id) || [], [kpis]);
   const { data: allSubmissions } = useReviewSubmissions(selectedKpiReview ? allKpiIds : []);
 
-  const isLoading = kpisLoading || categoriesLoading;
+  const isLoading = kpisLoading || categoriesLoading || !profile;
 
   const submissionMap = useMemo(() => 
     new Map(submissions?.map(s => [s.kpi_id, s])), 
