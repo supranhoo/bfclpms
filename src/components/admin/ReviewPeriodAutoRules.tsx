@@ -51,7 +51,7 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
   });
 
   const addRule = useMutation({
-    mutationFn: async ({ ruleType, deadlineDays }: { ruleType: string; deadlineDays?: number }) => {
+    mutationFn: async ({ ruleType, deadlineDays, lockDate }: { ruleType: string; deadlineDays?: number; lockDate?: string }) => {
       const template = RULE_TYPES.find(r => r.value === ruleType);
       const triggerCondition: Record<string, unknown> = { description: template?.description || '' };
       if ((ruleType === 'deadline_passed' || ruleType === 'auto_advance_zero') && deadlineDays) {
