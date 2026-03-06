@@ -162,10 +162,27 @@ export default function ReviewPeriodAutoRules({ periodId }: Props) {
                 <span className="text-sm text-muted-foreground">days</span>
               </div>
             )}
+            {newRuleType === 'scheduled_lock' && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-[160px] justify-start text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {newLockDate ? format(newLockDate, 'PPP') : 'Pick a date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar mode="single" selected={newLockDate} onSelect={setNewLockDate} disabled={(date) => date < new Date()} initialFocus />
+                </PopoverContent>
+              </Popover>
+            )}
             <Button
               size="sm"
-              onClick={() => newRuleType && addRule.mutate({ ruleType: newRuleType, deadlineDays: (newRuleType === 'deadline_passed' || newRuleType === 'auto_advance_zero') ? newDeadlineDays : undefined })}
-              disabled={!newRuleType || addRule.isPending || ((newRuleType === 'deadline_passed' || newRuleType === 'auto_advance_zero') && (!newDeadlineDays || newDeadlineDays < 1))}
+              onClick={() => newRuleType && addRule.mutate({
+                ruleType: newRuleType,
+                deadlineDays: (newRuleType === 'deadline_passed' || newRuleType === 'auto_advance_zero') ? newDeadlineDays : undefined,
+                lockDate: newRuleType === 'scheduled_lock' && newLockDate ? newLockDate.toISOString().split('T')[0] : undefined,
+              })}
+              disabled={!newRuleType || addRule.isPending || ((newRuleType === 'deadline_passed' || newRuleType === 'auto_advance_zero') && (!newDeadlineDays || newDeadlineDays < 1)) || (newRuleType === 'scheduled_lock' && !newLockDate)}
             >
               <Plus className="h-4 w-4 mr-1" /> Add
             </Button>
