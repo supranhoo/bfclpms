@@ -44,15 +44,19 @@ export default function ReviewPeriods() {
       // Get all KPI period/year combos
       const { data: kpiData, error: kpiErr } = await supabase
         .from('kpis')
-        .select('review_period, review_year')
+        .select('review_period, review_year, status')
         .not('review_period', 'is', null)
         .not('review_year', 'is', null);
       if (kpiErr) throw kpiErr;
 
       const periodCounts: Record<string, number> = {};
+      const periodApproved: Record<string, number> = {};
       kpiData?.forEach(kpi => {
         const key = `${kpi.review_period}-${kpi.review_year}`;
         periodCounts[key] = (periodCounts[key] || 0) + 1;
+        if (kpi.status === 'approved') {
+          periodApproved[key] = (periodApproved[key] || 0) + 1;
+        }
       });
 
       // Get existing review_periods records
@@ -72,15 +76,17 @@ export default function ReviewPeriods() {
         const [periodName, yearStr] = key.split('-');
         const year = parseInt(yearStr);
         const existing = rpData?.find(rp => rp.period_name === periodName && rp.review_year === year);
+        const total = periodCounts[key] || 0;
+        const approved = periodApproved[key] || 0;
         result.push({
           id: existing?.id || '',
           period_name: periodName,
           review_year: year,
           current_stage: (existing as any)?.current_stage || 'planning',
           stage_started_at: (existing as any)?.stage_started_at || null,
-          completion_percentage: (existing as any)?.completion_percentage || 0,
+          completion_percentage: total > 0 ? Math.round((approved / total) * 100) : 0,
           is_locked: existing?.is_locked || false,
-          kpi_count: periodCounts[key] || 0,
+          kpi_count: total,
         });
       });
 

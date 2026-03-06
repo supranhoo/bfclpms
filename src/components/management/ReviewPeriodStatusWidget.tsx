@@ -31,6 +31,23 @@ export function ReviewPeriodStatusWidget() {
         .order('period_name');
       if (error) throw error;
 
+      // Get KPI statuses for completion calculation
+      const { data: kpiData } = await supabase
+        .from('kpis')
+        .select('review_period, review_year, status')
+        .eq('review_year', currentYear)
+        .not('review_period', 'is', null);
+
+      const kpiCounts: Record<string, number> = {};
+      const kpiApproved: Record<string, number> = {};
+      (kpiData || []).forEach(kpi => {
+        const key = `${kpi.review_period}-${kpi.review_year}`;
+        kpiCounts[key] = (kpiCounts[key] || 0) + 1;
+        if (kpi.status === 'approved') {
+          kpiApproved[key] = (kpiApproved[key] || 0) + 1;
+        }
+      });
+
       // Get lock counts per period
       const periodIds = (rpData || []).map(p => p.id);
       let lockCounts: Record<string, number> = {};
@@ -45,15 +62,20 @@ export function ReviewPeriodStatusWidget() {
         });
       }
 
-      return (rpData || []).map(rp => ({
-        id: rp.id,
-        period_name: rp.period_name,
-        review_year: rp.review_year,
-        current_stage: (rp as any).current_stage || 'planning',
-        completion_percentage: (rp as any).completion_percentage || 0,
-        is_locked: rp.is_locked || false,
-        lock_count: lockCounts[rp.id] || 0,
-      })) as PeriodStatus[];
+      return (rpData || []).map(rp => {
+        const key = `${rp.period_name}-${rp.review_year}`;
+        const total = kpiCounts[key] || 0;
+        const approved = kpiApproved[key] || 0;
+        return {
+          id: rp.id,
+          period_name: rp.period_name,
+          review_year: rp.review_year,
+          current_stage: (rp as any).current_stage || 'planning',
+          completion_percentage: total > 0 ? Math.round((approved / total) * 100) : 0,
+          is_locked: rp.is_locked || false,
+          lock_count: lockCounts[rp.id] || 0,
+        };
+      }) as PeriodStatus[];
     },
     staleTime: 60_000,
   });
