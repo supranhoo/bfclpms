@@ -21,6 +21,7 @@ import { ActionItemsCards } from '@/components/management/ActionItemsCards';
 import { ReviewerAnalyticsTable } from '@/components/management/ReviewerAnalyticsTable';
 import { TrainingGapSummary } from '@/components/management/TrainingGapSummary';
 import { RecentAuditLog } from '@/components/management/RecentAuditLog';
+import { DirectReporteesMonitor } from '@/components/management/DirectReporteesMonitor';
 import { NotificationsSummary } from '@/components/management/NotificationsSummary';
 import { Toggle } from '@/components/ui/toggle';
 import {
@@ -43,8 +44,8 @@ import {
   Award,
 } from 'lucide-react';
 
-interface DepartmentPerformance {
-  department: string;
+interface DivisionPerformance {
+  division: string;
   totalEmployees: number;
   avgScore: number;
   completionRate: number;
@@ -197,11 +198,10 @@ export default function ManagementDashboard() {
         return yearResults.flat();
       };
 
-      const [currentKpis, profilesResult, queriesResult, departmentsResult] = await Promise.all([
+      const [currentKpis, profilesResult, queriesResult] = await Promise.all([
         fetchFiscalData(),
-        supabase.from('profiles').select('id, full_name, employee_code, department_id, reporting_manager_id, departments (name)'),
+        supabase.from('profiles').select('id, full_name, employee_code, department_id, reporting_manager_id, departments (name, business_unit_id, business_units (name, division_id, divisions (name)))'),
         supabase.from('kpi_queries').select('*', { count: 'exact', head: true }).eq('status', 'open').eq('query_type', 'query'),
-        supabase.from('departments').select('id, name'),
       ]);
 
       const profiles = profilesResult.data || [];
@@ -209,13 +209,17 @@ export default function ManagementDashboard() {
       const openQueries = queriesResult.count || 0;
       const profileMap = new Map(profiles.map(p => [p.id, p]));
 
-      // Get score for a KPI
-      const getScore = (kpi: any) => {
+      const getScore = (kpi: any): number | null => {
         const s = kpi.review_submissions;
-        return s?.final_score ?? s?.management_score ?? s?.auditor_score 
-          ?? s?.hr_pms_score ?? s?.skip_level_score 
-          ?? s?.manager_score ?? s?.self_score ?? 0;
+        if (!s) return null;
+        const score = s.final_score ?? s.management_score ?? s.auditor_score 
+          ?? s.hr_pms_score ?? s.skip_level_score 
+          ?? s.manager_score ?? s.self_score ?? null;
+        return score;
       };
+
+      /** Returns numeric score or 0 for backward compat in metrics */
+      const getScoreOrZero = (kpi: any): number => getScore(kpi) ?? 0;
 
       // Calculate metrics
       const calculateMetrics = (kpiList: any[]) => {
@@ -225,7 +229,7 @@ export default function ManagementDashboard() {
         const approvedKpis = stageCounts['approved'] || 0;
         const completionRate = kpiList.length > 0 ? (approvedKpis / kpiList.length) * 100 : 0;
         let totalScore = 0, totalWeightage = 0;
-        kpiList.forEach(kpi => { totalScore += getScore(kpi); totalWeightage += kpi.weightage || 100; });
+        kpiList.forEach(kpi => { totalScore += getScoreOrZero(kpi); totalWeightage += kpi.weightage || 100; });
         const avgScore = totalWeightage > 0 ? (totalScore / totalWeightage) * 100 : 0;
         return { totalKpis: kpiList.length, managementPending, approvedKpis, completionRate, avgScore, stageCounts };
       };
@@ -253,7 +257,7 @@ export default function ManagementDashboard() {
       const managementPendingKpis = kpis.filter(k => k.status === 'management_review');
       const employeePendingMap = new Map<string, { kpiCount: number; totalScore: number; totalWeightage: number }>();
       managementPendingKpis.forEach(kpi => {
-        const score = getScore(kpi);
+        const score = getScoreOrZero(kpi);
         const w = kpi.weightage || 100;
         const existing = employeePendingMap.get(kpi.employee_id);
         if (existing) { existing.kpiCount++; existing.totalScore += score; existing.totalWeightage += w; }
@@ -267,40 +271,40 @@ export default function ManagementDashboard() {
         })
         .sort((a, b) => b.kpiCount - a.kpiCount);
 
-      // Department performance with risk flags
-      const deptStats = new Map<string, { employees: Set<string>; totalScore: number; totalWeightage: number; approvedKpis: number; totalKpis: number; pendingReviews: number; employeeScores: Map<string, { s: number; w: number }> }>();
+      // Division performance with risk flags (department → business_unit → division)
+      const divisionStats = new Map<string, { employees: Set<string>; totalScore: number; totalWeightage: number; approvedKpis: number; totalKpis: number; pendingReviews: number; employeeScores: Map<string, { s: number; w: number }> }>();
       kpis.forEach(kpi => {
         const profile = profileMap.get(kpi.employee_id);
-        const deptName = (profile?.departments as any)?.name || 'Unknown';
-        if (!deptStats.has(deptName)) deptStats.set(deptName, { employees: new Set(), totalScore: 0, totalWeightage: 0, approvedKpis: 0, totalKpis: 0, pendingReviews: 0, employeeScores: new Map() });
-        const stats = deptStats.get(deptName)!;
+        const dept = profile?.departments as any;
+        const divisionName = dept?.business_units?.divisions?.name || dept?.business_units?.name || dept?.name || 'Unknown';
+        if (!divisionStats.has(divisionName)) divisionStats.set(divisionName, { employees: new Set(), totalScore: 0, totalWeightage: 0, approvedKpis: 0, totalKpis: 0, pendingReviews: 0, employeeScores: new Map() });
+        const stats = divisionStats.get(divisionName)!;
         stats.employees.add(kpi.employee_id);
         stats.totalKpis++;
-        const score = getScore(kpi);
+        const score = getScoreOrZero(kpi);
         stats.totalScore += score;
         stats.totalWeightage += kpi.weightage || 100;
         if (kpi.status === 'approved') stats.approvedKpis++;
         if (kpi.status === 'management_review') stats.pendingReviews++;
-        // Per-employee scores for risk flags
         const es = stats.employeeScores.get(kpi.employee_id) || { s: 0, w: 0 };
         es.s += score; es.w += (kpi.weightage || 100);
         stats.employeeScores.set(kpi.employee_id, es);
       });
 
-      const departmentPerformance: DepartmentPerformance[] = Array.from(deptStats.entries())
-        .map(([department, stats]) => {
+      const divisionPerformance: DivisionPerformance[] = Array.from(divisionStats.entries())
+        .map(([division, stats]) => {
           let riskFlags = 0;
-          stats.employeeScores.forEach(({ s, w }) => { if (w > 0 && (s / w) * 100 < 50) riskFlags++; });
-          return { department, totalEmployees: stats.employees.size, avgScore: stats.totalWeightage > 0 ? (stats.totalScore / stats.totalWeightage) * 100 : 0, completionRate: stats.totalKpis > 0 ? (stats.approvedKpis / stats.totalKpis) * 100 : 0, pendingReviews: stats.pendingReviews, riskFlags };
+          stats.employeeScores.forEach(({ s, w }) => { if (w > 0 && (s / w) < 2.5) riskFlags++; });
+          return { division, totalEmployees: stats.employees.size, avgScore: stats.totalWeightage > 0 ? (stats.totalScore / stats.totalWeightage) * 100 : 0, completionRate: stats.totalKpis > 0 ? (stats.approvedKpis / stats.totalKpis) * 100 : 0, pendingReviews: stats.pendingReviews, riskFlags };
         })
-        .filter(d => d.department !== 'Unknown')
+        .filter(d => d.division !== 'Unknown')
         .sort((a, b) => b.avgScore - a.avgScore);
 
       // Rating distribution
       const ratingCounts = { band5: 0, band4: 0, band3: 0, band2: 0, band1: 0 };
       const employeeScoreMap = new Map<string, { total: number; count: number; weightage: number }>();
       kpis.forEach(kpi => {
-        const score = getScore(kpi);
+        const score = getScoreOrZero(kpi);
         const w = kpi.weightage || 100;
         const existing = employeeScoreMap.get(kpi.employee_id);
         if (existing) { existing.total += score * w; existing.count++; existing.weightage += w; }
@@ -324,27 +328,54 @@ export default function ManagementDashboard() {
       const meanScore = allAvgScores.length > 0 ? allAvgScores.reduce((a, b) => a + b, 0) / allAvgScores.length : 0;
       const stdDev = allAvgScores.length > 0 ? Math.sqrt(allAvgScores.reduce((sq, n) => sq + Math.pow(n - meanScore, 2), 0) / allAvgScores.length) : 0;
 
-      // Top & Bottom performers
+      // Top & Bottom performers — score on 0-5 scale (no * 100)
       const employeePerformers = Array.from(employeeScoreMap.entries()).map(([eid, { total, weightage }]) => {
         const p = profileMap.get(eid);
-        return { employeeId: eid, name: p?.full_name || 'Unknown', department: (p?.departments as any)?.name || '-', score: weightage > 0 ? (total / weightage) * 100 : 0 };
+        return { employeeId: eid, name: p?.full_name || 'Unknown', department: (p?.departments as any)?.name || '-', score: weightage > 0 ? (total / weightage) : 0 };
       }).sort((a, b) => b.score - a.score);
       const topPerformers = employeePerformers.slice(0, 5);
-      const bottomPerformers = [...employeePerformers].sort((a, b) => a.score - b.score).slice(0, 5);
 
-      // Performance trend by period (in fiscal order)
-      const periodScores = new Map<string, { total: number; weightage: number }>();
+      // Bottom performers: last 3 months with actual data, weighted average
+      const monthsWithScores = new Set<string>();
+      kpis.forEach(kpi => {
+        if (getScore(kpi) !== null && kpi.review_period) monthsWithScores.add(kpi.review_period);
+      });
+      const recentMonthsForBottom = FISCAL_MONTHS
+        .filter(m => selectedMonths.includes(m) && monthsWithScores.has(m))
+        .slice(-3);
+      
+      const bottomEmployeeScores = new Map<string, { total: number; weightage: number }>();
+      kpis.forEach(kpi => {
+        if (!recentMonthsForBottom.includes(kpi.review_period)) return;
+        const score = getScore(kpi);
+        if (score === null) return;
+        const w = kpi.weightage || 100;
+        const existing = bottomEmployeeScores.get(kpi.employee_id);
+        if (existing) { existing.total += score * w; existing.weightage += w; }
+        else bottomEmployeeScores.set(kpi.employee_id, { total: score * w, weightage: w });
+      });
+      const bottomPerformers = Array.from(bottomEmployeeScores.entries())
+        .map(([eid, { total, weightage }]) => {
+          const p = profileMap.get(eid);
+          return { employeeId: eid, name: p?.full_name || 'Unknown', department: (p?.departments as any)?.name || '-', score: weightage > 0 ? (total / weightage) : 0 };
+        })
+        .sort((a, b) => a.score - b.score)
+        .slice(0, 5);
+
+      // Performance trend by period — only months with actual scored submissions
+      const periodScores = new Map<string, { total: number; weightage: number; hasScores: boolean }>();
       kpis.forEach(kpi => {
         const period = kpi.review_period || 'Unknown';
         const score = getScore(kpi);
+        if (score === null) return; // Skip KPIs with no actual score
         const w = kpi.weightage || 100;
         const existing = periodScores.get(period);
-        if (existing) { existing.total += score; existing.weightage += w; }
-        else periodScores.set(period, { total: score, weightage: w });
+        if (existing) { existing.total += score; existing.weightage += w; existing.hasScores = true; }
+        else periodScores.set(period, { total: score, weightage: w, hasScores: true });
       });
       const trendData = FISCAL_MONTHS
-        .filter(m => periodScores.has(m))
-        .map(m => ({ period: m, avgScore: periodScores.get(m)!.weightage > 0 ? (periodScores.get(m)!.total / periodScores.get(m)!.weightage) * 100 : 0 }));
+        .filter(m => periodScores.has(m) && periodScores.get(m)!.hasScores)
+        .map(m => ({ period: m, avgScore: periodScores.get(m)!.weightage > 0 ? (periodScores.get(m)!.total / periodScores.get(m)!.weightage) : 0 }));
 
       // Reviewer analytics — manager score bias
       const managerScores = new Map<string, { total: number; count: number }>();
@@ -396,7 +427,7 @@ export default function ManagementDashboard() {
         approvedKpis: currentMetrics.approvedKpis,
         stageCounts: currentMetrics.stageCounts,
         pendingReviews: pendingReviews.slice(0, 10),
-        departmentPerformance: departmentPerformance.slice(0, 10),
+        divisionPerformance: divisionPerformance.slice(0, 10),
         ratingDistribution: [
           { name: 'Outstanding (5)', value: ratingCounts.band5, color: CHART_COLORS[0] },
           { name: 'Exceeds Expectations (4)', value: ratingCounts.band4, color: CHART_COLORS[1] },
@@ -440,7 +471,6 @@ export default function ManagementDashboard() {
     );
   };
 
-  
 
   const getScoreColor = (score: number) => {
     if (score >= 85) return RATING_COLORS.excellent;
@@ -477,14 +507,14 @@ export default function ManagementDashboard() {
     });
 
     // Department table
-    if (dashboardData?.departmentPerformance?.length) {
+    if (dashboardData?.divisionPerformance?.length) {
       const lastY = (doc as any).lastAutoTable?.finalY || 100;
-      doc.text('Department Performance', 14, lastY + 10);
+      doc.text('Division Performance', 14, lastY + 10);
       autoTable(doc, {
         startY: lastY + 14,
-        head: [['Department', 'Employees', 'Avg Score', 'Completion', 'Risk Flags']],
-        body: dashboardData.departmentPerformance.map(d => [
-          d.department, String(d.totalEmployees), `${d.avgScore.toFixed(1)}%`, `${d.completionRate.toFixed(0)}%`, String(d.riskFlags),
+        head: [['Division', 'Employees', 'Avg Score', 'Completion', 'Risk Flags']],
+        body: dashboardData.divisionPerformance.map((d: any) => [
+          d.division, String(d.totalEmployees), `${d.avgScore.toFixed(1)}%`, `${d.completionRate.toFixed(0)}%`, String(d.riskFlags),
         ]),
       });
     }
@@ -680,21 +710,21 @@ export default function ManagementDashboard() {
         <RatingBellCurve data={dashboardData?.ratingDistribution || []} meanScore={dashboardData?.meanScore ?? 0} stdDev={dashboardData?.stdDev ?? 0} />
       </div>
 
-      {/* Department Performance Table with Risk Flags */}
+      {/* Division Performance Table with Risk Flags */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Building2 className="h-5 w-5" />
-            Department Performance
+            Division Performance
           </CardTitle>
-          <CardDescription>Completion rates, scores, and risk flags by department</CardDescription>
+          <CardDescription>Completion rates, scores, and risk flags by division</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Department</TableHead>
+                  <TableHead>Division</TableHead>
                   <TableHead className="text-center">Employees</TableHead>
                   <TableHead className="text-right">Avg Score</TableHead>
                   <TableHead className="text-right">Completion</TableHead>
@@ -702,23 +732,23 @@ export default function ManagementDashboard() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(dashboardData?.departmentPerformance || []).map((dept) => (
-                  <TableRow key={dept.department} className={dept.riskFlags > 2 ? 'bg-destructive/5' : ''}>
-                    <TableCell className="font-medium">{dept.department}</TableCell>
-                    <TableCell className="text-center">{dept.totalEmployees}</TableCell>
+                {(dashboardData?.divisionPerformance || []).map((div: any) => (
+                  <TableRow key={div.division} className={div.riskFlags > 2 ? 'bg-destructive/5' : ''}>
+                    <TableCell className="font-medium">{div.division}</TableCell>
+                    <TableCell className="text-center">{div.totalEmployees}</TableCell>
                     <TableCell className="text-right">
-                      <span className={getScoreColor(dept.avgScore)}>{dept.avgScore.toFixed(1)}%</span>
+                      <span className={getScoreColor(div.avgScore)}>{div.avgScore.toFixed(1)}%</span>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <Progress value={dept.completionRate} className="w-16 h-2" />
-                        <span className="text-sm w-12 text-right">{dept.completionRate.toFixed(0)}%</span>
+                        <Progress value={div.completionRate} className="w-16 h-2" />
+                        <span className="text-sm w-12 text-right">{div.completionRate.toFixed(0)}%</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
-                      {dept.riskFlags > 0 ? (
-                        <Badge variant={dept.riskFlags > 2 ? 'destructive' : 'secondary'}>
-                          {dept.riskFlags}
+                      {div.riskFlags > 0 ? (
+                        <Badge variant={div.riskFlags > 2 ? 'destructive' : 'secondary'}>
+                          {div.riskFlags}
                         </Badge>
                       ) : (
                         <span className="text-muted-foreground">—</span>
@@ -736,6 +766,12 @@ export default function ManagementDashboard() {
       <TopBottomPerformers
         top={dashboardData?.topPerformers || []}
         bottom={dashboardData?.bottomPerformers || []}
+      />
+
+      {/* Direct Reportees Monitoring */}
+      <DirectReporteesMonitor
+        fiscalStartYear={selectedFiscalYear}
+        selectedMonths={selectedMonths}
       />
 
       {/* Action Items & Approvals */}

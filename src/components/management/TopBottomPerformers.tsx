@@ -17,9 +17,9 @@ interface TopBottomPerformersProps {
 }
 
 const getScoreColor = (score: number) => {
-  if (score >= 85) return 'text-green-600 dark:text-green-400';
-  if (score >= 70) return 'text-blue-600 dark:text-blue-400';
-  if (score >= 50) return 'text-yellow-600 dark:text-yellow-400';
+  if (score >= 4.25) return 'text-green-600 dark:text-green-400';
+  if (score >= 3.5) return 'text-blue-600 dark:text-blue-400';
+  if (score >= 2.5) return 'text-yellow-600 dark:text-yellow-400';
   return 'text-destructive';
 };
 
@@ -35,7 +35,7 @@ export function TopBottomPerformers({ top, bottom }: TopBottomPerformersProps) {
             <Trophy className="h-5 w-5 text-yellow-500" />
             Top Performers
           </CardTitle>
-          <CardDescription>Highest weighted average scores</CardDescription>
+          <CardDescription>Highest weighted average scores (0-5 scale)</CardDescription>
         </CardHeader>
         <CardContent>
           {top.length === 0 ? (
@@ -54,7 +54,7 @@ export function TopBottomPerformers({ top, bottom }: TopBottomPerformersProps) {
                     </div>
                   </div>
                   <span className={`text-sm font-semibold ${getScoreColor(p.score)}`}>
-                    {p.score.toFixed(1)}%
+                    {p.score.toFixed(2)} / 5
                   </span>
                 </div>
               ))}
@@ -72,7 +72,7 @@ export function TopBottomPerformers({ top, bottom }: TopBottomPerformersProps) {
                 <AlertTriangle className="h-5 w-5 text-destructive" />
                 Bottom Performers
               </CardTitle>
-              <CardDescription>May require improvement plans</CardDescription>
+              <CardDescription>Lowest average over last 3 months</CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={() => navigate('/admin/pip')}>
               PIP <ArrowRight className="ml-1 h-3 w-3" />
@@ -96,7 +96,7 @@ export function TopBottomPerformers({ top, bottom }: TopBottomPerformersProps) {
                     </div>
                   </div>
                   <span className={`text-sm font-semibold ${getScoreColor(p.score)}`}>
-                    {p.score.toFixed(1)}%
+                    {p.score.toFixed(2)} / 5
                   </span>
                 </div>
               ))}
