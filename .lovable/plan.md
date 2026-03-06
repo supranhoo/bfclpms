@@ -1,201 +1,74 @@
 
 
-# Advanced Review Period Governance System — Full Implementation Plan
+# Testing Plan for Review Period Governance System
 
-## Risk & Impact Analysis
+## What will be tested
 
-**Data Impact**: HIGH — New tables, new enums, modifications to existing `review_periods` table. Existing workflow engine functions and triggers will need migration. Historical data integrity must be preserved.
+The governance system spans 3 layers: pure logic/constants, hooks with RPC calls, and UI components. Testing will focus on the testable units that don't require a live database connection.
 
-**Workflow Impact**: CRITICAL — Replacing the workflow engine means every review flow (self-review, manager, audit, management, skip-level, HR PMS) must be re-routed through the new governance system. All existing KPIs in-flight will need a compatibility layer.
+## Test Files to Create
 
-**UI/UX Consistency**: HIGH — The Review Periods page expands from a simple lock table to a multi-tab governance center. Lock indicators must propagate to Dashboard, Review panels, and Scorecard views.
+### 1. `src/test/reviewPeriodGovernance.test.ts` — Constants & Logic Tests
+Tests for all exported constants and pure logic from `useReviewPeriodGovernance.ts`:
+- `GOVERNANCE_STAGES` array contains exactly 6 stages in correct order
+- `STAGE_LABELS` has entries for all stages
+- `PERMISSION_KEYS` contains all 7 permission types
+- `PERMISSION_LABELS` has labels for all permission keys
+- Stage index calculations (used by Overview and StageController)
+- Lock hierarchy logic validation (Employee > Dept > Role > Global — tested via mock scenarios)
 
-**Regression Risk**: VERY HIGH — The workflow engine is referenced in 30+ files. Replacing it affects every status transition, send-back, approval, and notification trigger.
+### 2. `src/test/reviewPeriodPermissions.test.ts` — Permission Hook Logic Tests
+Tests for `useReviewPeriodPermissions.ts`:
+- Returns `DEFAULT_OPEN` when no user/period/year provided
+- Returns `isLoading: true` while query is in flight
+- Correctly maps RPC results to permission flags
+- Handles RPC errors gracefully (fail-open behavior)
+- Caches results for 30s (staleTime check)
 
-**Mitigation**: Implement in 4 ordered phases. Each phase is self-contained and testable. The existing workflow engine is preserved as a fallback until Phase 3 fully replaces it.
+### 3. `src/components/review/GovernanceLockBanner.test.tsx` — Banner Component Tests
+- Renders nothing when `isLoading` is true
+- Shows destructive "view-only" alert when `view_only` is true
+- Shows restriction warning listing disabled permissions
+- Shows nothing when all permissions are open
+- Shows correct restrictions based on `viewLevel` (management shows "approval", auditor shows "forwarding", manager shows "manager review")
 
----
+### 4. `src/components/admin/ReviewPeriodOverview.test.tsx` — Overview Component Tests
+- Renders period name and year
+- Renders current stage badge with correct label
+- Calculates progress percentage from stage index
+- Shows global lock button with correct state (Locked vs Open)
+- Calls `onToggleGlobalLock` when button clicked
 
-## Phase 1: Database Schema + Multi-Layer Lock Architecture
+### 5. `src/components/admin/ReviewPeriodStageController.test.tsx` — Stage Controller Tests
+- Renders all 6 stages in pipeline
+- Highlights current stage, marks previous as complete
+- Advance button disabled when at last stage (closed)
+- Revert button disabled when at first stage (planning)
+- Calls `onAdvanceStage` with correct next/previous stage
+- Shows closed-stage warning when stage is "closed"
 
-### New Tables
+### 6. `src/components/admin/ReviewPeriodRolePermissions.test.tsx` — Role Matrix Tests
+- Renders all 7 roles from `ALL_APP_ROLES`
+- Renders all 7 permission columns
+- Admin role switches are disabled (always full access)
+- Save button disabled until a change is made (dirty state)
+- Toggling a switch marks the form as dirty
 
-**`review_period_stages`** — Defines the lifecycle stage of each review period
-```
-id uuid PK
-review_period_id uuid FK → review_periods
-stage text (planning, self_review, manager_review, calibration, approval, closed)
-started_at timestamptz
-ended_at timestamptz
-started_by uuid FK → auth.users
-```
+## Technical Approach
 
-**`review_period_locks`** — Multi-layer lock records
-```
-id uuid PK
-review_period_id uuid FK → review_periods
-lock_type text (global, role, department, employee)
-target_id text (role name / department uuid / employee uuid)
-permissions jsonb (edit_kpi, submit_self_review, submit_manager_review, approve, edit_scores, add_comments, view_only)
-is_locked boolean default true
-locked_by uuid FK → auth.users
-locked_at timestamptz
-unlock_reason text
-reason text
-```
+- All tests use Vitest + React Testing Library (existing project pattern)
+- Component tests mock `supabase` and `useAuth` via `vi.mock()`
+- No database calls — all data passed as props or mocked
+- Tests follow existing patterns from `workflowEngine.test.ts` and `ErrorBoundary.test.tsx`
 
-**`review_period_auto_rules`** — Auto-lock rule definitions
-```
-id uuid PK
-review_period_id uuid FK → review_periods
-rule_type text (deadline_passed, review_submitted, approval_complete, calibration_complete)
-trigger_condition jsonb
-action jsonb (lock_type, target, permissions)
-is_active boolean
-created_by uuid
-```
+## Files Created
+- `src/test/reviewPeriodGovernance.test.ts`
+- `src/test/reviewPeriodPermissions.test.ts`
+- `src/components/review/GovernanceLockBanner.test.tsx`
+- `src/components/admin/ReviewPeriodOverview.test.tsx`
+- `src/components/admin/ReviewPeriodStageController.test.tsx`
+- `src/components/admin/ReviewPeriodRolePermissions.test.tsx`
 
-**`review_period_audit_log`** — Governance audit trail
-```
-id uuid PK
-review_period_id uuid FK → review_periods
-action text (stage_changed, role_locked, dept_locked, employee_locked, rule_triggered)
-performed_by uuid
-previous_state jsonb
-new_state jsonb
-reason text
-created_at timestamptz
-```
-
-### Modifications to Existing `review_periods` Table
-- Add `current_stage text default 'planning'`
-- Add `stage_started_at timestamptz`
-- Add `completion_percentage numeric default 0`
-
-### New Database Function
-`check_review_period_permission(p_user_id uuid, p_period_name text, p_review_year int, p_action text)` — SECURITY DEFINER function that evaluates the lock hierarchy (Employee > Department > Role > Global) and returns boolean. This replaces inline lock checks throughout the app.
-
-### RLS Policies
-- `review_period_locks`: Admin-only INSERT/UPDATE/DELETE; authenticated SELECT
-- `review_period_stages`: Admin-only INSERT/UPDATE; authenticated SELECT
-- `review_period_auto_rules`: Admin-only full CRUD; authenticated SELECT
-- `review_period_audit_log`: Admin-only INSERT; authenticated SELECT
-
----
-
-## Phase 2: UI — Review Periods Governance Center
-
-Rebuild `src/pages/admin/ReviewPeriods.tsx` as a tabbed governance center with 7 sections:
-
-### Tab 1: Period Overview
-- Period name, year, current stage badge, completion %, global lock toggle
-- Stage progress bar (Planning → Self Review → Manager Review → Calibration → Approval → Closed)
-
-### Tab 2: Stage Controller
-- Visual pipeline with "Advance Stage" / "Revert Stage" buttons
-- Each stage shows start/end dates, who initiated it
-- Stage change triggers audit log entry + notifications
-
-### Tab 3: Role Permissions Matrix
-- Table with roles as rows, permissions as columns (Edit KPI, Self Review, Manager Review, Approve, Edit Scores, Comments, View Only)
-- Toggle switches per cell
-- Roles fetched from `user_roles` table dynamically
-- Save creates/updates `review_period_locks` with `lock_type = 'role'`
-
-### Tab 4: Division/Department Locks
-- List of all departments from `departments` table
-- Lock/Unlock toggle per department with reason field
-- Bulk actions: "Lock All", "Unlock All"
-- Status indicators (Locked/Open) with locked_by and reason
-
-### Tab 5: Employee Locks
-- Searchable employee list from `profiles`
-- Individual lock/unlock with reason
-- Bulk actions: Lock by department, Lock completed reviews, Lock approved employees
-- Filter by department, status
-
-### Tab 6: Auto-Lock Rules
-- Rule builder UI: trigger condition → action
-- Predefined rule templates (self review deadline, manager submitted, final approved, calibration complete)
-- Enable/disable toggle per rule
-
-### Tab 7: Audit Log
-- Filterable table from `review_period_audit_log`
-- Columns: Action, Target, By, Date, Previous State, New State, Reason
-- Export capability
-
-### New Components (in `src/components/admin/`)
-- `ReviewPeriodStageController.tsx`
-- `ReviewPeriodRolePermissions.tsx`
-- `ReviewPeriodDepartmentLocks.tsx`
-- `ReviewPeriodEmployeeLocks.tsx`
-- `ReviewPeriodAutoRules.tsx`
-- `ReviewPeriodAuditLog.tsx`
-- `ReviewPeriodOverview.tsx`
-
----
-
-## Phase 3: Enforcement Layer — Replace Workflow Engine
-
-### New Hook: `useReviewPeriodPermissions`
-Central hook that checks `check_review_period_permission()` RPC for the current user + period. Returns permission flags consumed by all review components.
-
-### Integration Points (files to modify)
-1. **`src/components/review/KpiReviewPanel.tsx`** — Check lock permissions before enabling edit/submit
-2. **`src/components/review/SelfReviewSheet.tsx`** — Disable self-review if locked
-3. **`src/components/review/EmployeeScorecard.tsx`** — Show lock indicators
-4. **`src/components/review/ManagementScorecard.tsx`** — Respect role locks
-5. **`src/components/review/AuditScorecard.tsx`** — Respect role locks
-6. **`src/pages/Dashboard.tsx`** — Show period status widget
-7. **`src/pages/MyKpis.tsx`** — Disable submission if employee locked
-
-### Database Trigger Updates
-- Modify `prevent_locked_period_updates()` to call `check_review_period_permission()` instead of simple `is_period_locked()`
-- Modify `prevent_locked_submission_updates()` similarly
-- These become the server-side enforcement, preventing bypass via API
-
-### Workflow Engine Transition
-- `src/lib/workflowEngine.ts` functions (`resolveForwardStatus`, `resolvePendingStatuses`, etc.) remain for status resolution
-- The PERMISSION layer (who can act) shifts to the governance system
-- The STATUS layer (what comes next) stays in workflowEngine.ts
-- This avoids a dangerous full replacement while achieving the user's goal of centralized governance control
-
----
-
-## Phase 4: Dashboard Integration, Notifications, Auto-Lock Execution
-
-### Dashboard Widget
-- Add "Review Period Status" card to Management Dashboard
-- Shows: Period, Stage, Completion %, Lock Status, Alerts (pending counts)
-
-### Notifications
-- Stage change → notify all affected employees
-- Employee locked → notify employee
-- Department locked → notify department members
-- Deadline approaching → notify pending users
-- Uses existing `notifications` table and `send_email_on_notification` trigger
-
-### Auto-Lock Execution
-- Edge function `auto-lock-review-periods/index.ts` that runs on schedule
-- Evaluates active rules from `review_period_auto_rules`
-- Creates lock records and audit log entries when conditions met
-
-### Lock Indicators Across App
-- Add lock icon overlays to KPI cards, scorecard headers, and review panels
-- Tooltip showing lock reason and who locked
-
----
-
-## Implementation Order
-
-Given the scope, implementation will proceed across multiple build cycles:
-
-1. **Build 1**: Phase 1 (schema + migrations) + Phase 2 Tab 1-3 (Overview, Stage Controller, Role Permissions)
-2. **Build 2**: Phase 2 Tab 4-7 (Department Locks, Employee Locks, Auto Rules, Audit Log)
-3. **Build 3**: Phase 3 (enforcement hook, trigger updates, component integration)
-4. **Build 4**: Phase 4 (dashboard widget, notifications, auto-lock edge function, lock indicators)
-
-### Files Created (estimated: 12 new files)
-### Files Modified (estimated: 15-20 existing files)
-### Migrations: 3-4 SQL migrations
+## Files Modified
+None — tests only.
 
