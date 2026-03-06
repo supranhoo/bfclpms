@@ -141,6 +141,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const loadUserData = async (userId: string) => {
+    queryClient.invalidateQueries({ queryKey: ['modules'] });
+    await Promise.all([fetchProfile(userId), fetchRole(userId)]);
+  };
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -148,23 +153,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           initializedRef.current = true;
           setSession(session);
           setUser(session.user);
-          queryClient.invalidateQueries({ queryKey: ['modules'] });
-          fetchProfile(session.user.id);
-          fetchRole(session.user.id);
-          setLoading(false);
+          loadUserData(session.user.id).finally(() => setLoading(false));
         } else if (initializedRef.current) {
           setSession(session);
           setUser(session?.user ?? null);
           if (session?.user) {
-            queryClient.invalidateQueries({ queryKey: ['modules'] });
-            fetchProfile(session.user.id);
-            fetchRole(session.user.id);
+            loadUserData(session.user.id).finally(() => setLoading(false));
           } else {
             setProfile(null);
             setRole(null);
             setNaturalRole(null);
+            setLoading(false);
           }
-          setLoading(false);
         } else if (!session) {
           initializedRef.current = true;
           setLoading(false);
@@ -172,7 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (initializedRef.current) return;
       
       initializedRef.current = true;
@@ -180,9 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null);
       
       if (session?.user) {
-        queryClient.invalidateQueries({ queryKey: ['modules'] });
-        fetchProfile(session.user.id);
-        fetchRole(session.user.id);
+        await loadUserData(session.user.id);
       }
       
       setLoading(false);
