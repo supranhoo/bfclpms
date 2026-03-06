@@ -19,6 +19,21 @@ export function LoginSlideshow({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
+  // Preload the first wallpaper image so the browser discovers it early (improves LCP)
+  useEffect(() => {
+    if (wallpapers.length === 0) return;
+    const firstUrl = wallpapers[0];
+    const existing = document.querySelector(`link[rel="preload"][href="${firstUrl}"]`);
+    if (existing) return;
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.as = 'image';
+    link.href = firstUrl;
+    link.setAttribute('fetchpriority', 'high');
+    document.head.appendChild(link);
+    return () => { link.remove(); };
+  }, [wallpapers]);
+
   // Auto-advance slides
   useEffect(() => {
     if (wallpapers.length <= 1) return;
