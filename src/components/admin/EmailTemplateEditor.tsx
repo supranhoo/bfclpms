@@ -58,6 +58,7 @@ Great news! Your KPI has been approved by your manager.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 The review will now proceed to the next stage.`,
     color: '#10b981',
@@ -74,6 +75,7 @@ Your KPI has been sent back for revision.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please review the feedback and update your submission.`,
     color: '#f59e0b',
