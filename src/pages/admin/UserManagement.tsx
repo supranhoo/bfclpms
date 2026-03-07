@@ -1067,103 +1067,130 @@ export default function UserManagement() {
 
       {/* Create Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Add New User</DialogTitle>
-            <DialogDescription>Create a new user account</DialogDescription>
+            <DialogDescription>Create a new user account and assign their role</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-            <div className="space-y-2">
-              <Label>Full Name *</Label>
-              <Input
-                value={newFullName}
-                onChange={(e) => setNewFullName(e.target.value)}
-                placeholder="John Doe"
-              />
-            </div>
+          <ScrollArea className="flex-1 pr-4 -mr-4">
+            <div className="space-y-6 py-4">
+              {/* Section: Personal Information */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Personal Information</h3>
+                </div>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Full Name <span className="text-destructive">*</span></Label>
+                    <Input
+                      value={newFullName}
+                      onChange={(e) => setNewFullName(e.target.value)}
+                      placeholder="John Doe"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input
+                      type="email"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      placeholder="john@example.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Employee Code <span className="text-destructive">*</span></Label>
+                    <Input
+                      value={newEmployeeCode}
+                      onChange={(e) => setNewEmployeeCode(e.target.value)}
+                      placeholder="EMP001"
+                    />
+                  </div>
+                </div>
+              </div>
 
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input
-                type="email"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="john@example.com"
-              />
-            </div>
+              {/* Section: Organization */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Organization</h3>
+                </div>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Department</Label>
+                    <Select value={newDepartmentId} onValueChange={setNewDepartmentId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments?.map(d => (
+                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Designation</Label>
+                    <Input
+                      value={newDesignation}
+                      onChange={(e) => setNewDesignation(e.target.value)}
+                      placeholder="e.g. Senior Developer"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>PMS Grade</Label>
+                    <Input
+                      value={newPmsGrade}
+                      onChange={(e) => setNewPmsGrade(e.target.value)}
+                      placeholder="e.g. L4"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Reporting Manager</Label>
+                    <Select value={newManagerId} onValueChange={setNewManagerId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select manager" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {profiles?.filter(p => (p as any).is_active !== false).map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
 
-            <div className="space-y-2">
-              <Label>Employee Code *</Label>
-              <Input
-                value={newEmployeeCode}
-                onChange={(e) => setNewEmployeeCode(e.target.value)}
-                placeholder="EMP001"
-              />
+              {/* Section: Access */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Access</h3>
+                </div>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Role</Label>
+                    <Select value={newRole} onValueChange={(v) => setNewRole(v as AppRole)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ALL_APP_ROLES.map(role => (
+                          <SelectItem key={role} value={role}>{ROLE_LABELS[role]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
             </div>
+          </ScrollArea>
 
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Select value={newRole} onValueChange={(v) => setNewRole(v as AppRole)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ALL_APP_ROLES.map(role => (
-                    <SelectItem key={role} value={role}>{ROLE_LABELS[role]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Department</Label>
-              <Select value={newDepartmentId} onValueChange={setNewDepartmentId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  {departments?.map(d => (
-                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Designation</Label>
-              <Input
-                value={newDesignation}
-                onChange={(e) => setNewDesignation(e.target.value)}
-                placeholder="e.g. Senior Developer"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>PMS Grade</Label>
-              <Input
-                value={newPmsGrade}
-                onChange={(e) => setNewPmsGrade(e.target.value)}
-                placeholder="e.g. L4"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Reporting Manager</Label>
-              <Select value={newManagerId} onValueChange={setNewManagerId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select manager" />
-                </SelectTrigger>
-                <SelectContent>
-                  {profiles?.filter(p => (p as any).is_active !== false).map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t">
             <Button variant="outline" onClick={() => { setCreateDialogOpen(false); resetCreateForm(); }}>Cancel</Button>
             <Button onClick={handleCreateUser} disabled={createUser.isPending}>
               {createUser.isPending ? 'Creating...' : 'Create User'}
