@@ -389,6 +389,7 @@ export default function UserManagement() {
     setEditFullName(user.full_name || '');
     setEditEmail(user.email || '');
     setEditMobile((user as any).mobile_number || '');
+    setEditIsActive((user as any).is_active !== false);
     setEditDialogOpen(true);
   };
 
