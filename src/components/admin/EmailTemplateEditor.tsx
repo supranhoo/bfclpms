@@ -92,6 +92,7 @@ A KPI is ready for your audit review.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please review and provide your assessment.`,
     color: '#8b5cf6',
@@ -108,6 +109,7 @@ A KPI is ready for management review.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please review and provide final approval.`,
     color: '#0ea5e9',
