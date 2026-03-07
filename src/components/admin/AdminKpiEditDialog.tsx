@@ -297,6 +297,95 @@ const [formData, setFormData] = useState({
     onClose();
   };
 
+  const handleCopyToMonths = async () => {
+    if (!kpi || selectedCopyMonths.size === 0) return;
+    setCopying(true);
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      let created = 0;
+
+      for (const key of selectedCopyMonths) {
+        const [month, yearStr] = key.split('-');
+        const year = parseInt(yearStr);
+
+        // Build insert payload from current form state
+        const insertPayload = {
+          employee_id: formData.employee_id,
+          category_id: formData.category_id,
+          kra_name: formData.kra_name,
+          kpi_name: formData.kpi_name,
+          target_value: formData.uom_type === 'numeric' ? (formData.target_value ? parseFloat(formData.target_value) : null) : null,
+          uom: formData.uom || null,
+          weightage: formData.weightage ? parseFloat(formData.weightage) : null,
+          frequency: formData.frequency || null,
+          frequency_cycle_start: (formData.frequency_cycle_start && formData.frequency_cycle_start !== 'system_default') ? formData.frequency_cycle_start : null,
+          criteria: formData.uom_type === 'numeric' ? (formData.criteria || null) : null,
+          source_of_data: formData.source_of_data || null,
+          r5: formData.uom_type === 'numeric' ? (formData.r5 || null) : null,
+          r4: formData.uom_type === 'numeric' ? (formData.r4 || null) : null,
+          r3: formData.uom_type === 'numeric' ? (formData.r3 || null) : null,
+          r2: formData.uom_type === 'numeric' ? (formData.r2 || null) : null,
+          r1: formData.uom_type === 'numeric' ? (formData.r1 || null) : null,
+          r0: formData.uom_type === 'numeric' ? (formData.r0 || null) : null,
+          is_org_level: formData.is_org_level,
+          org_level_scope: formData.is_org_level ? formData.org_level_scope : 'organization',
+          uom_type: formData.uom_type,
+          qualitative_options: formData.uom_type === 'tiered' ? formData.qualitative_options : null,
+          require_resubmit_reason: formData.require_resubmit_reason,
+          day_count_type: formData.frequency === 'Daily' ? formData.day_count_type : null,
+          threshold_mode: formData.uom_type === 'numeric' ? formData.threshold_mode : null,
+          review_period: month,
+          review_year: year,
+          status: 'kra_set' as const,
+        };
+
+        const { error } = await supabase.from('kpis').insert(insertPayload as any);
+        if (error) {
+          console.error(`Failed to copy KPI to ${month} ${year}:`, error);
+          continue;
+        }
+        created++;
+
+        // Audit log
+        if (authUser) {
+          await supabase.from('kpi_audit_logs').insert({
+            kpi_id: kpi.id,
+            performed_by: authUser.id,
+            action: 'admin_copy_to_month',
+            new_value: { review_period: month, review_year: year } as any,
+            metadata: {
+              source: 'admin_copy_to_month',
+              target_month: month,
+              target_year: year,
+            },
+          });
+        }
+
+        // Ensure review_period record exists
+        await supabase.from('review_periods').upsert(
+          { period_name: month, review_year: year, is_locked: false },
+          { onConflict: 'period_name,review_year' }
+        );
+      }
+
+      if (created > 0) {
+        toast.success(`KPI copied to ${created} month(s)`);
+        queryClient.invalidateQueries({ queryKey: ['admin-kpis'] });
+        queryClient.invalidateQueries({ queryKey: ['kpis'] });
+        // Refresh siblings
+        setCopyToMonthsOpen(false);
+        setSelectedCopyMonths(new Set());
+      } else {
+        toast.error('Failed to copy KPI to any month. Duplicates may already exist.');
+      }
+    } catch (err) {
+      console.error('Copy to months failed:', err);
+      toast.error('Failed to copy KPI');
+    } finally {
+      setCopying(false);
+    }
+  };
+
   if (!kpi) return null;
 
   return (
