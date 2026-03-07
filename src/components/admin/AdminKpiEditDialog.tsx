@@ -184,27 +184,34 @@ const [formData, setFormData] = useState({
     // 2. If scope is broader, batch-update sibling KPIs
     if (applyScope !== 'this_month' && kpi.review_year && kpi.review_period) {
       try {
+        // Fiscal year spans two calendar years (July-June)
+        const fiscalStartYear = getFiscalStartYear(kpi.review_period, kpi.review_year);
+        const fiscalYears = [fiscalStartYear, fiscalStartYear + 1];
         const currentMonthIndex = MONTHS.indexOf(kpi.review_period);
         
-        // Query sibling KPIs
+        // Query sibling KPIs across both years of the fiscal year
         let query = supabase
           .from('kpis')
-          .select('id, review_period')
+          .select('id, review_period, review_year')
           .eq('employee_id', kpi.employee_id)
           .eq('kra_name', kpi.kra_name)
           .eq('kpi_name', kpi.kpi_name)
-          .eq('review_year', kpi.review_year)
+          .in('review_year', fiscalYears)
           .neq('id', kpi.id);
 
         const { data: siblings, error: fetchError } = await query;
         if (fetchError) throw fetchError;
 
-        // Filter by month scope
+        // Filter by month scope using fiscal ordering
         const filteredSiblings = (siblings || []).filter(s => {
           if (!s.review_period) return false;
-          const siblingMonthIndex = MONTHS.indexOf(s.review_period);
-          if (siblingMonthIndex === -1) return false;
-          if (applyScope === 'future_months') return siblingMonthIndex > currentMonthIndex;
+          if (MONTHS.indexOf(s.review_period) === -1) return false;
+          if (applyScope === 'future_months') {
+            // Use fiscal-aware ordering: later year always wins, same year compare month index
+            if (s.review_year! > kpi.review_year!) return true;
+            if (s.review_year! < kpi.review_year!) return false;
+            return MONTHS.indexOf(s.review_period) > currentMonthIndex;
+          }
           return true; // all_months
         });
 
