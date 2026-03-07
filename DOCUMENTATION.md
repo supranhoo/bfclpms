@@ -4046,4 +4046,17 @@ Admin-facing hook for managing locks, stages, and audit log. Provides:
 
 ---
 
+### Governance Bypass Exceptions (v1.53.0)
+
+The `SelfReviewSheet` implements two governance bypass exceptions where employees can edit KPIs even when their role's governance permissions (`submit_self_review`, `edit_kpi`) are disabled:
+
+| Exception | Condition | Detection | UI |
+|-----------|-----------|-----------|-----|
+| **Sent-Back KPI** | `status === 'kra_set'` AND prior submission exists | `isSentBack = isKraSet && submissionMap.has(kpi.id)` | Amber banner: "This KPI was sent back for revision" |
+| **Daily-Frequency KPI** | `status === 'kra_set'` AND `frequency === 'daily'` | `isDailyUnlocked = isKraSet && frequency === 'daily'` | Blue banner: "Daily data entry is permitted" |
+
+Both exceptions set `isGovernanceLocked = false`, allowing the employee to enter data and submit. Security is maintained via RLS (employees can only edit their own KPIs).
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*

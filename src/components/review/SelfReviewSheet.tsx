@@ -40,7 +40,7 @@ import { QualitativeValueInput } from './QualitativeValueInput';
 import { DateCalendarInput } from './DateCalendarInput';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
-import { Target, TrendingUp, CheckCircle2, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar, AlertTriangle, Loader2, Undo2 } from 'lucide-react';
+import { Target, TrendingUp, CheckCircle2, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar, CalendarDays, AlertTriangle, Loader2, Undo2 } from 'lucide-react';
 import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
 import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog';
 import { DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
