@@ -1013,6 +1013,19 @@ export default function UserManagement() {
                 />
               </div>
             </div>
+
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <Label>Account Status</Label>
+                <p className="text-xs text-muted-foreground">
+                  {editIsActive ? 'User can log in and access the system' : 'User is blocked from logging in'}
+                </p>
+              </div>
+              <Switch
+                checked={editIsActive}
+                onCheckedChange={setEditIsActive}
+              />
+            </div>
           </div>
 
           <DialogFooter>
