@@ -221,6 +221,7 @@ No further changes can be made to KPIs in this period unless unlocked by an admi
 An administrator has changed the status of your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please check your dashboard for updated details.`,
     color: '#64748b',
