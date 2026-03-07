@@ -161,9 +161,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const loadUserData = async (userId: string) => {
+  const loadUserData = async (userId: string): Promise<boolean> => {
     queryClient.invalidateQueries({ queryKey: ['modules'] });
-    await Promise.all([fetchProfile(userId), fetchRole(userId)]);
+    const [isActive] = await Promise.all([fetchProfile(userId), fetchRole(userId)]);
+    return isActive;
   };
 
   useEffect(() => {
