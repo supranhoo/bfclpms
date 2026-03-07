@@ -1130,7 +1130,7 @@ export default function UserManagement() {
                   <SelectValue placeholder="Select manager" />
                 </SelectTrigger>
                 <SelectContent>
-                  {profiles?.map(p => (
+                  {profiles?.filter(p => (p as any).is_active !== false).map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
                   ))}
                 </SelectContent>
