@@ -1,51 +1,84 @@
 
 
-# Plan: Bulk Apply KPI Changes Across Months
+# Plan: Add Active/Inactive Status for Employees
 
 ## Problem
-When an admin edits a KPI's structural fields (target, thresholds, weightage, UOM, etc.) in the Admin KPI Editor, the change only applies to the single selected month. If the same KPI exists across 12 months, the admin must repeat the edit 12 times.
+When employees leave the organization, there is no way to deactivate them. Currently the only option is to delete them, which loses historical data. An Active/Inactive toggle is needed to:
+1. Block login access for inactive users
+2. Exclude them from KPI rollover
+3. Hide them from active employee lists (reviewer panels, manager dropdowns, assignment dialogs)
+4. Preserve their historical KPI and review data
 
-## Solution
-Add a **"Apply To" scope selector** in the Admin KPI Edit Dialog that lets the admin choose how broadly to apply structural changes:
+## Changes Required
 
-1. **This month only** (default — current behavior)
-2. **All future months** — applies to months after the current KPI's month in the same year
-3. **All months** — applies to every month in the same year for this employee+KRA+KPI
+### 1. Database Migration — Add `is_active` column to `profiles`
 
-## How It Works
+```sql
+ALTER TABLE public.profiles 
+  ADD COLUMN is_active boolean NOT NULL DEFAULT true;
 
-### Sibling KPI Matching
-Find all KPIs with the same `employee_id`, `kra_name`, `kpi_name`, and `review_year` but different `review_period`. Filter by month index relative to the current KPI's month based on the selected scope.
+-- Add deactivated_at timestamp for audit trail
+ALTER TABLE public.profiles 
+  ADD COLUMN deactivated_at timestamptz;
+```
 
-### Fields That Propagate
-Structural/config fields only: `target_value`, `uom`, `weightage`, `criteria`, `r0`–`r5`, `frequency`, `frequency_cycle_start`, `source_of_data`, `is_org_level`, `org_level_scope`, `uom_type`, `qualitative_options`, `require_resubmit_reason`, `day_count_type`, `threshold_mode`.
+No RLS changes needed — existing policies already govern profile access. The column is just a data flag.
 
-### Fields That Do NOT Propagate
-- `review_period` (each KPI keeps its own month)
-- `status` (workflow position is per-month)
-- Achieved values / scores (data integrity)
+### 2. Auth Gate — Block Login for Inactive Users
 
-### UI Placement
-A radio group placed above the "Reason for Change" textarea, inside a highlighted info box:
-- Radio: This month only | All future months | All months
-- Helper text explaining what will happen
+**File: `src/contexts/AuthContext.tsx`**
+- After fetching the profile on login/session restore, check `is_active`.
+- If `is_active === false`, sign the user out immediately and show a toast: "Your account has been deactivated. Contact your administrator."
+- Add `is_active` to the `Profile` interface.
 
-### Execution Flow
-1. Admin edits fields and selects scope
-2. On save: first update the current KPI (existing logic)
-3. If scope ≠ "this_month": query sibling KPIs by matching criteria, filter by month scope, batch-update them with the same structural fields
-4. Each sibling update gets its own audit log entry with `source: 'admin_bulk_apply'`
-5. Toast shows count: "KPI updated + X sibling months updated"
+### 3. User Management UI — Add Active/Inactive Toggle
 
-## Files to Modify
+**File: `src/pages/admin/UserManagement.tsx`**
+- Add a **Status** column to the table showing Active/Inactive badge.
+- Add a **status filter** dropdown (All / Active / Inactive) alongside existing role/department filters. Default to "Active".
+- In the **Edit User dialog**, add an Active/Inactive switch. When toggling to inactive, set `deactivated_at = now()`. When reactivating, clear `deactivated_at`.
+- Add a **bulk deactivate** option in the bulk actions dialog.
+- Update stats cards to show Active vs Total counts.
 
-| File | Change |
+### 4. KPI Rollover — Skip Inactive Employees
+
+**File: `supabase/functions/auto-rollover-kpis/index.ts`**
+- After fetching source KPIs grouped by employee, query `profiles` to get `is_active` status for each employee.
+- Skip employees where `is_active = false` and log them as `skipped` with reason "inactive".
+
+### 5. Employee Selectors — Filter Out Inactive Users
+
+Several components query profiles for assignment/selection. Add `.eq('is_active', true)` filter to:
+
+| File | Query Purpose |
+|------|---------------|
+| `src/hooks/useOrganization.ts` → `useProfiles()` | Add filter but keep inactive visible when status filter = "Inactive" on User Management. For other consumers (reviewer panels, dropdowns), default to active only. |
+| `src/hooks/useOrganization.ts` → `useTeamMembers()` | Manager's direct reports — show only active |
+| `src/components/admin/OrgKpiAddEmployeeDialog.tsx` | Already has `.eq('is_active', true)` — will work automatically |
+| `src/components/admin/ReviewPeriodEmployeeLocks.tsx` | Employee locks — show only active |
+| `src/components/admin/SmartAssignmentDialog.tsx` | KRA assignment — show only active |
+| Reporting manager dropdowns (edit/create user) | Only show active users as potential managers |
+
+### 6. Reports & Dashboard — Handle Gracefully
+
+- Inactive employees' **historical data remains visible** in reports (Performance Report, Department Report, etc.).
+- The Management Dashboard's direct reportees monitor should only count active employees.
+- The KPI Weightage Dashboard should show inactive employees grayed out with a badge but not exclude them (historical data).
+
+## Impact Summary
+
+| Area | Effect |
 |------|--------|
-| `src/components/admin/AdminKpiEditDialog.tsx` | Add apply-scope radio group state, pass scope to submit handler, implement sibling query + batch update logic after primary save |
-| `src/hooks/useKpis.ts` | No changes needed — the dialog will handle sibling updates directly since `useAdminUpdateKpi` already handles single-KPI updates with audit logging |
+| Login | Blocked for inactive users |
+| KPI Rollover | Skipped for inactive users |
+| Assignment Dialogs | Inactive users hidden |
+| Manager Dropdowns | Inactive users hidden |
+| Historical Data | Preserved and visible in reports |
+| User Management | New filter, toggle, bulk action |
+| Notifications/Emails | Inactive users excluded from future sends |
 
 ## Risk Assessment
-- **Data Impact**: Only structural fields propagate; scores and statuses are untouched. Each update is individually audited.
-- **Regression Risk**: Low — default is "this month only" which preserves current behavior exactly.
-- **Performance**: At most 11 additional updates (one per sibling month), each lightweight.
+- **Data Impact**: Additive column with safe default (`true`). No existing data affected.
+- **Regression Risk**: Low — filter is opt-in for existing queries. `useProfiles()` will gain an optional parameter.
+- **Auth Security**: Server-side check on every session restore ensures deactivated users cannot bypass the gate by having a cached session.
 
