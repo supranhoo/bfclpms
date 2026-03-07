@@ -126,6 +126,7 @@ Congratulations! Your KPI has received final approval and is now complete.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Thank you for your contribution!`,
     color: '#6366f1',
@@ -141,6 +142,7 @@ Thank you for your contribution!`,
 {{actor_name}} has raised a query on your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Query: {{query_reason}}
 
 Please respond to this query at your earliest convenience.`,
