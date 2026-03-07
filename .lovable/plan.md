@@ -1,35 +1,51 @@
 
 
-# Fix: Include KPI Name and KRA Name in Bulk Apply Propagation
+# Plan: Bulk Apply KPI Changes Across Months
 
 ## Problem
-When an admin edits the KPI name (or KRA name) and selects "All months" or "All future months", the text change only applies to the current month. The sibling months retain the old name.
+When an admin edits a KPI's structural fields (target, thresholds, weightage, UOM, etc.) in the Admin KPI Editor, the change only applies to the single selected month. If the same KPI exists across 12 months, the admin must repeat the edit 12 times.
 
-This happens because the `structuralFields` object (line 147-168 of `AdminKpiEditDialog.tsx`) excludes `kra_name` and `kpi_name` — these are only sent in the primary update (line 175-176) but not in the batch sibling update (line 225).
+## Solution
+Add a **"Apply To" scope selector** in the Admin KPI Edit Dialog that lets the admin choose how broadly to apply structural changes:
 
-## Fix
+1. **This month only** (default — current behavior)
+2. **All future months** — applies to months after the current KPI's month in the same year
+3. **All months** — applies to every month in the same year for this employee+KRA+KPI
 
-### File: `src/components/admin/AdminKpiEditDialog.tsx`
+## How It Works
 
-**1. Add `kra_name` and `kpi_name` to the `structuralFields` object** (after line 148):
+### Sibling KPI Matching
+Find all KPIs with the same `employee_id`, `kra_name`, `kpi_name`, and `review_year` but different `review_period`. Filter by month index relative to the current KPI's month based on the selected scope.
 
-```typescript
-const structuralFields = {
-  kra_name: formData.kra_name,
-  kpi_name: formData.kpi_name,
-  target_value: ...
-  // rest unchanged
-};
-```
+### Fields That Propagate
+Structural/config fields only: `target_value`, `uom`, `weightage`, `criteria`, `r0`–`r5`, `frequency`, `frequency_cycle_start`, `source_of_data`, `is_org_level`, `org_level_scope`, `uom_type`, `qualitative_options`, `require_resubmit_reason`, `day_count_type`, `threshold_mode`.
 
-**2. Update the sibling query to use the ORIGINAL KPI name** (not the new one):
+### Fields That Do NOT Propagate
+- `review_period` (each KPI keeps its own month)
+- `status` (workflow position is per-month)
+- Achieved values / scores (data integrity)
 
-The sibling lookup (around line 196) currently matches on `kpi.kpi_name` which is the original KPI object. This is already correct — we match siblings by the old name, then update them to the new name. No change needed here.
+### UI Placement
+A radio group placed above the "Reason for Change" textarea, inside a highlighted info box:
+- Radio: This month only | All future months | All months
+- Helper text explaining what will happen
 
-**3. Handle the unique constraint**: The `idx_kpis_no_duplicates` constraint is on `(employee_id, review_period, review_year, kra_name, kpi_name)`. Since we're renaming from the old name to the new name for the same employee/period/year, each sibling update replaces the old name — no conflict arises unless a KPI with the new name already exists for that month. We should add error handling to catch and report this.
+### Execution Flow
+1. Admin edits fields and selects scope
+2. On save: first update the current KPI (existing logic)
+3. If scope ≠ "this_month": query sibling KPIs by matching criteria, filter by month scope, batch-update them with the same structural fields
+4. Each sibling update gets its own audit log entry with `source: 'admin_bulk_apply'`
+5. Toast shows count: "KPI updated + X sibling months updated"
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/components/admin/AdminKpiEditDialog.tsx` | Add apply-scope radio group state, pass scope to submit handler, implement sibling query + batch update logic after primary save |
+| `src/hooks/useKpis.ts` | No changes needed — the dialog will handle sibling updates directly since `useAdminUpdateKpi` already handles single-KPI updates with audit logging |
 
 ## Risk Assessment
-- **Data Impact**: KPI name/KRA name will now propagate like other structural fields. This is the expected behavior.
-- **Unique Constraint**: If the new name collides with an existing KPI in a sibling month, the update will fail for that sibling only (already handled by the `continue` on line 230). A toast will inform the admin.
-- **Regression Risk**: Low — only adds two more fields to an existing propagation mechanism.
+- **Data Impact**: Only structural fields propagate; scores and statuses are untouched. Each update is individually audited.
+- **Regression Risk**: Low — default is "this month only" which preserves current behavior exactly.
+- **Performance**: At most 11 additional updates (one per sibling month), each lightweight.
 
