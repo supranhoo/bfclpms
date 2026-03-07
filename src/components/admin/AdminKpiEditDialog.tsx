@@ -145,6 +145,8 @@ const [formData, setFormData] = useState({
 
     // Build the structural fields payload
     const structuralFields = {
+      kra_name: formData.kra_name,
+      kpi_name: formData.kpi_name,
       target_value: formData.uom_type === 'numeric' ? (formData.target_value ? parseFloat(formData.target_value) : null) : null,
       uom: formData.uom || null,
       weightage: formData.weightage ? parseFloat(formData.weightage) : null,
