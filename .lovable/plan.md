@@ -1,51 +1,47 @@
 
 
-# Plan: Bulk Apply KPI Changes Across Months
+# Plan: Add Review Period (Month/Year) to All KPI Email Templates
 
 ## Problem
-When an admin edits a KPI's structural fields (target, thresholds, weightage, UOM, etc.) in the Admin KPI Editor, the change only applies to the single selected month. If the same KPI exists across 12 months, the admin must repeat the edit 12 times.
+Email notifications for KPI events (sent back, approved, queries, etc.) don't include the review period month and year. The data (`review_period`, `review_year`) is already passed from the database trigger to the edge function — it's just missing from the template text.
 
-## Solution
-Add a **"Apply To" scope selector** in the Admin KPI Edit Dialog that lets the admin choose how broadly to apply structural changes:
+## Changes
 
-1. **This month only** (default — current behavior)
-2. **All future months** — applies to months after the current KPI's month in the same year
-3. **All months** — applies to every month in the same year for this employee+KRA+KPI
+### 1. Edge Function — `supabase/functions/send-email-notification/index.ts`
+Add `Period: {{review_period}} {{review_year}}` line to all KPI-related default templates that currently lack it. The following templates need the period added after the KRA/KPI lines:
 
-## How It Works
+| Template | Currently Has Period? |
+|---|---|
+| `kpi_submitted` | Yes |
+| `manager_approved` | No — add |
+| `manager_rejected` | No — add |
+| `query_raised` | No — add |
+| `query_resolved` | No — add |
+| `final_approved` | No — add |
+| `kra_assigned` | Yes |
+| `kpi_ready_for_audit` | No — add |
+| `kpi_ready_for_management` | No — add |
+| `query_response_received` | No — add |
+| `admin_status_change` | No — add |
+| `admin_data_entry` | No — add |
+| `admin_data_override` | No — add |
+| `org_kpi_sent_back` | No — add |
+| `admin_status_step_back` | No — add |
+| `rollback_requested` | No — add |
+| `rollback_approved` | No — add |
+| `rollback_rejected` | No — add |
+| Observation templates | No — add |
 
-### Sibling KPI Matching
-Find all KPIs with the same `employee_id`, `kra_name`, `kpi_name`, and `review_year` but different `review_period`. Filter by month index relative to the current KPI's month based on the selected scope.
+For each, insert `Period: {{review_period}} {{review_year}}` after the KPI/KRA line block.
 
-### Fields That Propagate
-Structural/config fields only: `target_value`, `uom`, `weightage`, `criteria`, `r0`–`r5`, `frequency`, `frequency_cycle_start`, `source_of_data`, `is_org_level`, `org_level_scope`, `uom_type`, `qualitative_options`, `require_resubmit_reason`, `day_count_type`, `threshold_mode`.
+### 2. Frontend — `src/components/admin/EmailTemplateEditor.tsx`
+Mirror the same period line additions in the default body templates shown in the Email Template Editor UI, so admins see the updated defaults when customizing.
 
-### Fields That Do NOT Propagate
-- `review_period` (each KPI keeps its own month)
-- `status` (workflow position is per-month)
-- Achieved values / scores (data integrity)
-
-### UI Placement
-A radio group placed above the "Reason for Change" textarea, inside a highlighted info box:
-- Radio: This month only | All future months | All months
-- Helper text explaining what will happen
-
-### Execution Flow
-1. Admin edits fields and selects scope
-2. On save: first update the current KPI (existing logic)
-3. If scope ≠ "this_month": query sibling KPIs by matching criteria, filter by month scope, batch-update them with the same structural fields
-4. Each sibling update gets its own audit log entry with `source: 'admin_bulk_apply'`
-5. Toast shows count: "KPI updated + X sibling months updated"
-
-## Files to Modify
-
-| File | Change |
-|------|--------|
-| `src/components/admin/AdminKpiEditDialog.tsx` | Add apply-scope radio group state, pass scope to submit handler, implement sibling query + batch update logic after primary save |
-| `src/hooks/useKpis.ts` | No changes needed — the dialog will handle sibling updates directly since `useAdminUpdateKpi` already handles single-KPI updates with audit logging |
+### 3. Documentation
+Update `DOCUMENTATION.md` to note that all KPI-related email templates now include period context.
 
 ## Risk Assessment
-- **Data Impact**: Only structural fields propagate; scores and statuses are untouched. Each update is individually audited.
-- **Regression Risk**: Low — default is "this month only" which preserves current behavior exactly.
-- **Performance**: At most 11 additional updates (one per sibling month), each lightweight.
+- **Data Impact**: None — no schema changes; `review_period` and `review_year` are already passed in the payload
+- **Regression Risk**: Minimal — only adds text to templates; existing custom templates saved by admins are unaffected (they use stored overrides)
+- **UI/UX**: Improves clarity for all email recipients
 
