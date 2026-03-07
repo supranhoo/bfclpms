@@ -13,6 +13,7 @@ export interface KpiRow {
   categoryName: string;
   categoryId: string;
   months: Record<string, number | null>; // month -> weightage
+  kpiIds: Record<string, string>; // month -> kpi.id
   baselineWeightage: number | null;
   hasMismatch: boolean;
 }
