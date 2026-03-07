@@ -265,6 +265,7 @@ Great news! Your KPI has been approved by your manager.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 The review will now proceed to the next stage.`,
   },
@@ -276,6 +277,7 @@ Your KPI has been sent back for revision.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please review the feedback and update your submission.`,
   },
@@ -286,6 +288,7 @@ Please review the feedback and update your submission.`,
 {{actor_name}} has raised a query on your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Query: {{query_reason}}
 
 Please respond to this query at your earliest convenience.`,
@@ -297,6 +300,7 @@ Please respond to this query at your earliest convenience.`,
 Your query has been resolved by {{actor_name}}.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Resolution: {{resolution_notes}}`,
   },
   final_approved: {
@@ -307,6 +311,7 @@ Congratulations! Your KPI has received final approval and is now complete.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Thank you for your contribution!`,
   },
