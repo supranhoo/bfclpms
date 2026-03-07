@@ -176,6 +176,7 @@ Please review the response and take appropriate action.`,
 Your query has been resolved by {{actor_name}}.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Resolution: {{resolution_notes}}`,
     color: '#10b981',
     emoji: '✅',
