@@ -99,6 +99,12 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
         const fullName = profile.full_name || 'Unknown';
         const employeeCode = profile.employee_code || '';
         const departmentName = profile.departments?.name || 'Unknown';
+        const isActive = profile.is_active !== false;
+
+        // Filter inactive employees unless includeInactive is true
+        if (!filters?.includeInactive && !isActive) {
+          continue;
+        }
 
         // Apply department filter client-side (embedded resource can't filter server-side)
         if (filters?.departmentId && profile.department_id !== filters.departmentId) {
