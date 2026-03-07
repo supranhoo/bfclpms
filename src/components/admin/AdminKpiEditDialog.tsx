@@ -66,6 +66,15 @@ export function AdminKpiEditDialog({ isOpen, onClose, kpi }: AdminKpiEditDialogP
   const { data: categories } = useKraCategories();
   const { data: profiles } = useProfiles();
   const updateKpi = useAdminUpdateKpi();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Copy to months state
+  const [copyToMonthsOpen, setCopyToMonthsOpen] = useState(false);
+  const [selectedCopyMonths, setSelectedCopyMonths] = useState<Set<string>>(new Set());
+  const [existingSiblingKeys, setExistingSiblingKeys] = useState<Set<string>>(new Set());
+  const [loadingSiblings, setLoadingSiblings] = useState(false);
+  const [copying, setCopying] = useState(false);
 
 const [formData, setFormData] = useState({
     employee_id: '',
