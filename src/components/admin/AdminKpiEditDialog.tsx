@@ -141,8 +141,32 @@ const [formData, setFormData] = useState({
       });
       setReason('');
       setApplyScope('this_month');
+      setCopyToMonthsOpen(false);
+      setSelectedCopyMonths(new Set());
+      setExistingSiblingKeys(new Set());
     }
   }, [kpi]);
+
+  // Fetch existing siblings when copy section is opened
+  useEffect(() => {
+    if (!copyToMonthsOpen || !kpi?.review_year || !kpi?.review_period) return;
+    const fetchSiblings = async () => {
+      setLoadingSiblings(true);
+      const fiscalStartYear = getFiscalStartYear(kpi.review_period!, kpi.review_year!);
+      const fiscalYears = [fiscalStartYear, fiscalStartYear + 1];
+      const { data } = await supabase
+        .from('kpis')
+        .select('review_period, review_year')
+        .eq('employee_id', kpi.employee_id)
+        .eq('kra_name', kpi.kra_name)
+        .eq('kpi_name', kpi.kpi_name)
+        .in('review_year', fiscalYears);
+      const keys = new Set((data || []).map(d => `${d.review_period}-${d.review_year}`));
+      setExistingSiblingKeys(keys);
+      setLoadingSiblings(false);
+    };
+    fetchSiblings();
+  }, [copyToMonthsOpen, kpi]);
 
   // Validation for tiered options
   const tieredValidationError = formData.uom_type === 'tiered' 
