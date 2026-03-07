@@ -7,9 +7,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useKraCategories, useProfiles } from '@/hooks/useOrganization';
 import { useAdminUpdateKpi, ReviewStatus, KPI } from '@/hooks/useKpis';
-import { Loader2, Building2, Info } from 'lucide-react';
+import { Loader2, Building2, Info, Copy, ChevronDown } from 'lucide-react';
 import { UomTypeSelector } from '@/components/admin/UomTypeSelector';
 import { TieredOptionsBuilder } from '@/components/admin/TieredOptionsBuilder';
 import { UomType, QualitativeOption, validateQualitativeOptions } from '@/lib/qualitativeUom';
@@ -17,6 +19,8 @@ import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
 
 type ApplyScope = 'this_month' | 'future_months' | 'all_months';
 
@@ -62,6 +66,15 @@ export function AdminKpiEditDialog({ isOpen, onClose, kpi }: AdminKpiEditDialogP
   const { data: categories } = useKraCategories();
   const { data: profiles } = useProfiles();
   const updateKpi = useAdminUpdateKpi();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Copy to months state
+  const [copyToMonthsOpen, setCopyToMonthsOpen] = useState(false);
+  const [selectedCopyMonths, setSelectedCopyMonths] = useState<Set<string>>(new Set());
+  const [existingSiblingKeys, setExistingSiblingKeys] = useState<Set<string>>(new Set());
+  const [loadingSiblings, setLoadingSiblings] = useState(false);
+  const [copying, setCopying] = useState(false);
 
 const [formData, setFormData] = useState({
     employee_id: '',
@@ -128,8 +141,32 @@ const [formData, setFormData] = useState({
       });
       setReason('');
       setApplyScope('this_month');
+      setCopyToMonthsOpen(false);
+      setSelectedCopyMonths(new Set());
+      setExistingSiblingKeys(new Set());
     }
   }, [kpi]);
+
+  // Fetch existing siblings when copy section is opened
+  useEffect(() => {
+    if (!copyToMonthsOpen || !kpi?.review_year || !kpi?.review_period) return;
+    const fetchSiblings = async () => {
+      setLoadingSiblings(true);
+      const fiscalStartYear = getFiscalStartYear(kpi.review_period!, kpi.review_year!);
+      const fiscalYears = [fiscalStartYear, fiscalStartYear + 1];
+      const { data } = await supabase
+        .from('kpis')
+        .select('review_period, review_year')
+        .eq('employee_id', kpi.employee_id)
+        .eq('kra_name', kpi.kra_name)
+        .eq('kpi_name', kpi.kpi_name)
+        .in('review_year', fiscalYears);
+      const keys = new Set((data || []).map(d => `${d.review_period}-${d.review_year}`));
+      setExistingSiblingKeys(keys);
+      setLoadingSiblings(false);
+    };
+    fetchSiblings();
+  }, [copyToMonthsOpen, kpi]);
 
   // Validation for tiered options
   const tieredValidationError = formData.uom_type === 'tiered' 
@@ -258,6 +295,95 @@ const [formData, setFormData] = useState({
     }
 
     onClose();
+  };
+
+  const handleCopyToMonths = async () => {
+    if (!kpi || selectedCopyMonths.size === 0) return;
+    setCopying(true);
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      let created = 0;
+
+      for (const key of selectedCopyMonths) {
+        const [month, yearStr] = key.split('-');
+        const year = parseInt(yearStr);
+
+        // Build insert payload from current form state
+        const insertPayload = {
+          employee_id: formData.employee_id,
+          category_id: formData.category_id,
+          kra_name: formData.kra_name,
+          kpi_name: formData.kpi_name,
+          target_value: formData.uom_type === 'numeric' ? (formData.target_value ? parseFloat(formData.target_value) : null) : null,
+          uom: formData.uom || null,
+          weightage: formData.weightage ? parseFloat(formData.weightage) : null,
+          frequency: formData.frequency || null,
+          frequency_cycle_start: (formData.frequency_cycle_start && formData.frequency_cycle_start !== 'system_default') ? formData.frequency_cycle_start : null,
+          criteria: formData.uom_type === 'numeric' ? (formData.criteria || null) : null,
+          source_of_data: formData.source_of_data || null,
+          r5: formData.uom_type === 'numeric' ? (formData.r5 || null) : null,
+          r4: formData.uom_type === 'numeric' ? (formData.r4 || null) : null,
+          r3: formData.uom_type === 'numeric' ? (formData.r3 || null) : null,
+          r2: formData.uom_type === 'numeric' ? (formData.r2 || null) : null,
+          r1: formData.uom_type === 'numeric' ? (formData.r1 || null) : null,
+          r0: formData.uom_type === 'numeric' ? (formData.r0 || null) : null,
+          is_org_level: formData.is_org_level,
+          org_level_scope: formData.is_org_level ? formData.org_level_scope : 'organization',
+          uom_type: formData.uom_type,
+          qualitative_options: formData.uom_type === 'tiered' ? formData.qualitative_options : null,
+          require_resubmit_reason: formData.require_resubmit_reason,
+          day_count_type: formData.frequency === 'Daily' ? formData.day_count_type : null,
+          threshold_mode: formData.uom_type === 'numeric' ? formData.threshold_mode : null,
+          review_period: month,
+          review_year: year,
+          status: 'kra_set' as const,
+        };
+
+        const { error } = await supabase.from('kpis').insert(insertPayload as any);
+        if (error) {
+          console.error(`Failed to copy KPI to ${month} ${year}:`, error);
+          continue;
+        }
+        created++;
+
+        // Audit log
+        if (authUser) {
+          await supabase.from('kpi_audit_logs').insert({
+            kpi_id: kpi.id,
+            performed_by: authUser.id,
+            action: 'admin_copy_to_month',
+            new_value: { review_period: month, review_year: year } as any,
+            metadata: {
+              source: 'admin_copy_to_month',
+              target_month: month,
+              target_year: year,
+            },
+          });
+        }
+
+        // Ensure review_period record exists
+        await supabase.from('review_periods').upsert(
+          { period_name: month, review_year: year, is_locked: false },
+          { onConflict: 'period_name,review_year' }
+        );
+      }
+
+      if (created > 0) {
+        toast.success(`KPI copied to ${created} month(s)`);
+        queryClient.invalidateQueries({ queryKey: ['admin-kpis'] });
+        queryClient.invalidateQueries({ queryKey: ['kpis'] });
+        // Refresh siblings
+        setCopyToMonthsOpen(false);
+        setSelectedCopyMonths(new Set());
+      } else {
+        toast.error('Failed to copy KPI to any month. Duplicates may already exist.');
+      }
+    } catch (err) {
+      console.error('Copy to months failed:', err);
+      toast.error('Failed to copy KPI');
+    } finally {
+      setCopying(false);
+    }
   };
 
   if (!kpi) return null;
@@ -754,7 +880,85 @@ const [formData, setFormData] = useState({
             )}
           </div>
 
-          {/* Reason for Change */}
+          {/* Copy to Other Months */}
+          {kpi?.review_year && kpi?.review_period && (
+            <Collapsible open={copyToMonthsOpen} onOpenChange={setCopyToMonthsOpen}>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" className="w-full justify-between" type="button">
+                  <span className="flex items-center gap-2">
+                    <Copy className="h-4 w-4" />
+                    Copy KPI to Other Months
+                  </span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${copyToMonthsOpen ? 'rotate-180' : ''}`} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3">
+                <div className="p-4 border rounded-lg bg-muted/30 space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Select months where this KPI doesn't exist yet. It will be created with status "KRA Set".
+                  </p>
+                  {loadingSiblings ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        {(() => {
+                          const fiscalStartYear = getFiscalStartYear(kpi.review_period!, kpi.review_year!);
+                          return FISCAL_MONTHS.map(month => {
+                            const year = MONTHS.indexOf(month) >= 6 ? fiscalStartYear : fiscalStartYear + 1;
+                            const key = `${month}-${year}`;
+                            const exists = existingSiblingKeys.has(key);
+                            const isSelected = selectedCopyMonths.has(key);
+                            return (
+                              <label
+                                key={key}
+                                className={`flex items-center gap-2 p-2 rounded-md border text-sm cursor-pointer transition-colors ${
+                                  exists
+                                    ? 'bg-muted/50 text-muted-foreground cursor-not-allowed opacity-60'
+                                    : isSelected
+                                    ? 'bg-primary/10 border-primary/30'
+                                    : 'hover:bg-muted/50'
+                                }`}
+                              >
+                                <Checkbox
+                                  checked={exists || isSelected}
+                                  disabled={exists}
+                                  onCheckedChange={(checked) => {
+                                    setSelectedCopyMonths(prev => {
+                                      const next = new Set(prev);
+                                      if (checked) next.add(key);
+                                      else next.delete(key);
+                                      return next;
+                                    });
+                                  }}
+                                />
+                                <span className="truncate">{month.slice(0, 3)} {year}</span>
+                                {exists && <span className="text-xs">(exists)</span>}
+                              </label>
+                            );
+                          });
+                        })()}
+                      </div>
+                      {selectedCopyMonths.size > 0 && (
+                        <Button
+                          size="sm"
+                          onClick={handleCopyToMonths}
+                          disabled={copying}
+                          className="mt-2"
+                        >
+                          {copying && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          Copy to {selectedCopyMonths.size} month(s)
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="reason">
               Reason for Change {formData.status !== originalStatus && <span className="text-destructive">* (Required when changing status)</span>}
