@@ -174,12 +174,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           initializedRef.current = true;
           setSession(session);
           setUser(session.user);
-          loadUserData(session.user.id).finally(() => setLoading(false));
+          loadUserData(session.user.id).then(isActive => {
+            if (!isActive) setLoading(false);
+            else setLoading(false);
+          });
         } else if (initializedRef.current) {
           setSession(session);
           setUser(session?.user ?? null);
           if (session?.user) {
-            loadUserData(session.user.id).finally(() => setLoading(false));
+            loadUserData(session.user.id).then(isActive => {
+              if (!isActive) setLoading(false);
+              else setLoading(false);
+            });
           } else {
             setProfile(null);
             setRole(null);
