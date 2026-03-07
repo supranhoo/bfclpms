@@ -23,6 +23,7 @@ const SHORT_MONTHS: Record<string, string> = {
 };
 
 function KpiWeightageDashboard() {
+  const queryClient = useQueryClient();
   const now = new Date();
   const currentFiscalYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
   const [fiscalYear, setFiscalYear] = useState(currentFiscalYear);
