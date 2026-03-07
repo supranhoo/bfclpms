@@ -180,6 +180,10 @@ function KpiWeightageDashboard() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="flex items-center gap-2 self-end pb-1">
+              <Switch id="show-inactive" checked={showInactive} onCheckedChange={setShowInactive} />
+              <Label htmlFor="show-inactive" className="text-xs text-muted-foreground whitespace-nowrap cursor-pointer">Show Inactive</Label>
+            </div>
             <Button variant="outline" size="sm" onClick={handleExport} disabled={!employees.length}>
               <Download className="h-4 w-4 mr-1.5" />Export
             </Button>
