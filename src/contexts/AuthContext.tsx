@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ? naturalRole
     : role;
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string): Promise<boolean> => {
     try {
       const { data: profileData } = await supabase
         .from('profiles')
@@ -76,8 +76,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
       
       if (profileData) {
+        // Check if user is deactivated
+        if (profileData.is_active === false) {
+          toast({
+            title: "Account deactivated",
+            description: "Your account has been deactivated. Contact your administrator.",
+            variant: "destructive",
+          });
+          await supabase.auth.signOut();
+          setUser(null);
+          setSession(null);
+          setProfile(null);
+          setRole(null);
+          setNaturalRole(null);
+          return false;
+        }
         setProfile(profileData);
+        return true;
       }
+      return true;
     } catch (error) {
       console.error('Failed to fetch profile:', error);
       toast({
@@ -85,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         description: "Please refresh the page to try again.",
         variant: "destructive",
       });
+      return true;
     }
   };
 
