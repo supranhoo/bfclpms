@@ -735,13 +735,13 @@ const [formData, setFormData] = useState({
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="future_months" id="scope_future" />
                 <Label htmlFor="scope_future" className="text-sm font-normal cursor-pointer">
-                  All future months <span className="text-muted-foreground">(same year, after {kpi?.review_period || 'current month'})</span>
+                   All future months <span className="text-muted-foreground">(fiscal year, after {kpi?.review_period || 'current month'})</span>
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="all_months" id="scope_all" />
                 <Label htmlFor="scope_all" className="text-sm font-normal cursor-pointer">
-                  All months <span className="text-muted-foreground">(every month in {kpi?.review_year || 'this year'})</span>
+                   All months <span className="text-muted-foreground">(fiscal year {kpi?.review_period && kpi?.review_year ? getFiscalLabel(kpi.review_period, kpi.review_year) : 'this year'})</span>
                 </Label>
               </div>
             </RadioGroup>
