@@ -231,6 +231,21 @@ Deno.serve(async (req) => {
 
     for (const [empId, kpis] of Object.entries(employeeKpis)) {
       if (skip_employee_ids.includes(empId)) continue;
+      if (inactiveSet.has(empId)) {
+        const profile = (kpis[0] as any).profiles;
+        skippedEmployees.push({
+          employee_id: empId,
+          employee_name: profile?.full_name || 'Unknown',
+          employee_code: profile?.employee_code || '',
+          department: profile?.departments?.name || '',
+          kpis_copied: 0,
+          status: 'skipped',
+          existing_kpi_count: 0,
+          existing_kpi_names: [],
+          source_kpi_count: kpis.length,
+        });
+        continue;
+      }
 
       const profile = (kpis[0] as any).profiles;
       const empName = profile?.full_name || 'Unknown';
