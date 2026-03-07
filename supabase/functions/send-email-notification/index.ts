@@ -487,6 +487,7 @@ An administrator has moved your KPI back one stage in the workflow.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please check your dashboard for details and take any required action.`,
   },
@@ -498,6 +499,7 @@ A rollback has been requested on a KPI that requires your review.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Reason: {{rollback_reason}}
 
 Please log in to review and approve or dismiss this request.`,
@@ -510,6 +512,7 @@ Your rollback request has been approved.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 You can now edit and resubmit your KPI.`,
   },
@@ -521,6 +524,7 @@ Your rollback request has been dismissed by the reviewer.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 The KPI will remain at its current stage. Please contact your reviewer if you have questions.`,
   },
