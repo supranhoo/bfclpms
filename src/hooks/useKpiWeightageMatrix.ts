@@ -35,9 +35,10 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
   employeeSearch?: string;
   departmentId?: string;
   categoryId?: string;
+  includeInactive?: boolean;
 }) {
   return useQuery({
-    queryKey: ['kpi-weightage-matrix', fiscalStartYear, filters?.employeeSearch, filters?.departmentId, filters?.categoryId],
+    queryKey: ['kpi-weightage-matrix', fiscalStartYear, filters?.employeeSearch, filters?.departmentId, filters?.categoryId, filters?.includeInactive],
     queryFn: async () => {
       // Fiscal year spans two calendar years: fiscalStartYear (Jul-Dec) and fiscalStartYear+1 (Jan-Jun)
       const PAGE_SIZE = 1000;
