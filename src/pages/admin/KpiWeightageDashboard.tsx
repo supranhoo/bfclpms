@@ -321,20 +321,41 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                           const isMismatch = w != null && kpi.baselineWeightage != null && w !== kpi.baselineWeightage;
                           const noData = w == null;
                           const isEliminated = noData && months.slice(0, mIdx).some(prev => kpi.months[prev] != null);
-                          return (
-                            <TableCell
-                              key={m}
-                              className={`text-center text-sm ${
-                                isEliminated
+                          const hasKpiId = !!kpi.kpiIds[m];
+                          const cellContent = noData ? '--' : `${w}%`;
+                          const cellClasses = `text-center text-sm ${
+                            isEliminated
+                              ? 'bg-destructive/10 text-destructive font-medium'
+                              : noData
+                                ? 'text-muted-foreground/40'
+                                : isMismatch
                                   ? 'bg-destructive/10 text-destructive font-medium'
-                                  : noData
-                                    ? 'text-muted-foreground/40'
-                                    : isMismatch
-                                      ? 'bg-destructive/10 text-destructive font-medium'
-                                      : ''
-                              }`}
-                            >
-                              {noData ? '--' : `${w}%`}
+                                  : ''
+                          }`;
+
+                          if (hasKpiId) {
+                            return (
+                              <TableCell key={m} className={cellClasses}>
+                                <WeightageCellEditor
+                                  employeeId={employee.employeeId}
+                                  kraName={kpi.kraName}
+                                  kpiName={kpi.kpiName}
+                                  month={m}
+                                  currentWeightage={w}
+                                  kpiIds={kpi.kpiIds}
+                                  onSuccess={onWeightageUpdate}
+                                >
+                                  <button className="w-full cursor-pointer hover:bg-muted/60 rounded px-1 py-0.5 transition-colors">
+                                    {cellContent}
+                                  </button>
+                                </WeightageCellEditor>
+                              </TableCell>
+                            );
+                          }
+
+                          return (
+                            <TableCell key={m} className={cellClasses}>
+                              {cellContent}
                             </TableCell>
                           );
                         })}
