@@ -241,11 +241,12 @@ function KpiWeightageDashboard() {
   );
 }
 
-function EmployeeSection({ employee, months, isOpen, onToggle }: {
+function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate }: {
   employee: EmployeeMatrix;
   months: string[];
   isOpen: boolean;
   onToggle: () => void;
+  onWeightageUpdate: () => void;
 }) {
   const sortedKras = Object.keys(employee.kras).sort();
   const hasMismatches = sortedKras.some(kra => employee.kras[kra].some(k => k.hasMismatch));
