@@ -802,6 +802,13 @@ export default function UserManagement() {
                       <TableCell>
                         <Badge className={roleColors[role as AppRole]}>{role}</Badge>
                       </TableCell>
+                      <TableCell>
+                        {(profile as any).is_active === false ? (
+                          <Badge variant="destructive" className="text-xs">Inactive</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs border-primary/30 text-primary">Active</Badge>
+                        )}
+                      </TableCell>
                       <TableCell>{manager?.full_name || '-'}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
