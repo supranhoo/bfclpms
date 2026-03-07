@@ -161,6 +161,7 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
         }
 
         kpiRow.months[month] = weightage;
+        kpiRow.kpiIds[month] = kpi.id;
 
         // Accumulate month totals
         if (weightage != null) {
