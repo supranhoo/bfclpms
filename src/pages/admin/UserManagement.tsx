@@ -752,6 +752,7 @@ export default function UserManagement() {
                   <TableHead>PMS Grade</TableHead>
                   <TableHead>Mobile</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Reporting To</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
