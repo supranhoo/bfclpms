@@ -1,77 +1,51 @@
 
 
-# Root Cause: `prevent_locked_period_updates` Trigger Lacks Bypass Exceptions
+# Plan: Bulk Apply KPI Changes Across Months
 
 ## Problem
-Arun Goswami has **January 2026** KPIs at `kra_set` status that were **sent back** for resubmission. January 2026 has an **employee role lock** that explicitly sets `edit_kpi: false` and `submit_self_review: false`.
+When an admin edits a KPI's structural fields (target, thresholds, weightage, UOM, etc.) in the Admin KPI Editor, the change only applies to the single selected month. If the same KPI exists across 12 months, the admin must repeat the edit 12 times.
 
-The **frontend** correctly bypasses governance for sent-back KPIs (line 512 of `SelfReviewSheet.tsx`):
-```js
-const isGovernanceLocked = !isSentBack && !isDailyUnlocked && (!govPerms.submit_self_review || govPerms.view_only);
-```
+## Solution
+Add a **"Apply To" scope selector** in the Admin KPI Edit Dialog that lets the admin choose how broadly to apply structural changes:
 
-But when the employee submits, the mutation calls `supabase.from('kpis').update({ status: 'self_review' })` (line 590 of `useKpis.ts`), which triggers `prevent_locked_period_updates`. This trigger **unconditionally** checks `edit_kpi` permission — which returns `false` for employees in January 2026 — and raises the exception.
+1. **This month only** (default — current behavior)
+2. **All future months** — applies to months after the current KPI's month in the same year
+3. **All months** — applies to every month in the same year for this employee+KRA+KPI
 
-**The database trigger has no bypass for sent-back or daily KPIs**, creating a mismatch between what the UI allows and what the database permits.
+## How It Works
 
-### Evidence
-| Check | Result |
-|---|---|
-| Arun's January `kra_set` KPI IDs | `84ebc5e8`, `c254a0f8` |
-| Prior submissions exist for those KPIs? | Yes (`kpi_status: open`, ratings reset) |
-| `check_review_period_permission(Arun, January, 2026, 'edit_kpi')` | `false` |
-| January role lock for `employee` | `is_locked: true`, `edit_kpi: false` |
+### Sibling KPI Matching
+Find all KPIs with the same `employee_id`, `kra_name`, `kpi_name`, and `review_year` but different `review_period`. Filter by month index relative to the current KPI's month based on the selected scope.
 
-## Fix — Database Migration
+### Fields That Propagate
+Structural/config fields only: `target_value`, `uom`, `weightage`, `criteria`, `r0`–`r5`, `frequency`, `frequency_cycle_start`, `source_of_data`, `is_org_level`, `org_level_scope`, `uom_type`, `qualitative_options`, `require_resubmit_reason`, `day_count_type`, `threshold_mode`.
 
-Update `prevent_locked_period_updates()` to add the same two bypass exceptions the frontend already implements:
+### Fields That Do NOT Propagate
+- `review_period` (each KPI keeps its own month)
+- `status` (workflow position is per-month)
+- Achieved values / scores (data integrity)
 
-1. **Sent-back KPIs**: If `OLD.status = 'kra_set'` AND `NEW.status = 'self_review'` AND a prior submission exists → allow
-2. **Daily frequency KPIs**: If `NEW.frequency = 'Daily'` AND `OLD.status = 'kra_set'` AND `NEW.status = 'self_review'` → allow
+### UI Placement
+A radio group placed above the "Reason for Change" textarea, inside a highlighted info box:
+- Radio: This month only | All future months | All months
+- Helper text explaining what will happen
 
-```sql
-CREATE OR REPLACE FUNCTION public.prevent_locked_period_updates()
-RETURNS trigger ...
-AS $$
-DECLARE
-  v_has_prior_submission boolean;
-BEGIN
-  -- Legacy lock
-  IF public.is_period_locked(NEW.review_period, NEW.review_year) THEN
-    IF NOT public.has_role(auth.uid(), 'admin') THEN
-      RAISE EXCEPTION '...';
-    END IF;
-  END IF;
+### Execution Flow
+1. Admin edits fields and selects scope
+2. On save: first update the current KPI (existing logic)
+3. If scope ≠ "this_month": query sibling KPIs by matching criteria, filter by month scope, batch-update them with the same structural fields
+4. Each sibling update gets its own audit log entry with `source: 'admin_bulk_apply'`
+5. Toast shows count: "KPI updated + X sibling months updated"
 
-  -- BYPASS: Daily KPIs at kra_set can transition to self_review
-  IF NEW.frequency = 'Daily' AND OLD.status = 'kra_set' AND NEW.status = 'self_review' THEN
-    RETURN NEW;
-  END IF;
+## Files to Modify
 
-  -- BYPASS: Sent-back KPIs (kra_set with prior submission) can resubmit
-  IF OLD.status = 'kra_set' AND NEW.status = 'self_review' THEN
-    SELECT EXISTS(SELECT 1 FROM review_submissions WHERE kpi_id = NEW.id)
-      INTO v_has_prior_submission;
-    IF v_has_prior_submission THEN
-      RETURN NEW;
-    END IF;
-  END IF;
-
-  -- Standard governance check
-  IF NOT public.check_review_period_permission(auth.uid(), ..., 'edit_kpi') THEN
-    RAISE EXCEPTION '...';
-  END IF;
-
-  RETURN NEW;
-END;
-$$
-```
-
-No frontend changes needed — the UI bypass logic is already correct.
+| File | Change |
+|------|--------|
+| `src/components/admin/AdminKpiEditDialog.tsx` | Add apply-scope radio group state, pass scope to submit handler, implement sibling query + batch update logic after primary save |
+| `src/hooks/useKpis.ts` | No changes needed — the dialog will handle sibling updates directly since `useAdminUpdateKpi` already handles single-KPI updates with audit logging |
 
 ## Risk Assessment
-- **Data Impact**: No schema changes; only trigger logic update
-- **Regression Risk**: Low — bypasses only apply to the specific `kra_set → self_review` transition, which is an employee submitting their review. All other KPI modifications remain governed.
-- **Security**: Safe — these are the same policy exceptions already enforced in the frontend. Adding them to the trigger ensures consistency.
-- **Policy Alignment**: Matches the documented governance bypass exceptions for sent-back and daily KPIs.
+- **Data Impact**: Only structural fields propagate; scores and statuses are untouched. Each update is individually audited.
+- **Regression Risk**: Low — default is "this month only" which preserves current behavior exactly.
+- **Performance**: At most 11 additional updates (one per sibling month), each lightweight.
 
