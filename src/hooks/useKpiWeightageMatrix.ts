@@ -22,6 +22,7 @@ export interface EmployeeMatrix {
   fullName: string;
   employeeCode: string;
   departmentName: string;
+  isActive: boolean;
   kras: Record<string, KpiRow[]>; // kra_name -> KpiRow[]
   monthTotals: Record<string, number>; // month -> total weightage
   activeMonths: string[];
