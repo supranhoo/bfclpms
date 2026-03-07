@@ -269,6 +269,7 @@ Please check your dashboard for updated details.`,
 The org KPI data you submitted has been sent back for revision.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Reason: {{send_back_reason}}
 
 Please review the feedback and resubmit the data.`,
