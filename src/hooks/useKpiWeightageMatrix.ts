@@ -13,6 +13,7 @@ export interface KpiRow {
   categoryName: string;
   categoryId: string;
   months: Record<string, number | null>; // month -> weightage
+  kpiIds: Record<string, string>; // month -> kpi.id
   baselineWeightage: number | null;
   hasMismatch: boolean;
 }
@@ -152,6 +153,7 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
             categoryName,
             categoryId: kpi.category_id,
             months: {},
+            kpiIds: {},
             baselineWeightage: null,
             hasMismatch: false,
           };
@@ -159,6 +161,7 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
         }
 
         kpiRow.months[month] = weightage;
+        kpiRow.kpiIds[month] = kpi.id;
 
         // Accumulate month totals
         if (weightage != null) {
