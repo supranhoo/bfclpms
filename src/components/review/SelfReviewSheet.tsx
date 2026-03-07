@@ -502,7 +502,11 @@ export function SelfReviewSheet({
   const needsSubPeriodForKpi = selectedKpi ? requiresSubPeriodSelection(selectedKpi.frequency as FrequencyType) : false;
   const isSelfReview = selectedKpi?.status === 'self_review';
 
-  const isGovernanceLocked = !govPerms.submit_self_review || govPerms.view_only;
+  // Detect sent-back KPI: status reverted to kra_set but a prior submission exists
+  const isSentBack = isKraSet && selectedKpi && submissionMap.has(selectedKpi.id);
+
+  // Governance lock does NOT apply to sent-back KPIs — employee must be able to respond
+  const isGovernanceLocked = !isSentBack && (!govPerms.submit_self_review || govPerms.view_only);
 
   const isReadOnly = (!isKraSet && !isSelfReview) || isGovernanceLocked;
 
