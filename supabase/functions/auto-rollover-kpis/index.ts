@@ -175,6 +175,21 @@ Deno.serve(async (req) => {
       employeeKpis[kpi.employee_id].push(kpi);
     }
 
+    // Fetch active status for all employees to skip inactive ones
+    const empIdsAll = Object.keys(employeeKpis);
+    const inactiveSet = new Set<string>();
+    for (let i = 0; i < empIdsAll.length; i += 50) {
+      const chunk = empIdsAll.slice(i, i + 50);
+      const { data: profileChunk } = await supabase
+        .from('profiles')
+        .select('id, is_active')
+        .in('id', chunk)
+        .eq('is_active', false);
+      if (profileChunk) {
+        for (const p of profileChunk) inactiveSet.add(p.id);
+      }
+    }
+
     // Fetch existing target KPIs for all relevant employees (paginated)
     const empIds = Object.keys(employeeKpis);
     const targetKpis: any[] = [];
