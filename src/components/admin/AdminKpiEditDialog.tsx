@@ -880,7 +880,85 @@ const [formData, setFormData] = useState({
             )}
           </div>
 
-          {/* Reason for Change */}
+          {/* Copy to Other Months */}
+          {kpi?.review_year && kpi?.review_period && (
+            <Collapsible open={copyToMonthsOpen} onOpenChange={setCopyToMonthsOpen}>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" className="w-full justify-between" type="button">
+                  <span className="flex items-center gap-2">
+                    <Copy className="h-4 w-4" />
+                    Copy KPI to Other Months
+                  </span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${copyToMonthsOpen ? 'rotate-180' : ''}`} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3">
+                <div className="p-4 border rounded-lg bg-muted/30 space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Select months where this KPI doesn't exist yet. It will be created with status "KRA Set".
+                  </p>
+                  {loadingSiblings ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        {(() => {
+                          const fiscalStartYear = getFiscalStartYear(kpi.review_period!, kpi.review_year!);
+                          return FISCAL_MONTHS.map(month => {
+                            const year = MONTHS.indexOf(month) >= 6 ? fiscalStartYear : fiscalStartYear + 1;
+                            const key = `${month}-${year}`;
+                            const exists = existingSiblingKeys.has(key);
+                            const isSelected = selectedCopyMonths.has(key);
+                            return (
+                              <label
+                                key={key}
+                                className={`flex items-center gap-2 p-2 rounded-md border text-sm cursor-pointer transition-colors ${
+                                  exists
+                                    ? 'bg-muted/50 text-muted-foreground cursor-not-allowed opacity-60'
+                                    : isSelected
+                                    ? 'bg-primary/10 border-primary/30'
+                                    : 'hover:bg-muted/50'
+                                }`}
+                              >
+                                <Checkbox
+                                  checked={exists || isSelected}
+                                  disabled={exists}
+                                  onCheckedChange={(checked) => {
+                                    setSelectedCopyMonths(prev => {
+                                      const next = new Set(prev);
+                                      if (checked) next.add(key);
+                                      else next.delete(key);
+                                      return next;
+                                    });
+                                  }}
+                                />
+                                <span className="truncate">{month.slice(0, 3)} {year}</span>
+                                {exists && <span className="text-xs">(exists)</span>}
+                              </label>
+                            );
+                          });
+                        })()}
+                      </div>
+                      {selectedCopyMonths.size > 0 && (
+                        <Button
+                          size="sm"
+                          onClick={handleCopyToMonths}
+                          disabled={copying}
+                          className="mt-2"
+                        >
+                          {copying && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          Copy to {selectedCopyMonths.size} month(s)
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="reason">
               Reason for Change {formData.status !== originalStatus && <span className="text-destructive">* (Required when changing status)</span>}
