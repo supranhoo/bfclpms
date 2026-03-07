@@ -2204,12 +2204,14 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          deactivated_at: string | null
           department_id: string | null
           designation: string | null
           email: string
           employee_code: string | null
           full_name: string | null
           id: string
+          is_active: boolean
           level: string | null
           mobile_number: string | null
           pms_grade: string | null
@@ -2219,12 +2221,14 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          deactivated_at?: string | null
           department_id?: string | null
           designation?: string | null
           email: string
           employee_code?: string | null
           full_name?: string | null
           id: string
+          is_active?: boolean
           level?: string | null
           mobile_number?: string | null
           pms_grade?: string | null
@@ -2234,12 +2238,14 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          deactivated_at?: string | null
           department_id?: string | null
           designation?: string | null
           email?: string
           employee_code?: string | null
           full_name?: string | null
           id?: string
+          is_active?: boolean
           level?: string | null
           mobile_number?: string | null
           pms_grade?: string | null
