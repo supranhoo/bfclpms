@@ -12,7 +12,8 @@ import { Label } from '@/components/ui/label';
 import { Loader2, ChevronRight, Download, Search, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useKpiWeightageMatrix, type EmployeeMatrix } from '@/hooks/useKpiWeightageMatrix';
 import { supabase } from '@/integrations/supabase/client';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { WeightageCellEditor } from '@/components/admin/WeightageCellEditor';
 import * as XLSX from 'xlsx';
 
 const SHORT_MONTHS: Record<string, string> = {
