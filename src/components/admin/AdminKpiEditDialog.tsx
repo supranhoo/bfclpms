@@ -43,6 +43,21 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+const FISCAL_MONTHS = [
+  'July', 'August', 'September', 'October', 'November', 'December',
+  'January', 'February', 'March', 'April', 'May', 'June'
+];
+
+const getFiscalStartYear = (month: string, year: number) => {
+  const calIndex = MONTHS.indexOf(month);
+  return calIndex >= 6 ? year : year - 1; // Jul-Dec = same year is fiscal start; Jan-Jun = previous year
+};
+
+const getFiscalLabel = (month: string, year: number) => {
+  const startYear = getFiscalStartYear(month, year);
+  return `${startYear}-${String(startYear + 1).slice(2)}`;
+};
+
 export function AdminKpiEditDialog({ isOpen, onClose, kpi }: AdminKpiEditDialogProps) {
   const { data: categories } = useKraCategories();
   const { data: profiles } = useProfiles();
@@ -169,27 +184,34 @@ const [formData, setFormData] = useState({
     // 2. If scope is broader, batch-update sibling KPIs
     if (applyScope !== 'this_month' && kpi.review_year && kpi.review_period) {
       try {
+        // Fiscal year spans two calendar years (July-June)
+        const fiscalStartYear = getFiscalStartYear(kpi.review_period, kpi.review_year);
+        const fiscalYears = [fiscalStartYear, fiscalStartYear + 1];
         const currentMonthIndex = MONTHS.indexOf(kpi.review_period);
         
-        // Query sibling KPIs
+        // Query sibling KPIs across both years of the fiscal year
         let query = supabase
           .from('kpis')
-          .select('id, review_period')
+          .select('id, review_period, review_year')
           .eq('employee_id', kpi.employee_id)
           .eq('kra_name', kpi.kra_name)
           .eq('kpi_name', kpi.kpi_name)
-          .eq('review_year', kpi.review_year)
+          .in('review_year', fiscalYears)
           .neq('id', kpi.id);
 
         const { data: siblings, error: fetchError } = await query;
         if (fetchError) throw fetchError;
 
-        // Filter by month scope
+        // Filter by month scope using fiscal ordering
         const filteredSiblings = (siblings || []).filter(s => {
           if (!s.review_period) return false;
-          const siblingMonthIndex = MONTHS.indexOf(s.review_period);
-          if (siblingMonthIndex === -1) return false;
-          if (applyScope === 'future_months') return siblingMonthIndex > currentMonthIndex;
+          if (MONTHS.indexOf(s.review_period) === -1) return false;
+          if (applyScope === 'future_months') {
+            // Use fiscal-aware ordering: later year always wins, same year compare month index
+            if (s.review_year! > kpi.review_year!) return true;
+            if (s.review_year! < kpi.review_year!) return false;
+            return MONTHS.indexOf(s.review_period) > currentMonthIndex;
+          }
           return true; // all_months
         });
 
@@ -713,13 +735,13 @@ const [formData, setFormData] = useState({
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="future_months" id="scope_future" />
                 <Label htmlFor="scope_future" className="text-sm font-normal cursor-pointer">
-                  All future months <span className="text-muted-foreground">(same year, after {kpi?.review_period || 'current month'})</span>
+                   All future months <span className="text-muted-foreground">(fiscal year, after {kpi?.review_period || 'current month'})</span>
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="all_months" id="scope_all" />
                 <Label htmlFor="scope_all" className="text-sm font-normal cursor-pointer">
-                  All months <span className="text-muted-foreground">(every month in {kpi?.review_year || 'this year'})</span>
+                   All months <span className="text-muted-foreground">(fiscal year {kpi?.review_period && kpi?.review_year ? getFiscalLabel(kpi.review_period, kpi.review_year) : 'this year'})</span>
                 </Label>
               </div>
             </RadioGroup>
