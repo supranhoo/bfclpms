@@ -170,6 +170,7 @@ export default function UserManagement() {
       pmsGrade,
       employeeCode,
       mobileNumber,
+      isActive,
     }: {
       userId: string;
       role: AppRole;
@@ -180,18 +181,26 @@ export default function UserManagement() {
       pmsGrade: string;
       employeeCode: string;
       mobileNumber?: string;
+      isActive?: boolean;
     }) => {
+      const updatePayload: Record<string, any> = {
+        full_name: fullName || null,
+        reporting_manager_id: reportingManagerId || null,
+        department_id: departmentId || null,
+        designation,
+        pms_grade: pmsGrade,
+        employee_code: employeeCode || null,
+        mobile_number: mobileNumber !== undefined ? (mobileNumber || null) : undefined,
+      };
+
+      if (isActive !== undefined) {
+        updatePayload.is_active = isActive;
+        updatePayload.deactivated_at = isActive ? null : new Date().toISOString();
+      }
+
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({
-          full_name: fullName || null,
-          reporting_manager_id: reportingManagerId || null,
-          department_id: departmentId || null,
-          designation,
-          pms_grade: pmsGrade,
-          employee_code: employeeCode || null,
-          mobile_number: mobileNumber !== undefined ? (mobileNumber || null) : undefined,
-        })
+        .update(updatePayload)
         .eq('id', userId);
 
       if (profileError) throw profileError;
