@@ -356,6 +356,7 @@ Please review and respond to the observation.`,
 
 {{actor_name}} has replied to an observation on {{kpi_name}}.
 
+Period: {{review_period}} {{review_year}}
 Observation: {{observation_title}}
 
 Please check the observation thread for the latest update.`,
