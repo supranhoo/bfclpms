@@ -40,7 +40,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   /** Refresh the in-memory profile from DB (e.g. after avatar/mobile update) */
-  fetchProfile: (userId: string) => Promise<void>;
+  fetchProfile: (userId: string) => Promise<boolean>;
 }
 
 const ADMIN_MODE_KEY = 'pms_admin_mode';
