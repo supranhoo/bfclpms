@@ -338,6 +338,7 @@ Thank you for your dedication and hard work during this period. We appreciate yo
 {{actor_name}} has raised a new observation on your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Observation: {{observation_title}}
 Type: {{observation_type}}
 Description: {{observation_description}}
