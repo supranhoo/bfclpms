@@ -253,6 +253,7 @@ Please check your dashboard for updated details.`,
 An administrator has overridden data on your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please check your dashboard for updated details.`,
     color: '#64748b',
