@@ -1,51 +1,24 @@
 
+# Plan: Active/Inactive Employee Status — IMPLEMENTED ✅
 
-# Plan: Bulk Apply KPI Changes Across Months
+## What Was Done
 
-## Problem
-When an admin edits a KPI's structural fields (target, thresholds, weightage, UOM, etc.) in the Admin KPI Editor, the change only applies to the single selected month. If the same KPI exists across 12 months, the admin must repeat the edit 12 times.
+### 1. Database Migration
+- Added `is_active` (boolean, default `true`) and `deactivated_at` (timestamptz) columns to `profiles` table.
 
-## Solution
-Add a **"Apply To" scope selector** in the Admin KPI Edit Dialog that lets the admin choose how broadly to apply structural changes:
+### 2. Auth Gate
+- `AuthContext.tsx` checks `is_active` on login/session restore. If `false`, user is signed out with a toast notification.
 
-1. **This month only** (default — current behavior)
-2. **All future months** — applies to months after the current KPI's month in the same year
-3. **All months** — applies to every month in the same year for this employee+KRA+KPI
+### 3. User Management UI
+- **Stats cards**: Now show Total, Active, Inactive, Admins (4 cards).
+- **Status filter**: Dropdown (Active/Inactive/All), defaults to "Active".
+- **Status column**: Desktop table shows Active/Inactive badge; mobile cards show Inactive badge.
+- **Edit dialog**: Account Status switch with description text.
+- **Manager dropdowns**: Inactive users are filtered out from edit, create, and bulk update dialogs.
 
-## How It Works
+### 4. KPI Rollover
+- `auto-rollover-kpis` edge function fetches `is_active` for all employees and skips inactive ones with `status: 'skipped'`.
 
-### Sibling KPI Matching
-Find all KPIs with the same `employee_id`, `kra_name`, `kpi_name`, and `review_year` but different `review_period`. Filter by month index relative to the current KPI's month based on the selected scope.
-
-### Fields That Propagate
-Structural/config fields only: `target_value`, `uom`, `weightage`, `criteria`, `r0`–`r5`, `frequency`, `frequency_cycle_start`, `source_of_data`, `is_org_level`, `org_level_scope`, `uom_type`, `qualitative_options`, `require_resubmit_reason`, `day_count_type`, `threshold_mode`.
-
-### Fields That Do NOT Propagate
-- `review_period` (each KPI keeps its own month)
-- `status` (workflow position is per-month)
-- Achieved values / scores (data integrity)
-
-### UI Placement
-A radio group placed above the "Reason for Change" textarea, inside a highlighted info box:
-- Radio: This month only | All future months | All months
-- Helper text explaining what will happen
-
-### Execution Flow
-1. Admin edits fields and selects scope
-2. On save: first update the current KPI (existing logic)
-3. If scope ≠ "this_month": query sibling KPIs by matching criteria, filter by month scope, batch-update them with the same structural fields
-4. Each sibling update gets its own audit log entry with `source: 'admin_bulk_apply'`
-5. Toast shows count: "KPI updated + X sibling months updated"
-
-## Files to Modify
-
-| File | Change |
-|------|--------|
-| `src/components/admin/AdminKpiEditDialog.tsx` | Add apply-scope radio group state, pass scope to submit handler, implement sibling query + batch update logic after primary save |
-| `src/hooks/useKpis.ts` | No changes needed — the dialog will handle sibling updates directly since `useAdminUpdateKpi` already handles single-KPI updates with audit logging |
-
-## Risk Assessment
-- **Data Impact**: Only structural fields propagate; scores and statuses are untouched. Each update is individually audited.
-- **Regression Risk**: Low — default is "this month only" which preserves current behavior exactly.
-- **Performance**: At most 11 additional updates (one per sibling month), each lightweight.
-
+### 5. Employee Selectors
+- `useTeamMembers()` filters to active employees only.
+- Manager dropdowns in User Management filter out inactive users.
