@@ -159,6 +159,7 @@ Please respond to this query at your earliest convenience.`,
 A response has been submitted to your query.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Resolution: {{resolution_notes}}
 
 Please review the response and take appropriate action.`,
