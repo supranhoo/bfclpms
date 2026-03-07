@@ -554,6 +554,13 @@ export function SelfReviewSheet({
                 <span>This KPI was <strong>sent back</strong> for revision. You can update your data and resubmit.</span>
               </div>
             )}
+            {/* Daily KPI governance bypass banner */}
+            {isDailyUnlocked && !isSentBack && (!govPerms.submit_self_review || govPerms.view_only) && (
+              <div className="flex items-center gap-2 rounded-md border border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950 p-3 text-sm text-blue-800 dark:text-blue-200">
+                <CalendarDays className="h-4 w-4 flex-shrink-0" />
+                <span>Daily data entry is permitted for this KPI even during restricted review periods.</span>
+              </div>
+            )}
             {/* KPI Review Panel */}
             <KpiReviewPanel
               kpi={selectedKpi}
