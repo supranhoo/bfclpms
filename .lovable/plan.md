@@ -1,35 +1,24 @@
 
+# Plan: Active/Inactive Employee Status — IMPLEMENTED ✅
 
-# Plan: Add Active/Inactive Employee Filter to KPI Weightage Dashboard
+## What Was Done
 
-## Problem
-The KPI Weightage Dashboard currently shows all employees regardless of their active status. Inactive employees should be hidden by default but visible when the admin opts in via a filter.
+### 1. Database Migration
+- Added `is_active` (boolean, default `true`) and `deactivated_at` (timestamptz) columns to `profiles` table.
 
-## Changes
+### 2. Auth Gate
+- `AuthContext.tsx` checks `is_active` on login/session restore. If `false`, user is signed out with a toast notification.
 
-### 1. `src/hooks/useKpiWeightageMatrix.ts`
-- Add `includeInactive?: boolean` to the filters parameter
-- Fetch `is_active` from the profiles join: update the select to include `is_active` from `profiles`
-- Store `isActive` on `EmployeeMatrix` interface
-- When `includeInactive` is falsy, skip employees where `profile.is_active === false`
+### 3. User Management UI
+- **Stats cards**: Now show Total, Active, Inactive, Admins (4 cards).
+- **Status filter**: Dropdown (Active/Inactive/All), defaults to "Active".
+- **Status column**: Desktop table shows Active/Inactive badge; mobile cards show Inactive badge.
+- **Edit dialog**: Account Status switch with description text.
+- **Manager dropdowns**: Inactive users are filtered out from edit, create, and bulk update dialogs.
 
-### 2. `src/pages/admin/KpiWeightageDashboard.tsx`
-- Add a new state `showInactive` (boolean, default `false`)
-- Pass `includeInactive: showInactive` to `useKpiWeightageMatrix`
-- Add a filter control (Switch or Select with "Active Only" / "All Employees" / "Inactive Only") in the filters card, next to the Category filter
-- In the employee list, show an "Inactive" badge (grayed out styling) next to inactive employees' names
+### 4. KPI Rollover
+- `auto-rollover-kpis` edge function fetches `is_active` for all employees and skips inactive ones with `status: 'skipped'`.
 
-### 3. `src/hooks/useKpiWeightageMatrix.ts` — EmployeeMatrix interface
-- Add `isActive: boolean` field
-
-### Files Modified
-
-| File | Change |
-|------|--------|
-| `src/hooks/useKpiWeightageMatrix.ts` | Add `is_active` to profile select, add `includeInactive` filter, add `isActive` to EmployeeMatrix |
-| `src/pages/admin/KpiWeightageDashboard.tsx` | Add status filter control, pass filter to hook, show Inactive badge |
-
-### Risk Assessment
-- **Regression Risk**: None — additive filter with safe default (active only, matching current behavior)
-- **Data Impact**: None — read-only filtering
-
+### 5. Employee Selectors
+- `useTeamMembers()` filters to active employees only.
+- Manager dropdowns in User Management filter out inactive users.

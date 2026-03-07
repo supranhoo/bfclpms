@@ -22,6 +22,7 @@ export interface EmployeeMatrix {
   fullName: string;
   employeeCode: string;
   departmentName: string;
+  isActive: boolean;
   kras: Record<string, KpiRow[]>; // kra_name -> KpiRow[]
   monthTotals: Record<string, number>; // month -> total weightage
   activeMonths: string[];
@@ -34,9 +35,10 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
   employeeSearch?: string;
   departmentId?: string;
   categoryId?: string;
+  includeInactive?: boolean;
 }) {
   return useQuery({
-    queryKey: ['kpi-weightage-matrix', fiscalStartYear, filters?.employeeSearch, filters?.departmentId, filters?.categoryId],
+    queryKey: ['kpi-weightage-matrix', fiscalStartYear, filters?.employeeSearch, filters?.departmentId, filters?.categoryId, filters?.includeInactive],
     queryFn: async () => {
       // Fiscal year spans two calendar years: fiscalStartYear (Jul-Dec) and fiscalStartYear+1 (Jan-Jun)
       const PAGE_SIZE = 1000;
@@ -57,7 +59,7 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
               weightage,
               review_period,
               category_id,
-              profiles!kpis_employee_id_fkey(full_name, employee_code, department_id, departments(name)),
+              profiles!kpis_employee_id_fkey(full_name, employee_code, department_id, is_active, departments(name)),
               kra_categories(name)
             `)
             .eq('review_year', reviewYear)
@@ -97,6 +99,12 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
         const fullName = profile.full_name || 'Unknown';
         const employeeCode = profile.employee_code || '';
         const departmentName = profile.departments?.name || 'Unknown';
+        const isActive = profile.is_active !== false;
+
+        // Filter inactive employees unless includeInactive is true
+        if (!filters?.includeInactive && !isActive) {
+          continue;
+        }
 
         // Apply department filter client-side (embedded resource can't filter server-side)
         if (filters?.departmentId && profile.department_id !== filters.departmentId) {
@@ -118,6 +126,7 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
             fullName,
             employeeCode,
             departmentName,
+            isActive,
             kras: {},
             monthTotals: {},
             activeMonths: [],

@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Loader2, ChevronRight, Download, Search, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useKpiWeightageMatrix, type EmployeeMatrix } from '@/hooks/useKpiWeightageMatrix';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,6 +28,7 @@ function KpiWeightageDashboard() {
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [departmentId, setDepartmentId] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
+  const [showInactive, setShowInactive] = useState(false);
   const [openEmployees, setOpenEmployees] = useState<Set<string>>(new Set());
 
   const fiscalLabel = (y: number) => `${y}-${String(y + 1).slice(-2)}`;
@@ -34,6 +37,7 @@ function KpiWeightageDashboard() {
     employeeSearch: employeeSearch || undefined,
     departmentId: departmentId && departmentId !== 'all' ? departmentId : undefined,
     categoryId: categoryId && categoryId !== 'all' ? categoryId : undefined,
+    includeInactive: showInactive,
   });
 
   const { data: departments } = useQuery({
@@ -176,6 +180,10 @@ function KpiWeightageDashboard() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="flex items-center gap-2 self-end pb-1">
+              <Switch id="show-inactive" checked={showInactive} onCheckedChange={setShowInactive} />
+              <Label htmlFor="show-inactive" className="text-xs text-muted-foreground whitespace-nowrap cursor-pointer">Show Inactive</Label>
+            </div>
             <Button variant="outline" size="sm" onClick={handleExport} disabled={!employees.length}>
               <Download className="h-4 w-4 mr-1.5" />Export
             </Button>
@@ -256,6 +264,7 @@ function EmployeeSection({ employee, months, isOpen, onToggle }: {
                 <span className="text-muted-foreground ml-2 text-xs">• {employee.departmentName}</span>
               </div>
               {hasMismatches && <Badge variant="destructive" className="text-xs">Mismatch</Badge>}
+              {!employee.isActive && <Badge variant="outline" className="text-xs text-muted-foreground">Inactive</Badge>}
             </div>
             <div className="flex gap-2 flex-wrap justify-end">
               {months.map(m => {
