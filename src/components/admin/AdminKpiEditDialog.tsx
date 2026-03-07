@@ -7,9 +7,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useKraCategories, useProfiles } from '@/hooks/useOrganization';
 import { useAdminUpdateKpi, ReviewStatus, KPI } from '@/hooks/useKpis';
-import { Loader2, Building2, Info } from 'lucide-react';
+import { Loader2, Building2, Info, Copy, ChevronDown } from 'lucide-react';
 import { UomTypeSelector } from '@/components/admin/UomTypeSelector';
 import { TieredOptionsBuilder } from '@/components/admin/TieredOptionsBuilder';
 import { UomType, QualitativeOption, validateQualitativeOptions } from '@/lib/qualitativeUom';
@@ -17,6 +19,8 @@ import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
 
 type ApplyScope = 'this_month' | 'future_months' | 'all_months';
 
