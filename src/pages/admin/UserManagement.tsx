@@ -556,8 +556,9 @@ export default function UserManagement() {
 
   // Stats
   const totalUsers = profiles?.length || 0;
+  const activeUsers = profiles?.filter(p => (p as any).is_active !== false).length || 0;
+  const inactiveUsers = totalUsers - activeUsers;
   const admins = profiles?.filter(p => (p.user_roles as any)?.[0]?.role === 'admin').length || 0;
-  const managers = profiles?.filter(p => (p.user_roles as any)?.[0]?.role === 'manager').length || 0;
 
   if (isLoading) {
     return <UserManagementSkeleton />;
@@ -577,7 +578,7 @@ export default function UserManagement() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Users</CardTitle>
@@ -589,20 +590,29 @@ export default function UserManagement() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Active</CardTitle>
+            <UserCheck className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-primary">{activeUsers}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Inactive</CardTitle>
+            <UserX className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-muted-foreground">{inactiveUsers}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Admins</CardTitle>
             <Shield className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-destructive">{admins}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Managers</CardTitle>
-            <Users className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-primary">{managers}</div>
           </CardContent>
         </Card>
       </div>
