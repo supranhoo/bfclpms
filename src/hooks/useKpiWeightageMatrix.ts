@@ -153,6 +153,7 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
             categoryName,
             categoryId: kpi.category_id,
             months: {},
+            kpiIds: {},
             baselineWeightage: null,
             hasMismatch: false,
           };
