@@ -96,6 +96,14 @@ Stages in brackets `[]` are optional and configurable per workflow template.
 | `management_review` | Management approves | `approved` | Management |
 | Any stage | Raise query | No status change | Any reviewer |
 
+### 3.5 Sent-Back KPI Governance Bypass
+
+When a reviewer sends back a KPI, its status reverts to `kra_set`. If the employee's governance permissions (Edit KPI / Self Review) are disabled, the system **still allows** the employee to edit and resubmit a sent-back KPI. This is detected when `status === 'kra_set'` **and** a prior submission exists for that KPI.
+
+- **Fresh KPIs** (`kra_set` with no submission): Governed by standard role permissions — if Edit KPI / Self Review are disabled, the KPI remains read-only.
+- **Sent-back KPIs** (`kra_set` with existing submission): Governance lock is bypassed; employee can update data and resubmit.
+- A visual banner informs the employee that the KPI was sent back for revision.
+
 ### 3.4 Review Period Locking
 
 - Admins can lock a review period via Review Periods page
@@ -559,6 +567,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.8.0 | 2026-03-07 | Sent-Back KPI Governance Bypass (§3.5): Employees can edit and resubmit KPIs that were sent back by a reviewer, even when Edit KPI / Self Review governance permissions are disabled. Fresh KPIs remain locked. |
 | 1.7.0 | 2026-03-05 | Effective Month Selection Policy (§23): KRA assignment dialogs now require explicit month/year selection instead of deriving from non-existent system setting. Multi-month frequencies auto-resolve to terminal month via `getActiveMonthForCycle`. |
 | 1.6.0 | 2026-03-05 | Bug bounty fixes (BUG-001–BUG-009): full 7-role coverage in User Management, email validation hardening, XSS sanitization in PolicyRenderer, SendBack character limit, stable React keys, pagination reset on filter, server-side unread notification count, Dashboard lazy-loading of allSubmissions |
 | 1.5.0 | 2026-03-05 | Frequency Period Auto-Resolution Policy (§22): KPI import/creation auto-resolves multi-month frequency periods to terminal month. DB trigger blocks INSERT of KPIs with locked-month review_period for non-admin users |
