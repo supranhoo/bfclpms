@@ -126,6 +126,7 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
             fullName,
             employeeCode,
             departmentName,
+            isActive,
             kras: {},
             monthTotals: {},
             activeMonths: [],
