@@ -56,6 +56,7 @@ export default function UserManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('active');
   const [currentPage, setCurrentPage] = useState(1);
 
   // Selection
