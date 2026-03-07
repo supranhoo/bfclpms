@@ -43,6 +43,21 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+const FISCAL_MONTHS = [
+  'July', 'August', 'September', 'October', 'November', 'December',
+  'January', 'February', 'March', 'April', 'May', 'June'
+];
+
+const getFiscalStartYear = (month: string, year: number) => {
+  const calIndex = MONTHS.indexOf(month);
+  return calIndex >= 6 ? year : year - 1; // Jul-Dec = same year is fiscal start; Jan-Jun = previous year
+};
+
+const getFiscalLabel = (month: string, year: number) => {
+  const startYear = getFiscalStartYear(month, year);
+  return `${startYear}-${String(startYear + 1).slice(2)}`;
+};
+
 export function AdminKpiEditDialog({ isOpen, onClose, kpi }: AdminKpiEditDialogProps) {
   const { data: categories } = useKraCategories();
   const { data: profiles } = useProfiles();
