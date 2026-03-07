@@ -251,6 +251,7 @@ export function useTeamMembers(managerId: string | undefined) {
           departments (id, name, code)
         `)
         .eq('reporting_manager_id', managerId!)
+        .eq('is_active', true)
         .order('full_name');
 
       if (error) throw error;
