@@ -100,9 +100,18 @@ Stages in brackets `[]` are optional and configurable per workflow template.
 
 When a reviewer sends back a KPI, its status reverts to `kra_set`. If the employee's governance permissions (Edit KPI / Self Review) are disabled, the system **still allows** the employee to edit and resubmit a sent-back KPI. This is detected when `status === 'kra_set'` **and** a prior submission exists for that KPI.
 
-- **Fresh KPIs** (`kra_set` with no submission): Governed by standard role permissions — if Edit KPI / Self Review are disabled, the KPI remains read-only.
+- **Fresh KPIs** (`kra_set` with no submission): Governed by standard role permissions — if Edit KPI / Self Review are disabled, the KPI remains read-only (unless it is a daily-frequency KPI; see §3.6).
 - **Sent-back KPIs** (`kra_set` with existing submission): Governance lock is bypassed; employee can update data and resubmit.
 - A visual banner informs the employee that the KPI was sent back for revision.
+
+### 3.6 Daily-Frequency KPI Governance Bypass
+
+Daily-frequency KPIs require continuous data entry throughout the month. When governance locks disable "Edit KPI" or "Self Review" for the Employee role, daily KPIs at `kra_set` status are **exempt** from these restrictions.
+
+- **Scope:** Only KPIs with `frequency = 'daily'` and `status = 'kra_set'`.
+- **Behavior:** The `SelfReviewSheet` bypasses `isGovernanceLocked` when `isDailyUnlocked` is true.
+- **UI:** A blue info banner ("Daily data entry is permitted for this KPI even during restricted review periods.") is displayed when the bypass is active.
+- **Security:** Employees can only edit their own KPIs (RLS enforced). The bypass does not affect other roles or frequency types.
 
 ### 3.4 Review Period Locking
 
