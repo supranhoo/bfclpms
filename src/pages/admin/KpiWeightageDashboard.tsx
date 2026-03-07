@@ -37,6 +37,7 @@ function KpiWeightageDashboard() {
     employeeSearch: employeeSearch || undefined,
     departmentId: departmentId && departmentId !== 'all' ? departmentId : undefined,
     categoryId: categoryId && categoryId !== 'all' ? categoryId : undefined,
+    includeInactive: showInactive,
   });
 
   const { data: departments } = useQuery({
