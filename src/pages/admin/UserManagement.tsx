@@ -659,6 +659,7 @@ export default function UserManagement() {
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="inactive">Inactive</SelectItem>
           </SelectContent>
+        </Select>
 
         {selectedUserIds.size > 0 && (
           <Button variant="secondary" onClick={() => setBulkDialogOpen(true)}>
