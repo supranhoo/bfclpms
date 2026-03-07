@@ -40,7 +40,7 @@ import { QualitativeValueInput } from './QualitativeValueInput';
 import { DateCalendarInput } from './DateCalendarInput';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
-import { Target, TrendingUp, CheckCircle2, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar, AlertTriangle, Loader2, Undo2 } from 'lucide-react';
+import { Target, TrendingUp, CheckCircle2, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar, CalendarDays, AlertTriangle, Loader2, Undo2 } from 'lucide-react';
 import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
 import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog';
 import { DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
@@ -505,8 +505,11 @@ export function SelfReviewSheet({
   // Detect sent-back KPI: status reverted to kra_set but a prior submission exists
   const isSentBack = isKraSet && selectedKpi && submissionMap.has(selectedKpi.id);
 
-  // Governance lock does NOT apply to sent-back KPIs — employee must be able to respond
-  const isGovernanceLocked = !isSentBack && (!govPerms.submit_self_review || govPerms.view_only);
+  // Daily KPIs need continuous data entry — bypass governance lock at kra_set
+  const isDailyUnlocked = isKraSet && selectedKpi?.frequency?.toLowerCase() === 'daily';
+
+  // Governance lock does NOT apply to sent-back or daily-frequency KPIs
+  const isGovernanceLocked = !isSentBack && !isDailyUnlocked && (!govPerms.submit_self_review || govPerms.view_only);
 
   const isReadOnly = (!isKraSet && !isSelfReview) || isGovernanceLocked;
 
@@ -549,6 +552,13 @@ export function SelfReviewSheet({
               <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950 p-3 text-sm text-amber-800 dark:text-amber-200">
                 <Undo2 className="h-4 w-4 flex-shrink-0" />
                 <span>This KPI was <strong>sent back</strong> for revision. You can update your data and resubmit.</span>
+              </div>
+            )}
+            {/* Daily KPI governance bypass banner */}
+            {isDailyUnlocked && !isSentBack && (!govPerms.submit_self_review || govPerms.view_only) && (
+              <div className="flex items-center gap-2 rounded-md border border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950 p-3 text-sm text-blue-800 dark:text-blue-200">
+                <CalendarDays className="h-4 w-4 flex-shrink-0" />
+                <span>Daily data entry is permitted for this KPI even during restricted review periods.</span>
               </div>
             )}
             {/* KPI Review Panel */}
