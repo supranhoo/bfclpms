@@ -18,6 +18,8 @@ interface Profile {
   reporting_manager_id: string | null;
   avatar_url: string | null;
   mobile_number?: string | null;
+  is_active?: boolean;
+  deactivated_at?: string | null;
 }
 
 interface AuthContextType {
@@ -38,7 +40,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   /** Refresh the in-memory profile from DB (e.g. after avatar/mobile update) */
-  fetchProfile: (userId: string) => Promise<void>;
+  fetchProfile: (userId: string) => Promise<boolean>;
 }
 
 const ADMIN_MODE_KEY = 'pms_admin_mode';
@@ -65,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ? naturalRole
     : role;
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string): Promise<boolean> => {
     try {
       const { data: profileData } = await supabase
         .from('profiles')
@@ -74,8 +76,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
       
       if (profileData) {
+        // Check if user is deactivated
+        if (profileData.is_active === false) {
+          toast({
+            title: "Account deactivated",
+            description: "Your account has been deactivated. Contact your administrator.",
+            variant: "destructive",
+          });
+          await supabase.auth.signOut();
+          setUser(null);
+          setSession(null);
+          setProfile(null);
+          setRole(null);
+          setNaturalRole(null);
+          return false;
+        }
         setProfile(profileData);
+        return true;
       }
+      return true;
     } catch (error) {
       console.error('Failed to fetch profile:', error);
       toast({
@@ -83,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         description: "Please refresh the page to try again.",
         variant: "destructive",
       });
+      return true;
     }
   };
 
@@ -141,9 +161,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const loadUserData = async (userId: string) => {
+  const loadUserData = async (userId: string): Promise<boolean> => {
     queryClient.invalidateQueries({ queryKey: ['modules'] });
-    await Promise.all([fetchProfile(userId), fetchRole(userId)]);
+    const [isActive] = await Promise.all([fetchProfile(userId), fetchRole(userId)]);
+    return isActive;
   };
 
   useEffect(() => {
@@ -153,12 +174,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           initializedRef.current = true;
           setSession(session);
           setUser(session.user);
-          loadUserData(session.user.id).finally(() => setLoading(false));
+          loadUserData(session.user.id).then(isActive => {
+            if (!isActive) setLoading(false);
+            else setLoading(false);
+          });
         } else if (initializedRef.current) {
           setSession(session);
           setUser(session?.user ?? null);
           if (session?.user) {
-            loadUserData(session.user.id).finally(() => setLoading(false));
+            loadUserData(session.user.id).then(isActive => {
+              if (!isActive) setLoading(false);
+              else setLoading(false);
+            });
           } else {
             setProfile(null);
             setRole(null);

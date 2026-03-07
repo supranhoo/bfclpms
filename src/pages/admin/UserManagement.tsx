@@ -12,10 +12,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { UserManagementSkeleton } from '@/components/ui/LoadingSkeletons';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package, Calendar, Phone } from 'lucide-react';
+import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package, Calendar, Phone, UserX, UserCheck } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { SmartAssignmentDialog } from '@/components/admin/SmartAssignmentDialog';
 import { EmployeeWorkingDaysDialog } from '@/components/admin/EmployeeWorkingDaysDialog';
@@ -55,6 +56,7 @@ export default function UserManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('active');
   const [currentPage, setCurrentPage] = useState(1);
 
   // Selection
@@ -72,7 +74,7 @@ export default function UserManagement() {
   const [editFullName, setEditFullName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editMobile, setEditMobile] = useState('');
-
+  const [editIsActive, setEditIsActive] = useState(true);
   // Create Dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newFullName, setNewFullName] = useState('');
@@ -134,10 +136,15 @@ export default function UserManagement() {
       const matchesRole = roleFilter === 'all' || role === roleFilter;
       
       const matchesDepartment = departmentFilter === 'all' || p.department_id === departmentFilter;
+
+      const isActive = (p as any).is_active !== false;
+      const matchesStatus = statusFilter === 'all' || 
+        (statusFilter === 'active' && isActive) || 
+        (statusFilter === 'inactive' && !isActive);
       
-      return matchesSearch && matchesRole && matchesDepartment;
+      return matchesSearch && matchesRole && matchesDepartment && matchesStatus;
     }) || [];
-  }, [profiles, searchQuery, roleFilter, departmentFilter]);
+  }, [profiles, searchQuery, roleFilter, departmentFilter, statusFilter]);
 
   const totalPages = Math.ceil(filteredProfiles.length / ITEMS_PER_PAGE);
   const paginatedProfiles = filteredProfiles.slice(
@@ -163,6 +170,7 @@ export default function UserManagement() {
       pmsGrade,
       employeeCode,
       mobileNumber,
+      isActive,
     }: {
       userId: string;
       role: AppRole;
@@ -173,18 +181,26 @@ export default function UserManagement() {
       pmsGrade: string;
       employeeCode: string;
       mobileNumber?: string;
+      isActive?: boolean;
     }) => {
+      const updatePayload: Record<string, any> = {
+        full_name: fullName || null,
+        reporting_manager_id: reportingManagerId || null,
+        department_id: departmentId || null,
+        designation,
+        pms_grade: pmsGrade,
+        employee_code: employeeCode || null,
+        mobile_number: mobileNumber !== undefined ? (mobileNumber || null) : undefined,
+      };
+
+      if (isActive !== undefined) {
+        updatePayload.is_active = isActive;
+        updatePayload.deactivated_at = isActive ? null : new Date().toISOString();
+      }
+
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({
-          full_name: fullName || null,
-          reporting_manager_id: reportingManagerId || null,
-          department_id: departmentId || null,
-          designation,
-          pms_grade: pmsGrade,
-          employee_code: employeeCode || null,
-          mobile_number: mobileNumber !== undefined ? (mobileNumber || null) : undefined,
-        })
+        .update(updatePayload)
         .eq('id', userId);
 
       if (profileError) throw profileError;
@@ -382,6 +398,7 @@ export default function UserManagement() {
     setEditFullName(user.full_name || '');
     setEditEmail(user.email || '');
     setEditMobile((user as any).mobile_number || '');
+    setEditIsActive((user as any).is_active !== false);
     setEditDialogOpen(true);
   };
 
@@ -416,6 +433,7 @@ export default function UserManagement() {
       pmsGrade: editPmsGrade,
       employeeCode: editEmployeeCode,
       mobileNumber: editMobile,
+      isActive: editIsActive,
     });
   };
 
@@ -538,8 +556,9 @@ export default function UserManagement() {
 
   // Stats
   const totalUsers = profiles?.length || 0;
+  const activeUsers = profiles?.filter(p => (p as any).is_active !== false).length || 0;
+  const inactiveUsers = totalUsers - activeUsers;
   const admins = profiles?.filter(p => (p.user_roles as any)?.[0]?.role === 'admin').length || 0;
-  const managers = profiles?.filter(p => (p.user_roles as any)?.[0]?.role === 'manager').length || 0;
 
   if (isLoading) {
     return <UserManagementSkeleton />;
@@ -559,7 +578,7 @@ export default function UserManagement() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Users</CardTitle>
@@ -571,20 +590,29 @@ export default function UserManagement() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Active</CardTitle>
+            <UserCheck className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-primary">{activeUsers}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Inactive</CardTitle>
+            <UserX className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-muted-foreground">{inactiveUsers}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Admins</CardTitle>
             <Shield className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-destructive">{admins}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Managers</CardTitle>
-            <Users className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-primary">{managers}</div>
           </CardContent>
         </Card>
       </div>
@@ -620,6 +648,16 @@ export default function UserManagement() {
             {departments?.map(d => (
               <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); handleFilterChange(); }}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
           </SelectContent>
         </Select>
 
@@ -658,6 +696,9 @@ export default function UserManagement() {
                         <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
                       </div>
                       <Badge className={roleColors[role as AppRole]}>{role}</Badge>
+                      {(profile as any).is_active === false && (
+                        <Badge variant="destructive" className="text-xs">Inactive</Badge>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
                       <span>Code: {profile.employee_code || '-'}</span>
@@ -714,6 +755,7 @@ export default function UserManagement() {
                   <TableHead>PMS Grade</TableHead>
                   <TableHead>Mobile</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Reporting To</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -762,6 +804,13 @@ export default function UserManagement() {
                       </TableCell>
                       <TableCell>
                         <Badge className={roleColors[role as AppRole]}>{role}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {(profile as any).is_active === false ? (
+                          <Badge variant="destructive" className="text-xs">Inactive</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs border-primary/30 text-primary">Active</Badge>
+                        )}
                       </TableCell>
                       <TableCell>{manager?.full_name || '-'}</TableCell>
                       <TableCell>
@@ -929,7 +978,7 @@ export default function UserManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
-                  {profiles?.filter(p => p.id !== selectedUser?.id).map(p => (
+                  {profiles?.filter(p => p.id !== selectedUser?.id && (p as any).is_active !== false).map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -966,6 +1015,19 @@ export default function UserManagement() {
                   className="pl-9"
                 />
               </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <Label>Account Status</Label>
+                <p className="text-xs text-muted-foreground">
+                  {editIsActive ? 'User can log in and access the system' : 'User is blocked from logging in'}
+                </p>
+              </div>
+              <Switch
+                checked={editIsActive}
+                onCheckedChange={setEditIsActive}
+              />
             </div>
           </div>
 
@@ -1068,7 +1130,7 @@ export default function UserManagement() {
                   <SelectValue placeholder="Select manager" />
                 </SelectTrigger>
                 <SelectContent>
-                  {profiles?.map(p => (
+                  {profiles?.filter(p => (p as any).is_active !== false).map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -1116,7 +1178,7 @@ export default function UserManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Remove Manager</SelectItem>
-                  {profiles?.map(p => (
+                  {profiles?.filter(p => (p as any).is_active !== false).map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
                   ))}
                 </SelectContent>

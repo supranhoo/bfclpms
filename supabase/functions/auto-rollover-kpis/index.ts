@@ -175,6 +175,21 @@ Deno.serve(async (req) => {
       employeeKpis[kpi.employee_id].push(kpi);
     }
 
+    // Fetch active status for all employees to skip inactive ones
+    const empIdsAll = Object.keys(employeeKpis);
+    const inactiveSet = new Set<string>();
+    for (let i = 0; i < empIdsAll.length; i += 50) {
+      const chunk = empIdsAll.slice(i, i + 50);
+      const { data: profileChunk } = await supabase
+        .from('profiles')
+        .select('id, is_active')
+        .in('id', chunk)
+        .eq('is_active', false);
+      if (profileChunk) {
+        for (const p of profileChunk) inactiveSet.add(p.id);
+      }
+    }
+
     // Fetch existing target KPIs for all relevant employees (paginated)
     const empIds = Object.keys(employeeKpis);
     const targetKpis: any[] = [];
@@ -216,6 +231,21 @@ Deno.serve(async (req) => {
 
     for (const [empId, kpis] of Object.entries(employeeKpis)) {
       if (skip_employee_ids.includes(empId)) continue;
+      if (inactiveSet.has(empId)) {
+        const profile = (kpis[0] as any).profiles;
+        skippedEmployees.push({
+          employee_id: empId,
+          employee_name: profile?.full_name || 'Unknown',
+          employee_code: profile?.employee_code || '',
+          department: profile?.departments?.name || '',
+          kpis_copied: 0,
+          status: 'skipped',
+          existing_kpi_count: 0,
+          existing_kpi_names: [],
+          source_kpi_count: kpis.length,
+        });
+        continue;
+      }
 
       const profile = (kpis[0] as any).profiles;
       const empName = profile?.full_name || 'Unknown';
