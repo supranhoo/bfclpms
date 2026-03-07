@@ -381,6 +381,7 @@ A KPI is ready for your audit review.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please review and provide your assessment.`,
   },
@@ -392,6 +393,7 @@ A KPI is ready for management review.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please review and provide final approval.`,
   },
@@ -402,6 +404,7 @@ Please review and provide final approval.`,
 A response has been submitted to your query.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Resolution: {{resolution_notes}}
 
 Please review the response and take appropriate action.`,
@@ -413,6 +416,7 @@ Please review the response and take appropriate action.`,
 An administrator has changed the status of your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please check your dashboard for updated details.`,
   },
@@ -423,6 +427,7 @@ Please check your dashboard for updated details.`,
 An administrator has entered data for your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please check your dashboard for updated details.`,
   },
@@ -433,6 +438,7 @@ Please check your dashboard for updated details.`,
 An administrator has overridden data on your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please check your dashboard for updated details.`,
   },
@@ -443,6 +449,7 @@ Please check your dashboard for updated details.`,
 The org KPI data you submitted has been sent back for revision.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Reason: {{send_back_reason}}
 
 Please review the feedback and resubmit the data.`,
