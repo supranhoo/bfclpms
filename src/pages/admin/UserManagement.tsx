@@ -696,6 +696,9 @@ export default function UserManagement() {
                         <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
                       </div>
                       <Badge className={roleColors[role as AppRole]}>{role}</Badge>
+                      {(profile as any).is_active === false && (
+                        <Badge variant="destructive" className="text-xs">Inactive</Badge>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
                       <span>Code: {profile.employee_code || '-'}</span>
