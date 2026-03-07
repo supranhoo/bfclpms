@@ -433,6 +433,7 @@ export default function UserManagement() {
       pmsGrade: editPmsGrade,
       employeeCode: editEmployeeCode,
       mobileNumber: editMobile,
+      isActive: editIsActive,
     });
   };
 
