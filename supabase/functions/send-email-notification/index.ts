@@ -548,6 +548,7 @@ If you did not make this change, please contact your administrator immediately.`
 {{actor_name}} has raised a new observation on your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Observation: {{observation_title}}
 Type: {{observation_type}}
 Description: {{observation_description}}
@@ -560,6 +561,7 @@ Please log in to review the observation and respond if needed.`,
 
 {{actor_name}} has replied to an observation on {{kpi_name}}:
 
+Period: {{review_period}} {{review_year}}
 Observation: {{observation_title}}
 Type: {{observation_type}}
 Description: {{observation_description}}
@@ -576,6 +578,7 @@ Please check the observation thread for the latest update.`,
 An observation on your KPI has been resolved.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Observation: {{observation_title}}
 
 No further action is needed on this observation.`,
@@ -587,6 +590,7 @@ No further action is needed on this observation.`,
 {{actor_name}} mentioned you in an observation.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Observation: {{observation_title}}
 Type: {{observation_type}}
 Description: {{observation_description}}

@@ -373,6 +373,7 @@ Please check the observation thread for the latest update.`,
 An observation on your KPI has been resolved.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Observation: {{observation_title}}
 
 The observation has been closed. No further action is required.`,
