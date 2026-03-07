@@ -28,6 +28,7 @@ function KpiWeightageDashboard() {
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [departmentId, setDepartmentId] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
+  const [showInactive, setShowInactive] = useState(false);
   const [openEmployees, setOpenEmployees] = useState<Set<string>>(new Set());
 
   const fiscalLabel = (y: number) => `${y}-${String(y + 1).slice(-2)}`;
