@@ -234,6 +234,7 @@ function KpiWeightageDashboard() {
           months={globalMonths}
           isOpen={openEmployees.has(emp.employeeId)}
           onToggle={() => toggleEmployee(emp.employeeId)}
+          onWeightageUpdate={() => queryClient.invalidateQueries({ queryKey: ['kpi-weightage-matrix'] })}
         />
       ))}
     </div>
