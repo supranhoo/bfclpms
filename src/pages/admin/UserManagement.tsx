@@ -136,10 +136,15 @@ export default function UserManagement() {
       const matchesRole = roleFilter === 'all' || role === roleFilter;
       
       const matchesDepartment = departmentFilter === 'all' || p.department_id === departmentFilter;
+
+      const isActive = (p as any).is_active !== false;
+      const matchesStatus = statusFilter === 'all' || 
+        (statusFilter === 'active' && isActive) || 
+        (statusFilter === 'inactive' && !isActive);
       
-      return matchesSearch && matchesRole && matchesDepartment;
+      return matchesSearch && matchesRole && matchesDepartment && matchesStatus;
     }) || [];
-  }, [profiles, searchQuery, roleFilter, departmentFilter]);
+  }, [profiles, searchQuery, roleFilter, departmentFilter, statusFilter]);
 
   const totalPages = Math.ceil(filteredProfiles.length / ITEMS_PER_PAGE);
   const paginatedProfiles = filteredProfiles.slice(
