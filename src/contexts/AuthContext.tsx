@@ -18,6 +18,8 @@ interface Profile {
   reporting_manager_id: string | null;
   avatar_url: string | null;
   mobile_number?: string | null;
+  is_active?: boolean;
+  deactivated_at?: string | null;
 }
 
 interface AuthContextType {
