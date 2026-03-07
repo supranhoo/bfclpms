@@ -265,6 +265,7 @@ Great news! Your KPI has been approved by your manager.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 The review will now proceed to the next stage.`,
   },
@@ -276,6 +277,7 @@ Your KPI has been sent back for revision.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please review the feedback and update your submission.`,
   },
@@ -286,6 +288,7 @@ Please review the feedback and update your submission.`,
 {{actor_name}} has raised a query on your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Query: {{query_reason}}
 
 Please respond to this query at your earliest convenience.`,
@@ -297,6 +300,7 @@ Please respond to this query at your earliest convenience.`,
 Your query has been resolved by {{actor_name}}.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Resolution: {{resolution_notes}}`,
   },
   final_approved: {
@@ -307,6 +311,7 @@ Congratulations! Your KPI has received final approval and is now complete.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Thank you for your contribution!`,
   },
@@ -376,6 +381,7 @@ A KPI is ready for your audit review.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please review and provide your assessment.`,
   },
@@ -387,6 +393,7 @@ A KPI is ready for management review.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please review and provide final approval.`,
   },
@@ -397,6 +404,7 @@ Please review and provide final approval.`,
 A response has been submitted to your query.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Resolution: {{resolution_notes}}
 
 Please review the response and take appropriate action.`,
@@ -408,6 +416,7 @@ Please review the response and take appropriate action.`,
 An administrator has changed the status of your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please check your dashboard for updated details.`,
   },
@@ -418,6 +427,7 @@ Please check your dashboard for updated details.`,
 An administrator has entered data for your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please check your dashboard for updated details.`,
   },
@@ -428,6 +438,7 @@ Please check your dashboard for updated details.`,
 An administrator has overridden data on your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please check your dashboard for updated details.`,
   },
@@ -438,6 +449,7 @@ Please check your dashboard for updated details.`,
 The org KPI data you submitted has been sent back for revision.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Reason: {{send_back_reason}}
 
 Please review the feedback and resubmit the data.`,
@@ -475,6 +487,7 @@ An administrator has moved your KPI back one stage in the workflow.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please check your dashboard for details and take any required action.`,
   },
@@ -486,6 +499,7 @@ A rollback has been requested on a KPI that requires your review.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Reason: {{rollback_reason}}
 
 Please log in to review and approve or dismiss this request.`,
@@ -498,6 +512,7 @@ Your rollback request has been approved.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 You can now edit and resubmit your KPI.`,
   },
@@ -509,6 +524,7 @@ Your rollback request has been dismissed by the reviewer.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 The KPI will remain at its current stage. Please contact your reviewer if you have questions.`,
   },
@@ -532,6 +548,7 @@ If you did not make this change, please contact your administrator immediately.`
 {{actor_name}} has raised a new observation on your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Observation: {{observation_title}}
 Type: {{observation_type}}
 Description: {{observation_description}}
@@ -544,6 +561,7 @@ Please log in to review the observation and respond if needed.`,
 
 {{actor_name}} has replied to an observation on {{kpi_name}}:
 
+Period: {{review_period}} {{review_year}}
 Observation: {{observation_title}}
 Type: {{observation_type}}
 Description: {{observation_description}}
@@ -560,6 +578,7 @@ Please check the observation thread for the latest update.`,
 An observation on your KPI has been resolved.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Observation: {{observation_title}}
 
 No further action is needed on this observation.`,
@@ -571,6 +590,7 @@ No further action is needed on this observation.`,
 {{actor_name}} mentioned you in an observation.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Observation: {{observation_title}}
 Type: {{observation_type}}
 Description: {{observation_description}}

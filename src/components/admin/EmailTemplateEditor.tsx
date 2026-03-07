@@ -58,6 +58,7 @@ Great news! Your KPI has been approved by your manager.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 The review will now proceed to the next stage.`,
     color: '#10b981',
@@ -74,6 +75,7 @@ Your KPI has been sent back for revision.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please review the feedback and update your submission.`,
     color: '#f59e0b',
@@ -90,6 +92,7 @@ A KPI is ready for your audit review.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please review and provide your assessment.`,
     color: '#8b5cf6',
@@ -106,6 +109,7 @@ A KPI is ready for management review.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please review and provide final approval.`,
     color: '#0ea5e9',
@@ -122,6 +126,7 @@ Congratulations! Your KPI has received final approval and is now complete.
 
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Thank you for your contribution!`,
     color: '#6366f1',
@@ -137,6 +142,7 @@ Thank you for your contribution!`,
 {{actor_name}} has raised a query on your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Query: {{query_reason}}
 
 Please respond to this query at your earliest convenience.`,
@@ -153,6 +159,7 @@ Please respond to this query at your earliest convenience.`,
 A response has been submitted to your query.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Resolution: {{resolution_notes}}
 
 Please review the response and take appropriate action.`,
@@ -169,6 +176,7 @@ Please review the response and take appropriate action.`,
 Your query has been resolved by {{actor_name}}.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Resolution: {{resolution_notes}}`,
     color: '#10b981',
     emoji: '✅',
@@ -213,6 +221,7 @@ No further changes can be made to KPIs in this period unless unlocked by an admi
 An administrator has changed the status of your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please check your dashboard for updated details.`,
     color: '#64748b',
@@ -228,6 +237,7 @@ Please check your dashboard for updated details.`,
 An administrator has entered data for your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please check your dashboard for updated details.`,
     color: '#64748b',
@@ -243,6 +253,7 @@ Please check your dashboard for updated details.`,
 An administrator has overridden data on your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 
 Please check your dashboard for updated details.`,
     color: '#64748b',
@@ -258,6 +269,7 @@ Please check your dashboard for updated details.`,
 The org KPI data you submitted has been sent back for revision.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Reason: {{send_back_reason}}
 
 Please review the feedback and resubmit the data.`,
@@ -326,6 +338,7 @@ Thank you for your dedication and hard work during this period. We appreciate yo
 {{actor_name}} has raised a new observation on your KPI.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Observation: {{observation_title}}
 Type: {{observation_type}}
 Description: {{observation_description}}
@@ -343,6 +356,7 @@ Please review and respond to the observation.`,
 
 {{actor_name}} has replied to an observation on {{kpi_name}}.
 
+Period: {{review_period}} {{review_year}}
 Observation: {{observation_title}}
 
 Please check the observation thread for the latest update.`,
@@ -359,6 +373,7 @@ Please check the observation thread for the latest update.`,
 An observation on your KPI has been resolved.
 
 KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
 Observation: {{observation_title}}
 
 The observation has been closed. No further action is required.`,
