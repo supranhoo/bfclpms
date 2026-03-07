@@ -1,51 +1,40 @@
 
 
-# Plan: Bulk Apply KPI Changes Across Months
+# Root Cause: `view_only` Permission Semantic Inversion
 
-## Problem
-When an admin edits a KPI's structural fields (target, thresholds, weightage, UOM, etc.) in the Admin KPI Editor, the change only applies to the single selected month. If the same KPI exists across 12 months, the admin must repeat the edit 12 times.
+## Problem Identified
+The `check_review_period_permission` database function returns `true` by default for ALL actions when no locks exist — including `view_only`. But `view_only = true` has **inverted semantics**: it means "this period IS view-only" (restrictive), unlike other permissions where `true` means "action is allowed" (permissive).
 
-## Solution
-Add a **"Apply To" scope selector** in the Admin KPI Edit Dialog that lets the admin choose how broadly to apply structural changes:
+**Proof**: For Samir viewing March 2026 (which has zero locks):
+- `submit_self_review` → `true` (correct: allowed)
+- `edit_kpi` → `true` (correct: allowed)  
+- `view_only` → `true` (**BUG**: means "period is view-only", should be `false`)
 
-1. **This month only** (default — current behavior)
-2. **All future months** — applies to months after the current KPI's month in the same year
-3. **All months** — applies to every month in the same year for this employee+KRA+KPI
+This makes `govPerms.view_only = true`, which triggers `isGovernanceLocked = true` in the SelfReviewSheet, making ALL KPIs read-only for ALL employees in any period without explicit locks.
 
-## How It Works
+The daily bypass (`isDailyUnlocked`) in the code IS correct and WOULD cancel this out, but the `govPerms.view_only = true` overrides it because the condition is: `!govPerms.submit_self_review || govPerms.view_only` — the second part is `true`, so even with `submit_self_review = true`, the whole expression evaluates to `true`.
 
-### Sibling KPI Matching
-Find all KPIs with the same `employee_id`, `kra_name`, `kpi_name`, and `review_year` but different `review_period`. Filter by month index relative to the current KPI's month based on the selected scope.
+## Fix
 
-### Fields That Propagate
-Structural/config fields only: `target_value`, `uom`, `weightage`, `criteria`, `r0`–`r5`, `frequency`, `frequency_cycle_start`, `source_of_data`, `is_org_level`, `org_level_scope`, `uom_type`, `qualitative_options`, `require_resubmit_reason`, `day_count_type`, `threshold_mode`.
+### 1. Database Migration — Fix the RPC default for `view_only`
+Modify `check_review_period_permission` to return `false` (not `true`) when `p_action = 'view_only'` and no locks apply. This is the correct semantic: "by default, the period is NOT view-only."
 
-### Fields That Do NOT Propagate
-- `review_period` (each KPI keeps its own month)
-- `status` (workflow position is per-month)
-- Achieved values / scores (data integrity)
+Add at the end of the function, before the final `RETURN true;`:
+```sql
+-- view_only is semantically inverted: true = restrictive
+-- Default should be false (period is NOT view-only)
+IF p_action = 'view_only' THEN
+  RETURN false;
+END IF;
 
-### UI Placement
-A radio group placed above the "Reason for Change" textarea, inside a highlighted info box:
-- Radio: This month only | All future months | All months
-- Helper text explaining what will happen
+RETURN true;
+```
 
-### Execution Flow
-1. Admin edits fields and selects scope
-2. On save: first update the current KPI (existing logic)
-3. If scope ≠ "this_month": query sibling KPIs by matching criteria, filter by month scope, batch-update them with the same structural fields
-4. Each sibling update gets its own audit log entry with `source: 'admin_bulk_apply'`
-5. Toast shows count: "KPI updated + X sibling months updated"
-
-## Files to Modify
-
-| File | Change |
-|------|--------|
-| `src/components/admin/AdminKpiEditDialog.tsx` | Add apply-scope radio group state, pass scope to submit handler, implement sibling query + batch update logic after primary save |
-| `src/hooks/useKpis.ts` | No changes needed — the dialog will handle sibling updates directly since `useAdminUpdateKpi` already handles single-KPI updates with audit logging |
+### 2. No frontend changes needed
+The `SelfReviewSheet` bypass logic and `KpiHeaderSection` badge logic are both correct — they just receive the wrong `view_only` value from the RPC. Once the RPC is fixed, everything works.
 
 ## Risk Assessment
-- **Data Impact**: Only structural fields propagate; scores and statuses are untouched. Each update is individually audited.
-- **Regression Risk**: Low — default is "this month only" which preserves current behavior exactly.
-- **Performance**: At most 11 additional updates (one per sibling month), each lightweight.
+- **Data Impact**: No schema changes, only RPC logic fix
+- **Regression Risk**: Low — only changes the default return for `view_only`. Periods WITH explicit locks are unaffected (the lock's `permissions.view_only` value is used directly)
+- **Security**: Safer — currently the bug makes periods MORE restrictive than intended, so fixing it relaxes an incorrect restriction
 
