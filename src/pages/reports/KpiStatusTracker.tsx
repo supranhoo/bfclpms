@@ -117,7 +117,7 @@ export default function KpiStatusTracker() {
         let q = supabase
           .from('kpis')
           .select(`
-            id, employee_id, kra_name, kpi_name, weightage, status, updated_at,
+            id, employee_id, kra_name, kpi_name, weightage, frequency, status, updated_at,
             review_period, review_year, is_org_level,
             kra_categories ( name )
           `)
