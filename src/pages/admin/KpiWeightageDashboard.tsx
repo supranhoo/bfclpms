@@ -338,7 +338,7 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                               <TableCell key={m} className={cellClasses}>
                                 <WeightageCellEditor
                                   employeeId={employee.employeeId}
-                                  kraName={kpi.kraName}
+                                  kraName={kpi.kraName || kraName}
                                   kpiName={kpi.kpiName}
                                   month={m}
                                   currentWeightage={w}
