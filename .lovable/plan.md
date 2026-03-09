@@ -1,24 +1,31 @@
 
-# Plan: Active/Inactive Employee Status — IMPLEMENTED ✅
 
-## What Was Done
+# Fix: Inconsistent Rating Display in Review Journey
 
-### 1. Database Migration
-- Added `is_active` (boolean, default `true`) and `deactivated_at` (timestamptz) columns to `profiles` table.
+## Problem
 
-### 2. Auth Gate
-- `AuthContext.tsx` checks `is_active` on login/session restore. If `false`, user is signed out with a toast notification.
+The Review Journey in `KpiJourneySection` shows **Self: Rating 5** and **Manager: Rating 0** for the same achieved value (5) on a "Lower is Better" KPI with Target=0, R5=0.
 
-### 3. User Management UI
-- **Stats cards**: Now show Total, Active, Inactive, Admins (4 cards).
-- **Status filter**: Dropdown (Active/Inactive/All), defaults to "Active".
-- **Status column**: Desktop table shows Active/Inactive badge; mobile cards show Inactive badge.
-- **Edit dialog**: Account Status switch with description text.
-- **Manager dropdowns**: Inactive users are filtered out from edit, create, and bulk update dialogs.
+**Root Cause**: `KpiJourneySection` reads `self_score` and `manager_score` directly from the stored `review_submissions` record without recalculating. The Self score (5) was stored at a time when the scoring logic was different or buggy. The Manager score (0) was stored later with corrected logic. The display layer blindly trusts stale stored values.
 
-### 4. KPI Rollover
-- `auto-rollover-kpis` edge function fetches `is_active` for all employees and skips inactive ones with `status: 'skipped'`.
+## Solution
 
-### 5. Employee Selectors
-- `useTeamMembers()` filters to active employees only.
-- Manager dropdowns in User Management filter out inactive users.
+Recalculate ratings from achieved values in `KpiJourneySection` using the KPI's current thresholds, instead of displaying raw stored scores. This aligns with the existing "score-calculation-initialization" pattern already used in UnifiedScorecard and AuditScorecard.
+
+## Changes
+
+### File: `src/components/review/KpiJourneySection.tsx`
+
+1. Import `calculateRating` and `RatingThresholds` from `@/lib/ratingCalculation`.
+2. Add a helper function `recalcScore(achievedValue, kpi)` that runs the achieved value through `calculateRating` with the KPI's current thresholds, criteria, UOM, and threshold_mode.
+3. For each stage in `stageData`, if `achievedValue` is not null, replace the stored `score` with the recalculated rating. Keep the stored score as a fallback when no achieved value exists.
+4. Derive the `rating` (color level) from the recalculated score using `ratingToLevel`.
+
+This ensures both Self and Manager stages show consistent ratings when their achieved values are evaluated against the same current thresholds.
+
+### Impact Assessment
+- **Data Impact**: None - read-only display change, no DB modifications.
+- **Workflow Impact**: None - submission logic unchanged.
+- **UI/UX**: Ratings will now be consistent across all stages for identical values.
+- **Regression Risk**: Low - only affects the read-only Review Journey display. The recalculation uses the same `calculateRating` function already used everywhere else.
+
