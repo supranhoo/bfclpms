@@ -271,6 +271,11 @@ const App = () => (
                     <Suspense fallback={<PageFallback />}><BottleneckReport /></Suspense>
                   </ReportRoute>
                 } />
+                <Route path="/reports/kpi-status-tracker" element={
+                  <ReportRoute reportKey="kpi-status-tracker">
+                    <Suspense fallback={<PageFallback />}><KpiStatusTracker /></Suspense>
+                  </ReportRoute>
+                } />
                 <Route path="/admin/pip" element={
                   <ProtectedRoute allowedRoles={['manager', 'admin', 'management']}>
                     <PIPManagement />

@@ -147,6 +147,14 @@ const reports: ReportCard[] = [
     color: 'text-amber-500',
     reportKey: 'bottleneck',
   },
+  {
+    title: 'KPI Status Tracker',
+    description: 'Flat table of all KPIs for a month showing employee details, current workflow stage, and pending level',
+    icon: ClipboardList,
+    path: '/reports/kpi-status-tracker',
+    color: 'text-sky-500',
+    reportKey: 'kpi-status-tracker',
+  },
 ];
 
 export default function ReportsHub() {
