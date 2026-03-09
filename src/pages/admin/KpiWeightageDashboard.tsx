@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, ChevronRight, Download, Search, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Loader2, ChevronRight, Download, Search, AlertTriangle, CheckCircle2, Pencil } from 'lucide-react';
 import { useKpiWeightageMatrix, type EmployeeMatrix } from '@/hooks/useKpiWeightageMatrix';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -302,7 +302,7 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
               </TableHeader>
               <TableBody>
                 {sortedKras.map(kraName => (
-                  <>
+                  <React.Fragment key={kraName}>
                     <TableRow key={`kra-${kraName}`} className="bg-muted/30">
                       <TableCell colSpan={months.length + 1} className="font-medium text-sm py-2">
                         {kraName}
@@ -338,15 +338,19 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                               <TableCell key={m} className={cellClasses}>
                                 <WeightageCellEditor
                                   employeeId={employee.employeeId}
-                                  kraName={kpi.kraName}
+                                  kraName={kpi.kraName || kraName}
                                   kpiName={kpi.kpiName}
                                   month={m}
                                   currentWeightage={w}
                                   kpiIds={kpi.kpiIds}
                                   onSuccess={onWeightageUpdate}
                                 >
-                                  <button className="w-full cursor-pointer hover:bg-muted/60 rounded px-1 py-0.5 transition-colors">
+                                  <button
+                                    className="w-full cursor-pointer hover:bg-muted/60 rounded px-1 py-0.5 transition-colors group inline-flex items-center justify-center gap-0.5"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
                                     {cellContent}
+                                    <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity shrink-0" />
                                   </button>
                                 </WeightageCellEditor>
                               </TableCell>
@@ -361,7 +365,7 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                         })}
                       </TableRow>
                     ))}
-                  </>
+                  </React.Fragment>
                 ))}
                 {/* Totals row */}
                 <TableRow className="bg-muted/50 font-medium">
