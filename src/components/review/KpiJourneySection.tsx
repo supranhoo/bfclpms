@@ -6,7 +6,7 @@ import { ReviewStageCard, StageStatus } from './ReviewStageCard';
 import { KPI, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
 import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle } from 'lucide-react';
 import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
-import { calculateRating, RatingThresholds, ratingToLevel } from '@/lib/ratingCalculation';
+import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { UomType } from '@/lib/qualitativeUom';
 
 type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
@@ -42,12 +42,10 @@ function getStageStatus(
   const stageStartIndex = statusOrder.indexOf(stageStartStatus);
   const currentIndex = statusOrder.indexOf(kpiStatus);
 
-  // Check if stage is completed
   if (currentIndex > stageStartIndex) {
     return 'completed';
   }
 
-  // Check if this is the current stage
   if (kpiStatus === stageStartStatus) {
     return 'current';
   }
@@ -77,6 +75,7 @@ export function KpiJourneySection({
   const globalIsNA = submission?.is_na || false;
 
   // Recalculate score from achieved value using current KPI thresholds
+  // This ensures consistent ratings across all stages regardless of when the score was stored
   const recalcScore = (achievedValue: number | string | null | undefined): { score: number; rating: string } | null => {
     if (achievedValue === null || achievedValue === undefined || achievedValue === '') return null;
     const thresholds: RatingThresholds = {
@@ -92,7 +91,7 @@ export function KpiJourneySection({
       kpi.target_value ?? null,
       thresholds,
       kpi.criteria || 'Higher is Better',
-      0, // weightage not needed for display
+      0,
       (kpi.uom_type as UomType) || 'numeric',
       kpi.qualitative_options as any,
       kpi.uom,
@@ -110,6 +109,30 @@ export function KpiJourneySection({
     return [];
   };
 
+  // Build stage data with recalculated scores from achieved values
+  const buildStage = (
+    icon: typeof User,
+    iconColor: 'blue' | 'amber' | 'purple' | 'emerald' | 'teal' | 'rose',
+    title: string,
+    storedScore: number | null,
+    storedRating: any,
+    remarks: string | null,
+    evidenceUrls: string[],
+    achievedValue: number | null
+  ) => {
+    const recalc = recalcScore(achievedValue);
+    return {
+      icon,
+      iconColor,
+      title,
+      score: recalc?.score ?? storedScore,
+      rating: recalc?.rating ?? storedRating,
+      remarks,
+      evidenceUrls,
+      achievedValue,
+    };
+  };
+
   const stageData: Record<JourneyStage, {
     icon: typeof User;
     iconColor: 'blue' | 'amber' | 'purple' | 'emerald' | 'teal' | 'rose';
@@ -120,66 +143,48 @@ export function KpiJourneySection({
     evidenceUrls: string[];
     achievedValue: number | null;
   }> = {
-    self: {
-      icon: User,
-      iconColor: 'blue',
-      title: 'Self',
-      score: submission?.self_score ?? null,
-      rating: submission?.self_rating ?? null,
-      remarks: submission?.self_remarks ?? null,
-      evidenceUrls: buildEvidenceUrls(submission?.self_evidence_urls, submission?.self_evidence_url),
-      achievedValue: submission?.achieved_value ?? null,
-    },
-    manager: {
-      icon: Briefcase,
-      iconColor: 'amber',
-      title: 'Manager',
-      score: submission?.manager_score ?? null,
-      rating: submission?.manager_rating ?? null,
-      remarks: submission?.manager_remarks ?? null,
-      evidenceUrls: buildEvidenceUrls(submission?.manager_evidence_urls, submission?.manager_evidence_url),
-      achievedValue: submission?.manager_achieved_value ?? null,
-    },
-    skip_level: {
-      icon: UserCheck,
-      iconColor: 'teal',
-      title: 'Skip-Level',
-      score: submission?.skip_level_score ?? null,
-      rating: submission?.skip_level_rating ?? null,
-      remarks: submission?.skip_level_remarks ?? null,
-      evidenceUrls: buildEvidenceUrls(submission?.skip_level_evidence_urls, submission?.skip_level_evidence_url),
-      achievedValue: submission?.skip_level_achieved_value ?? null,
-    },
-    hr_pms: {
-      icon: ClipboardCheck,
-      iconColor: 'rose',
-      title: 'HR PMS',
-      score: submission?.hr_pms_score ?? null,
-      rating: submission?.hr_pms_rating ?? null,
-      remarks: submission?.hr_pms_remarks ?? null,
-      evidenceUrls: buildEvidenceUrls(submission?.hr_pms_evidence_urls, submission?.hr_pms_evidence_url),
-      achievedValue: submission?.hr_pms_achieved_value ?? null,
-    },
-    auditor: {
-      icon: Shield,
-      iconColor: 'purple',
-      title: 'Auditor',
-      score: submission?.auditor_score ?? null,
-      rating: submission?.auditor_rating ?? null,
-      remarks: submission?.auditor_remarks ?? null,
-      evidenceUrls: buildEvidenceUrls(submission?.auditor_evidence_urls, submission?.auditor_evidence_url),
-      achievedValue: submission?.auditor_achieved_value ?? null,
-    },
-    management: {
-      icon: Briefcase,
-      iconColor: 'emerald',
-      title: 'Management',
-      score: submission?.management_score ?? null,
-      rating: submission?.management_rating ?? null,
-      remarks: submission?.management_remarks ?? null,
-      evidenceUrls: buildEvidenceUrls(submission?.management_evidence_urls, submission?.management_evidence_url),
-      achievedValue: submission?.management_achieved_value ?? null,
-    },
+    self: buildStage(
+      User, 'blue', 'Self',
+      submission?.self_score ?? null, submission?.self_rating ?? null,
+      submission?.self_remarks ?? null,
+      buildEvidenceUrls(submission?.self_evidence_urls, submission?.self_evidence_url),
+      submission?.achieved_value ?? null
+    ),
+    manager: buildStage(
+      Briefcase, 'amber', 'Manager',
+      submission?.manager_score ?? null, submission?.manager_rating ?? null,
+      submission?.manager_remarks ?? null,
+      buildEvidenceUrls(submission?.manager_evidence_urls, submission?.manager_evidence_url),
+      submission?.manager_achieved_value ?? null
+    ),
+    skip_level: buildStage(
+      UserCheck, 'teal', 'Skip-Level',
+      submission?.skip_level_score ?? null, submission?.skip_level_rating ?? null,
+      submission?.skip_level_remarks ?? null,
+      buildEvidenceUrls(submission?.skip_level_evidence_urls, submission?.skip_level_evidence_url),
+      submission?.skip_level_achieved_value ?? null
+    ),
+    hr_pms: buildStage(
+      ClipboardCheck, 'rose', 'HR PMS',
+      submission?.hr_pms_score ?? null, submission?.hr_pms_rating ?? null,
+      submission?.hr_pms_remarks ?? null,
+      buildEvidenceUrls(submission?.hr_pms_evidence_urls, submission?.hr_pms_evidence_url),
+      submission?.hr_pms_achieved_value ?? null
+    ),
+    auditor: buildStage(
+      Shield, 'purple', 'Auditor',
+      submission?.auditor_score ?? null, submission?.auditor_rating ?? null,
+      submission?.auditor_remarks ?? null,
+      buildEvidenceUrls(submission?.auditor_evidence_urls, submission?.auditor_evidence_url),
+      submission?.auditor_achieved_value ?? null
+    ),
+    management: buildStage(
+      Briefcase, 'emerald', 'Management',
+      submission?.management_score ?? null, submission?.management_rating ?? null,
+      submission?.management_remarks ?? null,
+      buildEvidenceUrls(submission?.management_evidence_urls, submission?.management_evidence_url),
+      submission?.management_achieved_value ?? null
+    ),
   };
 
   const stageCount = visibleStages.length;
@@ -209,7 +214,6 @@ export function KpiJourneySection({
         {visibleStages.map(stage => {
             const data = stageData[stage];
             const status = getStageStatus(stage, kpiStatus, viewLevel, effectiveStages);
-            // Per-stage N/A: only show N/A if globally marked AND this stage has no score
             const stageIsNA = (globalIsNA && data.score === null && status !== 'pending') || (!globalIsNA && data.score === null && status !== 'pending' && status === 'completed');
             return (
               <ReviewStageCard
