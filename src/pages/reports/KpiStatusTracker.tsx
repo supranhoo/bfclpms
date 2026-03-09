@@ -77,6 +77,7 @@ interface StatusTrackerRow {
   kraName: string;
   kpiName: string;
   weightage: number;
+  frequency: string;
   status: string;
   statusLabel: string;
   pendingAt: string;
@@ -116,7 +117,7 @@ export default function KpiStatusTracker() {
         let q = supabase
           .from('kpis')
           .select(`
-            id, employee_id, kra_name, kpi_name, weightage, status, updated_at,
+            id, employee_id, kra_name, kpi_name, weightage, frequency, status, updated_at,
             review_period, review_year, is_org_level,
             kra_categories ( name )
           `)
@@ -162,6 +163,7 @@ export default function KpiStatusTracker() {
           kraName: kpi.kra_name ?? '—',
           kpiName: kpi.kpi_name ?? '—',
           weightage: kpi.weightage ?? 0,
+          frequency: kpi.frequency ?? '—',
           status,
           statusLabel: STATUS_LABELS[status] ?? status,
           pendingAt: PENDING_AT_MAP[status] ?? '—',
@@ -246,6 +248,7 @@ export default function KpiStatusTracker() {
       'KRA': r.kraName,
       'KPI': r.kpiName,
       'Weightage': r.weightage,
+      'Frequency': r.frequency,
       'Current Status': r.statusLabel,
       'Pending At Level': r.pendingAt,
       'Days in Stage': r.daysPending,
@@ -255,8 +258,8 @@ export default function KpiStatusTracker() {
     const ws = XLSX.utils.json_to_sheet(exportData);
     ws['!cols'] = [
       { wch: 5 }, { wch: 14 }, { wch: 28 }, { wch: 20 }, { wch: 22 }, { wch: 20 },
-      { wch: 20 }, { wch: 30 }, { wch: 35 }, { wch: 10 }, { wch: 20 }, { wch: 22 },
-      { wch: 12 }, { wch: 10 },
+      { wch: 20 }, { wch: 30 }, { wch: 35 }, { wch: 10 }, { wch: 14 }, { wch: 20 },
+      { wch: 22 }, { wch: 12 }, { wch: 10 },
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'KPI Status Tracker');
@@ -432,6 +435,7 @@ export default function KpiStatusTracker() {
                       <TableHead className="min-w-[160px]">KRA</TableHead>
                       <TableHead className="min-w-[180px]">KPI</TableHead>
                       <TableHead className="w-20 text-center">Wt.</TableHead>
+                      <TableHead className="min-w-[120px]">Frequency</TableHead>
                       <TableHead className="min-w-[140px]">Status</TableHead>
                       <TableHead className="min-w-[160px]">Pending At</TableHead>
                       <TableHead className="w-20 text-center">Days</TableHead>
@@ -453,6 +457,7 @@ export default function KpiStatusTracker() {
                         <TableCell className="text-xs">{row.kraName}</TableCell>
                         <TableCell className="text-xs">{row.kpiName}</TableCell>
                         <TableCell className="text-center text-xs tabular-nums">{row.weightage}</TableCell>
+                        <TableCell className="text-xs">{row.frequency}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className={`text-xs border-0 ${statusBadgeClass(row.status)}`}>
                             {row.statusLabel}
