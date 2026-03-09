@@ -434,6 +434,7 @@ export default function KpiStatusTracker() {
                       <TableHead className="min-w-[160px]">KRA</TableHead>
                       <TableHead className="min-w-[180px]">KPI</TableHead>
                       <TableHead className="w-20 text-center">Wt.</TableHead>
+                      <TableHead className="min-w-[120px]">Frequency</TableHead>
                       <TableHead className="min-w-[140px]">Status</TableHead>
                       <TableHead className="min-w-[160px]">Pending At</TableHead>
                       <TableHead className="w-20 text-center">Days</TableHead>
