@@ -61,6 +61,7 @@ const TNIReport = lazy(() => import("./pages/reports/TNIReport"));
 const IssuesReport = lazy(() => import("./pages/reports/IssuesReport"));
 const KpiDetailReport = lazy(() => import("./pages/reports/KpiDetailReport"));
 const BottleneckReport = lazy(() => import("./pages/reports/BottleneckReport"));
+const KpiStatusTracker = lazy(() => import("./pages/reports/KpiStatusTracker"));
 
 // Layout components
 import { ReportRoute } from "./components/layout/ReportRoute";
@@ -268,6 +269,11 @@ const App = () => (
                 <Route path="/reports/bottleneck" element={
                   <ReportRoute reportKey="bottleneck">
                     <Suspense fallback={<PageFallback />}><BottleneckReport /></Suspense>
+                  </ReportRoute>
+                } />
+                <Route path="/reports/kpi-status-tracker" element={
+                  <ReportRoute reportKey="kpi-status-tracker">
+                    <Suspense fallback={<PageFallback />}><KpiStatusTracker /></Suspense>
                   </ReportRoute>
                 } />
                 <Route path="/admin/pip" element={
