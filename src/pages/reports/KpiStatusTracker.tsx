@@ -258,8 +258,8 @@ export default function KpiStatusTracker() {
     const ws = XLSX.utils.json_to_sheet(exportData);
     ws['!cols'] = [
       { wch: 5 }, { wch: 14 }, { wch: 28 }, { wch: 20 }, { wch: 22 }, { wch: 20 },
-      { wch: 20 }, { wch: 30 }, { wch: 35 }, { wch: 10 }, { wch: 20 }, { wch: 22 },
-      { wch: 12 }, { wch: 10 },
+      { wch: 20 }, { wch: 30 }, { wch: 35 }, { wch: 10 }, { wch: 14 }, { wch: 20 },
+      { wch: 22 }, { wch: 12 }, { wch: 10 },
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'KPI Status Tracker');
