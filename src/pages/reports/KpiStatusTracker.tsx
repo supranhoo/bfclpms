@@ -456,6 +456,7 @@ export default function KpiStatusTracker() {
                         <TableCell className="text-xs">{row.kraName}</TableCell>
                         <TableCell className="text-xs">{row.kpiName}</TableCell>
                         <TableCell className="text-center text-xs tabular-nums">{row.weightage}</TableCell>
+                        <TableCell className="text-xs">{row.frequency}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className={`text-xs border-0 ${statusBadgeClass(row.status)}`}>
                             {row.statusLabel}
