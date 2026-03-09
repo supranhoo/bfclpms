@@ -163,6 +163,7 @@ export default function KpiStatusTracker() {
           kraName: kpi.kra_name ?? '—',
           kpiName: kpi.kpi_name ?? '—',
           weightage: kpi.weightage ?? 0,
+          frequency: kpi.frequency ?? '—',
           status,
           statusLabel: STATUS_LABELS[status] ?? status,
           pendingAt: PENDING_AT_MAP[status] ?? '—',
