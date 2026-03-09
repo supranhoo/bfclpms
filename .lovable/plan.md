@@ -1,24 +1,20 @@
 
-# Plan: Active/Inactive Employee Status — IMPLEMENTED ✅
 
-## What Was Done
+# Plan: Add Frequency Column to KPI Status Tracker
 
-### 1. Database Migration
-- Added `is_active` (boolean, default `true`) and `deactivated_at` (timestamptz) columns to `profiles` table.
+## Problem
+The KPI Status Tracker report is missing the **Frequency** column (e.g., Monthly, Quarterly, Bi-Monthly), which is stored in `kpis.frequency`.
 
-### 2. Auth Gate
-- `AuthContext.tsx` checks `is_active` on login/session restore. If `false`, user is signed out with a toast notification.
+## Changes
 
-### 3. User Management UI
-- **Stats cards**: Now show Total, Active, Inactive, Admins (4 cards).
-- **Status filter**: Dropdown (Active/Inactive/All), defaults to "Active".
-- **Status column**: Desktop table shows Active/Inactive badge; mobile cards show Inactive badge.
-- **Edit dialog**: Account Status switch with description text.
-- **Manager dropdowns**: Inactive users are filtered out from edit, create, and bulk update dialogs.
+### File: `src/pages/reports/KpiStatusTracker.tsx`
 
-### 4. KPI Rollover
-- `auto-rollover-kpis` edge function fetches `is_active` for all employees and skips inactive ones with `status: 'skipped'`.
+1. **Add `frequency` to the `StatusTrackerRow` interface** (around line 69)
+2. **Add `frequency` to the Supabase select query** (line 119) — just append `, frequency` to the existing fields
+3. **Map `frequency` in the result builder** (around line 155) — `frequency: kpi.frequency ?? '—'`
+4. **Add a table column header** between "Weightage" and "Status" columns — `<TableHead>Frequency</TableHead>`
+5. **Add the table cell** in the row rendering — `<TableCell className="text-xs">{row.frequency}</TableCell>`
+6. **Add to Excel export** — insert `'Frequency': r.frequency` after Weightage in the export mapping, and add a column width entry
 
-### 5. Employee Selectors
-- `useTeamMembers()` filters to active employees only.
-- Manager dropdowns in User Management filter out inactive users.
+No database or RLS changes needed — `kpis.frequency` already exists.
+
