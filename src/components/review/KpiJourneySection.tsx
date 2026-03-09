@@ -76,6 +76,31 @@ export function KpiJourneySection({
   const visibleStages = getVisibleStagesForLevel(viewLevel, effectiveStages);
   const globalIsNA = submission?.is_na || false;
 
+  // Recalculate score from achieved value using current KPI thresholds
+  const recalcScore = (achievedValue: number | string | null | undefined): { score: number; rating: string } | null => {
+    if (achievedValue === null || achievedValue === undefined || achievedValue === '') return null;
+    const thresholds: RatingThresholds = {
+      r5: kpi.r5 ?? null,
+      r4: kpi.r4 ?? null,
+      r3: kpi.r3 ?? null,
+      r2: kpi.r2 ?? null,
+      r1: kpi.r1 ?? null,
+      r0: kpi.r0 ?? null,
+    };
+    const result = calculateRating(
+      achievedValue,
+      kpi.target_value ?? null,
+      thresholds,
+      kpi.criteria || 'Higher is Better',
+      0, // weightage not needed for display
+      (kpi.uom_type as UomType) || 'numeric',
+      kpi.qualitative_options as any,
+      kpi.uom,
+      (kpi.threshold_mode as 'absolute' | 'ratio') || 'absolute'
+    );
+    return { score: result.rating, rating: result.ratingLevel };
+  };
+
   const openQueries = queries.filter(q => q.status === 'open').length;
   const resolvedQueries = queries.filter(q => q.status === 'resolved').length;
 
