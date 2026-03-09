@@ -77,6 +77,7 @@ interface StatusTrackerRow {
   kraName: string;
   kpiName: string;
   weightage: number;
+  frequency: string;
   status: string;
   statusLabel: string;
   pendingAt: string;
