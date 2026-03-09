@@ -248,6 +248,7 @@ export default function KpiStatusTracker() {
       'KRA': r.kraName,
       'KPI': r.kpiName,
       'Weightage': r.weightage,
+      'Frequency': r.frequency,
       'Current Status': r.statusLabel,
       'Pending At Level': r.pendingAt,
       'Days in Stage': r.daysPending,
