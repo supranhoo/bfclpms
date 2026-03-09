@@ -37,6 +37,7 @@ const DEFAULT_CONFIGS: Record<string, { view_roles: AppRole[]; download_roles: A
   'tni': { view_roles: ['manager', 'admin', 'management'], download_roles: ['admin'] },
   'kpi-detail': { view_roles: ['manager', 'admin', 'auditor', 'management', 'hr_pms'], download_roles: ['admin'] },
   'bottleneck': { view_roles: ['admin', 'auditor', 'management'], download_roles: ['admin'] },
+  'kpi-status-tracker': { view_roles: ['admin'], download_roles: ['admin'] },
 };
 
 export function useReportAccess() {
