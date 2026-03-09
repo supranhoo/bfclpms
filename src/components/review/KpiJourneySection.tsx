@@ -6,6 +6,8 @@ import { ReviewStageCard, StageStatus } from './ReviewStageCard';
 import { KPI, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
 import { User, Briefcase, Shield, MessageSquare, History, UserCheck, ClipboardCheck, AlertTriangle } from 'lucide-react';
 import { getVisibleJourneyStages, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
+import { calculateRating, RatingThresholds, ratingToLevel } from '@/lib/ratingCalculation';
+import { UomType } from '@/lib/qualitativeUom';
 
 type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
 type JourneyStage = 'self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
