@@ -345,8 +345,12 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                                   kpiIds={kpi.kpiIds}
                                   onSuccess={onWeightageUpdate}
                                 >
-                                  <button className="w-full cursor-pointer hover:bg-muted/60 rounded px-1 py-0.5 transition-colors">
+                                  <button
+                                    className="w-full cursor-pointer hover:bg-muted/60 rounded px-1 py-0.5 transition-colors group inline-flex items-center justify-center gap-0.5"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
                                     {cellContent}
+                                    <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity shrink-0" />
                                   </button>
                                 </WeightageCellEditor>
                               </TableCell>
