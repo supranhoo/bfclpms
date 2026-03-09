@@ -302,7 +302,7 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
               </TableHeader>
               <TableBody>
                 {sortedKras.map(kraName => (
-                  <>
+                  <React.Fragment key={kraName}>
                     <TableRow key={`kra-${kraName}`} className="bg-muted/30">
                       <TableCell colSpan={months.length + 1} className="font-medium text-sm py-2">
                         {kraName}
