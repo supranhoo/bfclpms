@@ -365,7 +365,7 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                         })}
                       </TableRow>
                     ))}
-                  </>
+                  </React.Fragment>
                 ))}
                 {/* Totals row */}
                 <TableRow className="bg-muted/50 font-medium">

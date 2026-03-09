@@ -110,7 +110,7 @@ export function WeightageCellEditor({
   };
 
   return (
-    <Popover open={open} onOpenChange={handleOpen}>
+    <Popover open={open} onOpenChange={handleOpen} modal={false}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent className="w-64 p-4 space-y-3" align="center">
         <div className="space-y-1">
