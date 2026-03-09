@@ -61,6 +61,7 @@ const TNIReport = lazy(() => import("./pages/reports/TNIReport"));
 const IssuesReport = lazy(() => import("./pages/reports/IssuesReport"));
 const KpiDetailReport = lazy(() => import("./pages/reports/KpiDetailReport"));
 const BottleneckReport = lazy(() => import("./pages/reports/BottleneckReport"));
+const KpiStatusTracker = lazy(() => import("./pages/reports/KpiStatusTracker"));
 
 // Layout components
 import { ReportRoute } from "./components/layout/ReportRoute";
