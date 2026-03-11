@@ -12,7 +12,7 @@ import { useKraCategories } from '@/hooks/useOrganization';
 import { KpiTemplate, useCreateKpiTemplate, useUpdateKpiTemplate } from '@/hooks/useKpiTemplates';
 import { UomTypeSelector } from './UomTypeSelector';
 import { TieredOptionsBuilder } from './TieredOptionsBuilder';
-import { UomType, QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
+import { UomType, QualitativeOption, BINARY_OPTIONS, BINARY_OPTIONS_INVERTED, isBinaryInverted } from '@/lib/qualitativeUom';
 import { Separator } from '@/components/ui/separator';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 
