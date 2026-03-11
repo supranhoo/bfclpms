@@ -16,6 +16,7 @@ interface EmployeeContactCardProps {
     avatar_url: string | null;
     department_id: string | null;
     mobile_number?: string | null;
+    employee_code?: string | null;
   };
   departmentName?: string | null;
   onViewKpis: () => void;
