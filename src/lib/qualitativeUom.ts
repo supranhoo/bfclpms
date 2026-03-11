@@ -62,6 +62,27 @@ export const BINARY_OPTIONS: QualitativeOption[] = [
   { label: 'No', rating: 0, definition: 'No' },
 ];
 
+// Inverted binary mapping (for safety KPIs like LTI where No = good)
+export const BINARY_OPTIONS_INVERTED: QualitativeOption[] = [
+  { label: 'Yes', rating: 0, definition: 'Yes' },
+  { label: 'No', rating: 5, definition: 'No' },
+];
+
+// Returns stored qualitative_options for binary KPIs, or default BINARY_OPTIONS
+export function getBinaryOptions(qualitativeOptions: QualitativeOption[] | null | undefined): QualitativeOption[] {
+  if (qualitativeOptions && qualitativeOptions.length >= 2) {
+    return qualitativeOptions;
+  }
+  return BINARY_OPTIONS;
+}
+
+// Check if binary options are inverted (No=5)
+export function isBinaryInverted(qualitativeOptions: QualitativeOption[] | null | undefined): boolean {
+  if (!qualitativeOptions || qualitativeOptions.length < 2) return false;
+  const noOption = qualitativeOptions.find(o => o.label === 'No');
+  return noOption?.rating === 5;
+}
+
 // Rating score labels — aligned with canonical scale
 export const RATING_LABELS: Record<number, string> = {
   5: 'Outstanding (R5)',
