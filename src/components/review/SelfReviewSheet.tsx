@@ -272,7 +272,7 @@ export function SelfReviewSheet({
       if (prefilledValue !== null && prefilledValue !== undefined) {
         if (isQualitativeKpi(selectedKpi)) {
           const options = selectedKpi.uom_type === 'binary'
-            ? [{ label: 'Yes', rating: 5 }, { label: 'No', rating: 0 }]
+            ? ((selectedKpi.qualitative_options as QualitativeOption[] | null)?.length ? (selectedKpi.qualitative_options as QualitativeOption[]) : [{ label: 'Yes', rating: 5 }, { label: 'No', rating: 0 }])
             : (selectedKpi.qualitative_options as QualitativeOption[] | null) || [];
           const matchedOption = options.find(o =>
             o.label === prefilledValue.toString() || o.rating === prefilledValue

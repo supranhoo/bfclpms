@@ -665,12 +665,47 @@ const [formData, setFormData] = useState({
             </div>
           )}
 
-          {/* Binary UOM Info */}
+          {/* Binary UOM Info with Polarity Toggle */}
           {formData.uom_type === 'binary' && (
-            <div className="p-3 border rounded-lg bg-muted/30">
-              <p className="text-sm text-muted-foreground">
-                Binary KPIs use fixed scoring: <strong>Yes = R5 (Outstanding)</strong>, <strong>No = R0 (Unacceptable)</strong>
-              </p>
+            <div className="p-4 border rounded-lg bg-muted/30 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-medium">Binary Polarity</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    For safety KPIs (e.g., LTI), "No" (no injury) should score highest
+                  </p>
+                </div>
+                <Select
+                  value={isBinaryInverted(formData.qualitative_options) ? 'inverted' : 'standard'}
+                  onValueChange={(val) => {
+                    setFormData(prev => ({
+                      ...prev,
+                      qualitative_options: val === 'inverted' ? BINARY_OPTIONS_INVERTED : BINARY_OPTIONS,
+                    }));
+                  }}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="standard">Standard (Yes = 5)</SelectItem>
+                    <SelectItem value="inverted">Inverted (No = 5)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-4 text-sm">
+                {isBinaryInverted(formData.qualitative_options) ? (
+                  <>
+                    <span className="text-destructive font-medium">Yes = R0</span>
+                    <span className="text-primary font-medium">No = R5</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-primary font-medium">Yes = R5</span>
+                    <span className="text-destructive font-medium">No = R0</span>
+                  </>
+                )}
+              </div>
             </div>
           )}
 

@@ -113,7 +113,7 @@ export function calculateQualitativeRating(
   let options: QualitativeOption[] = [];
 
   if (uomType === 'binary') {
-    options = BINARY_OPTIONS;
+    options = getBinaryOptions(qualitativeOptions);
   } else if (uomType === 'tiered' && qualitativeOptions) {
     options = qualitativeOptions;
   } else {

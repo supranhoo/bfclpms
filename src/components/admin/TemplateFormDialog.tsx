@@ -448,14 +448,42 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                     </p>
                   </div>
                 )}
-                <div className="p-4 bg-muted/50 rounded-lg">
-                  <Label className="text-sm font-medium mb-2 block">Binary Scoring</Label>
-                  <div className="flex gap-4">
-                    <Badge variant="default">Yes = R5 (5)</Badge>
-                    <Badge variant="destructive">No = R0 (0)</Badge>
+                <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium">Binary Polarity</Label>
+                    <Select
+                      value={isBinaryInverted(formData.qualitative_options) ? 'inverted' : 'standard'}
+                      onValueChange={(val) => {
+                        setFormData({ 
+                          ...formData, 
+                          qualitative_options: val === 'inverted' ? BINARY_OPTIONS_INVERTED : BINARY_OPTIONS 
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="standard">Standard (Yes = 5)</SelectItem>
+                        <SelectItem value="inverted">Inverted (No = 5)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Fixed scoring: Yes achieves maximum rating, No achieves minimum rating.
+                  <div className="flex gap-4">
+                    {isBinaryInverted(formData.qualitative_options) ? (
+                      <>
+                        <Badge variant="destructive">Yes = R0 (0)</Badge>
+                        <Badge variant="default">No = R5 (5)</Badge>
+                      </>
+                    ) : (
+                      <>
+                        <Badge variant="default">Yes = R5 (5)</Badge>
+                        <Badge variant="destructive">No = R0 (0)</Badge>
+                      </>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Use "Inverted" for safety KPIs where "No" (e.g., no injuries) is the desired outcome.
                   </p>
                 </div>
               </div>

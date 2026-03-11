@@ -311,7 +311,7 @@ export function AdminDataEntryDialog({
         // For qualitative KPIs, try to resolve label from stored numeric rating
         if (kpi && isQualitativeKpi(kpi)) {
           const options = kpi.uom_type === 'binary'
-            ? [{ label: 'Yes', rating: 5, definition: 'Yes' }, { label: 'No', rating: 0, definition: 'No' }]
+            ? ((kpi.qualitative_options as QualitativeOption[] | null)?.length ? (kpi.qualitative_options as QualitativeOption[]) : [{ label: 'Yes', rating: 5, definition: 'Yes' }, { label: 'No', rating: 0, definition: 'No' }])
             : (kpi.qualitative_options as QualitativeOption[] | null) || [];
           const matchedOption = options.find(o => o.rating === achievedVal || o.label === String(achievedVal));
           if (matchedOption) {
