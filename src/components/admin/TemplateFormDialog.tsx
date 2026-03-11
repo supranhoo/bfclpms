@@ -155,7 +155,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
       uom_type: formData.uom_type,
       qualitative_options: formData.uom_type === 'tiered' 
         ? formData.qualitative_options 
-        : (formData.uom_type === 'binary' ? BINARY_OPTIONS : null),
+        : (formData.uom_type === 'binary' ? formData.qualitative_options : null),
       require_resubmit_reason: formData.require_resubmit_reason,
       threshold_mode: formData.uom_type === 'numeric' ? formData.threshold_mode : null,
     };
