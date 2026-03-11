@@ -17,6 +17,7 @@ import { ReviewPeriodSelectorEnhanced, type PeriodSelection } from '@/components
 import { EmployeeFilters } from '@/components/review/EmployeeFilters';
 import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { supabase } from '@/integrations/supabase/client';
+import { formatEmployeeName } from '@/lib/utils';
 import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2 } from 'lucide-react';
 import { ViewMode } from './ViewModeToggle';
 
@@ -582,7 +583,9 @@ export function EmployeeSelectorGrid({
 
   const getManagerName = (managerId: string | null) => {
     if (!managerId || !allProfiles) return null;
-    return allProfiles.find(p => p.id === managerId)?.full_name || null;
+    const mgr = allProfiles.find(p => p.id === managerId);
+    if (!mgr) return null;
+    return formatEmployeeName(mgr.full_name, mgr.email, mgr.employee_code);
   };
 
   const headerConfig = HEADER_CONFIG[viewLevel];
@@ -828,12 +831,12 @@ export function EmployeeSelectorGrid({
                       className="font-medium truncate group-hover:text-primary transition-colors cursor-pointer hover:underline"
                       title="Click to view contact info"
                     >
-                      {member.full_name || member.email}
+                      {formatEmployeeName(member.full_name, member.email, member.employee_code)}
                     </span>
                   </EmployeeContactCard>
                 ) : (
                   <p className="font-medium truncate group-hover:text-primary transition-colors">
-                    {member.full_name || member.email}
+                    {formatEmployeeName(member.full_name, member.email, member.employee_code)}
                   </p>
                 )}
                 <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0 ml-2" />

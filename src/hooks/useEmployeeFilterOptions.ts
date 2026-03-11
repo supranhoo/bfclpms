@@ -36,13 +36,16 @@ export function useEmployeeFilterOptions() {
     queryFn: async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('id, full_name, reporting_manager_id')
+        .select('id, full_name, reporting_manager_id, employee_code')
         .order('full_name');
 
       const managerIds = new Set(data?.map(p => p.reporting_manager_id).filter(Boolean));
       return data
         ?.filter(p => managerIds.has(p.id))
-        .map(p => ({ id: p.id, name: p.full_name || 'Unknown' })) || [];
+        .map(p => ({
+          id: p.id,
+          name: p.employee_code ? `${p.full_name || 'Unknown'} (${p.employee_code})` : (p.full_name || 'Unknown'),
+        })) || [];
     },
   });
 

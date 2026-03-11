@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Mail, Phone, Copy, Check, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { formatEmployeeName } from '@/lib/utils';
 
 interface EmployeeContactCardProps {
   employee: {
@@ -15,6 +16,7 @@ interface EmployeeContactCardProps {
     avatar_url: string | null;
     department_id: string | null;
     mobile_number?: string | null;
+    employee_code?: string | null;
   };
   departmentName?: string | null;
   onViewKpis: () => void;
@@ -70,7 +72,7 @@ export function EmployeeContactCard({ employee, departmentName, onViewKpis, chil
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-foreground text-sm leading-tight truncate">
-              {employee.full_name || employee.email}
+              {formatEmployeeName(employee.full_name, employee.email, employee.employee_code)}
             </p>
             {employee.designation && (
               <p className="text-xs text-muted-foreground mt-0.5 truncate">{employee.designation}</p>
