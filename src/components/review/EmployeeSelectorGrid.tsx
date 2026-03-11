@@ -17,6 +17,7 @@ import { ReviewPeriodSelectorEnhanced, type PeriodSelection } from '@/components
 import { EmployeeFilters } from '@/components/review/EmployeeFilters';
 import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { supabase } from '@/integrations/supabase/client';
+import { formatEmployeeName } from '@/lib/utils';
 import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2 } from 'lucide-react';
 import { ViewMode } from './ViewModeToggle';
 
