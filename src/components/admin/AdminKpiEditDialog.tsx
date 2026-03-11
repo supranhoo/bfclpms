@@ -200,7 +200,8 @@ const [formData, setFormData] = useState({
       is_org_level: formData.is_org_level,
       org_level_scope: formData.is_org_level ? formData.org_level_scope : 'organization',
       uom_type: formData.uom_type,
-      qualitative_options: formData.uom_type === 'tiered' ? formData.qualitative_options : null,
+      qualitative_options: formData.uom_type === 'tiered' ? formData.qualitative_options 
+        : formData.uom_type === 'binary' ? formData.qualitative_options : null,
       require_resubmit_reason: formData.require_resubmit_reason,
       day_count_type: formData.frequency === 'Daily' ? formData.day_count_type : null,
       threshold_mode: formData.uom_type === 'numeric' ? formData.threshold_mode : null,
