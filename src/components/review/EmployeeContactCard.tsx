@@ -72,7 +72,7 @@ export function EmployeeContactCard({ employee, departmentName, onViewKpis, chil
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-foreground text-sm leading-tight truncate">
-              {employee.full_name || employee.email}
+              {formatEmployeeName(employee.full_name, employee.email, employee.employee_code)}
             </p>
             {employee.designation && (
               <p className="text-xs text-muted-foreground mt-0.5 truncate">{employee.designation}</p>

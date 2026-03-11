@@ -830,12 +830,12 @@ export function EmployeeSelectorGrid({
                       className="font-medium truncate group-hover:text-primary transition-colors cursor-pointer hover:underline"
                       title="Click to view contact info"
                     >
-                      {member.full_name || member.email}
+                      {formatEmployeeName(member.full_name, member.email, member.employee_code)}
                     </span>
                   </EmployeeContactCard>
                 ) : (
                   <p className="font-medium truncate group-hover:text-primary transition-colors">
-                    {member.full_name || member.email}
+                    {formatEmployeeName(member.full_name, member.email, member.employee_code)}
                   </p>
                 )}
                 <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0 ml-2" />

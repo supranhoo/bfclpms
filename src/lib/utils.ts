@@ -6,6 +6,19 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Format employee name with optional employee code.
+ * Returns "Name (Code)" if code exists, otherwise just "Name" or email fallback.
+ */
+export function formatEmployeeName(
+  fullName: string | null | undefined,
+  email: string,
+  employeeCode?: string | null
+): string {
+  const name = fullName || email;
+  return employeeCode ? `${name} (${employeeCode})` : name;
+}
+
+/**
  * Safely parse a value to float, preserving 0 as a valid number.
  * Returns null for empty strings, null, undefined, or non-numeric values.
  * Prevents the common JS bug where `parseFloat(v) || null` treats 0 as falsy.
