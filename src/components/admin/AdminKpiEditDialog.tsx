@@ -14,7 +14,7 @@ import { useAdminUpdateKpi, ReviewStatus, KPI } from '@/hooks/useKpis';
 import { Loader2, Building2, Info, Copy, ChevronDown } from 'lucide-react';
 import { UomTypeSelector } from '@/components/admin/UomTypeSelector';
 import { TieredOptionsBuilder } from '@/components/admin/TieredOptionsBuilder';
-import { UomType, QualitativeOption, validateQualitativeOptions } from '@/lib/qualitativeUom';
+import { UomType, QualitativeOption, validateQualitativeOptions, BINARY_OPTIONS, BINARY_OPTIONS_INVERTED, isBinaryInverted } from '@/lib/qualitativeUom';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
 import { supabase } from '@/integrations/supabase/client';
