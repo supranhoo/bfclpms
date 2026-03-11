@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Mail, Phone, Copy, Check, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { formatEmployeeName } from '@/lib/utils';
 
 interface EmployeeContactCardProps {
   employee: {
