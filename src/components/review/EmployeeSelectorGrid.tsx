@@ -582,7 +582,9 @@ export function EmployeeSelectorGrid({
 
   const getManagerName = (managerId: string | null) => {
     if (!managerId || !allProfiles) return null;
-    return allProfiles.find(p => p.id === managerId)?.full_name || null;
+    const mgr = allProfiles.find(p => p.id === managerId);
+    if (!mgr) return null;
+    return formatEmployeeName(mgr.full_name, mgr.email, mgr.employee_code);
   };
 
   const headerConfig = HEADER_CONFIG[viewLevel];
