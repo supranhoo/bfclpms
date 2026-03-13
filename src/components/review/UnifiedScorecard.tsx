@@ -951,6 +951,14 @@ export function UnifiedScorecard({
       // N/A Confirmation (original flow)
       if (!naConfirmed) return;
       
+      // Explicitly set final_score/final_rating to null for N/A KPIs moving to approved
+      if (approve && config.forwardStatus === 'approved') {
+        await supabase
+          .from('review_submissions')
+          .update({ final_score: null, final_rating: null })
+          .eq('kpi_id', selectedKpi.id);
+      }
+      
       if (user?.id) {
         await supabase.from('kpi_audit_logs').insert({
           kpi_id: selectedKpi.id,
