@@ -482,7 +482,6 @@ function IssueTabContent({ value, issues, fixedIds, fixingAll, onFix, onFixAll, 
             <CollapsibleContent className="pl-6 space-y-1 pb-2">
               {empIssues.map(issue => {
                 const fixKey = issue.kpi.id + issue.type;
-                const isFixing = fixingIds.has(fixKey);
                 const isFixed = fixedIds.has(fixKey);
 
                 return (
@@ -496,12 +495,18 @@ function IssueTabContent({ value, issues, fixedIds, fixingAll, onFix, onFixAll, 
                       <p className="text-muted-foreground text-xs">{issue.description}</p>
                       <p className="text-xs"><span className="text-primary font-medium">Suggested:</span> {issue.suggestedFix}</p>
                     </div>
-                    {canAutoFix(issue.type) && !isFixed && (
-                      <Button variant="outline" size="sm" onClick={() => onFix(issue)} disabled={isFixing} className="shrink-0 gap-1">
-                        {isFixing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
-                        Fix
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button variant="ghost" size="sm" onClick={() => onEdit(issue)} className="gap-1 h-8 px-2">
+                        <Pencil className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Edit</span>
                       </Button>
-                    )}
+                      {canAutoFix(issue.type) && !isFixed && (
+                        <Button variant="outline" size="sm" onClick={() => onFix(issue)} className="gap-1">
+                          <Wrench className="h-3.5 w-3.5" />
+                          Fix
+                        </Button>
+                      )}
+                    </div>
                     {isFixed && (
                       <Badge className="bg-green-500/10 text-green-600 border-green-500/20 shrink-0" variant="outline">
                         <CheckCircle2 className="h-3 w-3 mr-1" /> Fixed

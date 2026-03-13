@@ -16,11 +16,9 @@ import type { KPI } from '@/hooks/useKpis';
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const FISCAL_ORDER = [6,7,8,9,10,11,0,1,2,3,4,5]; // Jul-Jun
 
-type IssueType = 'INVERTED_CRITERIA' | 'MISSING_CRITERIA';
-
 interface ScoringIssue {
   kpi: KPI;
-  type: IssueType;
+  type: string;
   severity: string;
   description: string;
   suggestedFix: string;
