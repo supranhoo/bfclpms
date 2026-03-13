@@ -384,7 +384,7 @@ export function AuditScorecard({
   const openReviewSheet = (kpi: KPI) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
-    const auditorAchieved = (existing as any)?.auditor_achieved_value ?? (existing as any)?.manager_achieved_value ?? existing?.achieved_value ?? null;
+    const auditorAchieved = (existing as any)?.auditor_achieved_value ?? null;
     
     // Recalculate score from achieved value if auditor hasn't reviewed yet
     let initialAuditorScore: number | null = existing?.auditor_score ?? null;

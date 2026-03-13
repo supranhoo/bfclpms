@@ -1,29 +1,25 @@
 
+# Fix: KPI Journey Section Showing Wrong Scores — IMPLEMENTED ✅
 
-# Confirming Behaviour & Plan Impact
+## Root Cause
+`KpiJourneySection.tsx` prioritized recalculated scores (`recalc?.score ?? storedScore`) over deliberately stored reviewer scores. For binary KPIs where a reviewer intentionally gave 0, the recalculation from an inherited achieved value overrode it to 5.
 
-## 1. How Final Score Works Today
+## Changes Made
 
-**Yes, the final score is the score given at the last stage.** Specifically:
+### 1. `KpiJourneySection.tsx` — Display priority fix
+- Changed `score: recalc?.score ?? storedScore` → `score: storedScore ?? recalc?.score`
+- Changed `rating: recalc?.rating ?? storedRating` → `rating: storedRating ?? recalc?.rating`
+- Stored reviewer scores now take precedence; recalculation only fills in when no stored score exists
 
-- When **Management** (the terminal reviewer) approves a KPI, `ManagementScorecard.tsx` writes `final_score = management_score` and `final_rating = management_rating` into `review_submissions`.
-- The **Dashboard** and all reports use a fallback chain: `final_score ?? management_score ?? auditor_score ?? hr_pms_score ?? skip_level_score ?? manager_score ?? self_score ?? 0`. This means the last reviewer's score always takes precedence.
+### 2. `ManagementScorecard.tsx` — Removed cross-stage fallback
+- Changed `management_achieved_value ?? auditor_achieved_value ?? achieved_value` → `management_achieved_value` only
+- Prevents stale self-review values from being inherited into management stage
 
-So for Anil Kumar Pathak's KPI: Gaurav (Management) gave score **0** → `final_score = 0` → Dashboard correctly shows **0**. This is working as intended.
+### 3. `AuditScorecard.tsx` — Removed cross-stage fallback
+- Changed `auditor_achieved_value ?? manager_achieved_value ?? achieved_value` → `auditor_achieved_value` only
+- Prevents stale previous-stage values from being inherited into audit stage
 
-## 2. Will The Plan Change Any Scoring Rules?
-
-**No. The plan changes ZERO scoring rules or KPI logic.** Here is exactly what it touches:
-
-| Change | What it does | Affects scoring? |
-|--------|-------------|-----------------|
-| Swap priority in `KpiJourneySection.tsx` | Display fix only — shows `storedScore` (the actual DB value) instead of a recalculated value in the **View KPI Details** panel | **No** — this is a read-only display component. It does not write to the database. |
-| Remove achieved-value fallback in `ManagementScorecard` / `AuditScorecard` | Stops pre-filling the achieved value field from a previous stage's value when opening the review sheet | **No** — reviewers can still enter any achieved value they want. It only changes the **initial pre-fill** so stale values don't get accidentally saved. The reviewer's actual submission logic is unchanged. |
-
-**In summary:**
-- The fallback chain (`final_score ?? management_score ?? ...`) is untouched
-- The `calculateRating` scoring engine is untouched  
-- The approval flow that writes `final_score` / `final_rating` is untouched
-- KPI thresholds (r0–r5), criteria, weightages — all untouched
-- This is purely a **display fix** for the Journey panel showing wrong numbers
-
+## Impact
+- Zero changes to scoring rules, thresholds, or KPI logic
+- Zero changes to the final_score fallback chain
+- Display-only fix for Journey panel + pre-fill fix for review sheets
