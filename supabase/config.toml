@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.update-user-email]
 verify_jwt = false
+
+[functions.repair-orphaned-propagations]
+verify_jwt = false

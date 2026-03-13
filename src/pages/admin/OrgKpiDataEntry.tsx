@@ -531,8 +531,13 @@ export default function OrgKpiDataEntry() {
     // Track which scope IDs were actually propagated
     const propagatedScopeIds: string[] = [];
     
+    // Track propagation results for completeness validation
+    let totalPropagated = 0;
+    const kpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+    const expectedCount = employeeCountMap.get(kpiKey) ?? 0;
+    
     if (scope === 'organization') {
-      await propagate.mutateAsync({
+      const result = await propagate.mutateAsync({
         categoryId: kpi.category_id,
         kraName: kpi.kra_name,
         kpiName: kpi.kpi_name,
@@ -544,11 +549,12 @@ export default function OrgKpiDataEntry() {
         naRemarks: values.naRemarks,
         remarks: values.remarks || undefined,
       });
-      propagatedScopeIds.push('organization'); // marker for org scope
+      totalPropagated = result.propagatedCount;
+      propagatedScopeIds.push('organization');
     } else if ((scope === 'department' || scope === 'employee') && values.scopedValues) {
       for (const sv of values.scopedValues) {
         if (sv.achievedValue === null && !sv.isNa) continue;
-        await propagate.mutateAsync({
+        const result = await propagate.mutateAsync({
           categoryId: kpi.category_id,
           kraName: kpi.kra_name,
           kpiName: kpi.kpi_name,
@@ -560,8 +566,18 @@ export default function OrgKpiDataEntry() {
           isNa: sv.isNa,
           remarks: sv.remarks || undefined,
         });
+        totalPropagated += result.propagatedCount;
         propagatedScopeIds.push(sv.scopeId);
       }
+    }
+
+    // Propagation completeness validation (PA3)
+    if (propagatedScopeIds.length > 0 && expectedCount > 0 && totalPropagated < expectedCount) {
+      toast({
+        title: `Partial propagation: ${totalPropagated}/${expectedCount} employees updated`,
+        description: `${expectedCount - totalPropagated} employee(s) may have mismatched KPI names. Check the Pending Report for details.`,
+        variant: 'destructive',
+      });
     }
 
     // Only update org_kpi_values status for rows that were actually propagated
