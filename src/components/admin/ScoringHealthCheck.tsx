@@ -333,10 +333,10 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
                 value="critical"
                 issues={criticalIssues}
                 fixedIds={fixedIds}
-                fixingIds={fixingIds}
                 fixingAll={fixingAll}
                 onFix={handleFix}
                 onFixAll={fixAll}
+                onEdit={handleEdit}
                 canAutoFix={canAutoFix}
                 severityIcon={severityIcon}
                 severityBadge={severityBadge}
@@ -345,10 +345,10 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
                 value="high"
                 issues={highIssues}
                 fixedIds={fixedIds}
-                fixingIds={fixingIds}
                 fixingAll={fixingAll}
                 onFix={handleFix}
                 onFixAll={fixAll}
+                onEdit={handleEdit}
                 canAutoFix={canAutoFix}
                 severityIcon={severityIcon}
                 severityBadge={severityBadge}
@@ -357,10 +357,10 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
                 value="medium"
                 issues={mediumIssues}
                 fixedIds={fixedIds}
-                fixingIds={fixingIds}
                 fixingAll={fixingAll}
                 onFix={handleFix}
                 onFixAll={fixAll}
+                onEdit={handleEdit}
                 canAutoFix={canAutoFix}
                 severityIcon={severityIcon}
                 severityBadge={severityBadge}
