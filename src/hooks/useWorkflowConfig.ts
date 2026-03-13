@@ -16,6 +16,8 @@ export interface WorkflowConfig {
   config_type: 'employee' | 'department' | 'pms_grade';
   config_value: string;
   workflow_template_id: string;
+  review_period: string | null;
+  review_year: number | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -67,18 +69,23 @@ export function useWorkflowConfigs() {
 }
 
 // Fetch employee's effective workflow using the database function
-export function useEmployeeWorkflow(employeeId: string | undefined) {
+export function useEmployeeWorkflow(employeeId: string | undefined, reviewPeriod?: string, reviewYear?: number) {
   return useQuery({
-    queryKey: ['employee-workflow', employeeId],
+    queryKey: ['employee-workflow', employeeId, reviewPeriod, reviewYear],
     queryFn: async () => {
       if (!employeeId) return null;
       
+      const params: Record<string, unknown> = { employee_uuid: employeeId };
+      if (reviewPeriod && reviewYear) {
+        params.p_review_period = reviewPeriod;
+        params.p_review_year = reviewYear;
+      }
+      
       const { data, error } = await supabase
-        .rpc('get_employee_workflow_info', { employee_uuid: employeeId });
+        .rpc('get_employee_workflow_info', params as any);
       
       if (error) throw error;
       
-      // The function returns a table, so we get the first row
       if (data && data.length > 0) {
         return data[0] as EmployeeWorkflowInfo;
       }
@@ -90,14 +97,20 @@ export function useEmployeeWorkflow(employeeId: string | undefined) {
 }
 
 // Get employee's workflow stages only
-export function useEmployeeWorkflowStages(employeeId: string | undefined) {
+export function useEmployeeWorkflowStages(employeeId: string | undefined, reviewPeriod?: string, reviewYear?: number) {
   return useQuery({
-    queryKey: ['employee-workflow-stages', employeeId],
+    queryKey: ['employee-workflow-stages', employeeId, reviewPeriod, reviewYear],
     queryFn: async () => {
       if (!employeeId) return null;
       
+      const params: Record<string, unknown> = { employee_uuid: employeeId };
+      if (reviewPeriod && reviewYear) {
+        params.p_review_period = reviewPeriod;
+        params.p_review_year = reviewYear;
+      }
+      
       const { data, error } = await supabase
-        .rpc('get_employee_workflow', { employee_uuid: employeeId });
+        .rpc('get_employee_workflow', params as any);
       
       if (error) throw error;
       return data as string[];
@@ -115,26 +128,58 @@ export function useUpsertWorkflowConfig() {
       configType,
       configValue,
       workflowTemplateId,
+      reviewPeriod,
+      reviewYear,
     }: {
       configType: 'employee' | 'department' | 'pms_grade';
       configValue: string;
       workflowTemplateId: string;
+      reviewPeriod?: string | null;
+      reviewYear?: number | null;
     }) => {
-      const { data, error } = await supabase
+      const record: Record<string, unknown> = {
+        config_type: configType,
+        config_value: configValue,
+        workflow_template_id: workflowTemplateId,
+        review_period: reviewPeriod || null,
+        review_year: reviewYear || null,
+      };
+
+      // Use different onConflict based on whether it's period-specific or global
+      // Since we use partial unique indexes, we need to handle conflicts manually
+      // First try to find existing record
+      let existingQuery = supabase
         .from('workflow_config')
-        .upsert(
-          {
-            config_type: configType,
-            config_value: configValue,
-            workflow_template_id: workflowTemplateId,
-          },
-          { onConflict: 'config_type,config_value' }
-        )
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+        .select('id')
+        .eq('config_type', configType)
+        .eq('config_value', configValue);
+
+      if (reviewPeriod && reviewYear) {
+        existingQuery = existingQuery.eq('review_period', reviewPeriod).eq('review_year', reviewYear);
+      } else {
+        existingQuery = existingQuery.is('review_period', null);
+      }
+
+      const { data: existing } = await existingQuery.maybeSingle();
+
+      if (existing) {
+        const { data, error } = await supabase
+          .from('workflow_config')
+          .update({ workflow_template_id: workflowTemplateId })
+          .eq('id', existing.id)
+          .select()
+          .single();
+        if (error) throw error;
+        return data;
+      } else {
+        const { data, error } = await supabase
+          .from('workflow_config')
+          .insert(record as any)
+          .select()
+          .single();
+        if (error) throw error;
+        return data;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflow-configs'] });
@@ -220,13 +265,12 @@ export function useUpdateWorkflowTemplate() {
   });
 }
 
-// Set a workflow template as the new default (only affects inherit/fallback cascade)
+// Set a workflow template as the new default
 export function useSetDefaultWorkflowTemplate() {
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async (templateId: string) => {
-      // Unset all defaults
       const { error: unsetError } = await supabase
         .from('workflow_templates')
         .update({ is_default: false })
@@ -234,7 +278,6 @@ export function useSetDefaultWorkflowTemplate() {
       
       if (unsetError) throw unsetError;
       
-      // Set new default
       const { error: setError } = await supabase
         .from('workflow_templates')
         .update({ is_default: true })
@@ -250,13 +293,12 @@ export function useSetDefaultWorkflowTemplate() {
   });
 }
 
-// Delete a workflow template (only if not in use and no active KPIs)
+// Delete a workflow template
 export function useDeleteWorkflowTemplate() {
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async (templateId: string) => {
-      // Check if any configs reference this template
       const { data: configs, error: checkError } = await supabase
         .from('workflow_config')
         .select('id')
@@ -268,7 +310,6 @@ export function useDeleteWorkflowTemplate() {
         throw new Error('Cannot delete: this template is currently assigned to employees, departments, or PMS grades.');
       }
       
-      // Check for active KPIs using this template
       const { data: hasActiveKpis, error: kpiCheckError } = await supabase
         .rpc('check_template_has_active_kpis', { template_uuid: templateId });
       
@@ -296,7 +337,6 @@ export function useArchiveWorkflowTemplate() {
   
   return useMutation({
     mutationFn: async (templateId: string) => {
-      // Check for active KPIs before archiving
       const { data: hasActiveKpis, error: kpiCheckError } = await supabase
         .rpc('check_template_has_active_kpis', { template_uuid: templateId });
       
@@ -385,14 +425,20 @@ export function hasWorkflowStage(stage: string, workflowStages: string[]): boole
  * Batch-fetch workflow stages for multiple employees in a single RPC call.
  * Returns a map of employeeId -> stages[].
  */
-export function useBulkEmployeeWorkflows(employeeIds: string[]) {
+export function useBulkEmployeeWorkflows(employeeIds: string[], reviewPeriod?: string, reviewYear?: number) {
   return useQuery({
-    queryKey: ['bulk-employee-workflows', employeeIds.sort().join(',')],
+    queryKey: ['bulk-employee-workflows', employeeIds.sort().join(','), reviewPeriod, reviewYear],
     queryFn: async () => {
       if (employeeIds.length === 0) return new Map<string, string[]>();
 
+      const params: Record<string, unknown> = { employee_ids: employeeIds };
+      if (reviewPeriod && reviewYear) {
+        params.p_review_period = reviewPeriod;
+        params.p_review_year = reviewYear;
+      }
+
       const { data, error } = await supabase
-        .rpc('get_bulk_employee_workflows' as any, { employee_ids: employeeIds }) as { data: { employee_id: string; stages: string[] }[] | null; error: any };
+        .rpc('get_bulk_employee_workflows' as any, params) as { data: { employee_id: string; stages: string[] }[] | null; error: any };
 
       if (error) throw error;
 
