@@ -1,36 +1,56 @@
 
-# Unify "My Dashboard" with Reviewer Dashboard Layout — IMPLEMENTED ✅
 
-## Changes Made
+# RCA: Biswajit's KPI Scoring + Systemic Issues
 
-### 1. UnifiedScorecard — Added `'self'` View Level
-- **Type**: Added `'self'` to `ScorecardViewLevel` union type
-- **Config**: Added self-specific static config (title: "My KPIs", scoreFieldPrefix: "self")
-- **Props**: Made `onBack` optional (not needed for self-view)
-- **Self-mode guard in config useMemo**: Returns simplified config for self (no reviewer workflow resolution)
-- **Self-mode hooks**: Added `useKraCategories`, `useSubPeriodSubmissionsByKpis`, category/pending-period state
-- **Profile header**: Conditional — shows `ProfileCard` (no back button) for self, existing reviewer header for others
-- **Category filter**: Added inline category dropdown in filter bar (self mode only)
-- **Pending period alerts**: Computed from allKpis, rendered before WorkflowProgressTracker
-- **Deep-link support**: Auto-open KPI from `autoOpenKpiId` with period auto-switching
-- **SelfReviewSheet**: Rendered for self mode; reviewer Sheet guarded with `!isSelfMode`
-- **Table callbacks**: `onReview`/`onView` open SelfReviewSheet for self mode, `onSendBack` disabled
-- **Score calculation**: Added `'self'` case to `getRelevantScore`
-- **viewType mapping**: `'self'` → `'my-kpis'` for KpiDetailsTable
-- **OrgKPI map fix**: Both key construction and lookup now use `toLowerCase()` for consistent matching
+## Biswajit's Specific KPI
 
-### 2. Dashboard.tsx — Simplified from ~960 to ~220 lines
-- **Removed**: All self-view rendering (charts, inline KPI table, SelfReviewSheet, modals, computed metrics, category metrics, sorting, sub-period fetching)
-- **Self-view**: Now delegates entirely to `<UnifiedScorecard viewLevel="self" />` with current user's profile as employee
-- **Preserved**: ViewModeToggle, EmployeeSelectorGrid for reviewer modes, deep-link effects (cross-user + self via autoOpenKpiId), MentionedKpiSheet
-- **Deep-link simplified**: Self-view kpi deep-link passes raw kpiId as `autoOpenKpiId` to UnifiedScorecard
+**KPI**: Logistics Cost Variance (Provision vs. Actual) — January 2026
+**Config**: Achieved=110%, Criteria="Lower is Better", UOM=%, Thresholds: R5≤98%, R4≤99%, R3≤100%, R2≤101%, R1≤102%
+**Result**: Score = 0 (because 110% > 102% — worst band)
 
-### 3. KpiDetailsTable — No Changes Needed
-- Existing `'my-kpis'` viewType already handles self-review action buttons correctly
+The score of **0 is mathematically correct** per the configured thresholds. 110% cost variance means 10% over budget — the scoring logic correctly assigns 0 for anything above 102%. Management recognized this and marked the KPI as **N/A** with remarks: *"we will need to understand this KRA or change it."*
 
-## Impact
-- **Visual consistency**: Self-view now shares identical layout with reviewer views (1:5 charts, workflow tracker, KpiDetailsTable)
-- **Code reduction**: ~750 lines removed from Dashboard.tsx
-- **No schema changes, no RLS changes**
-- **All reviewer flows unchanged** — only self-mode behavior added to UnifiedScorecard
-- **Org KPI key matching**: Fixed case-sensitivity inconsistency across views
+However, investigating this KPI exposed **two systemic bugs** affecting many employees.
+
+---
+
+## Bug 1: N/A KPIs Missing final_score (313 records)
+
+**Impact**: 313 out of 4,068 approved KPIs have `final_score = NULL`. Every single one is an N/A-marked KPI.
+
+**Root cause**: When a reviewer (management, auditor, etc.) marks a KPI as N/A and it transitions to "approved" status, the code does **not** sync `final_score` / `final_rating`. The memory spec says N/A should clear all scoring fields, but the approval path for N/A KPIs skips the final_score sync entirely.
+
+**Fix**:
+- In `UnifiedScorecard.tsx` and `AuditScorecard.tsx`: when submitting an N/A approval, explicitly set `final_score = null` and `final_rating = null` (or 0) in the same update
+- Write a one-time data repair migration to set `final_score = NULL, final_rating = NULL` for all 313 existing approved N/A records (confirming they're intentionally excluded from calculations)
+
+## Bug 2: Auditor Score Defaulting to 0 (30+ records)
+
+**Impact**: ~30 approved non-NA KPIs have `final_score = 0` while `self_score > 0`. These span all UOM types (%, Number, Date, Amount).
+
+**Root cause**: The old `AuditScorecard` component (line 387) initialized the auditor's achieved value as:
+```
+auditorAchieved = (existing as any)?.auditor_achieved_value ?? null;
+```
+It did **not** fall back to `existing?.achieved_value` (the self-review value). So when the auditor hadn't entered their own achieved value:
+1. Recalculation was skipped (no achieved value to calculate from)
+2. Score fell back to `manager_score` which was often null
+3. Auditor clicked "Forward" with score=0 or null, saving `auditor_score = 0`
+4. Approval synced this 0 to `final_score`
+
+The current `UnifiedScorecard` (now used for all views) already has the correct fallback chain at line 755. The legacy `AuditScorecard` and `EmployeeScorecard` components are no longer used from the Dashboard but still exist.
+
+**Fix**:
+- **AuditScorecard.tsx** line 387: Add fallback → `?? existing?.achieved_value ?? null`
+- **Data repair migration**: Recalculate `final_score` for the ~30 affected approved non-NA KPIs using the scoring engine logic, matching achieved_value against thresholds
+
+---
+
+## Plan Summary
+
+| File / Action | Change |
+|---|---|
+| `src/components/review/AuditScorecard.tsx` | Fix achieved value fallback (line 387) to match UnifiedScorecard pattern |
+| `src/components/review/UnifiedScorecard.tsx` | Ensure N/A approval path sets `final_score = null` explicitly |
+| Database migration | Repair 313 N/A records (confirm NULL final_score) and recalculate ~30 non-NA records with wrong final_score=0 |
+
