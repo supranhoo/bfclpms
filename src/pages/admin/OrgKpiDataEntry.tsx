@@ -450,7 +450,7 @@ export default function OrgKpiDataEntry() {
     const auditEntries: Array<any> = [];
 
     if (scope === 'organization') {
-      const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+      const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
       const oldVal = existingValuesMap.get(key)?.achieved_value ?? null;
       toSave.push({
         category_id: kpi.category_id,
