@@ -79,7 +79,7 @@ export function OrgKpiPendingReport({ rows, reviewPeriod, reviewYear }: OrgKpiPe
       { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 22 }, { wch: 14 },
       { wch: 14 }, { wch: 30 }, { wch: 25 }, { wch: 30 },
       { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
-      { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 14 },
+      { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 22 }, { wch: 14 },
     ];
 
     const wb = XLSX.utils.book_new();
