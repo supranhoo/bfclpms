@@ -1,28 +1,40 @@
 
+# Plan: Period-Specific Workflow Mapping — IMPLEMENTED ✅
 
-# Fix: "All future months" label clarity in Admin KPI Edit Dialog
+## What Was Done
 
-## Issue
+### 1. Database Migration
+- Added `review_period` (TEXT) and `review_year` (INT) columns to `workflow_config` table.
+- Replaced single unique constraint with two partial unique indexes:
+  - Global: `UNIQUE(config_type, config_value) WHERE review_period IS NULL`
+  - Period-specific: `UNIQUE(config_type, config_value, review_period, review_year) WHERE review_period IS NOT NULL`
+- Updated 3 RPCs (`get_employee_workflow`, `get_employee_workflow_info`, `get_bulk_employee_workflows`) with optional `p_review_period` and `p_review_year` parameters.
 
-The second radio option in the "Apply Changes To" section currently reads:
-
-> **All future months** (fiscal year, after March)
-
-This is misleading because it implies the current month (March) is excluded. In reality, the primary KPI save already handles the current month, so the overall effect IS "this month + all following months." The WeightageCellEditor uses the clearer label "This & all following months" for the same behavior.
-
-The user expects the label to read **"This month and all following months"** for clarity and consistency.
-
-## Fix (1 file)
-
-**`src/components/admin/AdminKpiEditDialog.tsx`** — Update the label for the `future_months` radio option:
-
-```tsx
-// Before (line 902-904):
-All future months (fiscal year, after {kpi?.review_period})
-
-// After:
-This month and all following months (fiscal year, after {kpi?.review_period})
+### 2. Resolution Cascade (7 levels)
 ```
+1. Period-specific employee config
+2. Period-specific department config
+3. Period-specific PMS grade config
+4. Global employee config
+5. Global department config
+6. Global PMS grade config
+7. Default template
+```
+When period params are NULL, steps 1-3 are skipped (backward compatible).
 
-This is a label-only change. The underlying logic already correctly updates the current month via the primary save and all subsequent fiscal-year siblings via the bulk apply path.
+### 3. Frontend — `useWorkflowConfig.ts`
+- Updated `WorkflowConfig` interface with `review_period` and `review_year` fields.
+- Updated `useUpsertWorkflowConfig` mutation to accept optional period params (uses find-then-update/insert pattern for partial unique indexes).
+- Updated `useEmployeeWorkflow`, `useEmployeeWorkflowStages`, `useBulkEmployeeWorkflows` hooks to accept optional period params and pass them to RPCs.
 
+### 4. Frontend — `WorkflowConfig.tsx`
+- Added period selector at the top: "Global Default" or "Specific Period" (month + year).
+- When "Global Default" selected: shows/edits configs where `review_period IS NULL`.
+- When specific period selected: shows/edits configs scoped to that period.
+- Shows "Inherits: [template]" badge when a global config exists but no period override.
+- Shows period badge on period-specific assignments.
+- Updated priority cascade description text dynamically.
+
+### 5. Backward Compatibility
+- All existing callers that don't pass period params continue to get global resolution.
+- No breaking changes to `workflowEngine.ts`, scorecards, or other consumers.

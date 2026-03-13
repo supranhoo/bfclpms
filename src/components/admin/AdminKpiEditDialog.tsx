@@ -900,7 +900,7 @@ const [formData, setFormData] = useState({
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="future_months" id="scope_future" />
                 <Label htmlFor="scope_future" className="text-sm font-normal cursor-pointer">
-                   All future months <span className="text-muted-foreground">(fiscal year, after {kpi?.review_period || 'current month'})</span>
+                   This month and all following months <span className="text-muted-foreground">(fiscal year, after {kpi?.review_period || 'current month'})</span>
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
