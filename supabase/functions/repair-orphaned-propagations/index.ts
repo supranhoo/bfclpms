@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
       if (body?.limit) batchLimit = Math.min(body.limit, 200);
     } catch { /* no body is fine */ }
 
-    // Find orphaned KPIs: org_level + kra_set + no review_submission + has org_kpi_value data
+    // Find orphaned KPIs: org_level + kra_set + no review_submission
     const { data: orphanedKpis, error: kpiError } = await supabase
       .from("kpis")
       .select("id, category_id, kra_name, kpi_name, review_period, review_year, employee_id, target_value, weightage, r5, r4, r3, r2, r1, r0, criteria, uom, uom_type, qualitative_options, threshold_mode")
@@ -60,6 +60,15 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Pre-fetch employee department mappings for dept-scoped matching
+    const empIds = [...new Set(orphanedKpis.map(k => k.employee_id))];
+    const { data: empProfiles } = await supabase
+      .from("profiles")
+      .select("id, department_id")
+      .in("id", empIds);
+    const empDeptMap = new Map<string, string | null>();
+    empProfiles?.forEach(p => empDeptMap.set(p.id, p.department_id));
 
     let repairedCount = 0;
     let skippedCount = 0;
@@ -85,7 +94,13 @@ Deno.serve(async (req) => {
 
         if (!orgValues || orgValues.length === 0) { skippedCount++; continue; }
 
-        const matchingValue = orgValues.find(v => v.employee_id === kpi.employee_id) || orgValues.find(v => v.employee_id === null);
+        // Match priority: exact employee match > department match > org-wide (null employee)
+        const empDeptId = empDeptMap.get(kpi.employee_id);
+        const matchingValue = 
+          orgValues.find(v => v.employee_id === kpi.employee_id) ||
+          (empDeptId ? orgValues.find(v => v.department_id === empDeptId && !v.employee_id) : null) ||
+          orgValues.find(v => v.employee_id === null && v.department_id === null) ||
+          orgValues[0]; // fallback: use any available value for this KPI group
         if (!matchingValue) { skippedCount++; continue; }
         if (matchingValue.achieved_value === null && !matchingValue.is_na) { skippedCount++; continue; }
 
