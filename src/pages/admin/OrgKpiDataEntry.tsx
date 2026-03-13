@@ -120,7 +120,7 @@ export default function OrgKpiDataEntry() {
   const prevValuesMap = useMemo(() => {
     const map = new Map<string, number | null>();
     previousValues?.forEach(v => {
-      const key = `${v.category_id}||${v.kra_name}||${v.kpi_name}`;
+      const key = `${v.category_id}||${v.kra_name.toLowerCase()}||${v.kpi_name.toLowerCase()}`;
       map.set(key, v.achieved_value);
     });
     return map;
