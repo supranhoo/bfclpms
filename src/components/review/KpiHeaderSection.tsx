@@ -147,28 +147,6 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
               <span className="hidden sm:inline">Timeline</span>
             </Button>
           )}
-          {isAdmin && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setEditDialogOpen(true)}
-                className="gap-1 h-6 sm:h-7 px-2 text-xs border-primary/30 text-primary"
-              >
-                <Settings className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Admin KPI Editor</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setDataEntryDialogOpen(true)}
-                className="gap-1 h-6 sm:h-7 px-2 text-xs border-primary/30 text-primary"
-              >
-                <ClipboardEdit className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Admin Data Entry</span>
-              </Button>
-            </>
-          )}
       </div>
       </div>
 
