@@ -481,8 +481,8 @@ export default function OrgKpiDataEntry() {
       values.scopedValues.forEach(sv => {
         const isDept = scope === 'department';
         const scopeKey = isDept
-          ? `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${sv.scopeId}||null`
-          : `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${sv.scopeId}`;
+          ? `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||${sv.scopeId}||null`
+          : `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||${sv.scopeId}`;
         const oldVal = existingValuesMap.get(scopeKey)?.achieved_value ?? null;
         toSave.push({
           category_id: kpi.category_id,
