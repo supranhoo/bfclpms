@@ -1,38 +1,82 @@
 
 
-# Correction: Score of 0 Is Valid — No Suppression Needed
+# Fix: Org KPI Propagation Not Reaching Employee Scorecards
 
-## Understanding
+## Root Cause (Confirmed via Database Investigation)
 
-You are absolutely right. For "Control Dust Emission" with 30 non-compliance days and target=0, the score **correctly** evaluates to 0. This is not a misconfiguration artifact — it is the legitimate scoring outcome.
+There are **33 KPIs** in the database where:
+- `org_kpi_values` has data (`achieved_value` populated, `status = propagated/approved`)
+- But the `kpis` table still shows `status = kra_set`
+- And `review_submissions` has NO record (no self_score, no achieved_value)
 
-My previous plan to suppress zero-score propagation and flag `ZERO_SCORE_FROM_MISSING_CONFIG` was **incorrect** for this case. I am withdrawing that plan.
+This means the propagation RPC was **never actually called** for these employees, but their `org_kpi_values.status` was incorrectly set to `propagated`.
 
-## What Actually Happens Today
+### The Bug (in `OrgKpiDataEntry.tsx`, lines 578-586)
 
-The propagation flow works correctly end-to-end:
+After the propagation loop, the handler runs a **blanket status update**:
 
-1. Admin enters achieved value (30) in Org KPI Data Entry
-2. `buildRatingsPayload` calls `calculateRating(30, 0, {all nulls}, 'Higher is Better', ...)` 
-3. `calculateAbsoluteRating` finds all R1–R5 are null → no threshold matches → rating = 0
-4. RPC writes `self_score = 0`, `self_rating = 'red'` to `review_submissions`
-5. KPI status advances from `kra_set` to `self_review`
-6. Dashboard displays "0.0" in a red badge (the `score != null` check correctly passes for 0)
+```javascript
+await supabase
+  .from('org_kpi_values')
+  .update({ status: 'propagated' })
+  .eq('category_id', kpi.category_id)
+  .eq('kra_name', kpi.kra_name)
+  .eq('kpi_name', kpi.kpi_name)
+  .eq('review_period', selectedPeriod)
+  .eq('review_year', selectedYear);
+```
 
-**Score of 0 propagates and displays correctly.** There is no bug here.
+This marks ALL org_kpi_values rows as `propagated` — including employees that were **skipped** in the loop (because `sv.achievedValue === null && !sv.isNa`). Those employees never had the RPC called, so their `kpis.status` stays at `kra_set` and `review_submissions` remains empty. The UI then shows the achieved value (read from org_kpi_values) but no self score (read from review_submissions).
 
-## What Could Still Be Improved (Optional)
+## Plan
 
-If you want the KPI to score differently (e.g., 0 days = 5, 1 day = 4, etc. as described in the KPI description), the fix is purely a **data configuration** task — an admin needs to:
+### 1. Fix the blanket status update (`OrgKpiDataEntry.tsx`)
 
-1. Set **Criteria** to "Lower is Better"
-2. Set **R5 = 0, R4 = 1, R3 = 2, R2 = 3, R1 = 4** (absolute thresholds)
+Instead of updating all rows, only update rows for employees that were actually propagated. Track which employee IDs were propagated in the loop, then update org_kpi_values only for those specific employee_ids.
 
-With those thresholds, 30 non-compliance days would still score 0 (since 30 > R1=4), which is the correct outcome. But if the actual value were 0 days, it would correctly score 5.
+### 2. Data repair: Fix 33 broken KPIs
 
-The Scoring Health Check already flags this KPI for `MISSING_THRESHOLDS` — which guides admins to add the correct configuration. No code changes are needed.
+Write a one-time repair in the `handleCardSaveAndPropagate` flow — or more practically, add a **"Re-propagate"** action that detects and fixes these orphaned entries. The approach:
+- Query for org_kpi_values where `status = propagated` but the corresponding `kpis.status = kra_set` and `review_submissions` is missing
+- For each, call the propagation RPC to actually push the data through
 
-## Summary
+This will be implemented as a backend function that can be triggered from the Org KPI Data Entry page.
 
-No code changes required. The previous plan to suppress zero-score propagation is withdrawn. The system handles this case correctly.
+### 3. Add a "Fix Orphaned Propagations" utility
+
+Add a button/action on the Org KPI Data Entry page (admin only) that:
+- Detects the 33 broken records
+- Re-runs propagation for each
+- Reports results
+
+## Files to Modify
+
+- **`src/pages/admin/OrgKpiDataEntry.tsx`** — Fix the blanket status update to only mark actually-propagated employees; add repair utility
+- **`src/hooks/usePropagateOrgKpiValue.ts`** — No changes needed (RPC logic is correct)
+
+## Technical Details
+
+The status update fix:
+```javascript
+// Track propagated employee IDs
+const propagatedEmployeeIds: string[] = [];
+for (const sv of values.scopedValues) {
+  if (sv.achievedValue === null && !sv.isNa) continue;
+  await propagate.mutateAsync({...});
+  propagatedEmployeeIds.push(sv.scopeId);
+}
+
+// Only update status for actually-propagated employees
+for (const empId of propagatedEmployeeIds) {
+  await supabase
+    .from('org_kpi_values')
+    .update({ status: 'propagated', updated_at: new Date().toISOString() })
+    .eq('category_id', kpi.category_id)
+    .eq('kra_name', kpi.kra_name)
+    .eq('kpi_name', kpi.kpi_name)
+    .eq('review_period', selectedPeriod)
+    .eq('review_year', selectedYear)
+    .eq('employee_id', empId);
+}
+```
 
