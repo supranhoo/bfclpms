@@ -250,7 +250,6 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
   };
 
   const canAutoFix = (type: IssueType) => type === 'INVERTED_CRITERIA' || type === 'MISSING_CRITERIA';
-  };
 
   return (
     <>
