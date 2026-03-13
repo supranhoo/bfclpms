@@ -392,10 +392,16 @@ export default function AllKpis() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Admin KPI Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Monitor KPI status across all employees and workflow stages</p>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-foreground">Admin KPI Dashboard</h1>
+            <p className="text-sm text-muted-foreground">Monitor KPI status across all employees and workflow stages</p>
+          </div>
+          <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Assign KRA
+          </Button>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <ScoringHealthCheck
@@ -403,21 +409,18 @@ export default function AllKpis() {
             selectedPeriod={selectedPeriod}
             selectedYear={selectedYear}
           />
+          <div className="h-5 w-px bg-border hidden sm:block" />
           <Button variant="outline" size="sm" onClick={handleExportExcel}>
-            <Download className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Export Excel</span>
+            <Download className="h-4 w-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Export</span>
           </Button>
           <Button variant="outline" size="sm" onClick={() => setIsCopyKrasOpen(true)}>
-            <Copy className="h-4 w-4 sm:mr-2" />
+            <Copy className="h-4 w-4 sm:mr-1.5" />
             <span className="hidden sm:inline">Copy KRAs</span>
           </Button>
           <Button variant="outline" size="sm" onClick={() => setIsBulkAssignOpen(true)}>
-            <Library className="h-4 w-4 sm:mr-2" />
+            <Library className="h-4 w-4 sm:mr-1.5" />
             <span className="hidden sm:inline">Bulk Assign</span>
-          </Button>
-          <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-            <Plus className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Assign KRA</span>
           </Button>
         </div>
       </div>
