@@ -1678,8 +1678,9 @@ export function UnifiedScorecard({
               </div>
             )}
           </SheetFooter>
-        </SheetContent>
+      </SheetContent>
       </Sheet>
+      )}
 
       {/* Query Dialog (Manager only) */}
       {viewLevel === 'manager' && (
