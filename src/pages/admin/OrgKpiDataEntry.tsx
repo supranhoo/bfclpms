@@ -528,6 +528,9 @@ export default function OrgKpiDataEntry() {
     await handleCardSave(kpi, values);
     const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
     
+    // Track which scope IDs were actually propagated
+    const propagatedScopeIds: string[] = [];
+    
     if (scope === 'organization') {
       await propagate.mutateAsync({
         categoryId: kpi.category_id,
@@ -541,7 +544,8 @@ export default function OrgKpiDataEntry() {
         naRemarks: values.naRemarks,
         remarks: values.remarks || undefined,
       });
-    } else if (scope === 'department' && values.scopedValues) {
+      propagatedScopeIds.push('organization'); // marker for org scope
+    } else if ((scope === 'department' || scope === 'employee') && values.scopedValues) {
       for (const sv of values.scopedValues) {
         if (sv.achievedValue === null && !sv.isNa) continue;
         await propagate.mutateAsync({
@@ -551,39 +555,53 @@ export default function OrgKpiDataEntry() {
           reviewPeriod: selectedPeriod,
           reviewYear: selectedYear,
           achievedValue: sv.isNa ? null : sv.achievedValue,
-          scope: 'department',
-          departmentId: sv.scopeId,
+          scope,
+          ...(scope === 'department' ? { departmentId: sv.scopeId } : { employeeId: sv.scopeId }),
           isNa: sv.isNa,
           remarks: sv.remarks || undefined,
         });
-      }
-    } else if (scope === 'employee' && values.scopedValues) {
-      for (const sv of values.scopedValues) {
-        if (sv.achievedValue === null && !sv.isNa) continue;
-        await propagate.mutateAsync({
-          categoryId: kpi.category_id,
-          kraName: kpi.kra_name,
-          kpiName: kpi.kpi_name,
-          reviewPeriod: selectedPeriod,
-          reviewYear: selectedYear,
-          achievedValue: sv.isNa ? null : sv.achievedValue,
-          scope: 'employee',
-          employeeId: sv.scopeId,
-          isNa: sv.isNa,
-          remarks: sv.remarks || undefined,
-        });
+        propagatedScopeIds.push(sv.scopeId);
       }
     }
 
-    // Set org_kpi_values status to 'propagated' for all matching rows
-    await supabase
-      .from('org_kpi_values')
-      .update({ status: 'propagated', updated_at: new Date().toISOString() })
-      .eq('category_id', kpi.category_id)
-      .eq('kra_name', kpi.kra_name)
-      .eq('kpi_name', kpi.kpi_name)
-      .eq('review_period', selectedPeriod)
-      .eq('review_year', selectedYear);
+    // Only update org_kpi_values status for rows that were actually propagated
+    if (propagatedScopeIds.length > 0) {
+      if (scope === 'organization') {
+        // Org scope: update all rows for this KPI (single value propagated to all)
+        await supabase
+          .from('org_kpi_values')
+          .update({ status: 'propagated', updated_at: new Date().toISOString() })
+          .eq('category_id', kpi.category_id)
+          .eq('kra_name', kpi.kra_name)
+          .eq('kpi_name', kpi.kpi_name)
+          .eq('review_period', selectedPeriod)
+          .eq('review_year', selectedYear);
+      } else if (scope === 'department') {
+        for (const deptId of propagatedScopeIds) {
+          await supabase
+            .from('org_kpi_values')
+            .update({ status: 'propagated', updated_at: new Date().toISOString() })
+            .eq('category_id', kpi.category_id)
+            .eq('kra_name', kpi.kra_name)
+            .eq('kpi_name', kpi.kpi_name)
+            .eq('review_period', selectedPeriod)
+            .eq('review_year', selectedYear)
+            .eq('department_id', deptId);
+        }
+      } else {
+        for (const empId of propagatedScopeIds) {
+          await supabase
+            .from('org_kpi_values')
+            .update({ status: 'propagated', updated_at: new Date().toISOString() })
+            .eq('category_id', kpi.category_id)
+            .eq('kra_name', kpi.kra_name)
+            .eq('kpi_name', kpi.kpi_name)
+            .eq('review_period', selectedPeriod)
+            .eq('review_year', selectedYear)
+            .eq('employee_id', empId);
+        }
+      }
+    }
     
     queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
   }, [handleCardSave, propagate, selectedPeriod, selectedYear, queryClient]);
