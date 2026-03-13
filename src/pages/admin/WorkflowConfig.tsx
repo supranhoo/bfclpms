@@ -26,6 +26,7 @@ import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, 
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import CustomWorkflowDialog from '@/components/admin/CustomWorkflowDialog';
 import ReconcileOrphanedKpisDialog from '@/components/admin/ReconcileOrphanedKpisDialog';
+import { WorkflowConfigExport } from '@/components/admin/WorkflowConfigExport';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
@@ -315,7 +316,14 @@ export default function WorkflowConfig() {
                 Showing overrides for {selectedMonth} {selectedYear}
               </Badge>
             )}
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-2">
+              <WorkflowConfigExport
+                templates={templates}
+                archivedTemplates={archivedTemplates}
+                configs={configs || []}
+                profiles={profiles || []}
+                departments={departments || []}
+              />
               <ReconcileOrphanedKpisDialog
                 periodMode={periodMode}
                 selectedMonth={selectedMonth}
