@@ -55,6 +55,7 @@ export default function OrgKpiDataEntry() {
   const [activeTab, setActiveTab] = useState<'entry' | 'suggestions' | 'owners'>('entry');
   const [importOpen, setImportOpen] = useState(false);
   const [selectedOwnerId, setSelectedOwnerId] = useState<string | null>(null);
+  const [isSendingReminder, setIsSendingReminder] = useState(false);
 
   // Impact sheet state
   const [impactOpen, setImpactOpen] = useState(false);
