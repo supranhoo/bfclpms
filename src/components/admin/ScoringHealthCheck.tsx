@@ -369,6 +369,19 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
           )}
         </DialogContent>
       </Dialog>
+
+      <ScoringFixImpactDialog
+        open={impactOpen}
+        onOpenChange={setImpactOpen}
+        issues={impactIssues}
+        onComplete={handleImpactComplete}
+      />
+
+      <AdminKpiEditDialog
+        isOpen={!!editKpi}
+        onClose={handleEditClose}
+        kpi={editKpi}
+      />
     </>
   );
 }
