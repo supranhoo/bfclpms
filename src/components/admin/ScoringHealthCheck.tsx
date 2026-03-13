@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { ShieldCheck, AlertTriangle, AlertCircle, Info, ChevronDown, ChevronRight, Wrench, CheckCircle2, Loader2, Pencil } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, AlertCircle, Info, ChevronDown, ChevronRight, Wrench, CheckCircle2, Loader2, Pencil, Eye } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -228,6 +228,7 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
   const [fixingAll, setFixingAll] = useState<IssueType | null>(null);
   const [impactIssues, setImpactIssues] = useState<ScoringIssue[]>([]);
   const [impactOpen, setImpactOpen] = useState(false);
+  const [impactReadOnly, setImpactReadOnly] = useState(false);
   const [editKpi, setEditKpi] = useState<KPI | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -244,6 +245,13 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
   // ─── Open impact preview for single fix ──────────────────────────────────
 
   const handleFix = (issue: ScoringIssue) => {
+    setImpactReadOnly(false);
+    setImpactIssues([issue]);
+    setImpactOpen(true);
+  };
+
+  const handleImpactPreview = (issue: ScoringIssue) => {
+    setImpactReadOnly(true);
     setImpactIssues([issue]);
     setImpactOpen(true);
   };
@@ -253,6 +261,7 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
   const fixAll = useCallback((type: IssueType) => {
     const fixable = activeIssues.filter(i => i.type === type && (type === 'INVERTED_CRITERIA' || type === 'MISSING_CRITERIA'));
     if (fixable.length === 0) return;
+    setImpactReadOnly(false);
     setImpactIssues(fixable);
     setImpactOpen(true);
   }, [activeIssues]);
@@ -396,6 +405,7 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
                 onFix={handleFix}
                 onFixAll={fixAll}
                 onEdit={handleEdit}
+                onImpactPreview={handleImpactPreview}
                 canAutoFix={canAutoFix}
                 severityIcon={severityIcon}
                 severityBadge={severityBadge}
@@ -408,6 +418,7 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
                 onFix={handleFix}
                 onFixAll={fixAll}
                 onEdit={handleEdit}
+                onImpactPreview={handleImpactPreview}
                 canAutoFix={canAutoFix}
                 severityIcon={severityIcon}
                 severityBadge={severityBadge}
@@ -420,6 +431,7 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
                 onFix={handleFix}
                 onFixAll={fixAll}
                 onEdit={handleEdit}
+                onImpactPreview={handleImpactPreview}
                 canAutoFix={canAutoFix}
                 severityIcon={severityIcon}
                 severityBadge={severityBadge}
@@ -434,6 +446,7 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
         onOpenChange={setImpactOpen}
         issues={impactIssues}
         onComplete={handleImpactComplete}
+        readOnly={impactReadOnly}
       />
 
       <AdminKpiEditDialog
@@ -455,12 +468,13 @@ interface IssueTabContentProps {
   onFix: (issue: ScoringIssue) => void;
   onFixAll: (type: IssueType) => void;
   onEdit: (issue: ScoringIssue) => void;
+  onImpactPreview: (issue: ScoringIssue) => void;
   canAutoFix: (type: IssueType) => boolean;
   severityIcon: (s: IssueSeverity) => React.ReactNode;
   severityBadge: (s: IssueSeverity) => React.ReactNode;
 }
 
-function IssueTabContent({ value, issues, fixedIds, fixingAll, onFix, onFixAll, onEdit, canAutoFix, severityIcon, severityBadge }: IssueTabContentProps) {
+function IssueTabContent({ value, issues, fixedIds, fixingAll, onFix, onFixAll, onEdit, onImpactPreview, canAutoFix, severityIcon, severityBadge }: IssueTabContentProps) {
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
 
   const activeIssues = issues.filter(i => !fixedIds.has(i.kpi.id + i.type));
@@ -555,6 +569,15 @@ function IssueTabContent({ value, issues, fixedIds, fixingAll, onFix, onFixAll, 
                       <p className="text-xs"><span className="text-primary font-medium">Suggested:</span> {issue.suggestedFix}</p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="sm" onClick={() => onImpactPreview(issue)} className="gap-1 h-8 px-2">
+                            <Eye className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">Impact</span>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>View impact across fiscal year</TooltipContent>
+                      </Tooltip>
                       <Button variant="ghost" size="sm" onClick={() => onEdit(issue)} className="gap-1 h-8 px-2">
                         <Pencil className="h-3.5 w-3.5" />
                         <span className="hidden sm:inline">Edit</span>

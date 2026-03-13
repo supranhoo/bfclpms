@@ -44,6 +44,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   issues: ScoringIssue[];
   onComplete: () => void;
+  readOnly?: boolean;
 }
 
 function getNewCriteriaForIssue(issue: ScoringIssue): string {
@@ -85,7 +86,7 @@ function getFiscalStartYear(month: string, year: number): number {
   return idx >= 6 ? year : year - 1;
 }
 
-export function ScoringFixImpactDialog({ open, onOpenChange, issues, onComplete }: Props) {
+export function ScoringFixImpactDialog({ open, onOpenChange, issues, onComplete, readOnly = false }: Props) {
   const [siblings, setSiblings] = useState<SiblingWithSubmission[]>([]);
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -269,11 +270,11 @@ export function ScoringFixImpactDialog({ open, onOpenChange, issues, onComplete 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-destructive" />
-            Impact Preview — {isBulk ? `${issues.length} KPIs` : primaryKpi?.kpi_name}
+            {readOnly ? 'Impact Preview' : 'Impact Preview — Fix'} — {isBulk ? `${issues.length} KPIs` : primaryKpi?.kpi_name}
           </DialogTitle>
           <DialogDescription>
             {isBulk
-              ? `Review score impact before applying fixes to ${issues.length} KPIs across all fiscal months.`
+              ? `Review score impact across ${issues.length} KPIs across all fiscal months.`
               : `${primaryIssue?.employeeName} — ${primaryIssue?.description}`}
           </DialogDescription>
         </DialogHeader>
@@ -288,56 +289,62 @@ export function ScoringFixImpactDialog({ open, onOpenChange, issues, onComplete 
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-10">
-                    <Checkbox
-                      checked={allSelected}
-                      onCheckedChange={(checked) => toggleAll(!!checked)}
-                    />
-                  </TableHead>
+                  {!readOnly && (
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={allSelected}
+                        onCheckedChange={(checked) => toggleAll(!!checked)}
+                      />
+                    </TableHead>
+                  )}
                   <TableHead>Month</TableHead>
                   <TableHead>Year</TableHead>
                   <TableHead className="text-right">Achieved</TableHead>
                   <TableHead>Current Score</TableHead>
-                  <TableHead>Simulated Score</TableHead>
-                  <TableHead className="w-16 text-center">Change</TableHead>
+                  {!readOnly && <TableHead>Simulated Score</TableHead>}
+                  {!readOnly && <TableHead className="w-16 text-center">Change</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {siblings.map(sib => (
-                  <TableRow key={sib.kpiId} className={!sib.selected ? 'opacity-50' : ''}>
-                    <TableCell>
-                      <Checkbox
-                        checked={sib.selected}
-                        onCheckedChange={() => toggleMonth(sib.kpiId)}
-                      />
-                    </TableCell>
+                  <TableRow key={sib.kpiId} className={!readOnly && !sib.selected ? 'opacity-50' : ''}>
+                    {!readOnly && (
+                      <TableCell>
+                        <Checkbox
+                          checked={sib.selected}
+                          onCheckedChange={() => toggleMonth(sib.kpiId)}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell className="font-medium">{sib.month}</TableCell>
                     <TableCell>{sib.year}</TableCell>
                     <TableCell className="text-right">
                       {sib.achievedValue !== null ? sib.achievedValue : <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell>{scoreDisplay(sib.currentScore, sib.currentRating)}</TableCell>
-                    <TableCell>{scoreDisplay(sib.simulatedScore, sib.simulatedRating)}</TableCell>
-                    <TableCell className="text-center">
-                      {sib.scoreChange === null ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : sib.scoreChange > 0 ? (
-                        <span className="text-green-600 flex items-center justify-center gap-0.5">
-                          <ArrowUp className="h-3.5 w-3.5" />+{sib.scoreChange}
-                        </span>
-                      ) : sib.scoreChange < 0 ? (
-                        <span className="text-destructive flex items-center justify-center gap-0.5">
-                          <ArrowDown className="h-3.5 w-3.5" />{sib.scoreChange}
-                        </span>
-                      ) : (
-                        <Minus className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
-                      )}
-                    </TableCell>
+                    {!readOnly && <TableCell>{scoreDisplay(sib.simulatedScore, sib.simulatedRating)}</TableCell>}
+                    {!readOnly && (
+                      <TableCell className="text-center">
+                        {sib.scoreChange === null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : sib.scoreChange > 0 ? (
+                          <span className="text-green-600 flex items-center justify-center gap-0.5">
+                            <ArrowUp className="h-3.5 w-3.5" />+{sib.scoreChange}
+                          </span>
+                        ) : sib.scoreChange < 0 ? (
+                          <span className="text-destructive flex items-center justify-center gap-0.5">
+                            <ArrowDown className="h-3.5 w-3.5" />{sib.scoreChange}
+                          </span>
+                        ) : (
+                          <Minus className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
+                        )}
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
                 {siblings.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-6">
+                    <TableCell colSpan={readOnly ? 4 : 7} className="text-center text-muted-foreground py-6">
                       No fiscal siblings found.
                     </TableCell>
                   </TableRow>
@@ -348,7 +355,7 @@ export function ScoringFixImpactDialog({ open, onOpenChange, issues, onComplete 
         )}
 
         {/* Summary */}
-        {!loading && siblings.length > 0 && (
+        {!loading && siblings.length > 0 && !readOnly && (
           <div className="flex flex-wrap items-center gap-3 text-sm border-t pt-3">
             <span className="text-muted-foreground">
               {selectedCount} of {siblings.length} months selected
@@ -375,12 +382,14 @@ export function ScoringFixImpactDialog({ open, onOpenChange, issues, onComplete 
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={applying}>
-            Cancel
+            {readOnly ? 'Close' : 'Cancel'}
           </Button>
-          <Button onClick={handleApply} disabled={applying || selectedCount === 0 || loading}>
-            {applying && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
-            Apply Fix to {selectedCount} Month{selectedCount !== 1 ? 's' : ''}
-          </Button>
+          {!readOnly && (
+            <Button onClick={handleApply} disabled={applying || selectedCount === 0 || loading}>
+              {applying && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+              Apply Fix to {selectedCount} Month{selectedCount !== 1 ? 's' : ''}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
