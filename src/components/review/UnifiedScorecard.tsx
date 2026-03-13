@@ -110,6 +110,14 @@ const VIEW_LEVEL_STATIC: Record<ScorecardViewLevel, {
   actionLabel: string;
   roleIcon: React.ElementType;
 }> = {
+  self: {
+    title: 'My KPIs',
+    description: 'Submit your self-assessment',
+    scoreFieldPrefix: 'self',
+    previousScoreField: 'self_score',
+    actionLabel: 'Submit',
+    roleIcon: User,
+  },
   manager: {
     title: 'Manager Review',
     description: 'Review and provide your assessment for this KPI',
@@ -130,11 +138,8 @@ const VIEW_LEVEL_STATIC: Record<ScorecardViewLevel, {
     title: 'HR PMS Review',
     description: 'HR PMS team review and assessment',
     scoreFieldPrefix: 'hr_pms',
-    // previousScoreField is resolved dynamically in config useMemo below
-    // because it depends on whether skip_level_check exists in the employee's workflow.
-    // actionLabel is also resolved dynamically in config useMemo based on nextAfterHrPms.
     previousScoreField: 'skip_level_score' as const,
-    actionLabel: 'Forward', // overridden dynamically in config useMemo
+    actionLabel: 'Forward',
     roleIcon: ClipboardCheck,
   },
   auditor: {
