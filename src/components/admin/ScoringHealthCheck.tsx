@@ -165,9 +165,11 @@ async function getFiscalSiblingIds(kpi: KPI): Promise<string[]> {
 
 export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props) {
   const [open, setOpen] = useState(false);
-  const [fixingIds, setFixingIds] = useState<Set<string>>(new Set());
   const [fixedIds, setFixedIds] = useState<Set<string>>(new Set());
   const [fixingAll, setFixingAll] = useState<IssueType | null>(null);
+  const [impactIssues, setImpactIssues] = useState<ScoringIssue[]>([]);
+  const [impactOpen, setImpactOpen] = useState(false);
+  const [editKpi, setEditKpi] = useState<KPI | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -180,112 +182,44 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
 
   const activeIssues = useMemo(() => issues.filter(i => !fixedIds.has(i.kpi.id + i.type)), [issues, fixedIds]);
 
-  // ─── Fix: Inverted Criteria ──────────────────────────────────────────────
+  // ─── Open impact preview for single fix ──────────────────────────────────
 
-  const fixInvertedCriteria = useCallback(async (issue: ScoringIssue) => {
-    const kpi = issue.kpi;
-    const newCriteria = kpi.criteria === 'Higher is Better' ? 'Lower is Better' : 'Higher is Better';
-    const fixKey = kpi.id + issue.type;
+  const handleFix = (issue: ScoringIssue) => {
+    setImpactIssues([issue]);
+    setImpactOpen(true);
+  };
 
-    setFixingIds(prev => new Set(prev).add(fixKey));
-    try {
-      // Fix current KPI
-      const { error } = await supabase
-        .from('kpis')
-        .update({ criteria: newCriteria })
-        .eq('id', kpi.id);
-      if (error) throw error;
+  // ─── Fix All → open bulk impact preview ──────────────────────────────────
 
-      // Fix fiscal siblings
-      const siblingIds = await getFiscalSiblingIds(kpi);
-      if (siblingIds.length > 0) {
-        const { error: sibError } = await supabase
-          .from('kpis')
-          .update({ criteria: newCriteria })
-          .in('id', siblingIds);
-        if (sibError) throw sibError;
-      }
-
-      // Audit log
-      await supabase.from('kpi_audit_logs').insert({
-        kpi_id: kpi.id,
-        action: 'SCORING_HEALTH_FIX',
-        performed_by: user?.id || '',
-        old_value: { criteria: kpi.criteria } as any,
-        new_value: { criteria: newCriteria } as any,
-        metadata: {
-          fix_type: 'inverted_criteria',
-          siblings_fixed: siblingIds.length,
-          source: 'scoring_health_check',
-        } as any,
-      });
-
-      setFixedIds(prev => new Set(prev).add(fixKey));
-      toast({ title: `Fixed: ${kpi.kpi_name}`, description: `Criteria set to "${newCriteria}" (+ ${siblingIds.length} fiscal siblings)` });
-    } catch (err: any) {
-      toast({ title: 'Fix failed', description: err.message, variant: 'destructive' });
-    } finally {
-      setFixingIds(prev => { const n = new Set(prev); n.delete(fixKey); return n; });
-    }
-  }, [user, toast]);
-
-  // ─── Fix: Missing Criteria (auto-detect direction) ───────────────────────
-
-  const fixMissingCriteria = useCallback(async (issue: ScoringIssue) => {
-    const kpi = issue.kpi;
-    const r5 = kpi.r5 != null ? parseFloat(kpi.r5) : null;
-    const r1 = kpi.r1 != null ? parseFloat(kpi.r1) : null;
-    let newCriteria = 'Higher is Better'; // default
-    if (r5 !== null && r1 !== null && !isNaN(r5) && !isNaN(r1)) {
-      newCriteria = r5 >= r1 ? 'Higher is Better' : 'Lower is Better';
-    }
-
-    const fixKey = kpi.id + issue.type;
-    setFixingIds(prev => new Set(prev).add(fixKey));
-    try {
-      const { error } = await supabase.from('kpis').update({ criteria: newCriteria }).eq('id', kpi.id);
-      if (error) throw error;
-
-      const siblingIds = await getFiscalSiblingIds(kpi);
-      if (siblingIds.length > 0) {
-        await supabase.from('kpis').update({ criteria: newCriteria }).in('id', siblingIds);
-      }
-
-      await supabase.from('kpi_audit_logs').insert({
-        kpi_id: kpi.id, action: 'SCORING_HEALTH_FIX', performed_by: user?.id || '',
-        old_value: { criteria: null } as any, new_value: { criteria: newCriteria } as any,
-        metadata: { fix_type: 'missing_criteria', siblings_fixed: siblingIds.length, source: 'scoring_health_check' } as any,
-      });
-
-      setFixedIds(prev => new Set(prev).add(fixKey));
-      toast({ title: `Fixed: ${kpi.kpi_name}`, description: `Criteria auto-set to "${newCriteria}"` });
-    } catch (err: any) {
-      toast({ title: 'Fix failed', description: err.message, variant: 'destructive' });
-    } finally {
-      setFixingIds(prev => { const n = new Set(prev); n.delete(fixKey); return n; });
-    }
-  }, [user, toast]);
-
-  // ─── Fix All for a category ──────────────────────────────────────────────
-
-  const fixAll = useCallback(async (type: IssueType) => {
+  const fixAll = useCallback((type: IssueType) => {
     const fixable = activeIssues.filter(i => i.type === type && (type === 'INVERTED_CRITERIA' || type === 'MISSING_CRITERIA'));
     if (fixable.length === 0) return;
+    setImpactIssues(fixable);
+    setImpactOpen(true);
+  }, [activeIssues]);
 
-    setFixingAll(type);
-    let fixed = 0;
-    for (const issue of fixable) {
-      try {
-        if (type === 'INVERTED_CRITERIA') await fixInvertedCriteria(issue);
-        else if (type === 'MISSING_CRITERIA') await fixMissingCriteria(issue);
-        fixed++;
-      } catch { /* individual toast already shown */ }
+  // ─── Impact dialog complete callback ─────────────────────────────────────
+
+  const handleImpactComplete = useCallback(() => {
+    for (const issue of impactIssues) {
+      setFixedIds(prev => new Set(prev).add(issue.kpi.id + issue.type));
     }
-    setFixingAll(null);
+    setImpactIssues([]);
     queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
     queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
-    toast({ title: `Bulk fix complete`, description: `${fixed}/${fixable.length} KPIs fixed.` });
-  }, [activeIssues, fixInvertedCriteria, fixMissingCriteria, queryClient, toast]);
+  }, [impactIssues, queryClient]);
+
+  // ─── KPI Editor ──────────────────────────────────────────────────────────
+
+  const handleEdit = (issue: ScoringIssue) => {
+    setEditKpi(issue.kpi);
+  };
+
+  const handleEditClose = () => {
+    setEditKpi(null);
+    queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
+    queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+  };
 
   // ─── Invalidate on close ─────────────────────────────────────────────────
 
@@ -316,10 +250,6 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
   };
 
   const canAutoFix = (type: IssueType) => type === 'INVERTED_CRITERIA' || type === 'MISSING_CRITERIA';
-
-  const handleFix = (issue: ScoringIssue) => {
-    if (issue.type === 'INVERTED_CRITERIA') fixInvertedCriteria(issue);
-    else if (issue.type === 'MISSING_CRITERIA') fixMissingCriteria(issue);
   };
 
   return (
