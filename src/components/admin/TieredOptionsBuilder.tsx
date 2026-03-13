@@ -93,7 +93,7 @@ export function TieredOptionsBuilder({
 
       <div className="space-y-3">
         {options.map((option, index) => (
-          <Card key={`${option.rating}-${option.label}-${index}`} className="border-dashed">
+          <Card key={index} className="border-dashed">
             <CardContent className="p-4 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 grid grid-cols-2 gap-3">
