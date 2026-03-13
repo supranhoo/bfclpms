@@ -474,99 +474,97 @@ export default function AllKpis() {
         </Card>
       </div>
 
-      {/* Global Filters */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Filters</CardTitle>
+      {/* Compact Filters */}
+      <div className="rounded-lg border bg-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-foreground">Filters</span>
             {hasActiveFilters && (
-              <Button variant="ghost" size="sm" onClick={resetFilters}>
-                Reset
-              </Button>
+              <Badge variant="secondary" className="text-xs">
+                {[selectedManager, selectedDepartment, selectedDivision, selectedPeriod, selectedYear].filter(v => v !== 'all').length} active
+              </Badge>
             )}
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* Reporting Manager */}
-            <Select value={selectedManager} onValueChange={setSelectedManager}>
-              <SelectTrigger>
-                <UserCheck className="h-4 w-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Reporting Manager" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Managers</SelectItem>
-                {managers.map(manager => (
-                  <SelectItem key={manager.id} value={manager.id}>
-                    {manager.full_name || manager.email}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={resetFilters} className="h-7 text-xs">
+              Reset
+            </Button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <Select value={selectedManager} onValueChange={setSelectedManager}>
+            <SelectTrigger className="h-9">
+              <UserCheck className="h-3.5 w-3.5 mr-1.5 text-muted-foreground shrink-0" />
+              <SelectValue placeholder="Manager" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Managers</SelectItem>
+              {managers.map(manager => (
+                <SelectItem key={manager.id} value={manager.id}>
+                  {manager.full_name || manager.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            {/* Department */}
-            <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-              <SelectTrigger>
-                <Building2 className="h-4 w-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Department" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Departments</SelectItem>
-                {departments?.map(dept => (
-                  <SelectItem key={dept.id} value={dept.id}>
-                    {dept.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+            <SelectTrigger className="h-9">
+              <Building2 className="h-3.5 w-3.5 mr-1.5 text-muted-foreground shrink-0" />
+              <SelectValue placeholder="Department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments?.map(dept => (
+                <SelectItem key={dept.id} value={dept.id}>
+                  {dept.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            {/* Division */}
-            <Select value={selectedDivision} onValueChange={setSelectedDivision}>
-              <SelectTrigger>
-                <SelectValue placeholder="Division" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Divisions</SelectItem>
-                {divisions?.map(div => (
-                  <SelectItem key={div.id} value={div.id}>
-                    {div.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Select value={selectedDivision} onValueChange={setSelectedDivision}>
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Division" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Divisions</SelectItem>
+              {divisions?.map(div => (
+                <SelectItem key={div.id} value={div.id}>
+                  {div.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            {/* Period */}
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger>
-                <SelectValue placeholder="Period" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Periods</SelectItem>
-                {availablePeriods.map(period => (
-                  <SelectItem key={period} value={period}>
-                    {period}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Period" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Periods</SelectItem>
+              {availablePeriods.map(period => (
+                <SelectItem key={period} value={period}>
+                  {period}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            {/* Year */}
-            <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger>
-                <SelectValue placeholder="Year" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Years</SelectItem>
-                {availableYears.map(year => (
-                  <SelectItem key={year} value={year?.toString() || ''}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+          <Select value={selectedYear} onValueChange={setSelectedYear}>
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Years</SelectItem>
+              {availableYears.map(year => (
+                <SelectItem key={year} value={year?.toString() || ''}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
       {/* Employee-Stage Matrix Table */}
       <Card>
