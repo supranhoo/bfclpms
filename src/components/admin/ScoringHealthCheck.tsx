@@ -147,7 +147,24 @@ function detectIssues(kpis: KPI[]): ScoringIssue[] {
           });
         }
       }
-      // If no qualitative_options → uses default Yes=5/No=0 fallback, no issue
+      // Heuristic: detect KPIs that likely need inverted polarity
+      const effectiveOpts = opts && Array.isArray(opts) && opts.length > 0 ? opts : [{ label: 'Yes', rating: 5 }, { label: 'No', rating: 0 }];
+      const yesOpt = effectiveOpts.find(o => (o.label || '').toLowerCase() === 'yes');
+      const isStandardPolarity = !yesOpt || yesOpt.rating === 5;
+
+      if (isStandardPolarity) {
+        const nameLower = (kpi.kpi_name || '').toLowerCase();
+        const matchesNegative = NEGATIVE_OUTCOME_KEYWORDS.some(kw => nameLower.includes(kw));
+        if (matchesNegative) {
+          issues.push({
+            kpi, type: 'BINARY_LIKELY_INVERTED', severity: 'medium',
+            description: `This KPI name suggests it measures a negative outcome (e.g., safety incident). Currently "Yes=5" (standard polarity), but "No" may be the desired high-scoring answer.`,
+            suggestedFix: 'Consider toggling Binary Polarity to "Inverted" (No=5) in the KPI editor.',
+            employeeName, employeeCode,
+          });
+        }
+      }
+      // If no qualitative_options → uses default Yes=5/No=0 fallback, no structural issue
     } else {
       // Tiered KPIs: must have options
       const opts = kpi.qualitative_options;
