@@ -382,7 +382,7 @@ export default function OrgKpiDataEntry() {
       scopedRows = filteredEmps
         .map(emp => {
           const dept = departments?.find(d => d.id === emp.department_id);
-          const scopeKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${emp.id}`;
+          const scopeKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||${emp.id}`;
           const val = existingValuesMap.get(scopeKey);
           // Per-employee target from their individual KPI record
           const empTargetKey = `${kpiKey}||${emp.id}`;
