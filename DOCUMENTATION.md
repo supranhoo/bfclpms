@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-13  
-> **Version:** 1.53.0 — Workflow Reconciliation: Added `reconcile_workflow_statuses` RPC and "Reconcile Orphaned KPIs" button on Workflow Configuration page to detect and auto-approve KPIs stuck in statuses that no longer exist after a workflow template change
+> **Version:** 1.54.0 — Org KPI Propagation CAPA: Added fallback category+KRA matching for name mismatches, enhanced repair edge function with NULL-value status reset, and post-propagation completeness validation warnings
 > **Maintainer:** Lovable AI
 
 ---

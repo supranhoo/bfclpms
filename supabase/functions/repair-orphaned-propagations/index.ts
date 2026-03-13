@@ -2,12 +2,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
@@ -39,14 +39,37 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Parse optional batch limit
-    let batchLimit = 50;
+    // Parse optional batch limit and mode
+    let batchLimit = 100;
+    let fixNullValues = true;
     try {
       const body = await req.json();
-      if (body?.limit) batchLimit = Math.min(body.limit, 200);
+      if (body?.limit) batchLimit = Math.min(body.limit, 500);
+      if (body?.fix_null_values === false) fixNullValues = false;
     } catch { /* no body is fine */ }
 
-    // Find orphaned KPIs: org_level + kra_set + no review_submission
+    // === PHASE 1: Fix NULL-value org_kpi_values marked as propagated (RC1) ===
+    let nullFixedCount = 0;
+    if (fixNullValues) {
+      const { data: nullRows, error: nullErr } = await supabase
+        .from("org_kpi_values")
+        .select("id")
+        .is("achieved_value", null)
+        .eq("is_na", false)
+        .in("status", ["propagated", "approved"])
+        .limit(200);
+
+      if (!nullErr && nullRows && nullRows.length > 0) {
+        const nullIds = nullRows.map(r => r.id);
+        const { error: resetErr } = await supabase
+          .from("org_kpi_values")
+          .update({ status: "entered", updated_at: new Date().toISOString() })
+          .in("id", nullIds);
+        if (!resetErr) nullFixedCount = nullIds.length;
+      }
+    }
+
+    // === PHASE 2: Find orphaned KPIs (org_level + kra_set + no review_submission) ===
     const { data: orphanedKpis, error: kpiError } = await supabase
       .from("kpis")
       .select("id, category_id, kra_name, kpi_name, review_period, review_year, employee_id, target_value, weightage, r5, r4, r3, r2, r1, r0, criteria, uom, uom_type, qualitative_options, threshold_mode")
@@ -56,12 +79,15 @@ Deno.serve(async (req) => {
 
     if (kpiError) throw kpiError;
     if (!orphanedKpis || orphanedKpis.length === 0) {
-      return new Response(JSON.stringify({ repaired: 0, message: "No orphaned records found" }), {
+      return new Response(JSON.stringify({
+        repaired: 0, null_values_fixed: nullFixedCount, skipped: 0, total_checked: 0, errors: [],
+        message: nullFixedCount > 0 ? `Fixed ${nullFixedCount} NULL-value entries` : "No orphaned records found"
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Pre-fetch employee department mappings for dept-scoped matching
+    // Pre-fetch employee department mappings
     const empIds = [...new Set(orphanedKpis.map(k => k.employee_id))];
     const { data: empProfiles } = await supabase
       .from("profiles")
@@ -81,8 +107,9 @@ Deno.serve(async (req) => {
           .from("review_submissions").select("id").eq("kpi_id", kpi.id).maybeSingle();
         if (existingSub) { skippedCount++; continue; }
 
-        // Find matching org_kpi_value
-        const { data: orgValues } = await supabase
+        // Find matching org_kpi_value — exact match first, then fallback to category+kra (RC4)
+        let orgValues: any[] | null = null;
+        const { data: exactMatch } = await supabase
           .from("org_kpi_values")
           .select("achieved_value, is_na, remarks, employee_id, department_id")
           .eq("category_id", kpi.category_id)
@@ -90,17 +117,32 @@ Deno.serve(async (req) => {
           .eq("kpi_name", kpi.kpi_name)
           .eq("review_period", kpi.review_period)
           .eq("review_year", kpi.review_year)
-          .in("status", ["propagated", "approved"]);
+          .in("status", ["propagated", "approved", "entered"]);
+
+        orgValues = exactMatch;
+
+        // RC4 CAPA: Fallback to category+kra if no exact kpi_name match
+        if (!orgValues || orgValues.length === 0) {
+          const { data: fallbackMatch } = await supabase
+            .from("org_kpi_values")
+            .select("achieved_value, is_na, remarks, employee_id, department_id")
+            .eq("category_id", kpi.category_id)
+            .eq("kra_name", kpi.kra_name)
+            .eq("review_period", kpi.review_period)
+            .eq("review_year", kpi.review_year)
+            .in("status", ["propagated", "approved", "entered"]);
+          orgValues = fallbackMatch;
+        }
 
         if (!orgValues || orgValues.length === 0) { skippedCount++; continue; }
 
-        // Match priority: exact employee match > department match > org-wide (null employee)
+        // Match priority: exact employee > department > org-wide > any
         const empDeptId = empDeptMap.get(kpi.employee_id);
-        const matchingValue = 
+        const matchingValue =
           orgValues.find(v => v.employee_id === kpi.employee_id) ||
           (empDeptId ? orgValues.find(v => v.department_id === empDeptId && !v.employee_id) : null) ||
           orgValues.find(v => v.employee_id === null && v.department_id === null) ||
-          orgValues[0]; // fallback: use any available value for this KPI group
+          orgValues[0];
         if (!matchingValue) { skippedCount++; continue; }
         if (matchingValue.achieved_value === null && !matchingValue.is_na) { skippedCount++; continue; }
 
@@ -110,7 +152,7 @@ Deno.serve(async (req) => {
 
         if (!matchingValue.is_na) {
           const uomType = kpi.uom_type || "numeric";
-          const isBinaryOrTiered = uomType === "binary" || 
+          const isBinaryOrTiered = uomType === "binary" ||
             (uomType === "tiered" && Array.isArray(kpi.qualitative_options) && (kpi.qualitative_options as any[]).length > 0);
 
           if (isBinaryOrTiered) {
@@ -153,7 +195,13 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ repaired: repairedCount, skipped: skippedCount, total_checked: orphanedKpis.length, errors: errors.slice(0, 20) }),
+      JSON.stringify({
+        repaired: repairedCount,
+        null_values_fixed: nullFixedCount,
+        skipped: skippedCount,
+        total_checked: orphanedKpis.length,
+        errors: errors.slice(0, 20)
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

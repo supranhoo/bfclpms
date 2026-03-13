@@ -113,18 +113,22 @@ function buildRatingsPayload(
 
 /**
  * Fetch matching org-level KPIs and filter by scope.
+ * Falls back to category_id + kra_name matching if exact kpi_name match returns 0 results.
  */
 async function fetchTargetKpis(params: PropagateParams) {
   const { categoryId, kraName, kpiName, reviewPeriod, reviewYear, scope, departmentId, employeeId } = params;
 
+  const baseSelect = `
+    id, employee_id, target_value, weightage,
+    r5, r4, r3, r2, r1, r0, criteria, uom, uom_type,
+    qualitative_options, threshold_mode, is_org_level, org_level_scope,
+    profiles!kpis_employee_id_fkey(id, full_name, employee_code, department_id, departments(name))
+  `;
+
+  // Try exact match first
   const { data: kpis, error } = await supabase
     .from('kpis')
-    .select(`
-      id, employee_id, target_value, weightage,
-      r5, r4, r3, r2, r1, r0, criteria, uom, uom_type,
-      qualitative_options, threshold_mode, is_org_level, org_level_scope,
-      profiles!kpis_employee_id_fkey(id, full_name, employee_code, department_id, departments(name))
-    `)
+    .select(baseSelect)
     .eq('category_id', categoryId)
     .eq('kra_name', kraName)
     .eq('kpi_name', kpiName)
@@ -133,14 +137,32 @@ async function fetchTargetKpis(params: PropagateParams) {
     .eq('is_org_level', true);
 
   if (error) throw error;
-  if (!kpis || kpis.length === 0) return [];
+
+  let targetKpis = kpis || [];
+
+  // RC4 CAPA: Fallback to category+kra matching if exact kpi_name match returns 0
+  if (targetKpis.length === 0) {
+    const { data: fallbackKpis, error: fallbackError } = await supabase
+      .from('kpis')
+      .select(baseSelect)
+      .eq('category_id', categoryId)
+      .eq('kra_name', kraName)
+      .eq('review_period', reviewPeriod)
+      .eq('review_year', reviewYear)
+      .eq('is_org_level', true);
+
+    if (fallbackError) throw fallbackError;
+    targetKpis = fallbackKpis || [];
+  }
+
+  if (targetKpis.length === 0) return [];
 
   if (scope === 'department' && departmentId) {
-    return kpis.filter(k => (k.profiles as any)?.department_id === departmentId);
+    return targetKpis.filter(k => (k.profiles as any)?.department_id === departmentId);
   } else if (scope === 'employee' && employeeId) {
-    return kpis.filter(k => k.employee_id === employeeId);
+    return targetKpis.filter(k => k.employee_id === employeeId);
   }
-  return kpis;
+  return targetKpis;
 }
 
 /**
