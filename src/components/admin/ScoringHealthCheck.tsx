@@ -24,7 +24,9 @@ type IssueType =
   | 'MISSING_THRESHOLDS'
   | 'MISSING_QUALITATIVE_OPTIONS'
   | 'MISSING_TARGET'
-  | 'MISSING_CRITERIA';
+  | 'MISSING_CRITERIA'
+  | 'BINARY_MISSING_POLARITY'
+  | 'BINARY_INVALID_RATINGS';
 
 export interface ScoringIssue {
   kpi: KPI;
@@ -106,13 +108,42 @@ function detectIssues(kpis: KPI[]): ScoringIssue[] {
           employeeName, employeeCode,
         });
       }
+    } else if (uomType === 'binary') {
+      // Binary KPIs: check custom options if present, otherwise fallback is fine
+      const opts = kpi.qualitative_options as Array<{ label?: string; rating?: number }> | null;
+      if (opts && Array.isArray(opts) && opts.length > 0) {
+        const labels = opts.map(o => (o.label || '').toLowerCase());
+        const hasYes = labels.includes('yes');
+        const hasNo = labels.includes('no');
+
+        if (!hasYes || !hasNo) {
+          issues.push({
+            kpi, type: 'BINARY_MISSING_POLARITY', severity: 'high',
+            description: `Binary KPI has custom options but is missing ${!hasYes ? '"Yes"' : ''}${!hasYes && !hasNo ? ' and ' : ''}${!hasNo ? '"No"' : ''} label. Scoring dropdown will be incomplete.`,
+            suggestedFix: 'Open the KPI editor and ensure both "Yes" and "No" options are defined.',
+            employeeName, employeeCode,
+          });
+        }
+
+        const ratings = opts.map(o => o.rating).filter(r => r !== undefined && r !== null);
+        const allValid = ratings.every(r => r === 0 || r === 5);
+        if (ratings.length > 0 && !allValid) {
+          issues.push({
+            kpi, type: 'BINARY_INVALID_RATINGS', severity: 'medium',
+            description: `Binary KPI has option ratings that are not standard (0 or 5). Current ratings: ${ratings.join(', ')}. This may produce unexpected scores.`,
+            suggestedFix: 'Open the KPI editor and set each option rating to either 0 or 5.',
+            employeeName, employeeCode,
+          });
+        }
+      }
+      // If no qualitative_options → uses default Yes=5/No=0 fallback, no issue
     } else {
-      // binary / tiered
+      // Tiered KPIs: must have options
       const opts = kpi.qualitative_options;
-      if (!opts || (Array.isArray(opts) && opts.length === 0)) {
+      if (!opts || (Array.isArray(opts) && opts.length < 2)) {
         issues.push({
           kpi, type: 'MISSING_QUALITATIVE_OPTIONS', severity: 'high',
-          description: `This ${uomType} KPI has no qualitative options configured. Scoring cannot be performed.`,
+          description: `This ${uomType} KPI has ${!opts || (Array.isArray(opts) && opts.length === 0) ? 'no' : 'fewer than 2'} qualitative options configured. Scoring cannot be performed.`,
           suggestedFix: 'Add qualitative scoring options in the KPI editor.',
           employeeName, employeeCode,
         });
