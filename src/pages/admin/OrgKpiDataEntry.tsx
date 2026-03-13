@@ -808,6 +808,7 @@ export default function OrgKpiDataEntry() {
             remark: val?.remarks ?? '',
             daysPending: status === 'Pending' ? daysSincePeriodStart : null,
             daysSinceLastUpdate: (status !== 'Pending' && val?.updated_at) ? differenceInDays(today, new Date(val.updated_at)) : null,
+          });
         });
       } else if (scope === 'employee' && allProfiles) {
         const mappedEmpIds = mappedEmployeesMap.get(kpiKey);
