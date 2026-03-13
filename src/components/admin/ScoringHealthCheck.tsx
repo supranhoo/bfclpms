@@ -96,11 +96,11 @@ function detectIssues(kpis: KPI[]): ScoringIssue[] {
         });
       }
 
-      if (kpi.target_value == null) {
+      if (kpi.target_value == null && !hasAnyThreshold) {
         issues.push({
           kpi, type: 'MISSING_TARGET', severity: 'medium',
-          description: 'No target value defined. Percentage-based calculations will return 0%.',
-          suggestedFix: 'Set a target value in the KPI editor.',
+          description: 'No target value defined and no thresholds set. Scoring engine has no basis to calculate a rating.',
+          suggestedFix: 'Set a target value or define R5–R1 thresholds in the KPI editor.',
           employeeName, employeeCode,
         });
       }
