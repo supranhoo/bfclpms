@@ -23,7 +23,12 @@ interface KpiHeaderSectionProps {
   employeeId?: string;
 }
 
-export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTimeline, orgKpiEnteredByName }: KpiHeaderSectionProps) {
+export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTimeline, orgKpiEnteredByName, employeeId }: KpiHeaderSectionProps) {
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [dataEntryDialogOpen, setDataEntryDialogOpen] = useState(false);
+
   const categoryName = kpi.kra_categories?.name || 'Uncategorized';
   const categoryColor = kpi.kra_categories?.color || '#6B7280';
   const status = kpi.status || 'kra_set';
@@ -33,21 +38,29 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   const govPerms = useReviewPeriodPermissions(selectedPeriod, selectedYear);
   const hasRestrictions = !govPerms.isLoading && (govPerms.view_only || !govPerms.edit_kpi || !govPerms.edit_scores);
 
-  const { data: managerName } = useQuery({
-    queryKey: ['kpi-reporting-manager', kpi.employee_id],
+  const { data: employeeProfile } = useQuery({
+    queryKey: ['kpi-employee-profile', kpi.employee_id],
     queryFn: async () => {
       const { data: emp } = await supabase
         .from('profiles')
-        .select('reporting_manager_id')
+        .select('full_name, employee_code, reporting_manager_id')
         .eq('id', kpi.employee_id)
         .single();
-      if (!emp?.reporting_manager_id) return null;
-      const { data: mgr } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', emp.reporting_manager_id)
-        .single();
-      return mgr?.full_name || null;
+      if (!emp) return null;
+      let managerName: string | null = null;
+      if (emp.reporting_manager_id) {
+        const { data: mgr } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', emp.reporting_manager_id)
+          .single();
+        managerName = mgr?.full_name || null;
+      }
+      return {
+        full_name: emp.full_name,
+        employee_code: emp.employee_code,
+        managerName,
+      };
     },
     staleTime: 5 * 60 * 1000,
   });
