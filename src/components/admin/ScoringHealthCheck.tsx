@@ -26,7 +26,18 @@ type IssueType =
   | 'MISSING_TARGET'
   | 'MISSING_CRITERIA'
   | 'BINARY_MISSING_POLARITY'
-  | 'BINARY_INVALID_RATINGS';
+  | 'BINARY_INVALID_RATINGS'
+  | 'BINARY_LIKELY_INVERTED';
+
+// Keywords indicating a negative-outcome KPI where "No" should score highest
+const NEGATIVE_OUTCOME_KEYWORDS = [
+  'lti', 'lost time', 'fatality', 'accident', 'incident', 'injury',
+  'deviation', 'non-compliance', 'noncompliance', 'violation', 'complaint',
+  'rejection', 'spillage', 'contamination', 'breakdown', 'failure',
+  'downtime', 'penalty', 'fire', 'hazard', 'unsafe', 'near miss',
+  'nearmiss', 'pilferage', 'theft', 'shortage', 'wastage', 'attrition',
+  'absenteeism', 'stoppage',
+];
 
 export interface ScoringIssue {
   kpi: KPI;
@@ -136,7 +147,24 @@ function detectIssues(kpis: KPI[]): ScoringIssue[] {
           });
         }
       }
-      // If no qualitative_options → uses default Yes=5/No=0 fallback, no issue
+      // Heuristic: detect KPIs that likely need inverted polarity
+      const effectiveOpts = opts && Array.isArray(opts) && opts.length > 0 ? opts : [{ label: 'Yes', rating: 5 }, { label: 'No', rating: 0 }];
+      const yesOpt = effectiveOpts.find(o => (o.label || '').toLowerCase() === 'yes');
+      const isStandardPolarity = !yesOpt || yesOpt.rating === 5;
+
+      if (isStandardPolarity) {
+        const nameLower = (kpi.kpi_name || '').toLowerCase();
+        const matchesNegative = NEGATIVE_OUTCOME_KEYWORDS.some(kw => nameLower.includes(kw));
+        if (matchesNegative) {
+          issues.push({
+            kpi, type: 'BINARY_LIKELY_INVERTED', severity: 'medium',
+            description: `This KPI name suggests it measures a negative outcome (e.g., safety incident). Currently "Yes=5" (standard polarity), but "No" may be the desired high-scoring answer.`,
+            suggestedFix: 'Consider toggling Binary Polarity to "Inverted" (No=5) in the KPI editor.',
+            employeeName, employeeCode,
+          });
+        }
+      }
+      // If no qualitative_options → uses default Yes=5/No=0 fallback, no structural issue
     } else {
       // Tiered KPIs: must have options
       const opts = kpi.qualitative_options;
