@@ -168,14 +168,14 @@ export default function OrgKpiDataEntry() {
   const getKpiStatus = useCallback((kpi: typeof frequencyFilteredKpis[0]): 'pending' | 'entered' | 'propagated' => {
     const scope = (kpi as any).org_level_scope || 'employee';
     if (scope === 'organization') {
-      const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+      const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
       const val = existingValuesMap.get(key);
       if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
         return val?.status === 'propagated' ? 'propagated' : 'entered';
       }
       return 'pending';
     }
-    const prefix = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||`;
+    const prefix = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||`;
     const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) =>
       k.startsWith(prefix) && ((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)
     );
