@@ -61,6 +61,13 @@ const getFiscalLabel = (month: string, year: number) => {
   return `${startYear}-${String(startYear + 1).slice(2)}`;
 };
 
+/* ── tiny section header ── */
+const SectionHeader = ({ children }: { children: React.ReactNode }) => (
+  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground pt-3 border-t border-border">
+    {children}
+  </p>
+);
+
 export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFormProps) {
   const { data: categories } = useKraCategories();
   const { data: profiles } = useProfiles();
@@ -378,16 +385,16 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
   if (!kpi) return null;
 
   return (
-    <div className="space-y-6">
-      {/* Employee & Category */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Employee</Label>
+    <div className="space-y-4">
+      {/* ═══ IDENTITY ═══ */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Employee</Label>
           <Select
             value={formData.employee_id}
             onValueChange={(value) => setFormData(prev => ({ ...prev, employee_id: value }))}
           >
-            <SelectTrigger>
+            <SelectTrigger className="h-9">
               <SelectValue placeholder="Select employee" />
             </SelectTrigger>
             <SelectContent>
@@ -399,13 +406,13 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
-          <Label>Category</Label>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Category</Label>
           <Select
             value={formData.category_id}
             onValueChange={(value) => setFormData(prev => ({ ...prev, category_id: value }))}
           >
-            <SelectTrigger>
+            <SelectTrigger className="h-9">
               <SelectValue placeholder="Select category" />
             </SelectTrigger>
             <SelectContent>
@@ -419,47 +426,62 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         </div>
       </div>
 
-      {/* KRA & KPI Names */}
-      <div className="space-y-2">
-        <Label>KRA Name</Label>
-        <Input
-          value={formData.kra_name}
-          onChange={(e) => setFormData(prev => ({ ...prev, kra_name: e.target.value }))}
-        />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs">KRA Name</Label>
+          <Input
+            className="h-9"
+            value={formData.kra_name}
+            onChange={(e) => setFormData(prev => ({ ...prev, kra_name: e.target.value }))}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Source of Data</Label>
+          <Input
+            className="h-9"
+            value={formData.source_of_data}
+            onChange={(e) => setFormData(prev => ({ ...prev, source_of_data: e.target.value }))}
+          />
+        </div>
       </div>
-      <div className="space-y-2">
-        <Label>KPI Name</Label>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">KPI Name</Label>
         <Textarea
           value={formData.kpi_name}
           onChange={(e) => setFormData(prev => ({ ...prev, kpi_name: e.target.value }))}
-          rows={2}
+          rows={1}
+          className="min-h-[36px] resize-y"
         />
       </div>
 
-      {/* UOM Type Selector */}
+      {/* ═══ MEASUREMENT ═══ */}
+      <SectionHeader>Measurement</SectionHeader>
+
       <UomTypeSelector
         value={formData.uom_type}
         onChange={(type) => setFormData(prev => ({ ...prev, uom_type: type }))}
       />
 
-      {/* Numeric-specific fields */}
+      {/* Numeric: Target / UOM / Weightage */}
       {formData.uom_type === 'numeric' && (
-        <div className="grid grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label>Target Value</Label>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Target Value</Label>
             <Input
+              className="h-9"
               type="number"
               value={formData.target_value}
               onChange={(e) => setFormData(prev => ({ ...prev, target_value: e.target.value }))}
             />
           </div>
-          <div className="space-y-2">
-            <Label>UOM</Label>
+          <div className="space-y-1.5">
+            <Label className="text-xs">UOM</Label>
             <Select
               value={formData.uom}
               onValueChange={(value) => setFormData(prev => ({ ...prev, uom: value }))}
             >
-              <SelectTrigger>
+              <SelectTrigger className="h-9">
                 <SelectValue placeholder="Select UOM" />
               </SelectTrigger>
               <SelectContent>
@@ -471,9 +493,10 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label>Weightage (%)</Label>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Weightage (%)</Label>
             <Input
+              className="h-9"
               type="number"
               value={formData.weightage}
               onChange={(e) => setFormData(prev => ({ ...prev, weightage: e.target.value }))}
@@ -482,24 +505,25 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         </div>
       )}
 
-      {/* Weightage for non-numeric types */}
+      {/* Non-numeric: Weightage + Frequency (+ Cycle Start) */}
       {formData.uom_type !== 'numeric' && (
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Weightage (%)</Label>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Weightage (%)</Label>
             <Input
+              className="h-9"
               type="number"
               value={formData.weightage}
               onChange={(e) => setFormData(prev => ({ ...prev, weightage: e.target.value }))}
             />
           </div>
-          <div className="space-y-2">
-            <Label>Frequency</Label>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Frequency</Label>
             <Select
               value={formData.frequency}
               onValueChange={(value) => setFormData(prev => ({ ...prev, frequency: value, frequency_cycle_start: '' }))}
             >
-              <SelectTrigger>
+              <SelectTrigger className="h-9">
                 <SelectValue placeholder="Select frequency" />
               </SelectTrigger>
               <SelectContent>
@@ -513,13 +537,13 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
             const cycleOptions = getCycleOptionsForFrequency(formData.frequency);
             if (!cycleOptions) return null;
             return (
-              <div className="space-y-2">
-                <Label>Cycle Start</Label>
+              <div className="space-y-1.5 col-span-2">
+                <Label className="text-xs">Cycle Start</Label>
                 <Select
                   value={formData.frequency_cycle_start}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, frequency_cycle_start: value }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-9">
                     <SelectValue placeholder="(Use system default)" />
                   </SelectTrigger>
                   <SelectContent>
@@ -535,16 +559,16 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         </div>
       )}
 
-      {/* Frequency & Criteria for numeric */}
+      {/* Numeric: Frequency / Criteria / Cycle Start */}
       {formData.uom_type === 'numeric' && (
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Frequency</Label>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Frequency</Label>
             <Select
               value={formData.frequency}
               onValueChange={(value) => setFormData(prev => ({ ...prev, frequency: value, frequency_cycle_start: '' }))}
             >
-              <SelectTrigger>
+              <SelectTrigger className="h-9">
                 <SelectValue placeholder="Select frequency" />
               </SelectTrigger>
               <SelectContent>
@@ -554,13 +578,13 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label>Criteria</Label>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Criteria</Label>
             <Select
               value={formData.criteria}
               onValueChange={(value) => setFormData(prev => ({ ...prev, criteria: value }))}
             >
-              <SelectTrigger>
+              <SelectTrigger className="h-9">
                 <SelectValue placeholder="Select criteria" />
               </SelectTrigger>
               <SelectContent>
@@ -570,18 +594,18 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
               </SelectContent>
             </Select>
           </div>
-          {MULTI_MONTH_FREQUENCIES.includes(formData.frequency) && (() => {
+          {MULTI_MONTH_FREQUENCIES.includes(formData.frequency) ? (() => {
             const cycleOptions = getCycleOptionsForFrequency(formData.frequency);
-            if (!cycleOptions) return null;
+            if (!cycleOptions) return <div />;
             return (
-              <div className="space-y-2 col-span-2">
-                <Label>Cycle Start</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Cycle Start</Label>
                 <Select
                   value={formData.frequency_cycle_start}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, frequency_cycle_start: value }))}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="(Use system default)" />
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Default" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="system_default">(Use system default)</SelectItem>
@@ -590,22 +614,21 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">Override the global cycle start for this KPI</p>
               </div>
             );
-          })()}
+          })() : <div />}
         </div>
       )}
 
-      {/* Day Count Type for Daily KPIs */}
+      {/* Day Count Type — inline when Daily */}
       {formData.frequency === 'Daily' && (
-        <div className="space-y-2">
-          <Label>Day Count Type</Label>
+        <div className="flex items-center gap-3">
+          <Label className="text-xs whitespace-nowrap">Day Count</Label>
           <Select
             value={formData.day_count_type}
             onValueChange={(value: 'working_days' | 'all_days') => setFormData(prev => ({ ...prev, day_count_type: value }))}
           >
-            <SelectTrigger>
+            <SelectTrigger className="h-9 w-[220px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -613,26 +636,15 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
               <SelectItem value="all_days">All Calendar Days</SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            {formData.day_count_type === 'working_days' 
-              ? 'Uses employee-specific working days for missed days calculation'
-              : 'Uses all calendar days (e.g., 31 days in January)'}
-          </p>
+          <span className="text-xs text-muted-foreground">
+            {formData.day_count_type === 'working_days' ? 'Employee-specific working days' : 'All calendar days'}
+          </span>
         </div>
       )}
 
-      {/* Source of Data */}
-      <div className="space-y-2">
-        <Label>Source of Data</Label>
-        <Input
-          value={formData.source_of_data}
-          onChange={(e) => setFormData(prev => ({ ...prev, source_of_data: e.target.value }))}
-        />
-      </div>
-
       {/* Tiered Options Builder */}
       {formData.uom_type === 'tiered' && (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <TieredOptionsBuilder
             options={formData.qualitative_options}
             onChange={(options) => setFormData(prev => ({ ...prev, qualitative_options: options }))}
@@ -643,16 +655,14 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         </div>
       )}
 
-      {/* Binary UOM Info with Polarity Toggle */}
+      {/* Binary polarity — compact */}
       {formData.uom_type === 'binary' && (
-        <div className="p-4 border rounded-lg bg-muted/30 space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="text-sm font-medium">Binary Polarity</Label>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                For safety KPIs (e.g., LTI), "No" (no injury) should score highest
-              </p>
-            </div>
+        <div className="flex items-center justify-between gap-3 p-3 border rounded-md bg-muted/30">
+          <div className="space-y-0.5">
+            <Label className="text-xs font-medium">Binary Polarity</Label>
+            <p className="text-xs text-muted-foreground">Safety KPIs: "No" should score highest</p>
+          </div>
+          <div className="flex items-center gap-3">
             <Select
               value={isBinaryInverted(formData.qualitative_options) ? 'inverted' : 'standard'}
               onValueChange={(val) => {
@@ -662,164 +672,128 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
                 }));
               }}
             >
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="h-8 w-[160px] text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="standard">Standard (Yes = 5)</SelectItem>
-                <SelectItem value="inverted">Inverted (No = 5)</SelectItem>
+                <SelectItem value="standard">Standard (Yes=5)</SelectItem>
+                <SelectItem value="inverted">Inverted (No=5)</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div className="flex gap-4 text-sm">
-            {isBinaryInverted(formData.qualitative_options) ? (
-              <>
-                <span className="text-destructive font-medium">Yes = R0</span>
-                <span className="text-primary font-medium">No = R5</span>
-              </>
-            ) : (
-              <>
-                <span className="text-primary font-medium">Yes = R5</span>
-                <span className="text-destructive font-medium">No = R0</span>
-              </>
-            )}
+            <div className="flex gap-2 text-xs font-medium">
+              {isBinaryInverted(formData.qualitative_options) ? (
+                <>
+                  <span className="text-destructive">Yes=R0</span>
+                  <span className="text-primary">No=R5</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-primary">Yes=R5</span>
+                  <span className="text-destructive">No=R0</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Organization-Level KPI Toggle */}
-      <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
-        <div className="flex items-center justify-between">
+      {/* Rating Thresholds — numeric only */}
+      {formData.uom_type === 'numeric' && (
+        <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <Building2 className="h-5 w-5 text-muted-foreground" />
-            <div>
-              <Label className="text-base font-medium">Organization-Level KPI</Label>
-              <p className="text-sm text-muted-foreground">
-                Achieved value will be centrally managed via Org KPI Data Entry
-              </p>
-            </div>
+            <Label className="text-xs whitespace-nowrap">Threshold Mode</Label>
+            <Select
+              value={formData.threshold_mode}
+              onValueChange={(value: 'absolute' | 'ratio') => setFormData(prev => ({ ...prev, threshold_mode: value }))}
+            >
+              <SelectTrigger className="h-8 w-[200px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="absolute">Absolute (Recommended)</SelectItem>
+                <SelectItem value="ratio">Ratio / Percentage</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground">
+              {formData.threshold_mode === 'absolute' ? 'Actual values' : '% of target'}
+            </span>
           </div>
-          <Switch
-            checked={formData.is_org_level}
-            onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_org_level: checked }))}
-          />
+          <div className="grid grid-cols-6 gap-1.5">
+            {(['r5', 'r4', 'r3', 'r2', 'r1', 'r0'] as const).map((field) => (
+              <div key={field} className="space-y-1">
+                <Label className="text-[10px] uppercase text-muted-foreground font-semibold">{field}</Label>
+                <Input
+                  className="h-8 text-xs"
+                  value={formData[field]}
+                  onChange={(e) => setFormData(prev => ({ ...prev, [field]: e.target.value }))}
+                  placeholder={formData.threshold_mode === 'absolute' ? '100' : '100%'}
+                />
+              </div>
+            ))}
+          </div>
         </div>
-        
-        {formData.is_org_level && (
-          <div className="ml-8 space-y-2">
-            <Label>Value Scope</Label>
+      )}
+
+      {/* ═══ SETTINGS ═══ */}
+      <SectionHeader>Settings</SectionHeader>
+
+      {/* Org-Level toggle — inline */}
+      <div className="flex items-center justify-between gap-3 p-3 border rounded-md bg-muted/30">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+          <div className="space-y-0.5">
+            <Label className="text-xs font-medium">Organization-Level KPI</Label>
+            <p className="text-[11px] text-muted-foreground">Centrally managed via Org KPI Data Entry</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {formData.is_org_level && (
             <Select
               value={formData.org_level_scope}
               onValueChange={(value: 'organization' | 'department' | 'employee') => 
                 setFormData(prev => ({ ...prev, org_level_scope: value }))
               }
             >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select scope" />
+              <SelectTrigger className="h-8 w-[140px] text-xs">
+                <SelectValue placeholder="Scope" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="organization">
-                  <div className="flex flex-col items-start">
-                    <span className="font-medium">Organization</span>
-                    <span className="text-xs text-muted-foreground">Same value for all employees</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="department">
-                  <div className="flex flex-col items-start">
-                    <span className="font-medium">Department</span>
-                    <span className="text-xs text-muted-foreground">Different value per department</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="employee">
-                  <div className="flex flex-col items-start">
-                    <span className="font-medium">Employee</span>
-                    <span className="text-xs text-muted-foreground">Different value per employee</span>
-                  </div>
-                </SelectItem>
+                <SelectItem value="organization">Organization</SelectItem>
+                <SelectItem value="department">Department</SelectItem>
+                <SelectItem value="employee">Employee</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-        )}
-      </div>
-
-      {/* Resubmission Settings */}
-      <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
-        <h3 className="font-medium text-sm">Resubmission Settings</h3>
-        <div className="flex items-center justify-between">
-          <div>
-            <Label className="text-sm font-medium">Require Reason for Resubmission</Label>
-            <p className="text-xs text-muted-foreground">
-              When enabled, employees must provide a mandatory reason when editing previously submitted daily/weekly entries
-            </p>
-          </div>
+          )}
           <Switch
-            checked={formData.require_resubmit_reason}
-            onCheckedChange={(checked) => setFormData(prev => ({ ...prev, require_resubmit_reason: checked }))}
+            checked={formData.is_org_level}
+            onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_org_level: checked }))}
           />
         </div>
       </div>
 
-      {/* Rating Thresholds - only shown for Numeric UOM Type */}
-      {formData.uom_type === 'numeric' && (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Threshold Mode</Label>
-            <Select
-              value={formData.threshold_mode}
-              onValueChange={(value: 'absolute' | 'ratio') => setFormData(prev => ({ ...prev, threshold_mode: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="absolute">
-                  <div className="flex flex-col items-start">
-                    <span className="font-medium">Absolute (Recommended)</span>
-                    <span className="text-xs text-muted-foreground">Thresholds are actual values</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="ratio">
-                  <div className="flex flex-col items-start">
-                    <span className="font-medium">Ratio / Percentage</span>
-                    <span className="text-xs text-muted-foreground">Thresholds are % of target</span>
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              {formData.threshold_mode === 'absolute' 
-                ? 'Thresholds are actual values (e.g., R5 = 100 means achieved ≥ 100)' 
-                : 'Thresholds are % of target (e.g., R5 = 100% means achieved ≥ target)'}
-            </p>
-          </div>
-          
-          <div className="space-y-2">
-            <Label>Rating Thresholds</Label>
-            <div className="grid grid-cols-6 gap-2">
-              {(['r5', 'r4', 'r3', 'r2', 'r1', 'r0'] as const).map((field) => (
-                <div key={field} className="space-y-1">
-                  <Label className="text-xs uppercase">{field}</Label>
-                  <Input
-                    value={formData[field]}
-                    onChange={(e) => setFormData(prev => ({ ...prev, [field]: e.target.value }))}
-                    placeholder={formData.threshold_mode === 'absolute' ? '100' : '100%'}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* Resubmission — inline */}
+      <div className="flex items-center justify-between gap-3 p-3 border rounded-md bg-muted/30">
+        <div className="space-y-0.5">
+          <Label className="text-xs font-medium">Require Reason for Resubmission</Label>
+          <p className="text-[11px] text-muted-foreground">Mandatory reason when editing previously submitted entries</p>
         </div>
-      )}
+        <Switch
+          checked={formData.require_resubmit_reason}
+          onCheckedChange={(checked) => setFormData(prev => ({ ...prev, require_resubmit_reason: checked }))}
+        />
+      </div>
 
-      {/* Review Period & Status */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="space-y-2">
-          <Label>Review Period</Label>
+      {/* ═══ PERIOD & STATUS ═══ */}
+      <SectionHeader>Period & Status</SectionHeader>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Review Period</Label>
           <Select
             value={formData.review_period}
             onValueChange={(value) => setFormData(prev => ({ ...prev, review_period: value }))}
           >
-            <SelectTrigger>
+            <SelectTrigger className="h-9">
               <SelectValue placeholder="Select period" />
             </SelectTrigger>
             <SelectContent>
@@ -829,21 +803,22 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
-          <Label>Review Year</Label>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Review Year</Label>
           <Input
+            className="h-9"
             type="number"
             value={formData.review_year}
             onChange={(e) => setFormData(prev => ({ ...prev, review_year: e.target.value }))}
           />
         </div>
-        <div className="space-y-2">
-          <Label>Status</Label>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Status</Label>
           <Select
             value={formData.status}
             onValueChange={(value) => setFormData(prev => ({ ...prev, status: value as ReviewStatus }))}
           >
-            <SelectTrigger>
+            <SelectTrigger className="h-9">
               <SelectValue placeholder="Select status" />
             </SelectTrigger>
             <SelectContent>
@@ -855,67 +830,61 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         </div>
       </div>
 
-      {/* Apply Scope Selector */}
-      <div className="p-4 border rounded-lg bg-primary/5 border-primary/20 space-y-3">
-        <div className="flex items-center gap-2">
-          <Info className="h-4 w-4 text-primary" />
-          <Label className="text-sm font-medium">Apply Changes To</Label>
+      {/* Apply Scope — horizontal inline pills */}
+      <div className="p-3 border rounded-md bg-primary/5 border-primary/20">
+        <div className="flex items-center gap-2 mb-2">
+          <Info className="h-3.5 w-3.5 text-primary" />
+          <Label className="text-xs font-medium">Apply Changes To</Label>
         </div>
         <RadioGroup
           value={applyScope}
           onValueChange={(value) => setApplyScope(value as ApplyScope)}
-          className="flex flex-col gap-2"
+          className="flex flex-wrap gap-3"
         >
-          <div className="flex items-center space-x-2">
+          <label className="flex items-center gap-1.5 cursor-pointer">
             <RadioGroupItem value="this_month" id="scope_this" />
-            <Label htmlFor="scope_this" className="text-sm font-normal cursor-pointer">
-              This month only
-            </Label>
-          </div>
-          <div className="flex items-center space-x-2">
+            <span className="text-xs">This month only</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
             <RadioGroupItem value="future_months" id="scope_future" />
-            <Label htmlFor="scope_future" className="text-sm font-normal cursor-pointer">
-               This month and all following months <span className="text-muted-foreground">(fiscal year, after {kpi?.review_period || 'current month'})</span>
-            </Label>
-          </div>
-          <div className="flex items-center space-x-2">
+            <span className="text-xs">This + future months</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
             <RadioGroupItem value="all_months" id="scope_all" />
-            <Label htmlFor="scope_all" className="text-sm font-normal cursor-pointer">
-               All months <span className="text-muted-foreground">(fiscal year {kpi?.review_period && kpi?.review_year ? getFiscalLabel(kpi.review_period, kpi.review_year) : 'this year'})</span>
-            </Label>
-          </div>
+            <span className="text-xs">All months ({kpi?.review_period && kpi?.review_year ? getFiscalLabel(kpi.review_period, kpi.review_year) : 'FY'})</span>
+          </label>
         </RadioGroup>
         {applyScope !== 'this_month' && (
-          <p className="text-xs text-muted-foreground">
-            Structural fields (target, thresholds, weightage, UOM, etc.) will be applied to matching sibling KPIs. Status and achieved values are never changed.
+          <p className="text-[11px] text-muted-foreground mt-1.5">
+            Structural fields applied to sibling KPIs. Status & achieved values unchanged.
           </p>
         )}
       </div>
 
-      {/* Copy to Other Months */}
+      {/* Copy to Other Months — collapsible */}
       {kpi?.review_year && kpi?.review_period && (
         <Collapsible open={copyToMonthsOpen} onOpenChange={setCopyToMonthsOpen}>
           <CollapsibleTrigger asChild>
-            <Button variant="outline" className="w-full justify-between" type="button">
-              <span className="flex items-center gap-2">
-                <Copy className="h-4 w-4" />
+            <Button variant="outline" size="sm" className="w-full justify-between h-9" type="button">
+              <span className="flex items-center gap-2 text-xs">
+                <Copy className="h-3.5 w-3.5" />
                 Copy KPI to Other Months
               </span>
-              <ChevronDown className={`h-4 w-4 transition-transform ${copyToMonthsOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${copyToMonthsOpen ? 'rotate-180' : ''}`} />
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="mt-3">
-            <div className="p-4 border rounded-lg bg-muted/30 space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Select months where this KPI doesn't exist yet. It will be created with status "KRA Set".
+          <CollapsibleContent className="mt-2">
+            <div className="p-3 border rounded-md bg-muted/30 space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Select months where this KPI doesn't exist yet. Created with status "KRA Set".
               </p>
               {loadingSiblings ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading...
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
                     {(() => {
                       const fiscalStartYear = getFiscalStartYear(kpi.review_period!, kpi.review_year!);
                       return FISCAL_MONTHS.map(month => {
@@ -926,7 +895,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
                         return (
                           <label
                             key={key}
-                            className={`flex items-center gap-2 p-2 rounded-md border text-sm cursor-pointer transition-colors ${
+                            className={`flex items-center gap-1.5 p-1.5 rounded border text-xs cursor-pointer transition-colors ${
                               exists
                                 ? 'bg-muted/50 text-muted-foreground cursor-not-allowed opacity-60'
                                 : isSelected
@@ -945,9 +914,10 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
                                   return next;
                                 });
                               }}
+                              className="h-3.5 w-3.5"
                             />
-                            <span className="truncate">{month.slice(0, 3)} {year}</span>
-                            {exists && <span className="text-xs">(exists)</span>}
+                            <span className="truncate">{month.slice(0, 3)}</span>
+                            {exists && <span className="text-[10px]">✓</span>}
                           </label>
                         );
                       });
@@ -958,9 +928,9 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
                       size="sm"
                       onClick={handleCopyToMonths}
                       disabled={copying}
-                      className="mt-2"
+                      className="h-8 text-xs"
                     >
-                      {copying && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      {copying && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
                       Copy to {selectedCopyMonths.size} month(s)
                     </Button>
                   )}
@@ -971,33 +941,34 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         </Collapsible>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="reason">
-          Reason for Change {formData.status !== originalStatus && <span className="text-destructive">* (Required when changing status)</span>}
+      {/* Reason */}
+      <div className="space-y-1.5">
+        <Label className="text-xs">
+          Reason for Change {formData.status !== originalStatus && <span className="text-destructive">* (Required)</span>}
         </Label>
         <Textarea
-          id="reason"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder={formData.status !== originalStatus ? "Required: Explain why the status is being changed..." : "Optional: Explain why this change is being made..."}
+          placeholder={formData.status !== originalStatus ? "Required: Explain status change..." : "Optional: Reason for change..."}
           rows={2}
-          className={formData.status !== originalStatus && !reason.trim() ? 'border-destructive' : ''}
+          className={`min-h-[56px] ${formData.status !== originalStatus && !reason.trim() ? 'border-destructive' : ''}`}
         />
         {formData.status !== originalStatus && (
-          <p className="text-xs text-muted-foreground">
-            Notifications will be sent to the employee and their reporting manager when status is changed.
+          <p className="text-[11px] text-muted-foreground">
+            Notifications sent to employee and reporting manager on status change.
           </p>
         )}
       </div>
 
       {/* Action Buttons */}
-      <div className="flex justify-end gap-2 pt-2">
-        <Button variant="outline" onClick={onCancel}>Cancel</Button>
+      <div className="flex justify-end gap-2 pt-1 border-t border-border">
+        <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
         <Button 
+          size="sm"
           onClick={handleSubmit} 
           disabled={updateKpi.isPending || (formData.status !== originalStatus && !reason.trim()) || (formData.uom_type === 'tiered' && !!tieredValidationError)}
         >
-          {updateKpi.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          {updateKpi.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
           Save Changes
         </Button>
       </div>
