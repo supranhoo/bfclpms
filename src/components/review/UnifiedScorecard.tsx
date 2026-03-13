@@ -835,6 +835,8 @@ export function UnifiedScorecard({
         is_na: true,
         na_marked_by_role: viewLevel,
         [remarkField]: markNaRemarks,
+        // Explicitly clear final_score/final_rating for N/A KPIs moving to approved
+        ...(approve && config.forwardStatus === 'approved' ? { final_score: null, final_rating: null } : {}),
       };
       
       const { error: submissionError } = await supabase
