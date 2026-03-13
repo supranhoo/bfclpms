@@ -12,6 +12,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import type { KPI } from '@/hooks/useKpis';
+import { ScoringFixImpactDialog } from '@/components/admin/ScoringFixImpactDialog';
+import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -24,7 +26,7 @@ type IssueType =
   | 'MISSING_TARGET'
   | 'MISSING_CRITERIA';
 
-interface ScoringIssue {
+export interface ScoringIssue {
   kpi: KPI;
   type: IssueType;
   severity: IssueSeverity;
