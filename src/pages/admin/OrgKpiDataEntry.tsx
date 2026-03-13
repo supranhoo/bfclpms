@@ -324,11 +324,12 @@ export default function OrgKpiDataEntry() {
     const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
     const catName = kpi.kra_categories?.name || '';
     const catColor = kpi.kra_categories?.color || '#6B7280';
-    const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+    const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
     const existing = existingValuesMap.get(key);
-    const prevKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+    const prevKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}`;
     const previousValue = prevValuesMap.get(prevKey) ?? null;
-    const empCount = employeeCountMap.get(prevKey) ?? 0;
+    const empCountKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+    const empCount = employeeCountMap.get(empCountKey) ?? 0;
 
     // Determine status using the shared helper (handles all scopes correctly)
     const status = getKpiStatus(kpi);
