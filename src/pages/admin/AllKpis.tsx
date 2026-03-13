@@ -21,6 +21,7 @@ import { AdminDailyEntryDialog } from '@/components/admin/AdminDailyEntryDialog'
 import { AdminStatusStepBackDialog } from '@/components/admin/AdminStatusStepBackDialog';
 import { CopyKrasDialog } from '@/components/admin/CopyKrasDialog';
 import { KraIssuanceConfirmDialog } from '@/components/admin/KraIssuanceConfirmDialog';
+import { ScoringHealthCheck } from '@/components/admin/ScoringHealthCheck';
 import { getPreviousStatus } from '@/hooks/useAdminDataEntry';
 import { getCalendarMonthsForPeriod, MONTH_NAMES } from '@/hooks/useAdminReports';
 import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy, Trash2, Undo2, Send, CheckCircle, ArrowUp } from 'lucide-react';
