@@ -409,7 +409,7 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                     {employee.kras[kraName].map(kpi => {
                       const firstKpiId = Object.values(kpi.kpiIds).find(Boolean);
                       return (
-                      <TableRow key={`kpi-${kpi.kpiName}-${kraName}`}>
+                      <TableRow key={`kpi-${kpi.kpiName}-${kraName}`} className="group/kpirow">
                         <TableCell className="pl-8 text-sm sticky left-0 bg-background z-10">
                           <div className="flex items-center gap-2">
                             <span className="truncate">{kpi.kpiName}</span>
