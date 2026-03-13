@@ -347,7 +347,7 @@ export default function OrgKpiDataEntry() {
         : departments;
       const kpiMappedEmpIds = mappedEmployeesMap.get(kpiKey);
       scopedRows = filteredDepts.map(dept => {
-        const scopeKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${dept.id}||null`;
+        const scopeKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||${dept.id}||null`;
         const val = existingValuesMap.get(scopeKey);
         // Build employee names sub-text for this department
         let scopeSubText: string | undefined;
