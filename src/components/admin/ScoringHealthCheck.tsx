@@ -261,6 +261,7 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
   const fixAll = useCallback((type: IssueType) => {
     const fixable = activeIssues.filter(i => i.type === type && (type === 'INVERTED_CRITERIA' || type === 'MISSING_CRITERIA'));
     if (fixable.length === 0) return;
+    setImpactReadOnly(false);
     setImpactIssues(fixable);
     setImpactOpen(true);
   }, [activeIssues]);
