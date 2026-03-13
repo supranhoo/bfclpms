@@ -639,6 +639,7 @@ const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string
   observation_reply: { color: '#8b5cf6', emoji: '💬', title: 'Observation Reply' },
   observation_resolved: { color: '#10b981', emoji: '✅', title: 'Observation Resolved' },
   observation_mention: { color: '#3b82f6', emoji: '@', title: 'Mentioned in Observation' },
+  org_kpi_pending_reminder: { color: '#f97316', emoji: '⏳', title: 'Pending KPI Reminder' },
 };
 
 // Build KRA table HTML for batch assignment emails

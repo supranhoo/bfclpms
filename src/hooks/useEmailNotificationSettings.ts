@@ -30,7 +30,8 @@ export type EmailEventType =
   | 'rollback_requested'
   | 'rollback_approved'
   | 'rollback_rejected'
-  | 'email_changed';
+  | 'email_changed'
+  | 'org_kpi_pending_reminder';
 
 export type EmailProvider = 'resend' | 'smtp' | 'microsoft_graph';
 export type SmtpSecurity = 'tls' | 'starttls' | 'none';

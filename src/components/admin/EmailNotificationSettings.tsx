@@ -52,6 +52,7 @@ const EMAIL_EVENTS: { key: EmailEventType; label: string; description: string }[
   { key: 'rollback_requested', label: 'Rollback Requested', description: 'Notify reviewer when a rollback is requested on a KPI' },
   { key: 'rollback_approved', label: 'Rollback Approved', description: 'Notify requester when their rollback request is approved' },
   { key: 'rollback_rejected', label: 'Rollback Dismissed', description: 'Notify requester when their rollback request is dismissed' },
+  { key: 'org_kpi_pending_reminder', label: 'Pending KPI Reminder', description: 'Send pending report to data owners with outstanding KPIs' },
 ];
 
 export function EmailNotificationSettings() {

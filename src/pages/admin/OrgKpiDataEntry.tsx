@@ -919,6 +919,33 @@ export default function OrgKpiDataEntry() {
                 </Button>
                 <OrgKpiBulkExport kpis={exportData} reviewPeriod={selectedPeriod} reviewYear={selectedYear} />
                 <OrgKpiPendingReport rows={pendingReportRows} reviewPeriod={selectedPeriod} reviewYear={selectedYear} />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={isSendingReminder}
+                  onClick={async () => {
+                    setIsSendingReminder(true);
+                    try {
+                      const { data, error } = await supabase.functions.invoke('send-pending-report-reminder', {
+                        body: { review_period: selectedPeriod, review_year: selectedYear },
+                      });
+                      if (error) throw error;
+                      if (data?.error) throw new Error(data.error);
+                      toast({
+                        title: 'Reminder Sent',
+                        description: `Notified ${data?.owners_notified ?? 0} data owner(s) about ${data?.total_pending ?? 0} pending KPI(s).`,
+                      });
+                    } catch (err: any) {
+                      toast({ title: 'Failed to Send Reminder', description: err.message, variant: 'destructive' });
+                    } finally {
+                      setIsSendingReminder(false);
+                    }
+                  }}
+                >
+                  {isSendingReminder ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                  Send Reminder
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="gap-1.5">
                   <Upload className="h-4 w-4" />
                   Import Excel
