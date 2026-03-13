@@ -27,6 +27,7 @@ export interface PendingReportRow {
   previousValue: number | null;
   daysPending: number | null;
   employeeCount: number | null;
+  daysSinceLastUpdate: number | null;
 }
 
 interface OrgKpiPendingReportProps {
@@ -69,6 +70,7 @@ export function OrgKpiPendingReport({ rows, reviewPeriod, reviewYear }: OrgKpiPe
       'Frequency': r.frequency,
       'Previous Period Value': r.previousValue ?? '',
       'Days Pending': r.daysPending ?? '',
+      'Days Since Last Update': r.daysSinceLastUpdate ?? '',
       'Employee Count': r.employeeCount ?? '',
     });
 
@@ -77,7 +79,7 @@ export function OrgKpiPendingReport({ rows, reviewPeriod, reviewYear }: OrgKpiPe
       { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 22 }, { wch: 14 },
       { wch: 14 }, { wch: 30 }, { wch: 25 }, { wch: 30 },
       { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
-      { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 14 },
+      { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 22 }, { wch: 14 },
     ];
 
     const wb = XLSX.utils.book_new();
