@@ -410,17 +410,17 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                       const firstKpiId = Object.values(kpi.kpiIds).find(Boolean);
                       return (
                       <TableRow key={`kpi-${kpi.kpiName}-${kraName}`} className="group/kpirow">
-                        <TableCell className="pl-8 text-sm sticky left-0 bg-background z-10">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate">{kpi.kpiName}</span>
+                        <TableCell className="pl-8 text-sm sticky left-0 bg-background z-10 max-w-[200px]">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate" title={kpi.kpiName}>{kpi.kpiName}</span>
                             {kpi.hasMismatch && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />}
                             {firstKpiId && (
                               <button
                                 onClick={() => onEditKpi(firstKpiId)}
-                                className="opacity-0 group-hover/kpirow:opacity-100 hover:opacity-100 focus:opacity-100 p-0.5 rounded hover:bg-muted transition-all shrink-0"
+                                className="opacity-50 hover:opacity-100 focus:opacity-100 p-0.5 rounded hover:bg-muted transition-all shrink-0"
                                 title="Edit KPI"
                               >
-                                <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+                                <Pencil className="h-3 w-3 text-muted-foreground" />
                               </button>
                             )}
                           </div>
