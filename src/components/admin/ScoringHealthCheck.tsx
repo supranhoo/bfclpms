@@ -405,6 +405,7 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
                 onFix={handleFix}
                 onFixAll={fixAll}
                 onEdit={handleEdit}
+                onImpactPreview={handleImpactPreview}
                 canAutoFix={canAutoFix}
                 severityIcon={severityIcon}
                 severityBadge={severityBadge}
@@ -417,6 +418,7 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
                 onFix={handleFix}
                 onFixAll={fixAll}
                 onEdit={handleEdit}
+                onImpactPreview={handleImpactPreview}
                 canAutoFix={canAutoFix}
                 severityIcon={severityIcon}
                 severityBadge={severityBadge}
@@ -429,6 +431,7 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
                 onFix={handleFix}
                 onFixAll={fixAll}
                 onEdit={handleEdit}
+                onImpactPreview={handleImpactPreview}
                 canAutoFix={canAutoFix}
                 severityIcon={severityIcon}
                 severityBadge={severityBadge}
