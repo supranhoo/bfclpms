@@ -9,11 +9,14 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, ChevronRight, Download, Search, AlertTriangle, CheckCircle2, Pencil } from 'lucide-react';
+import { Loader2, ChevronRight, Download, Search, AlertTriangle, CheckCircle2, Pencil, Plus, Settings2 } from 'lucide-react';
 import { useKpiWeightageMatrix, type EmployeeMatrix } from '@/hooks/useKpiWeightageMatrix';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { WeightageCellEditor } from '@/components/admin/WeightageCellEditor';
+import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
+import { KPI } from '@/hooks/useKpis';
+import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
 const SHORT_MONTHS: Record<string, string> = {
@@ -32,6 +35,21 @@ function KpiWeightageDashboard() {
   const [categoryId, setCategoryId] = useState<string>('');
   const [showInactive, setShowInactive] = useState(false);
   const [openEmployees, setOpenEmployees] = useState<Set<string>>(new Set());
+  const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
+  const [loadingEditKpi, setLoadingEditKpi] = useState(false);
+
+  const handleEditKpi = async (kpiId: string) => {
+    setLoadingEditKpi(true);
+    try {
+      const { data, error } = await supabase.from('kpis').select('*').eq('id', kpiId).single();
+      if (error) throw error;
+      setEditingKpi(data as unknown as KPI);
+    } catch (err: any) {
+      toast.error('Failed to load KPI details');
+    } finally {
+      setLoadingEditKpi(false);
+    }
+  };
 
   const fiscalLabel = (y: number) => `${y}-${String(y + 1).slice(-2)}`;
 
@@ -235,25 +253,105 @@ function KpiWeightageDashboard() {
           isOpen={openEmployees.has(emp.employeeId)}
           onToggle={() => toggleEmployee(emp.employeeId)}
           onWeightageUpdate={() => queryClient.invalidateQueries({ queryKey: ['kpi-weightage-matrix'] })}
+          fiscalYear={fiscalYear}
+          onEditKpi={handleEditKpi}
         />
       ))}
+
+      <AdminKpiEditDialog
+        isOpen={!!editingKpi}
+        onClose={() => {
+          setEditingKpi(null);
+          queryClient.invalidateQueries({ queryKey: ['kpi-weightage-matrix'] });
+        }}
+        kpi={editingKpi}
+      />
     </div>
   );
 }
 
-function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate }: {
+const FISCAL_MONTHS = ['July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March', 'April', 'May', 'June'];
+
+function getReviewYearForMonth(month: string, fiscalStartYear: number): number {
+  const idx = FISCAL_MONTHS.indexOf(month);
+  return idx < 6 ? fiscalStartYear : fiscalStartYear + 1;
+}
+
+function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate, fiscalYear, onEditKpi }: {
   employee: EmployeeMatrix;
   months: string[];
   isOpen: boolean;
   onToggle: () => void;
   onWeightageUpdate: () => void;
+  fiscalYear: number;
+  onEditKpi: (kpiId: string) => void;
 }) {
+  const [addingCell, setAddingCell] = useState<string | null>(null); // "kraName|kpiName|month"
   const sortedKras = Object.keys(employee.kras).sort();
   const hasMismatches = sortedKras.some(kra => employee.kras[kra].some(k => k.hasMismatch));
   const totalMismatch = months.some(m => {
     const total = employee.monthTotals[m];
     return total != null && total !== 100;
   });
+
+  const handleAddKpiToMonth = async (kpiRow: { kpiName: string; kraName: string; kpiIds: Record<string, string>; categoryId: string }, month: string) => {
+    const cellKey = `${kpiRow.kraName}|${kpiRow.kpiName}|${month}`;
+    setAddingCell(cellKey);
+    try {
+      // Find a source KPI to duplicate from
+      const sourceMonth = Object.keys(kpiRow.kpiIds).find(m => kpiRow.kpiIds[m]);
+      if (!sourceMonth) {
+        toast.error('No source KPI found to duplicate');
+        return;
+      }
+      const sourceKpiId = kpiRow.kpiIds[sourceMonth];
+
+      // Fetch the source KPI
+      const { data: sourceKpi, error: fetchError } = await supabase
+        .from('kpis')
+        .select('*')
+        .eq('id', sourceKpiId)
+        .single();
+      if (fetchError || !sourceKpi) {
+        toast.error('Failed to fetch source KPI');
+        return;
+      }
+
+      const reviewYear = getReviewYearForMonth(month, fiscalYear);
+
+      // Insert the new KPI for the target month
+      const { id, created_at, updated_at, ...rest } = sourceKpi;
+      const insertPayload = {
+        ...rest,
+        review_period: month,
+        review_year: reviewYear,
+        status: 'kra_set' as const,
+      };
+
+      const { error: insertError } = await supabase.from('kpis').insert(insertPayload as any);
+      if (insertError) {
+        if (insertError.message?.includes('duplicate') || insertError.code === '23505') {
+          toast.error('KPI already exists for this month');
+        } else {
+          toast.error(insertError.message || 'Failed to add KPI');
+        }
+        return;
+      }
+
+      // Ensure review_period record exists
+      await supabase.from('review_periods').upsert(
+        { period_name: month, review_year: reviewYear, is_locked: false },
+        { onConflict: 'period_name,review_year' }
+      );
+
+      toast.success(`KPI added for ${month}`);
+      onWeightageUpdate();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to add KPI');
+    } finally {
+      setAddingCell(null);
+    }
+  };
 
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
@@ -308,12 +406,23 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                         {kraName}
                       </TableCell>
                     </TableRow>
-                    {employee.kras[kraName].map(kpi => (
-                      <TableRow key={`kpi-${kpi.kpiName}-${kraName}`}>
+                    {employee.kras[kraName].map(kpi => {
+                      const firstKpiId = Object.values(kpi.kpiIds).find(Boolean);
+                      return (
+                      <TableRow key={`kpi-${kpi.kpiName}-${kraName}`} className="group/kpirow">
                         <TableCell className="pl-8 text-sm sticky left-0 bg-background z-10">
                           <div className="flex items-center gap-2">
-                            {kpi.kpiName}
+                            <span className="truncate">{kpi.kpiName}</span>
                             {kpi.hasMismatch && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />}
+                            {firstKpiId && (
+                              <button
+                                onClick={() => onEditKpi(firstKpiId)}
+                                className="opacity-0 group-hover/kpirow:opacity-100 hover:opacity-100 focus:opacity-100 p-0.5 rounded hover:bg-muted transition-all shrink-0"
+                                title="Edit KPI"
+                              >
+                                <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+                              </button>
+                            )}
                           </div>
                         </TableCell>
                         {months.map((m, mIdx) => {
@@ -323,6 +432,9 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                           const isEliminated = noData && months.slice(0, mIdx).some(prev => kpi.months[prev] != null);
                           const hasKpiId = !!kpi.kpiIds[m];
                           const cellContent = noData ? '--' : `${w}%`;
+                          const hasOtherMonths = Object.keys(kpi.kpiIds).length > 0;
+                          const cellKey = `${kpi.kraName}|${kpi.kpiName}|${m}`;
+                          const isAdding = addingCell === cellKey;
                           const cellClasses = `text-center text-sm ${
                             isEliminated
                               ? 'bg-destructive/10 text-destructive font-medium'
@@ -357,6 +469,26 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                             );
                           }
 
+                          // Empty cell — show "+" to add KPI for this month
+                          if (hasOtherMonths && !hasKpiId) {
+                            return (
+                              <TableCell key={m} className={cellClasses}>
+                                <button
+                                  className="w-full h-full inline-flex items-center justify-center cursor-pointer hover:bg-muted/60 rounded px-1 py-0.5 transition-colors group"
+                                  onClick={() => handleAddKpiToMonth(kpi, m)}
+                                  disabled={isAdding}
+                                  title={`Add KPI for ${m}`}
+                                >
+                                  {isAdding ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                                  ) : (
+                                    <Plus className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-primary transition-colors" />
+                                  )}
+                                </button>
+                              </TableCell>
+                            );
+                          }
+
                           return (
                             <TableCell key={m} className={cellClasses}>
                               {cellContent}
@@ -364,7 +496,8 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                           );
                         })}
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </React.Fragment>
                 ))}
                 {/* Totals row */}
