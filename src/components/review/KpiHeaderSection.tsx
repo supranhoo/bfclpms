@@ -1,14 +1,18 @@
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { KPI } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getCycleLabel } from '@/lib/frequencyUtils';
-import { Clock, Building2, Users, User, Lock } from 'lucide-react';
+import { Clock, Building2, Users, User, Lock, Settings, ClipboardEdit } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
+import { AdminDataEntryDialog } from '@/components/admin/AdminDataEntryDialog';
 
 interface KpiHeaderSectionProps {
   kpi: KPI;
@@ -16,6 +20,7 @@ interface KpiHeaderSectionProps {
   selectedYear: number;
   onOpenTimeline?: () => void;
   orgKpiEnteredByName?: string | null;
+  employeeId?: string;
 }
 
 export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTimeline, orgKpiEnteredByName }: KpiHeaderSectionProps) {
