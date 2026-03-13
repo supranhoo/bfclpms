@@ -27,7 +27,7 @@ import { OrgKpiBulkImport } from '@/components/admin/OrgKpiBulkImport';
 import { OrgKpiOwnerManagement } from '@/components/admin/OrgKpiOwnerManagement';
 import { OrgKpiImpactSheet } from '@/components/admin/OrgKpiImpactSheet';
 import { OrgKpiSuggestionsPanel } from '@/components/admin/OrgKpiSuggestionsPanel';
-import { Building2, AlertTriangle, Search, Copy, Upload, Users as UsersIcon, Lightbulb, Info } from 'lucide-react';
+import { Building2, AlertTriangle, Search, Copy, Upload, Users as UsersIcon, Lightbulb, Info, Mail, Loader2 } from 'lucide-react';
 import { isKpiLockedForPeriod, getActiveMonthForCycle } from '@/lib/frequencyUtils';
 import { differenceInDays, parse } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
