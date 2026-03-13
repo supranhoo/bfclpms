@@ -366,7 +366,70 @@ export function UnifiedScorecard({
 
   // Sorting with default Weightage (High to Low)
   const { sortedKpis: rawSortedKpis, sortConfig, setSort } = useKpiSorting(kpis, {}, submissionMap);
-  const sortedKpis = statusFilter ? rawSortedKpis.filter(k => k.status === statusFilter) : rawSortedKpis;
+  const sortedKpis = useMemo(() => {
+    let filtered = rawSortedKpis;
+    if (statusFilter) filtered = filtered.filter(k => k.status === statusFilter);
+    if (isSelfMode && activeCategory !== 'All') {
+      const cat = kraCategories?.find((c: any) => c.name === activeCategory);
+      if (cat) filtered = filtered.filter(k => k.category_id === cat.id);
+    }
+    return filtered;
+  }, [rawSortedKpis, statusFilter, isSelfMode, activeCategory, kraCategories]);
+
+  // Available categories for self-mode filter
+  const availableSelfCategories = useMemo(() => {
+    if (!isSelfMode || !kraCategories) return [];
+    return kraCategories.filter((cat: any) => kpis?.some(k => k.category_id === cat.id));
+  }, [isSelfMode, kraCategories, kpis]);
+
+  // Pending period alerts (self mode)
+  const MONTH_ORDER_SELF = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  const pendingPeriods = useMemo(() => {
+    if (!isSelfMode || !allKpis) return [];
+    const actionableStatuses = ['kra_set', 'self_review'];
+    const currentMonthIdx = MONTH_ORDER_SELF.indexOf(selectedPeriod);
+    const periodMap = new Map<string, number>();
+    allKpis.forEach(k => {
+      if (!actionableStatuses.includes(k.status || '')) return;
+      if (!k.review_period || k.review_year == null) return;
+      const monthIdx = MONTH_ORDER_SELF.indexOf(k.review_period);
+      const isEarlier = k.review_year < selectedYear ||
+        (k.review_year === selectedYear && monthIdx < currentMonthIdx && monthIdx >= 0);
+      if (!isEarlier) return;
+      const key = `${k.review_period}-${k.review_year}`;
+      periodMap.set(key, (periodMap.get(key) || 0) + 1);
+    });
+    return Array.from(periodMap.entries())
+      .map(([key, count]) => {
+        const [month, yearStr] = key.split('-');
+        return { month, year: parseInt(yearStr), count, key };
+      })
+      .filter(p => !dismissedPendingPeriods.includes(p.key))
+      .sort((a, b) => a.year !== b.year ? b.year - a.year : MONTH_ORDER_SELF.indexOf(b.month) - MONTH_ORDER_SELF.indexOf(a.month));
+  }, [isSelfMode, allKpis, selectedPeriod, selectedYear, dismissedPendingPeriods]);
+
+  // Auto-open KPI from deep link (self mode)
+  useEffect(() => {
+    if (!isSelfMode || !autoOpenKpiId || !allKpis || isLoading) return;
+    const targetKpi = kpis?.find(k => k.id === autoOpenKpiId);
+    if (targetKpi) {
+      setSelectedKpiForSelfReview(targetKpi);
+      return;
+    }
+    const match = allKpis.find(k => k.id === autoOpenKpiId);
+    if (match?.review_period && match.review_year != null) {
+      onPeriodSelectionChange({
+        ...periodSelection,
+        mode: 'single' as const,
+        selectedMonth: match.review_period,
+        selectedYear: match.review_year,
+        months: [match.review_period],
+        periodRanges: [{ month: match.review_period, year: match.review_year }],
+      });
+    }
+  }, [isSelfMode, autoOpenKpiId, kpis, allKpis, isLoading]);
 
   const queryMap = useMemo(() => {
     const map = new Map<string, KpiQuery[]>();
