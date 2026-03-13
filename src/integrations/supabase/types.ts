@@ -3327,25 +3327,17 @@ export type Database = {
         Returns: number
       }
       generate_bundles_from_kpis: { Args: never; Returns: Json }
-      get_bulk_employee_workflows:
-        | {
-            Args: { employee_ids: string[] }
-            Returns: {
-              employee_id: string
-              stages: string[]
-            }[]
-          }
-        | {
-            Args: {
-              employee_ids: string[]
-              p_review_period?: string
-              p_review_year?: number
-            }
-            Returns: {
-              employee_id: string
-              stages: string[]
-            }[]
-          }
+      get_bulk_employee_workflows: {
+        Args: {
+          employee_ids: string[]
+          p_review_period?: string
+          p_review_year?: number
+        }
+        Returns: {
+          employee_id: string
+          stages: string[]
+        }[]
+      }
       get_cycle_months: {
         Args: { p_frequency: string; p_month: string; p_year: number }
         Returns: string[]
@@ -3354,41 +3346,28 @@ export type Database = {
         Args: { _manager_id: string }
         Returns: string[]
       }
-      get_employee_workflow:
-        | { Args: { employee_uuid: string }; Returns: Json }
-        | {
-            Args: {
-              employee_uuid: string
-              p_review_period?: string
-              p_review_year?: number
-            }
-            Returns: Json
-          }
-      get_employee_workflow_info:
-        | {
-            Args: { employee_uuid: string }
-            Returns: {
-              config_source: string
-              display_name: string
-              stages: Json
-              template_id: string
-              template_name: string
-            }[]
-          }
-        | {
-            Args: {
-              employee_uuid: string
-              p_review_period?: string
-              p_review_year?: number
-            }
-            Returns: {
-              config_source: string
-              display_name: string
-              stages: Json
-              template_id: string
-              template_name: string
-            }[]
-          }
+      get_employee_workflow: {
+        Args: {
+          employee_uuid: string
+          p_review_period?: string
+          p_review_year?: number
+        }
+        Returns: Json
+      }
+      get_employee_workflow_info: {
+        Args: {
+          employee_uuid: string
+          p_review_period?: string
+          p_review_year?: number
+        }
+        Returns: {
+          config_source: string
+          display_name: string
+          stages: Json
+          template_id: string
+          template_name: string
+        }[]
+      }
       get_kpi_accessible_user_ids: {
         Args: { p_kpi_id: string }
         Returns: string[]
