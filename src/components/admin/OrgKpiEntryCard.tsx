@@ -87,9 +87,9 @@ interface OrgKpiEntryCardProps {
 }
 
 const statusConfig = {
-  pending: { label: 'Pending', icon: Clock, variant: 'outline' as const, className: 'text-muted-foreground' },
-  entered: { label: 'Entered', icon: CheckCircle2, variant: 'secondary' as const, className: 'text-primary' },
-  propagated: { label: 'Propagated', icon: ArrowUpRight, variant: 'default' as const, className: 'text-green-600' },
+  pending: { label: 'Pending', icon: Clock, variant: 'outline' as const, className: 'text-muted-foreground border-muted-foreground/30' },
+  entered: { label: 'Value Entered', icon: CheckCircle2, variant: 'secondary' as const, className: 'text-orange-600 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-950 dark:border-orange-800' },
+  propagated: { label: 'Propagated', icon: ArrowUpRight, variant: 'default' as const, className: 'text-green-600 bg-green-50 border-green-200 dark:text-green-400 dark:bg-green-950 dark:border-green-800' },
 };
 
 const scopeIcons = {

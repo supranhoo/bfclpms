@@ -120,7 +120,7 @@ export default function OrgKpiDataEntry() {
   const prevValuesMap = useMemo(() => {
     const map = new Map<string, number | null>();
     previousValues?.forEach(v => {
-      const key = `${v.category_id}||${v.kra_name}||${v.kpi_name}`;
+      const key = `${v.category_id}||${v.kra_name.toLowerCase()}||${v.kpi_name.toLowerCase()}`;
       map.set(key, v.achieved_value);
     });
     return map;
@@ -132,7 +132,7 @@ export default function OrgKpiDataEntry() {
     existingOrgValues?.forEach(v => {
       const deptPart = v.department_id || 'null';
       const empPart = v.employee_id || 'null';
-      const key = `${v.category_id}||${v.kra_name}||${v.kpi_name}||${deptPart}||${empPart}`;
+      const key = `${v.category_id}||${v.kra_name.toLowerCase()}||${v.kpi_name.toLowerCase()}||${deptPart}||${empPart}`;
       map.set(key, v);
     });
     return map;
@@ -168,14 +168,14 @@ export default function OrgKpiDataEntry() {
   const getKpiStatus = useCallback((kpi: typeof frequencyFilteredKpis[0]): 'pending' | 'entered' | 'propagated' => {
     const scope = (kpi as any).org_level_scope || 'employee';
     if (scope === 'organization') {
-      const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+      const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
       const val = existingValuesMap.get(key);
       if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
         return val?.status === 'propagated' ? 'propagated' : 'entered';
       }
       return 'pending';
     }
-    const prefix = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||`;
+    const prefix = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||`;
     const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) =>
       k.startsWith(prefix) && ((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)
     );
@@ -281,13 +281,13 @@ export default function OrgKpiDataEntry() {
       let status: 'pending' | 'entered' | 'propagated' = 'pending';
 
       if (scope === 'organization') {
-        const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+        const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
         const val = existingValuesMap.get(key);
         if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
           status = val?.status === 'propagated' ? 'propagated' : 'entered';
         }
       } else {
-        const prefix = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||`;
+        const prefix = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||`;
         const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) =>
           k.startsWith(prefix) && ((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)
         );
@@ -324,11 +324,12 @@ export default function OrgKpiDataEntry() {
     const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
     const catName = kpi.kra_categories?.name || '';
     const catColor = kpi.kra_categories?.color || '#6B7280';
-    const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+    const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
     const existing = existingValuesMap.get(key);
-    const prevKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+    const prevKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}`;
     const previousValue = prevValuesMap.get(prevKey) ?? null;
-    const empCount = employeeCountMap.get(prevKey) ?? 0;
+    const empCountKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+    const empCount = employeeCountMap.get(empCountKey) ?? 0;
 
     // Determine status using the shared helper (handles all scopes correctly)
     const status = getKpiStatus(kpi);
@@ -346,7 +347,7 @@ export default function OrgKpiDataEntry() {
         : departments;
       const kpiMappedEmpIds = mappedEmployeesMap.get(kpiKey);
       scopedRows = filteredDepts.map(dept => {
-        const scopeKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${dept.id}||null`;
+        const scopeKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||${dept.id}||null`;
         const val = existingValuesMap.get(scopeKey);
         // Build employee names sub-text for this department
         let scopeSubText: string | undefined;
@@ -381,7 +382,7 @@ export default function OrgKpiDataEntry() {
       scopedRows = filteredEmps
         .map(emp => {
           const dept = departments?.find(d => d.id === emp.department_id);
-          const scopeKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${emp.id}`;
+          const scopeKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||${emp.id}`;
           const val = existingValuesMap.get(scopeKey);
           // Per-employee target from their individual KPI record
           const empTargetKey = `${kpiKey}||${emp.id}`;
@@ -449,7 +450,7 @@ export default function OrgKpiDataEntry() {
     const auditEntries: Array<any> = [];
 
     if (scope === 'organization') {
-      const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+      const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
       const oldVal = existingValuesMap.get(key)?.achieved_value ?? null;
       toSave.push({
         category_id: kpi.category_id,
@@ -480,8 +481,8 @@ export default function OrgKpiDataEntry() {
       values.scopedValues.forEach(sv => {
         const isDept = scope === 'department';
         const scopeKey = isDept
-          ? `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${sv.scopeId}||null`
-          : `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${sv.scopeId}`;
+          ? `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||${sv.scopeId}||null`
+          : `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||${sv.scopeId}`;
         const oldVal = existingValuesMap.get(scopeKey)?.achieved_value ?? null;
         toSave.push({
           category_id: kpi.category_id,
