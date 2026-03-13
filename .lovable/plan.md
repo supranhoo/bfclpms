@@ -1,27 +1,25 @@
 
-# Plan: Scoring Health Check — Impact Preview & KPI Editor — IMPLEMENTED ✅
+# Fix: KPI Journey Section Showing Wrong Scores — IMPLEMENTED ✅
 
-## What Was Done
+## Root Cause
+`KpiJourneySection.tsx` prioritized recalculated scores (`recalc?.score ?? storedScore`) over deliberately stored reviewer scores. For binary KPIs where a reviewer intentionally gave 0, the recalculation from an inherited achieved value overrode it to 5.
 
-### 1. New Component: `src/components/admin/ScoringFixImpactDialog.tsx`
-- Impact preview dialog that opens before any fix is applied
-- Fetches all fiscal-year siblings (July–June cycle) and their `review_submissions`
-- Simulates new scores client-side using `calculateRating()` with the corrected criteria
-- Displays per-month table: Month, Year, Achieved Value, Current Score, Simulated Score, Change indicator
-- Color-coded change arrows: green ↑ for improvements, red ↓ for decreases, grey — for unchanged
-- Per-month checkboxes let admins select which months to apply the fix to
-- Summary line shows selected count, improved/decreased/unchanged counts
-- On confirm: updates only selected KPI IDs, writes audit log with `SCORING_HEALTH_FIX` action
-- Works for both single-KPI fixes and bulk "Fix All" operations
+## Changes Made
 
-### 2. Modified: `src/components/admin/ScoringHealthCheck.tsx`
-- **Fix button** now opens the impact preview dialog instead of applying immediately
-- **Fix All button** opens the impact preview with all fixable issues aggregated
-- **Edit button** (Pencil icon) added to every issue row — opens `AdminKpiEditDialog` for manual editing
-- Removed direct `fixInvertedCriteria` / `fixMissingCriteria` functions (logic moved to impact dialog)
-- Removed `fixingIds` state (no longer needed since fixes go through the dialog)
-- Exported `ScoringIssue` type for use by the impact dialog
+### 1. `KpiJourneySection.tsx` — Display priority fix
+- Changed `score: recalc?.score ?? storedScore` → `score: storedScore ?? recalc?.score`
+- Changed `rating: recalc?.rating ?? storedRating` → `rating: storedRating ?? recalc?.rating`
+- Stored reviewer scores now take precedence; recalculation only fills in when no stored score exists
 
-### 3. No Database Changes Required
-- Uses existing `kpis`, `review_submissions`, and `kpi_audit_logs` tables
-- All simulation runs client-side on fetched data
+### 2. `ManagementScorecard.tsx` — Removed cross-stage fallback
+- Changed `management_achieved_value ?? auditor_achieved_value ?? achieved_value` → `management_achieved_value` only
+- Prevents stale self-review values from being inherited into management stage
+
+### 3. `AuditScorecard.tsx` — Removed cross-stage fallback
+- Changed `auditor_achieved_value ?? manager_achieved_value ?? achieved_value` → `auditor_achieved_value` only
+- Prevents stale previous-stage values from being inherited into audit stage
+
+## Impact
+- Zero changes to scoring rules, thresholds, or KPI logic
+- Zero changes to the final_score fallback chain
+- Display-only fix for Journey panel + pre-fill fix for review sheets
