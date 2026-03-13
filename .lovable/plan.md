@@ -1,40 +1,42 @@
 
-# Plan: Period-Specific Workflow Mapping — IMPLEMENTED ✅
 
-## What Was Done
+# Fix: "type review_rating does not exist" in Reconcile RPC
 
-### 1. Database Migration
-- Added `review_period` (TEXT) and `review_year` (INT) columns to `workflow_config` table.
-- Replaced single unique constraint with two partial unique indexes:
-  - Global: `UNIQUE(config_type, config_value) WHERE review_period IS NULL`
-  - Period-specific: `UNIQUE(config_type, config_value, review_period, review_year) WHERE review_period IS NOT NULL`
-- Updated 3 RPCs (`get_employee_workflow`, `get_employee_workflow_info`, `get_bulk_employee_workflows`) with optional `p_review_period` and `p_review_year` parameters.
+## Root Cause Analysis
 
-### 2. Resolution Cascade (7 levels)
+The dry-run (`p_dry_run = true`) succeeds because it never executes the UPDATE path. When the user clicks "Confirm & Reconcile" (`p_dry_run = false`), the function hits this line:
+
+```sql
+UPDATE review_submissions
+SET final_rating = v_best_rating::review_rating,  -- ← THIS TYPE DOES NOT EXIST
+    ...
 ```
-1. Period-specific employee config
-2. Period-specific department config
-3. Period-specific PMS grade config
-4. Global employee config
-5. Global department config
-6. Global PMS grade config
-7. Default template
+
+The database has a type called **`rating_level`**, not `review_rating`. The incorrect cast causes a `42704` error.
+
+**Error from network response:**
 ```
-When period params are NULL, steps 1-3 are skipped (backward compatible).
+{"code":"42704","message":"type \"review_rating\" does not exist"}
+```
 
-### 3. Frontend — `useWorkflowConfig.ts`
-- Updated `WorkflowConfig` interface with `review_period` and `review_year` fields.
-- Updated `useUpsertWorkflowConfig` mutation to accept optional period params (uses find-then-update/insert pattern for partial unique indexes).
-- Updated `useEmployeeWorkflow`, `useEmployeeWorkflowStages`, `useBulkEmployeeWorkflows` hooks to accept optional period params and pass them to RPCs.
+## Fix (1 Migration)
 
-### 4. Frontend — `WorkflowConfig.tsx`
-- Added period selector at the top: "Global Default" or "Specific Period" (month + year).
-- When "Global Default" selected: shows/edits configs where `review_period IS NULL`.
-- When specific period selected: shows/edits configs scoped to that period.
-- Shows "Inherits: [template]" badge when a global config exists but no period override.
-- Shows period badge on period-specific assignments.
-- Updated priority cascade description text dynamically.
+Create a migration that replaces the `reconcile_workflow_statuses` function, changing the single cast from `::review_rating` to `::rating_level`.
 
-### 5. Backward Compatibility
-- All existing callers that don't pass period params continue to get global resolution.
-- No breaking changes to `workflowEngine.ts`, scorecards, or other consumers.
+**Line to change:**
+```sql
+-- Before:
+final_rating = v_best_rating::review_rating,
+
+-- After:
+final_rating = v_best_rating::rating_level,
+```
+
+The rest of the function remains identical.
+
+## Files Modified
+
+1. **New SQL migration** — `CREATE OR REPLACE FUNCTION reconcile_workflow_statuses` with the corrected type cast
+
+No frontend changes needed.
+
