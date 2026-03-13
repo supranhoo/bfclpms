@@ -446,6 +446,7 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
         onOpenChange={setImpactOpen}
         issues={impactIssues}
         onComplete={handleImpactComplete}
+        readOnly={impactReadOnly}
       />
 
       <AdminKpiEditDialog
