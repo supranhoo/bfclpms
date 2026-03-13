@@ -1137,7 +1137,8 @@ export function UnifiedScorecard({
   };
 
   // Determine view type for KpiDetailsTable
-  const viewType = viewLevel === 'manager' ? 'team-review'
+  const viewType = viewLevel === 'self' ? 'my-kpis'
+               : viewLevel === 'manager' ? 'team-review'
                : viewLevel === 'auditor' ? 'audit'
                : viewLevel === 'skip_level' ? 'skip-level-review'
                : viewLevel === 'hr_pms' ? 'hr-pms-review'
