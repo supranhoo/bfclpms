@@ -1266,6 +1266,42 @@ export function UnifiedScorecard({
         </Card>
       </div>
 
+      {/* Pending Period Alerts (self mode) */}
+      {isSelfMode && pendingPeriods.length > 0 && (
+        <div className="space-y-2">
+          {pendingPeriods.map(pp => (
+            <Alert key={pp.key} className="border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <AlertDescription className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-sm text-amber-800 dark:text-amber-200">
+                  You have <strong>{pp.count} pending KPI{pp.count > 1 ? 's' : ''}</strong> for {pp.month} {pp.year} that need your action.
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm"
+                    className="h-7 text-xs border-amber-400 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900"
+                    onClick={() => onPeriodSelectionChange({
+                      ...periodSelection,
+                      mode: 'single' as const,
+                      selectedMonth: pp.month,
+                      selectedYear: pp.year,
+                      months: [pp.month],
+                      periodRanges: [{ month: pp.month, year: pp.year }],
+                    })}
+                  >
+                    Switch to {pp.month.substring(0, 3)} {pp.year}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-amber-600 dark:text-amber-400"
+                    onClick={() => setDismissedPendingPeriods(prev => [...prev, pp.key])}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          ))}
+        </div>
+      )}
+
       {/* 3. Status Progress - Full Width Workflow Tracker (not compact) */}
       <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} workflowStages={effectiveStages} activeFilter={statusFilter} onFilterChange={setStatusFilter} />
 
