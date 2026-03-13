@@ -392,10 +392,16 @@ export default function AllKpis() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Admin KPI Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Monitor KPI status across all employees and workflow stages</p>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-foreground">Admin KPI Dashboard</h1>
+            <p className="text-sm text-muted-foreground">Monitor KPI status across all employees and workflow stages</p>
+          </div>
+          <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Assign KRA
+          </Button>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <ScoringHealthCheck
@@ -403,21 +409,18 @@ export default function AllKpis() {
             selectedPeriod={selectedPeriod}
             selectedYear={selectedYear}
           />
+          <div className="h-5 w-px bg-border hidden sm:block" />
           <Button variant="outline" size="sm" onClick={handleExportExcel}>
-            <Download className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Export Excel</span>
+            <Download className="h-4 w-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Export</span>
           </Button>
           <Button variant="outline" size="sm" onClick={() => setIsCopyKrasOpen(true)}>
-            <Copy className="h-4 w-4 sm:mr-2" />
+            <Copy className="h-4 w-4 sm:mr-1.5" />
             <span className="hidden sm:inline">Copy KRAs</span>
           </Button>
           <Button variant="outline" size="sm" onClick={() => setIsBulkAssignOpen(true)}>
-            <Library className="h-4 w-4 sm:mr-2" />
+            <Library className="h-4 w-4 sm:mr-1.5" />
             <span className="hidden sm:inline">Bulk Assign</span>
-          </Button>
-          <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-            <Plus className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Assign KRA</span>
           </Button>
         </div>
       </div>
@@ -471,128 +474,126 @@ export default function AllKpis() {
         </Card>
       </div>
 
-      {/* Global Filters */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Filters</CardTitle>
+      {/* Compact Filters */}
+      <div className="rounded-lg border bg-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-foreground">Filters</span>
             {hasActiveFilters && (
-              <Button variant="ghost" size="sm" onClick={resetFilters}>
-                Reset
-              </Button>
+              <Badge variant="secondary" className="text-xs">
+                {[selectedManager, selectedDepartment, selectedDivision, selectedPeriod, selectedYear].filter(v => v !== 'all').length} active
+              </Badge>
             )}
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* Reporting Manager */}
-            <Select value={selectedManager} onValueChange={setSelectedManager}>
-              <SelectTrigger>
-                <UserCheck className="h-4 w-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Reporting Manager" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Managers</SelectItem>
-                {managers.map(manager => (
-                  <SelectItem key={manager.id} value={manager.id}>
-                    {manager.full_name || manager.email}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={resetFilters} className="h-7 text-xs">
+              Reset
+            </Button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <Select value={selectedManager} onValueChange={setSelectedManager}>
+            <SelectTrigger className="h-9">
+              <UserCheck className="h-3.5 w-3.5 mr-1.5 text-muted-foreground shrink-0" />
+              <SelectValue placeholder="Manager" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Managers</SelectItem>
+              {managers.map(manager => (
+                <SelectItem key={manager.id} value={manager.id}>
+                  {manager.full_name || manager.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            {/* Department */}
-            <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-              <SelectTrigger>
-                <Building2 className="h-4 w-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Department" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Departments</SelectItem>
-                {departments?.map(dept => (
-                  <SelectItem key={dept.id} value={dept.id}>
-                    {dept.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+            <SelectTrigger className="h-9">
+              <Building2 className="h-3.5 w-3.5 mr-1.5 text-muted-foreground shrink-0" />
+              <SelectValue placeholder="Department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments?.map(dept => (
+                <SelectItem key={dept.id} value={dept.id}>
+                  {dept.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            {/* Division */}
-            <Select value={selectedDivision} onValueChange={setSelectedDivision}>
-              <SelectTrigger>
-                <SelectValue placeholder="Division" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Divisions</SelectItem>
-                {divisions?.map(div => (
-                  <SelectItem key={div.id} value={div.id}>
-                    {div.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Select value={selectedDivision} onValueChange={setSelectedDivision}>
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Division" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Divisions</SelectItem>
+              {divisions?.map(div => (
+                <SelectItem key={div.id} value={div.id}>
+                  {div.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            {/* Period */}
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger>
-                <SelectValue placeholder="Period" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Periods</SelectItem>
-                {availablePeriods.map(period => (
-                  <SelectItem key={period} value={period}>
-                    {period}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Period" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Periods</SelectItem>
+              {availablePeriods.map(period => (
+                <SelectItem key={period} value={period}>
+                  {period}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            {/* Year */}
-            <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger>
-                <SelectValue placeholder="Year" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Years</SelectItem>
-                {availableYears.map(year => (
-                  <SelectItem key={year} value={year?.toString() || ''}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+          <Select value={selectedYear} onValueChange={setSelectedYear}>
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Years</SelectItem>
+              {availableYears.map(year => (
+                <SelectItem key={year} value={year?.toString() || ''}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
       {/* Employee-Stage Matrix Table */}
       <Card>
-        <CardHeader>
-          <CardTitle>KPI Status by Employee</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">KPI Status by Employee</CardTitle>
           <CardDescription>
             {employeeData.length} employees · {stats.totalKpis} total KPIs
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[200px]">Employee Name</TableHead>
-                  <TableHead className="text-center w-[80px]">Total KPIs</TableHead>
-                  <TableHead className="text-center w-[80px]">
+                  <TableHead className="min-w-[220px] sticky left-0 bg-background z-10">Employee Name</TableHead>
+                  <TableHead className="text-center w-[70px]">Total</TableHead>
+                  <TableHead className="text-center w-[70px]">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span className="inline-flex items-center gap-1 cursor-help">
                           <Building className="h-3.5 w-3.5" />
-                          Org-Level
+                          Org
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>Organization-level KPIs with centralized values</TooltipContent>
                     </Tooltip>
                   </TableHead>
                   {WORKFLOW_STAGES.map(stage => (
-                    <TableHead key={stage} className="text-center min-w-[100px]">
+                    <TableHead key={stage} className="text-center min-w-[90px] px-2">
                       {getStageLabel(stage)}
                     </TableHead>
                   ))}
@@ -610,19 +611,19 @@ export default function AllKpis() {
                         className="cursor-pointer hover:bg-muted/50"
                         onClick={() => toggleEmployeeExpansion(emp.employeeId)}
                       >
-                        <TableCell>
+                        <TableCell className="sticky left-0 bg-background z-10">
                           <div className="flex items-center gap-2">
                             {isExpanded ? (
-                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                             ) : (
-                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                             )}
-                            <div>
-                              <div className="font-medium">{emp.employeeName}</div>
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{emp.employeeName}</div>
                               <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
                                 {emp.employeeCode && <span>{emp.employeeCode}</span>}
                                 {emp.employeeCode && <span>·</span>}
-                                <span>{emp.departmentName}</span>
+                                <span className="truncate max-w-[120px]">{emp.departmentName}</span>
                                 {selectedPeriod !== 'all' && (
                                   <>
                                     <span>·</span>
@@ -633,7 +634,7 @@ export default function AllKpis() {
                                           ? 'text-green-600 font-medium'
                                           : 'text-amber-600 font-medium'
                                     }>
-                                      {emp.totalWeightage}% weightage
+                                      {emp.totalWeightage}%
                                     </span>
                                   </>
                                 )}
@@ -670,14 +671,14 @@ export default function AllKpis() {
                           
                           if (count === 0) {
                             return (
-                              <TableCell key={stage} className="text-center text-muted-foreground">
+                              <TableCell key={stage} className="text-center text-muted-foreground px-2">
                                 -
                               </TableCell>
                             );
                           }
 
                           return (
-                            <TableCell key={stage} className="text-center">
+                            <TableCell key={stage} className="text-center px-2">
                               <div className="inline-flex items-center gap-1">
                                 <span className="font-medium">{count}</span>
                                 {queryCount > 0 && (
@@ -744,9 +745,10 @@ export default function AllKpis() {
                                   return (
                                     <div 
                                       key={kpi.id}
-                                      className="flex items-center justify-between p-3 bg-background rounded-lg border hover:border-primary/50 transition-colors"
+                                      className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3 p-3 bg-background rounded-lg border hover:border-primary/50 transition-colors"
                                     >
-                                      <div className="flex-1">
+                                      {/* Left: KPI Info */}
+                                      <div className="min-w-0">
                                         <div className="flex items-center gap-2 flex-wrap">
                                           <span className="font-medium">{kpi.kra_name}</span>
                                           {kpi.is_org_level && (
@@ -754,7 +756,7 @@ export default function AllKpis() {
                                               <TooltipTrigger asChild>
                                                 <Badge variant="outline" className="text-xs border-primary/50 text-primary shrink-0">
                                                   <BuildingIcon className="h-3 w-3 mr-1" />
-                                                  Org-Level
+                                                  Org
                                                 </Badge>
                                               </TooltipTrigger>
                                               <TooltipContent>Organization-level KPI with centralized values</TooltipContent>
@@ -766,20 +768,26 @@ export default function AllKpis() {
                                             </Badge>
                                           )}
                                         </div>
-                                        <div className="text-sm text-muted-foreground mt-1">{kpi.kpi_name}</div>
-                                        <div className="text-xs text-muted-foreground mt-1">
-                                          {kpi.review_period} {kpi.review_year} · {categories?.find(c => c.id === kpi.category_id)?.name || 'Unknown Category'} · Weightage: {kpi.weightage ?? 0}%
+                                        <div className="text-sm text-muted-foreground mt-1 line-clamp-2">{kpi.kpi_name}</div>
+                                        <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5 flex-wrap">
+                                          <span>{kpi.review_period} {kpi.review_year}</span>
+                                          <span>·</span>
+                                          <span className="truncate max-w-[160px]">{categories?.find(c => c.id === kpi.category_id)?.name || 'Unknown'}</span>
+                                          <span>·</span>
+                                          <span>{kpi.weightage ?? 0}%</span>
                                         </div>
                                       </div>
-                                      <div className="flex items-center gap-2 shrink-0 ml-4">
-                                        <Badge variant="outline">{getStageLabel(kpi.status || 'kra_set')}</Badge>
+
+                                      {/* Right: Status + Actions */}
+                                      <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                                        <Badge variant="outline" className="shrink-0">{getStageLabel(kpi.status || 'kra_set')}</Badge>
                                         
-                                        {/* Admin Data Entry Buttons */}
                                         <Tooltip>
                                           <TooltipTrigger asChild>
                                             <Button 
                                               variant="outline" 
-                                              size="sm"
+                                              size="icon"
+                                              className="h-8 w-8"
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 setDataEntryKpi(kpi);
@@ -790,19 +798,19 @@ export default function AllKpis() {
                                                 });
                                               }}
                                             >
-                                              <PenLine className="h-4 w-4" />
+                                              <PenLine className="h-3.5 w-3.5" />
                                             </Button>
                                           </TooltipTrigger>
                                           <TooltipContent>Enter Review Data</TooltipContent>
                                         </Tooltip>
                                         
-                                        {/* Daily/Weekly Entry Button */}
                                         {(isDaily || isWeekly) && (
                                           <Tooltip>
                                             <TooltipTrigger asChild>
                                               <Button 
                                                 variant="outline" 
-                                                size="sm"
+                                                size="icon"
+                                                className="h-8 w-8"
                                                 onClick={(e) => {
                                                   e.stopPropagation();
                                                   setDailyEntryKpi(kpi);
@@ -813,20 +821,20 @@ export default function AllKpis() {
                                                   });
                                                 }}
                                               >
-                                                <CalendarDays className="h-4 w-4" />
+                                                <CalendarDays className="h-3.5 w-3.5" />
                                               </Button>
                                             </TooltipTrigger>
                                             <TooltipContent>{isDaily ? 'Enter Daily Data' : 'Enter Weekly Data'}</TooltipContent>
                                           </Tooltip>
                                         )}
                                         
-                                        {/* Step Back Button */}
                                         {getPreviousStatus(kpi.status || 'kra_set') && (
                                           <Tooltip>
                                             <TooltipTrigger asChild>
                                               <Button 
                                                 variant="outline" 
-                                                size="sm"
+                                                size="icon"
+                                                className="h-8 w-8"
                                                 onClick={(e) => {
                                                   e.stopPropagation();
                                                   setStepBackKpi(kpi);
@@ -836,35 +844,42 @@ export default function AllKpis() {
                                                   });
                                                 }}
                                               >
-                                                <Undo2 className="h-4 w-4" />
+                                                <Undo2 className="h-3.5 w-3.5" />
                                               </Button>
                                             </TooltipTrigger>
                                             <TooltipContent>Step Back Status</TooltipContent>
                                           </Tooltip>
                                         )}
 
-                                        <Button 
-                                          variant="ghost" 
-                                          size="sm"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setEditingKpi(kpi);
-                                          }}
-                                        >
-                                          <Edit className="h-4 w-4" />
-                                        </Button>
                                         <Tooltip>
                                           <TooltipTrigger asChild>
                                             <Button 
                                               variant="ghost" 
-                                              size="sm"
-                                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                              size="icon"
+                                              className="h-8 w-8"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setEditingKpi(kpi);
+                                              }}
+                                            >
+                                              <Edit className="h-3.5 w-3.5" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>Edit KPI</TooltipContent>
+                                        </Tooltip>
+                                        
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button 
+                                              variant="ghost" 
+                                              size="icon"
+                                              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 setDeletingKpi(kpi);
                                               }}
                                             >
-                                              <Trash2 className="h-4 w-4" />
+                                              <Trash2 className="h-3.5 w-3.5" />
                                             </Button>
                                           </TooltipTrigger>
                                           <TooltipContent>Delete KRA</TooltipContent>
