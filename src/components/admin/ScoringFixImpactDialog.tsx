@@ -270,11 +270,11 @@ export function ScoringFixImpactDialog({ open, onOpenChange, issues, onComplete,
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-destructive" />
-            Impact Preview — {isBulk ? `${issues.length} KPIs` : primaryKpi?.kpi_name}
+            {readOnly ? 'Impact Preview' : 'Impact Preview — Fix'} — {isBulk ? `${issues.length} KPIs` : primaryKpi?.kpi_name}
           </DialogTitle>
           <DialogDescription>
             {isBulk
-              ? `Review score impact before applying fixes to ${issues.length} KPIs across all fiscal months.`
+              ? `Review score impact across ${issues.length} KPIs across all fiscal months.`
               : `${primaryIssue?.employeeName} — ${primaryIssue?.description}`}
           </DialogDescription>
         </DialogHeader>
