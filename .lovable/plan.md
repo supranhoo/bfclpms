@@ -1,40 +1,27 @@
 
-# Plan: Period-Specific Workflow Mapping — IMPLEMENTED ✅
+# Plan: Scoring Health Check — Admin Diagnostic & Fix Tool — IMPLEMENTED ✅
 
 ## What Was Done
 
-### 1. Database Migration
-- Added `review_period` (TEXT) and `review_year` (INT) columns to `workflow_config` table.
-- Replaced single unique constraint with two partial unique indexes:
-  - Global: `UNIQUE(config_type, config_value) WHERE review_period IS NULL`
-  - Period-specific: `UNIQUE(config_type, config_value, review_period, review_year) WHERE review_period IS NOT NULL`
-- Updated 3 RPCs (`get_employee_workflow`, `get_employee_workflow_info`, `get_bulk_employee_workflows`) with optional `p_review_period` and `p_review_year` parameters.
+### 1. New Component: `src/components/admin/ScoringHealthCheck.tsx`
+- Client-side diagnostic that scans loaded KPIs for scoring logic issues
+- Detects 5 issue categories:
+  - **Inverted Criteria** (Critical) — "Higher is Better" with descending thresholds or vice versa
+  - **Missing Thresholds** (High) — numeric KPIs with all R5-R1 NULL
+  - **Missing Qualitative Options** (High) — binary/tiered KPIs with no options
+  - **Missing Target** (Medium) — numeric KPIs with NULL target_value
+  - **Missing Criteria** (Medium) — KPIs with NULL criteria field
+- Auto-fix for Inverted Criteria (flips direction) and Missing Criteria (auto-detects from thresholds)
+- Fixes propagate to all fiscal-year siblings (July→June cycle) matching employee_id, kra_name, kpi_name
+- "Fix All" bulk action per category with sequential processing and progress toasts
+- Full audit logging with action `SCORING_HEALTH_FIX`
+- Grouped by employee with expand/collapse, tabbed by severity
 
-### 2. Resolution Cascade (7 levels)
-```
-1. Period-specific employee config
-2. Period-specific department config
-3. Period-specific PMS grade config
-4. Global employee config
-5. Global department config
-6. Global PMS grade config
-7. Default template
-```
-When period params are NULL, steps 1-3 are skipped (backward compatible).
+### 2. Integration: `src/pages/admin/AllKpis.tsx`
+- Added "Health Check" button (ShieldCheck icon) in header button row
+- Shows issue count badge on button when issues exist
+- Passes `filteredKpis`, `selectedPeriod`, `selectedYear` to component
 
-### 3. Frontend — `useWorkflowConfig.ts`
-- Updated `WorkflowConfig` interface with `review_period` and `review_year` fields.
-- Updated `useUpsertWorkflowConfig` mutation to accept optional period params (uses find-then-update/insert pattern for partial unique indexes).
-- Updated `useEmployeeWorkflow`, `useEmployeeWorkflowStages`, `useBulkEmployeeWorkflows` hooks to accept optional period params and pass them to RPCs.
-
-### 4. Frontend — `WorkflowConfig.tsx`
-- Added period selector at the top: "Global Default" or "Specific Period" (month + year).
-- When "Global Default" selected: shows/edits configs where `review_period IS NULL`.
-- When specific period selected: shows/edits configs scoped to that period.
-- Shows "Inherits: [template]" badge when a global config exists but no period override.
-- Shows period badge on period-specific assignments.
-- Updated priority cascade description text dynamically.
-
-### 5. Backward Compatibility
-- All existing callers that don't pass period params continue to get global resolution.
-- No breaking changes to `workflowEngine.ts`, scorecards, or other consumers.
+### 3. No Database Changes Required
+- Uses existing `kpis` and `kpi_audit_logs` tables
+- All detection runs client-side on already-fetched KPI data
