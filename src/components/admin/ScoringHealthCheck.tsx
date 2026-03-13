@@ -245,6 +245,13 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
   // ─── Open impact preview for single fix ──────────────────────────────────
 
   const handleFix = (issue: ScoringIssue) => {
+    setImpactReadOnly(false);
+    setImpactIssues([issue]);
+    setImpactOpen(true);
+  };
+
+  const handleImpactPreview = (issue: ScoringIssue) => {
+    setImpactReadOnly(true);
     setImpactIssues([issue]);
     setImpactOpen(true);
   };
