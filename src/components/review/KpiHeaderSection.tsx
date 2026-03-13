@@ -67,28 +67,6 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
 
   return (
     <>
-    {isAdmin && (
-      <div className="flex justify-end gap-1.5 mb-1.5">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setEditDialogOpen(true)}
-          className="gap-1 h-6 sm:h-7 px-2 text-xs border-primary/30 text-primary"
-        >
-          <Settings className="h-3 w-3 sm:h-4 sm:w-4" />
-          <span className="hidden sm:inline">Admin KPI Editor</span>
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setDataEntryDialogOpen(true)}
-          className="gap-1 h-6 sm:h-7 px-2 text-xs border-primary/30 text-primary"
-        >
-          <ClipboardEdit className="h-3 w-3 sm:h-4 sm:w-4" />
-          <span className="hidden sm:inline">Admin Data Entry</span>
-        </Button>
-      </div>
-    )}
     <div className="p-3 sm:p-4 bg-muted/30 rounded-lg border">
       {/* Badges Row */}
       <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 mb-2 sm:mb-3">
