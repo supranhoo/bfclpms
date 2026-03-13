@@ -253,6 +253,12 @@ export function UnifiedScorecard({
   const auditKpiIdList = useMemo(() => (kpis || []).map(k => k.id), [kpis]);
   const { data: auditKpiAssignments } = useAuditKpiAssignments(viewLevel === 'auditor' ? auditKpiIdList : []);
 
+  // Sub-period submissions for self-mode SelfReviewSheet
+  const selfModeKpiIds = useMemo(() => isSelfMode ? (kpis || []).map(k => k.id) : [], [isSelfMode, kpis]);
+  const { data: subPeriodSubmissions, isLoading: subPeriodLoading } = useSubPeriodSubmissionsByKpis(
+    selfModeKpiIds, selectedPeriod, selectedYear
+  );
+
   // Fetch org KPI values for this period
   const { data: orgKpiValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
 
