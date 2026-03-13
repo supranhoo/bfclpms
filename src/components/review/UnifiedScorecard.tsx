@@ -1391,7 +1391,31 @@ export function UnifiedScorecard({
         </CardContent>
       </Card>
 
-      {/* Review Sheet */}
+      {/* Self Review Sheet - for self mode */}
+      {isSelfMode && (
+        <SelfReviewSheet
+          open={!!selectedKpiForSelfReview}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedKpiForSelfReview(null);
+              setSelfAutoOpenQueryHistory(false);
+            }
+          }}
+          kpi={selectedKpiForSelfReview}
+          allKpis={allKpis || []}
+          submissionMap={submissionMap}
+          allSubmissions={allSubmissions || []}
+          subPeriodSubmissions={subPeriodSubmissions || []}
+          subPeriodLoading={subPeriodLoading || false}
+          orgKpiValuesMap={orgKpiValuesMap as any}
+          selectedPeriod={selectedPeriod}
+          selectedYear={selectedYear}
+          autoOpenQueryHistory={selfAutoOpenQueryHistory}
+        />
+      )}
+
+      {/* Review Sheet (reviewer modes only) */}
+      {!isSelfMode && (
       <Sheet open={reviewSheetOpen} onOpenChange={setReviewSheetOpen}>
         <SheetContent className="flex flex-col h-full w-full sm:w-[85vw] sm:max-w-[1200px] overflow-y-auto p-4 sm:p-6">
           <SheetHeader className="pb-2 sm:pb-4">
