@@ -35,6 +35,21 @@ function KpiWeightageDashboard() {
   const [categoryId, setCategoryId] = useState<string>('');
   const [showInactive, setShowInactive] = useState(false);
   const [openEmployees, setOpenEmployees] = useState<Set<string>>(new Set());
+  const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
+  const [loadingEditKpi, setLoadingEditKpi] = useState(false);
+
+  const handleEditKpi = async (kpiId: string) => {
+    setLoadingEditKpi(true);
+    try {
+      const { data, error } = await supabase.from('kpis').select('*').eq('id', kpiId).single();
+      if (error) throw error;
+      setEditingKpi(data as unknown as KPI);
+    } catch (err: any) {
+      toast.error('Failed to load KPI details');
+    } finally {
+      setLoadingEditKpi(false);
+    }
+  };
 
   const fiscalLabel = (y: number) => `${y}-${String(y + 1).slice(-2)}`;
 
