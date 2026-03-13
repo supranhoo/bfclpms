@@ -624,7 +624,7 @@ export function UnifiedScorecard({
       target: string;
       reason: string;
     }) => {
-      const newStatus = resolveSendBackStatus(target, viewLevel, effectiveStages);
+      const newStatus = resolveSendBackStatus(target, viewLevel as Exclude<ScorecardViewLevel, 'self'>, effectiveStages);
 
       const { data: updatedRows, error: kpiError } = await supabase
         .from('kpis')
