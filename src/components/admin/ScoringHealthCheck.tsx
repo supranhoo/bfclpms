@@ -468,12 +468,13 @@ interface IssueTabContentProps {
   onFix: (issue: ScoringIssue) => void;
   onFixAll: (type: IssueType) => void;
   onEdit: (issue: ScoringIssue) => void;
+  onImpactPreview: (issue: ScoringIssue) => void;
   canAutoFix: (type: IssueType) => boolean;
   severityIcon: (s: IssueSeverity) => React.ReactNode;
   severityBadge: (s: IssueSeverity) => React.ReactNode;
 }
 
-function IssueTabContent({ value, issues, fixedIds, fixingAll, onFix, onFixAll, onEdit, canAutoFix, severityIcon, severityBadge }: IssueTabContentProps) {
+function IssueTabContent({ value, issues, fixedIds, fixingAll, onFix, onFixAll, onEdit, onImpactPreview, canAutoFix, severityIcon, severityBadge }: IssueTabContentProps) {
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
 
   const activeIssues = issues.filter(i => !fixedIds.has(i.kpi.id + i.type));
