@@ -315,6 +315,13 @@ export default function WorkflowConfig() {
                 Showing overrides for {selectedMonth} {selectedYear}
               </Badge>
             )}
+            <div className="ml-auto">
+              <ReconcileOrphanedKpisDialog
+                periodMode={periodMode}
+                selectedMonth={selectedMonth}
+                selectedYear={selectedYear}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
