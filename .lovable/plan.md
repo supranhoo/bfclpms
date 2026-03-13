@@ -1,12 +1,11 @@
 
-
-# Fix: Exclude Unsubmitted KPIs from Score Calculation
+# Fix: Exclude Unsubmitted KPIs from Score Calculation — IMPLEMENTED ✅
 
 ## Problem
-KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) are included in the denominator but contribute 0 to the numerator, deflating overall scores. Affects 61 KPIs across 19 employees in January alone.
+KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
 
-## Change
-One-line guard addition in 4 files — add `if (!submission) return;` before the existing `is_na` check:
+## Fix Applied
+Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
 
 | File | Line | Change |
 |---|---|---|
@@ -15,5 +14,8 @@ One-line guard addition in 4 files — add `if (!submission) return;` before the
 | `AuditScorecard.tsx` | 221 | Same |
 | `ManagementScorecard.tsx` | 222 | Same |
 
-No database migration needed — purely a frontend calculation fix.
-
+## Impact
+- Biswajit's score: 382/468 → 382/443 (correct)
+- 19 employees with unsubmitted KPIs now show accurate weighted scores
+- Quarterly KPIs in non-terminal months are correctly excluded
+- No database migration needed — frontend calculation fix only

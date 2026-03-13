@@ -218,7 +218,7 @@ export function AuditScorecard({
     
     displayKpis.forEach(kpi => {
       const submission = submissionMap.get(kpi.id);
-      if (submission?.is_na) return; // Skip NA KPIs
+      if (!submission || submission.is_na) return; // Skip unsubmitted & NA KPIs
       
       const score = submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? 0;
       const weight = kpi.weightage || 0;
