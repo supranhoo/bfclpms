@@ -316,7 +316,14 @@ export default function WorkflowConfig() {
                 Showing overrides for {selectedMonth} {selectedYear}
               </Badge>
             )}
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-2">
+              <WorkflowConfigExport
+                templates={templates}
+                archivedTemplates={archivedTemplates}
+                configs={configs || []}
+                profiles={profiles || []}
+                departments={departments || []}
+              />
               <ReconcileOrphanedKpisDialog
                 periodMode={periodMode}
                 selectedMonth={selectedMonth}
