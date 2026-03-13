@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { ShieldCheck, AlertTriangle, AlertCircle, Info, ChevronDown, ChevronRight, Wrench, CheckCircle2, Loader2 } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, AlertCircle, Info, ChevronDown, ChevronRight, Wrench, CheckCircle2, Loader2, Pencil } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import type { KPI } from '@/hooks/useKpis';
+import { ScoringFixImpactDialog } from '@/components/admin/ScoringFixImpactDialog';
+import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -24,7 +26,7 @@ type IssueType =
   | 'MISSING_TARGET'
   | 'MISSING_CRITERIA';
 
-interface ScoringIssue {
+export interface ScoringIssue {
   kpi: KPI;
   type: IssueType;
   severity: IssueSeverity;
@@ -163,9 +165,11 @@ async function getFiscalSiblingIds(kpi: KPI): Promise<string[]> {
 
 export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props) {
   const [open, setOpen] = useState(false);
-  const [fixingIds, setFixingIds] = useState<Set<string>>(new Set());
   const [fixedIds, setFixedIds] = useState<Set<string>>(new Set());
   const [fixingAll, setFixingAll] = useState<IssueType | null>(null);
+  const [impactIssues, setImpactIssues] = useState<ScoringIssue[]>([]);
+  const [impactOpen, setImpactOpen] = useState(false);
+  const [editKpi, setEditKpi] = useState<KPI | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -178,112 +182,44 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
 
   const activeIssues = useMemo(() => issues.filter(i => !fixedIds.has(i.kpi.id + i.type)), [issues, fixedIds]);
 
-  // ─── Fix: Inverted Criteria ──────────────────────────────────────────────
+  // ─── Open impact preview for single fix ──────────────────────────────────
 
-  const fixInvertedCriteria = useCallback(async (issue: ScoringIssue) => {
-    const kpi = issue.kpi;
-    const newCriteria = kpi.criteria === 'Higher is Better' ? 'Lower is Better' : 'Higher is Better';
-    const fixKey = kpi.id + issue.type;
+  const handleFix = (issue: ScoringIssue) => {
+    setImpactIssues([issue]);
+    setImpactOpen(true);
+  };
 
-    setFixingIds(prev => new Set(prev).add(fixKey));
-    try {
-      // Fix current KPI
-      const { error } = await supabase
-        .from('kpis')
-        .update({ criteria: newCriteria })
-        .eq('id', kpi.id);
-      if (error) throw error;
+  // ─── Fix All → open bulk impact preview ──────────────────────────────────
 
-      // Fix fiscal siblings
-      const siblingIds = await getFiscalSiblingIds(kpi);
-      if (siblingIds.length > 0) {
-        const { error: sibError } = await supabase
-          .from('kpis')
-          .update({ criteria: newCriteria })
-          .in('id', siblingIds);
-        if (sibError) throw sibError;
-      }
-
-      // Audit log
-      await supabase.from('kpi_audit_logs').insert({
-        kpi_id: kpi.id,
-        action: 'SCORING_HEALTH_FIX',
-        performed_by: user?.id || '',
-        old_value: { criteria: kpi.criteria } as any,
-        new_value: { criteria: newCriteria } as any,
-        metadata: {
-          fix_type: 'inverted_criteria',
-          siblings_fixed: siblingIds.length,
-          source: 'scoring_health_check',
-        } as any,
-      });
-
-      setFixedIds(prev => new Set(prev).add(fixKey));
-      toast({ title: `Fixed: ${kpi.kpi_name}`, description: `Criteria set to "${newCriteria}" (+ ${siblingIds.length} fiscal siblings)` });
-    } catch (err: any) {
-      toast({ title: 'Fix failed', description: err.message, variant: 'destructive' });
-    } finally {
-      setFixingIds(prev => { const n = new Set(prev); n.delete(fixKey); return n; });
-    }
-  }, [user, toast]);
-
-  // ─── Fix: Missing Criteria (auto-detect direction) ───────────────────────
-
-  const fixMissingCriteria = useCallback(async (issue: ScoringIssue) => {
-    const kpi = issue.kpi;
-    const r5 = kpi.r5 != null ? parseFloat(kpi.r5) : null;
-    const r1 = kpi.r1 != null ? parseFloat(kpi.r1) : null;
-    let newCriteria = 'Higher is Better'; // default
-    if (r5 !== null && r1 !== null && !isNaN(r5) && !isNaN(r1)) {
-      newCriteria = r5 >= r1 ? 'Higher is Better' : 'Lower is Better';
-    }
-
-    const fixKey = kpi.id + issue.type;
-    setFixingIds(prev => new Set(prev).add(fixKey));
-    try {
-      const { error } = await supabase.from('kpis').update({ criteria: newCriteria }).eq('id', kpi.id);
-      if (error) throw error;
-
-      const siblingIds = await getFiscalSiblingIds(kpi);
-      if (siblingIds.length > 0) {
-        await supabase.from('kpis').update({ criteria: newCriteria }).in('id', siblingIds);
-      }
-
-      await supabase.from('kpi_audit_logs').insert({
-        kpi_id: kpi.id, action: 'SCORING_HEALTH_FIX', performed_by: user?.id || '',
-        old_value: { criteria: null } as any, new_value: { criteria: newCriteria } as any,
-        metadata: { fix_type: 'missing_criteria', siblings_fixed: siblingIds.length, source: 'scoring_health_check' } as any,
-      });
-
-      setFixedIds(prev => new Set(prev).add(fixKey));
-      toast({ title: `Fixed: ${kpi.kpi_name}`, description: `Criteria auto-set to "${newCriteria}"` });
-    } catch (err: any) {
-      toast({ title: 'Fix failed', description: err.message, variant: 'destructive' });
-    } finally {
-      setFixingIds(prev => { const n = new Set(prev); n.delete(fixKey); return n; });
-    }
-  }, [user, toast]);
-
-  // ─── Fix All for a category ──────────────────────────────────────────────
-
-  const fixAll = useCallback(async (type: IssueType) => {
+  const fixAll = useCallback((type: IssueType) => {
     const fixable = activeIssues.filter(i => i.type === type && (type === 'INVERTED_CRITERIA' || type === 'MISSING_CRITERIA'));
     if (fixable.length === 0) return;
+    setImpactIssues(fixable);
+    setImpactOpen(true);
+  }, [activeIssues]);
 
-    setFixingAll(type);
-    let fixed = 0;
-    for (const issue of fixable) {
-      try {
-        if (type === 'INVERTED_CRITERIA') await fixInvertedCriteria(issue);
-        else if (type === 'MISSING_CRITERIA') await fixMissingCriteria(issue);
-        fixed++;
-      } catch { /* individual toast already shown */ }
+  // ─── Impact dialog complete callback ─────────────────────────────────────
+
+  const handleImpactComplete = useCallback(() => {
+    for (const issue of impactIssues) {
+      setFixedIds(prev => new Set(prev).add(issue.kpi.id + issue.type));
     }
-    setFixingAll(null);
+    setImpactIssues([]);
     queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
     queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
-    toast({ title: `Bulk fix complete`, description: `${fixed}/${fixable.length} KPIs fixed.` });
-  }, [activeIssues, fixInvertedCriteria, fixMissingCriteria, queryClient, toast]);
+  }, [impactIssues, queryClient]);
+
+  // ─── KPI Editor ──────────────────────────────────────────────────────────
+
+  const handleEdit = (issue: ScoringIssue) => {
+    setEditKpi(issue.kpi);
+  };
+
+  const handleEditClose = () => {
+    setEditKpi(null);
+    queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
+    queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+  };
 
   // ─── Invalidate on close ─────────────────────────────────────────────────
 
@@ -314,11 +250,6 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
   };
 
   const canAutoFix = (type: IssueType) => type === 'INVERTED_CRITERIA' || type === 'MISSING_CRITERIA';
-
-  const handleFix = (issue: ScoringIssue) => {
-    if (issue.type === 'INVERTED_CRITERIA') fixInvertedCriteria(issue);
-    else if (issue.type === 'MISSING_CRITERIA') fixMissingCriteria(issue);
-  };
 
   return (
     <>
@@ -402,10 +333,10 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
                 value="critical"
                 issues={criticalIssues}
                 fixedIds={fixedIds}
-                fixingIds={fixingIds}
                 fixingAll={fixingAll}
                 onFix={handleFix}
                 onFixAll={fixAll}
+                onEdit={handleEdit}
                 canAutoFix={canAutoFix}
                 severityIcon={severityIcon}
                 severityBadge={severityBadge}
@@ -414,10 +345,10 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
                 value="high"
                 issues={highIssues}
                 fixedIds={fixedIds}
-                fixingIds={fixingIds}
                 fixingAll={fixingAll}
                 onFix={handleFix}
                 onFixAll={fixAll}
+                onEdit={handleEdit}
                 canAutoFix={canAutoFix}
                 severityIcon={severityIcon}
                 severityBadge={severityBadge}
@@ -426,10 +357,10 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
                 value="medium"
                 issues={mediumIssues}
                 fixedIds={fixedIds}
-                fixingIds={fixingIds}
                 fixingAll={fixingAll}
                 onFix={handleFix}
                 onFixAll={fixAll}
+                onEdit={handleEdit}
                 canAutoFix={canAutoFix}
                 severityIcon={severityIcon}
                 severityBadge={severityBadge}
@@ -438,6 +369,19 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
           )}
         </DialogContent>
       </Dialog>
+
+      <ScoringFixImpactDialog
+        open={impactOpen}
+        onOpenChange={setImpactOpen}
+        issues={impactIssues}
+        onComplete={handleImpactComplete}
+      />
+
+      <AdminKpiEditDialog
+        isOpen={!!editKpi}
+        onClose={handleEditClose}
+        kpi={editKpi}
+      />
     </>
   );
 }
@@ -448,16 +392,16 @@ interface IssueTabContentProps {
   value: string;
   issues: ScoringIssue[];
   fixedIds: Set<string>;
-  fixingIds: Set<string>;
   fixingAll: IssueType | null;
   onFix: (issue: ScoringIssue) => void;
   onFixAll: (type: IssueType) => void;
+  onEdit: (issue: ScoringIssue) => void;
   canAutoFix: (type: IssueType) => boolean;
   severityIcon: (s: IssueSeverity) => React.ReactNode;
   severityBadge: (s: IssueSeverity) => React.ReactNode;
 }
 
-function IssueTabContent({ value, issues, fixedIds, fixingIds, fixingAll, onFix, onFixAll, canAutoFix, severityIcon, severityBadge }: IssueTabContentProps) {
+function IssueTabContent({ value, issues, fixedIds, fixingAll, onFix, onFixAll, onEdit, canAutoFix, severityIcon, severityBadge }: IssueTabContentProps) {
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
 
   const activeIssues = issues.filter(i => !fixedIds.has(i.kpi.id + i.type));
@@ -538,7 +482,6 @@ function IssueTabContent({ value, issues, fixedIds, fixingIds, fixingAll, onFix,
             <CollapsibleContent className="pl-6 space-y-1 pb-2">
               {empIssues.map(issue => {
                 const fixKey = issue.kpi.id + issue.type;
-                const isFixing = fixingIds.has(fixKey);
                 const isFixed = fixedIds.has(fixKey);
 
                 return (
@@ -552,12 +495,18 @@ function IssueTabContent({ value, issues, fixedIds, fixingIds, fixingAll, onFix,
                       <p className="text-muted-foreground text-xs">{issue.description}</p>
                       <p className="text-xs"><span className="text-primary font-medium">Suggested:</span> {issue.suggestedFix}</p>
                     </div>
-                    {canAutoFix(issue.type) && !isFixed && (
-                      <Button variant="outline" size="sm" onClick={() => onFix(issue)} disabled={isFixing} className="shrink-0 gap-1">
-                        {isFixing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
-                        Fix
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button variant="ghost" size="sm" onClick={() => onEdit(issue)} className="gap-1 h-8 px-2">
+                        <Pencil className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Edit</span>
                       </Button>
-                    )}
+                      {canAutoFix(issue.type) && !isFixed && (
+                        <Button variant="outline" size="sm" onClick={() => onFix(issue)} className="gap-1">
+                          <Wrench className="h-3.5 w-3.5" />
+                          Fix
+                        </Button>
+                      )}
+                    </div>
                     {isFixed && (
                       <Badge className="bg-green-500/10 text-green-600 border-green-500/20 shrink-0" variant="outline">
                         <CheckCircle2 className="h-3 w-3 mr-1" /> Fixed
