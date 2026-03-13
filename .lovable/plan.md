@@ -1,25 +1,39 @@
 
-# Fix: KPI Journey Section Showing Wrong Scores — IMPLEMENTED ✅
+# CAPA: Email Pending Report Reminder to Data Owners — IMPLEMENTED ✅
 
 ## Root Cause
-`KpiJourneySection.tsx` prioritized recalculated scores (`recalc?.score ?? storedScore`) over deliberately stored reviewer scores. For binary KPIs where a reviewer intentionally gave 0, the recalculation from an inherited achieved value overrode it to 5.
+Feature was approved but never coded — no edge function, no event type, no UI trigger existed.
 
 ## Changes Made
 
-### 1. `KpiJourneySection.tsx` — Display priority fix
-- Changed `score: recalc?.score ?? storedScore` → `score: storedScore ?? recalc?.score`
-- Changed `rating: recalc?.rating ?? storedRating` → `rating: storedRating ?? recalc?.rating`
-- Stored reviewer scores now take precedence; recalculation only fills in when no stored score exists
+### 1. `src/hooks/useEmailNotificationSettings.ts` — Added event type
+- Added `'org_kpi_pending_reminder'` to `EmailEventType` union
 
-### 2. `ManagementScorecard.tsx` — Removed cross-stage fallback
-- Changed `management_achieved_value ?? auditor_achieved_value ?? achieved_value` → `management_achieved_value` only
-- Prevents stale self-review values from being inherited into management stage
+### 2. `src/components/admin/EmailNotificationSettings.tsx` — Added toggle
+- Added `org_kpi_pending_reminder` entry to `EMAIL_EVENTS` array so admins can enable/disable it
 
-### 3. `AuditScorecard.tsx` — Removed cross-stage fallback
-- Changed `auditor_achieved_value ?? manager_achieved_value ?? achieved_value` → `auditor_achieved_value` only
-- Prevents stale previous-stage values from being inherited into audit stage
+### 3. `supabase/functions/send-email-notification/index.ts` — Added template & style
+- Added `org_kpi_pending_reminder` to `DEFAULT_TEMPLATES` with subject/body using `{{pending_count}}`, `{{pending_table}}`
+- Added `org_kpi_pending_reminder` to `EVENT_STYLES` with orange color + ⏳ emoji
+
+### 4. `supabase/functions/send-pending-report-reminder/index.ts` — New edge function
+- Accepts `{ review_period, review_year }` from request body
+- Validates admin JWT
+- Checks email notifications enabled + event enabled in system_settings
+- Queries org-level KPIs, existing values, and data owners
+- Groups pending KPIs by data owner
+- Sends personalized HTML email per owner via `send-email-notification` function
+- Returns `{ success, owners_notified, total_pending }`
+
+### 5. `supabase/config.toml` — Registered function
+- Added `[functions.send-pending-report-reminder]` with `verify_jwt = false`
+
+### 6. `src/pages/admin/OrgKpiDataEntry.tsx` — Added Send Reminder button
+- Mail icon button next to Pending Report, admin-only
+- Invokes edge function with current period/year
+- Shows toast with result count
 
 ## Impact
-- Zero changes to scoring rules, thresholds, or KPI logic
-- Zero changes to the final_score fallback chain
-- Display-only fix for Journey panel + pre-fill fix for review sheets
+- No schema changes, no RLS changes
+- Leverages existing email infrastructure (multi-provider support)
+- Admin-configurable via Email Notification Settings toggle
