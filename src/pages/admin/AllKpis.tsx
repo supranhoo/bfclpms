@@ -21,6 +21,7 @@ import { AdminDailyEntryDialog } from '@/components/admin/AdminDailyEntryDialog'
 import { AdminStatusStepBackDialog } from '@/components/admin/AdminStatusStepBackDialog';
 import { CopyKrasDialog } from '@/components/admin/CopyKrasDialog';
 import { KraIssuanceConfirmDialog } from '@/components/admin/KraIssuanceConfirmDialog';
+import { ScoringHealthCheck } from '@/components/admin/ScoringHealthCheck';
 import { getPreviousStatus } from '@/hooks/useAdminDataEntry';
 import { getCalendarMonthsForPeriod, MONTH_NAMES } from '@/hooks/useAdminReports';
 import { Users, Target, AlertTriangle, Plus, PercentIcon, Building2, UserCheck, Download, Building, Library, ChevronDown, ChevronRight, Edit, Building as BuildingIcon, PenLine, CalendarDays, Copy, Trash2, Undo2, Send, CheckCircle, ArrowUp } from 'lucide-react';
@@ -397,6 +398,11 @@ export default function AllKpis() {
           <p className="text-sm text-muted-foreground">Monitor KPI status across all employees and workflow stages</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <ScoringHealthCheck
+            kpis={filteredKpis || []}
+            selectedPeriod={selectedPeriod}
+            selectedYear={selectedYear}
+          />
           <Button variant="outline" size="sm" onClick={handleExportExcel}>
             <Download className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Export Excel</span>
