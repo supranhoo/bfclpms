@@ -128,9 +128,9 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
       </div>
 
       {/* Reporting Manager */}
-      {managerName && (
+      {employeeProfile?.managerName && (
         <div className="text-xs text-muted-foreground text-right -mt-1 mb-2">
-          👤 Reporting Manager: {managerName}
+          👤 Reporting Manager: {employeeProfile.managerName}
         </div>
       )}
 
