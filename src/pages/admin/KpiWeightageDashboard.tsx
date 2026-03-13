@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, ChevronRight, Download, Search, AlertTriangle, CheckCircle2, Pencil, Plus, Settings2 } from 'lucide-react';
+import { Loader2, ChevronRight, Download, Search, AlertTriangle, CheckCircle2, Pencil, Plus } from 'lucide-react';
 import { useKpiWeightageMatrix, type EmployeeMatrix } from '@/hooks/useKpiWeightageMatrix';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
