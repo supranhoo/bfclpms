@@ -86,7 +86,7 @@ function getFiscalStartYear(month: string, year: number): number {
   return idx >= 6 ? year : year - 1;
 }
 
-export function ScoringFixImpactDialog({ open, onOpenChange, issues, onComplete }: Props) {
+export function ScoringFixImpactDialog({ open, onOpenChange, issues, onComplete, readOnly = false }: Props) {
   const [siblings, setSiblings] = useState<SiblingWithSubmission[]>([]);
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
