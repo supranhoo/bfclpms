@@ -66,6 +66,7 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   });
 
   return (
+    <>
     <div className="p-3 sm:p-4 bg-muted/30 rounded-lg border">
       {/* Badges Row */}
       <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 mb-2 sm:mb-3">
