@@ -179,6 +179,14 @@ export function UnifiedScorecard({
   const remarksMandatory = useRemarksMandatorySettings();
   
   const staticConfig = VIEW_LEVEL_STATIC[viewLevel];
+  const isSelfMode = viewLevel === 'self';
+  
+  // Self-mode specific hooks & state
+  const { data: kraCategories } = useKraCategories();
+  const [activeCategory, setActiveCategory] = useState<string>('All');
+  const [selectedKpiForSelfReview, setSelectedKpiForSelfReview] = useState<KPI | null>(null);
+  const [selfAutoOpenQueryHistory, setSelfAutoOpenQueryHistory] = useState(false);
+  const [dismissedPendingPeriods, setDismissedPendingPeriods] = useState<string[]>([]);
   
   // Fetch the employee's workflow stages dynamically
   const { data: workflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(employee.id);
