@@ -307,35 +307,39 @@ export function ScoringFixImpactDialog({ open, onOpenChange, issues, onComplete,
               </TableHeader>
               <TableBody>
                 {siblings.map(sib => (
-                  <TableRow key={sib.kpiId} className={!sib.selected ? 'opacity-50' : ''}>
-                    <TableCell>
-                      <Checkbox
-                        checked={sib.selected}
-                        onCheckedChange={() => toggleMonth(sib.kpiId)}
-                      />
-                    </TableCell>
+                  <TableRow key={sib.kpiId} className={!readOnly && !sib.selected ? 'opacity-50' : ''}>
+                    {!readOnly && (
+                      <TableCell>
+                        <Checkbox
+                          checked={sib.selected}
+                          onCheckedChange={() => toggleMonth(sib.kpiId)}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell className="font-medium">{sib.month}</TableCell>
                     <TableCell>{sib.year}</TableCell>
                     <TableCell className="text-right">
                       {sib.achievedValue !== null ? sib.achievedValue : <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell>{scoreDisplay(sib.currentScore, sib.currentRating)}</TableCell>
-                    <TableCell>{scoreDisplay(sib.simulatedScore, sib.simulatedRating)}</TableCell>
-                    <TableCell className="text-center">
-                      {sib.scoreChange === null ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : sib.scoreChange > 0 ? (
-                        <span className="text-green-600 flex items-center justify-center gap-0.5">
-                          <ArrowUp className="h-3.5 w-3.5" />+{sib.scoreChange}
-                        </span>
-                      ) : sib.scoreChange < 0 ? (
-                        <span className="text-destructive flex items-center justify-center gap-0.5">
-                          <ArrowDown className="h-3.5 w-3.5" />{sib.scoreChange}
-                        </span>
-                      ) : (
-                        <Minus className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
-                      )}
-                    </TableCell>
+                    {!readOnly && <TableCell>{scoreDisplay(sib.simulatedScore, sib.simulatedRating)}</TableCell>}
+                    {!readOnly && (
+                      <TableCell className="text-center">
+                        {sib.scoreChange === null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : sib.scoreChange > 0 ? (
+                          <span className="text-green-600 flex items-center justify-center gap-0.5">
+                            <ArrowUp className="h-3.5 w-3.5" />+{sib.scoreChange}
+                          </span>
+                        ) : sib.scoreChange < 0 ? (
+                          <span className="text-destructive flex items-center justify-center gap-0.5">
+                            <ArrowDown className="h-3.5 w-3.5" />{sib.scoreChange}
+                          </span>
+                        ) : (
+                          <Minus className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
+                        )}
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
                 {siblings.length === 0 && (
