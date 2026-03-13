@@ -97,7 +97,7 @@ interface UnifiedScorecardProps {
   employee: EmployeeProfile;
   periodSelection: PeriodSelection;
   onPeriodSelectionChange: (selection: PeriodSelection) => void;
-  onBack: () => void;
+  onBack?: () => void;
   autoOpenKpiId?: string | null;
 }
 
