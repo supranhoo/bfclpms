@@ -480,7 +480,7 @@ export function UnifiedScorecard({
     
     displayKpis.forEach(kpi => {
       const submission = submissionMap.get(kpi.id);
-      if (submission?.is_na) return;
+      if (!submission || submission.is_na) return; // Skip unsubmitted & NA KPIs
       
       const score = getRelevantScore(submission);
       const weight = kpi.weightage || 0;
