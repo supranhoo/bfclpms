@@ -597,6 +597,16 @@ Description: {{observation_description}}
 
 Please log in to review the observation and respond if needed.`,
   },
+  org_kpi_pending_reminder: {
+    subject: '[PMS] Pending Org KPI Data Entry Reminder - {{review_period}} {{review_year}}',
+    body: `Hi {{recipient_name}},
+
+You have {{pending_count}} pending organization KPI(s) that require data entry for {{review_period}} {{review_year}}.
+
+{{pending_table}}
+
+Please log in and enter the required data at your earliest convenience.`,
+  },
 };
 
 const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string }> = {
