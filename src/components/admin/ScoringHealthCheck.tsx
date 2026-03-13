@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { ShieldCheck, AlertTriangle, AlertCircle, Info, ChevronDown, ChevronRight, Wrench, CheckCircle2, Loader2 } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, AlertCircle, Info, ChevronDown, ChevronRight, Wrench, CheckCircle2, Loader2, Pencil } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
