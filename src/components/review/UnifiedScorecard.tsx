@@ -1338,16 +1338,17 @@ export function UnifiedScorecard({
             <div className="space-y-3">
               {sortedKpis.map(kpi => {
                 const submission = submissionMap.get(kpi.id);
+                const selfReviewHandler = (k: KPI) => { setSelfAutoOpenQueryHistory(false); setSelectedKpiForSelfReview(k); };
                 return (
                   <MobileKpiCard
                     key={kpi.id}
                     kpi={kpi}
                     submission={submission}
                     viewType={viewType}
-                    onAction={openReviewSheet}
-                    onView={openReviewSheet}
+                    onAction={isSelfMode ? selfReviewHandler : openReviewSheet}
+                    onView={isSelfMode ? selfReviewHandler : openReviewSheet}
                     onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
-                    onSendBack={openSendBackDialog}
+                    onSendBack={isSelfMode ? undefined : openSendBackDialog}
                     onToggleExpand={toggleDailyExpand}
                     isExpanded={expandedDailyKpis.has(kpi.id)}
                     getOrgKpiValue={getOrgKpiValue}
@@ -1372,9 +1373,13 @@ export function UnifiedScorecard({
               viewType={viewType}
               selectedPeriod={selectedPeriod}
               selectedYear={selectedYear}
-              onReview={openReviewSheet}
-              onView={openReviewSheet}
-              onSendBack={openSendBackDialog}
+              onReview={isSelfMode 
+                ? (kpi: KPI) => { setSelfAutoOpenQueryHistory(false); setSelectedKpiForSelfReview(kpi); } 
+                : openReviewSheet}
+              onView={isSelfMode 
+                ? (kpi: KPI) => { setSelfAutoOpenQueryHistory(false); setSelectedKpiForSelfReview(kpi); } 
+                : openReviewSheet}
+              onSendBack={isSelfMode ? undefined : openSendBackDialog}
               onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
               expandedKpis={expandedDailyKpis}
               onToggleExpand={toggleDailyExpand}
