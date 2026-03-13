@@ -1155,33 +1155,46 @@ export function UnifiedScorecard({
 
   return (
     <div className="space-y-6">
-      {/* 1. Profile + Filters Row - Matches Dashboard Layout */}
+      {/* 1. Profile + Filters Row */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        {/* Profile Card - Left with Back Button */}
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <Avatar className="h-10 w-10 sm:h-12 sm:w-12 shrink-0 border-2 border-primary/20">
-            <AvatarImage src={employee.avatar_url || undefined} />
-            <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-              {getInitials(employee.full_name)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg sm:text-xl font-bold truncate">{employee.full_name || employee.email}</h1>
-              {employee.employee_code && (
-                <span className="text-xs sm:text-sm text-muted-foreground">({employee.employee_code})</span>
-              )}
+        {/* Profile Card */}
+        {isSelfMode ? (
+          <ProfileCard
+            profile={{
+              full_name: employee.full_name,
+              designation: employee.designation,
+              employee_code: employee.employee_code,
+              avatar_url: employee.avatar_url,
+              email: employee.email,
+            }}
+            compact
+          />
+        ) : (
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <Avatar className="h-10 w-10 sm:h-12 sm:w-12 shrink-0 border-2 border-primary/20">
+              <AvatarImage src={employee.avatar_url || undefined} />
+              <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                {getInitials(employee.full_name)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg sm:text-xl font-bold truncate">{employee.full_name || employee.email}</h1>
+                {employee.employee_code && (
+                  <span className="text-xs sm:text-sm text-muted-foreground">({employee.employee_code})</span>
+                )}
+              </div>
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                {employee.designation || 'Employee'}
+              </p>
             </div>
-            <p className="text-xs sm:text-sm text-muted-foreground truncate">
-              {employee.designation || 'Employee'}
-            </p>
           </div>
-        </div>
+        )}
 
-        {/* Filters - Right (matching Dashboard with Cumulative Mode) */}
+        {/* Filters */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 flex-shrink-0">
           <ReviewPeriodSelectorEnhanced
             value={periodSelection}
@@ -1189,9 +1202,31 @@ export function UnifiedScorecard({
           />
           
           <div className="h-6 w-px bg-border hidden sm:block" />
+
+          {isSelfMode && availableSelfCategories.length > 0 && (
+            <>
+              <Select value={activeCategory} onValueChange={setActiveCategory}>
+                <SelectTrigger className="w-full sm:w-[140px] h-8 text-xs">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All" className="text-xs">All Categories</SelectItem>
+                  {availableSelfCategories.map((cat: any) => (
+                    <SelectItem key={cat.id} value={cat.name} className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color || 'hsl(var(--primary))' }} />
+                        {cat.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="h-6 w-px bg-border hidden sm:block" />
+            </>
+          )}
           
-          <Badge variant="outline" className="text-xs h-6 px-2 whitespace-nowrap">
-            {kpis?.length || 0} KPIs
+          <Badge variant="outline" className="text-xs h-6 px-2 ml-auto whitespace-nowrap">
+            {sortedKpis.length}/{kpis?.length || 0} KPIs
           </Badge>
         </div>
       </div>
