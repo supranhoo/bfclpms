@@ -828,7 +828,7 @@ export default function OrgKpiDataEntry() {
             achievedValue: val?.achieved_value ?? null,
             remark: val?.remarks ?? '',
             daysPending: status === 'Pending' ? daysSincePeriodStart : null,
-          });
+            daysSinceLastUpdate: (status !== 'Pending' && val?.updated_at) ? differenceInDays(today, new Date(val.updated_at)) : null,
         });
       }
     });
