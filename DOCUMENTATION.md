@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-06  
-> **Version:** 1.52.0 — Org KPI Data Entry governance enforcement: Data Owners now respect review period locks (edit_scores, view_only) via useReviewPeriodPermissions hook; GovernanceLockBanner displayed when restrictions apply
+> **Last Updated:** 2026-03-13  
+> **Version:** 1.53.0 — Workflow Reconciliation: Added `reconcile_workflow_statuses` RPC and "Reconcile Orphaned KPIs" button on Workflow Configuration page to detect and auto-approve KPIs stuck in statuses that no longer exist after a workflow template change
 > **Maintainer:** Lovable AI
 
 ---

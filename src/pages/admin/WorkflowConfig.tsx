@@ -25,6 +25,7 @@ import { useDepartments } from '@/hooks/useOrganization';
 import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil, Star, Archive, RotateCcw, ChevronDown, Calendar, Globe } from 'lucide-react';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import CustomWorkflowDialog from '@/components/admin/CustomWorkflowDialog';
+import ReconcileOrphanedKpisDialog from '@/components/admin/ReconcileOrphanedKpisDialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
@@ -314,6 +315,13 @@ export default function WorkflowConfig() {
                 Showing overrides for {selectedMonth} {selectedYear}
               </Badge>
             )}
+            <div className="ml-auto">
+              <ReconcileOrphanedKpisDialog
+                periodMode={periodMode}
+                selectedMonth={selectedMonth}
+                selectedYear={selectedYear}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
