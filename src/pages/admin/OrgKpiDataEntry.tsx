@@ -281,13 +281,13 @@ export default function OrgKpiDataEntry() {
       let status: 'pending' | 'entered' | 'propagated' = 'pending';
 
       if (scope === 'organization') {
-        const key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+        const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
         const val = existingValuesMap.get(key);
         if ((val?.achieved_value !== null && val?.achieved_value !== undefined) || val?.is_na) {
           status = val?.status === 'propagated' ? 'propagated' : 'entered';
         }
       } else {
-        const prefix = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||`;
+        const prefix = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||`;
         const matching = Array.from(existingValuesMap.entries()).filter(([k, v]) =>
           k.startsWith(prefix) && ((v.achieved_value !== null && v.achieved_value !== undefined) || v.is_na)
         );
