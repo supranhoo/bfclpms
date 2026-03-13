@@ -448,7 +448,9 @@ export function UnifiedScorecard({
       return submission.final_score;
     }
     // Fallback to level-specific scores for in-progress reviews
-    if (viewLevel === 'manager') {
+    if (viewLevel === 'self') {
+      return submission.self_score ?? 0;
+    } else if (viewLevel === 'manager') {
       return submission.manager_score ?? submission.self_score ?? 0;
     } else if (viewLevel === 'auditor') {
       return submission.auditor_score ?? submission.manager_score ?? submission.self_score ?? 0;
