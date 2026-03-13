@@ -289,18 +289,20 @@ export function ScoringFixImpactDialog({ open, onOpenChange, issues, onComplete,
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-10">
-                    <Checkbox
-                      checked={allSelected}
-                      onCheckedChange={(checked) => toggleAll(!!checked)}
-                    />
-                  </TableHead>
+                  {!readOnly && (
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={allSelected}
+                        onCheckedChange={(checked) => toggleAll(!!checked)}
+                      />
+                    </TableHead>
+                  )}
                   <TableHead>Month</TableHead>
                   <TableHead>Year</TableHead>
                   <TableHead className="text-right">Achieved</TableHead>
                   <TableHead>Current Score</TableHead>
-                  <TableHead>Simulated Score</TableHead>
-                  <TableHead className="w-16 text-center">Change</TableHead>
+                  {!readOnly && <TableHead>Simulated Score</TableHead>}
+                  {!readOnly && <TableHead className="w-16 text-center">Change</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
