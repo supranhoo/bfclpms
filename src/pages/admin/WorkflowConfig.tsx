@@ -22,11 +22,17 @@ import {
   type WorkflowTemplate,
 } from '@/hooks/useWorkflowConfig';
 import { useDepartments } from '@/hooks/useOrganization';
-import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil, Star, Archive, RotateCcw, ChevronDown } from 'lucide-react';
+import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil, Star, Archive, RotateCcw, ChevronDown, Calendar, Globe } from 'lucide-react';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import CustomWorkflowDialog from '@/components/admin/CustomWorkflowDialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
 // Stage color mapping
 const stageColors: Record<string, string> = {
   kra_set: 'bg-muted text-muted-foreground',
@@ -64,7 +70,14 @@ export default function WorkflowConfig() {
   const [deleteTarget, setDeleteTarget] = useState<WorkflowTemplate | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<WorkflowTemplate | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
-  
+
+  // Period selector state: 'global' or specific period
+  const currentYear = new Date().getFullYear();
+  const [periodMode, setPeriodMode] = useState<'global' | 'specific'>('global');
+  const [selectedMonth, setSelectedMonth] = useState(MONTHS[new Date().getMonth()]);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const years = [currentYear - 1, currentYear, currentYear + 1];
+
   const { data: allTemplates, isLoading: templatesLoading } = useWorkflowTemplates(true);
   const { data: configs, isLoading: configsLoading } = useWorkflowConfigs();
   const { data: departments } = useDepartments();
@@ -78,6 +91,21 @@ export default function WorkflowConfig() {
   // Split templates into active and archived
   const templates = useMemo(() => allTemplates?.filter(t => t.is_active) || [], [allTemplates]);
   const archivedTemplates = useMemo(() => allTemplates?.filter(t => !t.is_active) || [], [allTemplates]);
+
+  // Filter configs based on period selection
+  const filteredConfigs = useMemo(() => {
+    if (!configs) return [];
+    if (periodMode === 'global') {
+      return configs.filter(c => !c.review_period);
+    }
+    return configs.filter(c => c.review_period === selectedMonth && c.review_year === selectedYear);
+  }, [configs, periodMode, selectedMonth, selectedYear]);
+
+  // Also get global configs for showing "inherited" indicators when in period mode
+  const globalConfigs = useMemo(() => {
+    if (!configs) return [];
+    return configs.filter(c => !c.review_period);
+  }, [configs]);
   
   // Fetch all profiles for employee tab
   const { data: profiles } = useQuery({
@@ -113,9 +141,14 @@ export default function WorkflowConfig() {
     );
   }, [profiles, employeeSearch]);
   
-  // Helper to get config for a specific type and value
+  // Helper to get config for a specific type and value (from filtered configs)
   const getConfigFor = (type: string, value: string) => {
-    return configs?.find(c => c.config_type === type && c.config_value === value);
+    return filteredConfigs.find(c => c.config_type === type && c.config_value === value);
+  };
+
+  // Helper to get global config for showing inherited badge
+  const getGlobalConfigFor = (type: string, value: string) => {
+    return globalConfigs.find(c => c.config_type === type && c.config_value === value);
   };
   
   // Helper to get template by id
@@ -134,10 +167,14 @@ export default function WorkflowConfig() {
         configType,
         configValue,
         workflowTemplateId: templateId,
+        reviewPeriod: periodMode === 'specific' ? selectedMonth : null,
+        reviewYear: periodMode === 'specific' ? selectedYear : null,
       });
       toast({
         title: 'Workflow assigned',
-        description: 'The workflow configuration has been saved.',
+        description: periodMode === 'specific' 
+          ? `Workflow assigned for ${selectedMonth} ${selectedYear}.`
+          : 'The workflow configuration has been saved.',
       });
     } catch {
       toast({
@@ -169,6 +206,33 @@ export default function WorkflowConfig() {
     return <ReviewPanelSkeleton />;
   }
 
+  // Render inherited badge when in period mode and a global config exists but no period-specific one
+  const renderInheritedBadge = (type: string, value: string) => {
+    if (periodMode !== 'specific') return null;
+    const periodConfig = getConfigFor(type, value);
+    const globalConfig = getGlobalConfigFor(type, value);
+    if (!periodConfig && globalConfig) {
+      const tmpl = getTemplate(globalConfig.workflow_template_id);
+      return (
+        <div className="mt-1">
+          <Badge variant="outline" className="text-xs gap-1">
+            <Globe className="h-3 w-3" />
+            Inherits: {tmpl?.display_name || 'Global'}
+          </Badge>
+        </div>
+      );
+    }
+    if (periodConfig) {
+      return (
+        <Badge variant="secondary" className="text-xs gap-1 mt-1">
+          <Calendar className="h-3 w-3" />
+          {selectedMonth} {selectedYear}
+        </Badge>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -186,9 +250,72 @@ export default function WorkflowConfig() {
             Priority Cascade
           </CardTitle>
           <CardDescription>
-            Workflows are resolved in this order: Employee &gt; Department &gt; PMS Grade &gt; Default
+            {periodMode === 'specific' 
+              ? `Resolution: Period-specific (Employee > Dept > Grade) → Global (Employee > Dept > Grade) → Default`
+              : `Workflows are resolved in this order: Employee > Department > PMS Grade > Default`
+            }
           </CardDescription>
         </CardHeader>
+      </Card>
+
+      {/* Period Selector */}
+      <Card>
+        <CardContent className="pt-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="text-sm font-medium whitespace-nowrap">Scope:</span>
+            </div>
+            <Select value={periodMode} onValueChange={(v) => setPeriodMode(v as 'global' | 'specific')}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="global">
+                  <span className="flex items-center gap-2">
+                    <Globe className="h-3.5 w-3.5" />
+                    Global Default
+                  </span>
+                </SelectItem>
+                <SelectItem value="specific">
+                  <span className="flex items-center gap-2">
+                    <Calendar className="h-3.5 w-3.5" />
+                    Specific Period
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            {periodMode === 'specific' && (
+              <div className="flex gap-2">
+                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MONTHS.map(m => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={String(selectedYear)} onValueChange={(v) => setSelectedYear(parseInt(v))}>
+                  <SelectTrigger className="w-[90px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {years.map(y => (
+                      <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {periodMode === 'specific' && (
+              <Badge variant="outline" className="text-xs">
+                Showing overrides for {selectedMonth} {selectedYear}
+              </Badge>
+            )}
+          </div>
+        </CardContent>
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -357,6 +484,7 @@ export default function WorkflowConfig() {
               <CardTitle>Employee Workflow Overrides</CardTitle>
               <CardDescription>
                 Assign specific workflows to individual employees (highest priority)
+                {periodMode === 'specific' && ` — showing overrides for ${selectedMonth} ${selectedYear}`}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -418,6 +546,7 @@ export default function WorkflowConfig() {
                               <WorkflowStagesPreview stages={template.stages} />
                             </div>
                           )}
+                          {renderInheritedBadge('employee', profile.id)}
                         </TableCell>
                         <TableCell>
                           {config && (
@@ -450,7 +579,8 @@ export default function WorkflowConfig() {
             <CardHeader>
               <CardTitle>Department Workflows</CardTitle>
               <CardDescription>
-                Assign workflows to entire departments (applies to all employees in that department)
+                Assign workflows to entire departments
+                {periodMode === 'specific' && ` — showing overrides for ${selectedMonth} ${selectedYear}`}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -491,6 +621,7 @@ export default function WorkflowConfig() {
                               <WorkflowStagesPreview stages={template.stages} />
                             </div>
                           )}
+                          {renderInheritedBadge('department', dept.id)}
                         </TableCell>
                         <TableCell>
                           {config && (
@@ -519,6 +650,7 @@ export default function WorkflowConfig() {
               <CardTitle>PMS Grade Workflows</CardTitle>
               <CardDescription>
                 Assign workflows based on employee PMS grades
+                {periodMode === 'specific' && ` — showing overrides for ${selectedMonth} ${selectedYear}`}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -569,6 +701,7 @@ export default function WorkflowConfig() {
                                 <WorkflowStagesPreview stages={template.stages} />
                               </div>
                             )}
+                            {renderInheritedBadge('pms_grade', grade)}
                           </TableCell>
                           <TableCell>
                             {config && (
