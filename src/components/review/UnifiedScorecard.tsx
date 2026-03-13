@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useKpisByEmployee, useReviewSubmissions, useApproveKpi, useRaiseQuery, useKpiQueries, useSendBackKpi, useEmployeeKpiPeriods, RatingLevel, KPI, KpiQuery } from '@/hooks/useKpis';
-import { useSubPeriodSubmissions, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
+import { useSubPeriodSubmissions, useSubPeriodSubmissionsByKpis, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { ManagerDailyOverrideEditor, calculateOverriddenScore } from '@/components/review/ManagerDailyOverrideEditor';
@@ -41,8 +41,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
-  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays, UserCheck, ClipboardCheck, AlertTriangle
+  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays, UserCheck, ClipboardCheck, AlertTriangle, X
 } from 'lucide-react';
+import { SelfReviewSheet } from '@/components/review/SelfReviewSheet';
+import { ProfileCard } from '@/components/dashboard/ProfileCard';
+import { useKraCategories } from '@/hooks/useOrganization';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   kpiStatusColors, 
   kpiStatusLabels,
@@ -73,7 +77,7 @@ import {
 } from '@/lib/workflowEngine';
 
 // View level type - determines behavior and data access
-export type ScorecardViewLevel = 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms';
+export type ScorecardViewLevel = 'self' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms';
 
 interface EmployeeProfile {
   id: string;
@@ -93,7 +97,7 @@ interface UnifiedScorecardProps {
   employee: EmployeeProfile;
   periodSelection: PeriodSelection;
   onPeriodSelectionChange: (selection: PeriodSelection) => void;
-  onBack: () => void;
+  onBack?: () => void;
   autoOpenKpiId?: string | null;
 }
 
@@ -106,6 +110,14 @@ const VIEW_LEVEL_STATIC: Record<ScorecardViewLevel, {
   actionLabel: string;
   roleIcon: React.ElementType;
 }> = {
+  self: {
+    title: 'My KPIs',
+    description: 'Submit your self-assessment',
+    scoreFieldPrefix: 'self',
+    previousScoreField: 'self_score',
+    actionLabel: 'Submit',
+    roleIcon: User,
+  },
   manager: {
     title: 'Manager Review',
     description: 'Review and provide your assessment for this KPI',
@@ -126,11 +138,8 @@ const VIEW_LEVEL_STATIC: Record<ScorecardViewLevel, {
     title: 'HR PMS Review',
     description: 'HR PMS team review and assessment',
     scoreFieldPrefix: 'hr_pms',
-    // previousScoreField is resolved dynamically in config useMemo below
-    // because it depends on whether skip_level_check exists in the employee's workflow.
-    // actionLabel is also resolved dynamically in config useMemo based on nextAfterHrPms.
     previousScoreField: 'skip_level_score' as const,
-    actionLabel: 'Forward', // overridden dynamically in config useMemo
+    actionLabel: 'Forward',
     roleIcon: ClipboardCheck,
   },
   auditor: {
@@ -170,6 +179,14 @@ export function UnifiedScorecard({
   const remarksMandatory = useRemarksMandatorySettings();
   
   const staticConfig = VIEW_LEVEL_STATIC[viewLevel];
+  const isSelfMode = viewLevel === 'self';
+  
+  // Self-mode specific hooks & state
+  const { data: kraCategories } = useKraCategories();
+  const [activeCategory, setActiveCategory] = useState<string>('All');
+  const [selectedKpiForSelfReview, setSelectedKpiForSelfReview] = useState<KPI | null>(null);
+  const [selfAutoOpenQueryHistory, setSelfAutoOpenQueryHistory] = useState(false);
+  const [dismissedPendingPeriods, setDismissedPendingPeriods] = useState<string[]>([]);
   
   // Fetch the employee's workflow stages dynamically
   const { data: workflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(employee.id);
@@ -177,6 +194,17 @@ export function UnifiedScorecard({
 
   // Build dynamic config from workflow stages
   const config = useMemo(() => {
+    // Self mode doesn't need reviewer workflow config
+    if (viewLevel === 'self') {
+      return {
+        ...staticConfig,
+        pendingStatus: 'self_review',
+        reviewableStatuses: ['kra_set', 'self_review'],
+        forwardStatus: 'self_review',
+        sendBackTargets: [] as { value: string; label: string }[],
+      };
+    }
+    
     // For hr_pms: the "previous score" field depends on which stage precedes hr_pms_review.
     // If skip_level_check exists in the workflow, it comes before hr_pms_review → use skip_level_score.
     // Otherwise (manager_check → hr_pms_review directly) → use manager_score.
@@ -188,9 +216,6 @@ export function UnifiedScorecard({
     }
 
     // For hr_pms: resolve dynamic action label based on what comes AFTER hr_pms_review.
-    // - 'approved'           → "Approve"  (hr_pms is the terminal reviewer in this template)
-    // - 'audit'              → "Forward to Audit"
-    // - anything else        → "Forward"
     let resolvedActionLabel = staticConfig.actionLabel;
     if (viewLevel === 'hr_pms') {
       const nextAfterHrPms = (() => {
@@ -228,16 +253,22 @@ export function UnifiedScorecard({
   const auditKpiIdList = useMemo(() => (kpis || []).map(k => k.id), [kpis]);
   const { data: auditKpiAssignments } = useAuditKpiAssignments(viewLevel === 'auditor' ? auditKpiIdList : []);
 
+  // Sub-period submissions for self-mode SelfReviewSheet
+  const selfModeKpiIds = useMemo(() => isSelfMode ? (kpis || []).map(k => k.id) : [], [isSelfMode, kpis]);
+  const { data: subPeriodSubmissions, isLoading: subPeriodLoading } = useSubPeriodSubmissionsByKpis(
+    selfModeKpiIds, selectedPeriod, selectedYear
+  );
+
   // Fetch org KPI values for this period
   const { data: orgKpiValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
 
-  // Create org KPI values lookup map
+  // Create org KPI values lookup map (toLowerCase for consistent matching)
   const orgKpiValuesMap = useMemo(() => {
     const map = new Map<string, { achieved_value: number | null; data_source: string | null; entered_by_name: string | null }>();
     orgKpiValues?.forEach(v => {
       const deptPart = v.department_id || 'null';
       const empPart = v.employee_id || 'null';
-      const key = `${v.category_id}||${v.kra_name}||${v.kpi_name}||${deptPart}||${empPart}`;
+      const key = `${v.category_id}||${v.kra_name.toLowerCase()}||${v.kpi_name.toLowerCase()}||${deptPart}||${empPart}`;
       map.set(key, { achieved_value: v.achieved_value, data_source: v.data_source, entered_by_name: v.entered_by_name });
     });
     return map;
@@ -249,13 +280,13 @@ export function UnifiedScorecard({
     const scope = (kpi as any).org_level_scope || 'employee';
     let key: string;
     if (scope === 'organization') {
-      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+      key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
     } else if (scope === 'department') {
       const deptId = employee.department_id || 'null';
-      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${deptId}||null`;
+      key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||${deptId}||null`;
     } else {
       const empId = employee.id || 'null';
-      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${empId}`;
+      key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||${empId}`;
     }
     return orgKpiValuesMap.get(key) || null;
   };
@@ -335,7 +366,70 @@ export function UnifiedScorecard({
 
   // Sorting with default Weightage (High to Low)
   const { sortedKpis: rawSortedKpis, sortConfig, setSort } = useKpiSorting(kpis, {}, submissionMap);
-  const sortedKpis = statusFilter ? rawSortedKpis.filter(k => k.status === statusFilter) : rawSortedKpis;
+  const sortedKpis = useMemo(() => {
+    let filtered = rawSortedKpis;
+    if (statusFilter) filtered = filtered.filter(k => k.status === statusFilter);
+    if (isSelfMode && activeCategory !== 'All') {
+      const cat = kraCategories?.find((c: any) => c.name === activeCategory);
+      if (cat) filtered = filtered.filter(k => k.category_id === cat.id);
+    }
+    return filtered;
+  }, [rawSortedKpis, statusFilter, isSelfMode, activeCategory, kraCategories]);
+
+  // Available categories for self-mode filter
+  const availableSelfCategories = useMemo(() => {
+    if (!isSelfMode || !kraCategories) return [];
+    return kraCategories.filter((cat: any) => kpis?.some(k => k.category_id === cat.id));
+  }, [isSelfMode, kraCategories, kpis]);
+
+  // Pending period alerts (self mode)
+  const MONTH_ORDER_SELF = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  const pendingPeriods = useMemo(() => {
+    if (!isSelfMode || !allKpis) return [];
+    const actionableStatuses = ['kra_set', 'self_review'];
+    const currentMonthIdx = MONTH_ORDER_SELF.indexOf(selectedPeriod);
+    const periodMap = new Map<string, number>();
+    allKpis.forEach(k => {
+      if (!actionableStatuses.includes(k.status || '')) return;
+      if (!k.review_period || k.review_year == null) return;
+      const monthIdx = MONTH_ORDER_SELF.indexOf(k.review_period);
+      const isEarlier = k.review_year < selectedYear ||
+        (k.review_year === selectedYear && monthIdx < currentMonthIdx && monthIdx >= 0);
+      if (!isEarlier) return;
+      const key = `${k.review_period}-${k.review_year}`;
+      periodMap.set(key, (periodMap.get(key) || 0) + 1);
+    });
+    return Array.from(periodMap.entries())
+      .map(([key, count]) => {
+        const [month, yearStr] = key.split('-');
+        return { month, year: parseInt(yearStr), count, key };
+      })
+      .filter(p => !dismissedPendingPeriods.includes(p.key))
+      .sort((a, b) => a.year !== b.year ? b.year - a.year : MONTH_ORDER_SELF.indexOf(b.month) - MONTH_ORDER_SELF.indexOf(a.month));
+  }, [isSelfMode, allKpis, selectedPeriod, selectedYear, dismissedPendingPeriods]);
+
+  // Auto-open KPI from deep link (self mode)
+  useEffect(() => {
+    if (!isSelfMode || !autoOpenKpiId || !allKpis || isLoading) return;
+    const targetKpi = kpis?.find(k => k.id === autoOpenKpiId);
+    if (targetKpi) {
+      setSelectedKpiForSelfReview(targetKpi);
+      return;
+    }
+    const match = allKpis.find(k => k.id === autoOpenKpiId);
+    if (match?.review_period && match.review_year != null) {
+      onPeriodSelectionChange({
+        ...periodSelection,
+        mode: 'single' as const,
+        selectedMonth: match.review_period,
+        selectedYear: match.review_year,
+        months: [match.review_period],
+        periodRanges: [{ month: match.review_period, year: match.review_year }],
+      });
+    }
+  }, [isSelfMode, autoOpenKpiId, kpis, allKpis, isLoading]);
 
   const queryMap = useMemo(() => {
     const map = new Map<string, KpiQuery[]>();
@@ -354,7 +448,9 @@ export function UnifiedScorecard({
       return submission.final_score;
     }
     // Fallback to level-specific scores for in-progress reviews
-    if (viewLevel === 'manager') {
+    if (viewLevel === 'self') {
+      return submission.self_score ?? 0;
+    } else if (viewLevel === 'manager') {
       return submission.manager_score ?? submission.self_score ?? 0;
     } else if (viewLevel === 'auditor') {
       return submission.auditor_score ?? submission.manager_score ?? submission.self_score ?? 0;
@@ -1041,7 +1137,8 @@ export function UnifiedScorecard({
   };
 
   // Determine view type for KpiDetailsTable
-  const viewType = viewLevel === 'manager' ? 'team-review'
+  const viewType = viewLevel === 'self' ? 'my-kpis'
+               : viewLevel === 'manager' ? 'team-review'
                : viewLevel === 'auditor' ? 'audit'
                : viewLevel === 'skip_level' ? 'skip-level-review'
                : viewLevel === 'hr_pms' ? 'hr-pms-review'
@@ -1058,33 +1155,46 @@ export function UnifiedScorecard({
 
   return (
     <div className="space-y-6">
-      {/* 1. Profile + Filters Row - Matches Dashboard Layout */}
+      {/* 1. Profile + Filters Row */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        {/* Profile Card - Left with Back Button */}
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <Avatar className="h-10 w-10 sm:h-12 sm:w-12 shrink-0 border-2 border-primary/20">
-            <AvatarImage src={employee.avatar_url || undefined} />
-            <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-              {getInitials(employee.full_name)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg sm:text-xl font-bold truncate">{employee.full_name || employee.email}</h1>
-              {employee.employee_code && (
-                <span className="text-xs sm:text-sm text-muted-foreground">({employee.employee_code})</span>
-              )}
+        {/* Profile Card */}
+        {isSelfMode ? (
+          <ProfileCard
+            profile={{
+              full_name: employee.full_name,
+              designation: employee.designation,
+              employee_code: employee.employee_code,
+              avatar_url: employee.avatar_url,
+              email: employee.email,
+            }}
+            compact
+          />
+        ) : (
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <Avatar className="h-10 w-10 sm:h-12 sm:w-12 shrink-0 border-2 border-primary/20">
+              <AvatarImage src={employee.avatar_url || undefined} />
+              <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                {getInitials(employee.full_name)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg sm:text-xl font-bold truncate">{employee.full_name || employee.email}</h1>
+                {employee.employee_code && (
+                  <span className="text-xs sm:text-sm text-muted-foreground">({employee.employee_code})</span>
+                )}
+              </div>
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                {employee.designation || 'Employee'}
+              </p>
             </div>
-            <p className="text-xs sm:text-sm text-muted-foreground truncate">
-              {employee.designation || 'Employee'}
-            </p>
           </div>
-        </div>
+        )}
 
-        {/* Filters - Right (matching Dashboard with Cumulative Mode) */}
+        {/* Filters */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 flex-shrink-0">
           <ReviewPeriodSelectorEnhanced
             value={periodSelection}
@@ -1092,9 +1202,31 @@ export function UnifiedScorecard({
           />
           
           <div className="h-6 w-px bg-border hidden sm:block" />
+
+          {isSelfMode && availableSelfCategories.length > 0 && (
+            <>
+              <Select value={activeCategory} onValueChange={setActiveCategory}>
+                <SelectTrigger className="w-full sm:w-[140px] h-8 text-xs">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All" className="text-xs">All Categories</SelectItem>
+                  {availableSelfCategories.map((cat: any) => (
+                    <SelectItem key={cat.id} value={cat.name} className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color || 'hsl(var(--primary))' }} />
+                        {cat.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="h-6 w-px bg-border hidden sm:block" />
+            </>
+          )}
           
-          <Badge variant="outline" className="text-xs h-6 px-2 whitespace-nowrap">
-            {kpis?.length || 0} KPIs
+          <Badge variant="outline" className="text-xs h-6 px-2 ml-auto whitespace-nowrap">
+            {sortedKpis.length}/{kpis?.length || 0} KPIs
           </Badge>
         </div>
       </div>
@@ -1134,6 +1266,42 @@ export function UnifiedScorecard({
         </Card>
       </div>
 
+      {/* Pending Period Alerts (self mode) */}
+      {isSelfMode && pendingPeriods.length > 0 && (
+        <div className="space-y-2">
+          {pendingPeriods.map(pp => (
+            <Alert key={pp.key} className="border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <AlertDescription className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-sm text-amber-800 dark:text-amber-200">
+                  You have <strong>{pp.count} pending KPI{pp.count > 1 ? 's' : ''}</strong> for {pp.month} {pp.year} that need your action.
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm"
+                    className="h-7 text-xs border-amber-400 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900"
+                    onClick={() => onPeriodSelectionChange({
+                      ...periodSelection,
+                      mode: 'single' as const,
+                      selectedMonth: pp.month,
+                      selectedYear: pp.year,
+                      months: [pp.month],
+                      periodRanges: [{ month: pp.month, year: pp.year }],
+                    })}
+                  >
+                    Switch to {pp.month.substring(0, 3)} {pp.year}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-amber-600 dark:text-amber-400"
+                    onClick={() => setDismissedPendingPeriods(prev => [...prev, pp.key])}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          ))}
+        </div>
+      )}
+
       {/* 3. Status Progress - Full Width Workflow Tracker (not compact) */}
       <WorkflowProgressTracker kpis={kpis || []} queries={queries || []} workflowStages={effectiveStages} activeFilter={statusFilter} onFilterChange={setStatusFilter} />
 
@@ -1170,16 +1338,17 @@ export function UnifiedScorecard({
             <div className="space-y-3">
               {sortedKpis.map(kpi => {
                 const submission = submissionMap.get(kpi.id);
+                const selfReviewHandler = (k: KPI) => { setSelfAutoOpenQueryHistory(false); setSelectedKpiForSelfReview(k); };
                 return (
                   <MobileKpiCard
                     key={kpi.id}
                     kpi={kpi}
                     submission={submission}
                     viewType={viewType}
-                    onAction={openReviewSheet}
-                    onView={openReviewSheet}
+                    onAction={isSelfMode ? selfReviewHandler : openReviewSheet}
+                    onView={isSelfMode ? selfReviewHandler : openReviewSheet}
                     onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
-                    onSendBack={openSendBackDialog}
+                    onSendBack={isSelfMode ? undefined : openSendBackDialog}
                     onToggleExpand={toggleDailyExpand}
                     isExpanded={expandedDailyKpis.has(kpi.id)}
                     getOrgKpiValue={getOrgKpiValue}
@@ -1204,9 +1373,13 @@ export function UnifiedScorecard({
               viewType={viewType}
               selectedPeriod={selectedPeriod}
               selectedYear={selectedYear}
-              onReview={openReviewSheet}
-              onView={openReviewSheet}
-              onSendBack={openSendBackDialog}
+              onReview={isSelfMode 
+                ? (kpi: KPI) => { setSelfAutoOpenQueryHistory(false); setSelectedKpiForSelfReview(kpi); } 
+                : openReviewSheet}
+              onView={isSelfMode 
+                ? (kpi: KPI) => { setSelfAutoOpenQueryHistory(false); setSelectedKpiForSelfReview(kpi); } 
+                : openReviewSheet}
+              onSendBack={isSelfMode ? undefined : openSendBackDialog}
               onShowLogic={(kpi) => { setSelectedKpi(kpi); setLogicModalOpen(true); }}
               expandedKpis={expandedDailyKpis}
               onToggleExpand={toggleDailyExpand}
@@ -1218,7 +1391,31 @@ export function UnifiedScorecard({
         </CardContent>
       </Card>
 
-      {/* Review Sheet */}
+      {/* Self Review Sheet - for self mode */}
+      {isSelfMode && (
+        <SelfReviewSheet
+          open={!!selectedKpiForSelfReview}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedKpiForSelfReview(null);
+              setSelfAutoOpenQueryHistory(false);
+            }
+          }}
+          kpi={selectedKpiForSelfReview}
+          allKpis={allKpis || []}
+          submissionMap={submissionMap}
+          allSubmissions={allSubmissions || []}
+          subPeriodSubmissions={subPeriodSubmissions || []}
+          subPeriodLoading={subPeriodLoading || false}
+          orgKpiValuesMap={orgKpiValuesMap as any}
+          selectedPeriod={selectedPeriod}
+          selectedYear={selectedYear}
+          autoOpenQueryHistory={selfAutoOpenQueryHistory}
+        />
+      )}
+
+      {/* Review Sheet (reviewer modes only) */}
+      {!isSelfMode && (
       <Sheet open={reviewSheetOpen} onOpenChange={setReviewSheetOpen}>
         <SheetContent className="flex flex-col h-full w-full sm:w-[85vw] sm:max-w-[1200px] overflow-y-auto p-4 sm:p-6">
           <SheetHeader className="pb-2 sm:pb-4">
@@ -1481,8 +1678,9 @@ export function UnifiedScorecard({
               </div>
             )}
           </SheetFooter>
-        </SheetContent>
+      </SheetContent>
       </Sheet>
+      )}
 
       {/* Query Dialog (Manager only) */}
       {viewLevel === 'manager' && (
