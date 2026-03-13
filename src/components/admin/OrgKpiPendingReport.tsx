@@ -27,6 +27,7 @@ export interface PendingReportRow {
   previousValue: number | null;
   daysPending: number | null;
   employeeCount: number | null;
+  daysSinceLastUpdate: number | null;
 }
 
 interface OrgKpiPendingReportProps {
