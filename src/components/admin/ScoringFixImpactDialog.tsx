@@ -344,7 +344,7 @@ export function ScoringFixImpactDialog({ open, onOpenChange, issues, onComplete,
                 ))}
                 {siblings.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-6">
+                    <TableCell colSpan={readOnly ? 4 : 7} className="text-center text-muted-foreground py-6">
                       No fiscal siblings found.
                     </TableCell>
                   </TableRow>
