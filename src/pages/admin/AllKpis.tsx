@@ -398,6 +398,11 @@ export default function AllKpis() {
           <p className="text-sm text-muted-foreground">Monitor KPI status across all employees and workflow stages</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <ScoringHealthCheck
+            kpis={filteredKpis || []}
+            selectedPeriod={selectedPeriod}
+            selectedYear={selectedYear}
+          />
           <Button variant="outline" size="sm" onClick={handleExportExcel}>
             <Download className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Export Excel</span>

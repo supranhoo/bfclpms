@@ -46,7 +46,7 @@ function detectIssues(kpis: KPI[]): ScoringIssue[] {
   const issues: ScoringIssue[] = [];
 
   for (const kpi of kpis) {
-    const emp = kpi.profiles as { full_name?: string; employee_code?: string } | null;
+    const emp = (kpi as any).profiles as { full_name?: string; employee_code?: string } | null;
     const employeeName = emp?.full_name || 'Unknown';
     const employeeCode = emp?.employee_code || '';
     const uomType = kpi.uom_type;
