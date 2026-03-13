@@ -58,6 +58,7 @@ export function KpiReviewPanel({
         selectedYear={selectedYear}
         onOpenTimeline={onOpenTimeline}
         orgKpiEnteredByName={orgKpiEnteredByName}
+        employeeId={kpi.employee_id}
       />
 
       {/* Two-Column Layout - collapses at md breakpoint for mobile sheets */}

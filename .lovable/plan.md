@@ -1,27 +1,25 @@
 
+# Fix: KPI Journey Section Showing Wrong Scores — IMPLEMENTED ✅
 
-# Add Admin Action Buttons to "View KPI Details"
+## Root Cause
+`KpiJourneySection.tsx` prioritized recalculated scores (`recalc?.score ?? storedScore`) over deliberately stored reviewer scores. For binary KPIs where a reviewer intentionally gave 0, the recalculation from an inherited achieved value overrode it to 5.
 
-## What
-Add two buttons — "Admin KPI Editor" and "Admin Data Entry" — to the KPI header section inside the "View KPI Details" panel. Visible only to admin users. These buttons open the existing `AdminKpiEditDialog` and `AdminDataEntryDialog` respectively.
+## Changes Made
 
-## Where
-The buttons will be added to **`KpiHeaderSection`**, which is rendered by `KpiReviewPanel`, which is used across all 6 scorecards (SelfReviewSheet, EmployeeScorecard, AuditScorecard, ManagementScorecard, UnifiedScorecard, MentionedKpiSheet). This ensures coverage across all levels and dashboards with a single change point.
+### 1. `KpiJourneySection.tsx` — Display priority fix
+- Changed `score: recalc?.score ?? storedScore` → `score: storedScore ?? recalc?.score`
+- Changed `rating: recalc?.rating ?? storedRating` → `rating: storedRating ?? recalc?.rating`
+- Stored reviewer scores now take precedence; recalculation only fills in when no stored score exists
 
-## How
+### 2. `ManagementScorecard.tsx` — Removed cross-stage fallback
+- Changed `management_achieved_value ?? auditor_achieved_value ?? achieved_value` → `management_achieved_value` only
+- Prevents stale self-review values from being inherited into management stage
 
-### 1. `KpiReviewPanel.tsx`
-- Pass `kpi.employee_id` context down to `KpiHeaderSection` so it can open the data entry dialog with the correct employee.
+### 3. `AuditScorecard.tsx` — Removed cross-stage fallback
+- Changed `auditor_achieved_value ?? manager_achieved_value ?? achieved_value` → `auditor_achieved_value` only
+- Prevents stale previous-stage values from being inherited into audit stage
 
-### 2. `KpiHeaderSection.tsx`
-- Import `useAuth` and check `role === 'admin'`.
-- Import `AdminKpiEditDialog` and `AdminDataEntryDialog`.
-- Add local state for opening each dialog.
-- Fetch employee name/code from the existing `profiles` query (already fetches `reporting_manager_id`, extend to include `full_name` and `employee_code`).
-- Render two small buttons (Settings icon for Editor, ClipboardEdit icon for Data Entry) in the header badges row, only when admin.
-- Render the two dialog components conditionally.
-
-### Files Modified
-1. **`src/components/review/KpiReviewPanel.tsx`** — Pass employee context to header
-2. **`src/components/review/KpiHeaderSection.tsx`** — Add admin buttons + dialogs
-
+## Impact
+- Zero changes to scoring rules, thresholds, or KPI logic
+- Zero changes to the final_score fallback chain
+- Display-only fix for Journey panel + pre-fill fix for review sheets

@@ -1,14 +1,18 @@
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { KPI } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getCycleLabel } from '@/lib/frequencyUtils';
-import { Clock, Building2, Users, User, Lock } from 'lucide-react';
+import { Clock, Building2, Users, User, Lock, Settings, ClipboardEdit } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
+import { AdminDataEntryDialog } from '@/components/admin/AdminDataEntryDialog';
 
 interface KpiHeaderSectionProps {
   kpi: KPI;
@@ -16,9 +20,15 @@ interface KpiHeaderSectionProps {
   selectedYear: number;
   onOpenTimeline?: () => void;
   orgKpiEnteredByName?: string | null;
+  employeeId?: string;
 }
 
-export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTimeline, orgKpiEnteredByName }: KpiHeaderSectionProps) {
+export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTimeline, orgKpiEnteredByName, employeeId }: KpiHeaderSectionProps) {
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [dataEntryDialogOpen, setDataEntryDialogOpen] = useState(false);
+
   const categoryName = kpi.kra_categories?.name || 'Uncategorized';
   const categoryColor = kpi.kra_categories?.color || '#6B7280';
   const status = kpi.status || 'kra_set';
@@ -28,26 +38,35 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   const govPerms = useReviewPeriodPermissions(selectedPeriod, selectedYear);
   const hasRestrictions = !govPerms.isLoading && (govPerms.view_only || !govPerms.edit_kpi || !govPerms.edit_scores);
 
-  const { data: managerName } = useQuery({
-    queryKey: ['kpi-reporting-manager', kpi.employee_id],
+  const { data: employeeProfile } = useQuery({
+    queryKey: ['kpi-employee-profile', kpi.employee_id],
     queryFn: async () => {
       const { data: emp } = await supabase
         .from('profiles')
-        .select('reporting_manager_id')
+        .select('full_name, employee_code, reporting_manager_id')
         .eq('id', kpi.employee_id)
         .single();
-      if (!emp?.reporting_manager_id) return null;
-      const { data: mgr } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', emp.reporting_manager_id)
-        .single();
-      return mgr?.full_name || null;
+      if (!emp) return null;
+      let managerName: string | null = null;
+      if (emp.reporting_manager_id) {
+        const { data: mgr } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', emp.reporting_manager_id)
+          .single();
+        managerName = mgr?.full_name || null;
+      }
+      return {
+        full_name: emp.full_name,
+        employee_code: emp.employee_code,
+        managerName,
+      };
     },
     staleTime: 5 * 60 * 1000,
   });
 
   return (
+    <>
     <div className="p-3 sm:p-4 bg-muted/30 rounded-lg border">
       {/* Badges Row */}
       <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 mb-2 sm:mb-3">
@@ -106,13 +125,35 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
               <span className="hidden sm:inline">Timeline</span>
             </Button>
           )}
+          {isAdmin && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditDialogOpen(true)}
+                className="gap-1 h-6 sm:h-7 px-2 text-xs border-primary/30 text-primary"
+              >
+                <Settings className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Admin KPI Editor</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDataEntryDialogOpen(true)}
+                className="gap-1 h-6 sm:h-7 px-2 text-xs border-primary/30 text-primary"
+              >
+                <ClipboardEdit className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Admin Data Entry</span>
+              </Button>
+            </>
+          )}
       </div>
       </div>
 
       {/* Reporting Manager */}
-      {managerName && (
+      {employeeProfile?.managerName && (
         <div className="text-xs text-muted-foreground text-right -mt-1 mb-2">
-          👤 Reporting Manager: {managerName}
+          👤 Reporting Manager: {employeeProfile.managerName}
         </div>
       )}
 
@@ -145,5 +186,25 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
         {renderBoldKpiText(kpi.kpi_name)}
       </p>
     </div>
+
+    {/* Admin Dialogs */}
+    {isAdmin && (
+      <>
+        <AdminKpiEditDialog
+          isOpen={editDialogOpen}
+          onClose={() => setEditDialogOpen(false)}
+          kpi={kpi}
+        />
+        <AdminDataEntryDialog
+          isOpen={dataEntryDialogOpen}
+          onClose={() => setDataEntryDialogOpen(false)}
+          kpi={kpi}
+          employeeId={employeeId || kpi.employee_id}
+          employeeName={employeeProfile?.full_name || 'Employee'}
+          employeeCode={employeeProfile?.employee_code || undefined}
+        />
+      </>
+    )}
+    </>
   );
 }
