@@ -253,8 +253,19 @@ function KpiWeightageDashboard() {
           isOpen={openEmployees.has(emp.employeeId)}
           onToggle={() => toggleEmployee(emp.employeeId)}
           onWeightageUpdate={() => queryClient.invalidateQueries({ queryKey: ['kpi-weightage-matrix'] })}
+          fiscalYear={fiscalYear}
+          onEditKpi={handleEditKpi}
         />
       ))}
+
+      <AdminKpiEditDialog
+        isOpen={!!editingKpi}
+        onClose={() => {
+          setEditingKpi(null);
+          queryClient.invalidateQueries({ queryKey: ['kpi-weightage-matrix'] });
+        }}
+        kpi={editingKpi}
+      />
     </div>
   );
 }
