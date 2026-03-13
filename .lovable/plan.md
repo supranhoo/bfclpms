@@ -1,35 +1,27 @@
 
+# Plan: Scoring Health Check — Admin Diagnostic & Fix Tool — IMPLEMENTED ✅
 
-# Fix: False Positive MISSING_TARGET in Scoring Health Check
+## What Was Done
 
-## Problem
+### 1. New Component: `src/components/admin/ScoringHealthCheck.tsx`
+- Client-side diagnostic that scans loaded KPIs for scoring logic issues
+- Detects 5 issue categories:
+  - **Inverted Criteria** (Critical) — "Higher is Better" with descending thresholds or vice versa
+  - **Missing Thresholds** (High) — numeric KPIs with all R5-R1 NULL
+  - **Missing Qualitative Options** (High) — binary/tiered KPIs with no options
+  - **Missing Target** (Medium) — numeric KPIs with NULL target_value
+  - **Missing Criteria** (Medium) — KPIs with NULL criteria field
+- Auto-fix for Inverted Criteria (flips direction) and Missing Criteria (auto-detects from thresholds)
+- Fixes propagate to all fiscal-year siblings (July→June cycle) matching employee_id, kra_name, kpi_name
+- "Fix All" bulk action per category with sequential processing and progress toasts
+- Full audit logging with action `SCORING_HEALTH_FIX`
+- Grouped by employee with expand/collapse, tabbed by severity
 
-The Health Check flags ALL numeric KPIs with `target_value == null` as "Missing Target", even when they have R5-R1 thresholds defined in absolute mode. These KPIs score correctly without a target — the engine compares the achieved value directly against thresholds.
+### 2. Integration: `src/pages/admin/AllKpis.tsx`
+- Added "Health Check" button (ShieldCheck icon) in header button row
+- Shows issue count badge on button when issues exist
+- Passes `filteredKpis`, `selectedPeriod`, `selectedYear` to component
 
-Example: "Ensure raw material inventories between min-max levels" measures deviation count. R5=0 (no deviations), R1=4 (four deviations). No target needed — the thresholds ARE the scoring logic.
-
-## Fix
-
-**`src/components/admin/ScoringHealthCheck.tsx`** — Refine the `MISSING_TARGET` detection (around line 99):
-
-Only flag `MISSING_TARGET` when the KPI has **no thresholds defined either**. If R5-R1 thresholds exist, the target is not required for scoring.
-
-```typescript
-// Before:
-if (kpi.target_value == null) {
-  issues.push({ ... type: 'MISSING_TARGET' ... });
-}
-
-// After:
-if (kpi.target_value == null && !hasAnyThreshold) {
-  issues.push({ ... type: 'MISSING_TARGET' ... });
-}
-```
-
-This moves the `MISSING_TARGET` check inside the `!hasAnyThreshold` block (or adds the `&& !hasAnyThreshold` guard), so KPIs with defined thresholds are no longer falsely flagged.
-
-## Impact
-- Eliminates false positives for threshold-based KPIs (like deviation counts, error counts, etc.)
-- Only flags KPIs that truly have no scoring mechanism (no target AND no thresholds)
-- Single-line change in one file
-
+### 3. No Database Changes Required
+- Uses existing `kpis` and `kpi_audit_logs` tables
+- All detection runs client-side on already-fetched KPI data
