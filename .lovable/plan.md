@@ -1,19 +1,25 @@
 
+# Fix: KPI Journey Section Showing Wrong Scores — IMPLEMENTED ✅
 
-# Move Admin Buttons to Top of KPI Header (Right-Aligned)
+## Root Cause
+`KpiJourneySection.tsx` prioritized recalculated scores (`recalc?.score ?? storedScore`) over deliberately stored reviewer scores. For binary KPIs where a reviewer intentionally gave 0, the recalculation from an inherited achieved value overrode it to 5.
 
-## What
-Move the "Admin KPI Editor" and "Admin Data Entry" buttons from the badges row inside `KpiHeaderSection` to a dedicated right-aligned row at the very top of the component — visually sitting just below the Sheet/Dialog description, before the category/status badges.
+## Changes Made
 
-## Approach
-Single file change in **`src/components/review/KpiHeaderSection.tsx`**:
+### 1. `KpiJourneySection.tsx` — Display priority fix
+- Changed `score: recalc?.score ?? storedScore` → `score: storedScore ?? recalc?.score`
+- Changed `rating: recalc?.rating ?? storedRating` → `rating: storedRating ?? recalc?.rating`
+- Stored reviewer scores now take precedence; recalculation only fills in when no stored score exists
 
-1. Extract the admin buttons block from the badges row (lines 128-148)
-2. Add a new right-aligned `div` at the top of the component's return, before the existing `bg-muted/30` card — rendering only when `isAdmin` is true
-3. The buttons keep their current styling (outline, primary border, small size)
+### 2. `ManagementScorecard.tsx` — Removed cross-stage fallback
+- Changed `management_achieved_value ?? auditor_achieved_value ?? achieved_value` → `management_achieved_value` only
+- Prevents stale self-review values from being inherited into management stage
 
-This avoids touching 6+ parent scorecard files since the buttons stay within `KpiHeaderSection` but are visually repositioned above the main card content, appearing on the same visual line as the SheetDescription above.
+### 3. `AuditScorecard.tsx` — Removed cross-stage fallback
+- Changed `auditor_achieved_value ?? manager_achieved_value ?? achieved_value` → `auditor_achieved_value` only
+- Prevents stale previous-stage values from being inherited into audit stage
 
-## File
-- **`src/components/review/KpiHeaderSection.tsx`** — Move admin buttons from badge row to a top-level right-aligned row
-
+## Impact
+- Zero changes to scoring rules, thresholds, or KPI logic
+- Zero changes to the final_score fallback chain
+- Display-only fix for Journey panel + pre-fill fix for review sheets
