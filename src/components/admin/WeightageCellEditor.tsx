@@ -143,9 +143,54 @@ export function WeightageCellEditor({
             </div>
           </RadioGroup>
         </div>
-        <Button size="sm" className="w-full" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving...' : 'Save'}
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" className="flex-1" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
+          {currentWeightage != null && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive hover:text-destructive"
+              disabled={saving}
+              onClick={async () => {
+                setValue('');
+                setScope('this');
+                // Trigger save with null weightage for this month only
+                const ids = kpiIds[month] ? [kpiIds[month]] : [];
+                if (ids.length === 0) return;
+                setSaving(true);
+                try {
+                  const { error } = await supabase
+                    .from('kpis')
+                    .update({ weightage: null, updated_at: new Date().toISOString() })
+                    .in('id', ids);
+                  if (error) throw error;
+                  const { data: { user } } = await supabase.auth.getUser();
+                  if (user) {
+                    await supabase.from('kpi_audit_logs').insert({
+                      kpi_id: ids[0],
+                      performed_by: user.id,
+                      action: 'weightage_matrix_edit',
+                      old_value: { weightage: currentWeightage } as any,
+                      new_value: { weightage: null } as any,
+                      metadata: { scope: 'this', from_month: month, affected_count: 1, action: 'remove' } as any,
+                    });
+                  }
+                  toast.success('Weightage removed');
+                  setOpen(false);
+                  onSuccess();
+                } catch (err: any) {
+                  toast.error(err.message || 'Failed to remove weightage');
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              Remove
+            </Button>
+          )}
+        </div>
       </PopoverContent>
     </Popover>
   );
