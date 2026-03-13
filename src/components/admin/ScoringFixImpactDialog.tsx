@@ -44,6 +44,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   issues: ScoringIssue[];
   onComplete: () => void;
+  readOnly?: boolean;
 }
 
 function getNewCriteriaForIssue(issue: ScoringIssue): string {
