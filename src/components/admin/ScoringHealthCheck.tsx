@@ -569,6 +569,15 @@ function IssueTabContent({ value, issues, fixedIds, fixingAll, onFix, onFixAll, 
                       <p className="text-xs"><span className="text-primary font-medium">Suggested:</span> {issue.suggestedFix}</p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="sm" onClick={() => onImpactPreview(issue)} className="gap-1 h-8 px-2">
+                            <Eye className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">Impact</span>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>View impact across fiscal year</TooltipContent>
+                      </Tooltip>
                       <Button variant="ghost" size="sm" onClick={() => onEdit(issue)} className="gap-1 h-8 px-2">
                         <Pencil className="h-3.5 w-3.5" />
                         <span className="hidden sm:inline">Edit</span>
