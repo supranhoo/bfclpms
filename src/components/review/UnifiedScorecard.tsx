@@ -1959,7 +1959,7 @@ function DailySubmissionSummaryWithOverride({
                 overrideReason={overrideReason}
                 onReasonChange={onOverrideReasonChange}
                 originalScore={previousScore}
-                reviewLevel={viewLevel}
+                reviewLevel={viewLevel as Exclude<ScorecardViewLevel, 'self'>}
               />
             )
           )}
