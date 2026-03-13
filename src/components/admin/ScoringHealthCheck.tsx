@@ -26,7 +26,18 @@ type IssueType =
   | 'MISSING_TARGET'
   | 'MISSING_CRITERIA'
   | 'BINARY_MISSING_POLARITY'
-  | 'BINARY_INVALID_RATINGS';
+  | 'BINARY_INVALID_RATINGS'
+  | 'BINARY_LIKELY_INVERTED';
+
+// Keywords indicating a negative-outcome KPI where "No" should score highest
+const NEGATIVE_OUTCOME_KEYWORDS = [
+  'lti', 'lost time', 'fatality', 'accident', 'incident', 'injury',
+  'deviation', 'non-compliance', 'noncompliance', 'violation', 'complaint',
+  'rejection', 'spillage', 'contamination', 'breakdown', 'failure',
+  'downtime', 'penalty', 'fire', 'hazard', 'unsafe', 'near miss',
+  'nearmiss', 'pilferage', 'theft', 'shortage', 'wastage', 'attrition',
+  'absenteeism', 'stoppage',
+];
 
 export interface ScoringIssue {
   kpi: KPI;
