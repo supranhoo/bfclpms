@@ -355,7 +355,7 @@ export function ScoringFixImpactDialog({ open, onOpenChange, issues, onComplete,
         )}
 
         {/* Summary */}
-        {!loading && siblings.length > 0 && (
+        {!loading && siblings.length > 0 && !readOnly && (
           <div className="flex flex-wrap items-center gap-3 text-sm border-t pt-3">
             <span className="text-muted-foreground">
               {selectedCount} of {siblings.length} months selected
