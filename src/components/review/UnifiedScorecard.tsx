@@ -77,7 +77,7 @@ import {
 } from '@/lib/workflowEngine';
 
 // View level type - determines behavior and data access
-export type ScorecardViewLevel = 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms';
+export type ScorecardViewLevel = 'self' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms';
 
 interface EmployeeProfile {
   id: string;
