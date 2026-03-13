@@ -745,9 +745,10 @@ export default function AllKpis() {
                                   return (
                                     <div 
                                       key={kpi.id}
-                                      className="flex items-center justify-between p-3 bg-background rounded-lg border hover:border-primary/50 transition-colors"
+                                      className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3 p-3 bg-background rounded-lg border hover:border-primary/50 transition-colors"
                                     >
-                                      <div className="flex-1">
+                                      {/* Left: KPI Info */}
+                                      <div className="min-w-0">
                                         <div className="flex items-center gap-2 flex-wrap">
                                           <span className="font-medium">{kpi.kra_name}</span>
                                           {kpi.is_org_level && (
@@ -755,7 +756,7 @@ export default function AllKpis() {
                                               <TooltipTrigger asChild>
                                                 <Badge variant="outline" className="text-xs border-primary/50 text-primary shrink-0">
                                                   <BuildingIcon className="h-3 w-3 mr-1" />
-                                                  Org-Level
+                                                  Org
                                                 </Badge>
                                               </TooltipTrigger>
                                               <TooltipContent>Organization-level KPI with centralized values</TooltipContent>
@@ -767,20 +768,26 @@ export default function AllKpis() {
                                             </Badge>
                                           )}
                                         </div>
-                                        <div className="text-sm text-muted-foreground mt-1">{kpi.kpi_name}</div>
-                                        <div className="text-xs text-muted-foreground mt-1">
-                                          {kpi.review_period} {kpi.review_year} · {categories?.find(c => c.id === kpi.category_id)?.name || 'Unknown Category'} · Weightage: {kpi.weightage ?? 0}%
+                                        <div className="text-sm text-muted-foreground mt-1 line-clamp-2">{kpi.kpi_name}</div>
+                                        <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5 flex-wrap">
+                                          <span>{kpi.review_period} {kpi.review_year}</span>
+                                          <span>·</span>
+                                          <span className="truncate max-w-[160px]">{categories?.find(c => c.id === kpi.category_id)?.name || 'Unknown'}</span>
+                                          <span>·</span>
+                                          <span>{kpi.weightage ?? 0}%</span>
                                         </div>
                                       </div>
-                                      <div className="flex items-center gap-2 shrink-0 ml-4">
-                                        <Badge variant="outline">{getStageLabel(kpi.status || 'kra_set')}</Badge>
+
+                                      {/* Right: Status + Actions */}
+                                      <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                                        <Badge variant="outline" className="shrink-0">{getStageLabel(kpi.status || 'kra_set')}</Badge>
                                         
-                                        {/* Admin Data Entry Buttons */}
                                         <Tooltip>
                                           <TooltipTrigger asChild>
                                             <Button 
                                               variant="outline" 
-                                              size="sm"
+                                              size="icon"
+                                              className="h-8 w-8"
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 setDataEntryKpi(kpi);
@@ -791,19 +798,19 @@ export default function AllKpis() {
                                                 });
                                               }}
                                             >
-                                              <PenLine className="h-4 w-4" />
+                                              <PenLine className="h-3.5 w-3.5" />
                                             </Button>
                                           </TooltipTrigger>
                                           <TooltipContent>Enter Review Data</TooltipContent>
                                         </Tooltip>
                                         
-                                        {/* Daily/Weekly Entry Button */}
                                         {(isDaily || isWeekly) && (
                                           <Tooltip>
                                             <TooltipTrigger asChild>
                                               <Button 
                                                 variant="outline" 
-                                                size="sm"
+                                                size="icon"
+                                                className="h-8 w-8"
                                                 onClick={(e) => {
                                                   e.stopPropagation();
                                                   setDailyEntryKpi(kpi);
@@ -814,20 +821,20 @@ export default function AllKpis() {
                                                   });
                                                 }}
                                               >
-                                                <CalendarDays className="h-4 w-4" />
+                                                <CalendarDays className="h-3.5 w-3.5" />
                                               </Button>
                                             </TooltipTrigger>
                                             <TooltipContent>{isDaily ? 'Enter Daily Data' : 'Enter Weekly Data'}</TooltipContent>
                                           </Tooltip>
                                         )}
                                         
-                                        {/* Step Back Button */}
                                         {getPreviousStatus(kpi.status || 'kra_set') && (
                                           <Tooltip>
                                             <TooltipTrigger asChild>
                                               <Button 
                                                 variant="outline" 
-                                                size="sm"
+                                                size="icon"
+                                                className="h-8 w-8"
                                                 onClick={(e) => {
                                                   e.stopPropagation();
                                                   setStepBackKpi(kpi);
@@ -837,35 +844,42 @@ export default function AllKpis() {
                                                   });
                                                 }}
                                               >
-                                                <Undo2 className="h-4 w-4" />
+                                                <Undo2 className="h-3.5 w-3.5" />
                                               </Button>
                                             </TooltipTrigger>
                                             <TooltipContent>Step Back Status</TooltipContent>
                                           </Tooltip>
                                         )}
 
-                                        <Button 
-                                          variant="ghost" 
-                                          size="sm"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setEditingKpi(kpi);
-                                          }}
-                                        >
-                                          <Edit className="h-4 w-4" />
-                                        </Button>
                                         <Tooltip>
                                           <TooltipTrigger asChild>
                                             <Button 
                                               variant="ghost" 
-                                              size="sm"
-                                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                              size="icon"
+                                              className="h-8 w-8"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setEditingKpi(kpi);
+                                              }}
+                                            >
+                                              <Edit className="h-3.5 w-3.5" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>Edit KPI</TooltipContent>
+                                        </Tooltip>
+                                        
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button 
+                                              variant="ghost" 
+                                              size="icon"
+                                              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 setDeletingKpi(kpi);
                                               }}
                                             >
-                                              <Trash2 className="h-4 w-4" />
+                                              <Trash2 className="h-3.5 w-3.5" />
                                             </Button>
                                           </TooltipTrigger>
                                           <TooltipContent>Delete KRA</TooltipContent>
