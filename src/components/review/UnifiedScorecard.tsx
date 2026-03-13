@@ -835,6 +835,8 @@ export function UnifiedScorecard({
         is_na: true,
         na_marked_by_role: viewLevel,
         [remarkField]: markNaRemarks,
+        // Explicitly clear final_score/final_rating for N/A KPIs moving to approved
+        ...(approve && config.forwardStatus === 'approved' ? { final_score: null, final_rating: null } : {}),
       };
       
       const { error: submissionError } = await supabase
@@ -948,6 +950,14 @@ export function UnifiedScorecard({
       
       // N/A Confirmation (original flow)
       if (!naConfirmed) return;
+      
+      // Explicitly set final_score/final_rating to null for N/A KPIs moving to approved
+      if (approve && config.forwardStatus === 'approved') {
+        await supabase
+          .from('review_submissions')
+          .update({ final_score: null, final_rating: null })
+          .eq('kpi_id', selectedKpi.id);
+      }
       
       if (user?.id) {
         await supabase.from('kpi_audit_logs').insert({
