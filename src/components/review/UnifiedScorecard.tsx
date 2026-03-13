@@ -194,6 +194,17 @@ export function UnifiedScorecard({
 
   // Build dynamic config from workflow stages
   const config = useMemo(() => {
+    // Self mode doesn't need reviewer workflow config
+    if (viewLevel === 'self') {
+      return {
+        ...staticConfig,
+        pendingStatus: 'self_review',
+        reviewableStatuses: ['kra_set', 'self_review'],
+        forwardStatus: 'self_review',
+        sendBackTargets: [] as { value: string; label: string }[],
+      };
+    }
+    
     // For hr_pms: the "previous score" field depends on which stage precedes hr_pms_review.
     // If skip_level_check exists in the workflow, it comes before hr_pms_review → use skip_level_score.
     // Otherwise (manager_check → hr_pms_review directly) → use manager_score.
@@ -205,9 +216,6 @@ export function UnifiedScorecard({
     }
 
     // For hr_pms: resolve dynamic action label based on what comes AFTER hr_pms_review.
-    // - 'approved'           → "Approve"  (hr_pms is the terminal reviewer in this template)
-    // - 'audit'              → "Forward to Audit"
-    // - anything else        → "Forward"
     let resolvedActionLabel = staticConfig.actionLabel;
     if (viewLevel === 'hr_pms') {
       const nextAfterHrPms = (() => {
