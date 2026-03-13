@@ -1,27 +1,27 @@
 
-# Plan: Scoring Health Check — Admin Diagnostic & Fix Tool — IMPLEMENTED ✅
+# Plan: Scoring Health Check — Impact Preview & KPI Editor — IMPLEMENTED ✅
 
 ## What Was Done
 
-### 1. New Component: `src/components/admin/ScoringHealthCheck.tsx`
-- Client-side diagnostic that scans loaded KPIs for scoring logic issues
-- Detects 5 issue categories:
-  - **Inverted Criteria** (Critical) — "Higher is Better" with descending thresholds or vice versa
-  - **Missing Thresholds** (High) — numeric KPIs with all R5-R1 NULL
-  - **Missing Qualitative Options** (High) — binary/tiered KPIs with no options
-  - **Missing Target** (Medium) — numeric KPIs with NULL target_value
-  - **Missing Criteria** (Medium) — KPIs with NULL criteria field
-- Auto-fix for Inverted Criteria (flips direction) and Missing Criteria (auto-detects from thresholds)
-- Fixes propagate to all fiscal-year siblings (July→June cycle) matching employee_id, kra_name, kpi_name
-- "Fix All" bulk action per category with sequential processing and progress toasts
-- Full audit logging with action `SCORING_HEALTH_FIX`
-- Grouped by employee with expand/collapse, tabbed by severity
+### 1. New Component: `src/components/admin/ScoringFixImpactDialog.tsx`
+- Impact preview dialog that opens before any fix is applied
+- Fetches all fiscal-year siblings (July–June cycle) and their `review_submissions`
+- Simulates new scores client-side using `calculateRating()` with the corrected criteria
+- Displays per-month table: Month, Year, Achieved Value, Current Score, Simulated Score, Change indicator
+- Color-coded change arrows: green ↑ for improvements, red ↓ for decreases, grey — for unchanged
+- Per-month checkboxes let admins select which months to apply the fix to
+- Summary line shows selected count, improved/decreased/unchanged counts
+- On confirm: updates only selected KPI IDs, writes audit log with `SCORING_HEALTH_FIX` action
+- Works for both single-KPI fixes and bulk "Fix All" operations
 
-### 2. Integration: `src/pages/admin/AllKpis.tsx`
-- Added "Health Check" button (ShieldCheck icon) in header button row
-- Shows issue count badge on button when issues exist
-- Passes `filteredKpis`, `selectedPeriod`, `selectedYear` to component
+### 2. Modified: `src/components/admin/ScoringHealthCheck.tsx`
+- **Fix button** now opens the impact preview dialog instead of applying immediately
+- **Fix All button** opens the impact preview with all fixable issues aggregated
+- **Edit button** (Pencil icon) added to every issue row — opens `AdminKpiEditDialog` for manual editing
+- Removed direct `fixInvertedCriteria` / `fixMissingCriteria` functions (logic moved to impact dialog)
+- Removed `fixingIds` state (no longer needed since fixes go through the dialog)
+- Exported `ScoringIssue` type for use by the impact dialog
 
 ### 3. No Database Changes Required
-- Uses existing `kpis` and `kpi_audit_logs` tables
-- All detection runs client-side on already-fetched KPI data
+- Uses existing `kpis`, `review_submissions`, and `kpi_audit_logs` tables
+- All simulation runs client-side on fetched data
