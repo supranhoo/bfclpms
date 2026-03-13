@@ -115,6 +115,13 @@ function buildRatingsPayload(
  * Fetch matching org-level KPIs and filter by scope.
  * Falls back to category_id + kra_name matching if exact kpi_name match returns 0 results.
  */
+/**
+ * Escape special PostgREST ilike characters.
+ */
+function escapeIlike(val: string): string {
+  return val.replace(/[%_]/g, '\\$&');
+}
+
 async function fetchTargetKpis(params: PropagateParams) {
   const { categoryId, kraName, kpiName, reviewPeriod, reviewYear, scope, departmentId, employeeId } = params;
 
@@ -125,13 +132,16 @@ async function fetchTargetKpis(params: PropagateParams) {
     profiles!kpis_employee_id_fkey(id, full_name, employee_code, department_id, departments(name))
   `;
 
-  // Try exact match first
+  const escapedKra = escapeIlike(kraName);
+  const escapedKpi = escapeIlike(kpiName);
+
+  // Try case-insensitive exact match first (RC1 fix)
   const { data: kpis, error } = await supabase
     .from('kpis')
     .select(baseSelect)
     .eq('category_id', categoryId)
-    .eq('kra_name', kraName)
-    .eq('kpi_name', kpiName)
+    .ilike('kra_name', escapedKra)
+    .ilike('kpi_name', escapedKpi)
     .eq('review_period', reviewPeriod)
     .eq('review_year', reviewYear)
     .eq('is_org_level', true);
@@ -140,19 +150,34 @@ async function fetchTargetKpis(params: PropagateParams) {
 
   let targetKpis = kpis || [];
 
-  // RC4 CAPA: Fallback to category+kra matching if exact kpi_name match returns 0
+  // Fallback 1: category + case-insensitive kra matching (if exact kpi_name returns 0)
   if (targetKpis.length === 0) {
     const { data: fallbackKpis, error: fallbackError } = await supabase
       .from('kpis')
       .select(baseSelect)
       .eq('category_id', categoryId)
-      .eq('kra_name', kraName)
+      .ilike('kra_name', escapedKra)
       .eq('review_period', reviewPeriod)
       .eq('review_year', reviewYear)
       .eq('is_org_level', true);
 
     if (fallbackError) throw fallbackError;
     targetKpis = fallbackKpis || [];
+  }
+
+  // Fallback 2 (RC3): fuzzy KRA name — master kra_name as substring match
+  if (targetKpis.length === 0) {
+    const { data: fuzzyKpis, error: fuzzyError } = await supabase
+      .from('kpis')
+      .select(baseSelect)
+      .eq('category_id', categoryId)
+      .ilike('kra_name', `%${escapedKra}%`)
+      .eq('review_period', reviewPeriod)
+      .eq('review_year', reviewYear)
+      .eq('is_org_level', true);
+
+    if (fuzzyError) throw fuzzyError;
+    targetKpis = fuzzyKpis || [];
   }
 
   if (targetKpis.length === 0) return [];

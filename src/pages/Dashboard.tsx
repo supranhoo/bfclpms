@@ -130,13 +130,13 @@ export default function Dashboard() {
     const scope = (kpi as any).org_level_scope || 'employee';
     let key: string;
     if (scope === 'organization') {
-      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+      key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
     } else if (scope === 'department') {
       const deptId = profile?.department_id || 'null';
-      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${deptId}||null`;
+      key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||${deptId}||null`;
     } else {
       const empId = profile?.id || 'null';
-      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${empId}`;
+      key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||${empId}`;
     }
     return orgKpiValuesMap.get(key) || null;
   }, [orgKpiValuesMap, profile?.department_id, profile?.id]);
