@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
             self_score: selfScore,
             self_rating: selfRating,
             is_na: matchingValue.is_na,
-            remarks: matchingValue.remarks,
+            self_remarks: matchingValue.remarks,
           }, { onConflict: "kpi_id" });
 
         if (insertError) { errors.push(`${kpi.id}: ${insertError.message}`); continue; }
