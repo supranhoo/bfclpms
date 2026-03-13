@@ -449,7 +449,7 @@ export function ManagementScorecard({
   const openReviewSheet = (kpi: KPI) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
-    const mgmtAchieved = (existing as any)?.management_achieved_value ?? (existing as any)?.auditor_achieved_value ?? existing?.achieved_value ?? null;
+    const mgmtAchieved = (existing as any)?.management_achieved_value ?? null;
     
     // Recalculate score from achieved value if management hasn't reviewed yet
     let initialMgmtScore: number | null = existing?.management_score ?? null;
