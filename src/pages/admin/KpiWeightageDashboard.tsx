@@ -392,9 +392,9 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[250px] sticky left-0 bg-background z-10">KRA / KPI</TableHead>
+                  <TableHead className="max-w-[200px] sticky left-0 bg-background z-10">KRA / KPI</TableHead>
                   {months.map(m => (
-                    <TableHead key={m} className="text-center min-w-[70px]">{SHORT_MONTHS[m]}</TableHead>
+                    <TableHead key={m} className="text-center min-w-[55px]">{SHORT_MONTHS[m]}</TableHead>
                   ))}
                 </TableRow>
               </TableHeader>
