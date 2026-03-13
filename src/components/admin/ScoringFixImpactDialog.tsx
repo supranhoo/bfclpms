@@ -382,12 +382,14 @@ export function ScoringFixImpactDialog({ open, onOpenChange, issues, onComplete,
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={applying}>
-            Cancel
+            {readOnly ? 'Close' : 'Cancel'}
           </Button>
-          <Button onClick={handleApply} disabled={applying || selectedCount === 0 || loading}>
-            {applying && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
-            Apply Fix to {selectedCount} Month{selectedCount !== 1 ? 's' : ''}
-          </Button>
+          {!readOnly && (
+            <Button onClick={handleApply} disabled={applying || selectedCount === 0 || loading}>
+              {applying && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+              Apply Fix to {selectedCount} Month{selectedCount !== 1 ? 's' : ''}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
