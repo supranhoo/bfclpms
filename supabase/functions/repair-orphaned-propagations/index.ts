@@ -149,10 +149,9 @@ Deno.serve(async (req) => {
 });
 
 function scoreToRating(score: number): string {
-  if (score >= 4.5) return "green";
-  if (score >= 3.5) return "blue";
-  if (score >= 2.5) return "yellow";
-  if (score >= 1.5) return "yellow";
+  if (score >= 5) return "blue";
+  if (score >= 4) return "green";
+  if (score >= 3) return "yellow";
   return "red";
 }
 
