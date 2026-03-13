@@ -70,6 +70,7 @@ export function OrgKpiPendingReport({ rows, reviewPeriod, reviewYear }: OrgKpiPe
       'Frequency': r.frequency,
       'Previous Period Value': r.previousValue ?? '',
       'Days Pending': r.daysPending ?? '',
+      'Days Since Last Update': r.daysSinceLastUpdate ?? '',
       'Employee Count': r.employeeCount ?? '',
     });
 
