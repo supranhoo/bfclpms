@@ -228,6 +228,7 @@ export function ScoringHealthCheck({ kpis, selectedPeriod, selectedYear }: Props
   const [fixingAll, setFixingAll] = useState<IssueType | null>(null);
   const [impactIssues, setImpactIssues] = useState<ScoringIssue[]>([]);
   const [impactOpen, setImpactOpen] = useState(false);
+  const [impactReadOnly, setImpactReadOnly] = useState(false);
   const [editKpi, setEditKpi] = useState<KPI | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
