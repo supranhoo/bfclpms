@@ -424,7 +424,8 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                 <span className="text-muted-foreground ml-2 text-sm">({employee.employeeCode})</span>
                 <span className="text-muted-foreground ml-2 text-xs">• {employee.departmentName}</span>
               </div>
-              {hasMismatches && <Badge variant="destructive" className="text-xs">Mismatch</Badge>}
+              {hasUnacknowledgedMismatches && <Badge variant="destructive" className="text-xs">Variance</Badge>}
+              {!hasUnacknowledgedMismatches && hasMismatches && <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-600 dark:text-amber-400">Acknowledged</Badge>}
               {!employee.isActive && <Badge variant="outline" className="text-xs text-muted-foreground">Inactive</Badge>}
             </div>
             <div className="flex gap-2 flex-wrap justify-end">
