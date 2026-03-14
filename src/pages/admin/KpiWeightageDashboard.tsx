@@ -36,6 +36,7 @@ function KpiWeightageDashboard() {
   const [departmentId, setDepartmentId] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
   const [showInactive, setShowInactive] = useState(false);
+  const [showOnlyUnacknowledged, setShowOnlyUnacknowledged] = useState(false);
   const [openEmployees, setOpenEmployees] = useState<Set<string>>(new Set());
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
   const [loadingEditKpi, setLoadingEditKpi] = useState(false);
