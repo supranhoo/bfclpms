@@ -1,9 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { ChevronDown, ChevronRight, MessageSquare } from 'lucide-react';
 import type { KPI, ReviewSubmission } from '@/hooks/useKpis';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 
@@ -25,12 +27,63 @@ function getMonthSortIndex(period: string): number {
   return shortMonths.indexOf(first);
 }
 
+interface RemarksEntry {
+  level: string;
+  text: string;
+}
+
+interface MonthEntry {
+  month: string;
+  target: number | null;
+  achieved: number | null;
+  selfScore: number | null;
+  managerScore: number | null;
+  skipScore: number | null;
+  hrScore: number | null;
+  auditorScore: number | null;
+  mgmtScore: number | null;
+  finalScore: number | null;
+  status: string;
+  year: number;
+  isNa: boolean;
+  remarks: RemarksEntry[];
+}
+
+function getLast2Remarks(sub: ReviewSubmission): RemarksEntry[] {
+  const chain: { level: string; text: string | null }[] = [
+    { level: 'Management', text: sub.management_remarks },
+    { level: 'Auditor', text: sub.auditor_remarks },
+    { level: 'HR PMS', text: sub.hr_pms_remarks },
+    { level: 'Skip-Level', text: sub.skip_level_remarks },
+    { level: 'Manager', text: sub.manager_remarks },
+    { level: 'Self', text: sub.self_remarks },
+  ];
+  return chain
+    .filter((r): r is { level: string; text: string } => !!r.text)
+    .slice(0, 2);
+}
+
+const getRatingColor = (score: number) => {
+  if (score >= 5) return 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200';
+  if (score >= 4) return 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200';
+  if (score >= 3) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200';
+  if (score >= 2) return 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300';
+  if (score >= 1) return 'bg-red-400 text-white dark:bg-red-600 dark:text-white';
+  return 'bg-red-900 text-red-100 dark:bg-red-950 dark:text-red-200';
+};
+
+function ScoreBadge({ score, isNa }: { score: number | null; isNa: boolean }) {
+  if (isNa) return <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200 text-[10px]">N/A</Badge>;
+  if (score == null) return <span className="text-muted-foreground">-</span>;
+  return <Badge className={`${getRatingColor(score)} text-[10px]`}>{score.toFixed(1)}</Badge>;
+}
+
 export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: KpiTrackerModalProps) {
-  // Build monthly history from related KPIs (same name across different periods)
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+
   const monthlyData = useMemo(() => {
     if (!kpi) return [];
     
-    // Find all KPIs with the same name for this employee
     const relatedKpis = allKpis.filter(k => 
       k.employee_id === kpi.employee_id &&
       k.kpi_name === kpi.kpi_name &&
@@ -39,16 +92,7 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
 
     const submissionMap = new Map(submissions.map(s => [s.kpi_id, s]));
 
-    // Deduplicate by period + year to avoid showing same month twice
-    const periodMap = new Map<string, {
-      month: string;
-      target: number | null;
-      achieved: number | null;
-      rating: number | null;
-      status: string;
-      year: number;
-      isNa: boolean;
-    }>();
+    const periodMap = new Map<string, MonthEntry>();
 
     relatedKpis.forEach(k => {
       const periodKey = `${k.review_period}-${k.review_year}`;
@@ -59,35 +103,40 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
           month: k.review_period || 'N/A',
           target: isNa ? null : (k.target_value || 0),
           achieved: isNa ? null : (sub ? (sub.achieved_value ?? null) : null),
-          rating: isNa ? null : (sub ? (sub.final_score ?? sub.management_score ?? sub.auditor_score ?? sub.manager_score ?? sub.self_score ?? null) : null),
+          selfScore: isNa ? null : (sub?.self_score ?? null),
+          managerScore: isNa ? null : (sub?.manager_score ?? null),
+          skipScore: isNa ? null : (sub?.skip_level_score ?? null),
+          hrScore: isNa ? null : (sub?.hr_pms_score ?? null),
+          auditorScore: isNa ? null : (sub?.auditor_score ?? null),
+          mgmtScore: isNa ? null : (sub?.management_score ?? null),
+          finalScore: isNa ? null : (sub?.final_score ?? null),
           status: k.status || 'open',
           year: k.review_year || new Date().getFullYear(),
           isNa,
+          remarks: sub && !isNa ? getLast2Remarks(sub) : [],
         });
       }
     });
 
     return Array.from(periodMap.values()).sort((a, b) => {
-      // Sort by year first, then by month
       if (a.year !== b.year) return a.year - b.year;
       return getMonthSortIndex(a.month) - getMonthSortIndex(b.month);
     });
   }, [kpi, allKpis, submissions]);
 
-  if (!kpi) return null;
-
-  const getRatingColor = (score: number) => {
-    if (score >= 5) return 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200';
-    if (score >= 4) return 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200';
-    if (score >= 3) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200';
-    if (score >= 2) return 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300';
-    if (score >= 1) return 'bg-red-400 text-white dark:bg-red-600 dark:text-white';
-    return 'bg-red-900 text-red-100 dark:bg-red-950 dark:text-red-200';
+  const toggleRow = (idx: number) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      next.has(idx) ? next.delete(idx) : next.add(idx);
+      return next;
+    });
   };
+
+  if (!kpi) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
+      <DialogContent className="max-w-7xl max-h-[90vh] overflow-auto">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <DialogTitle>KPI Tracker Sheet</DialogTitle>
@@ -119,20 +168,8 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
                     }}
                   />
                   <Legend />
-                  <Line 
-                    type="monotone" 
-                    dataKey="target" 
-                    stroke="hsl(var(--muted-foreground))" 
-                    strokeDasharray="5 5"
-                    name="Target"
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="achieved" 
-                    stroke="hsl(var(--primary))" 
-                    strokeWidth={2}
-                    name="Achieved"
-                  />
+                  <Line type="monotone" dataKey="target" stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" name="Target" />
+                  <Line type="monotone" dataKey="achieved" stroke="hsl(var(--primary))" strokeWidth={2} name="Achieved" />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
@@ -145,47 +182,78 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
           {/* Monthly Detail Table */}
           <div>
             <h3 className="text-lg font-bold text-foreground mb-3">Monthly Detail Log</h3>
-            <div className="border rounded-lg overflow-hidden">
+            <div className="border rounded-lg overflow-hidden overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="text-center w-8"></TableHead>
                     <TableHead className="text-center">Month</TableHead>
                     <TableHead className="text-center">Target</TableHead>
                     <TableHead className="text-center">Achieved</TableHead>
-                    <TableHead className="text-center">Rating</TableHead>
+                    <TableHead className="text-center">Self</TableHead>
+                    <TableHead className="text-center">Manager</TableHead>
+                    <TableHead className="text-center">Skip</TableHead>
+                    <TableHead className="text-center">HR</TableHead>
+                    <TableHead className="text-center">Auditor</TableHead>
+                    <TableHead className="text-center">Mgmt</TableHead>
+                    <TableHead className="text-center">Final</TableHead>
                     <TableHead className="text-center">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {monthlyData.length > 0 ? (
-                    monthlyData.map((entry, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell className="text-center font-medium">{entry.month}</TableCell>
-                        <TableCell className="text-center">{entry.target}</TableCell>
-                        <TableCell className="text-center font-semibold">
-                          {entry.isNa ? (
-                            <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200">N/A</Badge>
-                          ) : entry.achieved != null ? entry.achieved : '-'}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {entry.isNa ? (
-                            <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200">N/A</Badge>
-                          ) : entry.rating != null ? (
-                            <Badge className={getRatingColor(entry.rating)}>
-                              {entry.rating.toFixed(1)}
-                            </Badge>
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className="text-xs font-semibold uppercase text-muted-foreground">
-                            {entry.status.replace('_', ' ')}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    monthlyData.map((entry, idx) => {
+                      const hasRemarks = entry.remarks.length > 0;
+                      const isExpanded = expandedRows.has(idx);
+                      return (
+                        <>
+                          <TableRow key={idx} className={hasRemarks ? 'cursor-pointer' : ''} onClick={() => hasRemarks && toggleRow(idx)}>
+                            <TableCell className="text-center p-2">
+                              {hasRemarks ? (
+                                isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground mx-auto" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
+                              ) : null}
+                            </TableCell>
+                            <TableCell className="text-center font-medium whitespace-nowrap">{entry.month}</TableCell>
+                            <TableCell className="text-center">{entry.isNa ? '-' : entry.target}</TableCell>
+                            <TableCell className="text-center font-semibold">
+                              {entry.isNa ? (
+                                <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200">N/A</Badge>
+                              ) : entry.achieved != null ? entry.achieved : '-'}
+                            </TableCell>
+                            <TableCell className="text-center"><ScoreBadge score={entry.selfScore} isNa={entry.isNa} /></TableCell>
+                            <TableCell className="text-center"><ScoreBadge score={entry.managerScore} isNa={entry.isNa} /></TableCell>
+                            <TableCell className="text-center"><ScoreBadge score={entry.skipScore} isNa={entry.isNa} /></TableCell>
+                            <TableCell className="text-center"><ScoreBadge score={entry.hrScore} isNa={entry.isNa} /></TableCell>
+                            <TableCell className="text-center"><ScoreBadge score={entry.auditorScore} isNa={entry.isNa} /></TableCell>
+                            <TableCell className="text-center"><ScoreBadge score={entry.mgmtScore} isNa={entry.isNa} /></TableCell>
+                            <TableCell className="text-center"><ScoreBadge score={entry.finalScore} isNa={entry.isNa} /></TableCell>
+                            <TableCell className="text-center">
+                              <span className="text-xs font-semibold uppercase text-muted-foreground">
+                                {entry.status.replace('_', ' ')}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                          {hasRemarks && isExpanded && (
+                            <TableRow key={`${idx}-remarks`} className="bg-muted/30">
+                              <TableCell colSpan={12} className="py-2 px-4">
+                                <div className="flex flex-col gap-1.5">
+                                  {entry.remarks.map((r, ri) => (
+                                    <div key={ri} className="flex items-start gap-2 text-xs">
+                                      <MessageSquare className="h-3 w-3 text-muted-foreground mt-0.5 shrink-0" />
+                                      <span className="font-semibold text-foreground">{r.level}:</span>
+                                      <span className="text-muted-foreground">{r.text}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </>
+                      );
+                    })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                         No monthly data available
                       </TableCell>
                     </TableRow>
