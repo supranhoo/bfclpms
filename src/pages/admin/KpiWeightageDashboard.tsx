@@ -334,7 +334,7 @@ function getReviewYearForMonth(month: string, fiscalStartYear: number): number {
   return idx < 6 ? fiscalStartYear : fiscalStartYear + 1;
 }
 
-function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate, fiscalYear, onEditKpi }: {
+function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate, fiscalYear, onEditKpi, showOnlyUnacknowledged }: {
   employee: EmployeeMatrix;
   months: string[];
   isOpen: boolean;
@@ -342,9 +342,11 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
   onWeightageUpdate: () => void;
   fiscalYear: number;
   onEditKpi: (kpiId: string) => void;
+  showOnlyUnacknowledged: boolean;
 }) {
-  const [addingCell, setAddingCell] = useState<string | null>(null); // "kraName|kpiName|month"
+  const [addingCell, setAddingCell] = useState<string | null>(null);
   const sortedKras = Object.keys(employee.kras).sort();
+  const hasUnacknowledgedMismatches = sortedKras.some(kra => employee.kras[kra].some(k => k.hasMismatch && !k.isAcknowledged));
   const hasMismatches = sortedKras.some(kra => employee.kras[kra].some(k => k.hasMismatch));
   const totalMismatch = months.some(m => {
     const total = employee.monthTotals[m];
