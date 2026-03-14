@@ -61,8 +61,10 @@ export function AcknowledgeVariancePopover({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          className="shrink-0 p-0.5 rounded hover:bg-muted transition-colors"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="shrink-0 h-5 w-5 p-0.5 rounded hover:bg-muted transition-colors"
           title={isAcknowledged ? 'Variance acknowledged (click to undo)' : 'Unacknowledged variance (click to acknowledge)'}
           onClick={(e) => e.stopPropagation()}
         >
@@ -71,7 +73,7 @@ export function AcknowledgeVariancePopover({
           ) : (
             <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
           )}
-        </button>
+        </Button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-3 space-y-2" align="center">
         <p className="text-xs text-muted-foreground">
