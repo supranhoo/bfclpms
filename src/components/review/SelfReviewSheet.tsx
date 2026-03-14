@@ -1118,6 +1118,11 @@ export function SelfReviewSheet({
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>Submit this {selectedKpi?.frequency} KPI for manager review?</p>
+                {selectedKpiSubPeriods.length === 0 && (
+                  <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive dark:text-red-300">
+                    <p className="font-medium">⚠️ No daily entries were recorded for this month. This will be submitted with a score of 0.</p>
+                  </div>
+                )}
                 <div className="p-3 bg-muted rounded-lg space-y-2">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Submitted Days:</span>
@@ -1133,16 +1138,16 @@ export function SelfReviewSheet({
                   )}
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Average Score:</span>
-                    <strong className="text-foreground">{aggregatedSubPeriodScore?.toFixed(2) ?? '—'}</strong>
+                    <strong className="text-foreground">{(aggregatedSubPeriodScore ?? 0).toFixed(2)}</strong>
                   </div>
-                  {aggregatedSubPeriodScore !== null && selectedKpi && (
+                  {selectedKpi && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Rating:</span>
                       <Badge
-                        style={{ backgroundColor: scoreDisplay[Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore, selectedKpi).rating)]?.color || '#991B1B' }}
+                        style={{ backgroundColor: scoreDisplay[Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore ?? 0, selectedKpi).rating)]?.color || '#991B1B' }}
                         className="text-white"
                       >
-                        {scoreDisplay[Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore, selectedKpi).rating)]?.label || 'Not Achieved'}
+                        {scoreDisplay[Math.round(calculateScoreFromAchieved(aggregatedSubPeriodScore ?? 0, selectedKpi).rating)]?.label || 'Not Achieved'}
                       </Badge>
                     </div>
                   )}
@@ -1157,7 +1162,7 @@ export function SelfReviewSheet({
             <AlertDialogCancel disabled={isSubmittingMonthly}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleSubmitMonthlyReview}
-              disabled={isSubmittingMonthly || selectedKpiSubPeriods.length === 0}
+              disabled={isSubmittingMonthly}
             >
               {isSubmittingMonthly ? 'Submitting...' : 'Confirm & Submit'}
             </AlertDialogAction>
