@@ -136,7 +136,7 @@ function KpiWeightageDashboard() {
           for (const m of globalMonths) {
             row[SHORT_MONTHS[m] || m] = kpi.months[m] != null ? `${kpi.months[m]}%` : '--';
           }
-          row['Mismatch'] = kpi.hasMismatch ? 'Yes' : 'No';
+          row['Variance'] = kpi.hasMismatch ? (kpi.isAcknowledged ? 'Acknowledged' : 'Yes') : 'No';
           rows.push(row);
         }
       }
