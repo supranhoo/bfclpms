@@ -165,6 +165,12 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
 
         kpiRow.months[month] = weightage;
         kpiRow.kpiIds[month] = kpi.id;
+        // Track acknowledged — true only if ALL month records are acknowledged
+        if (kpi.weightage_variance_acknowledged === true) {
+          // Will be finalized in post-processing
+          (kpiRow as any)._ackCount = ((kpiRow as any)._ackCount || 0) + 1;
+        }
+        (kpiRow as any)._totalCount = ((kpiRow as any)._totalCount || 0) + 1;
 
         // Accumulate month totals
         if (weightage != null) {
