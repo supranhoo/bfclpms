@@ -374,14 +374,9 @@ export function SelfReviewSheet({
     const aggregationResult = calculateDailyAggregatedScore(values, dailyAggregationMethod, selectedPeriod, selectedYear, isBinaryKpi);
     const aggregatedScore = aggregationResult.score;
 
-    if (aggregatedScore === null) {
-      toast({
-        title: 'No valid entries found',
-        description: 'Please enter values for at least one day before submitting the month.',
-        variant: 'destructive',
-      });
-      return;
-    }
+    // Allow submission with 0 score when no daily data was captured
+    const effectiveScore = aggregatedScore ?? 0;
+    const hasNoEntries = aggregatedScore === null;
 
     setIsSubmittingMonthly(true);
     try {
