@@ -34,7 +34,7 @@ export function WeightageCellEditor({
 }: WeightageCellEditorProps) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(String(currentWeightage ?? ''));
-  const [scope, setScope] = useState<Scope>('forward');
+  const [scope, setScope] = useState<Scope>('all');
   const [saving, setSaving] = useState(false);
 
   const handleOpen = (isOpen: boolean) => {
