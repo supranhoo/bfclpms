@@ -414,7 +414,7 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
 
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
-      <Card className={hasMismatches ? 'border-destructive/30' : ''}>
+      <Card className={hasUnacknowledgedMismatches ? 'border-destructive/30' : hasMismatches ? 'border-amber-500/30' : ''}>
         <CollapsibleTrigger asChild>
           <button className="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/50 transition-colors rounded-t-lg">
             <div className="flex items-center gap-3">
