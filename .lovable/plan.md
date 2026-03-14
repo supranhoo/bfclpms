@@ -1,21 +1,29 @@
 
-# Fix: Exclude Unsubmitted KPIs from Score Calculation — IMPLEMENTED ✅
 
-## Problem
-KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
+# Fix: Variance Acknowledgment Blocked by Governance Trigger
 
-## Fix Applied
-Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
+## Root Cause
 
-| File | Line | Change |
-|---|---|---|
-| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
-| `EmployeeScorecard.tsx` | 220 | Same |
-| `AuditScorecard.tsx` | 221 | Same |
-| `ManagementScorecard.tsx` | 222 | Same |
+The database trigger `prevent_locked_period_updates` runs on every UPDATE to the `kpis` table. It checks `edit_kpi` governance permission and raises an exception if the user lacks it. When an admin tries to acknowledge a variance, the trigger blocks it because the review period has `edit_kpi` disabled — even though acknowledging a variance doesn't modify any KPI content.
 
-## Impact
-- Biswajit's score: 382/468 → 382/443 (correct)
-- 19 employees with unsubmitted KPIs now show accurate weighted scores
-- Quarterly KPIs in non-terminal months are correctly excluded
-- No database migration needed — frontend calculation fix only
+## Fix
+
+**Database migration** — Add a bypass in `prevent_locked_period_updates` for updates that only change `weightage_variance_acknowledged` (and `updated_at`). If those are the only columns changing, skip the governance check entirely (admins-only safety check still applies).
+
+The bypass logic:
+```sql
+-- BYPASS: Variance acknowledgment is admin metadata, not a KPI edit
+IF OLD.weightage_variance_acknowledged IS DISTINCT FROM NEW.weightage_variance_acknowledged
+   AND OLD.weightage = NEW.weightage
+   AND OLD.status = NEW.status
+   AND OLD.kpi_name = NEW.kpi_name
+   AND OLD.target = NEW.target
+THEN
+  RETURN NEW;
+END IF;
+```
+
+This is placed **before** the governance check so it short-circuits for acknowledge-only updates while still enforcing governance for real KPI edits.
+
+**One file changed**: A single SQL migration to update the trigger function.
+
