@@ -1047,6 +1047,7 @@ export function SelfReviewSheet({
         kpi={selectedKpi}
         allKpis={allKpis}
         submissions={allSubmissions}
+        workflowStages={effectiveStages}
       />
 
       {/* Resubmission Confirmation Dialog */}

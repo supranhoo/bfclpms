@@ -1100,6 +1100,7 @@ export function AuditScorecard({
         kpi={selectedKpi}
         allKpis={allKpis || []}
         submissions={allSubmissions || []}
+        workflowStages={effectiveStages}
       />
 
       {/* Query History Dialog */}
