@@ -229,28 +229,53 @@ function KpiWeightageDashboard() {
       </Card>
 
       {/* Summary */}
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex gap-3 flex-wrap items-center">
         <Badge variant="secondary" className="text-sm py-1 px-3">
           {employees.length} Employees
         </Badge>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge
-                variant={mismatchCount > 0 ? 'destructive' : 'secondary'}
-                className={`text-sm py-1 px-3 transition-all duration-300 ${mismatchCount !== prevMismatchRef.current ? 'ring-2 ring-primary ring-offset-2 ring-offset-background scale-105' : ''}`}
-                onTransitionEnd={() => { prevMismatchRef.current = mismatchCount; }}
-              >
-                {mismatchCount > 0 ? <AlertTriangle className="h-3.5 w-3.5 mr-1" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
-                {mismatchCount} Mismatches
-                <Info className="h-3 w-3 ml-1 opacity-60" />
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-[260px] text-xs">
-              {mismatchCount} KPIs have inconsistent weightage across months. Edit a KPI and apply to "All months" to fix.
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        {varianceCount > 0 ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="destructive"
+                  className={`text-sm py-1 px-3 transition-all duration-300 ${varianceCount !== prevVarianceRef.current ? 'ring-2 ring-primary ring-offset-2 ring-offset-background scale-105' : ''}`}
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 mr-1" />
+                  {varianceCount} Variances
+                  <Info className="h-3 w-3 ml-1 opacity-60" />
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[280px] text-xs">
+                {varianceCount} KPIs have unacknowledged weightage differences across months. Click the ⚠ icon on a KPI row to mark it as intentional, or edit &amp; apply "All months" to fix.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : totalMismatchCount === 0 ? (
+          <Badge variant="secondary" className="text-sm py-1 px-3">
+            <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+            All Clear
+          </Badge>
+        ) : null}
+        {acknowledgedCount > 0 && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="text-sm py-1 px-3 border-amber-500/50 text-amber-600 dark:text-amber-400">
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                  {acknowledgedCount} Acknowledged
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[260px] text-xs">
+                {acknowledgedCount} KPIs have intentional weightage variations confirmed by admin.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+        <div className="flex items-center gap-2 ml-2">
+          <Switch id="show-unack" checked={showOnlyUnacknowledged} onCheckedChange={setShowOnlyUnacknowledged} />
+          <Label htmlFor="show-unack" className="text-xs text-muted-foreground whitespace-nowrap cursor-pointer">Unacknowledged only</Label>
+        </div>
         {employees.length > 0 && (
           <div className="ml-auto flex gap-2">
             <Button variant="ghost" size="sm" onClick={expandAll}>Expand All</Button>
