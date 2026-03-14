@@ -16,6 +16,7 @@ export interface KpiRow {
   kpiIds: Record<string, string>; // month -> kpi.id
   baselineWeightage: number | null;
   hasMismatch: boolean;
+  isAcknowledged: boolean;
 }
 
 export interface EmployeeMatrix {
@@ -58,6 +59,7 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
               kra_name,
               kpi_name,
               weightage,
+              weightage_variance_acknowledged,
               review_period,
               category_id,
               profiles!kpis_employee_id_fkey(full_name, employee_code, department_id, is_active, departments(name)),
@@ -156,12 +158,19 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
             kpiIds: {},
             baselineWeightage: null,
             hasMismatch: false,
+            isAcknowledged: false,
           };
           emp.kras[kraName].push(kpiRow);
         }
 
         kpiRow.months[month] = weightage;
         kpiRow.kpiIds[month] = kpi.id;
+        // Track acknowledged — true only if ALL month records are acknowledged
+        if (kpi.weightage_variance_acknowledged === true) {
+          // Will be finalized in post-processing
+          (kpiRow as any)._ackCount = ((kpiRow as any)._ackCount || 0) + 1;
+        }
+        (kpiRow as any)._totalCount = ((kpiRow as any)._totalCount || 0) + 1;
 
         // Accumulate month totals
         if (weightage != null) {
@@ -198,6 +207,12 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
                 ([_, w]) => w != null && w !== kpiRow.baselineWeightage
               );
             }
+            // Set acknowledged: true only if all records for this KPI row are acknowledged
+            const ackCount = (kpiRow as any)._ackCount || 0;
+            const totalCount = (kpiRow as any)._totalCount || 0;
+            kpiRow.isAcknowledged = kpiRow.hasMismatch && totalCount > 0 && ackCount === totalCount;
+            delete (kpiRow as any)._ackCount;
+            delete (kpiRow as any)._totalCount;
           }
         }
 

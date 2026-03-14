@@ -15,6 +15,7 @@ import { useKpiWeightageMatrix, type EmployeeMatrix } from '@/hooks/useKpiWeight
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { WeightageCellEditor } from '@/components/admin/WeightageCellEditor';
+import { AcknowledgeVariancePopover } from '@/components/admin/AcknowledgeVariancePopover';
 import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
 import { KPI } from '@/hooks/useKpis';
 import { toast } from 'sonner';
@@ -35,6 +36,7 @@ function KpiWeightageDashboard() {
   const [departmentId, setDepartmentId] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
   const [showInactive, setShowInactive] = useState(false);
+  const [showOnlyUnacknowledged, setShowOnlyUnacknowledged] = useState(false);
   const [openEmployees, setOpenEmployees] = useState<Set<string>>(new Set());
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
   const [loadingEditKpi, setLoadingEditKpi] = useState(false);
@@ -91,23 +93,31 @@ function KpiWeightageDashboard() {
   const expandAll = () => setOpenEmployees(new Set(employees.map(e => e.employeeId)));
   const collapseAll = () => setOpenEmployees(new Set());
 
-  const mismatchCount = useMemo(() => {
-    let count = 0;
+  const { varianceCount, acknowledgedCount } = useMemo(() => {
+    let variance = 0;
+    let acknowledged = 0;
     for (const emp of employees) {
       for (const kras of Object.values(emp.kras)) {
         for (const kpi of kras) {
-          if (kpi.hasMismatch) count++;
+          if (kpi.hasMismatch) {
+            if (kpi.isAcknowledged) {
+              acknowledged++;
+            } else {
+              variance++;
+            }
+          }
         }
       }
     }
-    return count;
+    return { varianceCount: variance, acknowledgedCount: acknowledged };
   }, [employees]);
 
-  const prevMismatchRef = useRef(mismatchCount);
+  const totalMismatchCount = varianceCount + acknowledgedCount;
+  const prevVarianceRef = useRef(varianceCount);
   useEffect(() => {
-    const timer = setTimeout(() => { prevMismatchRef.current = mismatchCount; }, 600);
+    const timer = setTimeout(() => { prevVarianceRef.current = varianceCount; }, 600);
     return () => clearTimeout(timer);
-  }, [mismatchCount]);
+  }, [varianceCount]);
 
   const handleExport = () => {
     const rows: any[] = [];
@@ -126,7 +136,7 @@ function KpiWeightageDashboard() {
           for (const m of globalMonths) {
             row[SHORT_MONTHS[m] || m] = kpi.months[m] != null ? `${kpi.months[m]}%` : '--';
           }
-          row['Mismatch'] = kpi.hasMismatch ? 'Yes' : 'No';
+          row['Variance'] = kpi.hasMismatch ? (kpi.isAcknowledged ? 'Acknowledged' : 'Yes') : 'No';
           rows.push(row);
         }
       }
@@ -142,7 +152,7 @@ function KpiWeightageDashboard() {
       for (const m of globalMonths) {
         totalRow[SHORT_MONTHS[m] || m] = emp.monthTotals[m] != null ? `${emp.monthTotals[m]}%` : '--';
       }
-      totalRow['Mismatch'] = '';
+      totalRow['Variance'] = '';
       rows.push(totalRow);
     }
 
@@ -219,28 +229,53 @@ function KpiWeightageDashboard() {
       </Card>
 
       {/* Summary */}
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex gap-3 flex-wrap items-center">
         <Badge variant="secondary" className="text-sm py-1 px-3">
           {employees.length} Employees
         </Badge>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge
-                variant={mismatchCount > 0 ? 'destructive' : 'secondary'}
-                className={`text-sm py-1 px-3 transition-all duration-300 ${mismatchCount !== prevMismatchRef.current ? 'ring-2 ring-primary ring-offset-2 ring-offset-background scale-105' : ''}`}
-                onTransitionEnd={() => { prevMismatchRef.current = mismatchCount; }}
-              >
-                {mismatchCount > 0 ? <AlertTriangle className="h-3.5 w-3.5 mr-1" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
-                {mismatchCount} Mismatches
-                <Info className="h-3 w-3 ml-1 opacity-60" />
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-[260px] text-xs">
-              {mismatchCount} KPIs have inconsistent weightage across months. Edit a KPI and apply to "All months" to fix.
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        {varianceCount > 0 ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="destructive"
+                  className={`text-sm py-1 px-3 transition-all duration-300 ${varianceCount !== prevVarianceRef.current ? 'ring-2 ring-primary ring-offset-2 ring-offset-background scale-105' : ''}`}
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 mr-1" />
+                  {varianceCount} Variances
+                  <Info className="h-3 w-3 ml-1 opacity-60" />
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[280px] text-xs">
+                {varianceCount} KPIs have unacknowledged weightage differences across months. Click the ⚠ icon on a KPI row to mark it as intentional, or edit &amp; apply "All months" to fix.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : totalMismatchCount === 0 ? (
+          <Badge variant="secondary" className="text-sm py-1 px-3">
+            <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+            All Clear
+          </Badge>
+        ) : null}
+        {acknowledgedCount > 0 && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="text-sm py-1 px-3 border-amber-500/50 text-amber-600 dark:text-amber-400">
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                  {acknowledgedCount} Acknowledged
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[260px] text-xs">
+                {acknowledgedCount} KPIs have intentional weightage variations confirmed by admin.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+        <div className="flex items-center gap-2 ml-2">
+          <Switch id="show-unack" checked={showOnlyUnacknowledged} onCheckedChange={setShowOnlyUnacknowledged} />
+          <Label htmlFor="show-unack" className="text-xs text-muted-foreground whitespace-nowrap cursor-pointer">Unacknowledged only</Label>
+        </div>
         {employees.length > 0 && (
           <div className="ml-auto flex gap-2">
             <Button variant="ghost" size="sm" onClick={expandAll}>Expand All</Button>
@@ -276,6 +311,7 @@ function KpiWeightageDashboard() {
           onWeightageUpdate={() => queryClient.invalidateQueries({ queryKey: ['kpi-weightage-matrix'] })}
           fiscalYear={fiscalYear}
           onEditKpi={handleEditKpi}
+          showOnlyUnacknowledged={showOnlyUnacknowledged}
         />
       ))}
 
@@ -298,7 +334,7 @@ function getReviewYearForMonth(month: string, fiscalStartYear: number): number {
   return idx < 6 ? fiscalStartYear : fiscalStartYear + 1;
 }
 
-function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate, fiscalYear, onEditKpi }: {
+function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate, fiscalYear, onEditKpi, showOnlyUnacknowledged }: {
   employee: EmployeeMatrix;
   months: string[];
   isOpen: boolean;
@@ -306,9 +342,11 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
   onWeightageUpdate: () => void;
   fiscalYear: number;
   onEditKpi: (kpiId: string) => void;
+  showOnlyUnacknowledged: boolean;
 }) {
-  const [addingCell, setAddingCell] = useState<string | null>(null); // "kraName|kpiName|month"
+  const [addingCell, setAddingCell] = useState<string | null>(null);
   const sortedKras = Object.keys(employee.kras).sort();
+  const hasUnacknowledgedMismatches = sortedKras.some(kra => employee.kras[kra].some(k => k.hasMismatch && !k.isAcknowledged));
   const hasMismatches = sortedKras.some(kra => employee.kras[kra].some(k => k.hasMismatch));
   const totalMismatch = months.some(m => {
     const total = employee.monthTotals[m];
@@ -376,7 +414,7 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
 
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
-      <Card className={hasMismatches ? 'border-destructive/30' : ''}>
+      <Card className={hasUnacknowledgedMismatches ? 'border-destructive/30' : hasMismatches ? 'border-amber-500/30' : ''}>
         <CollapsibleTrigger asChild>
           <button className="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/50 transition-colors rounded-t-lg">
             <div className="flex items-center gap-3">
@@ -386,7 +424,8 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                 <span className="text-muted-foreground ml-2 text-sm">({employee.employeeCode})</span>
                 <span className="text-muted-foreground ml-2 text-xs">• {employee.departmentName}</span>
               </div>
-              {hasMismatches && <Badge variant="destructive" className="text-xs">Mismatch</Badge>}
+              {hasUnacknowledgedMismatches && <Badge variant="destructive" className="text-xs">Variance</Badge>}
+              {!hasUnacknowledgedMismatches && hasMismatches && <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-600 dark:text-amber-400">Acknowledged</Badge>}
               {!employee.isActive && <Badge variant="outline" className="text-xs text-muted-foreground">Inactive</Badge>}
             </div>
             <div className="flex gap-2 flex-wrap justify-end">
@@ -427,14 +466,23 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                         {kraName}
                       </TableCell>
                     </TableRow>
-                    {employee.kras[kraName].map(kpi => {
+                    {employee.kras[kraName]
+                      .filter(kpi => !showOnlyUnacknowledged || (kpi.hasMismatch && !kpi.isAcknowledged))
+                      .map(kpi => {
                       const firstKpiId = Object.values(kpi.kpiIds).find(Boolean);
                       return (
                       <TableRow key={`kpi-${kpi.kpiName}-${kraName}`} className="group/kpirow">
                         <TableCell className="pl-8 text-sm sticky left-0 bg-background z-10 max-w-[200px]">
                           <div className="flex items-center gap-1.5">
                             <span className="truncate" title={kpi.kpiName}>{kpi.kpiName}</span>
-                            {kpi.hasMismatch && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />}
+                            {kpi.hasMismatch && (
+                              <AcknowledgeVariancePopover
+                                isAcknowledged={kpi.isAcknowledged}
+                                kpiIds={kpi.kpiIds}
+                                kpiName={kpi.kpiName}
+                                onSuccess={onWeightageUpdate}
+                              />
+                            )}
                             {firstKpiId && (
                               <button
                                 onClick={() => onEditKpi(firstKpiId)}

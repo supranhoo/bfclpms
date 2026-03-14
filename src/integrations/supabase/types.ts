@@ -1159,6 +1159,7 @@ export type Database = {
           uom_type: string | null
           updated_at: string
           weightage: number | null
+          weightage_variance_acknowledged: boolean
         }
         Insert: {
           category_id: string
@@ -1195,6 +1196,7 @@ export type Database = {
           uom_type?: string | null
           updated_at?: string
           weightage?: number | null
+          weightage_variance_acknowledged?: boolean
         }
         Update: {
           category_id?: string
@@ -1231,6 +1233,7 @@ export type Database = {
           uom_type?: string | null
           updated_at?: string
           weightage?: number | null
+          weightage_variance_acknowledged?: boolean
         }
         Relationships: [
           {
