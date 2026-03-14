@@ -34,7 +34,7 @@ export function WeightageCellEditor({
 }: WeightageCellEditorProps) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(String(currentWeightage ?? ''));
-  const [scope, setScope] = useState<Scope>('forward');
+  const [scope, setScope] = useState<Scope>('all');
   const [saving, setSaving] = useState(false);
 
   const handleOpen = (isOpen: boolean) => {
@@ -143,6 +143,9 @@ export function WeightageCellEditor({
             </div>
           </RadioGroup>
         </div>
+        <p className="text-[11px] text-muted-foreground">
+          Will update <strong>{getTargetKpiIds().length}</strong> month(s)
+        </p>
         <div className="flex gap-2">
           <Button size="sm" className="flex-1" onClick={handleSave} disabled={saving}>
             {saving ? 'Saving...' : 'Save'}
