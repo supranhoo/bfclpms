@@ -380,16 +380,23 @@ export function SelfReviewSheet({
 
     setIsSubmittingMonthly(true);
     try {
-      const result = calculateScoreFromAchieved(aggregatedScore, selectedKpi);
+      const result = calculateScoreFromAchieved(effectiveScore, selectedKpi);
       const selfRating = getRatingLevel(result.rating);
-      const methodLabel = dailyAggregationMethod === 'missed_days_penalty'
-        ? `Missed Days Penalty (${aggregationResult.missedDays} missed)`
-        : 'Average';
-      const defaultRemarks = `${methodLabel}: Aggregated from ${selectedKpiSubPeriods.length} ${selectedKpi.frequency?.toLowerCase()} entries`;
+      
+      let defaultRemarks: string;
+      if (hasNoEntries) {
+        const totalDays = aggregationResult.totalDays;
+        defaultRemarks = `Missed Days Penalty: 0 of ${totalDays} days submitted — Score 0`;
+      } else {
+        const methodLabel = dailyAggregationMethod === 'missed_days_penalty'
+          ? `Missed Days Penalty (${aggregationResult.missedDays} missed)`
+          : 'Average';
+        defaultRemarks = `${methodLabel}: Aggregated from ${selectedKpiSubPeriods.length} ${selectedKpi.frequency?.toLowerCase()} entries`;
+      }
 
       await submitReview.mutateAsync({
         kpi_id: selectedKpi.id,
-        achieved_value: aggregatedScore,
+        achieved_value: effectiveScore,
         self_rating: selfRating,
         self_score: result.rating,
         self_remarks: selfRemarks || defaultRemarks,
