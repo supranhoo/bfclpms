@@ -78,9 +78,20 @@ export function WeightageCellEditor({
 
     setSaving(true);
     try {
+      const updatePayload: any = { weightage: newWeightage, updated_at: new Date().toISOString() };
+      // Reset acknowledgement when creating a potential new variance
+      if (scope === 'this' || scope === 'forward') {
+        const allIds = Object.values(kpiIds).filter(Boolean);
+        if (allIds.length > 0) {
+          await supabase
+            .from('kpis')
+            .update({ weightage_variance_acknowledged: false, updated_at: new Date().toISOString() })
+            .in('id', allIds);
+        }
+      }
       const { error } = await supabase
         .from('kpis')
-        .update({ weightage: newWeightage, updated_at: new Date().toISOString() })
+        .update(updatePayload)
         .in('id', ids);
 
       if (error) throw error;
