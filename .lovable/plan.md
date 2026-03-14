@@ -1,21 +1,24 @@
 
-# Fix: Exclude Unsubmitted KPIs from Score Calculation — IMPLEMENTED ✅
+
+# Allow Daily KPI Submission with Zero Score When No Data Captured
 
 ## Problem
-KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
+For Daily KPIs like "Daily Plant Visit Compliance," if the employee hasn't captured any daily data for the month, the system blocks submission entirely. The employee cannot submit with a score/rating of 0, even though missing all days should logically result in a 0 rating (especially under the "Missed Days Penalty" method where 5+ missed days = 0).
 
-## Fix Applied
-Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
+## Proposed Change
 
-| File | Line | Change |
-|---|---|---|
-| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
-| `EmployeeScorecard.tsx` | 220 | Same |
-| `AuditScorecard.tsx` | 221 | Same |
-| `ManagementScorecard.tsx` | 222 | Same |
+### File: `src/components/review/SelfReviewSheet.tsx`
 
-## Impact
-- Biswajit's score: 382/468 → 382/443 (correct)
-- 19 employees with unsubmitted KPIs now show accurate weighted scores
-- Quarterly KPIs in non-terminal months are correctly excluded
-- No database migration needed — frontend calculation fix only
+**Current behavior (line 377-384):** When `aggregatedScore === null` (no entries), submission is blocked with an error toast.
+
+**New behavior:** Instead of blocking, allow submission with score = 0 and rating = 0 when the employee has no daily entries. The confirmation dialog should clearly warn: *"No daily entries were recorded. This will be submitted with a score of 0."*
+
+Specifically:
+1. Remove the hard block when `aggregatedScore === null` for daily/weekly KPIs
+2. Treat null aggregated score as 0 for submission purposes
+3. Set `self_score = 0`, `self_rating = 'red'`, `achieved_value = 0`
+4. Auto-generate remarks like: `"Missed Days Penalty: 0 of {expectedDays} days submitted — Score 0"`
+5. Show a warning confirmation before proceeding (reuse the existing `showMonthlySubmitConfirm` dialog pattern but with a prominent warning)
+
+This is a single-file change in `SelfReviewSheet.tsx`, modifying the `handleSubmitMonthlyReview` function and the confirmation dialog text.
+
