@@ -1,0 +1,1 @@
+ALTER TABLE public.kpis ADD COLUMN IF NOT EXISTS weightage_variance_acknowledged boolean NOT NULL DEFAULT false;
