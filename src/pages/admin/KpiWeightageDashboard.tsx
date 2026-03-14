@@ -152,7 +152,7 @@ function KpiWeightageDashboard() {
       for (const m of globalMonths) {
         totalRow[SHORT_MONTHS[m] || m] = emp.monthTotals[m] != null ? `${emp.monthTotals[m]}%` : '--';
       }
-      totalRow['Mismatch'] = '';
+      totalRow['Variance'] = '';
       rows.push(totalRow);
     }
 
