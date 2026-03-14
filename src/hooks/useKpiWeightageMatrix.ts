@@ -16,6 +16,7 @@ export interface KpiRow {
   kpiIds: Record<string, string>; // month -> kpi.id
   baselineWeightage: number | null;
   hasMismatch: boolean;
+  isAcknowledged: boolean;
 }
 
 export interface EmployeeMatrix {
