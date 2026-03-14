@@ -59,6 +59,7 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
               kra_name,
               kpi_name,
               weightage,
+              weightage_variance_acknowledged,
               review_period,
               category_id,
               profiles!kpis_employee_id_fkey(full_name, employee_code, department_id, is_active, departments(name)),
