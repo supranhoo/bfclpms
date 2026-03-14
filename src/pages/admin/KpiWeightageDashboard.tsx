@@ -311,6 +311,7 @@ function KpiWeightageDashboard() {
           onWeightageUpdate={() => queryClient.invalidateQueries({ queryKey: ['kpi-weightage-matrix'] })}
           fiscalYear={fiscalYear}
           onEditKpi={handleEditKpi}
+          showOnlyUnacknowledged={showOnlyUnacknowledged}
         />
       ))}
 
