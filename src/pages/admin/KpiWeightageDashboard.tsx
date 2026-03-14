@@ -103,6 +103,12 @@ function KpiWeightageDashboard() {
     return count;
   }, [employees]);
 
+  const prevMismatchRef = useRef(mismatchCount);
+  useEffect(() => {
+    const timer = setTimeout(() => { prevMismatchRef.current = mismatchCount; }, 600);
+    return () => clearTimeout(timer);
+  }, [mismatchCount]);
+
   const handleExport = () => {
     const rows: any[] = [];
     for (const emp of employees) {
