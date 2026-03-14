@@ -217,10 +217,24 @@ function KpiWeightageDashboard() {
         <Badge variant="secondary" className="text-sm py-1 px-3">
           {employees.length} Employees
         </Badge>
-        <Badge variant={mismatchCount > 0 ? 'destructive' : 'secondary'} className="text-sm py-1 px-3">
-          {mismatchCount > 0 ? <AlertTriangle className="h-3.5 w-3.5 mr-1" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
-          {mismatchCount} Mismatches
-        </Badge>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant={mismatchCount > 0 ? 'destructive' : 'secondary'}
+                className={`text-sm py-1 px-3 transition-all duration-300 ${mismatchCount !== prevMismatchRef.current ? 'ring-2 ring-primary ring-offset-2 ring-offset-background scale-105' : ''}`}
+                onTransitionEnd={() => { prevMismatchRef.current = mismatchCount; }}
+              >
+                {mismatchCount > 0 ? <AlertTriangle className="h-3.5 w-3.5 mr-1" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
+                {mismatchCount} Mismatches
+                <Info className="h-3 w-3 ml-1 opacity-60" />
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[260px] text-xs">
+              {mismatchCount} KPIs have inconsistent weightage across months. Edit a KPI and apply to "All months" to fix.
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         {employees.length > 0 && (
           <div className="ml-auto flex gap-2">
             <Button variant="ghost" size="sm" onClick={expandAll}>Expand All</Button>
