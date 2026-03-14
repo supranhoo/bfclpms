@@ -158,6 +158,7 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
             kpiIds: {},
             baselineWeightage: null,
             hasMismatch: false,
+            isAcknowledged: false,
           };
           emp.kras[kraName].push(kpiRow);
         }
