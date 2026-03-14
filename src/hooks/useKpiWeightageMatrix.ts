@@ -207,6 +207,12 @@ export function useKpiWeightageMatrix(fiscalStartYear: number, filters?: {
                 ([_, w]) => w != null && w !== kpiRow.baselineWeightage
               );
             }
+            // Set acknowledged: true only if all records for this KPI row are acknowledged
+            const ackCount = (kpiRow as any)._ackCount || 0;
+            const totalCount = (kpiRow as any)._totalCount || 0;
+            kpiRow.isAcknowledged = kpiRow.hasMismatch && totalCount > 0 && ackCount === totalCount;
+            delete (kpiRow as any)._ackCount;
+            delete (kpiRow as any)._totalCount;
           }
         }
 
