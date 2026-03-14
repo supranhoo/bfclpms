@@ -466,14 +466,23 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                         {kraName}
                       </TableCell>
                     </TableRow>
-                    {employee.kras[kraName].map(kpi => {
+                    {employee.kras[kraName]
+                      .filter(kpi => !showOnlyUnacknowledged || (kpi.hasMismatch && !kpi.isAcknowledged))
+                      .map(kpi => {
                       const firstKpiId = Object.values(kpi.kpiIds).find(Boolean);
                       return (
                       <TableRow key={`kpi-${kpi.kpiName}-${kraName}`} className="group/kpirow">
                         <TableCell className="pl-8 text-sm sticky left-0 bg-background z-10 max-w-[200px]">
                           <div className="flex items-center gap-1.5">
                             <span className="truncate" title={kpi.kpiName}>{kpi.kpiName}</span>
-                            {kpi.hasMismatch && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />}
+                            {kpi.hasMismatch && (
+                              <AcknowledgeVariancePopover
+                                isAcknowledged={kpi.isAcknowledged}
+                                kpiIds={kpi.kpiIds}
+                                kpiName={kpi.kpiName}
+                                onSuccess={onWeightageUpdate}
+                              />
+                            )}
                             {firstKpiId && (
                               <button
                                 onClick={() => onEditKpi(firstKpiId)}
