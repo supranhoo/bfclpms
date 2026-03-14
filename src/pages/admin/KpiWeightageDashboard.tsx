@@ -15,6 +15,7 @@ import { useKpiWeightageMatrix, type EmployeeMatrix } from '@/hooks/useKpiWeight
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { WeightageCellEditor } from '@/components/admin/WeightageCellEditor';
+import { AcknowledgeVariancePopover } from '@/components/admin/AcknowledgeVariancePopover';
 import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
 import { KPI } from '@/hooks/useKpis';
 import { toast } from 'sonner';
