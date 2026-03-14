@@ -1165,6 +1165,7 @@ export function ManagementScorecard({
         kpi={selectedKpi}
         allKpis={allKpis || []}
         submissions={allSubmissions || []}
+        workflowStages={effectiveStages}
       />
 
       {/* Query History Dialog */}

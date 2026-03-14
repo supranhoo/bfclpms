@@ -3,7 +3,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { ChevronDown, ChevronRight, MessageSquare } from 'lucide-react';
 import type { KPI, ReviewSubmission } from '@/hooks/useKpis';
@@ -15,6 +14,30 @@ interface KpiTrackerModalProps {
   kpi: KPI | null;
   allKpis: KPI[];
   submissions: ReviewSubmission[];
+  workflowStages?: string[];
+}
+
+const STAGE_COLUMN_MAP: Record<string, { key: string; label: string; remarkKey: string; remarkLabel: string }> = {
+  self_review: { key: 'selfScore', label: 'Self', remarkKey: 'self_remarks', remarkLabel: 'Self' },
+  manager_check: { key: 'managerScore', label: 'Manager', remarkKey: 'manager_remarks', remarkLabel: 'Manager' },
+  skip_level_check: { key: 'skipScore', label: 'Skip-Level', remarkKey: 'skip_level_remarks', remarkLabel: 'Skip-Level' },
+  hr_pms_review: { key: 'hrScore', label: 'HR PMS', remarkKey: 'hr_pms_remarks', remarkLabel: 'HR PMS' },
+  audit: { key: 'auditorScore', label: 'Auditor', remarkKey: 'auditor_remarks', remarkLabel: 'Auditor' },
+  management_review: { key: 'mgmtScore', label: 'Mgmt', remarkKey: 'management_remarks', remarkLabel: 'Management' },
+};
+
+const ALL_STAGES_ORDER = ['self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review'];
+
+function buildScoreColumns(stages: string[]): { key: string; label: string }[] {
+  const cols: { key: string; label: string }[] = [];
+  for (const stage of ALL_STAGES_ORDER) {
+    if (stages.includes(stage)) {
+      const col = STAGE_COLUMN_MAP[stage];
+      if (col) cols.push({ key: col.key, label: col.label });
+    }
+  }
+  cols.push({ key: 'finalScore', label: 'Final' });
+  return cols;
 }
 
 const fullMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -49,18 +72,20 @@ interface MonthEntry {
   remarks: RemarksEntry[];
 }
 
-function getLast2Remarks(sub: ReviewSubmission): RemarksEntry[] {
-  const chain: { level: string; text: string | null }[] = [
-    { level: 'Management', text: sub.management_remarks },
-    { level: 'Auditor', text: sub.auditor_remarks },
-    { level: 'HR PMS', text: sub.hr_pms_remarks },
-    { level: 'Skip-Level', text: sub.skip_level_remarks },
-    { level: 'Manager', text: sub.manager_remarks },
-    { level: 'Self', text: sub.self_remarks },
-  ];
-  return chain
-    .filter((r): r is { level: string; text: string } => !!r.text)
-    .slice(0, 2);
+function getLast2Remarks(sub: ReviewSubmission, stages: string[]): RemarksEntry[] {
+  // Traverse stages in reverse order to get the last 2 non-null remarks
+  const reverseStages = [...stages].reverse();
+  const result: RemarksEntry[] = [];
+  for (const stage of reverseStages) {
+    const mapping = STAGE_COLUMN_MAP[stage];
+    if (!mapping) continue;
+    const text = (sub as any)[mapping.remarkKey];
+    if (text) {
+      result.push({ level: mapping.remarkLabel, text });
+      if (result.length >= 2) break;
+    }
+  }
+  return result;
 }
 
 const getRatingColor = (score: number) => {
@@ -78,8 +103,13 @@ function ScoreBadge({ score, isNa }: { score: number | null; isNa: boolean }) {
   return <Badge className={`${getRatingColor(score)} text-[10px]`}>{score.toFixed(1)}</Badge>;
 }
 
-export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: KpiTrackerModalProps) {
+const DEFAULT_STAGES = ['self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review'];
+
+export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions, workflowStages }: KpiTrackerModalProps) {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+
+  const activeStages = workflowStages || DEFAULT_STAGES;
+  const scoreColumns = useMemo(() => buildScoreColumns(activeStages), [activeStages]);
 
   const monthlyData = useMemo(() => {
     if (!kpi) return [];
@@ -113,7 +143,7 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
           status: k.status || 'open',
           year: k.review_year || new Date().getFullYear(),
           isNa,
-          remarks: sub && !isNa ? getLast2Remarks(sub) : [],
+          remarks: sub && !isNa ? getLast2Remarks(sub, activeStages) : [],
         });
       }
     });
@@ -122,7 +152,7 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
       if (a.year !== b.year) return a.year - b.year;
       return getMonthSortIndex(a.month) - getMonthSortIndex(b.month);
     });
-  }, [kpi, allKpis, submissions]);
+  }, [kpi, allKpis, submissions, activeStages]);
 
   const toggleRow = (idx: number) => {
     setExpandedRows(prev => {
@@ -133,6 +163,8 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
   };
 
   if (!kpi) return null;
+
+  const totalCols = 4 + scoreColumns.length; // expand + month + target + achieved + scores + status
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -190,13 +222,9 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
                     <TableHead className="text-center">Month</TableHead>
                     <TableHead className="text-center">Target</TableHead>
                     <TableHead className="text-center">Achieved</TableHead>
-                    <TableHead className="text-center">Self</TableHead>
-                    <TableHead className="text-center">Manager</TableHead>
-                    <TableHead className="text-center">Skip</TableHead>
-                    <TableHead className="text-center">HR</TableHead>
-                    <TableHead className="text-center">Auditor</TableHead>
-                    <TableHead className="text-center">Mgmt</TableHead>
-                    <TableHead className="text-center">Final</TableHead>
+                    {scoreColumns.map(col => (
+                      <TableHead key={col.key} className="text-center">{col.label}</TableHead>
+                    ))}
                     <TableHead className="text-center">Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -220,13 +248,11 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
                                 <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200">N/A</Badge>
                               ) : entry.achieved != null ? entry.achieved : '-'}
                             </TableCell>
-                            <TableCell className="text-center"><ScoreBadge score={entry.selfScore} isNa={entry.isNa} /></TableCell>
-                            <TableCell className="text-center"><ScoreBadge score={entry.managerScore} isNa={entry.isNa} /></TableCell>
-                            <TableCell className="text-center"><ScoreBadge score={entry.skipScore} isNa={entry.isNa} /></TableCell>
-                            <TableCell className="text-center"><ScoreBadge score={entry.hrScore} isNa={entry.isNa} /></TableCell>
-                            <TableCell className="text-center"><ScoreBadge score={entry.auditorScore} isNa={entry.isNa} /></TableCell>
-                            <TableCell className="text-center"><ScoreBadge score={entry.mgmtScore} isNa={entry.isNa} /></TableCell>
-                            <TableCell className="text-center"><ScoreBadge score={entry.finalScore} isNa={entry.isNa} /></TableCell>
+                            {scoreColumns.map(col => (
+                              <TableCell key={col.key} className="text-center">
+                                <ScoreBadge score={(entry as any)[col.key]} isNa={entry.isNa} />
+                              </TableCell>
+                            ))}
                             <TableCell className="text-center">
                               <span className="text-xs font-semibold uppercase text-muted-foreground">
                                 {entry.status.replace('_', ' ')}
@@ -235,7 +261,7 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
                           </TableRow>
                           {hasRemarks && isExpanded && (
                             <TableRow key={`${idx}-remarks`} className="bg-muted/30">
-                              <TableCell colSpan={12} className="py-2 px-4">
+                              <TableCell colSpan={totalCols + 1} className="py-2 px-4">
                                 <div className="flex flex-col gap-1.5">
                                   {entry.remarks.map((r, ri) => (
                                     <div key={ri} className="flex items-start gap-2 text-xs">
@@ -253,7 +279,7 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions }: 
                     })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={totalCols + 1} className="text-center py-8 text-muted-foreground">
                         No monthly data available
                       </TableCell>
                     </TableRow>
