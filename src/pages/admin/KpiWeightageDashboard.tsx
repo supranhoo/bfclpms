@@ -93,23 +93,31 @@ function KpiWeightageDashboard() {
   const expandAll = () => setOpenEmployees(new Set(employees.map(e => e.employeeId)));
   const collapseAll = () => setOpenEmployees(new Set());
 
-  const mismatchCount = useMemo(() => {
-    let count = 0;
+  const { varianceCount, acknowledgedCount } = useMemo(() => {
+    let variance = 0;
+    let acknowledged = 0;
     for (const emp of employees) {
       for (const kras of Object.values(emp.kras)) {
         for (const kpi of kras) {
-          if (kpi.hasMismatch) count++;
+          if (kpi.hasMismatch) {
+            if (kpi.isAcknowledged) {
+              acknowledged++;
+            } else {
+              variance++;
+            }
+          }
         }
       }
     }
-    return count;
+    return { varianceCount: variance, acknowledgedCount: acknowledged };
   }, [employees]);
 
-  const prevMismatchRef = useRef(mismatchCount);
+  const totalMismatchCount = varianceCount + acknowledgedCount;
+  const prevVarianceRef = useRef(varianceCount);
   useEffect(() => {
-    const timer = setTimeout(() => { prevMismatchRef.current = mismatchCount; }, 600);
+    const timer = setTimeout(() => { prevVarianceRef.current = varianceCount; }, 600);
     return () => clearTimeout(timer);
-  }, [mismatchCount]);
+  }, [varianceCount]);
 
   const handleExport = () => {
     const rows: any[] = [];
