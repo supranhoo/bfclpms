@@ -59,16 +59,16 @@ export function SmartAssignmentDialog({
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<string>>(new Set());
   const [skipDuplicates, setSkipDuplicates] = useState(true);
 
-  // Fetch existing KPIs for this employee in the current period
+  // Fetch existing KPIs for this employee across all months in the year
+  // (needed because multi-month frequencies resolve to different months)
   const { data: existingKpis } = useQuery({
-    queryKey: ['employee-kpis', employeeId, currentPeriod, currentYear],
+    queryKey: ['employee-kpis-year', employeeId, currentYear],
     queryFn: async () => {
       if (!employeeId) return [];
       const { data, error } = await supabase
         .from('kpis')
-        .select('id, kra_name, kpi_name')
+        .select('id, kra_name, kpi_name, review_period')
         .eq('employee_id', employeeId)
-        .eq('review_period', currentPeriod)
         .eq('review_year', currentYear);
       if (error) throw error;
       return data || [];

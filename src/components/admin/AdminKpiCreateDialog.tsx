@@ -708,12 +708,12 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                 {/* Period & Advanced (left column bottom) */}
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Period</span>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Effective Period</span>
                     <div className="flex-1 h-px bg-border" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
-                      <Label className="text-sm font-medium">Review Period</Label>
+                      <Label className="text-sm font-medium">Effective Month</Label>
                       <Select value={reviewPeriod} onValueChange={setReviewPeriod}>
                         <SelectTrigger>
                           <SelectValue />
@@ -726,7 +726,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-sm font-medium">Review Year</Label>
+                      <Label className="text-sm font-medium">Year</Label>
                       <Select value={reviewYear.toString()} onValueChange={(v) => setReviewYear(parseInt(v))}>
                         <SelectTrigger>
                           <SelectValue />
@@ -739,6 +739,11 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                       </Select>
                     </div>
                   </div>
+                  {showResolvedPreview && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 rounded-md px-3 py-2">
+                      {frequency} KPI selected in {reviewPeriod} {reviewYear} will be assigned to <strong>{resolvedPeriod} {reviewYear}</strong> (cycle end month).
+                    </p>
+                  )}
                 </div>
               </div>
 

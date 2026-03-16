@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { MONTH_NAMES } from '@/hooks/useAdminReports';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { isDuplicateKpiError, getDuplicateKpiMessage } from '@/lib/kpiErrorUtils';
+import { isDuplicateKpiError, getDuplicateKpiMessage, formatKpiInsertError } from '@/lib/kpiErrorUtils';
 
 export type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review' | 'approved';
 export type RatingLevel = 'red' | 'yellow' | 'green' | 'blue';
