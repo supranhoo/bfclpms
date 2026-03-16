@@ -135,13 +135,14 @@ export function SmartAssignmentDialog({
     }));
   }, [selectedBundle, existingKpiSignatures, currentPeriod, currentYear]);
 
-  // Detect duplicates in selected templates
+  // Detect duplicates in selected templates (using resolved period)
   const templateDuplicates = useMemo(() => {
     return Array.from(selectedTemplateIds)
       .map(id => templates?.find(t => t.id === id))
       .filter(template => {
         if (!template) return false;
-        const signature = `${template.kra_name}::${template.kpi_name}`.toLowerCase();
+        const resolvedPeriod = getActiveMonthForCycle(template.frequency, currentPeriod, currentYear);
+        const signature = `${resolvedPeriod}::${template.kra_name}::${template.kpi_name}`.toLowerCase();
         return existingKpiSignatures.has(signature);
       })
       .map(template => ({
@@ -149,7 +150,7 @@ export function SmartAssignmentDialog({
         kra_name: template!.kra_name,
         kpi_name: template!.kpi_name,
       }));
-  }, [selectedTemplateIds, templates, existingKpiSignatures]);
+  }, [selectedTemplateIds, templates, existingKpiSignatures, currentPeriod, currentYear]);
 
   // Check if template is a duplicate
   const isTemplateDuplicate = (templateId: string) => {
