@@ -1,5 +1,16 @@
 
-# Fix: Exclude Unsubmitted KPIs from Score Calculation — IMPLEMENTED ✅
+# Workflow Configuration: "Effective From" Period Support — IMPLEMENTED ✅
+
+## What Changed
+- Added `is_ongoing` BOOLEAN column to `workflow_config` table
+- Created `month_name_to_index()` and `find_ongoing_workflow()` helper functions
+- Updated 3 RPCs with ongoing resolution: exact match → ongoing match → global fallback
+- Frontend: "Apply from this month onward" toggle + ongoing badges
+- Hook: `useUpsertWorkflowConfig` accepts `isOngoing` parameter
+
+---
+
+
 
 ## Problem
 KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
