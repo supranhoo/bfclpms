@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { useProfiles, useDepartments } from '@/hooks/useOrganization';
+import { useProfiles, useDepartments, useDesignations, usePmsGrades } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -51,6 +51,8 @@ export default function UserManagement() {
   const isMobile = useIsMobile();
   const { data: profiles, isLoading } = useProfiles();
   const { data: departments } = useDepartments();
+  const { data: designationsList } = useDesignations();
+  const { data: pmsGradesList } = usePmsGrades();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -989,19 +991,31 @@ export default function UserManagement() {
                   </div>
                   <div className="space-y-2">
                     <Label>Designation</Label>
-                    <Input
-                      value={editDesignation}
-                      onChange={(e) => setEditDesignation(e.target.value)}
-                      placeholder="e.g. Senior Developer"
-                    />
+                    <Select value={editDesignation || '__none__'} onValueChange={(val) => setEditDesignation(val === '__none__' ? '' : val)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select designation" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {designationsList?.map(d => (
+                          <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>PMS Grade</Label>
-                    <Input
-                      value={editPmsGrade}
-                      onChange={(e) => setEditPmsGrade(e.target.value)}
-                      placeholder="e.g. L4"
-                    />
+                    <Select value={editPmsGrade || '__none__'} onValueChange={(val) => setEditPmsGrade(val === '__none__' ? '' : val)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select PMS grade" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {pmsGradesList?.map(g => (
+                          <SelectItem key={g.id} value={g.name}>{g.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Reporting Manager</Label>
@@ -1136,19 +1150,31 @@ export default function UserManagement() {
                   </div>
                   <div className="space-y-2">
                     <Label>Designation</Label>
-                    <Input
-                      value={newDesignation}
-                      onChange={(e) => setNewDesignation(e.target.value)}
-                      placeholder="e.g. Senior Developer"
-                    />
+                    <Select value={newDesignation || '__none__'} onValueChange={(val) => setNewDesignation(val === '__none__' ? '' : val)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select designation" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {designationsList?.map(d => (
+                          <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>PMS Grade</Label>
-                    <Input
-                      value={newPmsGrade}
-                      onChange={(e) => setNewPmsGrade(e.target.value)}
-                      placeholder="e.g. L4"
-                    />
+                    <Select value={newPmsGrade || '__none__'} onValueChange={(val) => setNewPmsGrade(val === '__none__' ? '' : val)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select PMS grade" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {pmsGradesList?.map(g => (
+                          <SelectItem key={g.id} value={g.name}>{g.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Reporting Manager</Label>
