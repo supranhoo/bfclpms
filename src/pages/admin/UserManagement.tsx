@@ -51,6 +51,8 @@ export default function UserManagement() {
   const isMobile = useIsMobile();
   const { data: profiles, isLoading } = useProfiles();
   const { data: departments } = useDepartments();
+  const { data: designationsList } = useDesignations();
+  const { data: pmsGradesList } = usePmsGrades();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
