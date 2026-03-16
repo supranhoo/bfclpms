@@ -1,90 +1,111 @@
 
-# Workflow Configuration: "Effective From" Period Support — IMPLEMENTED ✅
+Detailed RCA
 
-## What Changed
-- Added `is_ongoing` BOOLEAN column to `workflow_config` table
-- Created `month_name_to_index()` and `find_ongoing_workflow()` helper functions
-- Updated 3 RPCs with ongoing resolution: exact match → ongoing match → global fallback
-- Frontend: "Apply from this month onward" toggle + ongoing badges
-- Hook: `useUpsertWorkflowConfig` accepts `isOngoing` parameter
+What I checked
+- `src/hooks/useKpis.ts`
+- `src/lib/kpiErrorUtils.ts`
+- `src/components/admin/AdminKpiCreateDialog.tsx`
+- `src/components/admin/BulkTemplateAssignDialog.tsx`
+- `src/components/admin/BundleAssignDialog.tsx`
+- `src/components/admin/SmartAssignmentDialog.tsx`
+- `src/components/admin/CopyKrasDialog.tsx`
+- The latest screenshot you shared
+- External docs for PostgREST/Supabase uniqueness error handling (`23505`)
 
----
+What the screenshot proves
+- The toast text in the screenshot exactly matches the fallback string in `src/lib/kpiErrorUtils.ts`:
+  `This KRA/KPI is already assigned to this employee for the selected review period...`
+- So the app is no longer showing the raw DB constraint error. The remaining problem is that it is still showing the generic fallback message instead of the resolved effective month.
 
-# Org-Level KPI Toggle in Assign New KRA Dialog — IMPLEMENTED ✅
+Do I know what the issue is?
+Yes.
 
-## What Changed
-- Added `isOrgLevel` toggle switch and `orgLevelScope` selector to the Advanced section of `AdminKpiCreateDialog`
-- Submit now uses these state values instead of hardcoded `is_org_level: false`
-- Scope options: Organization, Department, Employee (matching `MarkOrgLevelDialog` pattern)
+Exactly what the issue is
+1. `AdminKpiCreateDialog.tsx` resolves multi-month KPIs to a terminal month before insert:
+   - `getActiveMonthForCycle(frequency, reviewPeriod, reviewYear, frequencyCycleStart || null)`
+2. But `useCreateKpi()` still builds the toast like this:
+   - `getDuplicateKpiMessage()` with no `selectedMonth`, `resolvedMonth`, `frequency`, or `selectedYear`
+3. Because that context is missing, manual KPI creation can only show the generic fallback:
+   - “for the selected review period”
+4. The dialog UI is still misleading:
+   - it still says `Review Period / Review Year`
+   - it still offers `Q1/Q2/Q3/Q4`
+5. That is inconsistent with the rest of the admin assignment flows, which use `EffectiveMonthSelector` and month-based input.
+6. There is also a hidden logic bug: `getMonthNumber()` falls back to January for unknown values. So if this dialog allows `Q2/Q3/Q4`, the resolution logic can map them incorrectly.
+7. Some bulk flows are still inconsistent too:
+   - `SmartAssignmentDialog.tsx` checks existing KPIs using `currentPeriod/currentYear`
+   - but inserts into `resolvedPeriod`
+   - so duplicate pre-checks can still miss multi-month duplicates and only fail at insert time
 
----
+Root cause summary
+- Duplicate detection is working.
+- The remaining bug is a context-loss + UI-semantics issue:
+  - the insert happens in the resolved month
+  - the error message is built without that resolved month
+  - the dialog still presents the selection as a review period instead of an effective month
 
+Plan to fix
 
-## Problem
-KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
+1. Fix the manual create mutation contract
+- Refactor `useCreateKpi()` so the mutation receives:
+  - the DB payload
+  - error-display context (`frequency`, `selectedMonth`, `resolvedMonth`, `selectedYear`)
+- In `onError`, replace:
+  - `getDuplicateKpiMessage()`
+- with:
+  - `formatKpiInsertError(error, context)`
+- This directly fixes the exact toast shown in your screenshot.
 
-## Fix Applied
-Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
+2. Fix the manual create UI wording
+- Update `AdminKpiCreateDialog.tsx` to use the same effective-month concept already used in the other assignment dialogs.
+- Replace `Review Period / Review Year` with `Effective Month / Year`.
+- Remove `Q1/Q2/Q3/Q4` from this dialog entirely.
+- Use month-only input so the selection matches how `getActiveMonthForCycle()` actually works.
 
-| File | Line | Change |
-|---|---|---|
-| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
-| `EmployeeScorecard.tsx` | 220 | Same |
-| `AuditScorecard.tsx` | 221 | Same |
-| `ManagementScorecard.tsx` | 222 | Same |
+3. Add a live effective-month preview
+- In `AdminKpiCreateDialog.tsx`, show a helper whenever the resolved month differs from the selected month.
+- Example:
+  `Quarterly KPI selected in January 2026 will be assigned to March 2026.`
+- This prevents users from being surprised by duplicates that exist in the cycle-end month.
 
-## Impact
-- Biswajit's score: 382/468 → 382/443 (correct)
-- 19 employees with unsubmitted KPIs now show accurate weighted scores
-- Quarterly KPIs in non-terminal months are correctly excluded
-- No database migration needed — frontend calculation fix only
+4. Align duplicate pre-checks with resolved periods
+- Update `SmartAssignmentDialog.tsx` to check duplicates against resolved periods, not just the selected month.
+- Review `BundleAssignDialog.tsx`, `BulkTemplateAssignDialog.tsx`, and `CopyKrasDialog.tsx` so all duplicate checks and toasts use the same selected-vs-resolved logic.
+- Goal: avoid “no duplicate warning before insert, then DB reject” behavior.
 
----
+5. Harden the shared utility
+- Keep `error.code === '23505'` as primary detection.
+- Use `formatKpiInsertError()` everywhere duplicate KPI inserts can happen.
+- Standardize message priority:
+  - resolved month/year
+  - selected month/year as fallback
+  - generic period only if no context exists
 
-# Improve Send-Back KPI Experience — IMPLEMENTED ✅
+Files to update
+- `src/hooks/useKpis.ts`
+- `src/lib/kpiErrorUtils.ts`
+- `src/components/admin/AdminKpiCreateDialog.tsx`
+- `src/components/admin/SmartAssignmentDialog.tsx`
+- `src/components/admin/BundleAssignDialog.tsx`
+- `src/components/admin/BulkTemplateAssignDialog.tsx`
+- `src/components/admin/CopyKrasDialog.tsx`
 
-## Problems Fixed
+Validation after implementation
+- Manual create:
+  - Quarterly KPI
+  - selected month = January
+  - duplicate already exists in March
+  - expected toast: mentions March explicitly, not “selected review period”
+- Monthly KPI:
+  - selected month and stored month remain the same
+  - expected behavior unchanged
+- Manual dialog:
+  - no `Q1/Q2/Q3/Q4` options
+  - effective month preview appears for multi-month frequencies
+- Smart/bulk assignment:
+  - duplicate pre-checks match the resolved insert month
+  - fewer insert-time duplicate surprises
 
-### 1. Employee data preserved on send-back
-Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
-
-| File | Change |
-|---|---|
-| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
-| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
-
-### 2. Send-back reason shown on face
-- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
-- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
-- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
-
-### 3. Send-back queries created from all reviewer levels
-UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
-
-| File | Change |
-|---|---|
-| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
-| `SelfReviewSheet.tsx` | Uses SentBackBanner |
-| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
-| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
-
----
-
-# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
-
-## Gaps Fixed
-
-### 1. ManagementScorecard now creates `kpi_queries` record on send-back
-Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
-
-### 2. SentBackBanner shown to all reviewer levels
-The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
-
-### 3. SentBackBanner conditionally renders
-Returns `null` when no send-back query is found, so it doesn't show an empty banner.
-
-| File | Change |
-|---|---|
-| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
-| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
-| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |
+Why this plan should solve the reported issue
+- The toast in the screenshot is coming from the generic fallback branch, not from failed duplicate detection.
+- Passing resolved-month context into the create hook and fixing the dialog semantics addresses the exact mismatch the user is still seeing.
