@@ -97,6 +97,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
   ]);
   const [requireResubmitReason, setRequireResubmitReason] = useState(true);
   const [thresholdMode, setThresholdMode] = useState<'absolute' | 'ratio'>('absolute');
+  const [isOrgLevel, setIsOrgLevel] = useState(false);
+  const [orgLevelScope, setOrgLevelScope] = useState('organization');
 
   // Period - prefer explicit defaults from props, then system settings
   const [reviewPeriod, setReviewPeriod] = useState(defaultReviewPeriod || settings.current_review_period);
