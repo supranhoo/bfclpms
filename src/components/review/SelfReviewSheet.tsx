@@ -124,7 +124,7 @@ export function SelfReviewSheet({
   // Rollback state
   const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false);
   const { data: pendingRollback } = usePendingRollbackRequest(selectedKpi?.id);
-  const { data: employeeWorkflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(profile?.id);
+  const { data: employeeWorkflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(profile?.id, selectedPeriod, selectedYear);
   const effectiveStages = employeeWorkflowStages || DEFAULT_WORKFLOW_STAGES;
   const { data: ownerCheck } = useIsOrgKpiDataOwner(
     selectedKpi?.category_id || '',

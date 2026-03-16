@@ -87,7 +87,7 @@ export function EmployeeScorecard({
   const remarksMandatory = useRemarksMandatorySettings();
   
   // Fetch workflow stages for this employee
-  const { data: workflowStages } = useEmployeeWorkflowStages(employee.id);
+  const { data: workflowStages } = useEmployeeWorkflowStages(employee.id, selectedPeriod, selectedYear);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const managerForwardStatus = resolveForwardStatus('manager', effectiveStages);
 
