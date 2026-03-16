@@ -342,8 +342,27 @@ export default function WorkflowConfig() {
               </div>
             )}
             {periodMode === 'specific' && (
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isOngoing}
+                    onChange={(e) => setIsOngoing(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  <span className="text-sm text-muted-foreground whitespace-nowrap flex items-center gap-1">
+                    <ChevronsRight className="h-3.5 w-3.5" />
+                    Apply from this month onward
+                  </span>
+                </label>
+              </div>
+            )}
+            {periodMode === 'specific' && (
               <Badge variant="outline" className="text-xs">
-                Showing overrides for {selectedMonth} {selectedYear}
+                {isOngoing 
+                  ? `Ongoing from ${selectedMonth} ${selectedYear} →`
+                  : `Showing overrides for ${selectedMonth} ${selectedYear}`
+                }
               </Badge>
             )}
             <div className="ml-auto flex items-center gap-2">
