@@ -122,17 +122,18 @@ export function SmartAssignmentDialog({
     }, 0);
   }, [selectedTemplateIds, templates]);
 
-  // Detect duplicates in selected bundle
+  // Detect duplicates in selected bundle (using resolved period)
   const bundleDuplicates = useMemo(() => {
     if (!selectedBundle?.template_bundle_items) return [];
     return selectedBundle.template_bundle_items.filter(item => {
-      const signature = `${item.kpi_templates.kra_name}::${item.kpi_templates.kpi_name}`.toLowerCase();
+      const resolvedPeriod = getActiveMonthForCycle(item.kpi_templates.frequency, currentPeriod, currentYear);
+      const signature = `${resolvedPeriod}::${item.kpi_templates.kra_name}::${item.kpi_templates.kpi_name}`.toLowerCase();
       return existingKpiSignatures.has(signature);
     }).map(item => ({
       kra_name: item.kpi_templates.kra_name,
       kpi_name: item.kpi_templates.kpi_name,
     }));
-  }, [selectedBundle, existingKpiSignatures]);
+  }, [selectedBundle, existingKpiSignatures, currentPeriod, currentYear]);
 
   // Detect duplicates in selected templates
   const templateDuplicates = useMemo(() => {
