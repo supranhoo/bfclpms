@@ -95,14 +95,40 @@ export default function WorkflowConfig() {
   const templates = useMemo(() => allTemplates?.filter(t => t.is_active) || [], [allTemplates]);
   const archivedTemplates = useMemo(() => allTemplates?.filter(t => !t.is_active) || [], [allTemplates]);
 
+  // Helper to convert month name to index for comparison
+  const monthIndex = useCallback((m: string) => MONTHS.indexOf(m) + 1, []);
+
   // Filter configs based on period selection
   const filteredConfigs = useMemo(() => {
     if (!configs) return [];
     if (periodMode === 'global') {
       return configs.filter(c => !c.review_period);
     }
-    return configs.filter(c => c.review_period === selectedMonth && c.review_year === selectedYear);
-  }, [configs, periodMode, selectedMonth, selectedYear]);
+    // Exact match for the selected period
+    const exactConfigs = configs.filter(c => c.review_period === selectedMonth && c.review_year === selectedYear);
+    // Ongoing configs effective for this period (from earlier months)
+    const selectedSortKey = selectedYear * 100 + monthIndex(selectedMonth);
+    const ongoingConfigs = configs.filter(c => {
+      if (!c.is_ongoing || !c.review_period || !c.review_year) return false;
+      // Exclude exact matches (already included above)
+      if (c.review_period === selectedMonth && c.review_year === selectedYear) return false;
+      const configSortKey = c.review_year * 100 + monthIndex(c.review_period);
+      if (configSortKey > selectedSortKey) return false;
+      // Check if there's an exact config or a later ongoing config that supersedes it
+      const hasExact = exactConfigs.some(e => e.config_type === c.config_type && e.config_value === c.config_value);
+      if (hasExact) return false;
+      // Check if a later ongoing config supersedes this one
+      const hasLaterOngoing = configs.some(later => {
+        if (!later.is_ongoing || !later.review_period || !later.review_year) return false;
+        if (later.config_type !== c.config_type || later.config_value !== c.config_value) return false;
+        if (later.id === c.id) return false;
+        const laterKey = later.review_year * 100 + monthIndex(later.review_period);
+        return laterKey > configSortKey && laterKey <= selectedSortKey;
+      });
+      return !hasLaterOngoing;
+    });
+    return [...exactConfigs, ...ongoingConfigs];
+  }, [configs, periodMode, selectedMonth, selectedYear, monthIndex]);
 
   // Also get global configs for showing "inherited" indicators when in period mode
   const globalConfigs = useMemo(() => {
