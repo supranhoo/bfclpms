@@ -1472,6 +1472,10 @@ export function UnifiedScorecard({
                 orgKpiEnteredByName={getOrgKpiValue(selectedKpi)?.entered_by_name}
               />
               
+              
+              {/* Sent Back Banner */}
+              <SentBackBanner kpiId={selectedKpi.id} />
+
               {/* N/A Confirmation Card - existing N/A (with override option) */}
               {submissionMap.get(selectedKpi.id)?.is_na && isReviewable(selectedKpi) && (
                 <NaConfirmationCard
