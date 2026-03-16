@@ -282,8 +282,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
       review_period: resolvedPeriod,
       review_year: reviewYear,
       status: 'kra_set' as ReviewStatus,
-      is_org_level: false,
-      org_level_scope: 'organization' as const,
+      is_org_level: isOrgLevel,
+      org_level_scope: isOrgLevel ? orgLevelScope as any : null,
       uom_type: uomType,
       qualitative_options: uomType === 'tiered' ? qualitativeOptions : (uomType === 'binary' ? BINARY_OPTIONS : null),
       // Frequency fields - auto-derived by database trigger
