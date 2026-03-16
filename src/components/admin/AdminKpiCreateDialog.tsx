@@ -975,6 +975,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                         checked={requireResubmitReason}
                         onCheckedChange={setRequireResubmitReason}
                       />
+                    </div>
                   </div>
                   <div className="p-3 border rounded-lg bg-muted/30">
                     <div className="flex items-center justify-between gap-3">
