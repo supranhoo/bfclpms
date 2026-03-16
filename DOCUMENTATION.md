@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-13  
-> **Version:** 1.54.0 — Org KPI Propagation CAPA: Added fallback category+KRA matching for name mismatches, enhanced repair edge function with NULL-value status reset, and post-propagation completeness validation warnings
+> **Last Updated:** 2026-03-16  
+> **Version:** 1.54.1 — Centralized duplicate KPI error handling: created `kpiErrorUtils.ts` utility, fixed all 6 insert paths (AdminKpiCreateDialog, BulkTemplateAssignDialog, SmartAssignmentDialog, BundleAssignDialog, CopyKrasDialog) with friendly error messages including resolved effective month, fixed duplicate pre-check in BulkTemplateAssignDialog to query resolved period
 > **Maintainer:** Lovable AI
 
 ---
