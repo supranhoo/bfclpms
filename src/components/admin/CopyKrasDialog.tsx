@@ -241,7 +241,6 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
       handleClose();
     },
     onError: (err: any) => {
-      const { formatKpiInsertError } = require('@/lib/kpiErrorUtils');
       toast({ title: 'Copy Failed', description: formatKpiInsertError(err), variant: 'destructive' });
     },
   });
