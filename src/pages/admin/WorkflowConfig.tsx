@@ -238,7 +238,7 @@ export default function WorkflowConfig() {
     return <ReviewPanelSkeleton />;
   }
 
-  // Render inherited badge when in period mode and a global config exists but no period-specific one
+  // Render inherited/ongoing badge when in period mode
   const renderInheritedBadge = (type: string, value: string) => {
     if (periodMode !== 'specific') return null;
     const periodConfig = getConfigFor(type, value);
@@ -255,10 +255,28 @@ export default function WorkflowConfig() {
       );
     }
     if (periodConfig) {
+      const isOngoingConfig = (periodConfig as any).is_ongoing;
+      const isInherited = periodConfig.review_period !== selectedMonth || periodConfig.review_year !== selectedYear;
+      if (isInherited && isOngoingConfig) {
+        return (
+          <Badge variant="outline" className="text-xs gap-1 mt-1 border-primary/50 text-primary">
+            <ChevronsRight className="h-3 w-3" />
+            Ongoing from {periodConfig.review_period} {periodConfig.review_year} →
+          </Badge>
+        );
+      }
+      if (isOngoingConfig) {
+        return (
+          <Badge variant="secondary" className="text-xs gap-1 mt-1">
+            <ChevronsRight className="h-3 w-3" />
+            Ongoing from {selectedMonth} {selectedYear} →
+          </Badge>
+        );
+      }
       return (
         <Badge variant="secondary" className="text-xs gap-1 mt-1">
           <Calendar className="h-3 w-3" />
-          {selectedMonth} {selectedYear}
+          {selectedMonth} {selectedYear} only
         </Badge>
       );
     }
