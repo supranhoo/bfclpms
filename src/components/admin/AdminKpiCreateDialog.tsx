@@ -254,45 +254,57 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
     onClose();
   };
 
+  // Compute resolved effective month for multi-month frequencies
+  const resolvedPeriod = useMemo(() => {
+    return getActiveMonthForCycle(frequency, reviewPeriod, reviewYear, frequencyCycleStart || null);
+  }, [frequency, reviewPeriod, reviewYear, frequencyCycleStart]);
+
+  const showResolvedPreview = resolvedPeriod !== reviewPeriod;
+
   const handleSubmit = async () => {
     if (!employeeId || !categoryId || !kraName || !kpiName) {
       return;
     }
 
-    // Auto-resolve review_period to terminal month for multi-month frequencies
-    const resolvedPeriod = getActiveMonthForCycle(frequency, reviewPeriod, reviewYear, frequencyCycleStart || null);
-
     try {
       await createKpi.mutateAsync({
-        employee_id: employeeId,
-        category_id: categoryId,
-        kra_name: kraName,
-        kpi_name: kpiName,
-        uom: uomType === 'numeric' ? (uom || null) : uomType,
-        criteria: uomType === 'numeric' ? (criteria || null) : null,
-        target_value: uomType === 'numeric' ? (targetValue ? parseFloat(targetValue) : null) : null,
-        weightage: weightage ? parseFloat(weightage) : null,
-        frequency: frequency || null,
-        source_of_data: sourceOfData || null,
-        r5: uomType === 'numeric' ? (r5 || null) : null,
-        r4: uomType === 'numeric' ? (r4 || null) : null,
-        r3: uomType === 'numeric' ? (r3 || null) : null,
-        r2: uomType === 'numeric' ? (r2 || null) : null,
-        r1: uomType === 'numeric' ? (r1 || null) : null,
-        r0: uomType === 'numeric' ? (r0 || null) : null,
-        review_period: resolvedPeriod,
-        review_year: reviewYear,
-        status: 'kra_set' as ReviewStatus,
-        is_org_level: isOrgLevel,
-        org_level_scope: isOrgLevel ? orgLevelScope as any : null,
-        uom_type: uomType,
-        qualitative_options: uomType === 'tiered' ? qualitativeOptions : (uomType === 'binary' ? BINARY_OPTIONS : null),
-        sub_frequency: null,
-        frequency_cycle_start: (frequencyCycleStart && frequencyCycleStart !== 'system_default') ? frequencyCycleStart : null,
-        is_frequency_locked: false,
-        require_resubmit_reason: requireResubmitReason,
-        day_count_type: frequency === 'Daily' ? dayCountType : null,
-        threshold_mode: uomType === 'numeric' ? thresholdMode : null,
+        payload: {
+          employee_id: employeeId,
+          category_id: categoryId,
+          kra_name: kraName,
+          kpi_name: kpiName,
+          uom: uomType === 'numeric' ? (uom || null) : uomType,
+          criteria: uomType === 'numeric' ? (criteria || null) : null,
+          target_value: uomType === 'numeric' ? (targetValue ? parseFloat(targetValue) : null) : null,
+          weightage: weightage ? parseFloat(weightage) : null,
+          frequency: frequency || null,
+          source_of_data: sourceOfData || null,
+          r5: uomType === 'numeric' ? (r5 || null) : null,
+          r4: uomType === 'numeric' ? (r4 || null) : null,
+          r3: uomType === 'numeric' ? (r3 || null) : null,
+          r2: uomType === 'numeric' ? (r2 || null) : null,
+          r1: uomType === 'numeric' ? (r1 || null) : null,
+          r0: uomType === 'numeric' ? (r0 || null) : null,
+          review_period: resolvedPeriod,
+          review_year: reviewYear,
+          status: 'kra_set' as ReviewStatus,
+          is_org_level: isOrgLevel,
+          org_level_scope: isOrgLevel ? orgLevelScope as any : null,
+          uom_type: uomType,
+          qualitative_options: uomType === 'tiered' ? qualitativeOptions : (uomType === 'binary' ? BINARY_OPTIONS : null),
+          sub_frequency: null,
+          frequency_cycle_start: (frequencyCycleStart && frequencyCycleStart !== 'system_default') ? frequencyCycleStart : null,
+          is_frequency_locked: false,
+          require_resubmit_reason: requireResubmitReason,
+          day_count_type: frequency === 'Daily' ? dayCountType : null,
+          threshold_mode: uomType === 'numeric' ? thresholdMode : null,
+        },
+        errorContext: {
+          frequency,
+          selectedMonth: reviewPeriod,
+          resolvedMonth: resolvedPeriod,
+          selectedYear: reviewYear,
+        },
       });
       handleClose();
     } catch {
@@ -303,7 +315,6 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
   const periods = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December',
-    'Q1', 'Q2', 'Q3', 'Q4'
   ];
 
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i);
