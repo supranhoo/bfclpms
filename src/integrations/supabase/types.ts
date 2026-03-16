@@ -3154,6 +3154,7 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           id: string
+          is_ongoing: boolean
           review_period: string | null
           review_year: number | null
           updated_at: string | null
@@ -3165,6 +3166,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           id?: string
+          is_ongoing?: boolean
           review_period?: string | null
           review_year?: number | null
           updated_at?: string | null
@@ -3176,6 +3178,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           id?: string
+          is_ongoing?: boolean
           review_period?: string | null
           review_year?: number | null
           updated_at?: string | null
@@ -3329,6 +3332,15 @@ export type Database = {
         }
         Returns: number
       }
+      find_ongoing_workflow: {
+        Args: {
+          p_config_type: string
+          p_config_value: string
+          p_review_period: string
+          p_review_year: number
+        }
+        Returns: string
+      }
       generate_bundles_from_kpis: { Args: never; Returns: Json }
       get_bulk_employee_workflows: {
         Args: {
@@ -3406,6 +3418,7 @@ export type Database = {
         Args: { _period_name: string; _review_year: number }
         Returns: boolean
       }
+      month_name_to_index: { Args: { p_month: string }; Returns: number }
       propagate_org_kpi_value:
         | { Args: { p_is_na?: boolean; p_kpi_ratings: Json }; Returns: Json }
         | {
