@@ -549,12 +549,9 @@ export function SelfReviewSheet({
 
           {/* Main Content */}
           <div className="flex-1 overflow-y-auto py-3 sm:py-4 space-y-4 sm:space-y-6">
-            {/* Sent-back info banner */}
+            {/* Sent-back info banner with reason */}
             {isSentBack && (
-              <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950 p-3 text-sm text-amber-800 dark:text-amber-200">
-                <Undo2 className="h-4 w-4 flex-shrink-0" />
-                <span>This KPI was <strong>sent back</strong> for revision. You can update your data and resubmit.</span>
-              </div>
+              <SentBackBanner kpiId={selectedKpi.id} />
             )}
             {/* Daily KPI governance bypass banner */}
             {isDailyUnlocked && !isSentBack && (!govPerms.submit_self_review || govPerms.view_only) && (
