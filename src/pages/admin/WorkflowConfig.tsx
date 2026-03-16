@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,7 +22,7 @@ import {
   type WorkflowTemplate,
 } from '@/hooks/useWorkflowConfig';
 import { useDepartments } from '@/hooks/useOrganization';
-import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil, Star, Archive, RotateCcw, ChevronDown, Calendar, Globe } from 'lucide-react';
+import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil, Star, Archive, RotateCcw, ChevronDown, Calendar, Globe, ChevronsRight } from 'lucide-react';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import CustomWorkflowDialog from '@/components/admin/CustomWorkflowDialog';
 import ReconcileOrphanedKpisDialog from '@/components/admin/ReconcileOrphanedKpisDialog';
@@ -72,6 +72,7 @@ export default function WorkflowConfig() {
   const [deleteTarget, setDeleteTarget] = useState<WorkflowTemplate | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<WorkflowTemplate | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
+  const [isOngoing, setIsOngoing] = useState(false);
 
   // Period selector state: 'global' or specific period
   const currentYear = new Date().getFullYear();
@@ -94,14 +95,40 @@ export default function WorkflowConfig() {
   const templates = useMemo(() => allTemplates?.filter(t => t.is_active) || [], [allTemplates]);
   const archivedTemplates = useMemo(() => allTemplates?.filter(t => !t.is_active) || [], [allTemplates]);
 
+  // Helper to convert month name to index for comparison
+  const monthIndex = useCallback((m: string) => MONTHS.indexOf(m) + 1, []);
+
   // Filter configs based on period selection
   const filteredConfigs = useMemo(() => {
     if (!configs) return [];
     if (periodMode === 'global') {
       return configs.filter(c => !c.review_period);
     }
-    return configs.filter(c => c.review_period === selectedMonth && c.review_year === selectedYear);
-  }, [configs, periodMode, selectedMonth, selectedYear]);
+    // Exact match for the selected period
+    const exactConfigs = configs.filter(c => c.review_period === selectedMonth && c.review_year === selectedYear);
+    // Ongoing configs effective for this period (from earlier months)
+    const selectedSortKey = selectedYear * 100 + monthIndex(selectedMonth);
+    const ongoingConfigs = configs.filter(c => {
+      if (!c.is_ongoing || !c.review_period || !c.review_year) return false;
+      // Exclude exact matches (already included above)
+      if (c.review_period === selectedMonth && c.review_year === selectedYear) return false;
+      const configSortKey = c.review_year * 100 + monthIndex(c.review_period);
+      if (configSortKey > selectedSortKey) return false;
+      // Check if there's an exact config or a later ongoing config that supersedes it
+      const hasExact = exactConfigs.some(e => e.config_type === c.config_type && e.config_value === c.config_value);
+      if (hasExact) return false;
+      // Check if a later ongoing config supersedes this one
+      const hasLaterOngoing = configs.some(later => {
+        if (!later.is_ongoing || !later.review_period || !later.review_year) return false;
+        if (later.config_type !== c.config_type || later.config_value !== c.config_value) return false;
+        if (later.id === c.id) return false;
+        const laterKey = later.review_year * 100 + monthIndex(later.review_period);
+        return laterKey > configSortKey && laterKey <= selectedSortKey;
+      });
+      return !hasLaterOngoing;
+    });
+    return [...exactConfigs, ...ongoingConfigs];
+  }, [configs, periodMode, selectedMonth, selectedYear, monthIndex]);
 
   // Also get global configs for showing "inherited" indicators when in period mode
   const globalConfigs = useMemo(() => {
@@ -171,11 +198,14 @@ export default function WorkflowConfig() {
         workflowTemplateId: templateId,
         reviewPeriod: periodMode === 'specific' ? selectedMonth : null,
         reviewYear: periodMode === 'specific' ? selectedYear : null,
+        isOngoing: periodMode === 'specific' ? isOngoing : false,
       });
       toast({
         title: 'Workflow assigned',
         description: periodMode === 'specific' 
-          ? `Workflow assigned for ${selectedMonth} ${selectedYear}.`
+          ? isOngoing
+            ? `Workflow assigned from ${selectedMonth} ${selectedYear} onward.`
+            : `Workflow assigned for ${selectedMonth} ${selectedYear}.`
           : 'The workflow configuration has been saved.',
       });
     } catch {
@@ -208,7 +238,7 @@ export default function WorkflowConfig() {
     return <ReviewPanelSkeleton />;
   }
 
-  // Render inherited badge when in period mode and a global config exists but no period-specific one
+  // Render inherited/ongoing badge when in period mode
   const renderInheritedBadge = (type: string, value: string) => {
     if (periodMode !== 'specific') return null;
     const periodConfig = getConfigFor(type, value);
@@ -225,10 +255,28 @@ export default function WorkflowConfig() {
       );
     }
     if (periodConfig) {
+      const isOngoingConfig = (periodConfig as any).is_ongoing;
+      const isInherited = periodConfig.review_period !== selectedMonth || periodConfig.review_year !== selectedYear;
+      if (isInherited && isOngoingConfig) {
+        return (
+          <Badge variant="outline" className="text-xs gap-1 mt-1 border-primary/50 text-primary">
+            <ChevronsRight className="h-3 w-3" />
+            Ongoing from {periodConfig.review_period} {periodConfig.review_year} →
+          </Badge>
+        );
+      }
+      if (isOngoingConfig) {
+        return (
+          <Badge variant="secondary" className="text-xs gap-1 mt-1">
+            <ChevronsRight className="h-3 w-3" />
+            Ongoing from {selectedMonth} {selectedYear} →
+          </Badge>
+        );
+      }
       return (
         <Badge variant="secondary" className="text-xs gap-1 mt-1">
           <Calendar className="h-3 w-3" />
-          {selectedMonth} {selectedYear}
+          {selectedMonth} {selectedYear} only
         </Badge>
       );
     }
@@ -312,8 +360,27 @@ export default function WorkflowConfig() {
               </div>
             )}
             {periodMode === 'specific' && (
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isOngoing}
+                    onChange={(e) => setIsOngoing(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  <span className="text-sm text-muted-foreground whitespace-nowrap flex items-center gap-1">
+                    <ChevronsRight className="h-3.5 w-3.5" />
+                    Apply from this month onward
+                  </span>
+                </label>
+              </div>
+            )}
+            {periodMode === 'specific' && (
               <Badge variant="outline" className="text-xs">
-                Showing overrides for {selectedMonth} {selectedYear}
+                {isOngoing 
+                  ? `Ongoing from ${selectedMonth} ${selectedYear} →`
+                  : `Showing overrides for ${selectedMonth} ${selectedYear}`
+                }
               </Badge>
             )}
             <div className="ml-auto flex items-center gap-2">

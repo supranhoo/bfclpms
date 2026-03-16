@@ -18,6 +18,7 @@ export interface WorkflowConfig {
   workflow_template_id: string;
   review_period: string | null;
   review_year: number | null;
+  is_ongoing: boolean;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -130,12 +131,14 @@ export function useUpsertWorkflowConfig() {
       workflowTemplateId,
       reviewPeriod,
       reviewYear,
+      isOngoing,
     }: {
       configType: 'employee' | 'department' | 'pms_grade';
       configValue: string;
       workflowTemplateId: string;
       reviewPeriod?: string | null;
       reviewYear?: number | null;
+      isOngoing?: boolean;
     }) => {
       const record: Record<string, unknown> = {
         config_type: configType,
@@ -143,6 +146,7 @@ export function useUpsertWorkflowConfig() {
         workflow_template_id: workflowTemplateId,
         review_period: reviewPeriod || null,
         review_year: reviewYear || null,
+        is_ongoing: isOngoing || false,
       };
 
       // Use different onConflict based on whether it's period-specific or global
@@ -165,7 +169,7 @@ export function useUpsertWorkflowConfig() {
       if (existing) {
         const { data, error } = await supabase
           .from('workflow_config')
-          .update({ workflow_template_id: workflowTemplateId })
+          .update({ workflow_template_id: workflowTemplateId, is_ongoing: isOngoing || false } as any)
           .eq('id', existing.id)
           .select()
           .single();
