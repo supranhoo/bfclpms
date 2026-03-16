@@ -211,7 +211,7 @@ export function BulkTemplateAssignDialog({ isOpen, onClose }: BulkTemplateAssign
       .select('employee_id')
       .eq('kra_name', selectedTemplate.kra_name)
       .eq('kpi_name', selectedTemplate.kpi_name)
-      .eq('review_period', currentPeriod)
+      .eq('review_period', getActiveMonthForCycle(selectedTemplate.frequency, currentPeriod, currentYear))
       .eq('review_year', currentYear)
       .in('employee_id', Array.from(selectedEmployeeIds));
 

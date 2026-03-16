@@ -173,10 +173,11 @@ export function BundleAssignDialog({ isOpen, onClose, preselectedEmployeeId }: B
 
       handleClose();
     },
-    onError: (error) => {
+    onError: (error: any) => {
+      const { formatKpiInsertError } = require('@/lib/kpiErrorUtils');
       toast({
         title: 'Failed to assign bundle',
-        description: error.message,
+        description: formatKpiInsertError(error, { selectedMonth: currentPeriod, selectedYear: currentYear }),
         variant: 'destructive',
       });
     },
