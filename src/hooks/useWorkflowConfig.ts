@@ -169,7 +169,7 @@ export function useUpsertWorkflowConfig() {
       if (existing) {
         const { data, error } = await supabase
           .from('workflow_config')
-          .update({ workflow_template_id: workflowTemplateId })
+          .update({ workflow_template_id: workflowTemplateId, is_ongoing: isOngoing || false } as any)
           .eq('id', existing.id)
           .select()
           .single();
