@@ -76,10 +76,10 @@ export function SmartAssignmentDialog({
     enabled: isOpen && !!employeeId,
   });
 
-  // Create a set of existing KPI signatures for quick lookup
+  // Create a set of existing KPI signatures for quick lookup (period-aware)
   const existingKpiSignatures = useMemo(() => {
     return new Set(
-      existingKpis?.map(kpi => `${kpi.kra_name}::${kpi.kpi_name}`.toLowerCase()) || []
+      existingKpis?.map(kpi => `${kpi.review_period}::${kpi.kra_name}::${kpi.kpi_name}`.toLowerCase()) || []
     );
   }, [existingKpis]);
 
