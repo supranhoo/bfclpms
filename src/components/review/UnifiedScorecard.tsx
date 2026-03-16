@@ -60,6 +60,7 @@ import { MobileKpiCard } from '@/components/review/MobileKpiCard';
 import { NaConfirmationCard } from '@/components/review/NaConfirmationCard';
 import { OrgKpiRatingOverrideWarning } from '@/components/review/OrgKpiRatingOverrideWarning';
 import { RollbackRequestBanner } from '@/components/review/RollbackRequestBanner';
+import { SentBackBanner } from '@/components/review/SentBackBanner';
 import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog';
 import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
 import { useAuditKpiAssignments } from '@/hooks/useAuditKpiAssignments';
