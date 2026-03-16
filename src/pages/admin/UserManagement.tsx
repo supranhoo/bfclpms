@@ -989,19 +989,31 @@ export default function UserManagement() {
                   </div>
                   <div className="space-y-2">
                     <Label>Designation</Label>
-                    <Input
-                      value={editDesignation}
-                      onChange={(e) => setEditDesignation(e.target.value)}
-                      placeholder="e.g. Senior Developer"
-                    />
+                    <Select value={editDesignation || '__none__'} onValueChange={(val) => setEditDesignation(val === '__none__' ? '' : val)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select designation" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {designationsList?.map(d => (
+                          <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>PMS Grade</Label>
-                    <Input
-                      value={editPmsGrade}
-                      onChange={(e) => setEditPmsGrade(e.target.value)}
-                      placeholder="e.g. L4"
-                    />
+                    <Select value={editPmsGrade || '__none__'} onValueChange={(val) => setEditPmsGrade(val === '__none__' ? '' : val)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select PMS grade" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {pmsGradesList?.map(g => (
+                          <SelectItem key={g.id} value={g.name}>{g.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Reporting Manager</Label>
