@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { MONTH_NAMES } from '@/hooks/useAdminReports';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { isDuplicateKpiError, getDuplicateKpiMessage } from '@/lib/kpiErrorUtils';
+import { isDuplicateKpiError, getDuplicateKpiMessage, formatKpiInsertError } from '@/lib/kpiErrorUtils';
 
 export type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review' | 'approved';
 export type RatingLevel = 'red' | 'yellow' | 'green' | 'blue';
@@ -349,15 +349,25 @@ export function useReviewSubmissions(kpiIds: string[]) {
   });
 }
 
+interface CreateKpiInput {
+  payload: Omit<KPI, 'id' | 'created_at' | 'updated_at' | 'kra_categories'>;
+  errorContext?: {
+    frequency?: string | null;
+    selectedMonth?: string;
+    resolvedMonth?: string;
+    selectedYear?: number;
+  };
+}
+
 export function useCreateKpi() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (kpi: Omit<KPI, 'id' | 'created_at' | 'updated_at' | 'kra_categories'>) => {
+    mutationFn: async ({ payload }: CreateKpiInput) => {
       const { data, error } = await supabase
         .from('kpis')
-        .insert(kpi)
+        .insert(payload)
         .select()
         .single();
 
@@ -370,8 +380,11 @@ export function useCreateKpi() {
       queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
       toast({ title: 'KPI created successfully' });
     },
-    onError: (error: any) => {
-      const description = isDuplicateKpiError(error) ? getDuplicateKpiMessage() : error.message;
+    onError: (error: any, variables: CreateKpiInput) => {
+      const ctx = variables.errorContext;
+      const description = isDuplicateKpiError(error)
+        ? getDuplicateKpiMessage(ctx)
+        : error.message;
       toast({ title: 'Failed to create KPI', description, variant: 'destructive' });
     },
   });

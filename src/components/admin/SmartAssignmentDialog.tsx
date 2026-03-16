@@ -59,16 +59,16 @@ export function SmartAssignmentDialog({
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<string>>(new Set());
   const [skipDuplicates, setSkipDuplicates] = useState(true);
 
-  // Fetch existing KPIs for this employee in the current period
+  // Fetch existing KPIs for this employee across all months in the year
+  // (needed because multi-month frequencies resolve to different months)
   const { data: existingKpis } = useQuery({
-    queryKey: ['employee-kpis', employeeId, currentPeriod, currentYear],
+    queryKey: ['employee-kpis-year', employeeId, currentYear],
     queryFn: async () => {
       if (!employeeId) return [];
       const { data, error } = await supabase
         .from('kpis')
-        .select('id, kra_name, kpi_name')
+        .select('id, kra_name, kpi_name, review_period')
         .eq('employee_id', employeeId)
-        .eq('review_period', currentPeriod)
         .eq('review_year', currentYear);
       if (error) throw error;
       return data || [];
@@ -76,10 +76,10 @@ export function SmartAssignmentDialog({
     enabled: isOpen && !!employeeId,
   });
 
-  // Create a set of existing KPI signatures for quick lookup
+  // Create a set of existing KPI signatures for quick lookup (period-aware)
   const existingKpiSignatures = useMemo(() => {
     return new Set(
-      existingKpis?.map(kpi => `${kpi.kra_name}::${kpi.kpi_name}`.toLowerCase()) || []
+      existingKpis?.map(kpi => `${kpi.review_period}::${kpi.kra_name}::${kpi.kpi_name}`.toLowerCase()) || []
     );
   }, [existingKpis]);
 
@@ -122,25 +122,27 @@ export function SmartAssignmentDialog({
     }, 0);
   }, [selectedTemplateIds, templates]);
 
-  // Detect duplicates in selected bundle
+  // Detect duplicates in selected bundle (using resolved period)
   const bundleDuplicates = useMemo(() => {
     if (!selectedBundle?.template_bundle_items) return [];
     return selectedBundle.template_bundle_items.filter(item => {
-      const signature = `${item.kpi_templates.kra_name}::${item.kpi_templates.kpi_name}`.toLowerCase();
+      const resolvedPeriod = getActiveMonthForCycle(item.kpi_templates.frequency, currentPeriod, currentYear);
+      const signature = `${resolvedPeriod}::${item.kpi_templates.kra_name}::${item.kpi_templates.kpi_name}`.toLowerCase();
       return existingKpiSignatures.has(signature);
     }).map(item => ({
       kra_name: item.kpi_templates.kra_name,
       kpi_name: item.kpi_templates.kpi_name,
     }));
-  }, [selectedBundle, existingKpiSignatures]);
+  }, [selectedBundle, existingKpiSignatures, currentPeriod, currentYear]);
 
-  // Detect duplicates in selected templates
+  // Detect duplicates in selected templates (using resolved period)
   const templateDuplicates = useMemo(() => {
     return Array.from(selectedTemplateIds)
       .map(id => templates?.find(t => t.id === id))
       .filter(template => {
         if (!template) return false;
-        const signature = `${template.kra_name}::${template.kpi_name}`.toLowerCase();
+        const resolvedPeriod = getActiveMonthForCycle(template.frequency, currentPeriod, currentYear);
+        const signature = `${resolvedPeriod}::${template.kra_name}::${template.kpi_name}`.toLowerCase();
         return existingKpiSignatures.has(signature);
       })
       .map(template => ({
@@ -148,13 +150,14 @@ export function SmartAssignmentDialog({
         kra_name: template!.kra_name,
         kpi_name: template!.kpi_name,
       }));
-  }, [selectedTemplateIds, templates, existingKpiSignatures]);
+  }, [selectedTemplateIds, templates, existingKpiSignatures, currentPeriod, currentYear]);
 
-  // Check if template is a duplicate
+  // Check if template is a duplicate (using resolved period)
   const isTemplateDuplicate = (templateId: string) => {
     const template = templates?.find(t => t.id === templateId);
     if (!template) return false;
-    const signature = `${template.kra_name}::${template.kpi_name}`.toLowerCase();
+    const resolvedPeriod = getActiveMonthForCycle(template.frequency, currentPeriod, currentYear);
+    const signature = `${resolvedPeriod}::${template.kra_name}::${template.kpi_name}`.toLowerCase();
     return existingKpiSignatures.has(signature);
   };
 
@@ -210,7 +213,8 @@ export function SmartAssignmentDialog({
       // Filter out duplicates if skipDuplicates is enabled
       const itemsToInsert = skipDuplicates 
         ? selectedBundle.template_bundle_items.filter(item => {
-            const signature = `${item.kpi_templates.kra_name}::${item.kpi_templates.kpi_name}`.toLowerCase();
+            const resolvedPeriod = getActiveMonthForCycle(item.kpi_templates.frequency, currentPeriod, currentYear);
+            const signature = `${resolvedPeriod}::${item.kpi_templates.kra_name}::${item.kpi_templates.kpi_name}`.toLowerCase();
             return !existingKpiSignatures.has(signature);
           })
         : selectedBundle.template_bundle_items;
@@ -292,7 +296,8 @@ export function SmartAssignmentDialog({
       // Filter out duplicates if skipDuplicates is enabled
       if (skipDuplicates) {
         selectedTemplates = selectedTemplates.filter(template => {
-          const signature = `${template.kra_name}::${template.kpi_name}`.toLowerCase();
+          const resolvedPeriod = getActiveMonthForCycle(template.frequency, currentPeriod, currentYear);
+          const signature = `${resolvedPeriod}::${template.kra_name}::${template.kpi_name}`.toLowerCase();
           return !existingKpiSignatures.has(signature);
         });
       }
