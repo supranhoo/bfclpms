@@ -374,8 +374,6 @@ export function useCreateKpi() {
       const description = isDuplicateKpiError(error) ? getDuplicateKpiMessage() : error.message;
       toast({ title: 'Failed to create KPI', description, variant: 'destructive' });
     },
-      toast({ title: 'Failed to create KPI', description, variant: 'destructive' });
-    },
   });
 }
 

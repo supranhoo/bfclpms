@@ -16,6 +16,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { EffectiveMonthSelector } from './EffectiveMonthSelector';
 import { getActiveMonthForCycle } from '@/lib/frequencyUtils';
+import { formatKpiInsertError } from '@/lib/kpiErrorUtils';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
