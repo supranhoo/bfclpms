@@ -969,6 +969,7 @@ export function useSendBackKpi() {
 
       // Manager sends back to employee = status goes to kra_set
       // Clear all downstream data from kra_set forward
+      // Preserve employee self-review data; only clear manager+ fields
       const { error: submissionError } = await supabase
         .from('review_submissions')
         .update({

@@ -1,80 +1,50 @@
 
+# Fix: Exclude Unsubmitted KPIs from Score Calculation — IMPLEMENTED ✅
 
-# Improve Send-Back KPI Experience
+## Problem
+KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
 
-## Problems Identified
+## Fix Applied
+Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
 
-**1. Employee data gets wiped on send-back to employee**
-When a reviewer sends back a KPI to the employee (target = `kra_set`), the cascade-clear in `UnifiedScorecard.tsx` (lines 648-656) nullifies `self_rating`, `self_score`, `self_remarks`, `self_evidence_url`, and `achieved_value`. The employee then sees a blank form and has to re-enter everything from scratch — even if only a minor correction was needed.
+| File | Line | Change |
+|---|---|---|
+| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
+| `EmployeeScorecard.tsx` | 220 | Same |
+| `AuditScorecard.tsx` | 221 | Same |
+| `ManagementScorecard.tsx` | 222 | Same |
 
-The same pattern exists in `useSendBackKpi()` in `useKpis.ts` (the manager-only send-back hook), which also resets `kpi_status` to `'open'`.
+## Impact
+- Biswajit's score: 382/468 → 382/443 (correct)
+- 19 employees with unsubmitted KPIs now show accurate weighted scores
+- Quarterly KPIs in non-terminal months are correctly excluded
+- No database migration needed — frontend calculation fix only
 
-**2. Send-back reason is buried**
-The reason is stored as a `kpi_queries` record but the `SelfReviewSheet` banner only shows a generic "This KPI was sent back for revision" message. The employee must open the Query History dialog to find the actual reason — poor discoverability.
+---
 
-## Proposed Changes
+# Improve Send-Back KPI Experience — IMPLEMENTED ✅
 
-### 1. Preserve employee data on send-back (2 files)
+## Problems Fixed
 
-**`src/components/review/UnifiedScorecard.tsx`** — In the cascade-clear block (lines 648-656), when `newStatus === 'kra_set'`, stop clearing self-level fields. Only set `kpi_status = 'open'`:
-
-```diff
-  if (newStatus === 'kra_set') {
-    clearFields.kpi_status = 'open';
--   clearFields.self_rating = null;
--   clearFields.self_score = null;
--   clearFields.self_remarks = null;
--   clearFields.self_evidence_url = null;
--   clearFields.achieved_value = null;
-  }
-```
-
-**`src/hooks/useKpis.ts`** — In `useSendBackKpi()` (line 974), stop clearing `kpi_status` to `'open'`. The employee's previous self-review data stays intact so they can see what they submitted and make targeted corrections.
-
-```diff
-  .update({
--   kpi_status: 'open' as const,
-    manager_rating: null,
-    ...
-```
-
-This means when the employee reopens the KPI, their previous achieved value, score, rating, remarks, and evidence will all be pre-populated in the form (the existing `useEffect` initialization at line 249 already reads from `submissionMap`).
-
-### 2. Show send-back reason on the banner (2 files)
-
-**`src/components/review/SelfReviewSheet.tsx`**:
-- Fetch the latest send-back query for the selected KPI using `useKpiQueries` (already available in the codebase) or a lightweight targeted query
-- When `isSentBack` is true, find the most recent `kpi_queries` record with `query_type = 'send_back'` for that KPI
-- Update the amber banner (lines 553-557) to display: the reason text, who sent it back, and when
-
-Updated banner design:
-```text
-┌─────────────────────────────────────────────────────┐
-│ ↩ This KPI was sent back for revision               │
-│                                                     │
-│ Reason: "Please recheck the achieved value,         │
-│ the target was 85% not 58%"                         │
-│                                                     │
-│ Sent back by: Rajesh Kumar · 14 Mar 2026            │
-└─────────────────────────────────────────────────────┘
-```
-
-**`src/components/review/KpiDetailsTable.tsx`** (optional enhancement):
-- For KPIs in `kra_set` status that have a prior submission (sent-back), show a small "Sent Back" badge with the reason in a tooltip, so it's visible even from the KPI list without opening the sheet.
-
-### 3. Show send-back reason on reviewer scorecards too
-
-**`src/components/review/UnifiedScorecard.tsx`** and **`src/components/review/ManagementScorecard.tsx`**:
-- When viewing a KPI that was sent back (detected via audit log or query), show a subtle info banner with the send-back reason so all reviewers in the chain can see why it was returned.
-
-### Summary of files to modify
+### 1. Employee data preserved on send-back
+Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
 
 | File | Change |
-|------|--------|
-| `src/components/review/UnifiedScorecard.tsx` | Remove self-field clearing on send-back to employee |
-| `src/hooks/useKpis.ts` | Remove `kpi_status: 'open'` reset in `useSendBackKpi` |
-| `src/components/review/SelfReviewSheet.tsx` | Fetch & display send-back reason + sender on the banner |
-| `src/components/review/KpiDetailsTable.tsx` | Add "Sent Back" badge with reason tooltip for sent-back KPIs |
+|---|---|
+| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
+| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
 
-No database changes required — all data is already stored in `kpi_queries` and `kpi_audit_logs`.
+### 2. Send-back reason shown on face
+- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
+- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
+- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
 
+### 3. Send-back queries created from all reviewer levels
+UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
+
+| File | Change |
+|---|---|
+| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
+| `SelfReviewSheet.tsx` | Uses SentBackBanner |
+| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
+| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |

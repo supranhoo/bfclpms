@@ -645,14 +645,10 @@ export function UnifiedScorecard({
       const statusOrder = effectiveStages;
       const targetIdx = statusOrder.indexOf(newStatus);
 
-      // Clear kpi_status and self fields if going back to kra_set
+      // When sending back to employee (kra_set), only reset kpi_status
+      // but PRESERVE self-level data so employee can see what they submitted
       if (newStatus === 'kra_set') {
         clearFields.kpi_status = 'open';
-        clearFields.self_rating = null;
-        clearFields.self_score = null;
-        clearFields.self_remarks = null;
-        clearFields.self_evidence_url = null;
-        clearFields.achieved_value = null;
       }
 
       // Clear manager fields when target is before manager_check (or stage absent from pipeline)
@@ -721,12 +717,28 @@ export function UnifiedScorecard({
           new_value: { reason, target },
           metadata: { sent_back_at: new Date().toISOString() },
         });
+
+        // Create a kpi_queries record so the send-back reason is discoverable
+        const employeeId = kpis?.find(k => k.id === kpi_id)?.employee_id;
+        if (employeeId) {
+          await supabase.from('kpi_queries').insert({
+            kpi_id,
+            raised_by: user.id,
+            raised_to: employeeId,
+            reason: `[SENT BACK] ${reason}`,
+            entity_type: 'kpi',
+            status: 'resolved',
+            resolved_at: new Date().toISOString(),
+            query_type: 'send_back',
+          });
+        }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      queryClient.invalidateQueries({ queryKey: ['kpi-queries'] });
       toast({ title: 'KPI sent back successfully' });
       setSendBackDialogOpen(false);
       setReviewSheetOpen(false);
