@@ -131,12 +131,14 @@ export function useUpsertWorkflowConfig() {
       workflowTemplateId,
       reviewPeriod,
       reviewYear,
+      isOngoing,
     }: {
       configType: 'employee' | 'department' | 'pms_grade';
       configValue: string;
       workflowTemplateId: string;
       reviewPeriod?: string | null;
       reviewYear?: number | null;
+      isOngoing?: boolean;
     }) => {
       const record: Record<string, unknown> = {
         config_type: configType,
@@ -144,6 +146,7 @@ export function useUpsertWorkflowConfig() {
         workflow_template_id: workflowTemplateId,
         review_period: reviewPeriod || null,
         review_year: reviewYear || null,
+        is_ongoing: isOngoing || false,
       };
 
       // Use different onConflict based on whether it's period-specific or global
