@@ -1,90 +1,58 @@
 
-# Workflow Configuration: "Effective From" Period Support — IMPLEMENTED ✅
 
-## What Changed
-- Added `is_ongoing` BOOLEAN column to `workflow_config` table
-- Created `month_name_to_index()` and `find_ongoing_workflow()` helper functions
-- Updated 3 RPCs with ongoing resolution: exact match → ongoing match → global fallback
-- Frontend: "Apply from this month onward" toggle + ongoing badges
-- Hook: `useUpsertWorkflowConfig` accepts `isOngoing` parameter
+# RCA: Workflow Config for Employee 200416 Not Effective on Dashboard
 
----
+## Root Cause
 
-# Org-Level KPI Toggle in Assign New KRA Dialog — IMPLEMENTED ✅
+The database is correct — calling `get_employee_workflow('e97cb9a7-...', 'March', 2026)` returns the expected 6-stage workflow (`self_l1_hr_pms_audit`).
 
-## What Changed
-- Added `isOrgLevel` toggle switch and `orgLevelScope` selector to the Advanced section of `AdminKpiCreateDialog`
-- Submit now uses these state values instead of hardcoded `is_org_level: false`
-- Scope options: Organization, Department, Employee (matching `MarkOrgLevelDialog` pattern)
+The previous fix only patched **2 of 6** components. Four scorecard/review components still call `useEmployeeWorkflowStages(employee.id)` **without period parameters**, causing them to resolve the global fallback instead of the March-specific config.
 
----
+| Component | Line | Has period props? | Passes them? |
+|---|---|---|---|
+| `UnifiedScorecard.tsx` | 193 | Yes | **Yes** ✅ (fixed earlier) |
+| `EmployeeSelectorGrid.tsx` | 173 | Yes | **Yes** ✅ (fixed earlier) |
+| `EmployeeScorecard.tsx` | 90 | Yes (`selectedPeriod`, `selectedYear`) | **No** ❌ |
+| `AuditScorecard.tsx` | 98 | Yes | **No** ❌ |
+| `ManagementScorecard.tsx` | 92 | Yes | **No** ❌ |
+| `SelfReviewSheet.tsx` | 127 | Yes | **No** ❌ |
+| `AdminDataEntryDialog.tsx` | 108 | No (has KPI with period) | **No** ❌ |
 
+## Fix: 5 one-line changes
 
-## Problem
-KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
+**1. `src/components/review/EmployeeScorecard.tsx` line 90:**
+```diff
+- const { data: workflowStages } = useEmployeeWorkflowStages(employee.id);
++ const { data: workflowStages } = useEmployeeWorkflowStages(employee.id, selectedPeriod, selectedYear);
+```
 
-## Fix Applied
-Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
+**2. `src/components/review/AuditScorecard.tsx` line 98:**
+```diff
+- const { data: workflowStages } = useEmployeeWorkflowStages(employee.id);
++ const { data: workflowStages } = useEmployeeWorkflowStages(employee.id, selectedPeriod, selectedYear);
+```
 
-| File | Line | Change |
-|---|---|---|
-| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
-| `EmployeeScorecard.tsx` | 220 | Same |
-| `AuditScorecard.tsx` | 221 | Same |
-| `ManagementScorecard.tsx` | 222 | Same |
+**3. `src/components/review/ManagementScorecard.tsx` line 92:**
+```diff
+- const { data: workflowStages } = useEmployeeWorkflowStages(employee.id);
++ const { data: workflowStages } = useEmployeeWorkflowStages(employee.id, selectedPeriod, selectedYear);
+```
+
+**4. `src/components/review/SelfReviewSheet.tsx` line 127:**
+```diff
+- const { data: employeeWorkflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(profile?.id);
++ const { data: employeeWorkflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(profile?.id, selectedPeriod, selectedYear);
+```
+
+**5. `src/components/admin/AdminDataEntryDialog.tsx` line 108:**
+Extract period from the KPI prop and pass it:
+```diff
++ const kpiPeriod = kpi ? { month: kpi.review_period || 'January', year: kpi.review_year || new Date().getFullYear() } : null;
+- const { data: workflowStages } = useEmployeeWorkflowStages(employeeId);
++ const { data: workflowStages } = useEmployeeWorkflowStages(employeeId, kpiPeriod?.month, kpiPeriod?.year);
+```
 
 ## Impact
-- Biswajit's score: 382/468 → 382/443 (correct)
-- 19 employees with unsubmitted KPIs now show accurate weighted scores
-- Quarterly KPIs in non-terminal months are correctly excluded
-- No database migration needed — frontend calculation fix only
 
----
+All 6 consumer components will pass period context to the RPC, ensuring period-specific workflow overrides (like the one for employee 200416) are correctly resolved everywhere — scorecards, self-review, audit, management review, and admin data entry.
 
-# Improve Send-Back KPI Experience — IMPLEMENTED ✅
-
-## Problems Fixed
-
-### 1. Employee data preserved on send-back
-Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
-
-| File | Change |
-|---|---|
-| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
-| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
-
-### 2. Send-back reason shown on face
-- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
-- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
-- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
-
-### 3. Send-back queries created from all reviewer levels
-UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
-
-| File | Change |
-|---|---|
-| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
-| `SelfReviewSheet.tsx` | Uses SentBackBanner |
-| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
-| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
-
----
-
-# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
-
-## Gaps Fixed
-
-### 1. ManagementScorecard now creates `kpi_queries` record on send-back
-Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
-
-### 2. SentBackBanner shown to all reviewer levels
-The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
-
-### 3. SentBackBanner conditionally renders
-Returns `null` when no send-back query is found, so it doesn't show an empty banner.
-
-| File | Change |
-|---|---|
-| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
-| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
-| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |
