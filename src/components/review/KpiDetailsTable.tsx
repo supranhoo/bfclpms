@@ -378,6 +378,13 @@ export function KpiDetailsTable({
                           Sent Back
                         </Badge>
                       )}
+                      {/* Show Sent Back badge for KPIs at kra_set that have a prior submission */}
+                      {kpi.status === 'kra_set' && submission && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-600 dark:bg-amber-900/20 dark:text-amber-400 gap-0.5">
+                          <Undo2 className="h-2.5 w-2.5" />
+                          Sent Back
+                        </Badge>
+                      )}
                     </div>
                     <div className="relative">
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap">
