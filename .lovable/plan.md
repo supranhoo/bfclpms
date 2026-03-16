@@ -1,71 +1,103 @@
 
-# Fix: Exclude Unsubmitted KPIs from Score Calculation — IMPLEMENTED ✅
 
-## Problem
-KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
+# Workflow Configuration: "Effective From" Period Support
 
-## Fix Applied
-Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
+## Current Limitation
 
-| File | Line | Change |
-|---|---|---|
-| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
-| `EmployeeScorecard.tsx` | 220 | Same |
-| `AuditScorecard.tsx` | 221 | Same |
-| `ManagementScorecard.tsx` | 222 | Same |
+The system stores workflow configs with an **exact month+year** match. The `get_employee_workflow` RPC checks:
+```sql
+WHERE wc.review_period = p_review_period AND wc.review_year = p_review_year
+```
 
-## Impact
-- Biswajit's score: 382/468 → 382/443 (correct)
-- 19 employees with unsubmitted KPIs now show accurate weighted scores
-- Quarterly KPIs in non-terminal months are correctly excluded
-- No database migration needed — frontend calculation fix only
+This means if you assign a workflow to Bhoopendra for "March 2026", it **only** applies to March 2026. For April 2026, it falls back to the global config. To cover 12 months, you'd need 12 separate records — clearly impractical.
 
----
+## Proposed Solution: "Effective From" Mode
 
-# Improve Send-Back KPI Experience — IMPLEMENTED ✅
+Add an `effective_from` flag so a config means "use this workflow from this month onward, until a newer config supersedes it."
 
-## Problems Fixed
+### Database Changes
 
-### 1. Employee data preserved on send-back
-Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
+**1. Add column to `workflow_config`:**
+```sql
+ALTER TABLE workflow_config
+  ADD COLUMN is_ongoing BOOLEAN NOT NULL DEFAULT false;
+```
+
+When `is_ongoing = true`, the config applies from `(review_year, review_period)` onward — not just that single month.
+
+**2. Update `get_employee_workflow` RPC:**
+
+For each priority level, add a second lookup after the exact-match check: find the most recent ongoing config where `(year, month_index) <= (requested_year, requested_month_index)`.
+
+```text
+Resolution order per priority level:
+  1. Exact match for requested month+year
+  2. Latest ongoing config where effective_from ≤ requested month+year
+  3. (fall through to next priority level)
+```
+
+A helper converts month names to sortable integers for comparison:
+```sql
+-- Compare: (config_year * 100 + month_index) <= (requested_year * 100 + requested_month_index)
+```
+
+If two ongoing configs exist (e.g., one from Jan 2026, another from June 2026), the one with the latest effective date that is still ≤ the requested period wins.
+
+**3. Similarly update `get_employee_workflow_info` and `get_bulk_employee_workflows` RPCs** to use the same ongoing resolution logic.
+
+### Frontend Changes
+
+**`src/pages/admin/WorkflowConfig.tsx`:**
+- When `periodMode === 'specific'`, add a toggle/checkbox: **"Apply from this month onward"**
+- When toggled on, the upsert call includes `is_ongoing: true`
+- In the config list, show a badge like "Ongoing from Mar 2026" instead of "Mar 2026"
+- Add a visual indicator (e.g., arrow icon →) to distinguish one-time vs ongoing configs
+
+**`src/hooks/useWorkflowConfig.ts`:**
+- Update `useUpsertWorkflowConfig` to accept and pass `isOngoing` parameter
+- Update `WorkflowConfig` interface to include `is_ongoing`
+
+### UI Behavior
+
+```text
+┌─────────────────────────────────────────────────────┐
+│  Scope: ○ Global  ● Specific Period                 │
+│                                                     │
+│  Month: [March ▾]  Year: [2026 ▾]                   │
+│                                                     │
+│  ☑ Apply from this month onward                     │
+│    (This workflow will remain effective for all      │
+│     future months until a new config is set)         │
+└─────────────────────────────────────────────────────┘
+```
+
+When viewing configs in the table:
+```text
+│ Bhoopendra (101131) │ Sales Workflow │ Ongoing from Mar 2026 → │
+│ Rajesh (101045)      │ Default Flow   │ Apr 2026 only           │
+```
+
+### Config List Filtering
+
+When viewing a specific period (e.g., July 2026), the list should show:
+1. Exact configs for July 2026
+2. Ongoing configs from earlier months that are still effective (with an "Inherited from Mar 2026" indicator)
+
+### Edge Cases
+
+- **Overriding an ongoing config**: Setting a new config (exact or ongoing) for a later month takes precedence for that month onward
+- **Removing an ongoing config**: Reverts all future months back to the next applicable config in the hierarchy
+- **Exact config + ongoing config for same entity**: Exact match always wins for that specific month
+
+### Files to Modify
 
 | File | Change |
 |---|---|
-| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
-| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
+| **New migration SQL** | Add `is_ongoing` column, update 3 RPCs with ongoing resolution logic |
+| `src/hooks/useWorkflowConfig.ts` | Add `is_ongoing` to interfaces, pass in upsert |
+| `src/pages/admin/WorkflowConfig.tsx` | Add "Apply from this month onward" toggle, update badges and list display |
 
-### 2. Send-back reason shown on face
-- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
-- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
-- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
+### Summary
 
-### 3. Send-back queries created from all reviewer levels
-UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
+This is primarily a **database RPC change** — the resolution logic in `get_employee_workflow` needs to check for the nearest ongoing config when no exact match exists. The frontend changes are minimal: one checkbox toggle and updated badge display.
 
-| File | Change |
-|---|---|
-| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
-| `SelfReviewSheet.tsx` | Uses SentBackBanner |
-| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
-| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
-
----
-
-# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
-
-## Gaps Fixed
-
-### 1. ManagementScorecard now creates `kpi_queries` record on send-back
-Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
-
-### 2. SentBackBanner shown to all reviewer levels
-The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
-
-### 3. SentBackBanner conditionally renders
-Returns `null` when no send-back query is found, so it doesn't show an empty banner.
-
-| File | Change |
-|---|---|
-| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
-| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
-| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |
