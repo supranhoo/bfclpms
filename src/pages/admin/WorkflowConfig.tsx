@@ -198,11 +198,14 @@ export default function WorkflowConfig() {
         workflowTemplateId: templateId,
         reviewPeriod: periodMode === 'specific' ? selectedMonth : null,
         reviewYear: periodMode === 'specific' ? selectedYear : null,
+        isOngoing: periodMode === 'specific' ? isOngoing : false,
       });
       toast({
         title: 'Workflow assigned',
         description: periodMode === 'specific' 
-          ? `Workflow assigned for ${selectedMonth} ${selectedYear}.`
+          ? isOngoing
+            ? `Workflow assigned from ${selectedMonth} ${selectedYear} onward.`
+            : `Workflow assigned for ${selectedMonth} ${selectedYear}.`
           : 'The workflow configuration has been saved.',
       });
     } catch {
