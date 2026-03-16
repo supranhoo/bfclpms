@@ -276,7 +276,6 @@ export function SmartAssignmentDialog({
       handleClose();
     },
     onError: (error: any) => {
-      const { formatKpiInsertError } = require('@/lib/kpiErrorUtils');
       toast({
         title: 'Failed to assign KPIs',
         description: formatKpiInsertError(error, { selectedMonth: currentPeriod, selectedYear: currentYear }),
