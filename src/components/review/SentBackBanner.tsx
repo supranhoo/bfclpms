@@ -33,6 +33,8 @@ export function SentBackBanner({ kpiId }: SentBackBannerProps) {
     ? format(new Date(sendBackQuery.created_at), 'dd MMM yyyy')
     : null;
 
+  if (!sendBackQuery) return null;
+
   return (
     <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950 p-3 text-sm text-amber-800 dark:text-amber-200">
       <div className="flex items-center gap-2 font-medium">
@@ -42,11 +44,9 @@ export function SentBackBanner({ kpiId }: SentBackBannerProps) {
       {reason && (
         <p className="mt-2 ml-6 italic">&ldquo;{reason}&rdquo;</p>
       )}
-      {sendBackQuery && (
-        <p className="mt-1 ml-6 text-xs opacity-75">
-          Sent back by: {senderName}{sentDate ? ` · ${sentDate}` : ''}
-        </p>
-      )}
+      <p className="mt-1 ml-6 text-xs opacity-75">
+        Sent back by: {senderName}{sentDate ? ` · ${sentDate}` : ''}
+      </p>
     </div>
   );
 }
