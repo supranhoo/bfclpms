@@ -239,6 +239,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
     setReviewYear(settings.current_review_year);
     setRequireResubmitReason(true);
     setThresholdMode('absolute');
+    setIsOrgLevel(false);
+    setOrgLevelScope('organization');
     setIsCustomKra(false);
     setIsCustomKpi(false);
     setIsCustomCategory(false);
