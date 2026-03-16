@@ -105,7 +105,8 @@ export function AdminDataEntryDialog({
 }: AdminDataEntryDialogProps) {
   const submitMutation = useAdminSubmitReviewData();
   const fastTrackMutation = useAdminFastTrackApprove();
-  const { data: workflowStages } = useEmployeeWorkflowStages(employeeId);
+  const kpiPeriod = kpi ? parseReviewPeriod(kpi) : null;
+  const { data: workflowStages } = useEmployeeWorkflowStages(employeeId, kpiPeriod?.month, kpiPeriod?.year);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const visibleRoleLevels = useMemo(
     () => ALL_ROLE_LEVELS.filter((r) => effectiveStages.includes(r.stage)),

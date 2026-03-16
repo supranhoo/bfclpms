@@ -89,7 +89,7 @@ export function ManagementScorecard({
   const { toast } = useToast();
   
   // Fetch workflow stages for this employee
-  const { data: workflowStages } = useEmployeeWorkflowStages(employee.id);
+  const { data: workflowStages } = useEmployeeWorkflowStages(employee.id, selectedPeriod, selectedYear);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const sendBackTargets = resolveSendBackTargets('management', effectiveStages);
   
