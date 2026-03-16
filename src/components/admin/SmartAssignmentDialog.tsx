@@ -213,7 +213,8 @@ export function SmartAssignmentDialog({
       // Filter out duplicates if skipDuplicates is enabled
       const itemsToInsert = skipDuplicates 
         ? selectedBundle.template_bundle_items.filter(item => {
-            const signature = `${item.kpi_templates.kra_name}::${item.kpi_templates.kpi_name}`.toLowerCase();
+            const resolvedPeriod = getActiveMonthForCycle(item.kpi_templates.frequency, currentPeriod, currentYear);
+            const signature = `${resolvedPeriod}::${item.kpi_templates.kra_name}::${item.kpi_templates.kpi_name}`.toLowerCase();
             return !existingKpiSignatures.has(signature);
           })
         : selectedBundle.template_bundle_items;
