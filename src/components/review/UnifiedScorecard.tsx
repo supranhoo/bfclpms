@@ -645,14 +645,10 @@ export function UnifiedScorecard({
       const statusOrder = effectiveStages;
       const targetIdx = statusOrder.indexOf(newStatus);
 
-      // Clear kpi_status and self fields if going back to kra_set
+      // When sending back to employee (kra_set), only reset kpi_status
+      // but PRESERVE self-level data so employee can see what they submitted
       if (newStatus === 'kra_set') {
         clearFields.kpi_status = 'open';
-        clearFields.self_rating = null;
-        clearFields.self_score = null;
-        clearFields.self_remarks = null;
-        clearFields.self_evidence_url = null;
-        clearFields.achieved_value = null;
       }
 
       // Clear manager fields when target is before manager_check (or stage absent from pipeline)
