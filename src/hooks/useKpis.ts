@@ -370,7 +370,8 @@ export function useCreateKpi() {
       toast({ title: 'KPI created successfully' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Failed to create KPI', description: error.message, variant: 'destructive' });
+      const isDuplicate = error.message?.includes('idx_kpis_no_duplicates') || error.message?.includes('duplicate key');
+      toast({ title: 'Failed to create KPI', description: isDuplicate ? 'This KRA/KPI is already assigned to this employee for the selected review period. Please choose a different KPI or period.' : error.message, variant: 'destructive' });
     },
   });
 }
