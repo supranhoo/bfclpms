@@ -975,7 +975,35 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                         checked={requireResubmitReason}
                         onCheckedChange={setRequireResubmitReason}
                       />
+                  </div>
+                  <div className="p-3 border rounded-lg bg-muted/30">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <Label className="text-sm font-medium">Organization-Level KPI</Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Mark as centrally managed org KPI with a single achieved value
+                        </p>
+                      </div>
+                      <Switch
+                        checked={isOrgLevel}
+                        onCheckedChange={setIsOrgLevel}
+                      />
                     </div>
+                    {isOrgLevel && (
+                      <div className="mt-3 space-y-1.5">
+                        <Label className="text-xs font-medium">Scope</Label>
+                        <Select value={orgLevelScope} onValueChange={setOrgLevelScope}>
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="organization">Organization</SelectItem>
+                            <SelectItem value="department">Department</SelectItem>
+                            <SelectItem value="employee">Employee</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
