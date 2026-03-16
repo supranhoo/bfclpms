@@ -195,8 +195,10 @@ export function BulkTemplateAssignDialog({ isOpen, onClose }: BulkTemplateAssign
       });
       handleClose();
     },
-    onError: (error: Error) => {
-      toast({ title: 'Failed to assign KPIs', description: error.message, variant: 'destructive' });
+    onError: (error: any) => {
+      const { formatKpiInsertError } = require('@/lib/kpiErrorUtils');
+      const resolvedPeriod = selectedTemplate ? getActiveMonthForCycle(selectedTemplate.frequency, currentPeriod, currentYear) : currentPeriod;
+      toast({ title: 'Failed to assign KPIs', description: formatKpiInsertError(error, { frequency: selectedTemplate?.frequency, selectedMonth: currentPeriod, resolvedMonth: resolvedPeriod, selectedYear: currentYear }), variant: 'destructive' });
     },
   });
 
