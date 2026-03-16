@@ -18,6 +18,7 @@ export interface WorkflowConfig {
   workflow_template_id: string;
   review_period: string | null;
   review_year: number | null;
+  is_ongoing: boolean;
   created_at: string;
   updated_at: string;
   created_by: string | null;
