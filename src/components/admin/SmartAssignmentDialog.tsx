@@ -152,11 +152,12 @@ export function SmartAssignmentDialog({
       }));
   }, [selectedTemplateIds, templates, existingKpiSignatures, currentPeriod, currentYear]);
 
-  // Check if template is a duplicate
+  // Check if template is a duplicate (using resolved period)
   const isTemplateDuplicate = (templateId: string) => {
     const template = templates?.find(t => t.id === templateId);
     if (!template) return false;
-    const signature = `${template.kra_name}::${template.kpi_name}`.toLowerCase();
+    const resolvedPeriod = getActiveMonthForCycle(template.frequency, currentPeriod, currentYear);
+    const signature = `${resolvedPeriod}::${template.kra_name}::${template.kpi_name}`.toLowerCase();
     return existingKpiSignatures.has(signature);
   };
 
