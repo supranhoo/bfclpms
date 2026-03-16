@@ -97,6 +97,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
   ]);
   const [requireResubmitReason, setRequireResubmitReason] = useState(true);
   const [thresholdMode, setThresholdMode] = useState<'absolute' | 'ratio'>('absolute');
+  const [isOrgLevel, setIsOrgLevel] = useState(false);
+  const [orgLevelScope, setOrgLevelScope] = useState('organization');
 
   // Period - prefer explicit defaults from props, then system settings
   const [reviewPeriod, setReviewPeriod] = useState(defaultReviewPeriod || settings.current_review_period);
@@ -237,6 +239,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
     setReviewYear(settings.current_review_year);
     setRequireResubmitReason(true);
     setThresholdMode('absolute');
+    setIsOrgLevel(false);
+    setOrgLevelScope('organization');
     setIsCustomKra(false);
     setIsCustomKpi(false);
     setIsCustomCategory(false);
@@ -278,8 +282,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
       review_period: resolvedPeriod,
       review_year: reviewYear,
       status: 'kra_set' as ReviewStatus,
-      is_org_level: false,
-      org_level_scope: 'organization' as const,
+      is_org_level: isOrgLevel,
+      org_level_scope: isOrgLevel ? orgLevelScope as any : null,
       uom_type: uomType,
       qualitative_options: uomType === 'tiered' ? qualitativeOptions : (uomType === 'binary' ? BINARY_OPTIONS : null),
       // Frequency fields - auto-derived by database trigger
@@ -972,6 +976,35 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                         onCheckedChange={setRequireResubmitReason}
                       />
                     </div>
+                  </div>
+                  <div className="p-3 border rounded-lg bg-muted/30">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <Label className="text-sm font-medium">Organization-Level KPI</Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Mark as centrally managed org KPI with a single achieved value
+                        </p>
+                      </div>
+                      <Switch
+                        checked={isOrgLevel}
+                        onCheckedChange={setIsOrgLevel}
+                      />
+                    </div>
+                    {isOrgLevel && (
+                      <div className="mt-3 space-y-1.5">
+                        <Label className="text-xs font-medium">Scope</Label>
+                        <Select value={orgLevelScope} onValueChange={setOrgLevelScope}>
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="organization">Organization</SelectItem>
+                            <SelectItem value="department">Department</SelectItem>
+                            <SelectItem value="employee">Employee</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
