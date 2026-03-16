@@ -929,6 +929,11 @@ export function ManagementScorecard({
               />
             )}
             
+            {/* Sent Back Banner */}
+            {selectedKpi && (
+              <SentBackBanner kpiId={selectedKpi.id} />
+            )}
+
             {/* N/A Confirmation Card */}
             {selectedKpi && submissionMap.get(selectedKpi.id)?.is_na && (
               <NaConfirmationCard
