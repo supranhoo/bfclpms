@@ -1,90 +1,46 @@
 
-# Workflow Configuration: "Effective From" Period Support — IMPLEMENTED ✅
 
-## What Changed
-- Added `is_ongoing` BOOLEAN column to `workflow_config` table
-- Created `month_name_to_index()` and `find_ongoing_workflow()` helper functions
-- Updated 3 RPCs with ongoing resolution: exact match → ongoing match → global fallback
-- Frontend: "Apply from this month onward" toggle + ongoing badges
-- Hook: `useUpsertWorkflowConfig` accepts `isOngoing` parameter
+# Fix: Duplicate KPI Error Still Showing Raw Message
 
----
+## Diagnosis
 
-# Org-Level KPI Toggle in Assign New KRA Dialog — IMPLEMENTED ✅
+The friendly error message fix IS correctly in place in `useCreateKpi` (line 372-374 of `useKpis.ts`). However, the screenshot may reflect a cached version of the app before the fix was deployed.
 
-## What Changed
-- Added `isOrgLevel` toggle switch and `orgLevelScope` selector to the Advanced section of `AdminKpiCreateDialog`
-- Submit now uses these state values instead of hardcoded `is_org_level: false`
-- Scope options: Organization, Department, Employee (matching `MarkOrgLevelDialog` pattern)
+**To confirm**: Please do a hard refresh (Ctrl+Shift+R) and try again. If the friendly message appears, the fix is already working.
 
----
+## Additional Hardening (Recommended)
 
+There are **6 other code paths** that insert directly into the `kpis` table without the friendly duplicate error handling. These should all be patched for consistency:
 
-## Problem
-KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
-
-## Fix Applied
-Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
-
-| File | Line | Change |
+| File | Line | Context |
 |---|---|---|
-| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
-| `EmployeeScorecard.tsx` | 220 | Same |
-| `AuditScorecard.tsx` | 221 | Same |
-| `ManagementScorecard.tsx` | 222 | Same |
+| `AdminKpiEditorForm.tsx` | 341 | Bulk Apply copy |
+| `SmartAssignmentDialog.tsx` | 247, 331 | Smart assignment |
+| `BulkTemplateAssignDialog.tsx` | 185 | Bulk template assign |
+| `CopyKrasDialog.tsx` | 229 | Copy KRAs |
+| `KpiWeightageDashboard.tsx` | 390 | Already has partial handling ✅ |
 
-## Impact
-- Biswajit's score: 382/468 → 382/443 (correct)
-- 19 employees with unsubmitted KPIs now show accurate weighted scores
-- Quarterly KPIs in non-terminal months are correctly excluded
-- No database migration needed — frontend calculation fix only
+### Changes
 
----
+For each file above (except `KpiWeightageDashboard.tsx` which already handles it), update the error handler to detect `idx_kpis_no_duplicates` or `duplicate key` and show the user-friendly toast message instead of the raw database error.
 
-# Improve Send-Back KPI Experience — IMPLEMENTED ✅
+Additionally, wrap the `mutateAsync` call in `AdminKpiCreateDialog.tsx` (line 265) in a `try/catch` to prevent unhandled promise rejection:
 
-## Problems Fixed
+```typescript
+try {
+  await createKpi.mutateAsync({ ... });
+  handleClose();
+} catch {
+  // Error already handled by useCreateKpi onError
+}
+```
 
-### 1. Employee data preserved on send-back
-Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
+This ensures the dialog stays open on error (currently `handleClose()` on line 298 would not execute on error anyway, but the explicit try/catch is cleaner).
 
-| File | Change |
-|---|---|
-| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
-| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
+### Files to modify
+1. `src/components/admin/AdminKpiCreateDialog.tsx` — add try/catch
+2. `src/components/admin/AdminKpiEditorForm.tsx` — friendly duplicate message
+3. `src/components/admin/SmartAssignmentDialog.tsx` — friendly duplicate message (2 locations)
+4. `src/components/admin/BulkTemplateAssignDialog.tsx` — friendly duplicate message
+5. `src/components/admin/CopyKrasDialog.tsx` — friendly duplicate message
 
-### 2. Send-back reason shown on face
-- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
-- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
-- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
-
-### 3. Send-back queries created from all reviewer levels
-UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
-
-| File | Change |
-|---|---|
-| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
-| `SelfReviewSheet.tsx` | Uses SentBackBanner |
-| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
-| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
-
----
-
-# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
-
-## Gaps Fixed
-
-### 1. ManagementScorecard now creates `kpi_queries` record on send-back
-Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
-
-### 2. SentBackBanner shown to all reviewer levels
-The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
-
-### 3. SentBackBanner conditionally renders
-Returns `null` when no send-back query is found, so it doesn't show an empty banner.
-
-| File | Change |
-|---|---|
-| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
-| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
-| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |
