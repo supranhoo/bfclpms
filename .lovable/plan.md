@@ -1,82 +1,43 @@
 
-# Workflow Configuration: "Effective From" Period Support — IMPLEMENTED ✅
 
-## What Changed
-- Added `is_ongoing` BOOLEAN column to `workflow_config` table
-- Created `month_name_to_index()` and `find_ongoing_workflow()` helper functions
-- Updated 3 RPCs with ongoing resolution: exact match → ongoing match → global fallback
-- Frontend: "Apply from this month onward" toggle + ongoing badges
-- Hook: `useUpsertWorkflowConfig` accepts `isOngoing` parameter
+# Add "Mark as Org-Level KPI" Toggle to Assign New KRA Dialog
 
----
+## What's Missing
 
+The `AdminKpiCreateDialog` currently hardcodes `is_org_level: false` and `org_level_scope: 'organization'` when creating a KPI (line 281-282). There is no UI toggle to let the admin mark the KPI as org-level during creation.
 
+## Changes
 
-## Problem
-KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
+### `src/components/admin/AdminKpiCreateDialog.tsx`
 
-## Fix Applied
-Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
+1. **Add state variables** (after line 98):
+   - `isOrgLevel` (boolean, default `false`)
+   - `orgLevelScope` (string, default `'organization'`)
 
-| File | Line | Change |
-|---|---|---|
-| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
-| `EmployeeScorecard.tsx` | 220 | Same |
-| `AuditScorecard.tsx` | 221 | Same |
-| `ManagementScorecard.tsx` | 222 | Same |
+2. **Reset state** in the `handleClose` function — reset both new fields.
 
-## Impact
-- Biswajit's score: 382/468 → 382/443 (correct)
-- 19 employees with unsubmitted KPIs now show accurate weighted scores
-- Quarterly KPIs in non-terminal months are correctly excluded
-- No database migration needed — frontend calculation fix only
+3. **Use state in submit** (lines 281-282): Replace hardcoded values with the state variables.
 
----
+4. **Add UI toggle** in the Advanced section (after the "Require Reason for Resubmission" block, before the closing `</div>`):
+   - A switch labeled **"Organization-Level KPI"** with description text
+   - When toggled on, show a scope selector dropdown (Organization / Department / Employee) — same pattern used in `MarkOrgLevelDialog`
 
-# Improve Send-Back KPI Experience — IMPLEMENTED ✅
+### UI Layout (in Advanced section)
 
-## Problems Fixed
+```text
+┌──────────────────────────────────────────────────┐
+│  ADVANCED                                         │
+│ ┌──────────────────────────────────────────────┐  │
+│ │ Require Reason for Resubmission     [toggle] │  │
+│ └──────────────────────────────────────────────┘  │
+│ ┌──────────────────────────────────────────────┐  │
+│ │ Organization-Level KPI              [toggle] │  │
+│ │ Mark as centrally managed org KPI            │  │
+│ │                                              │  │
+│ │ Scope: [Organization ▾]  (shown when on)     │  │
+│ └──────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────┘
+```
 
-### 1. Employee data preserved on send-back
-Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
+No database changes needed — the `kpis` table already has `is_org_level` and `org_level_scope` columns.
 
-| File | Change |
-|---|---|
-| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
-| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
-
-### 2. Send-back reason shown on face
-- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
-- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
-- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
-
-### 3. Send-back queries created from all reviewer levels
-UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
-
-| File | Change |
-|---|---|
-| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
-| `SelfReviewSheet.tsx` | Uses SentBackBanner |
-| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
-| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
-
----
-
-# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
-
-## Gaps Fixed
-
-### 1. ManagementScorecard now creates `kpi_queries` record on send-back
-Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
-
-### 2. SentBackBanner shown to all reviewer levels
-The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
-
-### 3. SentBackBanner conditionally renders
-Returns `null` when no send-back query is found, so it doesn't show an empty banner.
-
-| File | Change |
-|---|---|
-| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
-| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
-| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |
