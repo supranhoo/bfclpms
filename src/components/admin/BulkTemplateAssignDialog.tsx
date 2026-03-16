@@ -16,6 +16,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { EffectiveMonthSelector } from './EffectiveMonthSelector';
 import { getActiveMonthForCycle } from '@/lib/frequencyUtils';
+import { formatKpiInsertError } from '@/lib/kpiErrorUtils';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -195,8 +196,9 @@ export function BulkTemplateAssignDialog({ isOpen, onClose }: BulkTemplateAssign
       });
       handleClose();
     },
-    onError: (error: Error) => {
-      toast({ title: 'Failed to assign KPIs', description: error.message, variant: 'destructive' });
+    onError: (error: any) => {
+      const resolvedPeriod = selectedTemplate ? getActiveMonthForCycle(selectedTemplate.frequency, currentPeriod, currentYear) : currentPeriod;
+      toast({ title: 'Failed to assign KPIs', description: formatKpiInsertError(error, { frequency: selectedTemplate?.frequency, selectedMonth: currentPeriod, resolvedMonth: resolvedPeriod, selectedYear: currentYear }), variant: 'destructive' });
     },
   });
 
@@ -209,7 +211,7 @@ export function BulkTemplateAssignDialog({ isOpen, onClose }: BulkTemplateAssign
       .select('employee_id')
       .eq('kra_name', selectedTemplate.kra_name)
       .eq('kpi_name', selectedTemplate.kpi_name)
-      .eq('review_period', currentPeriod)
+      .eq('review_period', getActiveMonthForCycle(selectedTemplate.frequency, currentPeriod, currentYear))
       .eq('review_year', currentYear)
       .in('employee_id', Array.from(selectedEmployeeIds));
 

@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Search, Package, Users, FileCheck, Sparkles } from 'lucide-react';
 import { EffectiveMonthSelector } from './EffectiveMonthSelector';
 import { getActiveMonthForCycle } from '@/lib/frequencyUtils';
+import { formatKpiInsertError } from '@/lib/kpiErrorUtils';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -173,10 +174,10 @@ export function BundleAssignDialog({ isOpen, onClose, preselectedEmployeeId }: B
 
       handleClose();
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
         title: 'Failed to assign bundle',
-        description: error.message,
+        description: formatKpiInsertError(error, { selectedMonth: currentPeriod, selectedYear: currentYear }),
         variant: 'destructive',
       });
     },

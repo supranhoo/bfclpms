@@ -12,6 +12,7 @@ import { Copy, Search, AlertTriangle, Loader2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { formatKpiInsertError } from '@/lib/kpiErrorUtils';
 
 
 const MONTHS = [
@@ -239,8 +240,8 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
 
       handleClose();
     },
-    onError: (err: Error) => {
-      toast({ title: 'Copy Failed', description: err.message, variant: 'destructive' });
+    onError: (err: any) => {
+      toast({ title: 'Copy Failed', description: formatKpiInsertError(err), variant: 'destructive' });
     },
   });
 

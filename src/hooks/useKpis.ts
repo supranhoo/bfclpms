@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { MONTH_NAMES } from '@/hooks/useAdminReports';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { isDuplicateKpiError, getDuplicateKpiMessage } from '@/lib/kpiErrorUtils';
 
 export type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review' | 'approved';
 export type RatingLevel = 'red' | 'yellow' | 'green' | 'blue';
@@ -369,9 +370,9 @@ export function useCreateKpi() {
       queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
       toast({ title: 'KPI created successfully' });
     },
-    onError: (error: Error) => {
-      const isDuplicate = error.message?.includes('idx_kpis_no_duplicates') || error.message?.includes('duplicate key');
-      toast({ title: 'Failed to create KPI', description: isDuplicate ? 'This KRA/KPI is already assigned to this employee for the selected review period. Please choose a different KPI or period.' : error.message, variant: 'destructive' });
+    onError: (error: any) => {
+      const description = isDuplicateKpiError(error) ? getDuplicateKpiMessage() : error.message;
+      toast({ title: 'Failed to create KPI', description, variant: 'destructive' });
     },
   });
 }
