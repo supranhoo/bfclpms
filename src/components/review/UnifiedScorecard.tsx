@@ -190,7 +190,7 @@ export function UnifiedScorecard({
   const [dismissedPendingPeriods, setDismissedPendingPeriods] = useState<string[]>([]);
   
   // Fetch the employee's workflow stages dynamically
-  const { data: workflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(employee.id);
+  const { data: workflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(employee.id, selectedPeriod, selectedYear);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
 
   // Build dynamic config from workflow stages

@@ -1,49 +1,71 @@
 
+# Fix: Exclude Unsubmitted KPIs from Score Calculation — IMPLEMENTED ✅
 
-# RCA: Workflow Config Change Not Reflected on Dashboard
+## Problem
+KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
 
-## Root Cause
+## Fix Applied
+Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
 
-The dashboard resolves each employee's workflow stages via the `get_employee_workflow` (single) and `get_bulk_employee_workflows` (bulk) RPCs. These RPCs support **period-aware resolution** — they accept optional `p_review_period` and `p_review_year` parameters. When provided, they check period-specific overrides first before falling back to global config.
-
-**The bug: neither call passes the period parameters.**
-
-| Component | Hook call | Period params passed? |
+| File | Line | Change |
 |---|---|---|
-| `UnifiedScorecard.tsx` line 193 | `useEmployeeWorkflowStages(employee.id)` | **No** — missing `selectedPeriod`, `selectedYear` |
-| `EmployeeSelectorGrid.tsx` line 173 | `useBulkEmployeeWorkflows(allEmployeeIds)` | **No** — missing period params |
+| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
+| `EmployeeScorecard.tsx` | 220 | Same |
+| `AuditScorecard.tsx` | 221 | Same |
+| `ManagementScorecard.tsx` | 222 | Same |
 
-Because the period parameters are omitted, the RPC always resolves the **global** workflow config and ignores any period-specific override set for Bhoopendra (101131). The admin set the workflow override with a specific period scope, but the dashboard fetches the global fallback — hence the old workflow still appears.
+## Impact
+- Biswajit's score: 382/468 → 382/443 (correct)
+- 19 employees with unsubmitted KPIs now show accurate weighted scores
+- Quarterly KPIs in non-terminal months are correctly excluded
+- No database migration needed — frontend calculation fix only
 
-## CAPA (Corrective and Preventive Action)
+---
 
-### Corrective Fix (2 files)
+# Improve Send-Back KPI Experience — IMPLEMENTED ✅
 
-**1. `src/components/review/UnifiedScorecard.tsx`** — Pass period to `useEmployeeWorkflowStages`:
+## Problems Fixed
 
-```diff
-- const { data: workflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(employee.id);
-+ const { data: workflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(employee.id, selectedPeriod, selectedYear);
-```
+### 1. Employee data preserved on send-back
+Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
 
-`selectedPeriod` and `selectedYear` are already available (lines 173-174).
+| File | Change |
+|---|---|
+| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
+| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
 
-**2. `src/components/review/EmployeeSelectorGrid.tsx`** — Pass period to `useBulkEmployeeWorkflows`:
+### 2. Send-back reason shown on face
+- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
+- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
+- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
 
-```diff
-- const { data: workflowMap } = useBulkEmployeeWorkflows(allEmployeeIds);
-+ const { data: workflowMap } = useBulkEmployeeWorkflows(allEmployeeIds, periodSelection.selectedMonth, periodSelection.selectedYear);
-```
+### 3. Send-back queries created from all reviewer levels
+UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
 
-`periodSelection` is already a prop of this component.
+| File | Change |
+|---|---|
+| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
+| `SelfReviewSheet.tsx` | Uses SentBackBanner |
+| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
+| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
 
-### Preventive: Cache key alignment
+---
 
-The hooks already include period params in their query keys (lines 102-103, 430), so once we pass the params, the cache will correctly differentiate between periods. No additional cache invalidation work needed.
+# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
 
-### Impact
+## Gaps Fixed
 
-- Dashboard will immediately resolve the correct period-specific workflow for any employee
-- Switching periods in the selector will correctly show different workflows if configured per-period
-- No database changes required — the RPCs already support this; the frontend simply wasn't using the feature
+### 1. ManagementScorecard now creates `kpi_queries` record on send-back
+Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
 
+### 2. SentBackBanner shown to all reviewer levels
+The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
+
+### 3. SentBackBanner conditionally renders
+Returns `null` when no send-back query is found, so it doesn't show an empty banner.
+
+| File | Change |
+|---|---|
+| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
+| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
+| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |

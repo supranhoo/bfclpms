@@ -170,7 +170,7 @@ export function EmployeeSelectorGrid({
     return source.map((p: { id: string }) => p.id);
   }, [requiredStage, stageFilteredProfiles, isFullAccess, allProfiles, teamMembers]);
 
-  const { data: workflowMap } = useBulkEmployeeWorkflows(allEmployeeIds);
+  const { data: workflowMap } = useBulkEmployeeWorkflows(allEmployeeIds, selectedPeriod, selectedYear);
 
   // Helper: get workflow stages for an employee (with fallback)
   const getStages = (employeeId: string): string[] => {
