@@ -351,7 +351,6 @@ export function SmartAssignmentDialog({
     },
     onError: (error: any) => {
       toast({
-      toast({
         title: 'Failed to assign KPIs',
         description: formatKpiInsertError(error, { selectedMonth: currentPeriod, selectedYear: currentYear }),
         variant: 'destructive',
