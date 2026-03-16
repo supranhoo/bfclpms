@@ -10,6 +10,14 @@
 
 ---
 
+# Org-Level KPI Toggle in Assign New KRA Dialog — IMPLEMENTED ✅
+
+## What Changed
+- Added `isOrgLevel` toggle switch and `orgLevelScope` selector to the Advanced section of `AdminKpiCreateDialog`
+- Submit now uses these state values instead of hardcoded `is_org_level: false`
+- Scope options: Organization, Department, Employee (matching `MarkOrgLevelDialog` pattern)
+
+---
 
 
 ## Problem
