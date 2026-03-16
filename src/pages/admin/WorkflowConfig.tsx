@@ -72,6 +72,7 @@ export default function WorkflowConfig() {
   const [deleteTarget, setDeleteTarget] = useState<WorkflowTemplate | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<WorkflowTemplate | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
+  const [isOngoing, setIsOngoing] = useState(false);
 
   // Period selector state: 'global' or specific period
   const currentYear = new Date().getFullYear();
