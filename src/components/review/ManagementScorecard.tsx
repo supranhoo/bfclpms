@@ -53,6 +53,7 @@ import { NaConfirmationCard } from '@/components/review/NaConfirmationCard';
 import { OrgKpiRatingOverrideWarning } from '@/components/review/OrgKpiRatingOverrideWarning';
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { GovernanceLockBanner } from '@/components/review/GovernanceLockBanner';
+import { SentBackBanner } from '@/components/review/SentBackBanner';
 
 interface ManagementScorecardProps {
   employee: {
@@ -433,11 +434,28 @@ export function ManagementScorecard({
           new_value: { reason, target },
           metadata: { sent_back_at: new Date().toISOString() },
         });
+
+        // Create a kpi_queries record so the send-back reason is discoverable
+        const employeeId = kpis?.find(k => k.id === kpi_id)?.employee_id;
+        if (employeeId) {
+          await supabase.from('kpi_queries').insert({
+            kpi_id,
+            raised_by: user.id,
+            raised_to: employeeId,
+            reason: `[SENT BACK] ${reason}`,
+            entity_type: 'kpi',
+            status: 'resolved',
+            resolved_at: new Date().toISOString(),
+            query_type: 'send_back',
+          });
+        }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      queryClient.invalidateQueries({ queryKey: ['kpi-queries'] });
+      queryClient.invalidateQueries({ queryKey: ['send-back-reason'] });
       toast({ title: 'KPI sent back successfully' });
       setSendBackDialogOpen(false);
     },
@@ -911,6 +929,11 @@ export function ManagementScorecard({
               />
             )}
             
+            {/* Sent Back Banner */}
+            {selectedKpi && (
+              <SentBackBanner kpiId={selectedKpi.id} />
+            )}
+
             {/* N/A Confirmation Card */}
             {selectedKpi && submissionMap.get(selectedKpi.id)?.is_na && (
               <NaConfirmationCard

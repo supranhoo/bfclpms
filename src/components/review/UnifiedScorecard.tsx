@@ -60,6 +60,7 @@ import { MobileKpiCard } from '@/components/review/MobileKpiCard';
 import { NaConfirmationCard } from '@/components/review/NaConfirmationCard';
 import { OrgKpiRatingOverrideWarning } from '@/components/review/OrgKpiRatingOverrideWarning';
 import { RollbackRequestBanner } from '@/components/review/RollbackRequestBanner';
+import { SentBackBanner } from '@/components/review/SentBackBanner';
 import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog';
 import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
 import { useAuditKpiAssignments } from '@/hooks/useAuditKpiAssignments';
@@ -1471,6 +1472,10 @@ export function UnifiedScorecard({
                 orgKpiEnteredByName={getOrgKpiValue(selectedKpi)?.entered_by_name}
               />
               
+              
+              {/* Sent Back Banner */}
+              <SentBackBanner kpiId={selectedKpi.id} />
+
               {/* N/A Confirmation Card - existing N/A (with override option) */}
               {submissionMap.get(selectedKpi.id)?.is_na && isReviewable(selectedKpi) && (
                 <NaConfirmationCard

@@ -1,39 +1,71 @@
 
+# Fix: Exclude Unsubmitted KPIs from Score Calculation — IMPLEMENTED ✅
 
-# Audit: Send-Back Improvements — Gaps Found
+## Problem
+KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
 
-## What's working
+## Fix Applied
+Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
 
-| Level | Data preserved on send-back to employee | kpi_queries record created | SentBackBanner shown |
-|---|---|---|---|
-| **Manager (UnifiedScorecard)** | ✅ Self fields kept | ✅ Yes | ❌ Not shown to manager |
-| **Auditor (UnifiedScorecard)** | ✅ Self fields kept | ✅ Yes | ❌ Not shown to auditor |
-| **Skip-level (UnifiedScorecard)** | ✅ Self fields kept | ✅ Yes | ❌ Not shown |
-| **HR PMS (UnifiedScorecard)** | ✅ Self fields kept | ✅ Yes | ❌ Not shown |
-| **Management (ManagementScorecard)** | ⚠️ Uses own send-back logic | ❌ No `kpi_queries` record | ❌ Not shown |
-| **Manager (useSendBackKpi)** | ✅ Self fields kept | ✅ Yes | N/A (employee sees it) |
-| **Employee (SelfReviewSheet)** | N/A | N/A | ✅ Yes |
+| File | Line | Change |
+|---|---|---|
+| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
+| `EmployeeScorecard.tsx` | 220 | Same |
+| `AuditScorecard.tsx` | 221 | Same |
+| `ManagementScorecard.tsx` | 222 | Same |
 
-## Issues to fix
+## Impact
+- Biswajit's score: 382/468 → 382/443 (correct)
+- 19 employees with unsubmitted KPIs now show accurate weighted scores
+- Quarterly KPIs in non-terminal months are correctly excluded
+- No database migration needed — frontend calculation fix only
 
-### 1. ManagementScorecard doesn't create `kpi_queries` record
-`ManagementScorecard.tsx` line ~429 only creates an `kpi_audit_logs` entry but NOT a `kpi_queries` record with `query_type: 'send_back'`. This means if management sends back a KPI, the `SentBackBanner` will have nothing to display.
+---
 
-**Fix**: Add the same `kpi_queries.insert(...)` block that `UnifiedScorecard` already has (lines 722-734).
+# Improve Send-Back KPI Experience — IMPLEMENTED ✅
 
-### 2. `useSendBackKpi` still sets `kpi_status: 'open'`
-Line 976 of `useKpis.ts` still includes `kpi_status: 'open'`. The plan said to remove it but it wasn't removed. This is actually harmless since `kpi_status` is a submission-level field (not the KPI status itself), and setting it to `'open'` is the correct behavior to signal the employee should re-submit. **No change needed** — this is correct as-is.
+## Problems Fixed
 
-### 3. SentBackBanner not shown to reviewers
-When a reviewer (manager/auditor/management) opens a KPI that was previously sent back by a higher-level reviewer, they don't see the send-back reason. The plan called for showing this in UnifiedScorecard and ManagementScorecard.
-
-**Fix**: In both `UnifiedScorecard.tsx` and `ManagementScorecard.tsx`, add the `SentBackBanner` inside the review sheet/dialog when the KPI has a recent send-back query.
-
-## Files to modify
+### 1. Employee data preserved on send-back
+Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
 
 | File | Change |
 |---|---|
-| `ManagementScorecard.tsx` | Add `kpi_queries` insert on send-back (parity with UnifiedScorecard) |
-| `UnifiedScorecard.tsx` | Show `SentBackBanner` in review sheet for sent-back KPIs |
-| `ManagementScorecard.tsx` | Show `SentBackBanner` in review sheet for sent-back KPIs |
+| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
+| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
 
+### 2. Send-back reason shown on face
+- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
+- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
+- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
+
+### 3. Send-back queries created from all reviewer levels
+UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
+
+| File | Change |
+|---|---|
+| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
+| `SelfReviewSheet.tsx` | Uses SentBackBanner |
+| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
+| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
+
+---
+
+# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
+
+## Gaps Fixed
+
+### 1. ManagementScorecard now creates `kpi_queries` record on send-back
+Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
+
+### 2. SentBackBanner shown to all reviewer levels
+The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
+
+### 3. SentBackBanner conditionally renders
+Returns `null` when no send-back query is found, so it doesn't show an empty banner.
+
+| File | Change |
+|---|---|
+| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
+| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
+| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |
