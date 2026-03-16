@@ -296,7 +296,8 @@ export function SmartAssignmentDialog({
       // Filter out duplicates if skipDuplicates is enabled
       if (skipDuplicates) {
         selectedTemplates = selectedTemplates.filter(template => {
-          const signature = `${template.kra_name}::${template.kpi_name}`.toLowerCase();
+          const resolvedPeriod = getActiveMonthForCycle(template.frequency, currentPeriod, currentYear);
+          const signature = `${resolvedPeriod}::${template.kra_name}::${template.kpi_name}`.toLowerCase();
           return !existingKpiSignatures.has(signature);
         });
       }
