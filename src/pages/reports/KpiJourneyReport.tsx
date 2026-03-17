@@ -63,6 +63,7 @@ export default function KpiJourneyReport() {
   const [selectedPeriod, setSelectedPeriod] = useState(FULL_MONTHS[currentMonthIdx]);
   const [selectedDept, setSelectedDept] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedType, setSelectedType] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
 
