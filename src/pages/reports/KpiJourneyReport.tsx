@@ -82,6 +82,8 @@ export default function KpiJourneyReport() {
 
     if (selectedDept !== 'all') result = result.filter(r => r.department === selectedDept);
     if (selectedStatus !== 'all') result = result.filter(r => r.status === selectedStatus);
+    if (selectedType === 'org') result = result.filter(r => r.isOrgKpi);
+    if (selectedType === 'individual') result = result.filter(r => !r.isOrgKpi);
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
       result = result.filter(r =>
