@@ -143,6 +143,7 @@ export default function KpiJourneyReport() {
       'Total Days': r.totalDays,
       'Status': STATUS_LABELS[r.status] ?? r.status,
       'Timeline Compliant': r.isCompliant ? 'Yes' : 'No',
+      'Type': r.isOrgKpi ? 'Org KPI' : 'Individual',
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
