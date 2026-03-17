@@ -300,6 +300,7 @@ export default function KpiJourneyReport() {
                     <TableHead className="min-w-[100px]">Category</TableHead>
                     <TableHead className="min-w-[120px]">KRA</TableHead>
                     <TableHead className="min-w-[120px]">KPI</TableHead>
+                    <TableHead className="min-w-[80px]">Type</TableHead>
                     <TableHead className="min-w-[130px]">KRA Assigned</TableHead>
                     <TableHead className="min-w-[130px]">Self Submitted</TableHead>
                     <TableHead className="min-w-[130px]">Manager</TableHead>
