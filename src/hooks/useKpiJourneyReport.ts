@@ -110,21 +110,25 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
       const timelineMap = new Map<string, Record<string, string>>();
 
       for (const log of allLogs) {
-        const field = ACTION_MAP[log.action];
-        if (!field) {
-          // Also handle generic STATUS_CHANGE_TO_* actions
-          if (log.action.startsWith('STATUS_CHANGE_TO_approved')) {
-            const existing = timelineMap.get(log.kpi_id) ?? {};
-            if (!existing.finalApprovedAt) {
-              existing.finalApprovedAt = log.created_at;
-              timelineMap.set(log.kpi_id, existing);
-            }
+        const existing = timelineMap.get(log.kpi_id) ?? {};
+
+        // Handle STATUS_TRANSITION specially
+        if (log.action === 'STATUS_TRANSITION') {
+          const newValue = log.new_value as any;
+          const newStatus = newValue?.status;
+          if (newStatus === 'self_review' && !existing.selfSubmittedAt) {
+            existing.selfSubmittedAt = log.created_at;
+          } else if (newStatus === 'approved') {
+            existing.finalApprovedAt = log.created_at;
           }
+          timelineMap.set(log.kpi_id, existing);
           continue;
         }
 
-        const existing = timelineMap.get(log.kpi_id) ?? {};
-        // Use the LATEST timestamp for each stage (most recent action)
+        const field = ACTION_MAP[log.action];
+        if (!field) continue;
+
+        // Use the LATEST timestamp for each stage
         existing[field] = log.created_at;
         timelineMap.set(log.kpi_id, existing);
       }
