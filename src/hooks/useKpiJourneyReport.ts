@@ -65,7 +65,7 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
           .from('kpis')
           .select(`
             id, employee_id, kra_name, kpi_name, status, created_at,
-            review_period, review_year,
+            review_period, review_year, is_org_level,
             kra_categories ( name )
           `)
           .eq('review_year', year)
