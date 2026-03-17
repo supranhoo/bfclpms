@@ -25,22 +25,26 @@ export interface KpiJourneyRow {
 }
 
 const ACTION_MAP: Record<string, keyof Omit<KpiJourneyRow, 'kpiId' | 'employeeCode' | 'employeeName' | 'department' | 'category' | 'kraName' | 'kpiName' | 'reviewPeriod' | 'status' | 'totalDays' | 'isCompliant'>> = {
-  'KRA_SET': 'kraAssignedAt',
-  'KRA_ISSUED': 'kraAssignedAt',
-  'KPI_CREATED': 'kraAssignedAt',
-  'SELF_REVIEW_SUBMITTED': 'selfSubmittedAt',
-  'SELF_REVIEW_RESUBMITTED': 'selfSubmittedAt',
-  'MANAGER_APPROVED': 'managerActionAt',
-  'MANAGER_SENT_BACK': 'managerActionAt',
-  'SKIP_LEVEL_APPROVED': 'skipLevelAt',
-  'SKIP_LEVEL_SENT_BACK': 'skipLevelAt',
-  'HR_PMS_APPROVED': 'hrPmsAt',
-  'HR_PMS_SENT_BACK': 'hrPmsAt',
-  'AUDITOR_APPROVED': 'auditorAt',
-  'AUDITOR_SENT_BACK': 'auditorAt',
+  'MANAGER_FORWARDED': 'managerActionAt',
+  'MANAGER_SENT_BACK_TO_EMPLOYEE': 'managerActionAt',
+  'SKIP_LEVEL_FORWARDED': 'skipLevelAt',
+  'SKIP_LEVEL_SENT_BACK_TO_MANAGER': 'skipLevelAt',
+  'SKIP_LEVEL_SENT_BACK_TO_EMPLOYEE': 'skipLevelAt',
+  'HR_PMS_FORWARDED': 'hrPmsAt',
+  'HR_PMS_SENT_BACK_TO_SKIP_LEVEL': 'hrPmsAt',
+  'HR_PMS_SENT_BACK_TO_MANAGER': 'hrPmsAt',
+  'HR_PMS_SENT_BACK_TO_EMPLOYEE': 'hrPmsAt',
+  'AUDITOR_FORWARDED': 'auditorAt',
+  'AUDITOR_SENT_BACK_TO_HR_PMS': 'auditorAt',
+  'AUDITOR_SENT_BACK_TO_SKIP_LEVEL': 'auditorAt',
+  'AUDITOR_SENT_BACK_TO_MANAGER': 'auditorAt',
+  'AUDITOR_SENT_BACK_TO_EMPLOYEE': 'auditorAt',
   'MANAGEMENT_APPROVED': 'managementAt',
-  'MANAGEMENT_SENT_BACK': 'managementAt',
-  'STATUS_CHANGE_TO_approved': 'finalApprovedAt',
+  'MANAGEMENT_SENT_BACK_TO_AUDITOR': 'managementAt',
+  'MANAGEMENT_SENT_BACK_TO_HR_PMS': 'managementAt',
+  'MANAGEMENT_SENT_BACK_TO_SKIP_LEVEL': 'managementAt',
+  'MANAGEMENT_SENT_BACK_TO_MANAGER': 'managementAt',
+  'MANAGEMENT_SENT_BACK_TO_EMPLOYEE': 'managementAt',
 };
 
 export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string) {
@@ -95,7 +99,7 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
         const batch = kpiIds.slice(i, i + logBatchSize);
         const { data: logs } = await supabase
           .from('kpi_audit_logs')
-          .select('kpi_id, action, created_at')
+          .select('kpi_id, action, created_at, new_value')
           .in('kpi_id', batch)
           .order('created_at', { ascending: true });
 
@@ -106,21 +110,25 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
       const timelineMap = new Map<string, Record<string, string>>();
 
       for (const log of allLogs) {
-        const field = ACTION_MAP[log.action];
-        if (!field) {
-          // Also handle generic STATUS_CHANGE_TO_* actions
-          if (log.action.startsWith('STATUS_CHANGE_TO_approved')) {
-            const existing = timelineMap.get(log.kpi_id) ?? {};
-            if (!existing.finalApprovedAt) {
-              existing.finalApprovedAt = log.created_at;
-              timelineMap.set(log.kpi_id, existing);
-            }
+        const existing = timelineMap.get(log.kpi_id) ?? {};
+
+        // Handle STATUS_TRANSITION specially
+        if (log.action === 'STATUS_TRANSITION') {
+          const newValue = log.new_value as any;
+          const newStatus = newValue?.status;
+          if (newStatus === 'self_review' && !existing.selfSubmittedAt) {
+            existing.selfSubmittedAt = log.created_at;
+          } else if (newStatus === 'approved') {
+            existing.finalApprovedAt = log.created_at;
           }
+          timelineMap.set(log.kpi_id, existing);
           continue;
         }
 
-        const existing = timelineMap.get(log.kpi_id) ?? {};
-        // Use the LATEST timestamp for each stage (most recent action)
+        const field = ACTION_MAP[log.action];
+        if (!field) continue;
+
+        // Use the LATEST timestamp for each stage
         existing[field] = log.created_at;
         timelineMap.set(log.kpi_id, existing);
       }
