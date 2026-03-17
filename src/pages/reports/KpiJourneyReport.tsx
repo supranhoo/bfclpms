@@ -63,6 +63,7 @@ export default function KpiJourneyReport() {
   const [selectedPeriod, setSelectedPeriod] = useState(FULL_MONTHS[currentMonthIdx]);
   const [selectedDept, setSelectedDept] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedType, setSelectedType] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -81,6 +82,8 @@ export default function KpiJourneyReport() {
 
     if (selectedDept !== 'all') result = result.filter(r => r.department === selectedDept);
     if (selectedStatus !== 'all') result = result.filter(r => r.status === selectedStatus);
+    if (selectedType === 'org') result = result.filter(r => r.isOrgKpi);
+    if (selectedType === 'individual') result = result.filter(r => !r.isOrgKpi);
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
       result = result.filter(r =>
@@ -92,7 +95,7 @@ export default function KpiJourneyReport() {
     }
 
     return result;
-  }, [rows, selectedDept, selectedStatus, searchTerm]);
+  }, [rows, selectedDept, selectedStatus, selectedType, searchTerm]);
 
   // Summary stats
   const stats = useMemo(() => {
@@ -140,6 +143,7 @@ export default function KpiJourneyReport() {
       'Total Days': r.totalDays,
       'Status': STATUS_LABELS[r.status] ?? r.status,
       'Timeline Compliant': r.isCompliant ? 'Yes' : 'No',
+      'Type': r.isOrgKpi ? 'Org KPI' : 'Individual',
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -159,7 +163,7 @@ export default function KpiJourneyReport() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
             <div>
               <Label className="text-xs text-muted-foreground">Year</Label>
               <Select value={selectedYear} onValueChange={v => { setSelectedYear(v); setCurrentPage(1); }}>
@@ -197,6 +201,17 @@ export default function KpiJourneyReport() {
                   {Object.entries(STATUS_LABELS).map(([k, v]) => (
                     <SelectItem key={k} value={k}>{v}</SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">Type</Label>
+              <Select value={selectedType} onValueChange={v => { setSelectedType(v); setCurrentPage(1); }}>
+                <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="org">Org KPI</SelectItem>
+                  <SelectItem value="individual">Individual</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -285,6 +300,7 @@ export default function KpiJourneyReport() {
                     <TableHead className="min-w-[100px]">Category</TableHead>
                     <TableHead className="min-w-[120px]">KRA</TableHead>
                     <TableHead className="min-w-[120px]">KPI</TableHead>
+                    <TableHead className="min-w-[80px]">Type</TableHead>
                     <TableHead className="min-w-[130px]">KRA Assigned</TableHead>
                     <TableHead className="min-w-[130px]">Self Submitted</TableHead>
                     <TableHead className="min-w-[130px]">Manager</TableHead>
@@ -307,6 +323,14 @@ export default function KpiJourneyReport() {
                       <TableCell className="text-xs">{row.category}</TableCell>
                       <TableCell className="text-xs">{row.kraName}</TableCell>
                       <TableCell className="text-xs">{row.kpiName}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-xs ${row.isOrgKpi
+                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400'
+                          : 'bg-muted text-muted-foreground'
+                        }`}>
+                          {row.isOrgKpi ? 'Org' : 'Individual'}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="text-xs font-mono">{formatDate(row.kraAssignedAt)}</TableCell>
                       <TableCell className="text-xs font-mono">{formatDate(row.selfSubmittedAt)}</TableCell>
                       <TableCell className="text-xs font-mono">{formatDate(row.managerActionAt)}</TableCell>

@@ -22,6 +22,7 @@ export interface KpiJourneyRow {
   finalApprovedAt: string | null;
   totalDays: number;
   isCompliant: boolean;
+  isOrgKpi: boolean;
 }
 
 const ACTION_MAP: Record<string, keyof Omit<KpiJourneyRow, 'kpiId' | 'employeeCode' | 'employeeName' | 'department' | 'category' | 'kraName' | 'kpiName' | 'reviewPeriod' | 'status' | 'totalDays' | 'isCompliant'>> = {
@@ -64,7 +65,7 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
           .from('kpis')
           .select(`
             id, employee_id, kra_name, kpi_name, status, created_at,
-            review_period, review_year,
+            review_period, review_year, is_org_level,
             kra_categories ( name )
           `)
           .eq('review_year', year)
@@ -172,6 +173,7 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
           finalApprovedAt: timeline.finalApprovedAt ?? null,
           totalDays,
           isCompliant,
+          isOrgKpi: !!kpi.is_org_level,
         };
       });
 
