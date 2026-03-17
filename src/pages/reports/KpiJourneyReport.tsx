@@ -95,7 +95,7 @@ export default function KpiJourneyReport() {
     }
 
     return result;
-  }, [rows, selectedDept, selectedStatus, searchTerm]);
+  }, [rows, selectedDept, selectedStatus, selectedType, searchTerm]);
 
   // Summary stats
   const stats = useMemo(() => {
