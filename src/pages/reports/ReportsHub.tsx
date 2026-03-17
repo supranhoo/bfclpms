@@ -155,6 +155,14 @@ const reports: ReportCard[] = [
     color: 'text-sky-500',
     reportKey: 'kpi-status-tracker',
   },
+  {
+    title: 'KPI Journey Timeline',
+    description: 'Complete lifecycle timeline of every KPI — from assignment through each approval stage with duration tracking',
+    icon: Workflow,
+    path: '/reports/kpi-journey',
+    color: 'text-emerald-600',
+    reportKey: 'kpi-journey',
+  },
 ];
 
 export default function ReportsHub() {
