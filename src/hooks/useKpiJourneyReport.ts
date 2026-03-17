@@ -173,6 +173,7 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
           finalApprovedAt: timeline.finalApprovedAt ?? null,
           totalDays,
           isCompliant,
+          isOrgKpi: !!kpi.is_org_level,
         };
       });
 
