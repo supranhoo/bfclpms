@@ -163,7 +163,7 @@ export default function KpiJourneyReport() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
             <div>
               <Label className="text-xs text-muted-foreground">Year</Label>
               <Select value={selectedYear} onValueChange={v => { setSelectedYear(v); setCurrentPage(1); }}>
