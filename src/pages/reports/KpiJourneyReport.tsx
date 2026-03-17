@@ -205,6 +205,17 @@ export default function KpiJourneyReport() {
               </Select>
             </div>
             <div>
+              <Label className="text-xs text-muted-foreground">Type</Label>
+              <Select value={selectedType} onValueChange={v => { setSelectedType(v); setCurrentPage(1); }}>
+                <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="org">Org KPI</SelectItem>
+                  <SelectItem value="individual">Individual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
               <Label className="text-xs text-muted-foreground">Search</Label>
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
