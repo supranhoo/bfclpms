@@ -22,6 +22,7 @@ export interface KpiJourneyRow {
   finalApprovedAt: string | null;
   totalDays: number;
   isCompliant: boolean;
+  isOrgKpi: boolean;
 }
 
 const ACTION_MAP: Record<string, keyof Omit<KpiJourneyRow, 'kpiId' | 'employeeCode' | 'employeeName' | 'department' | 'category' | 'kraName' | 'kpiName' | 'reviewPeriod' | 'status' | 'totalDays' | 'isCompliant'>> = {
