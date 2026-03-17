@@ -99,7 +99,7 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
         const batch = kpiIds.slice(i, i + logBatchSize);
         const { data: logs } = await supabase
           .from('kpi_audit_logs')
-          .select('kpi_id, action, created_at')
+          .select('kpi_id, action, created_at, new_value')
           .in('kpi_id', batch)
           .order('created_at', { ascending: true });
 
