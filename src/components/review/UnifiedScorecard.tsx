@@ -1418,6 +1418,7 @@ export function UnifiedScorecard({
               workflowStages={effectiveStages}
               auditKpiAssignments={auditKpiAssignments}
               getOrgKpiValue={getOrgKpiValue}
+              dataOwnerNames={dataOwnerNamesMap}
             />
           )}
         </CardContent>
