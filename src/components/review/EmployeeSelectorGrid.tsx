@@ -542,7 +542,7 @@ export function EmployeeSelectorGrid({
       return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inReview, stat3: forwarded, stat4: 0, totalKpis: relevantKpis.length };
     } else {
       return {
-        totalEmployees: baseMembers.length,
+        totalEmployees: demographicFilteredMembers.length,
         stat1: relevantKpis.filter(k => k.status === 'management_review').length,
         stat2: relevantKpis.filter(k => k.status === 'approved').length,
         stat3: relevantKpis.length,
@@ -550,7 +550,7 @@ export function EmployeeSelectorGrid({
         totalKpis: relevantKpis.length,
       };
     }
-  }, [periodKpis, baseMembers, viewLevel, workflowMap, skipLevelMembers]);
+  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers]);
 
   // Smart period detection: auto-switch to a period with KPIs if current period has none
   const handleEmployeeClick = async (member: EmployeeProfile) => {
