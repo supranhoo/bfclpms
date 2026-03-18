@@ -1,36 +1,90 @@
 
+# Workflow Configuration: "Effective From" Period Support — IMPLEMENTED ✅
 
-## Issue: "Data entered by" Shows When No Data Exists for This Employee
+## What Changed
+- Added `is_ongoing` BOOLEAN column to `workflow_config` table
+- Created `month_name_to_index()` and `find_ongoing_workflow()` helper functions
+- Updated 3 RPCs with ongoing resolution: exact match → ongoing match → global fallback
+- Frontend: "Apply from this month onward" toggle + ongoing badges
+- Hook: `useUpsertWorkflowConfig` accepts `isOngoing` parameter
 
-### Root Cause
+---
 
-The **fallback logic** we added in the previous fix is too aggressive. For employee-scoped Org KPIs that haven't been propagated yet, `getOrgKpiValue()` falls back to the **organization-level record** (the base record with `employee_id=null`). That record has `entered_by_name = "Ankit Choudhary"` because Ankit entered the org-level value.
+# Org-Level KPI Toggle in Assign New KRA Dialog — IMPLEMENTED ✅
 
-But the employee's KPI has no actual data — status is "KRA SET", score is 0, achieved value is 0/20. The "Data entered by: Ankit Choudhary" badge is misleading because Ankit entered data at the org level, not for this specific employee.
+## What Changed
+- Added `isOrgLevel` toggle switch and `orgLevelScope` selector to the Advanced section of `AdminKpiCreateDialog`
+- Submit now uses these state values instead of hardcoded `is_org_level: false`
+- Scope options: Organization, Department, Employee (matching `MarkOrgLevelDialog` pattern)
 
-### Fix
+---
 
-**Only show "Data entered by"** when data was actually propagated or entered for this employee — i.e., when the org KPI value record has a non-null `achieved_value`.
 
-**Files to change:**
+## Problem
+KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
 
-1. **`src/components/review/KpiHeaderSection.tsx`** (line 157): Add condition to check that `achieved_value` exists before showing the badge. This requires passing `orgKpiAchievedValue` as a new prop.
+## Fix Applied
+Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
 
-2. **`src/components/review/KpiReviewPanel.tsx`**: Pass the achieved value through.
+| File | Line | Change |
+|---|---|---|
+| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
+| `EmployeeScorecard.tsx` | 220 | Same |
+| `AuditScorecard.tsx` | 221 | Same |
+| `ManagementScorecard.tsx` | 222 | Same |
 
-3. **All 4 scorecards** (`UnifiedScorecard.tsx`, `EmployeeScorecard.tsx`, `ManagementScorecard.tsx`, `AuditScorecard.tsx`): Pass `orgKpiAchievedValue` when opening the KPI detail panel.
+## Impact
+- Biswajit's score: 382/468 → 382/443 (correct)
+- 19 employees with unsubmitted KPIs now show accurate weighted scores
+- Quarterly KPIs in non-terminal months are correctly excluded
+- No database migration needed — frontend calculation fix only
 
-**Alternative (simpler):** Instead of adding a new prop, just condition the "Data entered by" display on `orgKpiEnteredByName` being different from the fallback — but the cleanest approach is: **in `KpiHeaderSection`, only show "Data entered by" when the KPI has an actual submission or achieved value.** We can check the existing `kpi.status` — if it's `kra_set`, there's no data entry to attribute.
+---
 
-**Simplest fix (1 file, 1 line):**
-In `KpiHeaderSection.tsx` line 157, change:
-```typescript
-{orgKpiEnteredByName && (
-```
-to:
-```typescript
-{orgKpiEnteredByName && kpi.status !== 'kra_set' && (
-```
+# Improve Send-Back KPI Experience — IMPLEMENTED ✅
 
-This hides the misleading badge when the KPI hasn't progressed past the initial stage. If data has been propagated, the status would have advanced.
+## Problems Fixed
 
+### 1. Employee data preserved on send-back
+Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
+
+| File | Change |
+|---|---|
+| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
+| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
+
+### 2. Send-back reason shown on face
+- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
+- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
+- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
+
+### 3. Send-back queries created from all reviewer levels
+UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
+
+| File | Change |
+|---|---|
+| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
+| `SelfReviewSheet.tsx` | Uses SentBackBanner |
+| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
+| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
+
+---
+
+# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
+
+## Gaps Fixed
+
+### 1. ManagementScorecard now creates `kpi_queries` record on send-back
+Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
+
+### 2. SentBackBanner shown to all reviewer levels
+The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
+
+### 3. SentBackBanner conditionally renders
+Returns `null` when no send-back query is found, so it doesn't show an empty banner.
+
+| File | Change |
+|---|---|
+| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
+| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
+| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |

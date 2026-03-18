@@ -154,7 +154,7 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
               Data Owner: {orgKpiDataOwnerNames.join(', ')}
             </Badge>
           )}
-          {orgKpiEnteredByName && (
+          {orgKpiEnteredByName && kpi.status !== 'kra_set' && (
             <Badge variant="outline" className="text-xs">
               Data entered by: {orgKpiEnteredByName}
             </Badge>
