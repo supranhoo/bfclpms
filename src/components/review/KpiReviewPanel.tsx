@@ -30,6 +30,7 @@ interface KpiReviewPanelProps {
   onOpenTimeline?: () => void;
   workflowStages?: string[];
   orgKpiEnteredByName?: string | null;
+  orgKpiDataOwnerNames?: string[];
 }
 
 export function KpiReviewPanel({
