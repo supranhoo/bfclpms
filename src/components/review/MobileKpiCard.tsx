@@ -33,6 +33,7 @@ interface MobileKpiCardProps {
   isLocked?: boolean;
   getOrgKpiValue?: (kpi: KPI) => { achieved_value: number | null; data_source: string | null; entered_by_name: string | null } | null;
   sentBackKpiIds?: Set<string>;
+  dataOwnerNames?: Map<string, string[]>;
 }
 
 export function MobileKpiCard({
