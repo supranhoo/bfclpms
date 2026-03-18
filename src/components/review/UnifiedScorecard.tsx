@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useKpisByEmployee, useReviewSubmissions, useApproveKpi, useRaiseQuery, useKpiQueries, useSendBackKpi, useEmployeeKpiPeriods, RatingLevel, KPI, KpiQuery } from '@/hooks/useKpis';
 import { useSubPeriodSubmissions, useSubPeriodSubmissionsByKpis, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
+import { useOrgKpiDataOwnerNames, getOwnerNamesForKpi } from '@/hooks/useOrgKpiDataOwner';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { ManagerDailyOverrideEditor, calculateOverriddenScore } from '@/components/review/ManagerDailyOverrideEditor';
 import { ReviewLevelOverrideEditor, calculateOverriddenScore as calculateReviewerOverriddenScore } from '@/components/review/ReviewLevelOverrideEditor';
@@ -262,6 +263,7 @@ export function UnifiedScorecard({
 
   // Fetch org KPI values for this period
   const { data: orgKpiValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
+  const { data: dataOwnerNamesMap } = useOrgKpiDataOwnerNames();
 
   // Create org KPI values lookup map (toLowerCase for consistent matching)
   const orgKpiValuesMap = useMemo(() => {
@@ -1416,6 +1418,7 @@ export function UnifiedScorecard({
               workflowStages={effectiveStages}
               auditKpiAssignments={auditKpiAssignments}
               getOrgKpiValue={getOrgKpiValue}
+              dataOwnerNames={dataOwnerNamesMap}
             />
           )}
         </CardContent>
@@ -1477,6 +1480,7 @@ export function UnifiedScorecard({
                 onOpenTimeline={() => setTimelineOpen(true)}
                 workflowStages={effectiveStages}
                 orgKpiEnteredByName={getOrgKpiValue(selectedKpi)?.entered_by_name}
+                orgKpiDataOwnerNames={getOwnerNamesForKpi(dataOwnerNamesMap, selectedKpi)}
               />
               
               

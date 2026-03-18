@@ -85,6 +85,7 @@ interface KpiDetailsTableProps {
   workflowStages?: string[];
   sentBackKpiIds?: Set<string>;
   auditKpiAssignments?: Map<string, AuditKpiAssignment>;
+  dataOwnerNames?: Map<string, string[]>;
 }
 
 /**
@@ -145,6 +146,7 @@ export function KpiDetailsTable({
   workflowStages,
   sentBackKpiIds,
   auditKpiAssignments,
+  dataOwnerNames,
 }: KpiDetailsTableProps) {
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const scoreColumns = buildScoreColumns(effectiveStages);
@@ -405,11 +407,19 @@ export function KpiDetailsTable({
                         )}
                         Org KPI — {scope.charAt(0).toUpperCase() + scope.slice(1)}
                       </Badge>
-                      {orgValue?.entered_by_name && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                          Data by: {orgValue.entered_by_name}
-                        </Badge>
-                      )}
+                      {(() => {
+                        const ownerKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}`;
+                        const owners = dataOwnerNames?.get(ownerKey);
+                        return owners && owners.length > 0 ? (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            Data Owner: {owners.join(', ')}
+                          </Badge>
+                        ) : orgValue?.entered_by_name ? (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            Data Owner: {orgValue.entered_by_name}
+                          </Badge>
+                        ) : null;
+                      })()}
                     </div>
                   )}
                 </TableCell>

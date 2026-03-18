@@ -20,10 +20,11 @@ interface KpiHeaderSectionProps {
   selectedYear: number;
   onOpenTimeline?: () => void;
   orgKpiEnteredByName?: string | null;
+  orgKpiDataOwnerNames?: string[];
   employeeId?: string;
 }
 
-export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTimeline, orgKpiEnteredByName, employeeId }: KpiHeaderSectionProps) {
+export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTimeline, orgKpiEnteredByName, orgKpiDataOwnerNames, employeeId }: KpiHeaderSectionProps) {
   const { role } = useAuth();
   const isAdmin = role === 'admin';
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -148,6 +149,11 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
             )}
             Organization KPI — {scope.charAt(0).toUpperCase() + scope.slice(1)}
           </Badge>
+          {orgKpiDataOwnerNames && orgKpiDataOwnerNames.length > 0 && (
+            <Badge variant="outline" className="text-xs">
+              Data Owner: {orgKpiDataOwnerNames.join(', ')}
+            </Badge>
+          )}
           {orgKpiEnteredByName && (
             <Badge variant="outline" className="text-xs">
               Data entered by: {orgKpiEnteredByName}

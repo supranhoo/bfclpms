@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useKpisByEmployee, useReviewSubmissions, useApproveKpi, useRaiseQuery, useKpiQueries, useSendBackKpi, RatingLevel, KPI, KpiQuery } from '@/hooks/useKpis';
 import { useSubPeriodSubmissions, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
+import { useOrgKpiDataOwnerNames, getOwnerNamesForKpi } from '@/hooks/useOrgKpiDataOwner';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { ManagerDailyOverrideEditor, calculateOverriddenScore } from '@/components/review/ManagerDailyOverrideEditor';
 import { useManagerSubPeriodOverride } from '@/hooks/useManagerSubPeriodOverride';
@@ -104,6 +105,7 @@ export function EmployeeScorecard({
 
   // Fetch org KPI values for this period
   const { data: orgKpiValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
+  const { data: dataOwnerNamesMap } = useOrgKpiDataOwnerNames();
 
   // Create org KPI values lookup map
   const orgKpiValuesMap = useMemo(() => {
@@ -777,6 +779,7 @@ export function EmployeeScorecard({
               expandedKpis={expandedDailyKpis}
               onToggleExpand={toggleDailyExpand}
               workflowStages={effectiveStages}
+              dataOwnerNames={dataOwnerNamesMap}
             />
           )}
         </CardContent>
@@ -814,6 +817,7 @@ export function EmployeeScorecard({
                 onOpenTimeline={() => setTimelineOpen(true)}
                 workflowStages={effectiveStages}
                 orgKpiEnteredByName={getOrgKpiValue(selectedKpi)?.entered_by_name}
+                orgKpiDataOwnerNames={getOwnerNamesForKpi(dataOwnerNamesMap, selectedKpi)}
               />
               
               {/* N/A Confirmation Card - Show when KPI is marked as N/A (with override option) */}

@@ -14,6 +14,7 @@ import { resolveForwardStatus, resolveSendBackTargets, resolveSendBackStatus, DE
 import { useKpisByEmployee, useReviewSubmissions, useKpiQueries, RatingLevel, KPI, KpiQuery } from '@/hooks/useKpis';
 import { useSubPeriodSubmissions, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
+import { useOrgKpiDataOwnerNames, getOwnerNamesForKpi } from '@/hooks/useOrgKpiDataOwner';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { ReviewLevelOverrideEditor, calculateOverriddenScore } from '@/components/review/ReviewLevelOverrideEditor';
 import { useReviewerSubPeriodOverride } from '@/hooks/useReviewerSubPeriodOverride';
@@ -106,6 +107,7 @@ export function ManagementScorecard({
 
   // Fetch org KPI values for this period
   const { data: orgKpiValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
+  const { data: dataOwnerNamesMap } = useOrgKpiDataOwnerNames();
 
   // Create org KPI values lookup map
   const orgKpiValuesMap = useMemo(() => {
@@ -896,6 +898,7 @@ export function ManagementScorecard({
               expandedKpis={expandedDailyKpis}
               onToggleExpand={toggleDailyExpand}
               workflowStages={effectiveStages}
+              dataOwnerNames={dataOwnerNamesMap}
             />
           )}
         </CardContent>
@@ -933,6 +936,7 @@ export function ManagementScorecard({
                 onOpenTimeline={() => setTimelineOpen(true)}
                 workflowStages={effectiveStages}
                 orgKpiEnteredByName={getOrgKpiValue(selectedKpi)?.entered_by_name}
+                orgKpiDataOwnerNames={getOwnerNamesForKpi(dataOwnerNamesMap, selectedKpi)}
               />
             )}
             

@@ -21,6 +21,7 @@ interface MobileKpiCardProps {
   statusLabels: Record<string, string>;
   score?: number | null;
   orgKpiValue?: { achieved_value: number | null; data_source: string | null; entered_by_name: string | null } | null;
+  dataOwnerNames?: Map<string, string[]>;
   auditAssignment?: AuditKpiAssignment | null;
   isAuditCapable?: boolean;
   onViewLogic: (kpi: KPI) => void;
@@ -35,6 +36,7 @@ export function MobileKpiCard({
   statusLabels,
   score: scoreProp,
   orgKpiValue,
+  dataOwnerNames,
   auditAssignment,
   isAuditCapable,
   onViewLogic,
@@ -106,11 +108,19 @@ export function MobileKpiCard({
             )}
             Org KPI — {scope.charAt(0).toUpperCase() + scope.slice(1)}
           </Badge>
-          {orgKpiValue?.entered_by_name && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-              Data by: {orgKpiValue.entered_by_name}
-            </Badge>
-          )}
+          {(() => {
+            const ownerKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}`;
+            const owners = dataOwnerNames?.get(ownerKey);
+            return owners && owners.length > 0 ? (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                Data Owner: {owners.join(', ')}
+              </Badge>
+            ) : orgKpiValue?.entered_by_name ? (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                Data Owner: {orgKpiValue.entered_by_name}
+              </Badge>
+            ) : null;
+          })()}
         </div>
       )}
 

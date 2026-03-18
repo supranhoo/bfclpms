@@ -30,6 +30,7 @@ interface KpiReviewPanelProps {
   onOpenTimeline?: () => void;
   workflowStages?: string[];
   orgKpiEnteredByName?: string | null;
+  orgKpiDataOwnerNames?: string[];
 }
 
 export function KpiReviewPanel({
@@ -47,6 +48,7 @@ export function KpiReviewPanel({
   onOpenTimeline,
   workflowStages,
   orgKpiEnteredByName,
+  orgKpiDataOwnerNames,
 }: KpiReviewPanelProps) {
   const isOwnKpi = currentUserId ? kpi.employee_id === currentUserId : false;
   return (
@@ -58,6 +60,7 @@ export function KpiReviewPanel({
         selectedYear={selectedYear}
         onOpenTimeline={onOpenTimeline}
         orgKpiEnteredByName={orgKpiEnteredByName}
+        orgKpiDataOwnerNames={orgKpiDataOwnerNames}
         employeeId={kpi.employee_id}
       />
 

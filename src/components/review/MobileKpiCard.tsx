@@ -33,6 +33,7 @@ interface MobileKpiCardProps {
   isLocked?: boolean;
   getOrgKpiValue?: (kpi: KPI) => { achieved_value: number | null; data_source: string | null; entered_by_name: string | null } | null;
   sentBackKpiIds?: Set<string>;
+  dataOwnerNames?: Map<string, string[]>;
 }
 
 export function MobileKpiCard({
@@ -49,6 +50,7 @@ export function MobileKpiCard({
   isLocked,
   getOrgKpiValue,
   sentBackKpiIds,
+  dataOwnerNames,
 }: MobileKpiCardProps) {
   const isNaKpi = submission?.is_na || false;
   const isDailyKpi = kpi.frequency === 'Daily';
@@ -264,11 +266,19 @@ export function MobileKpiCard({
             )}
             Org KPI
           </Badge>
-          {orgValue?.entered_by_name && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-              Data by: {orgValue.entered_by_name}
-            </Badge>
-          )}
+          {(() => {
+            const ownerKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}`;
+            const owners = dataOwnerNames?.get(ownerKey);
+            return owners && owners.length > 0 ? (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                Data Owner: {owners.join(', ')}
+              </Badge>
+            ) : orgValue?.entered_by_name ? (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                Data Owner: {orgValue.entered_by_name}
+              </Badge>
+            ) : null;
+          })()}
         </div>
       )}
 

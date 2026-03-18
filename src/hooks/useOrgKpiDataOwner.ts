@@ -238,3 +238,50 @@ export function useRemoveOrgKpiOwner() {
     },
   });
 }
+
+/**
+ * Bulk lookup hook: returns a Map of data owner names keyed by `categoryId||kraName||kpiName` (lowercased).
+ * Used across scorecards to show "Data Owner: X, Y" badges.
+ */
+export function useOrgKpiDataOwnerNames() {
+  return useQuery({
+    queryKey: ['org-kpi-data-owner-names'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('org_kpi_data_owners')
+        .select(`
+          category_id,
+          kra_name,
+          kpi_name,
+          owner:profiles!org_kpi_data_owners_owner_id_fkey(full_name)
+        `);
+
+      if (error) throw error;
+
+      const map = new Map<string, string[]>();
+      for (const row of data || []) {
+        const key = `${row.category_id}||${row.kra_name.toLowerCase()}||${row.kpi_name.toLowerCase()}`;
+        const ownerName = (row.owner as any)?.full_name || 'Unknown';
+        const existing = map.get(key) || [];
+        if (!existing.includes(ownerName)) {
+          existing.push(ownerName);
+        }
+        map.set(key, existing);
+      }
+      return map;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Helper to look up owner names for a specific KPI from the map
+ */
+export function getOwnerNamesForKpi(
+  map: Map<string, string[]> | undefined,
+  kpi: { category_id: string; kra_name: string; kpi_name: string }
+): string[] {
+  if (!map) return [];
+  const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}`;
+  return map.get(key) || [];
+}
