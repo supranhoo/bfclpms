@@ -92,14 +92,6 @@ const reports: ReportCard[] = [
     reportKey: 'department',
   },
   {
-    title: 'Manager Team Report',
-    description: 'Manager-wise team performance showing average scores and completion rates',
-    icon: Users,
-    path: '/reports/manager-team',
-    color: 'text-cyan-500',
-    reportKey: 'department',
-  },
-  {
     title: 'Audit Trail Report',
     description: 'Complete history of all KPI modifications, approvals, and status changes',
     icon: ClipboardList,
