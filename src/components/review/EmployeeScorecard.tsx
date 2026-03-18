@@ -779,6 +779,7 @@ export function EmployeeScorecard({
               expandedKpis={expandedDailyKpis}
               onToggleExpand={toggleDailyExpand}
               workflowStages={effectiveStages}
+              dataOwnerNames={dataOwnerNamesMap}
             />
           )}
         </CardContent>
