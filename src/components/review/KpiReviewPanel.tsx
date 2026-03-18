@@ -60,6 +60,7 @@ export function KpiReviewPanel({
         selectedYear={selectedYear}
         onOpenTimeline={onOpenTimeline}
         orgKpiEnteredByName={orgKpiEnteredByName}
+        orgKpiDataOwnerNames={orgKpiDataOwnerNames}
         employeeId={kpi.employee_id}
       />
 
