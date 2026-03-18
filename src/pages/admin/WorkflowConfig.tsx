@@ -18,6 +18,7 @@ import {
   useSetDefaultWorkflowTemplate,
   useArchiveWorkflowTemplate,
   useRestoreWorkflowTemplate,
+  useUpdateBatchOngoing,
   getStageLabel,
   type WorkflowTemplate,
 } from '@/hooks/useWorkflowConfig';
