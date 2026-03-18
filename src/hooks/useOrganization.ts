@@ -270,9 +270,9 @@ export function useTeamMembers(managerId: string | undefined) {
  * Respects the employee-level override (workflow_config) with fallback to the default template.
  * Returns null when stage is null (meaning "no filter needed").
  */
-export function useProfilesByWorkflowStage(stage: string | null) {
+export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: string, reviewYear?: number) {
   return useQuery({
-    queryKey: ['profiles-by-workflow-stage', stage],
+    queryKey: ['profiles-by-workflow-stage', stage, reviewPeriod, reviewYear],
     queryFn: async () => {
       if (!stage) return null;
 
