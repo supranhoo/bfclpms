@@ -328,8 +328,8 @@ export function EmployeeSelectorGrid({
     }
   };
 
-  // Filter members based on search, department, designation, grade, manager, and status
-  const displayMembers = useMemo(() => {
+  // Demographic filtering (search, department, designation, grade, manager) — used for stats
+  const demographicFilteredMembers = useMemo(() => {
     let filtered = baseMembers?.filter(p => 
       p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -348,6 +348,13 @@ export function EmployeeSelectorGrid({
     if (selectedManager) {
       filtered = filtered?.filter(p => p.reporting_manager_id === selectedManager);
     }
+
+    return filtered;
+  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager]);
+
+  // Filter members further by status for display
+  const displayMembers = useMemo(() => {
+    let filtered = demographicFilteredMembers ? [...demographicFilteredMembers] : undefined;
 
     // Status-based filtering using per-employee workflow resolution
     if (statusFilter === 'my_assigned' && viewLevel === 'audit') {
