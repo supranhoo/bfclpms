@@ -111,7 +111,7 @@ export function EmployeeScorecard({
     orgKpiValues?.forEach(v => {
       const deptPart = v.department_id || 'null';
       const empPart = v.employee_id || 'null';
-      const key = `${v.category_id}||${v.kra_name}||${v.kpi_name}||${deptPart}||${empPart}`;
+      const key = `${v.category_id}||${v.kra_name.toLowerCase()}||${v.kpi_name.toLowerCase()}||${deptPart}||${empPart}`;
       map.set(key, { achieved_value: v.achieved_value, data_source: v.data_source, entered_by_name: v.entered_by_name });
     });
     return map;
@@ -123,13 +123,13 @@ export function EmployeeScorecard({
     const scope = (kpi as any).org_level_scope || 'employee';
     let key: string;
     if (scope === 'organization') {
-      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||null`;
+      key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
     } else if (scope === 'department') {
       const deptId = employee.department_id || 'null';
-      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||${deptId}||null`;
+      key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||${deptId}||null`;
     } else {
       const empId = employee.id || 'null';
-      key = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}||null||${empId}`;
+      key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||${empId}`;
     }
     return orgKpiValuesMap.get(key) || null;
   };
