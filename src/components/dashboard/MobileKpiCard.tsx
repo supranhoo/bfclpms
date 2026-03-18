@@ -36,6 +36,7 @@ export function MobileKpiCard({
   statusLabels,
   score: scoreProp,
   orgKpiValue,
+  dataOwnerNames,
   auditAssignment,
   isAuditCapable,
   onViewLogic,
