@@ -1,81 +1,90 @@
 
+# Workflow Configuration: "Effective From" Period Support — IMPLEMENTED ✅
 
-## Root Cause Analysis (RCA)
-
-### Issue 1: Employee visible in HR PMS panel despite workflow not including HR PMS stage
-
-**Root Cause**: `useProfilesByWorkflowStage` in `src/hooks/useOrganization.ts` (line 293) calls `get_bulk_employee_workflows` **without passing `p_review_period` and `p_review_year`**. This means it always resolves workflows using the global/default configuration — not the period-specific one.
-
-So if Bhoopendra's **global** (or older) workflow includes `hr_pms_review`, he appears in the HR PMS panel even though his **Feb 2026** workflow is `KRA Set → Self Review → Manager Check → Audit → Approved` (no HR PMS stage).
-
-**Evidence**: Line 293 in `useOrganization.ts`:
-```typescript
-.rpc('get_bulk_employee_workflows', { employee_ids: profileIds })
-// Missing: p_review_period, p_review_year
-```
-
-Meanwhile, `useBulkEmployeeWorkflows` in `useWorkflowConfig.ts` (line 432) correctly accepts and passes `reviewPeriod` and `reviewYear`, but `useProfilesByWorkflowStage` doesn't use it — it has its own direct RPC call.
-
-### Issue 2: March 2026 showing old workflow for Bhoopendra
-
-**Same Root Cause**: The `useProfilesByWorkflowStage` hook doesn't accept period/year params, so:
-1. The employee list filtering is period-agnostic (always uses global workflow)
-2. When the user switches from Feb to Mar, the employee still appears because the filter doesn't re-evaluate per-period
-
-Additionally, the `EmployeeSelectorGrid` does call `useBulkEmployeeWorkflows` with `selectedPeriod` and `selectedYear` (line 173), which correctly resolves per-period workflows for the **scorecard columns and stage tracker**. But the **employee visibility filter** (`useProfilesByWorkflowStage`) runs separately and is period-blind.
-
-The WorkflowProgressTracker in the second screenshot shows `HR PMS` for March because the scorecard's `useEmployeeWorkflowStages` correctly resolves March's workflow — but if March has no explicit config and the `is_ongoing` flag from an older config includes HR PMS, the ongoing resolution cascade returns the old workflow. This is expected "Effective From" behavior **if** the Feb config was not set as `is_ongoing: false`. Need to verify the DB config, but the code fix is still necessary regardless.
+## What Changed
+- Added `is_ongoing` BOOLEAN column to `workflow_config` table
+- Created `month_name_to_index()` and `find_ongoing_workflow()` helper functions
+- Updated 3 RPCs with ongoing resolution: exact match → ongoing match → global fallback
+- Frontend: "Apply from this month onward" toggle + ongoing badges
+- Hook: `useUpsertWorkflowConfig` accepts `isOngoing` parameter
 
 ---
 
-## Corrective and Preventive Action (CAPA)
+# Org-Level KPI Toggle in Assign New KRA Dialog — IMPLEMENTED ✅
 
-### Changes Required
+## What Changed
+- Added `isOrgLevel` toggle switch and `orgLevelScope` selector to the Advanced section of `AdminKpiCreateDialog`
+- Submit now uses these state values instead of hardcoded `is_org_level: false`
+- Scope options: Organization, Department, Employee (matching `MarkOrgLevelDialog` pattern)
 
-**1. `src/hooks/useOrganization.ts` — `useProfilesByWorkflowStage`**
+---
 
-- Accept `reviewPeriod` and `reviewYear` as parameters
-- Pass them to the `get_bulk_employee_workflows` RPC call
-- Update the query key to include period/year for correct cache invalidation
 
-```typescript
-// Before
-export function useProfilesByWorkflowStage(stage: string | null)
-  .rpc('get_bulk_employee_workflows', { employee_ids: profileIds })
+## Problem
+KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
 
-// After
-export function useProfilesByWorkflowStage(
-  stage: string | null,
-  reviewPeriod?: string,
-  reviewYear?: number
-)
-  .rpc('get_bulk_employee_workflows', {
-    employee_ids: profileIds,
-    p_review_period: reviewPeriod,
-    p_review_year: reviewYear,
-  })
-```
+## Fix Applied
+Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
 
-**2. `src/components/review/EmployeeSelectorGrid.tsx` — Pass period context**
+| File | Line | Change |
+|---|---|---|
+| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
+| `EmployeeScorecard.tsx` | 220 | Same |
+| `AuditScorecard.tsx` | 221 | Same |
+| `ManagementScorecard.tsx` | 222 | Same |
 
-- Update the call to `useProfilesByWorkflowStage` to include `selectedPeriod` and `selectedYear`
+## Impact
+- Biswajit's score: 382/468 → 382/443 (correct)
+- 19 employees with unsubmitted KPIs now show accurate weighted scores
+- Quarterly KPIs in non-terminal months are correctly excluded
+- No database migration needed — frontend calculation fix only
 
-```typescript
-// Before (line 137)
-const { data: stageFilteredProfiles } = useProfilesByWorkflowStage(requiredStage);
+---
 
-// After
-const { data: stageFilteredProfiles } = useProfilesByWorkflowStage(
-  requiredStage, selectedPeriod, selectedYear
-);
-```
+# Improve Send-Back KPI Experience — IMPLEMENTED ✅
 
-### Summary
+## Problems Fixed
 
-| What | Where | Fix |
-|------|-------|-----|
-| Employee list filter ignores period | `useProfilesByWorkflowStage` | Pass `p_review_period` + `p_review_year` to RPC |
-| Caller doesn't supply period | `EmployeeSelectorGrid` line 137 | Forward `selectedPeriod`, `selectedYear` |
+### 1. Employee data preserved on send-back
+Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
 
-These two changes ensure that when a reviewer switches to Feb 2026 or Mar 2026, only employees whose **period-specific** resolved workflow contains the required stage (e.g., `hr_pms_review`) are shown. No database or RPC changes needed — the RPC already supports these optional params.
+| File | Change |
+|---|---|
+| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
+| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
 
+### 2. Send-back reason shown on face
+- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
+- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
+- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
+
+### 3. Send-back queries created from all reviewer levels
+UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
+
+| File | Change |
+|---|---|
+| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
+| `SelfReviewSheet.tsx` | Uses SentBackBanner |
+| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
+| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
+
+---
+
+# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
+
+## Gaps Fixed
+
+### 1. ManagementScorecard now creates `kpi_queries` record on send-back
+Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
+
+### 2. SentBackBanner shown to all reviewer levels
+The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
+
+### 3. SentBackBanner conditionally renders
+Returns `null` when no send-back query is found, so it doesn't show an empty banner.
+
+| File | Change |
+|---|---|
+| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
+| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
+| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |

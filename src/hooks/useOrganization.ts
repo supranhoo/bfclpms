@@ -270,9 +270,9 @@ export function useTeamMembers(managerId: string | undefined) {
  * Respects the employee-level override (workflow_config) with fallback to the default template.
  * Returns null when stage is null (meaning "no filter needed").
  */
-export function useProfilesByWorkflowStage(stage: string | null) {
+export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: string, reviewYear?: number) {
   return useQuery({
-    queryKey: ['profiles-by-workflow-stage', stage],
+    queryKey: ['profiles-by-workflow-stage', stage, reviewPeriod, reviewYear],
     queryFn: async () => {
       if (!stage) return null;
 
@@ -289,8 +289,11 @@ export function useProfilesByWorkflowStage(stage: string | null) {
       //    employee-level override → department-level → pms_grade-level → default template
       //    This is the authoritative resolution, identical to what useEmployeeWorkflowStages uses.
       const profileIds = profiles.map(p => p.id);
+      const rpcParams: Record<string, any> = { employee_ids: profileIds };
+      if (reviewPeriod) rpcParams.p_review_period = reviewPeriod;
+      if (reviewYear) rpcParams.p_review_year = reviewYear;
       const { data: bulkData, error: bulkError } = await (supabase as any)
-        .rpc('get_bulk_employee_workflows', { employee_ids: profileIds });
+        .rpc('get_bulk_employee_workflows', rpcParams);
 
       if (bulkError) {
         console.error('useProfilesByWorkflowStage: bulk workflow fetch failed, falling back to default', bulkError);
