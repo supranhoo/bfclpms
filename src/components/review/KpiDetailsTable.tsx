@@ -146,6 +146,7 @@ export function KpiDetailsTable({
   workflowStages,
   sentBackKpiIds,
   auditKpiAssignments,
+  dataOwnerNames,
 }: KpiDetailsTableProps) {
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
   const scoreColumns = buildScoreColumns(effectiveStages);
