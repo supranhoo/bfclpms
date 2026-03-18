@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useKpisByEmployee, useReviewSubmissions, useApproveKpi, useRaiseQuery, useKpiQueries, useSendBackKpi, useEmployeeKpiPeriods, RatingLevel, KPI, KpiQuery } from '@/hooks/useKpis';
 import { useSubPeriodSubmissions, useSubPeriodSubmissionsByKpis, SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { useOrgKpiValues } from '@/hooks/useOrgKpiValues';
+import { useOrgKpiDataOwnerNames, getOwnerNamesForKpi } from '@/hooks/useOrgKpiDataOwner';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { ManagerDailyOverrideEditor, calculateOverriddenScore } from '@/components/review/ManagerDailyOverrideEditor';
 import { ReviewLevelOverrideEditor, calculateOverriddenScore as calculateReviewerOverriddenScore } from '@/components/review/ReviewLevelOverrideEditor';
