@@ -85,6 +85,7 @@ interface KpiDetailsTableProps {
   workflowStages?: string[];
   sentBackKpiIds?: Set<string>;
   auditKpiAssignments?: Map<string, AuditKpiAssignment>;
+  dataOwnerNames?: Map<string, string[]>;
 }
 
 /**
