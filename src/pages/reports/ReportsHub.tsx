@@ -92,28 +92,12 @@ const reports: ReportCard[] = [
     reportKey: 'department',
   },
   {
-    title: 'Manager Team Report',
-    description: 'Manager-wise team performance showing average scores and completion rates',
-    icon: Users,
-    path: '/reports/manager-team',
-    color: 'text-cyan-500',
-    reportKey: 'department',
-  },
-  {
     title: 'Audit Trail Report',
     description: 'Complete history of all KPI modifications, approvals, and status changes',
     icon: ClipboardList,
     path: '/reports/audit-trail',
     color: 'text-orange-500',
     reportKey: 'audit-trail',
-  },
-  {
-    title: 'Period Comparison',
-    description: 'Compare performance metrics across different review periods',
-    icon: Calendar,
-    path: '/reports/period-comparison',
-    color: 'text-indigo-500',
-    reportKey: 'employee-summary',
   },
   {
     title: 'Training Needs (TNI)',

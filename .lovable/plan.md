@@ -1,50 +1,90 @@
 
+# Workflow Configuration: "Effective From" Period Support — IMPLEMENTED ✅
 
-## Reports Audit — Findings
-
-### All 15 Reports: Routing & Access Control Status
-
-| # | Report | Route | App.tsx Route | ReportRoute Guard | Status |
-|---|--------|-------|---------------|-------------------|--------|
-| 1 | Employee Performance Summary | /reports/employee-summary | Yes | Yes | OK |
-| 2 | Performance Report | /reports/performance | Yes | Yes | OK |
-| 3 | Monthly Scorecard | /reports/monthly-scorecard | Yes | Yes | OK |
-| 4 | KRA Issuance | /reports/kra-issuance | Yes | Yes | OK |
-| 5 | Query Report | /reports/queries | Yes | Yes | OK |
-| 6 | Unified Issues Report | /reports/issues | Yes | Yes | OK |
-| 7 | Completion Report | /reports/completion | Yes | Yes | OK |
-| 8 | Department Summary | /reports/department | Yes | Yes | OK |
-| 9 | **Manager Team Report** | /reports/manager-team | **NO** | **NO** | **MISSING ROUTE** |
-| 10 | Audit Trail Report | /reports/audit-trail | Yes | Yes | OK |
-| 11 | **Period Comparison** | /reports/period-comparison | **NO** | **NO** | **MISSING ROUTE** |
-| 12 | TNI Report | /reports/tni | Yes | Yes | OK |
-| 13 | KPI Detail Report | /reports/kpi-detail | Yes | Yes | OK |
-| 14 | KPI Mapping Matrix | /admin/kpi-mapping | Yes (admin) | No (ProtectedRoute) | OK (admin-only) |
-| 15 | Workflow Bottleneck | /reports/bottleneck | Yes | Yes | OK |
-| 16 | KPI Status Tracker | /reports/kpi-status-tracker | Yes | Yes | OK |
-| 17 | KPI Journey Timeline | /reports/kpi-journey | Yes | Yes | OK |
-
-### Issues Found
-
-**Issue 1: Two dead-link report cards in ReportsHub**
-- "Manager Team Report" links to `/reports/manager-team` — no route exists in App.tsx, no page component exists. Clicking navigates to a 404.
-- "Period Comparison" links to `/reports/period-comparison` — no route exists in App.tsx, no page component exists. Clicking navigates to a 404.
-
-**Issue 2: Console warning (non-blocking)**
-- `WorkflowStagesPreview` in `WorkflowConfig.tsx` receives a ref but is not wrapped in `React.forwardRef()`. This is a warning only, not a crash.
-
-### No Other Issues Found
-- All 15 existing report pages have matching lazy imports, route definitions, and `ReportRoute` access guards.
-- The KPI Journey Report's new "Type" column (Org/Individual) is properly wired with `isOrgKpi` field, filter, and Excel export.
-- Report access control via `useReportAccess` hook is consistently applied across all routed reports.
+## What Changed
+- Added `is_ongoing` BOOLEAN column to `workflow_config` table
+- Created `month_name_to_index()` and `find_ongoing_workflow()` helper functions
+- Updated 3 RPCs with ongoing resolution: exact match → ongoing match → global fallback
+- Frontend: "Apply from this month onward" toggle + ongoing badges
+- Hook: `useUpsertWorkflowConfig` accepts `isOngoing` parameter
 
 ---
 
-### Recommended Fix
+# Org-Level KPI Toggle in Assign New KRA Dialog — IMPLEMENTED ✅
 
-**Option A (Remove dead cards):** Remove the "Manager Team Report" and "Period Comparison" entries from the `reports` array in `ReportsHub.tsx` since no page components exist for them.
+## What Changed
+- Added `isOrgLevel` toggle switch and `orgLevelScope` selector to the Advanced section of `AdminKpiCreateDialog`
+- Submit now uses these state values instead of hardcoded `is_org_level: false`
+- Scope options: Organization, Department, Employee (matching `MarkOrgLevelDialog` pattern)
 
-**Option B (Build the pages):** Create `ManagerTeamReport.tsx` and `PeriodComparisonReport.tsx` page components, add routes to `App.tsx`, and add `report_access_config` entries. This is a larger effort.
+---
 
-**Also fix:** Add `React.forwardRef` to `WorkflowStagesPreview` in `WorkflowConfig.tsx` to resolve the console warning.
 
+## Problem
+KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
+
+## Fix Applied
+Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
+
+| File | Line | Change |
+|---|---|---|
+| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
+| `EmployeeScorecard.tsx` | 220 | Same |
+| `AuditScorecard.tsx` | 221 | Same |
+| `ManagementScorecard.tsx` | 222 | Same |
+
+## Impact
+- Biswajit's score: 382/468 → 382/443 (correct)
+- 19 employees with unsubmitted KPIs now show accurate weighted scores
+- Quarterly KPIs in non-terminal months are correctly excluded
+- No database migration needed — frontend calculation fix only
+
+---
+
+# Improve Send-Back KPI Experience — IMPLEMENTED ✅
+
+## Problems Fixed
+
+### 1. Employee data preserved on send-back
+Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
+
+| File | Change |
+|---|---|
+| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
+| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
+
+### 2. Send-back reason shown on face
+- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
+- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
+- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
+
+### 3. Send-back queries created from all reviewer levels
+UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
+
+| File | Change |
+|---|---|
+| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
+| `SelfReviewSheet.tsx` | Uses SentBackBanner |
+| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
+| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
+
+---
+
+# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
+
+## Gaps Fixed
+
+### 1. ManagementScorecard now creates `kpi_queries` record on send-back
+Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
+
+### 2. SentBackBanner shown to all reviewer levels
+The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
+
+### 3. SentBackBanner conditionally renders
+Returns `null` when no send-back query is found, so it doesn't show an empty banner.
+
+| File | Change |
+|---|---|
+| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
+| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
+| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |
