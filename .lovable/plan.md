@@ -1,66 +1,90 @@
 
+# Workflow Configuration: "Effective From" Period Support — IMPLEMENTED ✅
 
-## RCA: "Data by" Badge Missing for Employee-Scoped Org KPIs
+## What Changed
+- Added `is_ongoing` BOOLEAN column to `workflow_config` table
+- Created `month_name_to_index()` and `find_ongoing_workflow()` helper functions
+- Updated 3 RPCs with ongoing resolution: exact match → ongoing match → global fallback
+- Frontend: "Apply from this month onward" toggle + ongoing badges
+- Hook: `useUpsertWorkflowConfig` accepts `isOngoing` parameter
 
-### Root Cause
+---
 
-The `getOrgKpiValue()` function in all three scorecards builds a lookup key based on the KPI's `org_level_scope`. For **employee-scoped** KPIs, it builds:
-```
-key = `${category_id}||${kra_name}||${kpi_name}||null||${employeeId}`
-```
+# Org-Level KPI Toggle in Assign New KRA Dialog — IMPLEMENTED ✅
 
-However, the source `org_kpi_values` record (before propagation) is stored with `employee_id = null`:
-```
-key = `${category_id}||${kra_name}||${kpi_name}||null||null`
-```
+## What Changed
+- Added `isOrgLevel` toggle switch and `orgLevelScope` selector to the Advanced section of `AdminKpiCreateDialog`
+- Submit now uses these state values instead of hardcoded `is_org_level: false`
+- Scope options: Organization, Department, Employee (matching `MarkOrgLevelDialog` pattern)
 
-**Per-employee records only exist after propagation.** The KPI "Achieve Power generation target from WHRB 1050 TPD" has a value entered (status: `approved`) but was **never propagated** — so no per-employee record exists, and the lookup returns `null`.
+---
 
-The third KPI in the screenshot ("Achieve production target from 1050 TPD") shows "Data by" because it WAS propagated, creating per-employee records.
 
-### Database Evidence
+## Problem
+KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
 
-| KPI | org_kpi_values records | Has per-employee record? | "Data by" shows? |
-|-----|----------------------|--------------------------|------------------|
-| Power gen from WHRB 1050 | 1 (employee_id=null, status=approved) | No | No |
-| Costing | 1 (employee_id=null, scope=org) | N/A (org scope) | Yes |
-| Production from 1050 TPD | 3 (null + 2 employee-specific, propagated) | Yes | Yes |
+## Fix Applied
+Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
 
-### Fix
+| File | Line | Change |
+|---|---|---|
+| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
+| `EmployeeScorecard.tsx` | 220 | Same |
+| `AuditScorecard.tsx` | 221 | Same |
+| `ManagementScorecard.tsx` | 222 | Same |
 
-Add a **fallback** in `getOrgKpiValue()`: when the scope-specific lookup fails, fall back to the organization-level record (`||null||null`). This ensures the `entered_by_name` is resolved even before propagation.
+## Impact
+- Biswajit's score: 382/468 → 382/443 (correct)
+- 19 employees with unsubmitted KPIs now show accurate weighted scores
+- Quarterly KPIs in non-terminal months are correctly excluded
+- No database migration needed — frontend calculation fix only
 
-**Files to edit (same pattern in all three):**
-1. `src/components/review/EmployeeScorecard.tsx` — `getOrgKpiValue` (line ~121-135)
-2. `src/components/review/ManagementScorecard.tsx` — `getOrgKpiValue` (line ~123-137)
-3. `src/components/review/UnifiedScorecard.tsx` — `getOrgKpiValue` (line ~279-293)
+---
 
-**Change in each:** After the scope-based lookup, if no result found, try the org-level fallback key:
+# Improve Send-Back KPI Experience — IMPLEMENTED ✅
 
-```typescript
-const getOrgKpiValue = (kpi: KPI) => {
-  if (!kpi.is_org_level) return null;
-  const scope = (kpi as any).org_level_scope || 'employee';
-  let key: string;
-  if (scope === 'organization') {
-    key = `...||null||null`;
-  } else if (scope === 'department') {
-    key = `...||${deptId}||null`;
-  } else {
-    key = `...||null||${empId}`;
-  }
-  // Try scope-specific first, then fall back to org-level record
-  const result = orgKpiValuesMap.get(key);
-  if (result) return result;
-  
-  // Fallback: check the base org-level record (before propagation)
-  if (scope !== 'organization') {
-    const fallbackKey = `${kpi.category_id}||${kra}||${kpiName}||null||null`;
-    return orgKpiValuesMap.get(fallbackKey) || null;
-  }
-  return null;
-};
-```
+## Problems Fixed
 
-Three files, ~3 lines added per file.
+### 1. Employee data preserved on send-back
+Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
 
+| File | Change |
+|---|---|
+| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
+| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
+
+### 2. Send-back reason shown on face
+- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
+- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
+- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
+
+### 3. Send-back queries created from all reviewer levels
+UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
+
+| File | Change |
+|---|---|
+| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
+| `SelfReviewSheet.tsx` | Uses SentBackBanner |
+| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
+| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
+
+---
+
+# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
+
+## Gaps Fixed
+
+### 1. ManagementScorecard now creates `kpi_queries` record on send-back
+Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
+
+### 2. SentBackBanner shown to all reviewer levels
+The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
+
+### 3. SentBackBanner conditionally renders
+Returns `null` when no send-back query is found, so it doesn't show an empty banner.
+
+| File | Change |
+|---|---|
+| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
+| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
+| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |
