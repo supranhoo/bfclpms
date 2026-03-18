@@ -18,6 +18,7 @@ import {
   useSetDefaultWorkflowTemplate,
   useArchiveWorkflowTemplate,
   useRestoreWorkflowTemplate,
+  useUpdateBatchOngoing,
   getStageLabel,
   type WorkflowTemplate,
 } from '@/hooks/useWorkflowConfig';
@@ -90,6 +91,7 @@ export default function WorkflowConfig() {
   const setDefaultTemplate = useSetDefaultWorkflowTemplate();
   const archiveTemplate = useArchiveWorkflowTemplate();
   const restoreTemplate = useRestoreWorkflowTemplate();
+  const batchUpdateOngoing = useUpdateBatchOngoing();
   
   // Split templates into active and archived
   const templates = useMemo(() => allTemplates?.filter(t => t.is_active) || [], [allTemplates]);
@@ -365,7 +367,30 @@ export default function WorkflowConfig() {
                   <input
                     type="checkbox"
                     checked={isOngoing}
-                    onChange={(e) => setIsOngoing(e.target.checked)}
+                    onChange={(e) => {
+                      const newVal = e.target.checked;
+                      setIsOngoing(newVal);
+                      // Batch-update existing configs for this period
+                      const periodConfigs = (configs || []).filter(
+                        c => c.review_period === selectedMonth && c.review_year === selectedYear
+                      );
+                      if (periodConfigs.length > 0) {
+                        batchUpdateOngoing.mutate(
+                          { reviewPeriod: selectedMonth, reviewYear: selectedYear, isOngoing: newVal },
+                          {
+                            onSuccess: (data) => {
+                              toast({
+                                title: newVal ? 'Ongoing enabled' : 'Ongoing disabled',
+                                description: `Updated ${data?.length || 0} config(s) for ${selectedMonth} ${selectedYear}`,
+                              });
+                            },
+                            onError: (err: any) => {
+                              toast({ title: 'Error', description: err.message, variant: 'destructive' });
+                            },
+                          }
+                        );
+                      }
+                    }}
                     className="rounded border-border"
                   />
                   <span className="text-sm text-muted-foreground whitespace-nowrap flex items-center gap-1">
