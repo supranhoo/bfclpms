@@ -523,7 +523,7 @@ export function EmployeeSelectorGrid({
           if (slIdx >= 0 && stages.slice(slIdx).includes(k.status || '')) reviewed++;
         }
       });
-      return { totalEmployees: baseMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'hr_pms') {
       let pending = 0, inReview = 0, forwarded = 0;
       relevantKpis.forEach(k => {
