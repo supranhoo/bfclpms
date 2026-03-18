@@ -383,6 +383,38 @@ export function useRestoreWorkflowTemplate() {
   });
 }
 
+// Batch-update is_ongoing for all configs in a specific period
+export function useUpdateBatchOngoing() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      reviewPeriod,
+      reviewYear,
+      isOngoing,
+    }: {
+      reviewPeriod: string;
+      reviewYear: number;
+      isOngoing: boolean;
+    }) => {
+      const { data, error } = await supabase
+        .from('workflow_config')
+        .update({ is_ongoing: isOngoing } as any)
+        .eq('review_period', reviewPeriod)
+        .eq('review_year', reviewYear)
+        .select();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflow-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-workflow'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-workflow-stages'] });
+      queryClient.invalidateQueries({ queryKey: ['bulk-employee-workflows'] });
+    },
+  });
+}
+
 // Delete a workflow configuration
 export function useDeleteWorkflowConfig() {
   const queryClient = useQueryClient();
