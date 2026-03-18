@@ -149,6 +149,11 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
             )}
             Organization KPI — {scope.charAt(0).toUpperCase() + scope.slice(1)}
           </Badge>
+          {orgKpiDataOwnerNames && orgKpiDataOwnerNames.length > 0 && (
+            <Badge variant="outline" className="text-xs">
+              Data Owner: {orgKpiDataOwnerNames.join(', ')}
+            </Badge>
+          )}
           {orgKpiEnteredByName && (
             <Badge variant="outline" className="text-xs">
               Data entered by: {orgKpiEnteredByName}
