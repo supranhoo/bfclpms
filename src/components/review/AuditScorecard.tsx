@@ -809,6 +809,7 @@ export function AuditScorecard({
               workflowStages={effectiveStages}
               sentBackKpiIds={sentBackKpiIds}
               auditKpiAssignments={auditKpiAssignments}
+              dataOwnerNames={dataOwnerNamesMap}
             />
           )}
         </CardContent>
