@@ -468,11 +468,11 @@ export function EmployeeSelectorGrid({
 
   // Calculate stats using per-employee workflow-aware resolution
   const stats = useMemo(() => {
-    if (!periodKpis || !baseMembers) {
+    if (!periodKpis || !demographicFilteredMembers) {
       return { totalEmployees: 0, stat1: 0, stat2: 0, stat3: 0, stat4: 0, totalKpis: 0 };
     }
 
-    const memberIds = new Set(baseMembers.map(m => m.id));
+    const memberIds = new Set(demographicFilteredMembers.map(m => m.id));
     const relevantKpis = periodKpis.filter(k => memberIds.has(k.employee_id));
     const skipIds = new Set(skipLevelMembers?.map(m => m.id) || []);
 
