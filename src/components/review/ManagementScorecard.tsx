@@ -133,7 +133,14 @@ export function ManagementScorecard({
       const empId = employee.id || 'null';
       key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||${empId}`;
     }
-    return orgKpiValuesMap.get(key) || null;
+    const result = orgKpiValuesMap.get(key);
+    if (result) return result;
+    // Fallback: check base org-level record (before propagation)
+    if (scope !== 'organization') {
+      const fallbackKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
+      return orgKpiValuesMap.get(fallbackKey) || null;
+    }
+    return null;
   };
 
   // Org KPI send-back dialog state
