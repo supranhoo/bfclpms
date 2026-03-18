@@ -495,7 +495,7 @@ export function EmployeeSelectorGrid({
         }
       });
       return {
-        totalEmployees: baseMembers.length,
+        totalEmployees: demographicFilteredMembers.length,
         stat1: directPending,
         stat2: skipPending,
         stat3: reviewed,
