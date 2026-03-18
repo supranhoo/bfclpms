@@ -24,7 +24,7 @@ interface KpiHeaderSectionProps {
   employeeId?: string;
 }
 
-export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTimeline, orgKpiEnteredByName, employeeId }: KpiHeaderSectionProps) {
+export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTimeline, orgKpiEnteredByName, orgKpiDataOwnerNames, employeeId }: KpiHeaderSectionProps) {
   const { role } = useAuth();
   const isAdmin = role === 'admin';
   const [editDialogOpen, setEditDialogOpen] = useState(false);
