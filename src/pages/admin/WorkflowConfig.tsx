@@ -91,6 +91,7 @@ export default function WorkflowConfig() {
   const setDefaultTemplate = useSetDefaultWorkflowTemplate();
   const archiveTemplate = useArchiveWorkflowTemplate();
   const restoreTemplate = useRestoreWorkflowTemplate();
+  const batchUpdateOngoing = useUpdateBatchOngoing();
   
   // Split templates into active and archived
   const templates = useMemo(() => allTemplates?.filter(t => t.is_active) || [], [allTemplates]);
