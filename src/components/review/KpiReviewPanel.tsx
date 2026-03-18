@@ -48,6 +48,7 @@ export function KpiReviewPanel({
   onOpenTimeline,
   workflowStages,
   orgKpiEnteredByName,
+  orgKpiDataOwnerNames,
 }: KpiReviewPanelProps) {
   const isOwnKpi = currentUserId ? kpi.employee_id === currentUserId : false;
   return (
