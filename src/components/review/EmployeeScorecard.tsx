@@ -111,7 +111,7 @@ export function EmployeeScorecard({
     orgKpiValues?.forEach(v => {
       const deptPart = v.department_id || 'null';
       const empPart = v.employee_id || 'null';
-      const key = `${v.category_id}||${v.kra_name}||${v.kpi_name}||${deptPart}||${empPart}`;
+      const key = `${v.category_id}||${v.kra_name.toLowerCase()}||${v.kpi_name.toLowerCase()}||${deptPart}||${empPart}`;
       map.set(key, { achieved_value: v.achieved_value, data_source: v.data_source, entered_by_name: v.entered_by_name });
     });
     return map;
