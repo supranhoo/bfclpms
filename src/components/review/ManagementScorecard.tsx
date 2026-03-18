@@ -898,6 +898,7 @@ export function ManagementScorecard({
               expandedKpis={expandedDailyKpis}
               onToggleExpand={toggleDailyExpand}
               workflowStages={effectiveStages}
+              dataOwnerNames={dataOwnerNamesMap}
             />
           )}
         </CardContent>
