@@ -105,6 +105,7 @@ export function EmployeeScorecard({
 
   // Fetch org KPI values for this period
   const { data: orgKpiValues } = useOrgKpiValues(undefined, selectedPeriod, selectedYear);
+  const { data: dataOwnerNamesMap } = useOrgKpiDataOwnerNames();
 
   // Create org KPI values lookup map
   const orgKpiValuesMap = useMemo(() => {
