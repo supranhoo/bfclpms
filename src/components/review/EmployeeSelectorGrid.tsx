@@ -134,7 +134,9 @@ export function EmployeeSelectorGrid({
   const requiredStage = PANEL_REQUIRED_STAGE[viewLevel] ?? null;
 
   // Fetch only employees whose resolved workflow template includes the required stage
-  const { data: stageFilteredProfiles, isLoading: stageFilteredLoading } = useProfilesByWorkflowStage(requiredStage);
+  const selectedPeriodForFilter = periodSelection.selectedMonth;
+  const selectedYearForFilter = periodSelection.selectedYear;
+  const { data: stageFilteredProfiles, isLoading: stageFilteredLoading } = useProfilesByWorkflowStage(requiredStage, selectedPeriodForFilter, selectedYearForFilter);
 
   const { departments, designations, grades, managers } = useEmployeeFilterOptions();
   const [searchParams] = useSearchParams();
