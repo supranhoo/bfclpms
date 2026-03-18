@@ -20,6 +20,7 @@ interface KpiHeaderSectionProps {
   selectedYear: number;
   onOpenTimeline?: () => void;
   orgKpiEnteredByName?: string | null;
+  orgKpiDataOwnerNames?: string[];
   employeeId?: string;
 }
 
