@@ -328,8 +328,8 @@ export function EmployeeSelectorGrid({
     }
   };
 
-  // Filter members based on search, department, designation, grade, manager, and status
-  const displayMembers = useMemo(() => {
+  // Demographic filtering (search, department, designation, grade, manager) — used for stats
+  const demographicFilteredMembers = useMemo(() => {
     let filtered = baseMembers?.filter(p => 
       p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -348,6 +348,13 @@ export function EmployeeSelectorGrid({
     if (selectedManager) {
       filtered = filtered?.filter(p => p.reporting_manager_id === selectedManager);
     }
+
+    return filtered;
+  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager]);
+
+  // Filter members further by status for display
+  const displayMembers = useMemo(() => {
+    let filtered = demographicFilteredMembers ? [...demographicFilteredMembers] : undefined;
 
     // Status-based filtering using per-employee workflow resolution
     if (statusFilter === 'my_assigned' && viewLevel === 'audit') {
@@ -439,7 +446,7 @@ export function EmployeeSelectorGrid({
     });
 
     return filtered;
-  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers, myAssignedEmployeeIds, myKpiLevelData]);
+  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers, myAssignedEmployeeIds, myKpiLevelData]);
 
   // Split display members into assigned/others for audit view
   const { assignedMembers, otherMembers } = useMemo(() => {
@@ -461,11 +468,11 @@ export function EmployeeSelectorGrid({
 
   // Calculate stats using per-employee workflow-aware resolution
   const stats = useMemo(() => {
-    if (!periodKpis || !baseMembers) {
+    if (!periodKpis || !demographicFilteredMembers) {
       return { totalEmployees: 0, stat1: 0, stat2: 0, stat3: 0, stat4: 0, totalKpis: 0 };
     }
 
-    const memberIds = new Set(baseMembers.map(m => m.id));
+    const memberIds = new Set(demographicFilteredMembers.map(m => m.id));
     const relevantKpis = periodKpis.filter(k => memberIds.has(k.employee_id));
     const skipIds = new Set(skipLevelMembers?.map(m => m.id) || []);
 
@@ -488,7 +495,7 @@ export function EmployeeSelectorGrid({
         }
       });
       return {
-        totalEmployees: baseMembers.length,
+        totalEmployees: demographicFilteredMembers.length,
         stat1: directPending,
         stat2: skipPending,
         stat3: reviewed,
@@ -504,7 +511,7 @@ export function EmployeeSelectorGrid({
         else if (k.status === 'audit') inAudit++;
         else if (['management_review', 'approved'].includes(k.status || '')) forwarded++;
       });
-      return { totalEmployees: baseMembers.length, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'skip_level') {
       let pending = 0, reviewed = 0;
       relevantKpis.forEach(k => {
@@ -516,7 +523,7 @@ export function EmployeeSelectorGrid({
           if (slIdx >= 0 && stages.slice(slIdx).includes(k.status || '')) reviewed++;
         }
       });
-      return { totalEmployees: baseMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'hr_pms') {
       let pending = 0, inReview = 0, forwarded = 0;
       relevantKpis.forEach(k => {
@@ -532,10 +539,10 @@ export function EmployeeSelectorGrid({
           }
         }
       });
-      return { totalEmployees: baseMembers.length, stat1: pending, stat2: inReview, stat3: forwarded, stat4: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inReview, stat3: forwarded, stat4: 0, totalKpis: relevantKpis.length };
     } else {
       return {
-        totalEmployees: baseMembers.length,
+        totalEmployees: demographicFilteredMembers.length,
         stat1: relevantKpis.filter(k => k.status === 'management_review').length,
         stat2: relevantKpis.filter(k => k.status === 'approved').length,
         stat3: relevantKpis.length,
@@ -543,7 +550,7 @@ export function EmployeeSelectorGrid({
         totalKpis: relevantKpis.length,
       };
     }
-  }, [periodKpis, baseMembers, viewLevel, workflowMap, skipLevelMembers]);
+  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers]);
 
   // Smart period detection: auto-switch to a period with KPIs if current period has none
   const handleEmployeeClick = async (member: EmployeeProfile) => {
