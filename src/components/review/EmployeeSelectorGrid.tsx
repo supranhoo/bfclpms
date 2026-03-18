@@ -539,7 +539,7 @@ export function EmployeeSelectorGrid({
           }
         }
       });
-      return { totalEmployees: baseMembers.length, stat1: pending, stat2: inReview, stat3: forwarded, stat4: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inReview, stat3: forwarded, stat4: 0, totalKpis: relevantKpis.length };
     } else {
       return {
         totalEmployees: baseMembers.length,
