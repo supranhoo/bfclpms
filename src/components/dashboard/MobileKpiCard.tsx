@@ -21,6 +21,7 @@ interface MobileKpiCardProps {
   statusLabels: Record<string, string>;
   score?: number | null;
   orgKpiValue?: { achieved_value: number | null; data_source: string | null; entered_by_name: string | null } | null;
+  dataOwnerNames?: Map<string, string[]>;
   auditAssignment?: AuditKpiAssignment | null;
   isAuditCapable?: boolean;
   onViewLogic: (kpi: KPI) => void;
