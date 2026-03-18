@@ -1480,6 +1480,7 @@ export function UnifiedScorecard({
                 onOpenTimeline={() => setTimelineOpen(true)}
                 workflowStages={effectiveStages}
                 orgKpiEnteredByName={getOrgKpiValue(selectedKpi)?.entered_by_name}
+                orgKpiDataOwnerNames={getOwnerNamesForKpi(dataOwnerNamesMap, selectedKpi)}
               />
               
               

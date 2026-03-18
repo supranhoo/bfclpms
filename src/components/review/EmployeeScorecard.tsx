@@ -817,6 +817,7 @@ export function EmployeeScorecard({
                 onOpenTimeline={() => setTimelineOpen(true)}
                 workflowStages={effectiveStages}
                 orgKpiEnteredByName={getOrgKpiValue(selectedKpi)?.entered_by_name}
+                orgKpiDataOwnerNames={getOwnerNamesForKpi(dataOwnerNamesMap, selectedKpi)}
               />
               
               {/* N/A Confirmation Card - Show when KPI is marked as N/A (with override option) */}
