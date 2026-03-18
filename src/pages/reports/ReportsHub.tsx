@@ -100,14 +100,6 @@ const reports: ReportCard[] = [
     reportKey: 'audit-trail',
   },
   {
-    title: 'Period Comparison',
-    description: 'Compare performance metrics across different review periods',
-    icon: Calendar,
-    path: '/reports/period-comparison',
-    color: 'text-indigo-500',
-    reportKey: 'employee-summary',
-  },
-  {
     title: 'Training Needs (TNI)',
     description: 'Identify skill gaps and training requirements across the organization',
     icon: GraduationCap,
