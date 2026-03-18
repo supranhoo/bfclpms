@@ -50,6 +50,7 @@ export function MobileKpiCard({
   isLocked,
   getOrgKpiValue,
   sentBackKpiIds,
+  dataOwnerNames,
 }: MobileKpiCardProps) {
   const isNaKpi = submission?.is_na || false;
   const isDailyKpi = kpi.frequency === 'Daily';
