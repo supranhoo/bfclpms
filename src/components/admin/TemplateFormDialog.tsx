@@ -762,7 +762,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                             </Label>
                           </div>
                           <div className="flex items-start gap-1.5 ml-6">
-                            <AlertTriangle className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400 mt-0.5 shrink-0" />
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
                             <p className="text-xs text-muted-foreground">
                               Caution: This will overwrite individual employee weightages that may have been customized in the Weightage Dashboard.
                             </p>
