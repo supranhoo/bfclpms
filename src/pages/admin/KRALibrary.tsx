@@ -113,7 +113,7 @@ export default function KRALibrary() {
 
   const handleDuplicate = async (template: KpiTemplate) => {
     try {
-      const { id, created_at, updated_at, created_by, kra_categories, ...rest } = template;
+      const { id, created_at, updated_at, kra_categories, ...rest } = template;
       await createTemplate.mutateAsync({
         ...rest,
         title: `${template.title} (Copy)`,
