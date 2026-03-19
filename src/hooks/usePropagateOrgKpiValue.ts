@@ -48,6 +48,7 @@ function buildRatingsPayload(
     achieved_value: number | null;
     self_score: number | null;
     self_rating: string | null;
+    evidence_url: string | null;
   }> = [];
 
   const profileMap = new Map<string, { fullName: string; employeeCode: string | null; departmentName: string | null }>();
