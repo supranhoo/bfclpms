@@ -60,15 +60,18 @@ export function TemplatePropagationPreview({ data, isLoading }: PropagationPrevi
       <div>
         <h4 className="text-sm font-medium mb-2">Fields Being Changed</h4>
         <div className="space-y-1">
-          {Object.entries(data.fields_changed).map(([field, change]) => (
-            <div key={field} className="flex items-center gap-2 text-sm">
-              <CheckCircle className="h-3 w-3 text-primary" />
-              <span className="font-medium capitalize">{field.replace(/_/g, ' ')}:</span>
-              <span className="text-muted-foreground line-through">{String(change.old ?? '—')}</span>
-              <span>→</span>
-              <span className="text-foreground font-medium">{String(change.new ?? '—')}</span>
-            </div>
-          ))}
+          {Object.entries(data.fields_changed).map(([field, change]) => {
+            const fmt = (v: any) => v == null ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+            return (
+              <div key={field} className="flex items-center gap-2 text-sm">
+                <CheckCircle className="h-3 w-3 text-primary" />
+                <span className="font-medium capitalize">{field.replace(/_/g, ' ')}:</span>
+                <span className="text-muted-foreground line-through">{fmt(change.old)}</span>
+                <span>→</span>
+                <span className="text-foreground font-medium">{fmt(change.new)}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
