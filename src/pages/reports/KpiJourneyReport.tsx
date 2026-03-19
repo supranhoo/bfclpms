@@ -329,8 +329,9 @@ export default function KpiJourneyReport() {
                     <TableRow key={row.kpiId}>
                       <TableCell className="sticky left-0 bg-background z-10 font-mono text-xs">{row.employeeCode}</TableCell>
                       <TableCell className="sticky left-[80px] bg-background z-10 font-medium text-sm">{row.employeeName}</TableCell>
-                      <TableCell className="text-xs">{row.department}</TableCell>
-                      <TableCell className="text-xs">{row.category}</TableCell>
+                       <TableCell className="text-xs">{row.department}</TableCell>
+                       <TableCell className="text-xs">{row.reportingManager}</TableCell>
+                       <TableCell className="text-xs">{row.category}</TableCell>
                       <TableCell className="text-xs">{row.kraName}</TableCell>
                       <TableCell className="text-xs">{row.kpiName}</TableCell>
                       <TableCell>
