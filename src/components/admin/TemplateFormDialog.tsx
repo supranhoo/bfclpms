@@ -763,7 +763,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {[2025, 2026, 2027].map(y => (
+                              {YEAR_OPTIONS.map(y => (
                                 <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                               ))}
                             </SelectContent>
