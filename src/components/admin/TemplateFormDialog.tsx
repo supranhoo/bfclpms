@@ -332,81 +332,81 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
 
         <ScrollArea className="max-h-[70vh] pr-4">
           <div className="space-y-6 py-2">
-            {/* Basic Info */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <Label>Template Title *</Label>
-                <Input
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="e.g., Sales Manager KRA Template"
-                />
-              </div>
+            {/* ── Identity ── */}
+            <div className="space-y-1.5">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Identity</h3>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                <div className="col-span-2">
+                  <Label>Template Title *</Label>
+                  <Input
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    placeholder="e.g., Sales Manager KRA Template"
+                  />
+                </div>
 
-              <div className="col-span-2">
-                <Label>Description</Label>
-                <Textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Brief description of this template..."
-                  rows={2}
-                />
-              </div>
-            </div>
+                <div className="col-span-2">
+                  <Label>Description</Label>
+                  <Textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Brief description of this template..."
+                    rows={2}
+                  />
+                </div>
 
-            {/* Category & KRA/KPI */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Category</Label>
-                <Select
-                  value={formData.category_id}
-                  onValueChange={(val) => setFormData({ ...formData, category_id: val })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories?.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                <div>
+                  <Label>KRA Name *</Label>
+                  <Input
+                    value={formData.kra_name}
+                    onChange={(e) => setFormData({ ...formData, kra_name: e.target.value })}
+                    placeholder="Key Result Area"
+                  />
+                </div>
 
-              <div>
-                <Label>Criteria</Label>
-                <Select
-                  value={formData.criteria}
-                  onValueChange={(val) => setFormData({ ...formData, criteria: val })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Higher is Better">Higher is Better</SelectItem>
-                    <SelectItem value="Lower is Better">Lower is Better</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                <div>
+                  <Label>KPI Name *</Label>
+                  <Input
+                    value={formData.kpi_name}
+                    onChange={(e) => setFormData({ ...formData, kpi_name: e.target.value })}
+                    placeholder="Key Performance Indicator"
+                  />
+                </div>
 
-              <div>
-                <Label>KRA Name *</Label>
-                <Input
-                  value={formData.kra_name}
-                  onChange={(e) => setFormData({ ...formData, kra_name: e.target.value })}
-                  placeholder="Key Result Area"
-                />
-              </div>
+                <div>
+                  <Label>Category</Label>
+                  <Select
+                    value={formData.category_id}
+                    onValueChange={(val) => setFormData({ ...formData, category_id: val })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories?.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div>
-                <Label>KPI Name *</Label>
-                <Input
-                  value={formData.kpi_name}
-                  onChange={(e) => setFormData({ ...formData, kpi_name: e.target.value })}
-                  placeholder="Key Performance Indicator"
-                />
+                <div>
+                  <Label>Criteria</Label>
+                  <Select
+                    value={formData.criteria}
+                    onValueChange={(val) => setFormData({ ...formData, criteria: val })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Higher is Better">Higher is Better</SelectItem>
+                      <SelectItem value="Lower is Better">Lower is Better</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
