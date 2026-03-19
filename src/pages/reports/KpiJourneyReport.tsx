@@ -126,6 +126,7 @@ export default function KpiJourneyReport() {
         'Emp Code': r.employeeCode,
         'Employee': r.employeeName,
         'Department': r.department,
+        'Reporting Manager': r.reportingManager,
         'Category': r.category,
         'KRA': r.kraName,
         'KPI': r.kpiName,
@@ -305,8 +306,9 @@ export default function KpiJourneyReport() {
                   <TableRow>
                     <TableHead className="sticky left-0 bg-background z-10 min-w-[80px]">Emp Code</TableHead>
                     <TableHead className="sticky left-[80px] bg-background z-10 min-w-[140px]">Employee</TableHead>
-                    <TableHead className="min-w-[100px]">Dept</TableHead>
-                    <TableHead className="min-w-[100px]">Category</TableHead>
+                     <TableHead className="min-w-[100px]">Dept</TableHead>
+                     <TableHead className="min-w-[140px]">Reporting Manager</TableHead>
+                     <TableHead className="min-w-[100px]">Category</TableHead>
                     <TableHead className="min-w-[120px]">KRA</TableHead>
                     <TableHead className="min-w-[120px]">KPI</TableHead>
                     <TableHead className="min-w-[80px]">Type</TableHead>
@@ -328,8 +330,9 @@ export default function KpiJourneyReport() {
                     <TableRow key={row.kpiId}>
                       <TableCell className="sticky left-0 bg-background z-10 font-mono text-xs">{row.employeeCode}</TableCell>
                       <TableCell className="sticky left-[80px] bg-background z-10 font-medium text-sm">{row.employeeName}</TableCell>
-                      <TableCell className="text-xs">{row.department}</TableCell>
-                      <TableCell className="text-xs">{row.category}</TableCell>
+                       <TableCell className="text-xs">{row.department}</TableCell>
+                       <TableCell className="text-xs">{row.reportingManager}</TableCell>
+                       <TableCell className="text-xs">{row.category}</TableCell>
                       <TableCell className="text-xs">{row.kraName}</TableCell>
                       <TableCell className="text-xs">{row.kpiName}</TableCell>
                       <TableCell>

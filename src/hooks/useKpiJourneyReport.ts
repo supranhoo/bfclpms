@@ -6,6 +6,7 @@ export interface KpiJourneyRow {
   employeeCode: string;
   employeeName: string;
   department: string;
+  reportingManager: string;
   category: string;
   kraName: string;
   kpiName: string;

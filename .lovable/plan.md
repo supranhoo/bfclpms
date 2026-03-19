@@ -1,41 +1,90 @@
 
+# Workflow Configuration: "Effective From" Period Support — IMPLEMENTED ✅
 
-## Add Reporting Manager Column to KPI Journey Report
+## What Changed
+- Added `is_ongoing` BOOLEAN column to `workflow_config` table
+- Created `month_name_to_index()` and `find_ongoing_workflow()` helper functions
+- Updated 3 RPCs with ongoing resolution: exact match → ongoing match → global fallback
+- Frontend: "Apply from this month onward" toggle + ongoing badges
+- Hook: `useUpsertWorkflowConfig` accepts `isOngoing` parameter
 
-### What Changes
+---
 
-Add a "Reporting Manager" column to both the on-screen table and the Excel export.
+# Org-Level KPI Toggle in Assign New KRA Dialog — IMPLEMENTED ✅
 
-### 1. Database Migration — Update `get_kpi_journey_report` RPC
+## What Changed
+- Added `isOrgLevel` toggle switch and `orgLevelScope` selector to the Advanced section of `AdminKpiCreateDialog`
+- Submit now uses these state values instead of hardcoded `is_org_level: false`
+- Scope options: Organization, Department, Employee (matching `MarkOrgLevelDialog` pattern)
 
-Modify the SQL function to join the manager's profile and include `reportingManager` in the JSON output.
+---
 
-In the `filtered_kpis` CTE, add:
-```sql
-LEFT JOIN profiles mgr ON mgr.id = p.reporting_manager_id
-```
-Select `mgr.full_name AS manager_name`.
 
-In `rows_data`, add to the `jsonb_build_object`:
-```sql
-'reportingManager', COALESCE(pg.manager_name, '—')
-```
+## Problem
+KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
 
-### 2. Frontend Hook — `src/hooks/useKpiJourneyReport.ts`
+## Fix Applied
+Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
 
-Add `reportingManager: string` to the `KpiJourneyRow` interface.
+| File | Line | Change |
+|---|---|---|
+| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
+| `EmployeeScorecard.tsx` | 220 | Same |
+| `AuditScorecard.tsx` | 221 | Same |
+| `ManagementScorecard.tsx` | 222 | Same |
 
-### 3. Report Page — `src/pages/reports/KpiJourneyReport.tsx`
+## Impact
+- Biswajit's score: 382/468 → 382/443 (correct)
+- 19 employees with unsubmitted KPIs now show accurate weighted scores
+- Quarterly KPIs in non-terminal months are correctly excluded
+- No database migration needed — frontend calculation fix only
 
-**Table**: Add a `<TableHead>` for "Manager" after the "Dept" column, and a corresponding `<TableCell>` displaying `row.reportingManager`.
+---
 
-**Excel Export**: Add a `'Reporting Manager': r.reportingManager` field to the export mapping object, positioned after the "Department" column.
+# Improve Send-Back KPI Experience — IMPLEMENTED ✅
 
-### Files Changed
+## Problems Fixed
+
+### 1. Employee data preserved on send-back
+Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
 
 | File | Change |
-|------|--------|
-| New migration | `CREATE OR REPLACE FUNCTION get_kpi_journey_report` — add manager join + output field |
-| `src/hooks/useKpiJourneyReport.ts` | Add `reportingManager` to `KpiJourneyRow` interface |
-| `src/pages/reports/KpiJourneyReport.tsx` | Add Manager table column + Excel export column |
+|---|---|
+| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
+| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
 
+### 2. Send-back reason shown on face
+- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
+- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
+- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
+
+### 3. Send-back queries created from all reviewer levels
+UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
+
+| File | Change |
+|---|---|
+| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
+| `SelfReviewSheet.tsx` | Uses SentBackBanner |
+| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
+| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
+
+---
+
+# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
+
+## Gaps Fixed
+
+### 1. ManagementScorecard now creates `kpi_queries` record on send-back
+Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
+
+### 2. SentBackBanner shown to all reviewer levels
+The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
+
+### 3. SentBackBanner conditionally renders
+Returns `null` when no send-back query is found, so it doesn't show an empty banner.
+
+| File | Change |
+|---|---|
+| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
+| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
+| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |
