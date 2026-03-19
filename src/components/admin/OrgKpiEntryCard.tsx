@@ -674,7 +674,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               )}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button size="sm" className="h-7 text-xs" disabled={isPropagating}>
+                  <Button size="sm" className="h-7 text-xs" disabled={isPropagating || (!isNa && achievedValue.trim() === '')}>
                     {isPropagating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5 mr-1" />}
                     Propagate
                   </Button>
