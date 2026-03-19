@@ -384,6 +384,37 @@ export default function KpiJourneyReport() {
                           </Badge>
                         )}
                       </TableCell>
+                      <TableCell>
+                        {row.sendBackCount === 0 ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button className="cursor-pointer">
+                                <Badge variant="outline" className={`text-xs font-mono ${
+                                  row.sendBackCount >= 2
+                                    ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
+                                }`}>
+                                  {row.sendBackCount}×
+                                </Badge>
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-80 max-h-60 overflow-y-auto" align="start">
+                              <div className="space-y-3">
+                                <h4 className="font-semibold text-sm">Send-Back History</h4>
+                                {(row.sendBacks ?? []).map((sb: SendBackEntry, idx: number) => (
+                                  <div key={idx} className="border-l-2 border-amber-400 pl-3 text-xs space-y-0.5">
+                                    <div className="font-medium">{sb.raisedBy}</div>
+                                    <div className="text-muted-foreground">{formatDate(sb.date)}</div>
+                                    <div className="text-foreground/80">{sb.reason}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        )}
+                      </TableCell>
                       <TableCell className="text-center">
                         {row.isNa ? (
                           <MinusCircle className="h-4 w-4 text-muted-foreground mx-auto" />
