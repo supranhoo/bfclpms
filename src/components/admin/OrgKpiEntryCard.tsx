@@ -7,9 +7,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
 import { OrgKpiAuditLog } from '@/components/admin/OrgKpiAuditLog';
 import { OrgKpiScopedEntryTable, ScopedRow } from '@/components/admin/OrgKpiScopedEntryTable';
-import type { ObservationCounts } from '@/components/admin/OrgKpiScopedEntryTable';
-import { OrgKpiObservationsSummary } from '@/components/admin/OrgKpiObservationsSummary';
 import { useObservationsByKpis } from '@/hooks/useKpiObservations';
+import type { KpiObservation } from '@/hooks/useKpiObservations';
 import { OrgKpiOwnerDialog } from '@/components/admin/OrgKpiOwnerDialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { isValueOutOfRange, RatingThresholds } from '@/lib/ratingCalculation';
@@ -119,21 +118,19 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   const obsKpiIds = isEmployeeScope && employeeKpiIds ? employeeKpiIds : [];
   const { data: observationMap } = useObservationsByKpis(obsKpiIds);
 
-  const employeeObservationCounts = useMemo(() => {
+  const employeeObservations = useMemo(() => {
     if (!observationMap || observationMap.size === 0) return undefined;
-    const counts = new Map<string, ObservationCounts>();
+    const grouped = new Map<string, KpiObservation[]>();
     observationMap.forEach((observations) => {
       observations.forEach(obs => {
         const empId = obs.kpi?.employee_id;
         if (!empId) return;
-        const existing = counts.get(empId) || { positive: 0, concern: 0, neutral: 0 };
-        if (obs.observation_type === 'positive') existing.positive++;
-        else if (obs.observation_type === 'concern') existing.concern++;
-        else existing.neutral++;
-        counts.set(empId, existing);
+        const existing = grouped.get(empId) || [];
+        existing.push(obs);
+        grouped.set(empId, existing);
       });
     });
-    return counts.size > 0 ? counts : undefined;
+    return grouped.size > 0 ? grouped : undefined;
   }, [observationMap]);
   const [naRemarks, setNaRemarks] = useState('');
 
@@ -442,13 +439,8 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               targetValue={data.targetValue}
               uom={data.uom}
               criteria={data.criteria ?? undefined}
-              observationCounts={employeeObservationCounts}
+              employeeObservations={employeeObservations}
             />
-          )}
-
-          {/* Employee Observations panel — only for employee-scoped KPIs */}
-          {data.scope === 'employee' && employeeKpiIds && employeeKpiIds.length > 0 && (
-            <OrgKpiObservationsSummary kpiIds={employeeKpiIds} />
           )}
 
           {/* Lock banner */}

@@ -12,14 +12,16 @@ import { isValueOutOfRange, RatingThresholds, calculateRating } from '@/lib/rati
 import { RatingBadge } from '@/components/ui/RatingBadge';
 import { QualitativeSelect } from '@/components/review/QualitativeSelect';
 import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
-import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown } from 'lucide-react';
+import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown, MessageSquare } from 'lucide-react';
+import { format } from 'date-fns';
+import type { KpiObservation } from '@/hooks/useKpiObservations';
 
 export interface ScopedRow {
-  scopeId: string; // departmentId or employeeId
+  scopeId: string;
   scopeName: string;
-  scopeSubText?: string; // e.g. comma-separated employee names under a department
-  departmentName?: string; // for grouping/sorting employee-scope rows
-  designation?: string;    // for display in employee column
+  scopeSubText?: string;
+  departmentName?: string;
+  designation?: string;
   achievedValue: number | null;
   remarks: string;
   evidenceUrl: string | null;
@@ -39,17 +41,18 @@ export interface ObservationCounts {
 interface OrgKpiScopedEntryTableProps {
   rows: ScopedRow[];
   onValueChange: (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa', value: string | null) => void;
-  scopeLabel: string; // "Department" or "Employee"
-  // For out-of-range warnings and rating calculation
+  scopeLabel: string;
   ratingThresholds?: RatingThresholds;
   targetValue?: number | null;
   uom?: string | null;
   criteria?: string;
-  // Observation counts per employee
+  /** Full observations grouped by employee ID */
+  employeeObservations?: Map<string, KpiObservation[]>;
+  /** @deprecated Use employeeObservations instead */
   observationCounts?: Map<string, ObservationCounts>;
 }
 
-export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, observationCounts }: OrgKpiScopedEntryTableProps) {
+export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts }: OrgKpiScopedEntryTableProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [bulkFillValue, setBulkFillValue] = useState('');
 
@@ -58,21 +61,17 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
   const enteredCount = rows.filter(r => r.achievedValue !== null || r.isNa).length;
   const allEntered = rows.length > 0 && enteredCount === rows.length;
 
-  // Sort rows
   const isEmployeeScope = scopeLabel === 'Employee';
   const sortedRows = [...rows].sort((a, b) => {
     if (isEmployeeScope) {
-      // Sort by departmentName A→Z, then by scopeName A→Z
       const deptA = a.departmentName ?? '';
       const deptB = b.departmentName ?? '';
       if (deptA !== deptB) return deptA.localeCompare(deptB);
       return a.scopeName.localeCompare(b.scopeName);
     }
-    // Department scope: sort by name A→Z
     return a.scopeName.localeCompare(b.scopeName);
   });
 
-  // Build grouped structure for employee scope
   const groupedRows: Array<{ dept: string | null; rows: ScopedRow[] }> = [];
   if (isEmployeeScope) {
     let lastDept: string | null = null;
@@ -112,7 +111,6 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
           </Button>
         </CollapsibleTrigger>
 
-        {/* Bulk fill — inline next to the trigger (hidden for qualitative KPIs) */}
         {isOpen && emptyCount > 0 && !allQualitative && (
           <div className="flex items-center gap-1 flex-shrink-0">
             <Input
@@ -152,40 +150,20 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
             </TableHeader>
             <TableBody>
               {isEmployeeScope ? (
-                // Grouped by department
                 groupedRows.map(group => (
-                  <>
-                    {/* Department group header */}
-                    <TableRow key={`group-${group.dept ?? 'none'}`} className="bg-muted/50 hover:bg-muted/50">
-                      <TableCell colSpan={7} className="py-1.5 px-3">
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span className="text-xs font-semibold text-muted-foreground">
-                            {group.dept ?? 'No Department'}
-                          </span>
-                          <Badge variant="outline" className="text-xs h-4 px-1.5 font-normal">
-                            {group.rows.length} {group.rows.length === 1 ? 'employee' : 'employees'}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                    {/* Employee rows within group */}
-                    {group.rows.map(row => (
-                      <EmployeeRow
-                        key={row.scopeId}
-                        row={row}
-                        onValueChange={onValueChange}
-                        ratingThresholds={ratingThresholds}
-                        targetValue={targetValue}
-                        uom={uom}
-                        criteria={criteria}
-                        observationCounts={observationCounts?.get(row.scopeId)}
-                      />
-                    ))}
-                  </>
+                  <EmployeeGroup
+                    key={`group-${group.dept ?? 'none'}`}
+                    group={group}
+                    onValueChange={onValueChange}
+                    ratingThresholds={ratingThresholds}
+                    targetValue={targetValue}
+                    uom={uom}
+                    criteria={criteria}
+                    employeeObservations={employeeObservations}
+                    observationCounts={observationCounts}
+                  />
                 ))
               ) : (
-                // Department scope — flat sorted list
                 sortedRows.map(row => (
                   <DepartmentRow key={row.scopeId} row={row} onValueChange={onValueChange} ratingThresholds={ratingThresholds} targetValue={targetValue} uom={uom} criteria={criteria} />
                 ))
@@ -198,7 +176,65 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
   );
 }
 
-// ---- Employee row (with dept/designation badges + out-of-range warning) ----
+// ---- Employee group (department header + employee rows) ----
+interface EmployeeGroupProps {
+  group: { dept: string | null; rows: ScopedRow[] };
+  onValueChange: (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa', value: string | null) => void;
+  ratingThresholds?: RatingThresholds;
+  targetValue?: number | null;
+  uom?: string | null;
+  criteria?: string;
+  employeeObservations?: Map<string, KpiObservation[]>;
+  observationCounts?: Map<string, ObservationCounts>;
+}
+
+function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts }: EmployeeGroupProps) {
+  return (
+    <>
+      <TableRow key={`group-${group.dept ?? 'none'}`} className="bg-muted/50 hover:bg-muted/50">
+        <TableCell colSpan={7} className="py-1.5 px-3">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs font-semibold text-muted-foreground">
+              {group.dept ?? 'No Department'}
+            </span>
+            <Badge variant="outline" className="text-xs h-4 px-1.5 font-normal">
+              {group.rows.length} {group.rows.length === 1 ? 'employee' : 'employees'}
+            </Badge>
+          </div>
+        </TableCell>
+      </TableRow>
+      {group.rows.map(row => (
+        <EmployeeRow
+          key={row.scopeId}
+          row={row}
+          onValueChange={onValueChange}
+          ratingThresholds={ratingThresholds}
+          targetValue={targetValue}
+          uom={uom}
+          criteria={criteria}
+          observations={employeeObservations?.get(row.scopeId)}
+          observationCounts={observationCounts?.get(row.scopeId)}
+        />
+      ))}
+    </>
+  );
+}
+
+// ---- Observation type/status configs (reused from OrgKpiObservationsSummary) ----
+const obsTypeConfig: Record<string, { label: string; className: string }> = {
+  positive: { label: 'Positive', className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
+  concern: { label: 'Concern', className: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
+  neutral: { label: 'Neutral', className: 'bg-muted text-muted-foreground' },
+};
+
+const obsStatusConfig: Record<string, { label: string; variant: 'outline' | 'secondary' | 'default' }> = {
+  open: { label: 'Open', variant: 'outline' },
+  acknowledged: { label: 'Acknowledged', variant: 'secondary' },
+  resolved: { label: 'Resolved', variant: 'default' },
+};
+
+// ---- Employee row (with expandable observation sub-row) ----
 interface EmployeeRowProps {
   row: ScopedRow;
   onValueChange: (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa', value: string | null) => void;
@@ -206,11 +242,13 @@ interface EmployeeRowProps {
   targetValue?: number | null;
   uom?: string | null;
   criteria?: string;
+  observations?: KpiObservation[];
   observationCounts?: ObservationCounts;
 }
 
-function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observationCounts }: EmployeeRowProps) {
-  // Prefer per-employee target over card-level fallback
+function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observations, observationCounts: legacyCounts }: EmployeeRowProps) {
+  const [expanded, setExpanded] = useState(false);
+
   const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
   const effectiveUom = row.uom != null ? row.uom : uom;
 
@@ -221,164 +259,246 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
 
   const rowIsNa = row.isNa ?? false;
 
+  // Derive counts from full observations if available, else fall back to legacy counts
+  const counts = observations
+    ? {
+        positive: observations.filter(o => o.observation_type === 'positive').length,
+        concern: observations.filter(o => o.observation_type === 'concern').length,
+        neutral: observations.filter(o => o.observation_type === 'neutral').length,
+      }
+    : legacyCounts;
+
+  const hasObservations = observations && observations.length > 0;
+  const totalObs = counts ? counts.positive + counts.concern + counts.neutral : 0;
+
   return (
-    <TableRow className={rowIsNa ? 'opacity-60' : ''}>
-      {/* Name + dept/designation */}
-      <TableCell className="text-sm py-1.5 min-w-[200px]">
-        <div className="flex flex-col gap-0.5">
-          <span className="font-medium text-sm leading-tight">{row.scopeName}</span>
-          <div className="flex flex-wrap gap-1 mt-0.5">
-            {row.departmentName && (
-              <Badge variant="secondary" className="text-[10px] h-4 px-1.5 font-normal">
-                {row.departmentName}
-              </Badge>
-            )}
-            {row.designation && (
-              <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal">
-                {row.designation}
-              </Badge>
-            )}
-            {observationCounts && observationCounts.positive > 0 && (
-              <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400 gap-0.5">
-                <TrendingUp className="w-2.5 h-2.5" />
-                Positive: {observationCounts.positive}
-              </Badge>
-            )}
-            {observationCounts && observationCounts.concern > 0 && (
-              <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400 gap-0.5">
-                <TrendingDown className="w-2.5 h-2.5" />
-                Concern: {observationCounts.concern}
-              </Badge>
-            )}
-            {observationCounts && observationCounts.neutral > 0 && (
-              <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal gap-0.5">
-                Neutral: {observationCounts.neutral}
-              </Badge>
-            )}
+    <>
+      <TableRow className={rowIsNa ? 'opacity-60' : ''}>
+        {/* Name + dept/designation + observation badges */}
+        <TableCell className="text-sm py-1.5 min-w-[200px]">
+          <div className="flex flex-col gap-0.5">
+            <span className="font-medium text-sm leading-tight">{row.scopeName}</span>
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {row.departmentName && (
+                <Badge variant="secondary" className="text-[10px] h-4 px-1.5 font-normal">
+                  {row.departmentName}
+                </Badge>
+              )}
+              {row.designation && (
+                <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal">
+                  {row.designation}
+                </Badge>
+              )}
+              {/* Observation badges — clickable when full observations available */}
+              {counts && counts.positive > 0 && (
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] h-4 px-1.5 font-normal border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400 gap-0.5 ${hasObservations ? 'cursor-pointer hover:bg-green-100 dark:hover:bg-green-950/50 transition-colors' : ''}`}
+                  onClick={hasObservations ? () => setExpanded(!expanded) : undefined}
+                >
+                  <TrendingUp className="w-2.5 h-2.5" />
+                  Positive: {counts.positive}
+                </Badge>
+              )}
+              {counts && counts.concern > 0 && (
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] h-4 px-1.5 font-normal border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400 gap-0.5 ${hasObservations ? 'cursor-pointer hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors' : ''}`}
+                  onClick={hasObservations ? () => setExpanded(!expanded) : undefined}
+                >
+                  <TrendingDown className="w-2.5 h-2.5" />
+                  Concern: {counts.concern}
+                </Badge>
+              )}
+              {counts && counts.neutral > 0 && (
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] h-4 px-1.5 font-normal gap-0.5 ${hasObservations ? 'cursor-pointer hover:bg-muted transition-colors' : ''}`}
+                  onClick={hasObservations ? () => setExpanded(!expanded) : undefined}
+                >
+                  Neutral: {counts.neutral}
+                </Badge>
+              )}
+              {/* Show a generic expand toggle if observations exist but all counts are 0 (shouldn't happen, but safe) */}
+              {hasObservations && totalObs > 0 && (
+                <button
+                  onClick={() => setExpanded(!expanded)}
+                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-0.5"
+                >
+                  {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                  {expanded ? 'Hide' : 'View'} details
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      </TableCell>
+        </TableCell>
 
-      {/* Target (read-only) — per-employee target preferred */}
-      <TableCell className="py-1.5 w-24 text-center">
-        <span className={`text-xs ${rowIsNa ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}>
-          {effectiveTarget != null ? effectiveTarget : '—'}
-          {effectiveUom && effectiveTarget != null && <span className="ml-0.5 text-[10px]">{effectiveUom}</span>}
-        </span>
-      </TableCell>
+        {/* Target */}
+        <TableCell className="py-1.5 w-24 text-center">
+          <span className={`text-xs ${rowIsNa ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}>
+            {effectiveTarget != null ? effectiveTarget : '—'}
+            {effectiveUom && effectiveTarget != null && <span className="ml-0.5 text-[10px]">{effectiveUom}</span>}
+          </span>
+        </TableCell>
 
-      {/* N/A toggle */}
-      <TableCell className="py-1.5 w-16 text-center">
-        <Switch
-          checked={rowIsNa}
-          onCheckedChange={(checked) => onValueChange(row.scopeId, 'isNa', checked ? 'true' : 'false')}
-          className="scale-75"
-        />
-      </TableCell>
-
-      {/* Achieved value */}
-      <TableCell className="py-1.5 w-28">
-        {rowIsNa ? (
-          <div className="flex items-center justify-center gap-1 text-muted-foreground">
-            <Ban className="h-3.5 w-3.5" />
-            <span className="text-xs font-medium">N/A</span>
-          </div>
-        ) : row.uomType === 'binary' || (row.uomType === 'tiered' && row.qualitativeOptions?.length) ? (
-          <QualitativeSelect
-            uomType={row.uomType}
-            qualitativeOptions={(row.qualitativeOptions as QualitativeOption[]) || null}
-            value={(() => {
-              const opts = row.qualitativeOptions?.length
-                ? row.qualitativeOptions
-                : (row.uomType === 'binary' ? BINARY_OPTIONS : []);
-              if (row.achievedValue === null) return null;
-              const match = opts.find(o => Number(o.rating) === row.achievedValue);
-              return match?.label || null;
-            })()}
-            onChange={(label, rating) => {
-              onValueChange(row.scopeId, 'achievedValue', rating.toString());
-            }}
-            className="h-8 w-full text-sm"
+        {/* N/A toggle */}
+        <TableCell className="py-1.5 w-16 text-center">
+          <Switch
+            checked={rowIsNa}
+            onCheckedChange={(checked) => onValueChange(row.scopeId, 'isNa', checked ? 'true' : 'false')}
+            className="scale-75"
           />
-        ) : (
-          <div className="flex items-center gap-1">
-            <Input
-              type="number"
-              value={row.achievedValue ?? ''}
-              onChange={(e) => onValueChange(row.scopeId, 'achievedValue', e.target.value)}
-              placeholder="—"
-              className="h-8 text-center text-sm flex-1"
+        </TableCell>
+
+        {/* Achieved value */}
+        <TableCell className="py-1.5 w-28">
+          {rowIsNa ? (
+            <div className="flex items-center justify-center gap-1 text-muted-foreground">
+              <Ban className="h-3.5 w-3.5" />
+              <span className="text-xs font-medium">N/A</span>
+            </div>
+          ) : row.uomType === 'binary' || (row.uomType === 'tiered' && row.qualitativeOptions?.length) ? (
+            <QualitativeSelect
+              uomType={row.uomType}
+              qualitativeOptions={(row.qualitativeOptions as QualitativeOption[]) || null}
+              value={(() => {
+                const opts = row.qualitativeOptions?.length
+                  ? row.qualitativeOptions
+                  : (row.uomType === 'binary' ? BINARY_OPTIONS : []);
+                if (row.achievedValue === null) return null;
+                const match = opts.find(o => Number(o.rating) === row.achievedValue);
+                return match?.label || null;
+              })()}
+              onChange={(label, rating) => {
+                onValueChange(row.scopeId, 'achievedValue', rating.toString());
+              }}
+              className="h-8 w-full text-sm"
             />
-            {outOfRange?.outOfRange && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[220px] text-xs">
-                    {outOfRange.message}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-          </div>
-        )}
-      </TableCell>
+          ) : (
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                value={row.achievedValue ?? ''}
+                onChange={(e) => onValueChange(row.scopeId, 'achievedValue', e.target.value)}
+                placeholder="—"
+                className="h-8 text-center text-sm flex-1"
+              />
+              {outOfRange?.outOfRange && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[220px] text-xs">
+                      {outOfRange.message}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+          )}
+        </TableCell>
 
-      {/* Rating (read-only) */}
-      <TableCell className="py-1.5 w-24 text-center">
-        {rowIsNa || numVal === null ? (
-          <span className="text-xs text-muted-foreground">—</span>
-        ) : (row.uomType === 'binary' || (row.uomType === 'tiered' && row.qualitativeOptions?.length)) ? (
-          <RatingBadge score={numVal} short className="text-[10px] h-5 px-1.5" />
-        ) : (
-          <RatingBadge
-            score={calculateRating(
-              numVal, effectiveTarget, ratingThresholds || { r5: null, r4: null, r3: null, r2: null, r1: null },
-              criteria, 0, 'numeric', null, effectiveUom
-            ).rating}
-            short
-            className="text-[10px] h-5 px-1.5"
-          />
-        )}
-      </TableCell>
+        {/* Rating */}
+        <TableCell className="py-1.5 w-24 text-center">
+          {rowIsNa || numVal === null ? (
+            <span className="text-xs text-muted-foreground">—</span>
+          ) : (row.uomType === 'binary' || (row.uomType === 'tiered' && row.qualitativeOptions?.length)) ? (
+            <RatingBadge score={numVal} short className="text-[10px] h-5 px-1.5" />
+          ) : (
+            <RatingBadge
+              score={calculateRating(
+                numVal, effectiveTarget, ratingThresholds || { r5: null, r4: null, r3: null, r2: null, r1: null },
+                criteria, 0, 'numeric', null, effectiveUom
+              ).rating}
+              short
+              className="text-[10px] h-5 px-1.5"
+            />
+          )}
+        </TableCell>
 
-      {/* Remark textarea */}
-      <TableCell className="py-1.5 min-w-[220px]">
-        {rowIsNa ? (
-          <Textarea
-            value={row.remarks}
-            onChange={(e) => onValueChange(row.scopeId, 'remarks', e.target.value)}
-            placeholder="Reason for N/A (required)"
-            className="text-sm resize-none min-h-0 border-destructive/50"
-            rows={2}
-            required
-          />
-        ) : (
-          <Textarea
-            value={row.remarks}
-            onChange={(e) => onValueChange(row.scopeId, 'remarks', e.target.value)}
-            placeholder="Remark"
-            className="text-sm resize-none min-h-0"
-            rows={2}
-          />
-        )}
-      </TableCell>
+        {/* Remark */}
+        <TableCell className="py-1.5 min-w-[220px]">
+          {rowIsNa ? (
+            <Textarea
+              value={row.remarks}
+              onChange={(e) => onValueChange(row.scopeId, 'remarks', e.target.value)}
+              placeholder="Reason for N/A (required)"
+              className="text-sm resize-none min-h-0 border-destructive/50"
+              rows={2}
+              required
+            />
+          ) : (
+            <Textarea
+              value={row.remarks}
+              onChange={(e) => onValueChange(row.scopeId, 'remarks', e.target.value)}
+              placeholder="Remark"
+              className="text-sm resize-none min-h-0"
+              rows={2}
+            />
+          )}
+        </TableCell>
 
-      {/* File */}
-      <TableCell className="py-1.5 w-24">
-        {!rowIsNa && (
-          <OrgKpiFileUpload
-            existingUrl={row.evidenceUrl}
-            onUploadComplete={(url) => onValueChange(row.scopeId, 'evidenceUrl', url)}
-          />
-        )}
-      </TableCell>
-    </TableRow>
+        {/* File */}
+        <TableCell className="py-1.5 w-24">
+          {!rowIsNa && (
+            <OrgKpiFileUpload
+              existingUrl={row.evidenceUrl}
+              onUploadComplete={(url) => onValueChange(row.scopeId, 'evidenceUrl', url)}
+            />
+          )}
+        </TableCell>
+      </TableRow>
+
+      {/* Expandable observation detail sub-row */}
+      {expanded && hasObservations && (
+        <TableRow className="bg-muted/20 hover:bg-muted/20">
+          <TableCell colSpan={7} className="py-2 px-3">
+            <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
+              {observations!.map(obs => {
+                const type = obsTypeConfig[obs.observation_type] || obsTypeConfig.neutral;
+                const status = obsStatusConfig[obs.status] || obsStatusConfig.open;
+                return (
+                  <div key={obs.id} className="flex items-start gap-2 text-xs bg-background/60 border rounded-md p-2">
+                    <MessageSquare className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                    <div className="flex-1 min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${type.className}`}>
+                          {type.label}
+                        </span>
+                        <Badge variant={status.variant} className="text-[10px] h-4 px-1.5">
+                          {status.label}
+                        </Badge>
+                        {(obs as any).ticket_number && (
+                          <span className="text-muted-foreground">{(obs as any).ticket_number}</span>
+                        )}
+                        {obs.created_by_profile && (
+                          <span className="text-muted-foreground">
+                            · Raised by: {obs.created_by_profile.full_name || obs.created_by_profile.email}
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-medium text-foreground leading-tight">{obs.title}</p>
+                      {obs.description && (
+                        <p className="text-muted-foreground line-clamp-2">{obs.description}</p>
+                      )}
+                      <p className="text-muted-foreground">
+                        {format(new Date(obs.created_at!), 'dd MMM yyyy')}
+                        {obs.observer_role && ` · ${obs.observer_role}`}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
   );
 }
 
-// ---- Department row (simpler — no dept/designation, but wider remark) ----
+// ---- Department row (unchanged) ----
 interface DepartmentRowProps {
   row: ScopedRow;
   onValueChange: (scopeId: string, field: 'achievedValue' | 'remarks' | 'evidenceUrl' | 'isNa', value: string | null) => void;
@@ -403,7 +523,6 @@ function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom,
           )}
         </div>
       </TableCell>
-      {/* Target (read-only) */}
       <TableCell className="py-1.5 w-24 text-center">
         <span className={`text-xs ${rowIsNa ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}>
           {row.targetValue != null ? row.targetValue : '—'}
@@ -450,7 +569,6 @@ function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom,
           />
         )}
       </TableCell>
-      {/* Rating (read-only) */}
       <TableCell className="py-1.5 w-24 text-center">
         {rowIsNa || row.achievedValue === null ? (
           <span className="text-xs text-muted-foreground">—</span>
