@@ -52,6 +52,9 @@ export function TemplateChangeHistory({ templateId, templateTitle, isOpen, onClo
                     {entry.scope === 'selected' && (
                       <Badge variant="secondary" className="ml-2 text-xs">Selected</Badge>
                     )}
+                    {entry.changed_by_name && (
+                      <span className="text-xs text-muted-foreground ml-2">by {entry.changed_by_name}</span>
+                    )}
                   </div>
                   <div className="space-y-1">
                     {Object.entries(entry.fields_changed).map(([field, change]) => (

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,6 +23,8 @@ import { AlertTriangle, ArrowRight, Loader2, Users } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const currentYear = new Date().getFullYear();
+const YEAR_OPTIONS = [currentYear - 1, currentYear, currentYear + 1];
 
 interface TemplateFormDialogProps {
   isOpen: boolean;
@@ -44,6 +47,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(new Set());
   const [previewData, setPreviewData] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   const { data: linkedEmployees } = useLinkedEmployees(template?.id || null);
 
@@ -156,7 +160,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
     if (!template) return {};
     const changes: Record<string, { old: any; new: any }> = {};
 
-    const compareMap: Record<string, { formKey: keyof typeof formData; templateKey: keyof KpiTemplate; isNumeric?: boolean }> = {
+    const compareMap: Record<string, { formKey: keyof typeof formData; templateKey: keyof KpiTemplate; isNumeric?: boolean; isJson?: boolean; isBoolean?: boolean }> = {
       kra_name: { formKey: 'kra_name', templateKey: 'kra_name' },
       kpi_name: { formKey: 'kpi_name', templateKey: 'kpi_name' },
       target_value: { formKey: 'target_value', templateKey: 'target_value', isNumeric: true },
@@ -173,6 +177,8 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
       r0: { formKey: 'r0', templateKey: 'r0' },
       uom_type: { formKey: 'uom_type', templateKey: 'uom_type' as any },
       threshold_mode: { formKey: 'threshold_mode', templateKey: 'threshold_mode' as any },
+      qualitative_options: { formKey: 'qualitative_options', templateKey: 'qualitative_options' as any, isJson: true },
+      require_resubmit_reason: { formKey: 'require_resubmit_reason', templateKey: 'require_resubmit_reason' as any, isBoolean: true },
     };
 
     for (const [field, config] of Object.entries(compareMap)) {
@@ -180,6 +186,20 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
       let newVal: any = formData[config.formKey];
       if (config.isNumeric) {
         newVal = newVal ? parseFloat(newVal) : null;
+      }
+      if (config.isJson) {
+        const oldJson = JSON.stringify(oldVal ?? null);
+        const newJson = JSON.stringify(newVal ?? null);
+        if (oldJson !== newJson) {
+          changes[field] = { old: oldVal ?? null, new: newVal ?? null };
+        }
+        continue;
+      }
+      if (config.isBoolean) {
+        if ((oldVal ?? null) !== (newVal ?? null)) {
+          changes[field] = { old: oldVal ?? null, new: newVal ?? null };
+        }
+        continue;
       }
       const normalizedOld = oldVal ?? null;
       const normalizedNew = newVal === '' ? null : newVal;
@@ -220,6 +240,16 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
     });
     setPreviewData(result);
     setShowPreview(true);
+  };
+
+  const handleSubmitClick = () => {
+    if (!formData.title || !formData.kra_name || !formData.kpi_name) return;
+    // Show confirmation if propagating
+    if (template && shouldPropagate && hasPropagableChanges) {
+      setShowConfirmDialog(true);
+      return;
+    }
+    handleSubmit();
   };
 
   const handleSubmit = async () => {
@@ -292,6 +322,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
   };
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl max-h-[90vh]">
         <DialogHeader>
@@ -743,7 +774,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {[2025, 2026, 2027].map(y => (
+                              {YEAR_OPTIONS.map(y => (
                                 <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                               ))}
                             </SelectContent>
@@ -774,6 +805,19 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                       {propagationScope === 'selected' && linkedEmployees && (
                         <ScrollArea className="max-h-[150px] border rounded-md p-2">
                           <div className="space-y-1">
+                            <div className="flex items-center gap-2 py-1 border-b mb-1 pb-2">
+                              <Checkbox
+                                checked={linkedEmployees.length > 0 && selectedEmployeeIds.size === linkedEmployees.length}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedEmployeeIds(new Set(linkedEmployees.map(e => e.id)));
+                                  } else {
+                                    setSelectedEmployeeIds(new Set());
+                                  }
+                                }}
+                              />
+                              <span className="text-sm font-medium">Select All ({linkedEmployees.length})</span>
+                            </div>
                             {linkedEmployees.map(emp => (
                               <div key={emp.id} className="flex items-center gap-2 py-1">
                                 <Checkbox
@@ -841,7 +885,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
             Cancel
           </Button>
           <Button
-            onClick={handleSubmit}
+            onClick={handleSubmitClick}
             disabled={isSubmitting || !formData.title || !formData.kra_name || !formData.kpi_name}
           >
             {isSubmitting ? (
@@ -856,5 +900,36 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Confirmation dialog for propagation */}
+    <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Confirm Propagation</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2">
+              <p>This will update:</p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li><strong>{Object.keys(propagationChangedFields).length}</strong> field{Object.keys(propagationChangedFields).length !== 1 ? 's' : ''} ({Object.keys(propagationChangedFields).map(f => f.replace(/_/g, ' ')).join(', ')})</li>
+                <li>
+                  {propagationScope === 'all' 
+                    ? `Across all linked employees (${linkedCount})`
+                    : `Across ${selectedEmployeeIds.size} selected employee${selectedEmployeeIds.size !== 1 ? 's' : ''}`}
+                </li>
+                <li>Effective from <strong>{effectiveMonth} {effectiveYear}</strong></li>
+              </ul>
+              <p className="text-sm text-destructive font-medium mt-2">This action cannot be undone.</p>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={() => { setShowConfirmDialog(false); handleSubmit(); }}>
+            Propagate Now
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
