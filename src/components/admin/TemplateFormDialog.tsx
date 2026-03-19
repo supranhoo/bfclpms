@@ -322,6 +322,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
   };
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl max-h-[90vh]">
         <DialogHeader>
