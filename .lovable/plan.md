@@ -1,32 +1,54 @@
 
 
-## Fix: KRA Library Edit Template Dialog — Layout & Propagation Visibility
+## Fix: Template-to-KPI Sync Cycle — Permanent Data Loss Loop
 
-### Issue 1: Cramped Dialog Layout
+### Problem Found
 
-The dialog uses `max-w-2xl` (672px) and `max-h-[60vh]` for the scroll area. With all the fields (identity, UOM type cards, metrics, binary polarity, source, advanced settings, propagation section), everything is stacked tightly in a narrow column. The screenshot confirms fields are visually crushed together.
+The template `fdeba115` still has `r5=null`, `r0=null`, `target_value=null` even after the back-fill. Every time the admin opens and saves this template, the form loads nulls as empty strings, then saves them back as nulls — overwriting any back-fill. The change detection never flags these fields because it compares `null` to `null`. The "TEST" prefix on `kpi_name` also never reached Dummy's live KPIs because propagation was OFF.
 
-### Issue 2: KPI Changes Not Reflecting on Dashboard
+This is a **permanent desync loop** that affects all binary/tiered templates whose fields were originally nullified.
 
-The template save only writes to the `kpi_templates` table. Linked KPIs in the `kpis` table are **separate records** that only update when the admin explicitly toggles the "Propagate Changes to Linked KPIs" switch (which defaults to OFF and is buried at the bottom of the dialog). The user likely saved the template without enabling propagation, so the change never reached Dummy's actual KPI.
+### Fix Plan
 
-### Plan
+| # | Change | File |
+|---|--------|------|
+| 1 | **Back-fill template from linked KPIs (again, properly)** | Database one-time update |
+| 2 | **Prevent null overwrite on save** | `TemplateFormDialog.tsx` |
+| 3 | **Auto-detect drift and warn** | `TemplateFormDialog.tsx` |
 
-| # | Change | Detail |
-|---|--------|--------|
-| 1 | **Widen dialog** | Change `max-w-2xl` → `max-w-4xl` and `max-h-[60vh]` → `max-h-[70vh]`. This gives ~896px width — room for 2-column layouts without cramping. |
-| 2 | **2-column grid for identity fields** | KRA Name + KPI Name already use grid-cols-2. Extend this pattern: Category + Criteria in one row, Weightage + Frequency in one row. Add proper spacing (`gap-6` between sections instead of `gap-4`). |
-| 3 | **Better section separation** | Add subtle section headers ("Measurement", "Scoring", "Advanced") with spacing. Replace bare `<Separator />` with labeled dividers so the form reads as organized groups, not a wall of inputs. |
-| 4 | **Auto-enable propagation prompt** | When the user is editing a template with linked KPIs and has made structural changes, show an inline amber banner above the footer: *"You changed {N} fields. These changes only apply to the template — toggle Propagation to update {X} linked employees."* This makes it impossible to miss. |
-| 5 | **Move propagation toggle to footer area** | Instead of burying the propagation switch deep inside the scrollable area, place a prominent propagation indicator near the Save button. When changes are detected and propagation is OFF, the save button label shows "Update Template Only" (making it clear KPIs won't update). When ON, it shows "Save & Propagate". |
+### Detail
+
+**Fix 1 — Database back-fill**
+Update template `fdeba115` (and any other templates with the same issue) to pull `r5`, `r0`, `target_value`, `kpi_name` from their linked KPIs. This time we also revert the test `kpi_name` back to the correct value.
+
+```sql
+UPDATE kpi_templates SET
+  r5 = '1', r0 = 'zero policy developed', target_value = 1.00
+WHERE id = 'fdeba115-bb07-4fa1-a132-36878be343b4'
+  AND r5 IS NULL;
+```
+
+Also revert the "TEST" prefix from the template's `kpi_name` to match the live KPIs.
+
+**Fix 2 — Prevent null overwrite loop** (in `TemplateFormDialog.tsx`)
+
+When loading a template into the form, if a field is null on the template but the template has linked KPIs, fetch one linked KPI and use its values as fallback for the form fields. This way:
+- The form shows the actual values employees see
+- Saving preserves them instead of writing nulls
+- Change detection works correctly
+
+Implementation: In the `useEffect` that initializes formData from template (line 84-121), add a secondary data source from the first linked KPI when template fields are null.
+
+**Fix 3 — Drift warning in dialog footer**
+
+When the form loads and detects that any structural field on the template is null while linked KPIs have non-null values, show an info banner: *"Some template fields are out of sync with live KPIs. Saving will update the template to match."* This uses the existing `useLinkedEmployees` hook data.
 
 ### Files Changed
+- `src/components/admin/TemplateFormDialog.tsx` — form initialization fallback + drift banner
+- Database — one-time data fix for template `fdeba115`
 
-- `src/components/admin/TemplateFormDialog.tsx` — all changes are in this single file
-
-### What This Does NOT Change
-- No database changes
-- No edge function changes
-- No changes to propagation logic itself (that already works post-CORS fix)
-- `OrgKpiObservationsSummary`, other admin components — untouched
+### What This Fixes
+- Dummy's KPI will match the template after the next propagation
+- Future template saves will never re-null fields that employees actually have
+- The "TEST" prefix will be cleaned from the template name
 
