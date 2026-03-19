@@ -1,38 +1,34 @@
 
 
-## Remaining Improvements for KRA Library & Template Propagation
+## KRA Library & Template Propagation — Issues & Fixes
 
-After reviewing the full codebase, here are the gaps that still need attention:
+After reviewing all related files, the system is largely functional. However, I found the following bugs and improvements:
 
-### 1. No Duplicate Template Action
-There is no way to clone/duplicate an existing template. Admins must recreate from scratch.
+### Bug 1: `useMemo` Used for Side Effects (KRALibrary.tsx, line 93)
 
-**Change**: Add a "Duplicate" option in the dropdown menu on `KRALibrary.tsx` that creates a copy with " (Copy)" appended to the title.
+```js
+useMemo(() => { setCurrentPage(1); }, [searchQuery, categoryFilter, sortField, sortDir]);
+```
 
-### 2. No Category Filter on the Library Page
-The table only has a text search. Admins managing dozens of templates cannot filter by category.
+`useMemo` must not trigger side effects like `setState`. This is a React anti-pattern that may cause inconsistent renders. Must be changed to `useEffect`.
 
-**Change**: Add a category dropdown filter next to the search input on `KRALibrary.tsx`.
+### Bug 2: Revert Does Not Update the Template Record
 
-### 3. Delete Doesn't Warn About Linked KPIs
-The delete confirmation says "This action cannot be undone" but doesn't mention if the template has linked KPIs that will become orphaned (lose their `source_template_id` link).
+When "Revert" is clicked in `TemplateChangeHistory`, it sends reversed `fields_changed` to the edge function, which updates linked KPIs. However, **the template record itself is never updated back** to the old values. This means the template and its linked KPIs become out of sync — the template shows the new value, but KPIs have the old value.
 
-**Change**: Show linked KPI count in the delete confirmation dialog. If count > 0, display a warning: "This template is linked to X KPIs. They will no longer receive propagated updates."
+**Fix**: After the revert propagation succeeds, also call `useUpdateKpiTemplate` to patch the template with the reverted values.
 
-### 4. No Rollback/Undo for Propagation
-Once propagation executes, there is no way to revert. The audit trail logs old values but there's no UI to trigger a rollback.
+### Bug 3: Duplicate Passes `created_by` Field
 
-**Change**: Add a "Revert" button on each entry in `TemplateChangeHistory.tsx` that creates a reverse propagation using the stored `old` values from `fields_changed`.
+In `KRALibrary.tsx` line 115, the destructure `const { id, created_at, updated_at, kra_categories, ...rest } = template` still includes `created_by` in `rest`. If `created_by` has a foreign key constraint referencing the original creator, this may fail for other admins. Should also exclude `created_by`.
 
-### 5. Table Missing Weightage & Frequency Columns
-The library table shows Target but not Weightage or Frequency — key fields admins need at a glance.
+### Improvement 1: Tiered Frequency Uses Free-Text Input
 
-**Change**: Add Weightage and Frequency columns to the table in `KRALibrary.tsx`.
+For `uom_type === 'tiered'` (line 652-655), frequency is a plain `<Input>` instead of the `<Select>` dropdown used for numeric and binary types. This inconsistency means tiered templates can have arbitrary frequency strings.
 
-### 6. No Pagination or Sorting
-The template table has no pagination or column sorting, which will become a problem as the library grows.
+### Improvement 2: Missing Error Handling on Duplicate
 
-**Change**: Add client-side sorting (click column headers) and pagination (e.g., 20 per page) to `KRALibrary.tsx`.
+`handleDuplicate` (line 114-123) uses `mutateAsync` but doesn't catch errors. If the mutation fails, the unhandled promise rejection occurs silently. The `createTemplate` hook has `onError` toast, but `mutateAsync` throws — so the caller should handle it.
 
 ---
 
@@ -40,46 +36,9 @@ The template table has no pagination or column sorting, which will become a prob
 
 | # | File | Change |
 |---|------|--------|
-| 1 | `KRALibrary.tsx` | Add "Duplicate" dropdown item that calls `useCreateKpiTemplate` with cloned data |
-| 2 | `KRALibrary.tsx` | Add category filter dropdown next to search bar |
-| 3 | `KRALibrary.tsx` | Show linked count in delete dialog with orphan warning |
-| 4 | `KRALibrary.tsx` | Add Weightage and Frequency columns to the table |
-| 5 | `KRALibrary.tsx` | Add column header sorting and simple pagination (20/page) |
-| 6 | `TemplateChangeHistory.tsx` | Add "Revert" button per entry that triggers reverse propagation |
-| 7 | `useKpiTemplates.ts` | Add `useRevertTemplatePropagation` mutation that sends reversed `fields_changed` to the edge function |
-
-### UI Additions
-
-**Category filter** (next to search):
-```text
-[Search templates...    ] [All Categories ▼]
-```
-
-**Delete warning with linked count**:
-```text
-┌────────────────────────────────────────┐
-│  Delete Template                       │
-│                                        │
-│  Are you sure you want to delete       │
-│  "Sales Target KRA"?                   │
-│                                        │
-│  ⚠ This template is linked to 24 KPIs │
-│  across 8 employees. They will no      │
-│  longer receive propagated updates.    │
-│                                        │
-│           [Cancel]  [Delete]           │
-└────────────────────────────────────────┘
-```
-
-**Table columns** (added):
-```text
-Title | Category | KRA/KPI | Target | Weightage | Frequency | Linked | Status | ⋮
-```
-
-**Revert button** in change history:
-```text
-March 2026                    05 Mar 2026, 14:30
-3 KPIs updated across 2 employees    by Admin User
-                                      [↩ Revert]
-```
+| 1 | `KRALibrary.tsx` line 93 | Change `useMemo` to `useEffect` for resetting page |
+| 2 | `KRALibrary.tsx` line 115 | Also exclude `created_by` from duplicate destructure |
+| 3 | `KRALibrary.tsx` line 114-123 | Wrap `handleDuplicate` in try/catch |
+| 4 | `TemplateChangeHistory.tsx` handleRevert | After propagation, also update the template record with reverted field values |
+| 5 | `TemplateFormDialog.tsx` line 652-655 | Replace free-text Input with Select dropdown for tiered frequency (matching numeric/binary) |
 
