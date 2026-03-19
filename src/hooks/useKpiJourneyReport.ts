@@ -229,6 +229,7 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
           totalDays,
           isCompliant,
           isOrgKpi: !!kpi.is_org_level,
+          isNa: submissionsMap.get(kpi.id)?.is_na === true,
         };
       });
 
