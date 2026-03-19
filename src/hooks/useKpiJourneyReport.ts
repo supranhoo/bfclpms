@@ -124,7 +124,7 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
             .eq('action', 'STATUS_TRANSITION')
             .order('created_at', { ascending: true }),
         ])
-      ).then(results => results.flatMap(r => r.data ?? []));
+      ).then(results => results.flatMap(r => (r.data ?? []) as any[]));
 
       const [profilesResult, allSubmissions, allLogs] = await Promise.all([
         profilesPromise, submissionsPromise, logsPromise,
