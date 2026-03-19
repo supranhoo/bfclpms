@@ -51,7 +51,7 @@ export default function PerformanceReport() {
     let count = 0;
     catKpis.forEach(kpi => {
       const sub = submissionMap.get(kpi.id);
-    const subScore = sub?.final_score ?? sub?.management_score ?? sub?.auditor_score ?? sub?.hr_pms_score ?? sub?.skip_level_score ?? sub?.manager_score ?? sub?.self_score ?? null;
+    const subScore = (kpi.status === 'approved' ? sub?.final_score : null) ?? sub?.management_score ?? sub?.auditor_score ?? sub?.hr_pms_score ?? sub?.skip_level_score ?? sub?.manager_score ?? sub?.self_score ?? null;
     if (subScore != null) {
         totalScore += subScore;
         count++;
