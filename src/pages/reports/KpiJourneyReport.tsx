@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
-import { useKpiJourneyReport, KpiJourneyRow } from '@/hooks/useKpiJourneyReport';
+import { useKpiJourneyReport, fetchKpiJourneyExportData, KpiJourneyFilters } from '@/hooks/useKpiJourneyReport';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -12,7 +12,9 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Download, Search, ChevronLeft, ChevronRight, FileSpreadsheet, Clock, CheckCircle2, AlertCircle, Timer, Loader2, MinusCircle } from 'lucide-react';
 import { format } from 'date-fns';
-import * as XLSX from 'xlsx';
+import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
 
 const FULL_MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -41,7 +43,6 @@ function formatDate(dateStr: string | null): string {
   }
 }
 
-
 function DurationBadge({ days, isApproved }: { days: number; isApproved: boolean }) {
   let color = 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
   if (days > 30) color = 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
@@ -67,97 +68,96 @@ export default function KpiJourneyReport() {
   const [selectedType, setSelectedType] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [isExporting, setIsExporting] = useState(false);
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 
-  const { data: rows, isLoading } = useKpiJourneyReport(selectedPeriod, selectedYear);
+  const filters: KpiJourneyFilters = useMemo(() => ({
+    department: selectedDept,
+    status: selectedStatus,
+    type: selectedType,
+    search: searchTerm,
+  }), [selectedDept, selectedStatus, selectedType, searchTerm]);
 
-  const departments = useMemo(() => {
-    if (!rows) return [];
-    return [...new Set(rows.map(r => r.department))].filter(d => d !== '—').sort();
-  }, [rows]);
+  const { data, isLoading } = useKpiJourneyReport(selectedPeriod, selectedYear, currentPage, filters);
 
-  const filtered = useMemo(() => {
-    if (!rows) return [];
-    let result = rows;
+  const rows = data?.rows ?? [];
+  const totalCount = data?.totalCount ?? 0;
+  const summary = data?.summary ?? { total: 0, pending: 0, avgToSelf: 0, avgToFinal: 0 };
 
-    if (selectedDept !== 'all') result = result.filter(r => r.department === selectedDept);
-    if (selectedStatus === 'na') result = result.filter(r => r.isNa);
-    else if (selectedStatus !== 'all') result = result.filter(r => !r.isNa && r.status === selectedStatus);
-    if (selectedType === 'org') result = result.filter(r => r.isOrgKpi);
-    if (selectedType === 'individual') result = result.filter(r => !r.isOrgKpi);
-    if (searchTerm) {
-      const q = searchTerm.toLowerCase();
-      result = result.filter(r =>
-        r.employeeName.toLowerCase().includes(q) ||
-        r.employeeCode.toLowerCase().includes(q) ||
-        r.kpiName.toLowerCase().includes(q) ||
-        r.kraName.toLowerCase().includes(q)
-      );
+  // Fetch departments for filter dropdown
+  const { data: departments } = useQuery({
+    queryKey: ['kpi-journey-departments', selectedYear, selectedPeriod],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('kpis')
+        .select('employee_id, profiles!inner(department_id, departments(name))')
+        .eq('review_year', parseInt(selectedYear))
+        .eq('review_period', selectedPeriod)
+        .limit(1000);
+      if (!data) return [];
+      const names = new Set<string>();
+      for (const k of data) {
+        const dept = (k as any).profiles?.departments?.name;
+        if (dept) names.add(dept);
+      }
+      return [...names].sort();
+    },
+    enabled: !!selectedPeriod && !!selectedYear,
+  });
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  const handleExport = useCallback(async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const [{ default: XLSX }, allRows] = await Promise.all([
+        import('xlsx'),
+        fetchKpiJourneyExportData(selectedPeriod, selectedYear, filters),
+      ]);
+
+      const fmtCell = (dateStr: string | null, isNa: boolean) => {
+        if (isNa && !dateStr) return 'N/A';
+        return dateStr ? format(new Date(dateStr), 'dd-MMM-yyyy HH:mm') : '';
+      };
+
+      const exportData = allRows.map(r => ({
+        'Emp Code': r.employeeCode,
+        'Employee': r.employeeName,
+        'Department': r.department,
+        'Category': r.category,
+        'KRA': r.kraName,
+        'KPI': r.kpiName,
+        'Month': r.reviewPeriod,
+        'KRA Assigned': r.kraAssignedAt ? format(new Date(r.kraAssignedAt), 'dd-MMM-yyyy HH:mm') : '',
+        'Self Submitted': fmtCell(r.selfSubmittedAt, r.isNa),
+        'Manager Action': fmtCell(r.managerActionAt, r.isNa),
+        'Skip-Level': fmtCell(r.skipLevelAt, r.isNa),
+        'HR PMS': fmtCell(r.hrPmsAt, r.isNa),
+        'Auditor': fmtCell(r.auditorAt, r.isNa),
+        'Management': fmtCell(r.managementAt, r.isNa),
+        'Final Approved': fmtCell(r.finalApprovedAt, r.isNa),
+        'Total Days': r.isNa ? 'N/A' : r.totalDays,
+        'Status': r.isNa ? 'N/A' : (STATUS_LABELS[r.status] ?? r.status),
+        'Timeline Compliant': r.isCompliant ? 'Yes' : 'No',
+        'Type': r.isOrgKpi ? 'Org KPI' : 'Individual',
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'KPI Journey');
+      XLSX.writeFile(wb, `KPI_Journey_${selectedPeriod}_${selectedYear}.xlsx`);
+      toast.success('Export completed');
+    } catch (err) {
+      console.error('Export failed:', err);
+      toast.error('Export failed. Please try again.');
+    } finally {
+      setIsExporting(false);
     }
+  }, [selectedPeriod, selectedYear, filters, isExporting]);
 
-    return result;
-  }, [rows, selectedDept, selectedStatus, selectedType, searchTerm]);
-
-  // Summary stats
-  const stats = useMemo(() => {
-    if (!filtered.length) return { total: 0, avgToSelf: 0, avgToFinal: 0, pending: 0 };
-
-    const applicable = filtered.filter(r => !r.isNa);
-    const withSelf = applicable.filter(r => r.kraAssignedAt && r.selfSubmittedAt);
-    const withFinal = applicable.filter(r => r.finalApprovedAt);
-    const pending = applicable.filter(r => r.status !== 'approved').length;
-
-    const avgToSelf = withSelf.length > 0
-      ? Math.round(withSelf.reduce((sum, r) => {
-          const d = Math.max(0, Math.round((new Date(r.selfSubmittedAt!).getTime() - new Date(r.kraAssignedAt!).getTime()) / 86400000));
-          return sum + d;
-        }, 0) / withSelf.length)
-      : 0;
-
-    const avgToFinal = withFinal.length > 0
-      ? Math.round(withFinal.reduce((sum, r) => sum + r.totalDays, 0) / withFinal.length)
-      : 0;
-
-    return { total: filtered.length, avgToSelf, avgToFinal, pending };
-  }, [filtered]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-
-  const handleExport = () => {
-    if (!filtered.length) return;
-    const fmtCell = (dateStr: string | null, isNa: boolean) => {
-      if (isNa && !dateStr) return 'N/A';
-      return dateStr ? format(new Date(dateStr), 'dd-MMM-yyyy HH:mm') : '';
-    };
-    const exportData = filtered.map(r => ({
-      'Emp Code': r.employeeCode,
-      'Employee': r.employeeName,
-      'Department': r.department,
-      'Category': r.category,
-      'KRA': r.kraName,
-      'KPI': r.kpiName,
-      'Month': r.reviewPeriod,
-      'KRA Assigned': r.kraAssignedAt ? format(new Date(r.kraAssignedAt), 'dd-MMM-yyyy HH:mm') : '',
-      'Self Submitted': fmtCell(r.selfSubmittedAt, r.isNa),
-      'Manager Action': fmtCell(r.managerActionAt, r.isNa),
-      'Skip-Level': fmtCell(r.skipLevelAt, r.isNa),
-      'HR PMS': fmtCell(r.hrPmsAt, r.isNa),
-      'Auditor': fmtCell(r.auditorAt, r.isNa),
-      'Management': fmtCell(r.managementAt, r.isNa),
-      'Final Approved': fmtCell(r.finalApprovedAt, r.isNa),
-      'Total Days': r.isNa ? 'N/A' : r.totalDays,
-      'Status': r.isNa ? 'N/A' : (STATUS_LABELS[r.status] ?? r.status),
-      'Timeline Compliant': r.isCompliant ? 'Yes' : 'No',
-      'Type': r.isOrgKpi ? 'Org KPI' : 'Individual',
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'KPI Journey');
-    XLSX.writeFile(wb, `KPI_Journey_${selectedPeriod}_${selectedYear}.xlsx`);
-  };
+  const resetPage = useCallback(() => setCurrentPage(1), []);
 
   return (
     <div className="space-y-6">
@@ -173,7 +173,7 @@ export default function KpiJourneyReport() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
             <div>
               <Label className="text-xs text-muted-foreground">Year</Label>
-              <Select value={selectedYear} onValueChange={v => { setSelectedYear(v); setCurrentPage(1); }}>
+              <Select value={selectedYear} onValueChange={v => { setSelectedYear(v); resetPage(); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {years.map(y => <SelectItem key={y} value={y.toString()}>{y}</SelectItem>)}
@@ -182,7 +182,7 @@ export default function KpiJourneyReport() {
             </div>
             <div>
               <Label className="text-xs text-muted-foreground">Period</Label>
-              <Select value={selectedPeriod} onValueChange={v => { setSelectedPeriod(v); setCurrentPage(1); }}>
+              <Select value={selectedPeriod} onValueChange={v => { setSelectedPeriod(v); resetPage(); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {FULL_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
@@ -191,17 +191,17 @@ export default function KpiJourneyReport() {
             </div>
             <div>
               <Label className="text-xs text-muted-foreground">Department</Label>
-              <Select value={selectedDept} onValueChange={v => { setSelectedDept(v); setCurrentPage(1); }}>
+              <Select value={selectedDept} onValueChange={v => { setSelectedDept(v); resetPage(); }}>
                 <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Departments</SelectItem>
-                  {departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  {(departments ?? []).map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div>
               <Label className="text-xs text-muted-foreground">Status</Label>
-              <Select value={selectedStatus} onValueChange={v => { setSelectedStatus(v); setCurrentPage(1); }}>
+              <Select value={selectedStatus} onValueChange={v => { setSelectedStatus(v); resetPage(); }}>
                 <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
@@ -214,7 +214,7 @@ export default function KpiJourneyReport() {
             </div>
             <div>
               <Label className="text-xs text-muted-foreground">Type</Label>
-              <Select value={selectedType} onValueChange={v => { setSelectedType(v); setCurrentPage(1); }}>
+              <Select value={selectedType} onValueChange={v => { setSelectedType(v); resetPage(); }}>
                 <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
@@ -230,7 +230,7 @@ export default function KpiJourneyReport() {
                 <Input
                   placeholder="Name, code, KPI..."
                   value={searchTerm}
-                  onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                  onChange={e => { setSearchTerm(e.target.value); resetPage(); }}
                   className="pl-8"
                 />
               </div>
@@ -246,7 +246,7 @@ export default function KpiJourneyReport() {
           <CardContent>
             <div className="flex items-center gap-2">
               <FileSpreadsheet className="h-5 w-5 text-primary" />
-              <span className="text-2xl font-bold">{isLoading ? <Skeleton className="h-7 w-12" /> : stats.total}</span>
+              <span className="text-2xl font-bold">{isLoading ? <Skeleton className="h-7 w-12" /> : summary.total}</span>
             </div>
           </CardContent>
         </Card>
@@ -255,7 +255,7 @@ export default function KpiJourneyReport() {
           <CardContent>
             <div className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-blue-500" />
-              <span className="text-2xl font-bold">{isLoading ? <Skeleton className="h-7 w-12" /> : `${stats.avgToSelf}d`}</span>
+              <span className="text-2xl font-bold">{isLoading ? <Skeleton className="h-7 w-12" /> : `${summary.avgToSelf}d`}</span>
             </div>
           </CardContent>
         </Card>
@@ -264,7 +264,7 @@ export default function KpiJourneyReport() {
           <CardContent>
             <div className="flex items-center gap-2">
               <Timer className="h-5 w-5 text-green-500" />
-              <span className="text-2xl font-bold">{isLoading ? <Skeleton className="h-7 w-12" /> : `${stats.avgToFinal}d`}</span>
+              <span className="text-2xl font-bold">{isLoading ? <Skeleton className="h-7 w-12" /> : `${summary.avgToFinal}d`}</span>
             </div>
           </CardContent>
         </Card>
@@ -273,17 +273,18 @@ export default function KpiJourneyReport() {
           <CardContent>
             <div className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-amber-500" />
-              <span className="text-2xl font-bold">{isLoading ? <Skeleton className="h-7 w-12" /> : stats.pending}</span>
+              <span className="text-2xl font-bold">{isLoading ? <Skeleton className="h-7 w-12" /> : summary.pending}</span>
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Export */}
-      {canExport && filtered.length > 0 && (
+      {canExport && totalCount > 0 && (
         <div className="flex justify-end">
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-2" /> Export Excel
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={isExporting}>
+            {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+            {isExporting ? 'Exporting...' : 'Export Excel'}
           </Button>
         </div>
       )}
@@ -295,7 +296,7 @@ export default function KpiJourneyReport() {
             <div className="flex items-center justify-center py-20">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
-          ) : paged.length === 0 ? (
+          ) : rows.length === 0 ? (
             <div className="text-center py-20 text-muted-foreground">No KPIs found for this period.</div>
           ) : (
             <div className="overflow-x-auto">
@@ -323,7 +324,7 @@ export default function KpiJourneyReport() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paged.map(row => (
+                  {rows.map(row => (
                     <TableRow key={row.kpiId}>
                       <TableCell className="sticky left-0 bg-background z-10 font-mono text-xs">{row.employeeCode}</TableCell>
                       <TableCell className="sticky left-[80px] bg-background z-10 font-medium text-sm">{row.employeeName}</TableCell>
@@ -388,7 +389,7 @@ export default function KpiJourneyReport() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">
-            Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
+            Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, totalCount)} of {totalCount}
           </span>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
