@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -90,7 +90,7 @@ export default function KRALibrary() {
   const paginatedTemplates = sortedTemplates.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   // Reset page when filters change
-  useMemo(() => { setCurrentPage(1); }, [searchQuery, categoryFilter, sortField, sortDir]);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, categoryFilter, sortField, sortDir]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -112,14 +112,19 @@ export default function KRALibrary() {
   };
 
   const handleDuplicate = async (template: KpiTemplate) => {
-    const { id, created_at, updated_at, kra_categories, ...rest } = template;
-    await createTemplate.mutateAsync({
-      ...rest,
-      title: `${template.title} (Copy)`,
-      applicable_roles: rest.applicable_roles || [],
-      is_active: true,
-    });
-    toast({ title: 'Template duplicated successfully' });
+    try {
+      const { id, created_at, updated_at, kra_categories, ...rest } = template;
+      await createTemplate.mutateAsync({
+        ...rest,
+        title: `${template.title} (Copy)`,
+        applicable_roles: rest.applicable_roles || [],
+        is_active: true,
+        created_by: null,
+      });
+      toast({ title: 'Template duplicated successfully' });
+    } catch {
+      // Error toast handled by the mutation's onError
+    }
   };
 
   const handleDelete = async () => {

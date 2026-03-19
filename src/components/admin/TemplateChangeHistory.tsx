@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useTemplateChangeHistory, usePropagateTemplateChange, TemplateChangeLog } from '@/hooks/useKpiTemplates';
+import { useTemplateChangeHistory, usePropagateTemplateChange, useUpdateKpiTemplate, TemplateChangeLog } from '@/hooks/useKpiTemplates';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +18,7 @@ interface TemplateChangeHistoryProps {
 export function TemplateChangeHistory({ templateId, templateTitle, isOpen, onClose }: TemplateChangeHistoryProps) {
   const { data: history, isLoading } = useTemplateChangeHistory(isOpen ? templateId : null);
   const propagate = usePropagateTemplateChange();
+  const updateTemplate = useUpdateKpiTemplate();
   const [revertingEntry, setRevertingEntry] = useState<TemplateChangeLog | null>(null);
 
   const handleRevert = async () => {
@@ -36,6 +37,17 @@ export function TemplateChangeHistory({ templateId, templateTitle, isOpen, onClo
       effective_year: revertingEntry.effective_year,
       employee_ids: revertingEntry.scope === 'selected' ? revertingEntry.selected_employee_ids : undefined,
     });
+
+    // Also update the template record itself to stay in sync
+    const templatePatch: Record<string, any> = { id: templateId };
+    Object.entries(reversedFields).forEach(([field, change]) => {
+      templatePatch[field] = change.new;
+    });
+    try {
+      await updateTemplate.mutateAsync(templatePatch as any);
+    } catch {
+      // Template update is best-effort; propagation already succeeded
+    }
 
     setRevertingEntry(null);
   };

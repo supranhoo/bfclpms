@@ -650,11 +650,17 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                   </div>
                   <div>
                     <Label>Frequency</Label>
-                    <Input
-                      value={formData.frequency}
-                      onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
-                      placeholder="Monthly"
-                    />
+                    <Select value={formData.frequency} onValueChange={(v) => setFormData({ ...formData, frequency: v })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select frequency" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Monthly">Monthly</SelectItem>
+                        <SelectItem value="Quarterly">Quarterly</SelectItem>
+                        <SelectItem value="Half-Yearly">Half-Yearly</SelectItem>
+                        <SelectItem value="Yearly">Yearly</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <TieredOptionsBuilder
