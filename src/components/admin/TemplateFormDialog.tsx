@@ -189,7 +189,17 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
     return changes;
   }, [template, formData]);
 
+  const weightageChanged = 'weightage' in changedFields;
+
+  // Fields to propagate — excludes weightage unless explicitly included
+  const propagationChangedFields = useMemo(() => {
+    if (includeWeightage) return changedFields;
+    const { weightage, ...rest } = changedFields;
+    return rest;
+  }, [changedFields, includeWeightage]);
+
   const hasChanges = Object.keys(changedFields).length > 0;
+  const hasPropagableChanges = Object.keys(propagationChangedFields).length > 0;
 
   const handleClose = () => {
     resetForm();
