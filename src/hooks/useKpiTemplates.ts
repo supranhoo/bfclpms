@@ -49,6 +49,7 @@ export interface TemplateChangeLog {
   scope: string;
   selected_employee_ids: string[];
   created_at: string;
+  changed_by_name?: string;
 }
 
 export function useKpiTemplates() {
