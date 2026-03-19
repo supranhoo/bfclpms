@@ -670,17 +670,11 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
               </div>
             )}
 
-            {/* Source of Data */}
-            <div>
-              <Label>Source of Data</Label>
-              <Input
-                value={formData.source_of_data}
-                onChange={(e) => setFormData({ ...formData, source_of_data: e.target.value })}
-                placeholder="e.g., CRM System, Monthly Reports"
-              />
             </div>
 
-            <Separator />
+            {/* ── Source & Advanced ── */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b pb-2 border-border">Source & Advanced</h3>
 
             {/* Advanced Settings */}
             <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
