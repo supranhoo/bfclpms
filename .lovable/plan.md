@@ -1,90 +1,30 @@
 
-# Workflow Configuration: "Effective From" Period Support — IMPLEMENTED ✅
 
-## What Changed
-- Added `is_ongoing` BOOLEAN column to `workflow_config` table
-- Created `month_name_to_index()` and `find_ongoing_workflow()` helper functions
-- Updated 3 RPCs with ongoing resolution: exact match → ongoing match → global fallback
-- Frontend: "Apply from this month onward" toggle + ongoing badges
-- Hook: `useUpsertWorkflowConfig` accepts `isOngoing` parameter
+## Fix: KPI Journey Report Stuck/Slow Loading
 
----
+### Root Cause
+With 1,583 KPIs for the current period, the report makes **6 sequential batch iterations** for both submissions and audit logs. Each audit log iteration makes 2 queries (workflow + transition). While the two loops run in parallel, each loop internally runs its batches **sequentially** -- that's 6 sequential round-trips within each loop. Combined with the 2-iteration KPI fetch loop, the total waterfall is ~8 sequential database round-trips, causing the page to appear stuck.
 
-# Org-Level KPI Toggle in Assign New KRA Dialog — IMPLEMENTED ✅
+### Fix
 
-## What Changed
-- Added `isOrgLevel` toggle switch and `orgLevelScope` selector to the Advanced section of `AdminKpiCreateDialog`
-- Submit now uses these state values instead of hardcoded `is_org_level: false`
-- Scope options: Organization, Department, Employee (matching `MarkOrgLevelDialog` pattern)
+**File: `src/hooks/useKpiJourneyReport.ts`**
 
----
+Parallelize the inner batch loops -- instead of iterating sequentially, fire all batch queries concurrently using `Promise.all`:
 
+1. **Submissions**: Build all batch slices upfront, then `Promise.all` all submission queries at once (6 parallel calls instead of 6 sequential)
+2. **Audit logs**: Build all batch slices, then `Promise.all` all workflow + transition queries at once (12 parallel calls instead of 6 sequential pairs)
 
-## Problem
-KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
+This reduces the waterfall from ~8 sequential round-trips to ~3 (KPI fetch pages + one parallel fan-out for everything else).
 
-## Fix Applied
-Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
+```text
+Before:  KPI pg1 → KPI pg2 → [sub batch1 → sub batch2 → ... → sub batch6]
+                              [log batch1 → log batch2 → ... → log batch6]
 
-| File | Line | Change |
-|---|---|---|
-| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
-| `EmployeeScorecard.tsx` | 220 | Same |
-| `AuditScorecard.tsx` | 221 | Same |
-| `ManagementScorecard.tsx` | 222 | Same |
+After:   KPI pg1 → KPI pg2 → [sub batch1..6 + log batch1..6 ALL parallel]
+```
 
-## Impact
-- Biswajit's score: 382/468 → 382/443 (correct)
-- 19 employees with unsubmitted KPIs now show accurate weighted scores
-- Quarterly KPIs in non-terminal months are correctly excluded
-- No database migration needed — frontend calculation fix only
-
----
-
-# Improve Send-Back KPI Experience — IMPLEMENTED ✅
-
-## Problems Fixed
-
-### 1. Employee data preserved on send-back
-Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
-
+### Files Changed
 | File | Change |
-|---|---|
-| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
-| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
+|------|--------|
+| `src/hooks/useKpiJourneyReport.ts` | Parallelize batch queries inside submissions and audit log loops |
 
-### 2. Send-back reason shown on face
-- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
-- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
-- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
-
-### 3. Send-back queries created from all reviewer levels
-UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
-
-| File | Change |
-|---|---|
-| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
-| `SelfReviewSheet.tsx` | Uses SentBackBanner |
-| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
-| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
-
----
-
-# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
-
-## Gaps Fixed
-
-### 1. ManagementScorecard now creates `kpi_queries` record on send-back
-Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
-
-### 2. SentBackBanner shown to all reviewer levels
-The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
-
-### 3. SentBackBanner conditionally renders
-Returns `null` when no send-back query is found, so it doesn't show an empty banner.
-
-| File | Change |
-|---|---|
-| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
-| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
-| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |
