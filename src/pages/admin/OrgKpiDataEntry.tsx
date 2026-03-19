@@ -543,6 +543,16 @@ export default function OrgKpiDataEntry() {
     const kpiKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
     const expectedCount = employeeCountMap.get(kpiKey) ?? 0;
     
+    // Block propagation of blank data for all scopes
+    if (!values.isNa && values.achievedValue === null) {
+      toast({
+        title: 'Cannot propagate blank data',
+        description: 'Please enter an achieved value or mark as N/A before propagating.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (scope === 'organization') {
       const result = await propagate.mutateAsync({
         categoryId: kpi.category_id,
