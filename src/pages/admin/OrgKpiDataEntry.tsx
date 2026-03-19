@@ -550,6 +550,7 @@ export default function OrgKpiDataEntry() {
         isNa: values.isNa,
         naRemarks: values.naRemarks,
         remarks: values.remarks || undefined,
+        evidenceUrl: values.evidenceUrl || undefined,
       });
       totalPropagated = result.propagatedCount;
       propagatedScopeIds.push('organization');
@@ -567,6 +568,7 @@ export default function OrgKpiDataEntry() {
           ...(scope === 'department' ? { departmentId: sv.scopeId } : { employeeId: sv.scopeId }),
           isNa: sv.isNa,
           remarks: sv.remarks || undefined,
+          evidenceUrl: sv.evidenceUrl || undefined,
         });
         totalPropagated += result.propagatedCount;
         propagatedScopeIds.push(sv.scopeId);

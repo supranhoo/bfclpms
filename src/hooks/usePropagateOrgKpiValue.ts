@@ -31,6 +31,7 @@ interface PropagateParams {
   isNa?: boolean;
   naRemarks?: string;
   remarks?: string;
+  evidenceUrl?: string | null;
 }
 
 /**
@@ -40,13 +41,15 @@ interface PropagateParams {
 function buildRatingsPayload(
   targetKpis: any[],
   achievedValue: number | null,
-  isNa: boolean
+  isNa: boolean,
+  evidenceUrl?: string | null
 ) {
   const kpiRatings: Array<{
     kpi_id: string;
     achieved_value: number | null;
     self_score: number | null;
     self_rating: string | null;
+    evidence_url: string | null;
   }> = [];
 
   const profileMap = new Map<string, { fullName: string; employeeCode: string | null; departmentName: string | null }>();
@@ -65,6 +68,7 @@ function buildRatingsPayload(
         achieved_value: null,
         self_score: null,
         self_rating: null,
+        evidence_url: null,
       });
     } else {
       const uomType = (kpi.uom_type as string) || 'numeric';
@@ -79,6 +83,7 @@ function buildRatingsPayload(
           achieved_value: achievedValue,
           self_score: directRating,
           self_rating: scoreToRating(directRating),
+          evidence_url: evidenceUrl || null,
         });
       } else {
         const thresholds: RatingThresholds = {
@@ -103,6 +108,7 @@ function buildRatingsPayload(
           achieved_value: achievedValue,
           self_score: ratingResult.rating,
           self_rating: scoreToRating(ratingResult.rating),
+          evidence_url: evidenceUrl || null,
         });
       }
     }
@@ -265,7 +271,7 @@ export function usePropagateOrgKpiValue() {
       if (targetKpis.length === 0) return { propagatedCount: 0, details: [] };
 
       const { kpiRatings, profileMap } = buildRatingsPayload(
-        targetKpis, params.achievedValue, !!params.isNa
+        targetKpis, params.achievedValue, !!params.isNa, params.evidenceUrl
       );
 
       const result = await callPropagationRpc(kpiRatings, profileMap, !!params.isNa, params.remarks);
@@ -323,7 +329,7 @@ export function useBulkPropagateOrgKpiValues() {
         if (targetKpis.length === 0) continue;
 
         const { kpiRatings, profileMap } = buildRatingsPayload(
-          targetKpis, params.achievedValue, !!params.isNa
+          targetKpis, params.achievedValue, !!params.isNa, params.evidenceUrl
         );
 
         allRatings.push(...kpiRatings);
