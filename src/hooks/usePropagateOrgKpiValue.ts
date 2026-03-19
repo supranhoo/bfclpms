@@ -329,7 +329,7 @@ export function useBulkPropagateOrgKpiValues() {
         if (targetKpis.length === 0) continue;
 
         const { kpiRatings, profileMap } = buildRatingsPayload(
-          targetKpis, params.achievedValue, !!params.isNa
+          targetKpis, params.achievedValue, !!params.isNa, params.evidenceUrl
         );
 
         allRatings.push(...kpiRatings);
