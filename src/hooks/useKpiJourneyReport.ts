@@ -23,6 +23,7 @@ export interface KpiJourneyRow {
   totalDays: number;
   isCompliant: boolean;
   isOrgKpi: boolean;
+  isNa: boolean;
 }
 
 const ACTION_MAP: Record<string, keyof Omit<KpiJourneyRow, 'kpiId' | 'employeeCode' | 'employeeName' | 'department' | 'category' | 'kraName' | 'kpiName' | 'reviewPeriod' | 'status' | 'totalDays' | 'isCompliant'>> = {
@@ -105,9 +106,9 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
             .select('kpi_id, action, created_at, new_value')
             .in('kpi_id', batch)
             .order('created_at', { ascending: true }),
-          supabase
+      supabase
             .from('review_submissions')
-            .select('kpi_id, submitted_at, self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score')
+            .select('kpi_id, submitted_at, self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na')
             .in('kpi_id', batch),
         ]);
 
@@ -228,6 +229,7 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
           totalDays,
           isCompliant,
           isOrgKpi: !!kpi.is_org_level,
+          isNa: submissionsMap.get(kpi.id)?.is_na === true,
         };
       });
 

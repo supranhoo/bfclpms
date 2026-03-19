@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Download, Search, ChevronLeft, ChevronRight, FileSpreadsheet, Clock, CheckCircle2, AlertCircle, Timer, Loader2 } from 'lucide-react';
+import { Download, Search, ChevronLeft, ChevronRight, FileSpreadsheet, Clock, CheckCircle2, AlertCircle, Timer, Loader2, MinusCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 
@@ -39,6 +39,11 @@ function formatDate(dateStr: string | null): string {
   } catch {
     return '—';
   }
+}
+
+function formatDateOrNa(dateStr: string | null, isNa: boolean): string {
+  if (isNa && !dateStr) return 'N/A';
+  return formatDate(dateStr);
 }
 
 function DurationBadge({ days, isApproved }: { days: number; isApproved: boolean }) {
@@ -81,7 +86,8 @@ export default function KpiJourneyReport() {
     let result = rows;
 
     if (selectedDept !== 'all') result = result.filter(r => r.department === selectedDept);
-    if (selectedStatus !== 'all') result = result.filter(r => r.status === selectedStatus);
+    if (selectedStatus === 'na') result = result.filter(r => r.isNa);
+    else if (selectedStatus !== 'all') result = result.filter(r => !r.isNa && r.status === selectedStatus);
     if (selectedType === 'org') result = result.filter(r => r.isOrgKpi);
     if (selectedType === 'individual') result = result.filter(r => !r.isOrgKpi);
     if (searchTerm) {
@@ -101,9 +107,10 @@ export default function KpiJourneyReport() {
   const stats = useMemo(() => {
     if (!filtered.length) return { total: 0, avgToSelf: 0, avgToFinal: 0, pending: 0 };
 
-    const withSelf = filtered.filter(r => r.kraAssignedAt && r.selfSubmittedAt);
-    const withFinal = filtered.filter(r => r.finalApprovedAt);
-    const pending = filtered.filter(r => r.status !== 'approved').length;
+    const applicable = filtered.filter(r => !r.isNa);
+    const withSelf = applicable.filter(r => r.kraAssignedAt && r.selfSubmittedAt);
+    const withFinal = applicable.filter(r => r.finalApprovedAt);
+    const pending = applicable.filter(r => r.status !== 'approved').length;
 
     const avgToSelf = withSelf.length > 0
       ? Math.round(withSelf.reduce((sum, r) => {
@@ -124,6 +131,10 @@ export default function KpiJourneyReport() {
 
   const handleExport = () => {
     if (!filtered.length) return;
+    const fmtCell = (dateStr: string | null, isNa: boolean) => {
+      if (isNa && !dateStr) return 'N/A';
+      return dateStr ? format(new Date(dateStr), 'dd-MMM-yyyy HH:mm') : '';
+    };
     const exportData = filtered.map(r => ({
       'Emp Code': r.employeeCode,
       'Employee': r.employeeName,
@@ -133,15 +144,15 @@ export default function KpiJourneyReport() {
       'KPI': r.kpiName,
       'Month': r.reviewPeriod,
       'KRA Assigned': r.kraAssignedAt ? format(new Date(r.kraAssignedAt), 'dd-MMM-yyyy HH:mm') : '',
-      'Self Submitted': r.selfSubmittedAt ? format(new Date(r.selfSubmittedAt), 'dd-MMM-yyyy HH:mm') : '',
-      'Manager Action': r.managerActionAt ? format(new Date(r.managerActionAt), 'dd-MMM-yyyy HH:mm') : '',
-      'Skip-Level': r.skipLevelAt ? format(new Date(r.skipLevelAt), 'dd-MMM-yyyy HH:mm') : '',
-      'HR PMS': r.hrPmsAt ? format(new Date(r.hrPmsAt), 'dd-MMM-yyyy HH:mm') : '',
-      'Auditor': r.auditorAt ? format(new Date(r.auditorAt), 'dd-MMM-yyyy HH:mm') : '',
-      'Management': r.managementAt ? format(new Date(r.managementAt), 'dd-MMM-yyyy HH:mm') : '',
-      'Final Approved': r.finalApprovedAt ? format(new Date(r.finalApprovedAt), 'dd-MMM-yyyy HH:mm') : '',
-      'Total Days': r.totalDays,
-      'Status': STATUS_LABELS[r.status] ?? r.status,
+      'Self Submitted': fmtCell(r.selfSubmittedAt, r.isNa),
+      'Manager Action': fmtCell(r.managerActionAt, r.isNa),
+      'Skip-Level': fmtCell(r.skipLevelAt, r.isNa),
+      'HR PMS': fmtCell(r.hrPmsAt, r.isNa),
+      'Auditor': fmtCell(r.auditorAt, r.isNa),
+      'Management': fmtCell(r.managementAt, r.isNa),
+      'Final Approved': fmtCell(r.finalApprovedAt, r.isNa),
+      'Total Days': r.isNa ? 'N/A' : r.totalDays,
+      'Status': r.isNa ? 'N/A' : (STATUS_LABELS[r.status] ?? r.status),
       'Timeline Compliant': r.isCompliant ? 'Yes' : 'No',
       'Type': r.isOrgKpi ? 'Org KPI' : 'Individual',
     }));
@@ -198,6 +209,7 @@ export default function KpiJourneyReport() {
                 <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="na">N/A</SelectItem>
                   {Object.entries(STATUS_LABELS).map(([k, v]) => (
                     <SelectItem key={k} value={k}>{v}</SelectItem>
                   ))}
@@ -332,26 +344,36 @@ export default function KpiJourneyReport() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs font-mono">{formatDate(row.kraAssignedAt)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDate(row.selfSubmittedAt)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDate(row.managerActionAt)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDate(row.skipLevelAt)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDate(row.hrPmsAt)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDate(row.auditorAt)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDate(row.managementAt)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDate(row.finalApprovedAt)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.selfSubmittedAt, row.isNa)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.managerActionAt, row.isNa)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.skipLevelAt, row.isNa)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.hrPmsAt, row.isNa)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.auditorAt, row.isNa)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.managementAt, row.isNa)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.finalApprovedAt, row.isNa)}</TableCell>
                       <TableCell>
-                        <DurationBadge days={row.totalDays} isApproved={row.status === 'approved'} />
+                        {row.isNa ? (
+                          <Badge variant="outline" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 font-mono text-xs">N/A</Badge>
+                        ) : (
+                          <DurationBadge days={row.totalDays} isApproved={row.status === 'approved'} />
+                        )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={`text-xs ${row.status === 'approved'
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                          : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-                        }`}>
-                          {STATUS_LABELS[row.status] ?? row.status}
-                        </Badge>
+                        {row.isNa ? (
+                          <Badge variant="outline" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 text-xs">N/A</Badge>
+                        ) : (
+                          <Badge variant="outline" className={`text-xs ${row.status === 'approved'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                          }`}>
+                            {STATUS_LABELS[row.status] ?? row.status}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-center">
-                        {row.isCompliant ? (
+                        {row.isNa ? (
+                          <MinusCircle className="h-4 w-4 text-muted-foreground mx-auto" />
+                        ) : row.isCompliant ? (
                           <CheckCircle2 className="h-4 w-4 text-green-500 mx-auto" />
                         ) : (
                           <AlertCircle className="h-4 w-4 text-red-500 mx-auto" />
