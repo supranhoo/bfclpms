@@ -921,7 +921,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                 {propagate.isPending ? 'Propagating...' : 'Saving...'}
               </>
             ) : template 
-              ? (shouldPropagate && hasPropagableChanges ? 'Save & Propagate' : 'Update Template') 
+              ? (shouldPropagate && hasPropagableChanges ? 'Save & Propagate' : 'Update Template Only') 
               : 'Create Template'}
           </Button>
         </DialogFooter>
