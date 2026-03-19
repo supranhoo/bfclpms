@@ -177,7 +177,7 @@ export default function EmployeePerformanceSummary() {
         const key = `${kpi.employee_id}-${kpi.review_period}`;
         const existing = employeePeriodMap.get(key);
 
-        const score = submission?.final_score ?? 
+        const score = (kpi.status === 'approved' ? submission?.final_score : null) ??
                       submission?.management_score ?? 
                       submission?.auditor_score ?? 
                       submission?.hr_pms_score ?? 
