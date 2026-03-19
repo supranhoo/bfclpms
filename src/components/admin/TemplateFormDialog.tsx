@@ -808,7 +808,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                         variant="outline"
                         size="sm"
                         onClick={handlePreview}
-                        disabled={propagate.isPending}
+                        disabled={propagate.isPending || !hasPropagableChanges}
                       >
                         {propagate.isPending ? (
                           <>
