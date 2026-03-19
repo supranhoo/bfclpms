@@ -21,8 +21,17 @@ import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { TemplatePropagationPreview } from './TemplatePropagationPreview';
 import { TemplateSyncCheck } from './TemplateSyncCheck';
 import { Card, CardContent } from '@/components/ui/card';
-import { AlertTriangle, ArrowRight, Loader2, Users } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Info, Loader2, Users } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { supabase } from '@/integrations/supabase/client';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+
+/** Structural fields that should be back-filled from a linked KPI when null on template */
+const BACKFILL_FIELDS = [
+  'target_value', 'weightage', 'uom', 'criteria', 'source_of_data',
+  'frequency', 'uom_type', 'qualitative_options', 'threshold_mode',
+  'kra_name', 'kpi_name', 'r5', 'r4', 'r3', 'r2', 'r1', 'r0',
+] as const;
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const currentYear = new Date().getFullYear();
