@@ -99,6 +99,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
   const [thresholdMode, setThresholdMode] = useState<'absolute' | 'ratio'>('absolute');
   const [isOrgLevel, setIsOrgLevel] = useState(false);
   const [orgLevelScope, setOrgLevelScope] = useState('organization');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   // Period - prefer explicit defaults from props, then system settings
   const [reviewPeriod, setReviewPeriod] = useState(defaultReviewPeriod || settings.current_review_period);
