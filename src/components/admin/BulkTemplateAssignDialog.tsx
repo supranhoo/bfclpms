@@ -181,6 +181,7 @@ export function BulkTemplateAssignDialog({ isOpen, onClose }: BulkTemplateAssign
         review_period: resolvedPeriod,
         review_year: currentYear,
         is_org_level: false,
+        source_template_id: selectedTemplate.id,
       }));
 
       const { error } = await supabase.from('kpis').insert(kpisToInsert);

@@ -332,6 +332,7 @@ export function SmartAssignmentDialog({
           review_year: currentYear,
           is_org_level: false,
           status: 'kra_set' as const,
+          source_template_id: template.id,
         };
       });
 
