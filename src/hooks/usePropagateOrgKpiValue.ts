@@ -31,6 +31,7 @@ interface PropagateParams {
   isNa?: boolean;
   naRemarks?: string;
   remarks?: string;
+  evidenceUrl?: string | null;
 }
 
 /**
