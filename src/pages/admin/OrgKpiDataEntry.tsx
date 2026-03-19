@@ -568,6 +568,7 @@ export default function OrgKpiDataEntry() {
           ...(scope === 'department' ? { departmentId: sv.scopeId } : { employeeId: sv.scopeId }),
           isNa: sv.isNa,
           remarks: sv.remarks || undefined,
+          evidenceUrl: sv.evidenceUrl || undefined,
         });
         totalPropagated += result.propagatedCount;
         propagatedScopeIds.push(sv.scopeId);
