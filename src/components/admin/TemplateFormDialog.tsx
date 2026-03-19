@@ -325,95 +325,94 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
   return (
     <>
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh]">
+      <DialogContent className="max-w-4xl max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>{template ? 'Edit Template' : 'Create Template'}</DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[60vh] pr-4">
-          <div className="space-y-4 py-2">
-            {/* Basic Info */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <Label>Template Title *</Label>
-                <Input
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="e.g., Sales Manager KRA Template"
-                />
-              </div>
+        <ScrollArea className="max-h-[70vh] pr-4">
+          <div className="space-y-6 py-2">
+            {/* ── Identity ── */}
+            <div className="space-y-1.5">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Identity</h3>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                <div className="col-span-2">
+                  <Label>Template Title *</Label>
+                  <Input
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    placeholder="e.g., Sales Manager KRA Template"
+                  />
+                </div>
 
-              <div className="col-span-2">
-                <Label>Description</Label>
-                <Textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Brief description of this template..."
-                  rows={2}
-                />
+                <div className="col-span-2">
+                  <Label>Description</Label>
+                  <Textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Brief description of this template..."
+                    rows={2}
+                  />
+                </div>
+
+                <div>
+                  <Label>KRA Name *</Label>
+                  <Input
+                    value={formData.kra_name}
+                    onChange={(e) => setFormData({ ...formData, kra_name: e.target.value })}
+                    placeholder="Key Result Area"
+                  />
+                </div>
+
+                <div>
+                  <Label>KPI Name *</Label>
+                  <Input
+                    value={formData.kpi_name}
+                    onChange={(e) => setFormData({ ...formData, kpi_name: e.target.value })}
+                    placeholder="Key Performance Indicator"
+                  />
+                </div>
+
+                <div>
+                  <Label>Category</Label>
+                  <Select
+                    value={formData.category_id}
+                    onValueChange={(val) => setFormData({ ...formData, category_id: val })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories?.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Criteria</Label>
+                  <Select
+                    value={formData.criteria}
+                    onValueChange={(val) => setFormData({ ...formData, criteria: val })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Higher is Better">Higher is Better</SelectItem>
+                      <SelectItem value="Lower is Better">Lower is Better</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
-            {/* Category & KRA/KPI */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Category</Label>
-                <Select
-                  value={formData.category_id}
-                  onValueChange={(val) => setFormData({ ...formData, category_id: val })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories?.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label>Criteria</Label>
-                <Select
-                  value={formData.criteria}
-                  onValueChange={(val) => setFormData({ ...formData, criteria: val })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Higher is Better">Higher is Better</SelectItem>
-                    <SelectItem value="Lower is Better">Lower is Better</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label>KRA Name *</Label>
-                <Input
-                  value={formData.kra_name}
-                  onChange={(e) => setFormData({ ...formData, kra_name: e.target.value })}
-                  placeholder="Key Result Area"
-                />
-              </div>
-
-              <div>
-                <Label>KPI Name *</Label>
-                <Input
-                  value={formData.kpi_name}
-                  onChange={(e) => setFormData({ ...formData, kpi_name: e.target.value })}
-                  placeholder="Key Performance Indicator"
-                />
-              </div>
-            </div>
-
-            {/* Metrics */}
-            <Separator />
-
-            {/* UOM Type Selector */}
+            {/* ── Measurement ── */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b pb-2 border-border">Measurement</h3>
             <UomTypeSelector 
               value={formData.uom_type} 
               onChange={(val) => setFormData({ ...formData, uom_type: val })} 
@@ -671,39 +670,54 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
               </div>
             )}
 
-            {/* Source of Data */}
-            <div>
-              <Label>Source of Data</Label>
-              <Input
-                value={formData.source_of_data}
-                onChange={(e) => setFormData({ ...formData, source_of_data: e.target.value })}
-                placeholder="e.g., CRM System, Monthly Reports"
-              />
             </div>
 
-            <Separator />
-
-            {/* Advanced Settings */}
-            <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
-              <h3 className="font-medium text-sm">Advanced Settings</h3>
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-sm font-medium">Require Reason for Resubmission</Label>
-                  <p className="text-xs text-muted-foreground">
-                    When enabled, employees must provide a mandatory reason when editing previously submitted daily/weekly entries
-                  </p>
-                </div>
-                <Switch
-                  checked={formData.require_resubmit_reason}
-                  onCheckedChange={(checked) => setFormData({ ...formData, require_resubmit_reason: checked })}
+            {/* ── Source & Advanced ── */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b pb-2 border-border">Source & Advanced</h3>
+              <div>
+                <Label>Source of Data</Label>
+                <Input
+                  value={formData.source_of_data}
+                  onChange={(e) => setFormData({ ...formData, source_of_data: e.target.value })}
+                  placeholder="e.g., CRM System, Monthly Reports"
                 />
+              </div>
+              <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
+                <h3 className="font-medium text-sm">Advanced Settings</h3>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm font-medium">Require Reason for Resubmission</Label>
+                    <p className="text-xs text-muted-foreground">
+                      When enabled, employees must provide a mandatory reason when editing previously submitted daily/weekly entries
+                    </p>
+                  </div>
+                  <Switch
+                    checked={formData.require_resubmit_reason}
+                    onCheckedChange={(checked) => setFormData({ ...formData, require_resubmit_reason: checked })}
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Propagation Settings — only in edit mode with linked employees */}
+            {/* ── Propagation ── */}
             {template && linkedCount > 0 && (
-              <>
-                <Separator />
+              <div className="space-y-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b pb-2 border-border">Propagation</h3>
+
+                {/* Amber warning when changes exist but propagation is off */}
+                {hasChanges && !shouldPropagate && (
+                  <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                    <div className="text-sm">
+                      <p className="font-medium">You changed {Object.keys(changedFields).length} field{Object.keys(changedFields).length !== 1 ? 's' : ''}</p>
+                      <p className="text-muted-foreground text-xs mt-0.5">
+                        These changes only apply to the template — enable Propagation below to update {linkedCount} linked employee{linkedCount !== 1 ? 's' : ''}.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="p-4 border rounded-lg border-primary/30 bg-primary/5 space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -736,7 +750,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                     <div className="space-y-4">
                       {/* Weightage include/exclude toggle */}
                       {weightageChanged && (
-                        <div className="p-3 border rounded-md border-yellow-500/30 bg-yellow-500/5 space-y-2">
+                        <div className="p-3 border rounded-md border-amber-500/30 bg-amber-500/5 space-y-2">
                           <div className="flex items-center gap-2">
                             <Checkbox
                               id="include-weightage"
@@ -748,7 +762,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                             </Label>
                           </div>
                           <div className="flex items-start gap-1.5 ml-6">
-                            <AlertTriangle className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400 mt-0.5 shrink-0" />
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
                             <p className="text-xs text-muted-foreground">
                               Caution: This will overwrite individual employee weightages that may have been customized in the Weightage Dashboard.
                             </p>
@@ -888,7 +902,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                     </div>
                   )}
                 </div>
-              </>
+              </div>
             )}
           </div>
         </ScrollArea>
@@ -907,7 +921,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                 {propagate.isPending ? 'Propagating...' : 'Saving...'}
               </>
             ) : template 
-              ? (shouldPropagate && hasPropagableChanges ? 'Save & Propagate' : 'Update Template') 
+              ? (shouldPropagate && hasPropagableChanges ? 'Save & Propagate' : 'Update Template Only') 
               : 'Create Template'}
           </Button>
         </DialogFooter>
