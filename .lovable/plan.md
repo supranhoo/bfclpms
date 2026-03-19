@@ -1,90 +1,45 @@
 
-# Workflow Configuration: "Effective From" Period Support — IMPLEMENTED ✅
 
-## What Changed
-- Added `is_ongoing` BOOLEAN column to `workflow_config` table
-- Created `month_name_to_index()` and `find_ongoing_workflow()` helper functions
-- Updated 3 RPCs with ongoing resolution: exact match → ongoing match → global fallback
-- Frontend: "Apply from this month onward" toggle + ongoing badges
-- Hook: `useUpsertWorkflowConfig` accepts `isOngoing` parameter
+## Fix: Stale `final_score` in Fallback Chains Across Codebase
 
----
+### Problem
+The same bug exists in **9 other files**. They all use a fallback chain like:
+```
+final_score ?? management_score ?? auditor_score ?? manager_score ?? self_score
+```
+This picks up the stale `final_score` (e.g. 5 from import) even when the KPI is not yet approved and later reviewers scored 0.
 
-# Org-Level KPI Toggle in Assign New KRA Dialog — IMPLEMENTED ✅
+### Fix Pattern
+In every fallback chain, only use `final_score` when the KPI status is `'approved'`. Otherwise, skip it:
+```typescript
+// Before:
+const score = sub.final_score ?? sub.management_score ?? ...
 
-## What Changed
-- Added `isOrgLevel` toggle switch and `orgLevelScope` selector to the Advanced section of `AdminKpiCreateDialog`
-- Submit now uses these state values instead of hardcoded `is_org_level: false`
-- Scope options: Organization, Department, Employee (matching `MarkOrgLevelDialog` pattern)
+// After:
+const score = (status === 'approved' ? sub.final_score : null) ?? sub.management_score ?? ...
+```
 
----
+### Files to Change
 
+| # | File | Line(s) | Context |
+|---|------|---------|---------|
+| 1 | `src/components/management/DirectReporteesMonitor.tsx` | 88 | Monthly score aggregation — has `kpi.status` available via `allKpis` query (needs adding to select) |
+| 2 | `src/pages/ManagementDashboard.tsx` | 217 | Dashboard score calc — has `kpi.status` available |
+| 3 | `src/pages/reports/PerformanceReport.tsx` | 54, 73 | Category scores and avg — has `kpi.status` available |
+| 4 | `src/pages/reports/EmployeePerformanceSummary.tsx` | 180, 288 | Two fallback chains — has `kpi.status` available |
+| 5 | `src/pages/reports/KpiDetailReport.tsx` | 26-37 | `resolveFinalScore()` helper — needs status param added |
+| 6 | `src/components/review/KpiHistoryCard.tsx` | 47 | History chart score — has `k.status` available |
+| 7 | `src/components/review/KpiReviewPanel.tsx` | 96 | `baseScore` prop — has `kpi.status` available |
+| 8 | `src/components/dashboard/KpiTrackerModal.tsx` | 142 | Monthly detail `finalScore` — has `k.status` available; guard display same as KpiDetailsTable |
+| 9 | `src/pages/admin/ImportData.tsx` | 1744-1746 | Export rating column — has KPI status from joined data |
 
-## Problem
-KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
+### Approach
+- Each file already has access to the KPI status (either directly or via joined data)
+- The fix is mechanical: wrap `final_score` access with a status check
+- `KpiDetailReport.resolveFinalScore` will gain an optional `status` parameter
+- `DirectReporteesMonitor` needs `status` added to its Supabase select query
 
-## Fix Applied
-Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
+### Impact
+- Immediately fixes stale scores for all existing data across dashboards, reports, and review panels
+- Combined with the previous fixes (clearing final_score on intermediate review, guarding imports), this eliminates the issue end-to-end
 
-| File | Line | Change |
-|---|---|---|
-| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
-| `EmployeeScorecard.tsx` | 220 | Same |
-| `AuditScorecard.tsx` | 221 | Same |
-| `ManagementScorecard.tsx` | 222 | Same |
-
-## Impact
-- Biswajit's score: 382/468 → 382/443 (correct)
-- 19 employees with unsubmitted KPIs now show accurate weighted scores
-- Quarterly KPIs in non-terminal months are correctly excluded
-- No database migration needed — frontend calculation fix only
-
----
-
-# Improve Send-Back KPI Experience — IMPLEMENTED ✅
-
-## Problems Fixed
-
-### 1. Employee data preserved on send-back
-Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
-
-| File | Change |
-|---|---|
-| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
-| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
-
-### 2. Send-back reason shown on face
-- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
-- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
-- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
-
-### 3. Send-back queries created from all reviewer levels
-UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
-
-| File | Change |
-|---|---|
-| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
-| `SelfReviewSheet.tsx` | Uses SentBackBanner |
-| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
-| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
-
----
-
-# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
-
-## Gaps Fixed
-
-### 1. ManagementScorecard now creates `kpi_queries` record on send-back
-Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
-
-### 2. SentBackBanner shown to all reviewer levels
-The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
-
-### 3. SentBackBanner conditionally renders
-Returns `null` when no send-back query is found, so it doesn't show an empty banner.
-
-| File | Change |
-|---|---|
-| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
-| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
-| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |
