@@ -131,6 +131,10 @@ export default function KpiJourneyReport() {
 
   const handleExport = () => {
     if (!filtered.length) return;
+    const fmtCell = (dateStr: string | null, isNa: boolean) => {
+      if (isNa && !dateStr) return 'N/A';
+      return dateStr ? format(new Date(dateStr), 'dd-MMM-yyyy HH:mm') : '';
+    };
     const exportData = filtered.map(r => ({
       'Emp Code': r.employeeCode,
       'Employee': r.employeeName,
@@ -140,15 +144,15 @@ export default function KpiJourneyReport() {
       'KPI': r.kpiName,
       'Month': r.reviewPeriod,
       'KRA Assigned': r.kraAssignedAt ? format(new Date(r.kraAssignedAt), 'dd-MMM-yyyy HH:mm') : '',
-      'Self Submitted': r.selfSubmittedAt ? format(new Date(r.selfSubmittedAt), 'dd-MMM-yyyy HH:mm') : '',
-      'Manager Action': r.managerActionAt ? format(new Date(r.managerActionAt), 'dd-MMM-yyyy HH:mm') : '',
-      'Skip-Level': r.skipLevelAt ? format(new Date(r.skipLevelAt), 'dd-MMM-yyyy HH:mm') : '',
-      'HR PMS': r.hrPmsAt ? format(new Date(r.hrPmsAt), 'dd-MMM-yyyy HH:mm') : '',
-      'Auditor': r.auditorAt ? format(new Date(r.auditorAt), 'dd-MMM-yyyy HH:mm') : '',
-      'Management': r.managementAt ? format(new Date(r.managementAt), 'dd-MMM-yyyy HH:mm') : '',
-      'Final Approved': r.finalApprovedAt ? format(new Date(r.finalApprovedAt), 'dd-MMM-yyyy HH:mm') : '',
-      'Total Days': r.totalDays,
-      'Status': STATUS_LABELS[r.status] ?? r.status,
+      'Self Submitted': fmtCell(r.selfSubmittedAt, r.isNa),
+      'Manager Action': fmtCell(r.managerActionAt, r.isNa),
+      'Skip-Level': fmtCell(r.skipLevelAt, r.isNa),
+      'HR PMS': fmtCell(r.hrPmsAt, r.isNa),
+      'Auditor': fmtCell(r.auditorAt, r.isNa),
+      'Management': fmtCell(r.managementAt, r.isNa),
+      'Final Approved': fmtCell(r.finalApprovedAt, r.isNa),
+      'Total Days': r.isNa ? 'N/A' : r.totalDays,
+      'Status': r.isNa ? 'N/A' : (STATUS_LABELS[r.status] ?? r.status),
       'Timeline Compliant': r.isCompliant ? 'Yes' : 'No',
       'Type': r.isOrgKpi ? 'Org KPI' : 'Individual',
     }));
