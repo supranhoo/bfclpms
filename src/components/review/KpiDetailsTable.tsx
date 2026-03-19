@@ -455,7 +455,7 @@ export function KpiDetailsTable({
                 </TableCell>
                 {/* Dynamic Score Columns */}
                 {scoreColumns.map(col => {
-                  const score = getScoreForColumn(submission, col.key);
+                  const score = getScoreForColumn(submission, col.key, kpi.status || 'kra_set');
                   const stageCompleted = isStageCompleted(col.key, kpi.status || 'kra_set', effectiveStages);
                   const showNA = score === null && stageCompleted;
                   return (
