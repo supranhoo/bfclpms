@@ -1,113 +1,129 @@
 
-# Workflow Configuration: "Effective From" Period Support — IMPLEMENTED ✅
 
-## What Changed
-- Added `is_ongoing` BOOLEAN column to `workflow_config` table
-- Created `month_name_to_index()` and `find_ongoing_workflow()` helper functions
-- Updated 3 RPCs with ongoing resolution: exact match → ongoing match → global fallback
-- Frontend: "Apply from this month onward" toggle + ongoing badges
-- Hook: `useUpsertWorkflowConfig` accepts `isOngoing` parameter
+## Root Cause Analysis: Stale `final_score` Persisting After Auditor/Management Scored 0
 
----
+### Evidence from Live Data
 
-# Org-Level KPI Toggle in Assign New KRA Dialog — IMPLEMENTED ✅
+For KPI `1f220ea1` (January 2026, "Maintining and Reconciling inventory"):
+- `self_score: 5, self_rating: "blue"`
+- `auditor_score: 0, auditor_rating: "red"`
+- `management_score: 0, management_rating: "red"`
+- `final_score: 5, final_rating: "blue"` ← **WRONG — should be 0**
+- Status: Approved
 
-## What Changed
-- Added `isOrgLevel` toggle switch and `orgLevelScope` selector to the Advanced section of `AdminKpiCreateDialog`
-- Submit now uses these state values instead of hardcoded `is_org_level: false`
-- Scope options: Organization, Department, Employee (matching `MarkOrgLevelDialog` pattern)
+Multiple KPIs show this pattern: Self=5, Auditor=0, Mgmt=0, but Final=5.
 
 ---
 
+### Root Causes Identified
 
-## Problem
-KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
+**RC-1: Legacy imported data was never corrected**
 
-## Fix Applied
-Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
+These KPIs were bulk-imported (via `import-kpis` edge function) with `final_score` set from self-review before our fix. The old import code was:
+```
+final_score: row.auditRating ?? row.managerRating ?? row.employeeRating ?? row.rating ?? null
+```
+With only self-rating available at import time, `final_score=5` was written. The KPIs were then reviewed through the UI, but **the old code paths did not clear the stale `final_score` during intermediate stages**. Our fix (clearing `final_score` in the `else` branch) was applied AFTER these KPIs were already processed.
 
-| File | Line | Change |
-|---|---|---|
-| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
-| `EmployeeScorecard.tsx` | 220 | Same |
-| `AuditScorecard.tsx` | 221 | Same |
-| `ManagementScorecard.tsx` | 222 | Same |
+**RC-2: `getRelevantScore()` in UnifiedScorecard still uses `final_score` unconditionally (ACTIVE BUG)**
 
-## Impact
-- Biswajit's score: 382/468 → 382/443 (correct)
-- 19 employees with unsubmitted KPIs now show accurate weighted scores
-- Quarterly KPIs in non-terminal months are correctly excluded
-- No database migration needed — frontend calculation fix only
+Lines 454-459 of `UnifiedScorecard.tsx`:
+```typescript
+const getRelevantScore = (submission: any) => {
+  if (submission.final_score !== null && submission.final_score !== undefined) {
+    return submission.final_score; // ← No status check!
+  }
+  // ...fallback chain
+};
+```
+This function powers the **Overall Score chart and Category Score chart** on the dashboard. It picks up stale `final_score=5` for ALL KPIs regardless of status, inflating dashboard scores.
 
----
+**RC-3: ManagementScorecard ALWAYS writes `final_score` regardless of approve flag**
 
-# Improve Send-Back KPI Experience — IMPLEMENTED ✅
-
-## Problems Fixed
-
-### 1. Employee data preserved on send-back
-Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
-
-| File | Change |
-|---|---|
-| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
-| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
-
-### 2. Send-back reason shown on face
-- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
-- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
-- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
-
-### 3. Send-back queries created from all reviewer levels
-UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
-
-| File | Change |
-|---|---|
-| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
-| `SelfReviewSheet.tsx` | Uses SentBackBanner |
-| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
-| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
+Lines 304-305 of `ManagementScorecard.tsx`:
+```typescript
+final_rating: management_rating,
+final_score: management_score,  // ← Written on EVERY submit, not just approval
+```
+This is inconsistent with the UnifiedScorecard pattern (which only writes on approval and clears otherwise). While it correctly writes the management score, it means non-approved saves pollute the `final_score` field.
 
 ---
 
-# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
+### CAPA Plan (4 Fixes)
 
-## Gaps Fixed
+**Fix 1: Data migration — Correct stale `final_score` for approved KPIs**
 
-### 1. ManagementScorecard now creates `kpi_queries` record on send-back
-Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
+Write a one-time SQL migration that recalculates `final_score` for all approved KPIs using the proper fallback chain:
+```sql
+UPDATE review_submissions rs
+SET 
+  final_score = COALESCE(rs.management_score, rs.auditor_score, rs.hr_pms_score, 
+                          rs.skip_level_score, rs.manager_score, rs.self_score),
+  final_rating = COALESCE(rs.management_rating, rs.auditor_rating, rs.hr_pms_rating,
+                           rs.skip_level_rating, rs.manager_rating, rs.self_rating)
+FROM kpis k
+WHERE k.id = rs.kpi_id
+  AND k.status = 'approved'
+  AND rs.is_na = false
+  AND rs.final_score IS DISTINCT FROM 
+      COALESCE(rs.management_score, rs.auditor_score, rs.hr_pms_score,
+               rs.skip_level_score, rs.manager_score, rs.self_score);
+```
+Also NULL out `final_score`/`final_rating` for non-approved KPIs that still have stale values.
 
-### 2. SentBackBanner shown to all reviewer levels
-The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
+**Fix 2: Gate `getRelevantScore()` in UnifiedScorecard**
 
-### 3. SentBackBanner conditionally renders
-Returns `null` when no send-back query is found, so it doesn't show an empty banner.
+Update lines 454-469 to check KPI status before using `final_score`. The function needs the KPI's status passed in:
+```typescript
+const getRelevantScore = (submission: any, kpiStatus?: string) => {
+  if (!submission) return 0;
+  if (kpiStatus === 'approved' && submission.final_score != null) {
+    return submission.final_score;
+  }
+  // ...existing fallback chain
+};
+```
 
-| File | Change |
-|---|---|
-| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
-| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
-| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |
+**Fix 3: Align ManagementScorecard with the guarded pattern**
+
+Change lines 296-308 to only set `final_score`/`final_rating` when `approve === true`:
+```typescript
+const updatePayload: any = {
+  management_rating, management_score, management_remarks,
+  management_evidence_url, management_achieved_value,
+};
+if (approve) {
+  updatePayload.final_rating = management_rating;
+  updatePayload.final_score = management_score;
+} else {
+  updatePayload.final_score = null;
+  updatePayload.final_rating = null;
+}
+```
+
+**Fix 4: Clear stale `final_score` for non-approved KPIs (migration)**
+
+```sql
+UPDATE review_submissions rs
+SET final_score = NULL, final_rating = NULL
+FROM kpis k
+WHERE k.id = rs.kpi_id
+  AND k.status != 'approved'
+  AND (rs.final_score IS NOT NULL OR rs.final_rating IS NOT NULL);
+```
 
 ---
 
-# Fix: Stale `final_score` in Fallback Chains — IMPLEMENTED ✅
-
-## Problem
-9 files used `final_score ?? management_score ?? ...` fallback chains without checking KPI approval status, causing stale imported `final_score` values to override actual reviewer scores.
-
-## Fix Applied
-Gated `final_score` behind `status === 'approved'` check in all fallback chains:
+### Files to Change
 
 | File | Change |
 |------|--------|
-| `DirectReporteesMonitor.tsx` | Added `status` to query select; gated fallback |
-| `ManagementDashboard.tsx` | Gated `getScore()` helper |
-| `PerformanceReport.tsx` | Gated category scores + avg score |
-| `EmployeePerformanceSummary.tsx` | Gated both fallback chains (lines 180, 288) |
-| `KpiDetailReport.tsx` | Added `status` param to `resolveFinalScore()` |
-| `KpiHistoryCard.tsx` | Gated history chart scores |
-| `KpiReviewPanel.tsx` | Gated `baseScore` prop |
-| `KpiTrackerModal.tsx` | Gated `finalScore` display |
-| `ImportData.tsx` | Gated export rating column |
+| New migration SQL | Fix 1 + Fix 4: Correct stale final_scores in DB |
+| `src/components/review/UnifiedScorecard.tsx` | Fix 2: Gate `getRelevantScore()` with status check |
+| `src/components/review/ManagementScorecard.tsx` | Fix 3: Only write final_score on approval |
+
+### Impact
+- Immediately corrects all existing stale scores in the database
+- Dashboard charts (Overall Score, Category Score) will show accurate values
+- Prevents future stale values from all code paths (UnifiedScorecard, ManagementScorecard, import, admin data entry)
 
