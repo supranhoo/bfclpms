@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
-import { useKpiJourneyReport, fetchKpiJourneyExportData, KpiJourneyFilters } from '@/hooks/useKpiJourneyReport';
+import { useKpiJourneyReport, fetchKpiJourneyExportData, KpiJourneyFilters, SendBackEntry } from '@/hooks/useKpiJourneyReport';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Download, Search, ChevronLeft, ChevronRight, FileSpreadsheet, Clock, CheckCircle2, AlertCircle, Timer, Loader2, MinusCircle } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Download, Search, ChevronLeft, ChevronRight, FileSpreadsheet, Clock, CheckCircle2, AlertCircle, Timer, Loader2, MinusCircle, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -83,7 +84,7 @@ export default function KpiJourneyReport() {
 
   const rows = data?.rows ?? [];
   const totalCount = data?.totalCount ?? 0;
-  const summary = data?.summary ?? { total: 0, pending: 0, avgToSelf: 0, avgToFinal: 0 };
+  const summary = data?.summary ?? { total: 0, pending: 0, avgToSelf: 0, avgToFinal: 0, totalSendBacks: 0 };
 
   // Fetch departments for filter dropdown
   const { data: departments } = useQuery({
@@ -144,6 +145,11 @@ export default function KpiJourneyReport() {
         'Status': r.isNa ? 'N/A' : (STATUS_LABELS[r.status] ?? r.status),
         'Timeline Compliant': r.isCompliant ? 'Yes' : 'No',
         'Type': r.isOrgKpi ? 'Org KPI' : 'Individual',
+        'Send-Back Count': r.sendBackCount ?? 0,
+        'Send-Back History': (r.sendBacks ?? []).map((sb: any) => {
+          const d = sb.date ? format(new Date(sb.date), 'dd-MMM-yyyy') : '';
+          return `${d} by ${sb.raisedBy}: ${sb.reason}`;
+        }).join('; '),
       }));
 
       const ws = XLSX.utils.json_to_sheet(exportData);
@@ -242,7 +248,7 @@ export default function KpiJourneyReport() {
       </Card>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total KPIs</CardTitle></CardHeader>
           <CardContent>
@@ -276,6 +282,15 @@ export default function KpiJourneyReport() {
             <div className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-amber-500" />
               <span className="text-2xl font-bold">{isLoading ? <Skeleton className="h-7 w-12" /> : summary.pending}</span>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total Send-Backs</CardTitle></CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-red-500" />
+              <span className="text-2xl font-bold">{isLoading ? <Skeleton className="h-7 w-12" /> : summary.totalSendBacks}</span>
             </div>
           </CardContent>
         </Card>
@@ -324,6 +339,7 @@ export default function KpiJourneyReport() {
                     <TableHead className="min-w-[130px]">Final</TableHead>
                     <TableHead className="min-w-[90px]">Total Days</TableHead>
                     <TableHead className="min-w-[100px]">Status</TableHead>
+                    <TableHead className="min-w-[90px]">Send-Backs</TableHead>
                     <TableHead className="min-w-[60px] text-center">✓</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -371,6 +387,37 @@ export default function KpiJourneyReport() {
                           }`}>
                             {STATUS_LABELS[row.status] ?? row.status}
                           </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {row.sendBackCount === 0 ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button className="cursor-pointer">
+                                <Badge variant="outline" className={`text-xs font-mono ${
+                                  row.sendBackCount >= 2
+                                    ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
+                                }`}>
+                                  {row.sendBackCount}×
+                                </Badge>
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-80 max-h-60 overflow-y-auto" align="start">
+                              <div className="space-y-3">
+                                <h4 className="font-semibold text-sm">Send-Back History</h4>
+                                {(row.sendBacks ?? []).map((sb: SendBackEntry, idx: number) => (
+                                  <div key={idx} className="border-l-2 border-amber-400 pl-3 text-xs space-y-0.5">
+                                    <div className="font-medium">{sb.raisedBy}</div>
+                                    <div className="text-muted-foreground">{formatDate(sb.date)}</div>
+                                    <div className="text-foreground/80">{sb.reason}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         )}
                       </TableCell>
                       <TableCell className="text-center">
