@@ -112,14 +112,18 @@ export default function KRALibrary() {
   };
 
   const handleDuplicate = async (template: KpiTemplate) => {
-    const { id, created_at, updated_at, kra_categories, ...rest } = template;
-    await createTemplate.mutateAsync({
-      ...rest,
-      title: `${template.title} (Copy)`,
-      applicable_roles: rest.applicable_roles || [],
-      is_active: true,
-    });
-    toast({ title: 'Template duplicated successfully' });
+    try {
+      const { id, created_at, updated_at, created_by, kra_categories, ...rest } = template;
+      await createTemplate.mutateAsync({
+        ...rest,
+        title: `${template.title} (Copy)`,
+        applicable_roles: rest.applicable_roles || [],
+        is_active: true,
+      });
+      toast({ title: 'Template duplicated successfully' });
+    } catch {
+      // Error toast handled by the mutation's onError
+    }
   };
 
   const handleDelete = async () => {
