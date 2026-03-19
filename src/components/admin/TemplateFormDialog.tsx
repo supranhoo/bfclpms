@@ -47,6 +47,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(new Set());
   const [previewData, setPreviewData] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   const { data: linkedEmployees } = useLinkedEmployees(template?.id || null);
 
