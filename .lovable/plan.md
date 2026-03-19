@@ -111,3 +111,34 @@ Gated `final_score` behind `status === 'approved'` check in all fallback chains:
 | `KpiTrackerModal.tsx` | Gated `finalScore` display |
 | `ImportData.tsx` | Gated export rating column |
 
+---
+
+# KRA Library → KPI Master: Template Propagation — IMPLEMENTED ✅
+
+## What Changed
+
+### Database
+- Added `source_template_id` column to `kpis` table (FK → `kpi_templates`)
+- Backfilled 5922 of 7387 KPIs via case-insensitive `(kra_name, kpi_name, category_id)` matching
+- Created `template_change_logs` table with admin-only RLS for audit trail
+
+### Edge Function: `propagate-template-change`
+- Receives: template_id, changed fields, effective_month/year, optional employee_ids, dry_run flag
+- Updates only structural fields (target_value, weightage, uom, r5-r0, etc.) — never scores
+- Skips approved KPIs; filters by effective month onwards
+- Supports dry-run preview returning impact summary
+- Creates audit log entries for each propagated KPI
+
+### Assignment Flows Updated
+All 4 assignment flows now write `source_template_id`:
+- `BulkTemplateAssignDialog.tsx` — template.id
+- `BundleAssignDialog.tsx` — template.id via bundle items
+- `SmartAssignmentDialog.tsx` — template.id (both bundle + individual paths)
+- `AdminKpiCreateDialog.tsx` — selectedTemplateId when created from template
+
+### Enhanced UI
+- **TemplateFormDialog**: Propagation Settings section with effective month, scope (all/selected), field diff, preview impact, "Save & Propagate" button
+- **TemplatePropagationPreview**: Dry-run summary cards showing KPIs/employees affected
+- **TemplateChangeHistory**: Timeline dialog showing all past propagation events
+- **KRALibrary page**: "Linked" column with KPI count, "View Change History" action, 3 stats cards
+
