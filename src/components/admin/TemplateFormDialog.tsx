@@ -37,6 +37,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
 
   // Propagation state
   const [shouldPropagate, setShouldPropagate] = useState(false);
+  const [includeWeightage, setIncludeWeightage] = useState(false);
   const [effectiveMonth, setEffectiveMonth] = useState(() => MONTH_NAMES[new Date().getMonth()]);
   const [effectiveYear, setEffectiveYear] = useState(() => new Date().getFullYear());
   const [propagationScope, setPropagationScope] = useState<'all' | 'selected'>('all');
