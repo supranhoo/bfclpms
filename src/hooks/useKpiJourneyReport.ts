@@ -85,36 +85,58 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
 
       if (allKpis.length === 0) return [];
 
-      // Fetch profiles
-      const { data: profiles } = await supabase
+      const kpiIds = allKpis.map(k => k.id);
+
+      // Fetch profiles, submissions, and audit logs ALL in parallel
+      const profilesPromise = supabase
         .from('profiles')
         .select('id, employee_code, full_name, department_id, departments ( name )');
 
-      const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
-
-      // Fetch audit logs and review_submissions for all KPI IDs in batches
-      const kpiIds = allKpis.map(k => k.id);
-      const allLogs: any[] = [];
-      const allSubmissions: any[] = [];
-      const logBatchSize = 500;
-
-      for (let i = 0; i < kpiIds.length; i += logBatchSize) {
-        const batch = kpiIds.slice(i, i + logBatchSize);
-        const [logsResult, subsResult] = await Promise.all([
-          supabase
-            .from('kpi_audit_logs')
-            .select('kpi_id, action, created_at, new_value')
-            .in('kpi_id', batch)
-            .order('created_at', { ascending: true }),
-      supabase
+      // Submissions: 1 row per KPI, fetch in single batched calls outside the loop
+      const submissionsPromise = (async () => {
+        const allSubs: any[] = [];
+        for (let i = 0; i < kpiIds.length; i += 1000) {
+          const batch = kpiIds.slice(i, i + 1000);
+          const { data } = await supabase
             .from('review_submissions')
             .select('kpi_id, submitted_at, self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na')
-            .in('kpi_id', batch),
-        ]);
+            .in('kpi_id', batch);
+          if (data) allSubs.push(...data);
+        }
+        return allSubs;
+      })();
 
-        if (logsResult.data) allLogs.push(...logsResult.data);
-        if (subsResult.data) allSubmissions.push(...subsResult.data);
-      }
+      // Audit logs: split into workflow actions (no new_value) and status transitions (with new_value)
+      const logsPromise = (async () => {
+        const allLogs: any[] = [];
+        const batchSize = 1000;
+        for (let i = 0; i < kpiIds.length; i += batchSize) {
+          const batch = kpiIds.slice(i, i + batchSize);
+          const [workflowResult, transitionResult] = await Promise.all([
+            supabase
+              .from('kpi_audit_logs')
+              .select('kpi_id, action, created_at')
+              .in('kpi_id', batch)
+              .neq('action', 'STATUS_TRANSITION')
+              .order('created_at', { ascending: true }),
+            supabase
+              .from('kpi_audit_logs')
+              .select('kpi_id, action, created_at, new_value')
+              .in('kpi_id', batch)
+              .eq('action', 'STATUS_TRANSITION')
+              .order('created_at', { ascending: true }),
+          ]);
+          if (workflowResult.data) allLogs.push(...workflowResult.data);
+          if (transitionResult.data) allLogs.push(...transitionResult.data);
+        }
+        return allLogs;
+      })();
+
+      const [profilesResult, allSubmissions, allLogs] = await Promise.all([
+        profilesPromise, submissionsPromise, logsPromise,
+      ]);
+
+      const profileMap = new Map((profilesResult.data ?? []).map(p => [p.id, p]));
 
       // Build submissions map for fallback
       const submissionsMap = new Map<string, any>();
