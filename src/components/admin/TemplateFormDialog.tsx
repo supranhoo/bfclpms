@@ -107,35 +107,57 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
     threshold_mode: 'absolute' as 'absolute' | 'ratio',
   });
 
+  // Detect drift: template has null fields but linked KPIs have values
+  const driftFields = useMemo(() => {
+    if (!template || !sampleLinkedKpi) return [];
+    const drifted: string[] = [];
+    for (const field of BACKFILL_FIELDS) {
+      const tVal = (template as any)[field];
+      const kVal = (sampleLinkedKpi as any)[field];
+      if ((tVal === null || tVal === undefined) && kVal !== null && kVal !== undefined) {
+        drifted.push(field);
+      }
+    }
+    return drifted;
+  }, [template, sampleLinkedKpi]);
+
   useEffect(() => {
     if (template) {
+      // Helper: use template value, falling back to linked KPI value for null fields
+      const val = (field: string) => {
+        const tVal = (template as any)[field];
+        if (tVal !== null && tVal !== undefined) return tVal;
+        if (sampleLinkedKpi) return (sampleLinkedKpi as any)[field] ?? null;
+        return null;
+      };
+
       setFormData({
         title: template.title || '',
         description: template.description || '',
         category_id: template.category_id || '',
-        kra_name: template.kra_name || '',
-        kpi_name: template.kpi_name || '',
-        uom: template.uom || '',
-        target_value: template.target_value?.toString() || '',
-        weightage: template.weightage?.toString() || '',
-        criteria: template.criteria || 'Higher is Better',
-        frequency: template.frequency || '',
-        source_of_data: template.source_of_data || '',
-        r5: template.r5 || '',
-        r4: template.r4 || '',
-        r3: template.r3 || '',
-        r2: template.r2 || '',
-        r1: template.r1 || '',
-        r0: template.r0 || '',
+        kra_name: val('kra_name') || '',
+        kpi_name: val('kpi_name') || '',
+        uom: val('uom') || '',
+        target_value: val('target_value')?.toString() || '',
+        weightage: val('weightage')?.toString() || '',
+        criteria: val('criteria') || 'Higher is Better',
+        frequency: val('frequency') || '',
+        source_of_data: val('source_of_data') || '',
+        r5: val('r5') || '',
+        r4: val('r4') || '',
+        r3: val('r3') || '',
+        r2: val('r2') || '',
+        r1: val('r1') || '',
+        r0: val('r0') || '',
         is_active: template.is_active ?? true,
-        uom_type: (template as any).uom_type || 'numeric',
-        qualitative_options: (template as any).qualitative_options || [
+        uom_type: val('uom_type') || 'numeric',
+        qualitative_options: val('qualitative_options') || [
           { label: 'Yes', rating: 5, definition: 'Requirement fully met' },
           { label: 'No', rating: 0, definition: 'Requirement not met' },
         ],
         require_resubmit_reason: template.require_resubmit_reason ?? true,
         day_count_type: (template as any).day_count_type || 'working_days',
-        threshold_mode: (template as any).threshold_mode || 'absolute',
+        threshold_mode: val('threshold_mode') || 'absolute',
       });
       setShouldPropagate(false);
       setIncludeWeightage(false);
@@ -144,7 +166,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
     } else {
       resetForm();
     }
-  }, [template, isOpen]);
+  }, [template, isOpen, sampleLinkedKpi]);
 
   const resetForm = () => {
     setFormData({
