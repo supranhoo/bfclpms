@@ -451,10 +451,10 @@ export function UnifiedScorecard({
   }, [queries]);
 
   // Get the relevant score based on view level (cascade down the chain)
-  const getRelevantScore = (submission: any) => {
+  const getRelevantScore = (submission: any, kpiStatus?: string) => {
     if (!submission) return 0;
-    // Prefer final_score (set by import or workflow completion)
-    if (submission.final_score !== null && submission.final_score !== undefined) {
+    // Only use final_score when KPI is approved — prevents stale imported values from overriding actual reviewer scores
+    if (kpiStatus === 'approved' && submission.final_score !== null && submission.final_score !== undefined) {
       return submission.final_score;
     }
     // Fallback to level-specific scores for in-progress reviews
@@ -492,7 +492,7 @@ export function UnifiedScorecard({
       const submission = submissionMap.get(kpi.id);
       if (!submission || submission.is_na) return; // Skip unsubmitted & NA KPIs
       
-      const score = getRelevantScore(submission);
+      const score = getRelevantScore(submission, kpi.status);
       const weight = kpi.weightage || 0;
       const categoryName = kpi.kra_categories?.name || 'Other';
       const categoryColor = kpi.kra_categories?.color || null;
