@@ -84,7 +84,7 @@ export default function KpiJourneyReport() {
 
   const rows = data?.rows ?? [];
   const totalCount = data?.totalCount ?? 0;
-  const summary = data?.summary ?? { total: 0, pending: 0, avgToSelf: 0, avgToFinal: 0 };
+  const summary = data?.summary ?? { total: 0, pending: 0, avgToSelf: 0, avgToFinal: 0, totalSendBacks: 0 };
 
   // Fetch departments for filter dropdown
   const { data: departments } = useQuery({
