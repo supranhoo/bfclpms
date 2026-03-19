@@ -70,7 +70,7 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
         Array.from(monthsByYear.entries()).map(async ([calYear, months]) => {
           const { data, error } = await supabase
             .from('kpis')
-            .select('employee_id, weightage, review_period, review_year, review_submissions (final_score, management_score, auditor_score, manager_score, self_score)')
+            .select('employee_id, weightage, review_period, review_year, status, review_submissions (final_score, management_score, auditor_score, manager_score, self_score)')
             .eq('review_year', calYear)
             .in('review_period', months)
             .in('employee_id', reporteeIds);
