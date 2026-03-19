@@ -177,9 +177,12 @@ export function usePropagateTemplateChange() {
         queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
         queryClient.invalidateQueries({ queryKey: ['template-linked-counts'] });
         queryClient.invalidateQueries({ queryKey: ['template-change-history'] });
+        const periodsNote = data.kpis_updated > data.employees_affected 
+          ? ' (across multiple review periods)' 
+          : '';
         toast({
           title: 'Changes Propagated',
-          description: `Updated ${data.kpis_updated} KPIs across ${data.employees_affected} employees`,
+          description: `Updated ${data.kpis_updated} KPI record${data.kpis_updated !== 1 ? 's' : ''} for ${data.employees_affected} employee${data.employees_affected !== 1 ? 's' : ''}${periodsNote}`,
         });
       }
     },
