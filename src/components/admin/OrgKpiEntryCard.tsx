@@ -7,8 +7,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { OrgKpiFileUpload } from '@/components/admin/OrgKpiFileUpload';
 import { OrgKpiAuditLog } from '@/components/admin/OrgKpiAuditLog';
 import { OrgKpiScopedEntryTable, ScopedRow } from '@/components/admin/OrgKpiScopedEntryTable';
-import type { ObservationCounts } from '@/components/admin/OrgKpiScopedEntryTable';
-import { OrgKpiObservationsSummary } from '@/components/admin/OrgKpiObservationsSummary';
+import { useObservationsByKpis } from '@/hooks/useKpiObservations';
+import type { KpiObservation } from '@/hooks/useKpiObservations';
 import { useObservationsByKpis } from '@/hooks/useKpiObservations';
 import { OrgKpiOwnerDialog } from '@/components/admin/OrgKpiOwnerDialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
