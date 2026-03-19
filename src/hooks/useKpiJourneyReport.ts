@@ -1,6 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
+export interface SendBackEntry {
+  date: string;
+  raisedBy: string;
+  reason: string;
+}
+
 export interface KpiJourneyRow {
   kpiId: string;
   employeeCode: string;
@@ -25,6 +31,8 @@ export interface KpiJourneyRow {
   isCompliant: boolean;
   isOrgKpi: boolean;
   isNa: boolean;
+  sendBackCount: number;
+  sendBacks: SendBackEntry[];
 }
 
 export interface KpiJourneyFilters {
@@ -39,6 +47,7 @@ export interface KpiJourneySummary {
   pending: number;
   avgToSelf: number;
   avgToFinal: number;
+  totalSendBacks: number;
 }
 
 export interface KpiJourneyResult {
