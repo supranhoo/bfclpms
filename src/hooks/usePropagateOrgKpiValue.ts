@@ -271,7 +271,7 @@ export function usePropagateOrgKpiValue() {
       if (targetKpis.length === 0) return { propagatedCount: 0, details: [] };
 
       const { kpiRatings, profileMap } = buildRatingsPayload(
-        targetKpis, params.achievedValue, !!params.isNa
+        targetKpis, params.achievedValue, !!params.isNa, params.evidenceUrl
       );
 
       const result = await callPropagationRpc(kpiRatings, profileMap, !!params.isNa, params.remarks);
