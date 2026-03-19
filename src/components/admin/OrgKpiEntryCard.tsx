@@ -440,12 +440,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               uom={data.uom}
               employeeObservations={employeeObservations}
             />
-          )}
-
-          {/* Employee Observations panel — only for employee-scoped KPIs */}
-          {data.scope === 'employee' && employeeKpiIds && employeeKpiIds.length > 0 && (
-            <OrgKpiObservationsSummary kpiIds={employeeKpiIds} />
-          )}
+          )
 
           {/* Lock banner */}
           {isLocked && (
