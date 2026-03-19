@@ -107,9 +107,10 @@ export default function KpiJourneyReport() {
   const stats = useMemo(() => {
     if (!filtered.length) return { total: 0, avgToSelf: 0, avgToFinal: 0, pending: 0 };
 
-    const withSelf = filtered.filter(r => r.kraAssignedAt && r.selfSubmittedAt);
-    const withFinal = filtered.filter(r => r.finalApprovedAt);
-    const pending = filtered.filter(r => r.status !== 'approved').length;
+    const applicable = filtered.filter(r => !r.isNa);
+    const withSelf = applicable.filter(r => r.kraAssignedAt && r.selfSubmittedAt);
+    const withFinal = applicable.filter(r => r.finalApprovedAt);
+    const pending = applicable.filter(r => r.status !== 'approved').length;
 
     const avgToSelf = withSelf.length > 0
       ? Math.round(withSelf.reduce((sum, r) => {
