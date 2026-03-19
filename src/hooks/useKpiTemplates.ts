@@ -73,17 +73,13 @@ export function useLinkedKpiCounts() {
   return useQuery({
     queryKey: ['template-linked-counts'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('kpis')
-        .select('source_template_id')
-        .not('source_template_id', 'is', null);
+      const { data, error } = await supabase.rpc('get_template_linked_counts');
 
       if (error) throw error;
 
       const counts: Record<string, number> = {};
-      (data || []).forEach(kpi => {
-        const tid = kpi.source_template_id as string;
-        counts[tid] = (counts[tid] || 0) + 1;
+      (data || []).forEach((row: { template_id: string; linked_count: number }) => {
+        counts[row.template_id] = row.linked_count;
       });
       return counts;
     },
