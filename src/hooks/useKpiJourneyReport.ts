@@ -93,44 +93,38 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
         .select('id, employee_code, full_name, department_id, departments ( name )');
 
       // Submissions: 1 row per KPI, fetch in single batched calls outside the loop
-      const submissionsPromise = (async () => {
-        const allSubs: any[] = [];
-        for (let i = 0; i < kpiIds.length; i += 300) {
-          const batch = kpiIds.slice(i, i + 300);
-          const { data } = await supabase
+      // Build batch slices upfront
+      const batches: string[][] = [];
+      for (let i = 0; i < kpiIds.length; i += 300) {
+        batches.push(kpiIds.slice(i, i + 300));
+      }
+
+      // Fire ALL submission + audit log batch queries in parallel
+      const submissionsPromise = Promise.all(
+        batches.map(batch =>
+          supabase
             .from('review_submissions')
             .select('kpi_id, submitted_at, self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na')
-            .in('kpi_id', batch);
-          if (data) allSubs.push(...data);
-        }
-        return allSubs;
-      })();
+            .in('kpi_id', batch)
+        )
+      ).then(results => results.flatMap(r => r.data ?? []));
 
-      // Audit logs: split into workflow actions (no new_value) and status transitions (with new_value)
-      const logsPromise = (async () => {
-        const allLogs: any[] = [];
-        const batchSize = 300;
-        for (let i = 0; i < kpiIds.length; i += batchSize) {
-          const batch = kpiIds.slice(i, i + batchSize);
-          const [workflowResult, transitionResult] = await Promise.all([
-            supabase
-              .from('kpi_audit_logs')
-              .select('kpi_id, action, created_at')
-              .in('kpi_id', batch)
-              .neq('action', 'STATUS_TRANSITION')
-              .order('created_at', { ascending: true }),
-            supabase
-              .from('kpi_audit_logs')
-              .select('kpi_id, action, created_at, new_value')
-              .in('kpi_id', batch)
-              .eq('action', 'STATUS_TRANSITION')
-              .order('created_at', { ascending: true }),
-          ]);
-          if (workflowResult.data) allLogs.push(...workflowResult.data);
-          if (transitionResult.data) allLogs.push(...transitionResult.data);
-        }
-        return allLogs;
-      })();
+      const logsPromise = Promise.all(
+        batches.flatMap(batch => [
+          supabase
+            .from('kpi_audit_logs')
+            .select('kpi_id, action, created_at')
+            .in('kpi_id', batch)
+            .neq('action', 'STATUS_TRANSITION')
+            .order('created_at', { ascending: true }),
+          supabase
+            .from('kpi_audit_logs')
+            .select('kpi_id, action, created_at, new_value')
+            .in('kpi_id', batch)
+            .eq('action', 'STATUS_TRANSITION')
+            .order('created_at', { ascending: true }),
+        ])
+      ).then(results => results.flatMap(r => r.data ?? []));
 
       const [profilesResult, allSubmissions, allLogs] = await Promise.all([
         profilesPromise, submissionsPromise, logsPromise,
