@@ -750,7 +750,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                     <div className="space-y-4">
                       {/* Weightage include/exclude toggle */}
                       {weightageChanged && (
-                        <div className="p-3 border rounded-md border-yellow-500/30 bg-yellow-500/5 space-y-2">
+                        <div className="p-3 border rounded-md border-amber-500/30 bg-amber-500/5 space-y-2">
                           <div className="flex items-center gap-2">
                             <Checkbox
                               id="include-weightage"
