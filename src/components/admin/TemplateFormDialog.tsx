@@ -186,6 +186,20 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
       if (config.isNumeric) {
         newVal = newVal ? parseFloat(newVal) : null;
       }
+      if (config.isJson) {
+        const oldJson = JSON.stringify(oldVal ?? null);
+        const newJson = JSON.stringify(newVal ?? null);
+        if (oldJson !== newJson) {
+          changes[field] = { old: oldVal ?? null, new: newVal ?? null };
+        }
+        continue;
+      }
+      if (config.isBoolean) {
+        if ((oldVal ?? null) !== (newVal ?? null)) {
+          changes[field] = { old: oldVal ?? null, new: newVal ?? null };
+        }
+        continue;
+      }
       const normalizedOld = oldVal ?? null;
       const normalizedNew = newVal === '' ? null : newVal;
       if (String(normalizedOld) !== String(normalizedNew)) {
