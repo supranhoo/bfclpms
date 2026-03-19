@@ -242,6 +242,16 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
     setShowPreview(true);
   };
 
+  const handleSubmitClick = () => {
+    if (!formData.title || !formData.kra_name || !formData.kpi_name) return;
+    // Show confirmation if propagating
+    if (template && shouldPropagate && hasPropagableChanges) {
+      setShowConfirmDialog(true);
+      return;
+    }
+    handleSubmit();
+  };
+
   const handleSubmit = async () => {
     if (!formData.title || !formData.kra_name || !formData.kpi_name) {
       return;
