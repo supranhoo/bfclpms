@@ -107,6 +107,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
         threshold_mode: (template as any).threshold_mode || 'absolute',
       });
       setShouldPropagate(false);
+      setIncludeWeightage(false);
       setShowPreview(false);
       setPreviewData(null);
     } else {
