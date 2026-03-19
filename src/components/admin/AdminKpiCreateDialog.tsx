@@ -194,6 +194,9 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
   const applyTemplate = (kpiNameValue: string) => {
     const tpl = filteredKpiTemplates.find(t => t.kpi_name === kpiNameValue);
     if (!tpl) return;
+    // Track template link - only real templates (from kpi_templates table) have created_by or applicable_roles
+    const isRealTemplate = (templates || []).some(t => t.id === tpl.id);
+    setSelectedTemplateId(isRealTemplate ? tpl.id : null);
     if (tpl.uom_type) setUomType(tpl.uom_type as UomType);
     if (tpl.uom) setUom(tpl.uom);
     if (tpl.criteria) setCriteria(tpl.criteria);
