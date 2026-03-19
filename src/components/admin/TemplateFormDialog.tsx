@@ -843,14 +843,17 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                         <div>
                           <Label className="text-xs mb-1 block">Fields to Propagate</Label>
                           <div className="space-y-1">
-                            {Object.entries(propagationChangedFields).map(([field, change]) => (
-                              <div key={field} className="text-xs flex items-center gap-1">
-                                <span className="font-medium capitalize">{field.replace(/_/g, ' ')}</span>
-                                <span className="text-muted-foreground line-through">{String(change.old ?? '—')}</span>
-                                <ArrowRight className="h-3 w-3" />
-                                <span className="font-medium">{String(change.new ?? '—')}</span>
-                              </div>
-                            ))}
+                            {Object.entries(propagationChangedFields).map(([field, change]) => {
+                              const fmt = (v: any) => v == null ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+                              return (
+                                <div key={field} className="text-xs flex items-center gap-1">
+                                  <span className="font-medium capitalize">{field.replace(/_/g, ' ')}</span>
+                                  <span className="text-muted-foreground line-through">{fmt(change.old)}</span>
+                                  <ArrowRight className="h-3 w-3" />
+                                  <span className="font-medium">{fmt(change.new)}</span>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
