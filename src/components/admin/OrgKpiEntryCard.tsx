@@ -118,21 +118,19 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   const obsKpiIds = isEmployeeScope && employeeKpiIds ? employeeKpiIds : [];
   const { data: observationMap } = useObservationsByKpis(obsKpiIds);
 
-  const employeeObservationCounts = useMemo(() => {
+  const employeeObservations = useMemo(() => {
     if (!observationMap || observationMap.size === 0) return undefined;
-    const counts = new Map<string, ObservationCounts>();
+    const grouped = new Map<string, KpiObservation[]>();
     observationMap.forEach((observations) => {
       observations.forEach(obs => {
         const empId = obs.kpi?.employee_id;
         if (!empId) return;
-        const existing = counts.get(empId) || { positive: 0, concern: 0, neutral: 0 };
-        if (obs.observation_type === 'positive') existing.positive++;
-        else if (obs.observation_type === 'concern') existing.concern++;
-        else existing.neutral++;
-        counts.set(empId, existing);
+        const existing = grouped.get(empId) || [];
+        existing.push(obs);
+        grouped.set(empId, existing);
       });
     });
-    return counts.size > 0 ? counts : undefined;
+    return grouped.size > 0 ? grouped : undefined;
   }, [observationMap]);
   const [naRemarks, setNaRemarks] = useState('');
 
