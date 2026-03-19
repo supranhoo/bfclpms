@@ -380,6 +380,17 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
 
         <ScrollArea className="max-h-[70vh] pr-4">
           <div className="space-y-6 py-2">
+            {/* Drift warning banner */}
+            {template && driftFields.length > 0 && (
+              <Alert className="border-blue-500/30 bg-blue-500/10">
+                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-sm">
+                  <span className="font-medium">Template sync notice:</span>{' '}
+                  {driftFields.length} field{driftFields.length !== 1 ? 's' : ''} ({driftFields.map(f => f.replace(/_/g, ' ')).join(', ')}) were missing from the template but found on linked KPIs. Values have been pre-filled — saving will update the template to match.
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* ── Identity ── */}
             <div className="space-y-1.5">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Identity</h3>
