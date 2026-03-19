@@ -112,7 +112,7 @@ export default function KpiJourneyReport() {
     if (isExporting) return;
     setIsExporting(true);
     try {
-      const [{ default: XLSX }, allRows] = await Promise.all([
+      const [XLSX, allRows] = await Promise.all([
         import('xlsx'),
         fetchKpiJourneyExportData(selectedPeriod, selectedYear, filters),
       ]);
