@@ -159,7 +159,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
     if (!template) return {};
     const changes: Record<string, { old: any; new: any }> = {};
 
-    const compareMap: Record<string, { formKey: keyof typeof formData; templateKey: keyof KpiTemplate; isNumeric?: boolean }> = {
+    const compareMap: Record<string, { formKey: keyof typeof formData; templateKey: keyof KpiTemplate; isNumeric?: boolean; isJson?: boolean; isBoolean?: boolean }> = {
       kra_name: { formKey: 'kra_name', templateKey: 'kra_name' },
       kpi_name: { formKey: 'kpi_name', templateKey: 'kpi_name' },
       target_value: { formKey: 'target_value', templateKey: 'target_value', isNumeric: true },
@@ -176,6 +176,8 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
       r0: { formKey: 'r0', templateKey: 'r0' },
       uom_type: { formKey: 'uom_type', templateKey: 'uom_type' as any },
       threshold_mode: { formKey: 'threshold_mode', templateKey: 'threshold_mode' as any },
+      qualitative_options: { formKey: 'qualitative_options', templateKey: 'qualitative_options' as any, isJson: true },
+      require_resubmit_reason: { formKey: 'require_resubmit_reason', templateKey: 'require_resubmit_reason' as any, isBoolean: true },
     };
 
     for (const [field, config] of Object.entries(compareMap)) {
