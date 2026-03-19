@@ -108,6 +108,7 @@ function buildRatingsPayload(
           achieved_value: achievedValue,
           self_score: ratingResult.rating,
           self_rating: scoreToRating(ratingResult.rating),
+          evidence_url: evidenceUrl || null,
         });
       }
     }
