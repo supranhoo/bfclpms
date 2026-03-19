@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
@@ -20,8 +21,17 @@ import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { TemplatePropagationPreview } from './TemplatePropagationPreview';
 import { TemplateSyncCheck } from './TemplateSyncCheck';
 import { Card, CardContent } from '@/components/ui/card';
-import { AlertTriangle, ArrowRight, Loader2, Users } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Info, Loader2, Users } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { supabase } from '@/integrations/supabase/client';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+
+/** Structural fields that should be back-filled from a linked KPI when null on template */
+const BACKFILL_FIELDS = [
+  'target_value', 'weightage', 'uom', 'criteria', 'source_of_data',
+  'frequency', 'uom_type', 'qualitative_options', 'threshold_mode',
+  'kra_name', 'kpi_name', 'r5', 'r4', 'r3', 'r2', 'r1', 'r0',
+] as const;
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const currentYear = new Date().getFullYear();
@@ -52,6 +62,22 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
 
   const { data: linkedEmployees } = useLinkedEmployees(template?.id || null);
 
+  // Fetch one linked KPI to use as fallback for null template fields
+  const { data: sampleLinkedKpi } = useQuery({
+    queryKey: ['template-sample-kpi', template?.id],
+    enabled: !!template?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kpis')
+        .select('*')
+        .eq('source_template_id', template!.id)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -81,35 +107,57 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
     threshold_mode: 'absolute' as 'absolute' | 'ratio',
   });
 
+  // Detect drift: template has null fields but linked KPIs have values
+  const driftFields = useMemo(() => {
+    if (!template || !sampleLinkedKpi) return [];
+    const drifted: string[] = [];
+    for (const field of BACKFILL_FIELDS) {
+      const tVal = (template as any)[field];
+      const kVal = (sampleLinkedKpi as any)[field];
+      if ((tVal === null || tVal === undefined) && kVal !== null && kVal !== undefined) {
+        drifted.push(field);
+      }
+    }
+    return drifted;
+  }, [template, sampleLinkedKpi]);
+
   useEffect(() => {
     if (template) {
+      // Helper: use template value, falling back to linked KPI value for null fields
+      const val = (field: string) => {
+        const tVal = (template as any)[field];
+        if (tVal !== null && tVal !== undefined) return tVal;
+        if (sampleLinkedKpi) return (sampleLinkedKpi as any)[field] ?? null;
+        return null;
+      };
+
       setFormData({
         title: template.title || '',
         description: template.description || '',
         category_id: template.category_id || '',
-        kra_name: template.kra_name || '',
-        kpi_name: template.kpi_name || '',
-        uom: template.uom || '',
-        target_value: template.target_value?.toString() || '',
-        weightage: template.weightage?.toString() || '',
-        criteria: template.criteria || 'Higher is Better',
-        frequency: template.frequency || '',
-        source_of_data: template.source_of_data || '',
-        r5: template.r5 || '',
-        r4: template.r4 || '',
-        r3: template.r3 || '',
-        r2: template.r2 || '',
-        r1: template.r1 || '',
-        r0: template.r0 || '',
+        kra_name: val('kra_name') || '',
+        kpi_name: val('kpi_name') || '',
+        uom: val('uom') || '',
+        target_value: val('target_value')?.toString() || '',
+        weightage: val('weightage')?.toString() || '',
+        criteria: val('criteria') || 'Higher is Better',
+        frequency: val('frequency') || '',
+        source_of_data: val('source_of_data') || '',
+        r5: val('r5') || '',
+        r4: val('r4') || '',
+        r3: val('r3') || '',
+        r2: val('r2') || '',
+        r1: val('r1') || '',
+        r0: val('r0') || '',
         is_active: template.is_active ?? true,
-        uom_type: (template as any).uom_type || 'numeric',
-        qualitative_options: (template as any).qualitative_options || [
+        uom_type: val('uom_type') || 'numeric',
+        qualitative_options: val('qualitative_options') || [
           { label: 'Yes', rating: 5, definition: 'Requirement fully met' },
           { label: 'No', rating: 0, definition: 'Requirement not met' },
         ],
         require_resubmit_reason: template.require_resubmit_reason ?? true,
         day_count_type: (template as any).day_count_type || 'working_days',
-        threshold_mode: (template as any).threshold_mode || 'absolute',
+        threshold_mode: val('threshold_mode') || 'absolute',
       });
       setShouldPropagate(false);
       setIncludeWeightage(false);
@@ -118,7 +166,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
     } else {
       resetForm();
     }
-  }, [template, isOpen]);
+  }, [template, isOpen, sampleLinkedKpi]);
 
   const resetForm = () => {
     setFormData({
@@ -332,6 +380,17 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
 
         <ScrollArea className="max-h-[70vh] pr-4">
           <div className="space-y-6 py-2">
+            {/* Drift warning banner */}
+            {template && driftFields.length > 0 && (
+              <Alert className="border-blue-500/30 bg-blue-500/10">
+                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-sm">
+                  <span className="font-medium">Template sync notice:</span>{' '}
+                  {driftFields.length} field{driftFields.length !== 1 ? 's' : ''} ({driftFields.map(f => f.replace(/_/g, ' ')).join(', ')}) were missing from the template but found on linked KPIs. Values have been pre-filled — saving will update the template to match.
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* ── Identity ── */}
             <div className="space-y-1.5">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Identity</h3>
