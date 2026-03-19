@@ -28,3 +28,26 @@ The checkbox is only visible when weightage was actually changed in the form. Wh
 ### Edge Case
 If weightage is the **only** field changed and the checkbox is unchecked, the propagation section shows a note: "No fields selected for propagation" and disables the propagate button.
 
+---
+
+# Weightage Propagation Guard — IMPLEMENTED ✅
+
+## Problem
+When propagating template changes from KRA Library, `weightage` was always included as a structural field, overwriting individual employee weightages customized via the Weightage Dashboard.
+
+## Fix
+Added an **"Include weightage changes"** checkbox (default: unchecked) in the propagation section of `TemplateFormDialog`. When unchecked, `weightage` is filtered out of the `fields_changed` payload sent to the edge function.
+
+| Detail | Behavior |
+|--------|----------|
+| Default | Weightage **excluded** from propagation |
+| Checkbox visible | Only when weightage was actually changed in the form |
+| Warning | ⚠ "Caution: This will overwrite individual employee weightages" |
+| Edge case | If weightage is the only change and checkbox is unchecked, propagation shows "No fields selected" and disables Preview/Propagate |
+| Edge function | No change needed — already filters by `fields_changed` keys |
+
+### File Changed
+| File | Change |
+|------|--------|
+| `TemplateFormDialog.tsx` | Added `includeWeightage` state, `propagationChangedFields` memo, checkbox UI with warning, disabled states when no propagable fields |
+
