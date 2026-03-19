@@ -88,3 +88,26 @@ Returns `null` when no send-back query is found, so it doesn't show an empty ban
 | `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
 | `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
 | `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |
+
+---
+
+# Fix: Stale `final_score` in Fallback Chains — IMPLEMENTED ✅
+
+## Problem
+9 files used `final_score ?? management_score ?? ...` fallback chains without checking KPI approval status, causing stale imported `final_score` values to override actual reviewer scores.
+
+## Fix Applied
+Gated `final_score` behind `status === 'approved'` check in all fallback chains:
+
+| File | Change |
+|------|--------|
+| `DirectReporteesMonitor.tsx` | Added `status` to query select; gated fallback |
+| `ManagementDashboard.tsx` | Gated `getScore()` helper |
+| `PerformanceReport.tsx` | Gated category scores + avg score |
+| `EmployeePerformanceSummary.tsx` | Gated both fallback chains (lines 180, 288) |
+| `KpiDetailReport.tsx` | Added `status` param to `resolveFinalScore()` |
+| `KpiHistoryCard.tsx` | Gated history chart scores |
+| `KpiReviewPanel.tsx` | Gated `baseScore` prop |
+| `KpiTrackerModal.tsx` | Gated `finalScore` display |
+| `ImportData.tsx` | Gated export rating column |
+
