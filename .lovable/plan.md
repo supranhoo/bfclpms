@@ -1,20 +1,31 @@
 
 
-## Add Frequency Column to KPI Journey Timeline Report
+## Fix Propagation CORS Failure and [object Object] Display
 
-The `frequency` field exists on the `kpis` table but the `get_kpi_journey_report` RPC function does not select or return it. Three layers need changes.
+Both fixes from the previous plan were **not actually applied** to the files. The edge function still has the old CORS headers, and `String()` is still used for object rendering. Here is the corrected plan:
 
-### Plan
+### Issue 1: Edge Function CORS — request never reaches the function
 
-| # | Layer | Change |
-|---|-------|--------|
-| 1 | **Database RPC** | Alter `get_kpi_journey_report` to add `k.frequency` in the `filtered_kpis` CTE and include `'frequency', COALESCE(pg.frequency, '—')` in the `jsonb_build_object` output |
-| 2 | **Hook type** (`useKpiJourneyReport.ts`) | Add `frequency: string` to the `KpiJourneyRow` interface |
-| 3 | **Report page** (`KpiJourneyReport.tsx`) | Add a "Frequency" `<TableHead>` + `<TableCell>` column in the table (after KPI column, before Type), and add `'Frequency': r.frequency` to the Excel export mapping |
+The Supabase JS client sends headers like `x-supabase-client-platform` that are not in the `Access-Control-Allow-Headers` list. The browser blocks the preflight, so the function never executes (confirmed: zero logs).
 
-### Details
+| # | File | Change |
+|---|------|--------|
+| 1 | `supabase/functions/propagate-template-change/index.ts` (line 5) | Replace CORS headers with full set: `authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version` |
 
-**RPC migration** — In the `filtered_kpis` CTE, add `k.frequency` to the SELECT list. In `rows_data`, add `'frequency', COALESCE(pg.frequency, '—')` to the `jsonb_build_object`. This pulls from the existing `kpis.frequency` column with no new joins needed.
+### Issue 2: `[object Object]` in Fields to Propagate
 
-**UI** — The new column goes between "KPI" and "Type" in the table, and between "KPI" and "Month" in the Excel export, matching the established column order pattern from other reports.
+`String()` on arrays/objects produces `[object Object]`. Affects both `TemplateFormDialog.tsx` (lines 849, 851) and `TemplatePropagationPreview.tsx` (lines 67, 69).
+
+| # | File | Lines | Change |
+|---|------|-------|--------|
+| 2 | `src/components/admin/TemplateFormDialog.tsx` | 849, 851 | Replace `String(change.old/new)` with a helper: if value is object/array, use `JSON.stringify(val)`, otherwise `String(val ?? '—')` |
+| 3 | `src/components/admin/TemplatePropagationPreview.tsx` | 67, 69 | Same fix as above |
+
+### Technical detail
+
+```typescript
+const fmt = (v: any) => v == null ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+```
+
+Three files, three small edits. This will unblock propagation and fix the display.
 
