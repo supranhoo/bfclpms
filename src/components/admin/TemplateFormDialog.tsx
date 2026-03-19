@@ -691,6 +691,34 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
 
                   {shouldPropagate && hasChanges && (
                     <div className="space-y-4">
+                      {/* Weightage include/exclude toggle */}
+                      {weightageChanged && (
+                        <div className="p-3 border rounded-md border-yellow-500/30 bg-yellow-500/5 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id="include-weightage"
+                              checked={includeWeightage}
+                              onCheckedChange={(checked) => setIncludeWeightage(checked === true)}
+                            />
+                            <Label htmlFor="include-weightage" className="text-sm font-medium cursor-pointer">
+                              Include weightage changes
+                            </Label>
+                          </div>
+                          <div className="flex items-start gap-1.5 ml-6">
+                            <AlertTriangle className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400 mt-0.5 shrink-0" />
+                            <p className="text-xs text-muted-foreground">
+                              Caution: This will overwrite individual employee weightages that may have been customized in the Weightage Dashboard.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* No propagable fields warning */}
+                      {!hasPropagableChanges && (
+                        <p className="text-xs text-muted-foreground italic">
+                          No fields selected for propagation. Only weightage was changed and it is excluded by default.
+                        </p>
+                      )}
                       {/* Effective Month */}
                       <div className="grid grid-cols-2 gap-3">
                         <div>
