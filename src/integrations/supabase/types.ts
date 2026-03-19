@@ -3464,6 +3464,13 @@ export type Database = {
         Args: { employee_uuid: string }
         Returns: string
       }
+      get_template_linked_counts: {
+        Args: never
+        Returns: {
+          linked_count: number
+          template_id: string
+        }[]
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
