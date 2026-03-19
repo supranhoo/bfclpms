@@ -914,8 +914,8 @@ async function processImport(
           auditor_rating: isNa ? null : mapScoreToRating(row.auditRating),
           auditor_score: isNa ? null : (row.auditRating ?? null),
           auditor_remarks: row.auditRemarks ?? null,
-          final_rating: isNa ? null : mapScoreToRating(row.auditRating ?? row.managerRating ?? row.employeeRating ?? row.rating),
-          final_score: isNa ? null : (row.auditRating ?? row.managerRating ?? row.employeeRating ?? row.rating ?? null),
+          final_rating: isNa ? null : (determineReviewStatus(row) === 'approved' ? mapScoreToRating(row.auditRating ?? row.managerRating ?? row.employeeRating ?? row.rating) : null),
+          final_score: isNa ? null : (determineReviewStatus(row) === 'approved' ? (row.auditRating ?? row.managerRating ?? row.employeeRating ?? row.rating ?? null) : null),
           kpi_status: determineKpiStatus(row),
           is_na: isNa,
         });

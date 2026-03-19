@@ -567,6 +567,11 @@ export function UnifiedScorecard({
       if (approve && config.forwardStatus === 'approved') {
         updateData.final_rating = rating;
         updateData.final_score = score;
+      } else {
+        // Clear stale final_score/final_rating to prevent displaying
+        // outdated values from import or prior stages
+        updateData.final_score = null;
+        updateData.final_rating = null;
       }
 
       const { data: updateResult, error: submissionError } = await supabase

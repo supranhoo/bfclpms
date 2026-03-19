@@ -103,7 +103,8 @@ function renderScoreCell(score: number | null | undefined): React.ReactNode {
  */
 function getScoreForColumn(
   submission: ReviewSubmission | undefined,
-  columnKey: string
+  columnKey: string,
+  kpiStatus?: string
 ): number | null {
   if (!submission) return null;
   
@@ -121,7 +122,8 @@ function getScoreForColumn(
     case 'management_score':
       return submission.management_score ?? null;
     case 'final_score':
-      return submission.final_score ?? null;
+      // Only show final_score when KPI is approved to prevent stale values
+      return kpiStatus === 'approved' ? (submission.final_score ?? null) : null;
     default:
       return null;
   }
@@ -453,7 +455,7 @@ export function KpiDetailsTable({
                 </TableCell>
                 {/* Dynamic Score Columns */}
                 {scoreColumns.map(col => {
-                  const score = getScoreForColumn(submission, col.key);
+                  const score = getScoreForColumn(submission, col.key, kpi.status || 'kra_set');
                   const stageCompleted = isStageCompleted(col.key, kpi.status || 'kra_set', effectiveStages);
                   const showNA = score === null && stageCompleted;
                   return (
