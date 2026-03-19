@@ -1,32 +1,38 @@
 
 
-## Completeness Gaps in Weightage Propagation Guard & Template Propagation
+## Remaining Improvements for KRA Library & Template Propagation
 
-After reviewing the full implementation, I found several missing pieces across the propagation flow:
+After reviewing the full codebase, here are the gaps that still need attention:
 
-### 1. Missing Field Change Detection (Client-Side)
+### 1. No Duplicate Template Action
+There is no way to clone/duplicate an existing template. Admins must recreate from scratch.
 
-The `compareMap` in `TemplateFormDialog.tsx` (lines 159-176) does not track two fields that are listed as structural on the server:
-- **`qualitative_options`** — if an admin changes tiered/binary options, the change is silently ignored during propagation
-- **`require_resubmit_reason`** — toggling this in the form never gets detected as a change
+**Change**: Add a "Duplicate" option in the dropdown menu on `KRALibrary.tsx` that creates a copy with " (Copy)" appended to the title.
 
-These fields get saved to the template but are never included in `fields_changed`, so they never propagate.
+### 2. No Category Filter on the Library Page
+The table only has a text search. Admins managing dozens of templates cannot filter by category.
 
-### 2. No Confirmation Before Propagation
+**Change**: Add a category dropdown filter next to the search input on `KRALibrary.tsx`.
 
-Clicking "Save & Propagate" immediately executes the bulk update. For a destructive operation affecting potentially hundreds of KPIs, there should be a confirmation dialog showing a summary (e.g., "This will update 47 KPIs across 12 employees. Continue?").
+### 3. Delete Doesn't Warn About Linked KPIs
+The delete confirmation says "This action cannot be undone" but doesn't mention if the template has linked KPIs that will become orphaned (lose their `source_template_id` link).
 
-### 3. Hardcoded Year Selector
+**Change**: Show linked KPI count in the delete confirmation dialog. If count > 0, display a warning: "This template is linked to X KPIs. They will no longer receive propagated updates."
 
-The year dropdown (line 746) is hardcoded to `[2025, 2026, 2027]`. Should be dynamically generated relative to the current year.
+### 4. No Rollback/Undo for Propagation
+Once propagation executes, there is no way to revert. The audit trail logs old values but there's no UI to trigger a rollback.
 
-### 4. Change History Missing "Who"
+**Change**: Add a "Revert" button on each entry in `TemplateChangeHistory.tsx` that creates a reverse propagation using the stored `old` values from `fields_changed`.
 
-`template_change_logs` stores `changed_by` (user ID), but `TemplateChangeHistory.tsx` never resolves it to a name. The history entries don't show who performed the propagation.
+### 5. Table Missing Weightage & Frequency Columns
+The library table shows Target but not Weightage or Frequency — key fields admins need at a glance.
 
-### 5. No Select All / Deselect All for Employee Scope
+**Change**: Add Weightage and Frequency columns to the table in `KRALibrary.tsx`.
 
-When "Selected employees only" is chosen, there are no bulk selection controls for the employee list.
+### 6. No Pagination or Sorting
+The template table has no pagination or column sorting, which will become a problem as the library grows.
+
+**Change**: Add client-side sorting (click column headers) and pagination (e.g., 20 per page) to `KRALibrary.tsx`.
 
 ---
 
@@ -34,45 +40,46 @@ When "Selected employees only" is chosen, there are no bulk selection controls f
 
 | # | File | Change |
 |---|------|--------|
-| 1 | `TemplateFormDialog.tsx` | Add `qualitative_options` and `require_resubmit_reason` to the `compareMap` so changes are detected and propagated. Use JSON.stringify for deep comparison of `qualitative_options`. |
-| 2 | `TemplateFormDialog.tsx` | Add a confirmation `AlertDialog` that appears when "Save & Propagate" is clicked — shows field count, KPI count, employee count summary before executing. |
-| 3 | `TemplateFormDialog.tsx` | Replace hardcoded `[2025, 2026, 2027]` with dynamic range: `[currentYear - 1, currentYear, currentYear + 1]`. |
-| 4 | `TemplateFormDialog.tsx` | Add "Select All / Deselect All" toggle above the employee list when scope is "selected". |
-| 5 | `TemplateChangeHistory.tsx` | Fetch profile names for `changed_by` IDs and display "by [Name]" in each history entry. Update the hook query to join profiles or fetch separately. |
-| 6 | `useKpiTemplates.ts` | Update `useTemplateChangeHistory` query to join on profiles table to get the changer's name. |
+| 1 | `KRALibrary.tsx` | Add "Duplicate" dropdown item that calls `useCreateKpiTemplate` with cloned data |
+| 2 | `KRALibrary.tsx` | Add category filter dropdown next to search bar |
+| 3 | `KRALibrary.tsx` | Show linked count in delete dialog with orphan warning |
+| 4 | `KRALibrary.tsx` | Add Weightage and Frequency columns to the table |
+| 5 | `KRALibrary.tsx` | Add column header sorting and simple pagination (20/page) |
+| 6 | `TemplateChangeHistory.tsx` | Add "Revert" button per entry that triggers reverse propagation |
+| 7 | `useKpiTemplates.ts` | Add `useRevertTemplatePropagation` mutation that sends reversed `fields_changed` to the edge function |
 
-### UI Changes
+### UI Additions
 
-**Confirmation dialog** (appears on "Save & Propagate" click):
+**Category filter** (next to search):
 ```text
-┌─────────────────────────────────────┐
-│  Confirm Propagation                │
-│                                     │
-│  This will update:                  │
-│  • 3 fields (target value, r5, r4)  │
-│  • Across all linked employees      │
-│  • Effective from March 2026        │
-│                                     │
-│  This action cannot be undone.      │
-│                                     │
-│         [Cancel]  [Propagate Now]   │
-└─────────────────────────────────────┘
+[Search templates...    ] [All Categories ▼]
 ```
 
-**Select All** in employee list:
+**Delete warning with linked count**:
 ```text
-Scope: ○ All linked employees (12)  ● Selected employees only
-┌──────────────────────────────────┐
-│ ☐ Select All                     │
-│ ☑ John Smith           3 KPIs   │
-│ ☑ Jane Doe             2 KPIs   │
-│ ☐ Bob Wilson           4 KPIs   │
-└──────────────────────────────────┘
+┌────────────────────────────────────────┐
+│  Delete Template                       │
+│                                        │
+│  Are you sure you want to delete       │
+│  "Sales Target KRA"?                   │
+│                                        │
+│  ⚠ This template is linked to 24 KPIs │
+│  across 8 employees. They will no      │
+│  longer receive propagated updates.    │
+│                                        │
+│           [Cancel]  [Delete]           │
+└────────────────────────────────────────┘
 ```
 
-**Change History** — adds "by" line:
+**Table columns** (added):
+```text
+Title | Category | KRA/KPI | Target | Weightage | Frequency | Linked | Status | ⋮
+```
+
+**Revert button** in change history:
 ```text
 March 2026                    05 Mar 2026, 14:30
 3 KPIs updated across 2 employees    by Admin User
+                                      [↩ Revert]
 ```
 
