@@ -135,13 +135,17 @@ export function useTemplateChangeHistory(templateId: string | null) {
       if (!templateId) return [];
       const { data, error } = await supabase
         .from('template_change_logs')
-        .select('*')
+        .select('*, profiles:changed_by(full_name)')
         .eq('template_id', templateId)
         .order('created_at', { ascending: false })
         .limit(50);
 
       if (error) throw error;
-      return data as TemplateChangeLog[];
+      return (data || []).map((row: any) => ({
+        ...row,
+        changed_by_name: row.profiles?.full_name || null,
+        profiles: undefined,
+      })) as TemplateChangeLog[];
     },
   });
 }
