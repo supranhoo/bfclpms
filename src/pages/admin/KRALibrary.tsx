@@ -119,6 +119,7 @@ export default function KRALibrary() {
         title: `${template.title} (Copy)`,
         applicable_roles: rest.applicable_roles || [],
         is_active: true,
+        created_by: null,
       });
       toast({ title: 'Template duplicated successfully' });
     } catch {
