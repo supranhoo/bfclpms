@@ -700,10 +700,24 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
               </div>
             </div>
 
-            {/* Propagation Settings — only in edit mode with linked employees */}
+            {/* ── Propagation ── */}
             {template && linkedCount > 0 && (
-              <>
-                <Separator />
+              <div className="space-y-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b pb-2 border-border">Propagation</h3>
+
+                {/* Amber warning when changes exist but propagation is off */}
+                {hasChanges && !shouldPropagate && (
+                  <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                    <div className="text-sm">
+                      <p className="font-medium">You changed {Object.keys(changedFields).length} field{Object.keys(changedFields).length !== 1 ? 's' : ''}</p>
+                      <p className="text-muted-foreground text-xs mt-0.5">
+                        These changes only apply to the template — enable Propagation below to update {linkedCount} linked employee{linkedCount !== 1 ? 's' : ''}.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="p-4 border rounded-lg border-primary/30 bg-primary/5 space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
