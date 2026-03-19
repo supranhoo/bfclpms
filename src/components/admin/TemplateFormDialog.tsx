@@ -410,10 +410,9 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
               </div>
             </div>
 
-            {/* Metrics */}
-            <Separator />
-
-            {/* UOM Type Selector */}
+            {/* ── Measurement ── */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b pb-2 border-border">Measurement</h3>
             <UomTypeSelector 
               value={formData.uom_type} 
               onChange={(val) => setFormData({ ...formData, uom_type: val })} 
