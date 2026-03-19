@@ -334,6 +334,7 @@ export default function KpiJourneyReport() {
                     <TableHead className="min-w-[130px]">Final</TableHead>
                     <TableHead className="min-w-[90px]">Total Days</TableHead>
                     <TableHead className="min-w-[100px]">Status</TableHead>
+                    <TableHead className="min-w-[90px]">Send-Backs</TableHead>
                     <TableHead className="min-w-[60px] text-center">✓</TableHead>
                   </TableRow>
                 </TableHeader>
