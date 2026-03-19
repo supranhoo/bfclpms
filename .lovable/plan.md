@@ -1,40 +1,23 @@
 
 
-## KRA Library — Final Review & Fixes
+## Fixes for Propagation Failure and Display Bug
 
-### Current Status: All Features Working
+### Issue 1: Edge Function CORS Failure
+The error "Failed to send a request to the Edge Function" is caused by missing CORS headers. The Supabase JS client sends additional headers (`x-supabase-client-platform`, `x-supabase-client-platform-version`, etc.) that are not listed in `Access-Control-Allow-Headers`, so the browser blocks the preflight OPTIONS request.
 
-After reviewing every file in the chain — `KRALibrary.tsx`, `TemplateFormDialog.tsx`, `TemplateChangeHistory.tsx`, `useKpiTemplates.ts`, `TemplatePropagationPreview.tsx`, and the edge function — all features are properly wired:
+**Fix**: Update CORS headers in `supabase/functions/propagate-template-change/index.ts` line 3-6.
 
-- Template CRUD, duplicate, category filter, sorting, pagination — correct
-- Change detection (including `qualitative_options`, `require_resubmit_reason`) — correct
-- Propagation with confirmation dialog, dry-run preview, scope selection, Select All — correct
-- Change history with attribution ("by Name") and revert (with template sync) — correct
-- Delete warning with linked KPI count — correct
+### Issue 2: `[object Object]` in Fields to Propagate Display
+When `qualitative_options` (an array of objects) is changed, `String(change.old)` and `String(change.new)` render as `[object Object],[object Object]` instead of human-readable text.
 
-### Issues Found
+**Fix**: In `src/components/admin/TemplateFormDialog.tsx` lines 849/851, use `JSON.stringify` for non-primitive values instead of `String()`.
 
-**1. Console Warning: PaginationPrevious/PaginationNext ref forwarding**
-
-The console shows: `Function components cannot be given refs. Check the render method of PaginationNext.`
-
-This is because `PaginationPrevious` and `PaginationNext` use `PaginationLink` internally, which doesn't forward refs. In `KRALibrary.tsx`, the `onClick` handler is placed directly on these components, which works, but the underlying component triggers a React warning.
-
-**Fix**: Not in `KRALibrary.tsx` — the fix is in `src/components/ui/pagination.tsx`. The `PaginationLink` component needs `React.forwardRef`. This is a pre-existing issue in the shared UI component, not caused by our changes.
-
-**2. No other issues found**
-
-- Data flow from hooks to components is correct
-- The `useTemplateChangeHistory` join with `profiles:changed_by(full_name)` works because `template_change_logs.changed_by` references a user ID and `profiles` table has matching IDs
-- The edge function correctly validates admin role, filters by effective month, batches updates, and logs audit entries
-- Revert correctly swaps old/new and syncs the template record
-- Duplicate correctly excludes `id`, `created_at`, `updated_at`, `kra_categories` and nulls `created_by`
+---
 
 ### Plan
 
 | # | File | Change |
 |---|------|--------|
-| 1 | `src/components/ui/pagination.tsx` | Wrap `PaginationLink` with `React.forwardRef` to eliminate the console warning |
-
-This is the only remaining fix needed. Everything else is functional and correctly connected.
+| 1 | `supabase/functions/propagate-template-change/index.ts` | Update `corsHeaders` to include all required Supabase client headers |
+| 2 | `src/components/admin/TemplateFormDialog.tsx` | Fix `String()` rendering to handle objects/arrays with `JSON.stringify` or a label formatter |
 
