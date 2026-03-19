@@ -18,7 +18,7 @@ import { Separator } from '@/components/ui/separator';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { TemplatePropagationPreview } from './TemplatePropagationPreview';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowRight, Loader2, Users } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Loader2, Users } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
