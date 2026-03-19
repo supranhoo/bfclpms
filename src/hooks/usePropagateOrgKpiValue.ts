@@ -41,7 +41,8 @@ interface PropagateParams {
 function buildRatingsPayload(
   targetKpis: any[],
   achievedValue: number | null,
-  isNa: boolean
+  isNa: boolean,
+  evidenceUrl?: string | null
 ) {
   const kpiRatings: Array<{
     kpi_id: string;
