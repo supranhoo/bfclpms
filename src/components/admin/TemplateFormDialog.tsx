@@ -675,21 +675,28 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
             {/* ── Source & Advanced ── */}
             <div className="space-y-4">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b pb-2 border-border">Source & Advanced</h3>
-
-            {/* Advanced Settings */}
-            <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
-              <h3 className="font-medium text-sm">Advanced Settings</h3>
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-sm font-medium">Require Reason for Resubmission</Label>
-                  <p className="text-xs text-muted-foreground">
-                    When enabled, employees must provide a mandatory reason when editing previously submitted daily/weekly entries
-                  </p>
-                </div>
-                <Switch
-                  checked={formData.require_resubmit_reason}
-                  onCheckedChange={(checked) => setFormData({ ...formData, require_resubmit_reason: checked })}
+              <div>
+                <Label>Source of Data</Label>
+                <Input
+                  value={formData.source_of_data}
+                  onChange={(e) => setFormData({ ...formData, source_of_data: e.target.value })}
+                  placeholder="e.g., CRM System, Monthly Reports"
                 />
+              </div>
+              <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
+                <h3 className="font-medium text-sm">Advanced Settings</h3>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm font-medium">Require Reason for Resubmission</Label>
+                    <p className="text-xs text-muted-foreground">
+                      When enabled, employees must provide a mandatory reason when editing previously submitted daily/weekly entries
+                    </p>
+                  </div>
+                  <Switch
+                    checked={formData.require_resubmit_reason}
+                    onCheckedChange={(checked) => setFormData({ ...formData, require_resubmit_reason: checked })}
+                  />
+                </div>
               </div>
             </div>
 
