@@ -85,7 +85,7 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
 
       allKpis.forEach(kpi => {
         const s = kpi.review_submissions;
-        const score = s?.final_score ?? s?.management_score ?? s?.auditor_score ?? s?.manager_score ?? s?.self_score ?? null;
+        const score = (kpi.status === 'approved' ? s?.final_score : null) ?? s?.management_score ?? s?.auditor_score ?? s?.manager_score ?? s?.self_score ?? null;
         if (score === null) return;
 
         const w = kpi.weightage || 100;

@@ -23,10 +23,10 @@ const FULL_MONTHS = [
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
 
 // Final score fallback chain — same as all existing reports
-function resolveFinalScore(sub: any): number | null {
+function resolveFinalScore(sub: any, status?: string): number | null {
   if (!sub) return null;
   const v =
-    sub.final_score ??
+    (status === 'approved' ? sub.final_score : null) ??
     sub.management_score ??
     sub.auditor_score ??
     sub.hr_pms_score ??
