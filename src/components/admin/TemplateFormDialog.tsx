@@ -257,11 +257,11 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
       if (template) {
         await updateTemplate.mutateAsync({ id: template.id, ...payload } as any);
 
-        // Propagate if requested and there are changes
-        if (shouldPropagate && hasChanges) {
+        // Propagate if requested and there are propagable changes
+        if (shouldPropagate && hasPropagableChanges) {
           await propagate.mutateAsync({
             template_id: template.id,
-            fields_changed: changedFields,
+            fields_changed: propagationChangedFields,
             effective_month: effectiveMonth,
             effective_year: effectiveYear,
             employee_ids: propagationScope === 'selected' ? Array.from(selectedEmployeeIds) : undefined,
