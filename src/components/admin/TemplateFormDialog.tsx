@@ -680,6 +680,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                       onCheckedChange={setShouldPropagate}
                       disabled={!hasChanges}
                     />
+
                   </div>
 
                   {!hasChanges && (
