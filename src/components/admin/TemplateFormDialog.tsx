@@ -325,13 +325,13 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
   return (
     <>
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh]">
+      <DialogContent className="max-w-4xl max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>{template ? 'Edit Template' : 'Create Template'}</DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[60vh] pr-4">
-          <div className="space-y-4 py-2">
+        <ScrollArea className="max-h-[70vh] pr-4">
+          <div className="space-y-6 py-2">
             {/* Basic Info */}
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
