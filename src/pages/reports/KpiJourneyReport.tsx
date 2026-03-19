@@ -130,6 +130,7 @@ export default function KpiJourneyReport() {
         'Category': r.category,
         'KRA': r.kraName,
         'KPI': r.kpiName,
+        'Frequency': r.frequency,
         'Month': r.reviewPeriod,
         'KRA Assigned': r.kraAssignedAt ? format(new Date(r.kraAssignedAt), 'dd-MMM-yyyy HH:mm') : '',
         'Self Submitted': fmtCell(r.selfSubmittedAt, r.isNa),
@@ -310,8 +311,9 @@ export default function KpiJourneyReport() {
                      <TableHead className="min-w-[140px]">Reporting Manager</TableHead>
                      <TableHead className="min-w-[100px]">Category</TableHead>
                     <TableHead className="min-w-[120px]">KRA</TableHead>
-                    <TableHead className="min-w-[120px]">KPI</TableHead>
-                    <TableHead className="min-w-[80px]">Type</TableHead>
+                     <TableHead className="min-w-[120px]">KPI</TableHead>
+                     <TableHead className="min-w-[100px]">Frequency</TableHead>
+                     <TableHead className="min-w-[80px]">Type</TableHead>
                     <TableHead className="min-w-[130px]">KRA Assigned</TableHead>
                     <TableHead className="min-w-[130px]">Self Submitted</TableHead>
                     <TableHead className="min-w-[130px]">Manager</TableHead>
@@ -334,8 +336,9 @@ export default function KpiJourneyReport() {
                        <TableCell className="text-xs">{row.reportingManager}</TableCell>
                        <TableCell className="text-xs">{row.category}</TableCell>
                       <TableCell className="text-xs">{row.kraName}</TableCell>
-                      <TableCell className="text-xs">{row.kpiName}</TableCell>
-                      <TableCell>
+                       <TableCell className="text-xs">{row.kpiName}</TableCell>
+                       <TableCell className="text-xs">{row.frequency}</TableCell>
+                       <TableCell>
                         <Badge variant="outline" className={`text-xs ${row.isOrgKpi
                           ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400'
                           : 'bg-muted text-muted-foreground'
