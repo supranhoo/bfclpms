@@ -484,6 +484,11 @@ export default function OrgKpiDataEntry() {
           ? `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||${sv.scopeId}||null`
           : `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||${sv.scopeId}`;
         const oldVal = existingValuesMap.get(scopeKey)?.achieved_value ?? null;
+
+        // Guard: skip if this would destructively overwrite a non-null DB value with null
+        // (race condition protection — user never touched this row's achieved value)
+        if (sv.achievedValue === null && !sv.isNa && oldVal !== null) return;
+
         toSave.push({
           category_id: kpi.category_id,
           kra_name: kpi.kra_name,
