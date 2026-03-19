@@ -293,17 +293,25 @@ export function ManagementScorecard({
       management_achieved_value?: number | null;
       approve: boolean;
     }) => {
+      const updatePayload: any = {
+        management_rating,
+        management_score,
+        management_remarks,
+        management_evidence_url,
+        management_achieved_value,
+      };
+      // Only write final_score/final_rating on approval to prevent stale values
+      if (approve) {
+        updatePayload.final_rating = management_rating;
+        updatePayload.final_score = management_score;
+      } else {
+        updatePayload.final_score = null;
+        updatePayload.final_rating = null;
+      }
+
       const { data: updateData, error: submissionError } = await supabase
         .from('review_submissions')
-        .update({
-          management_rating,
-          management_score,
-          management_remarks,
-          management_evidence_url,
-          management_achieved_value,
-          final_rating: management_rating,
-          final_score: management_score,
-        })
+        .update(updatePayload)
         .eq('kpi_id', kpi_id)
         .select();
 
