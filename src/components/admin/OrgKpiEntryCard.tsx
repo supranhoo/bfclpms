@@ -159,7 +159,28 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
     const identityChanged = newIdentity !== kpiIdentityRef.current;
 
     if (!identityChanged) {
-      if (isDirtyRef.current) return;
+      if (isDirtyRef.current) {
+        // Merge: accept DB values for fields the user hasn't touched (prevents null overwrite race)
+        if (data.scopedRows?.length) {
+          setScopedValues(prev => prev.map(row => {
+            const dbRow = data.scopedRows!.find(r => r.scopeId === row.scopeId);
+            if (!dbRow) return row;
+            // If local achievedValue is null but DB has a real value, take DB value
+            if (row.achievedValue === null && dbRow.achievedValue !== null) {
+              return { ...row, achievedValue: dbRow.achievedValue };
+            }
+            return row;
+          }));
+        }
+        // For org-scope: merge achieved value from DB if local is null
+        if (data.achievedValue !== null) {
+          const currentNumeric = achievedValue === '' ? null : parseFloat(achievedValue);
+          if (currentNumeric === null || isNaN(currentNumeric)) {
+            setAchievedValue(data.achievedValue.toString());
+          }
+        }
+        return;
+      }
       const currentNumeric = achievedValue === '' ? null : parseFloat(achievedValue);
       const sameValue =
         currentNumeric === data.achievedValue ||
