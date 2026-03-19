@@ -156,7 +156,7 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
         if (!sub) continue;
 
         let changed = false;
-        if (!timeline.selfSubmittedAt && sub.self_score != null) {
+        if (!timeline.selfSubmittedAt && (sub.self_score != null || sub.is_na)) {
           timeline.selfSubmittedAt = sub.submitted_at;
           changed = true;
         }
