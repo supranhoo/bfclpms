@@ -794,6 +794,19 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                       {propagationScope === 'selected' && linkedEmployees && (
                         <ScrollArea className="max-h-[150px] border rounded-md p-2">
                           <div className="space-y-1">
+                            <div className="flex items-center gap-2 py-1 border-b mb-1 pb-2">
+                              <Checkbox
+                                checked={linkedEmployees.length > 0 && selectedEmployeeIds.size === linkedEmployees.length}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedEmployeeIds(new Set(linkedEmployees.map(e => e.id)));
+                                  } else {
+                                    setSelectedEmployeeIds(new Set());
+                                  }
+                                }}
+                              />
+                              <span className="text-sm font-medium">Select All ({linkedEmployees.length})</span>
+                            </div>
                             {linkedEmployees.map(emp => (
                               <div key={emp.id} className="flex items-center gap-2 py-1">
                                 <Checkbox
