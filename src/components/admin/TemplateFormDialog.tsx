@@ -62,6 +62,22 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
 
   const { data: linkedEmployees } = useLinkedEmployees(template?.id || null);
 
+  // Fetch one linked KPI to use as fallback for null template fields
+  const { data: sampleLinkedKpi } = useQuery({
+    queryKey: ['template-sample-kpi', template?.id],
+    enabled: !!template?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kpis')
+        .select('*')
+        .eq('source_template_id', template!.id)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
