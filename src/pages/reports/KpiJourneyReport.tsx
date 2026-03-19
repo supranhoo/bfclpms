@@ -305,8 +305,9 @@ export default function KpiJourneyReport() {
                   <TableRow>
                     <TableHead className="sticky left-0 bg-background z-10 min-w-[80px]">Emp Code</TableHead>
                     <TableHead className="sticky left-[80px] bg-background z-10 min-w-[140px]">Employee</TableHead>
-                    <TableHead className="min-w-[100px]">Dept</TableHead>
-                    <TableHead className="min-w-[100px]">Category</TableHead>
+                     <TableHead className="min-w-[100px]">Dept</TableHead>
+                     <TableHead className="min-w-[140px]">Reporting Manager</TableHead>
+                     <TableHead className="min-w-[100px]">Category</TableHead>
                     <TableHead className="min-w-[120px]">KRA</TableHead>
                     <TableHead className="min-w-[120px]">KPI</TableHead>
                     <TableHead className="min-w-[80px]">Type</TableHead>
