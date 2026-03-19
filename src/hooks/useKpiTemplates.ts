@@ -95,7 +95,8 @@ export function useLinkedEmployees(templateId: string | null) {
       const { data, error } = await supabase
         .from('kpis')
         .select('employee_id, review_period, review_year, status, profiles!kpis_employee_id_fkey(id, full_name, employee_code)')
-        .eq('source_template_id', templateId);
+        .eq('source_template_id', templateId)
+        .limit(10000);
 
       if (error) throw error;
 
