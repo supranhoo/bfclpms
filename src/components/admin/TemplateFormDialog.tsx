@@ -207,10 +207,10 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
   };
 
   const handlePreview = async () => {
-    if (!template || !hasChanges) return;
+    if (!template || !hasPropagableChanges) return;
     const result = await propagate.mutateAsync({
       template_id: template.id,
-      fields_changed: changedFields,
+      fields_changed: propagationChangedFields,
       effective_month: effectiveMonth,
       effective_year: effectiveYear,
       employee_ids: propagationScope === 'selected' ? Array.from(selectedEmployeeIds) : undefined,
