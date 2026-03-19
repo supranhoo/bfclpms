@@ -723,6 +723,9 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
 
                   </div>
 
+                  {/* Sync check — detect template vs KPI drift */}
+                  <TemplateSyncCheck template={template} />
+
                   {!hasChanges && (
                     <p className="text-xs text-muted-foreground italic">
                       Make changes to the template fields above to enable propagation.
