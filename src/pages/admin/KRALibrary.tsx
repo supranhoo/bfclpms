@@ -90,7 +90,7 @@ export default function KRALibrary() {
   const paginatedTemplates = sortedTemplates.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   // Reset page when filters change
-  useMemo(() => { setCurrentPage(1); }, [searchQuery, categoryFilter, sortField, sortDir]);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, categoryFilter, sortField, sortDir]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
