@@ -902,7 +902,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                     </div>
                   )}
                 </div>
-              </>
+              </div>
             )}
           </div>
         </ScrollArea>
