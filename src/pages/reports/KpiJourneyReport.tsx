@@ -126,6 +126,7 @@ export default function KpiJourneyReport() {
         'Emp Code': r.employeeCode,
         'Employee': r.employeeName,
         'Department': r.department,
+        'Reporting Manager': r.reportingManager,
         'Category': r.category,
         'KRA': r.kraName,
         'KPI': r.kpiName,
