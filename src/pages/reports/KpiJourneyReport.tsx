@@ -41,6 +41,11 @@ function formatDate(dateStr: string | null): string {
   }
 }
 
+function formatDateOrNa(dateStr: string | null, isNa: boolean): string {
+  if (isNa && !dateStr) return 'N/A';
+  return formatDate(dateStr);
+}
+
 function DurationBadge({ days, isApproved }: { days: number; isApproved: boolean }) {
   let color = 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
   if (days > 30) color = 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
