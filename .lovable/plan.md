@@ -1,53 +1,32 @@
 
 
-## Root Cause Analysis: KRA Library Changes Not Visible in Dashboard/All KPIs
+## Fix: KRA Library Edit Template Dialog — Layout & Propagation Visibility
 
-### Findings
+### Issue 1: Cramped Dialog Layout
 
-I investigated the template `fdeba115` ("Create and update HR policies") and its linked live KPIs. Here is what I found:
+The dialog uses `max-w-2xl` (672px) and `max-h-[60vh]` for the scroll area. With all the fields (identity, UOM type cards, metrics, binary polarity, source, advanced settings, propagation section), everything is stacked tightly in a narrow column. The screenshot confirms fields are visually crushed together.
 
-**1. Template vs KPI field mismatch (design bug)**
+### Issue 2: KPI Changes Not Reflecting on Dashboard
 
-The template save logic in `TemplateFormDialog.tsx` (lines 266-285) conditionally nullifies fields based on `uom_type`. This template has `uom_type = 'binary'`, so when saved:
-- `criteria` is forced to `null` (line 269)
-- `r5`, `r4`, `r3`, `r2`, `r1`, `r0` are forced to `null` (lines 272-277)
-- `target_value` is forced to `null` (line 267)
+The template save only writes to the `kpi_templates` table. Linked KPIs in the `kpis` table are **separate records** that only update when the admin explicitly toggles the "Propagate Changes to Linked KPIs" switch (which defaults to OFF and is buried at the bottom of the dialog). The user likely saved the template without enabling propagation, so the change never reached Dummy's actual KPI.
 
-But the linked live KPIs still have values from the original import: `r5 = "1"`, `r0 = "zero policy developed"`, `target_value = 1.00`, `criteria = "Higher is Better"`.
+### Plan
 
-The propagation change detection compares template values to form values. Since the template stores NULLs for binary UOMs, subsequent edits cannot detect that these fields differ from the KPIs. The template and KPIs are permanently out of sync.
+| # | Change | Detail |
+|---|--------|--------|
+| 1 | **Widen dialog** | Change `max-w-2xl` → `max-w-4xl` and `max-h-[60vh]` → `max-h-[70vh]`. This gives ~896px width — room for 2-column layouts without cramping. |
+| 2 | **2-column grid for identity fields** | KRA Name + KPI Name already use grid-cols-2. Extend this pattern: Category + Criteria in one row, Weightage + Frequency in one row. Add proper spacing (`gap-6` between sections instead of `gap-4`). |
+| 3 | **Better section separation** | Add subtle section headers ("Measurement", "Scoring", "Advanced") with spacing. Replace bare `<Separator />` with labeled dividers so the form reads as organized groups, not a wall of inputs. |
+| 4 | **Auto-enable propagation prompt** | When the user is editing a template with linked KPIs and has made structural changes, show an inline amber banner above the footer: *"You changed {N} fields. These changes only apply to the template — toggle Propagation to update {X} linked employees."* This makes it impossible to miss. |
+| 5 | **Move propagation toggle to footer area** | Instead of burying the propagation switch deep inside the scrollable area, place a prominent propagation indicator near the Save button. When changes are detected and propagation is OFF, the save button label shows "Update Template Only" (making it clear KPIs won't update). When ON, it shows "Save & Propagate". |
 
-**2. Prior CORS failures (now fixed)**
+### Files Changed
 
-Before today's CORS fix, ALL propagation requests from KRA Library were silently blocked by the browser preflight check. Any template changes saved before today were written to the template but never reached the linked KPIs. The propagation log confirms only 2 entries exist (both from today after the CORS fix).
+- `src/components/admin/TemplateFormDialog.tsx` — all changes are in this single file
 
-**3. No full-sync mechanism**
-
-There is no way to compare the current template state against all linked KPIs and push all differences. The propagation only pushes changes detected within a single edit session (comparing the template's saved values to the form's current values).
-
-### Fix Plan
-
-| # | Fix | Description |
-|---|-----|-------------|
-| 1 | **Stop nullifying fields on template save for binary/tiered UOMs** | In `TemplateFormDialog.tsx`, the save payload (lines 266-285) nullifies `criteria`, `r5`-`r0`, and `target_value` when `uom_type !== 'numeric'`. This is wrong — these fields should be saved as-is regardless of UOM type so the template accurately represents the KPI configuration. The form can hide/show these fields based on UOM type, but the save should preserve whatever values were set. |
-| 2 | **Add "Sync All Fields" action to KRA Library** | Add a button in the propagation section (visible when a template has linked KPIs) that compares ALL structural fields on the template against a sample linked KPI and shows any discrepancies. The admin can then trigger a full re-propagation of all fields, not just the changes from the current edit session. |
-| 3 | **Fix the existing template data** | Run a one-time data fix to populate the template's NULL fields (`r5`, `r0`, `target_value`, `criteria`, `kpi_name`) from the linked KPIs, so the template accurately reflects the current state of the live KPIs. |
-
-### Technical Detail
-
-**Fix 1** — Change the save payload to preserve all fields:
-```typescript
-// Before (broken): nullifies fields for non-numeric
-criteria: formData.uom_type === 'numeric' ? (formData.criteria || null) : null,
-r5: formData.uom_type === 'numeric' ? (formData.r5 || null) : null,
-
-// After (fixed): always save what's in the form
-criteria: formData.criteria || null,
-r5: formData.r5 || null,
-target_value: formData.target_value ? parseFloat(formData.target_value) : null,
-```
-
-**Fix 2** — Add sync detection in propagation section: query one linked KPI, compare all STRUCTURAL_FIELDS, highlight mismatches, and allow a one-click full re-push.
-
-**Fix 3** — Database update to back-fill template from its linked KPIs (one-time migration or manual script).
+### What This Does NOT Change
+- No database changes
+- No edge function changes
+- No changes to propagation logic itself (that already works post-CORS fix)
+- `OrgKpiObservationsSummary`, other admin components — untouched
 
