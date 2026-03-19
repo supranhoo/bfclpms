@@ -340,13 +340,13 @@ export default function KpiJourneyReport() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs font-mono">{formatDate(row.kraAssignedAt)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.selfSubmittedAt, row.isNa)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.managerActionAt, row.isNa)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.skipLevelAt, row.isNa)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.hrPmsAt, row.isNa)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.auditorAt, row.isNa)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.managementAt, row.isNa)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.finalApprovedAt, row.isNa)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDate(row.selfSubmittedAt)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDate(row.managerActionAt)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDate(row.skipLevelAt)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDate(row.hrPmsAt)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDate(row.auditorAt)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDate(row.managementAt)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDate(row.finalApprovedAt)}</TableCell>
                       <TableCell>
                         {row.isNa ? (
                           <Badge variant="outline" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 font-mono text-xs">N/A</Badge>
