@@ -139,7 +139,7 @@ export function KpiTrackerModal({ isOpen, onClose, kpi, allKpis, submissions, wo
           hrScore: isNa ? null : (sub?.hr_pms_score ?? null),
           auditorScore: isNa ? null : (sub?.auditor_score ?? null),
           mgmtScore: isNa ? null : (sub?.management_score ?? null),
-          finalScore: isNa ? null : (sub?.final_score ?? null),
+          finalScore: isNa ? null : (k.status === 'approved' ? (sub?.final_score ?? null) : null),
           status: k.status || 'open',
           year: k.review_year || new Date().getFullYear(),
           isNa,

@@ -51,7 +51,7 @@ export default function PerformanceReport() {
     let count = 0;
     catKpis.forEach(kpi => {
       const sub = submissionMap.get(kpi.id);
-    const subScore = sub?.final_score ?? sub?.management_score ?? sub?.auditor_score ?? sub?.hr_pms_score ?? sub?.skip_level_score ?? sub?.manager_score ?? sub?.self_score ?? null;
+    const subScore = (kpi.status === 'approved' ? sub?.final_score : null) ?? sub?.management_score ?? sub?.auditor_score ?? sub?.hr_pms_score ?? sub?.skip_level_score ?? sub?.manager_score ?? sub?.self_score ?? null;
     if (subScore != null) {
         totalScore += subScore;
         count++;
@@ -70,7 +70,10 @@ export default function PerformanceReport() {
 
   const totalKpis = allKpis?.length || 0;
   const approvedKpis = allKpis?.filter(k => k.status === 'approved').length || 0;
-  const avgScore = submissions?.length ? Math.round(submissions.reduce((sum, s) => sum + (s.final_score ?? s.management_score ?? s.auditor_score ?? s.hr_pms_score ?? s.skip_level_score ?? s.manager_score ?? s.self_score ?? 0), 0) / submissions.length) : 0;
+  const avgScore = submissions?.length ? Math.round(submissions.reduce((sum, s) => {
+    const kpi = allKpis?.find(k => k.id === (s as any).kpi_id);
+    return sum + ((kpi?.status === 'approved' ? s.final_score : null) ?? s.management_score ?? s.auditor_score ?? s.hr_pms_score ?? s.skip_level_score ?? s.manager_score ?? s.self_score ?? 0);
+  }, 0) / submissions.length) : 0;
 
   const { toast } = useToast();
 

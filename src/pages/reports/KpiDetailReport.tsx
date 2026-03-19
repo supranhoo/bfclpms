@@ -23,10 +23,10 @@ const FULL_MONTHS = [
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
 
 // Final score fallback chain — same as all existing reports
-function resolveFinalScore(sub: any): number | null {
+function resolveFinalScore(sub: any, status?: string): number | null {
   if (!sub) return null;
   const v =
-    sub.final_score ??
+    (status === 'approved' ? sub.final_score : null) ??
     sub.management_score ??
     sub.auditor_score ??
     sub.hr_pms_score ??
@@ -179,7 +179,7 @@ export default function KpiDetailReport() {
           : kpi.review_submissions;
         const isNa = sub?.is_na ?? false;
         const weightage = kpi.weightage ?? 0;
-        const finalScore = isNa ? null : resolveFinalScore(sub);
+        const finalScore = isNa ? null : resolveFinalScore(sub, kpi.status);
         const totalScore = isNa || finalScore === null ? null : finalScore * weightage;
         const outOfScore = isNa ? null : weightage * 5;
         const percentage =

@@ -1741,9 +1741,9 @@ export default function ImportData() {
           r0: kpi.r0 ?? '',
           targetAchieved: submission?.achieved_value ?? '',
           achievedWeight: '',
-          rating: submission?.final_score ?? submission?.management_score ?? submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? '',
+          rating: (kpi.status === 'approved' ? submission?.final_score : null) ?? submission?.management_score ?? submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? '',
           kpiWeightageScore: (() => {
-            const score = submission?.final_score ?? submission?.management_score ?? submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? null;
+            const score = (kpi.status === 'approved' ? submission?.final_score : null) ?? submission?.management_score ?? submission?.auditor_score ?? submission?.manager_score ?? submission?.self_score ?? null;
             return score != null && kpi.weightage != null
               ? Number((score * (kpi.weightage / 100)).toFixed(2))
               : '';
