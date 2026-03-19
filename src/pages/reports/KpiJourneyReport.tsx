@@ -209,6 +209,7 @@ export default function KpiJourneyReport() {
                 <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="na">N/A</SelectItem>
                   {Object.entries(STATUS_LABELS).map(([k, v]) => (
                     <SelectItem key={k} value={k}>{v}</SelectItem>
                   ))}
