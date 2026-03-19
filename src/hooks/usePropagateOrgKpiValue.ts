@@ -68,6 +68,7 @@ function buildRatingsPayload(
         achieved_value: null,
         self_score: null,
         self_rating: null,
+        evidence_url: null,
       });
     } else {
       const uomType = (kpi.uom_type as string) || 'numeric';
