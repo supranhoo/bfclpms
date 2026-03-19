@@ -91,20 +91,34 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
 
       const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
 
-      // Fetch audit logs for all KPI IDs in batches
+      // Fetch audit logs and review_submissions for all KPI IDs in batches
       const kpiIds = allKpis.map(k => k.id);
       const allLogs: any[] = [];
+      const allSubmissions: any[] = [];
       const logBatchSize = 500;
 
       for (let i = 0; i < kpiIds.length; i += logBatchSize) {
         const batch = kpiIds.slice(i, i + logBatchSize);
-        const { data: logs } = await supabase
-          .from('kpi_audit_logs')
-          .select('kpi_id, action, created_at, new_value')
-          .in('kpi_id', batch)
-          .order('created_at', { ascending: true });
+        const [logsResult, subsResult] = await Promise.all([
+          supabase
+            .from('kpi_audit_logs')
+            .select('kpi_id, action, created_at, new_value')
+            .in('kpi_id', batch)
+            .order('created_at', { ascending: true }),
+          supabase
+            .from('review_submissions')
+            .select('kpi_id, submitted_at, self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score')
+            .in('kpi_id', batch),
+        ]);
 
-        if (logs) allLogs.push(...logs);
+        if (logsResult.data) allLogs.push(...logsResult.data);
+        if (subsResult.data) allSubmissions.push(...subsResult.data);
+      }
+
+      // Build submissions map for fallback
+      const submissionsMap = new Map<string, any>();
+      for (const sub of allSubmissions) {
+        submissionsMap.set(sub.kpi_id, sub);
       }
 
       // Build timeline map: kpiId → { field → earliest timestamp }
@@ -132,6 +146,46 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
         // Use the LATEST timestamp for each stage
         existing[field] = log.created_at;
         timelineMap.set(log.kpi_id, existing);
+      }
+
+      // Fallback: fill missing timeline fields from review_submissions
+      for (const kpi of allKpis) {
+        const timeline = timelineMap.get(kpi.id) ?? {};
+        const sub = submissionsMap.get(kpi.id);
+        if (!sub) continue;
+
+        let changed = false;
+        if (!timeline.selfSubmittedAt && sub.self_score != null) {
+          timeline.selfSubmittedAt = sub.submitted_at;
+          changed = true;
+        }
+        if (!timeline.managerActionAt && sub.manager_score != null) {
+          timeline.managerActionAt = sub.submitted_at;
+          changed = true;
+        }
+        if (!timeline.skipLevelAt && sub.skip_level_score != null) {
+          timeline.skipLevelAt = sub.submitted_at;
+          changed = true;
+        }
+        if (!timeline.hrPmsAt && sub.hr_pms_score != null) {
+          timeline.hrPmsAt = sub.submitted_at;
+          changed = true;
+        }
+        if (!timeline.auditorAt && sub.auditor_score != null) {
+          timeline.auditorAt = sub.submitted_at;
+          changed = true;
+        }
+        if (!timeline.managementAt && sub.management_score != null) {
+          timeline.managementAt = sub.submitted_at;
+          changed = true;
+        }
+        if (!timeline.finalApprovedAt && kpi.status === 'approved' && sub.final_score != null) {
+          timeline.finalApprovedAt = sub.submitted_at;
+          changed = true;
+        }
+        if (changed) {
+          timelineMap.set(kpi.id, timeline);
+        }
       }
 
       const now = new Date();
