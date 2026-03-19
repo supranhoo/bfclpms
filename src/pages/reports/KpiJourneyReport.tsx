@@ -335,8 +335,9 @@ export default function KpiJourneyReport() {
                        <TableCell className="text-xs">{row.reportingManager}</TableCell>
                        <TableCell className="text-xs">{row.category}</TableCell>
                       <TableCell className="text-xs">{row.kraName}</TableCell>
-                      <TableCell className="text-xs">{row.kpiName}</TableCell>
-                      <TableCell>
+                       <TableCell className="text-xs">{row.kpiName}</TableCell>
+                       <TableCell className="text-xs">{row.frequency}</TableCell>
+                       <TableCell>
                         <Badge variant="outline" className={`text-xs ${row.isOrgKpi
                           ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400'
                           : 'bg-muted text-muted-foreground'
