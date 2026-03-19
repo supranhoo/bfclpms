@@ -243,7 +243,7 @@ export default function KpiJourneyReport() {
       </Card>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total KPIs</CardTitle></CardHeader>
           <CardContent>
@@ -277,6 +277,15 @@ export default function KpiJourneyReport() {
             <div className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-amber-500" />
               <span className="text-2xl font-bold">{isLoading ? <Skeleton className="h-7 w-12" /> : summary.pending}</span>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total Send-Backs</CardTitle></CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-red-500" />
+              <span className="text-2xl font-bold">{isLoading ? <Skeleton className="h-7 w-12" /> : summary.totalSendBacks}</span>
             </div>
           </CardContent>
         </Card>
