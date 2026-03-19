@@ -3387,6 +3387,19 @@ export type Database = {
         Args: { p_kpi_id: string }
         Returns: string[]
       }
+      get_kpi_journey_report: {
+        Args: {
+          p_department?: string
+          p_limit?: number
+          p_offset?: number
+          p_period: string
+          p_search?: string
+          p_status?: string
+          p_type?: string
+          p_year: number
+        }
+        Returns: Json
+      }
       get_skip_level_manager: {
         Args: { employee_uuid: string }
         Returns: string
