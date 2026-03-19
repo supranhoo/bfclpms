@@ -109,7 +109,7 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
       // Audit logs: split into workflow actions (no new_value) and status transitions (with new_value)
       const logsPromise = (async () => {
         const allLogs: any[] = [];
-        const batchSize = 1000;
+        const batchSize = 300;
         for (let i = 0; i < kpiIds.length; i += batchSize) {
           const batch = kpiIds.slice(i, i + batchSize);
           const [workflowResult, transitionResult] = await Promise.all([
