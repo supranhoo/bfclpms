@@ -18,6 +18,7 @@ import { UomType, QualitativeOption, BINARY_OPTIONS, BINARY_OPTIONS_INVERTED, is
 import { Separator } from '@/components/ui/separator';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { TemplatePropagationPreview } from './TemplatePropagationPreview';
+import { TemplateSyncCheck } from './TemplateSyncCheck';
 import { Card, CardContent } from '@/components/ui/card';
 import { AlertTriangle, ArrowRight, Loader2, Users } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
