@@ -10,6 +10,7 @@ export interface KpiJourneyRow {
   category: string;
   kraName: string;
   kpiName: string;
+  frequency: string;
   reviewPeriod: string;
   status: string;
   kraAssignedAt: string | null;

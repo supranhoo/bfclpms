@@ -130,6 +130,7 @@ export default function KpiJourneyReport() {
         'Category': r.category,
         'KRA': r.kraName,
         'KPI': r.kpiName,
+        'Frequency': r.frequency,
         'Month': r.reviewPeriod,
         'KRA Assigned': r.kraAssignedAt ? format(new Date(r.kraAssignedAt), 'dd-MMM-yyyy HH:mm') : '',
         'Self Submitted': fmtCell(r.selfSubmittedAt, r.isNa),
