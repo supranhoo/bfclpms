@@ -344,26 +344,36 @@ export default function KpiJourneyReport() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs font-mono">{formatDate(row.kraAssignedAt)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDate(row.selfSubmittedAt)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDate(row.managerActionAt)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDate(row.skipLevelAt)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDate(row.hrPmsAt)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDate(row.auditorAt)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDate(row.managementAt)}</TableCell>
-                      <TableCell className="text-xs font-mono">{formatDate(row.finalApprovedAt)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.selfSubmittedAt, row.isNa)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.managerActionAt, row.isNa)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.skipLevelAt, row.isNa)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.hrPmsAt, row.isNa)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.auditorAt, row.isNa)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.managementAt, row.isNa)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDateOrNa(row.finalApprovedAt, row.isNa)}</TableCell>
                       <TableCell>
-                        <DurationBadge days={row.totalDays} isApproved={row.status === 'approved'} />
+                        {row.isNa ? (
+                          <Badge variant="outline" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 font-mono text-xs">N/A</Badge>
+                        ) : (
+                          <DurationBadge days={row.totalDays} isApproved={row.status === 'approved'} />
+                        )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={`text-xs ${row.status === 'approved'
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                          : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-                        }`}>
-                          {STATUS_LABELS[row.status] ?? row.status}
-                        </Badge>
+                        {row.isNa ? (
+                          <Badge variant="outline" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 text-xs">N/A</Badge>
+                        ) : (
+                          <Badge variant="outline" className={`text-xs ${row.status === 'approved'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                          }`}>
+                            {STATUS_LABELS[row.status] ?? row.status}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-center">
-                        {row.isCompliant ? (
+                        {row.isNa ? (
+                          <MinusCircle className="h-4 w-4 text-muted-foreground mx-auto" />
+                        ) : row.isCompliant ? (
                           <CheckCircle2 className="h-4 w-4 text-green-500 mx-auto" />
                         ) : (
                           <AlertCircle className="h-4 w-4 text-red-500 mx-auto" />
