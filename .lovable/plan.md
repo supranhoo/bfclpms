@@ -1,53 +1,78 @@
 
 
-## Add Weightage Include/Exclude Option to Template Propagation
+## Completeness Gaps in Weightage Propagation Guard & Template Propagation
 
-### Problem
-When an admin edits a template in the KRA Library and propagates changes, `weightage` is always included as a structural field. This overwrites individual employee weightages that were customized via the Weightage Dashboard.
+After reviewing the full implementation, I found several missing pieces across the propagation flow:
 
-### Solution
-Add a checkbox in the propagation section of the TemplateFormDialog that lets the admin choose whether to include or exclude weightage from propagation. Default: **excluded** (since weightage is typically customized per employee).
+### 1. Missing Field Change Detection (Client-Side)
 
-### Files to Change
+The `compareMap` in `TemplateFormDialog.tsx` (lines 159-176) does not track two fields that are listed as structural on the server:
+- **`qualitative_options`** — if an admin changes tiered/binary options, the change is silently ignored during propagation
+- **`require_resubmit_reason`** — toggling this in the form never gets detected as a change
 
-| File | Change |
-|------|--------|
-| `src/components/admin/TemplateFormDialog.tsx` | Add `includeWeightage` state (default `false`). When building `changedFields` for propagation, filter out `weightage` unless the checkbox is checked. Show checkbox UI in the propagation options section. |
-| `supabase/functions/propagate-template-change/index.ts` | No change needed — the edge function already only processes fields present in `fields_changed`, so excluding `weightage` from the client payload is sufficient. |
+These fields get saved to the template but are never included in `fields_changed`, so they never propagate.
 
-### UI Detail
-In the propagation options area (near the "Propagate to linked KPIs" toggle), add:
+### 2. No Confirmation Before Propagation
 
-```
-☐ Include weightage changes
-  ⚠ Caution: This will overwrite individual employee weightages
-```
+Clicking "Save & Propagate" immediately executes the bulk update. For a destructive operation affecting potentially hundreds of KPIs, there should be a confirmation dialog showing a summary (e.g., "This will update 47 KPIs across 12 employees. Continue?").
 
-The checkbox is only visible when weightage was actually changed in the form. When unchecked (default), `weightage` is removed from `changedFields` before sending to the edge function.
+### 3. Hardcoded Year Selector
 
-### Edge Case
-If weightage is the **only** field changed and the checkbox is unchecked, the propagation section shows a note: "No fields selected for propagation" and disables the propagate button.
+The year dropdown (line 746) is hardcoded to `[2025, 2026, 2027]`. Should be dynamically generated relative to the current year.
+
+### 4. Change History Missing "Who"
+
+`template_change_logs` stores `changed_by` (user ID), but `TemplateChangeHistory.tsx` never resolves it to a name. The history entries don't show who performed the propagation.
+
+### 5. No Select All / Deselect All for Employee Scope
+
+When "Selected employees only" is chosen, there are no bulk selection controls for the employee list.
 
 ---
 
-# Weightage Propagation Guard — IMPLEMENTED ✅
+### Plan
 
-## Problem
-When propagating template changes from KRA Library, `weightage` was always included as a structural field, overwriting individual employee weightages customized via the Weightage Dashboard.
+| # | File | Change |
+|---|------|--------|
+| 1 | `TemplateFormDialog.tsx` | Add `qualitative_options` and `require_resubmit_reason` to the `compareMap` so changes are detected and propagated. Use JSON.stringify for deep comparison of `qualitative_options`. |
+| 2 | `TemplateFormDialog.tsx` | Add a confirmation `AlertDialog` that appears when "Save & Propagate" is clicked — shows field count, KPI count, employee count summary before executing. |
+| 3 | `TemplateFormDialog.tsx` | Replace hardcoded `[2025, 2026, 2027]` with dynamic range: `[currentYear - 1, currentYear, currentYear + 1]`. |
+| 4 | `TemplateFormDialog.tsx` | Add "Select All / Deselect All" toggle above the employee list when scope is "selected". |
+| 5 | `TemplateChangeHistory.tsx` | Fetch profile names for `changed_by` IDs and display "by [Name]" in each history entry. Update the hook query to join profiles or fetch separately. |
+| 6 | `useKpiTemplates.ts` | Update `useTemplateChangeHistory` query to join on profiles table to get the changer's name. |
 
-## Fix
-Added an **"Include weightage changes"** checkbox (default: unchecked) in the propagation section of `TemplateFormDialog`. When unchecked, `weightage` is filtered out of the `fields_changed` payload sent to the edge function.
+### UI Changes
 
-| Detail | Behavior |
-|--------|----------|
-| Default | Weightage **excluded** from propagation |
-| Checkbox visible | Only when weightage was actually changed in the form |
-| Warning | ⚠ "Caution: This will overwrite individual employee weightages" |
-| Edge case | If weightage is the only change and checkbox is unchecked, propagation shows "No fields selected" and disables Preview/Propagate |
-| Edge function | No change needed — already filters by `fields_changed` keys |
+**Confirmation dialog** (appears on "Save & Propagate" click):
+```text
+┌─────────────────────────────────────┐
+│  Confirm Propagation                │
+│                                     │
+│  This will update:                  │
+│  • 3 fields (target value, r5, r4)  │
+│  • Across all linked employees      │
+│  • Effective from March 2026        │
+│                                     │
+│  This action cannot be undone.      │
+│                                     │
+│         [Cancel]  [Propagate Now]   │
+└─────────────────────────────────────┘
+```
 
-### File Changed
-| File | Change |
-|------|--------|
-| `TemplateFormDialog.tsx` | Added `includeWeightage` state, `propagationChangedFields` memo, checkbox UI with warning, disabled states when no propagable fields |
+**Select All** in employee list:
+```text
+Scope: ○ All linked employees (12)  ● Selected employees only
+┌──────────────────────────────────┐
+│ ☐ Select All                     │
+│ ☑ John Smith           3 KPIs   │
+│ ☑ Jane Doe             2 KPIs   │
+│ ☐ Bob Wilson           4 KPIs   │
+└──────────────────────────────────┘
+```
+
+**Change History** — adds "by" line:
+```text
+March 2026                    05 Mar 2026, 14:30
+3 KPIs updated across 2 employees    by Admin User
+```
 
