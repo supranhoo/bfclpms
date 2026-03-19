@@ -1,0 +1,1 @@
+CREATE INDEX idx_kpi_audit_logs_kpi_id ON public.kpi_audit_logs USING btree (kpi_id);
