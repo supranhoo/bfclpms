@@ -179,7 +179,7 @@ export default function KpiDetailReport() {
           : kpi.review_submissions;
         const isNa = sub?.is_na ?? false;
         const weightage = kpi.weightage ?? 0;
-        const finalScore = isNa ? null : resolveFinalScore(sub);
+        const finalScore = isNa ? null : resolveFinalScore(sub, kpi.status);
         const totalScore = isNa || finalScore === null ? null : finalScore * weightage;
         const outOfScore = isNa ? null : weightage * 5;
         const percentage =

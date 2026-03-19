@@ -285,7 +285,7 @@ export default function EmployeePerformanceSummary() {
         const periodMap = employeeTrends.get(kpi.employee_id)!;
         const existing = periodMap.get(kpi.review_period);
 
-        const score = submission?.final_score ?? 
+        const score = (kpi.status === 'approved' ? submission?.final_score : null) ??
                       submission?.management_score ?? 
                       submission?.auditor_score ?? 
                       submission?.hr_pms_score ?? 
