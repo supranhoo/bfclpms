@@ -1,113 +1,169 @@
 
-# Workflow Configuration: "Effective From" Period Support — IMPLEMENTED ✅
 
-## What Changed
-- Added `is_ongoing` BOOLEAN column to `workflow_config` table
-- Created `month_name_to_index()` and `find_ongoing_workflow()` helper functions
-- Updated 3 RPCs with ongoing resolution: exact match → ongoing match → global fallback
-- Frontend: "Apply from this month onward" toggle + ongoing badges
-- Hook: `useUpsertWorkflowConfig` accepts `isOngoing` parameter
+## KRA Library → KPI Master: Propagate Template Changes to Live KPIs
 
----
+### Current State
 
-# Org-Level KPI Toggle in Assign New KRA Dialog — IMPLEMENTED ✅
+The KRA Library (`kpi_templates` table) is **disconnected** from live KPIs (`kpis` table). Templates are only used at assignment time — once a KPI is created for an employee, it has no back-link to the template. Editing a template today changes nothing for existing employees.
 
-## What Changed
-- Added `isOrgLevel` toggle switch and `orgLevelScope` selector to the Advanced section of `AdminKpiCreateDialog`
-- Submit now uses these state values instead of hardcoded `is_org_level: false`
-- Scope options: Organization, Department, Employee (matching `MarkOrgLevelDialog` pattern)
+### What We Will Build
+
+Transform the KRA Library into a **KPI Master** where editing a template propagates structural changes to all linked live KPIs, with:
+- Effective month/year control
+- Employee selection (all linked or specific subset)
+- Org KPI vs Individual KPI awareness
+- Audit trail of all propagated changes
+- Dry-run preview before applying
 
 ---
 
+### Phase 1: Database Foundation — Link KPIs to Templates
 
-## Problem
-KPIs with no `review_submissions` record (e.g., still at `kra_set` status, or Quarterly KPIs in non-terminal months) were included in the denominator but contributed 0 to the numerator, deflating overall scores. Affected 61 KPIs across 19 employees in January alone.
+**Migration 1: Add `source_template_id` to `kpis` table**
 
-## Fix Applied
-Guard clause `if (!submission || submission.is_na) return;` added in 4 files:
+```sql
+ALTER TABLE kpis ADD COLUMN source_template_id uuid REFERENCES kpi_templates(id) ON DELETE SET NULL;
+CREATE INDEX idx_kpis_source_template ON kpis(source_template_id);
+```
 
-| File | Line | Change |
-|---|---|---|
-| `UnifiedScorecard.tsx` | 483 | `if (!submission \|\| submission.is_na) return;` |
-| `EmployeeScorecard.tsx` | 220 | Same |
-| `AuditScorecard.tsx` | 221 | Same |
-| `ManagementScorecard.tsx` | 222 | Same |
+**Migration 2: Backfill existing KPIs**
 
-## Impact
-- Biswajit's score: 382/468 → 382/443 (correct)
-- 19 employees with unsubmitted KPIs now show accurate weighted scores
-- Quarterly KPIs in non-terminal months are correctly excluded
-- No database migration needed — frontend calculation fix only
+Match existing KPIs to templates using `(kra_name, kpi_name, category_id)` case-insensitive matching:
+```sql
+UPDATE kpis k
+SET source_template_id = t.id
+FROM kpi_templates t
+WHERE lower(k.kra_name) = lower(t.kra_name)
+  AND lower(k.kpi_name) = lower(t.kpi_name)
+  AND k.category_id = t.category_id
+  AND k.source_template_id IS NULL;
+```
 
----
+**Migration 3: Create `template_change_logs` table**
 
-# Improve Send-Back KPI Experience — IMPLEMENTED ✅
-
-## Problems Fixed
-
-### 1. Employee data preserved on send-back
-Previously, sending back a KPI to employee cleared all self-level fields (rating, score, remarks, evidence, achieved value). Now only `kpi_status` is reset to `open` — employee sees their previous data pre-filled.
-
-| File | Change |
-|---|---|
-| `UnifiedScorecard.tsx` | Removed self-field clearing in cascade-clear for `kra_set` |
-| `useKpis.ts` | `useSendBackKpi` no longer clears self-level fields |
-
-### 2. Send-back reason shown on face
-- **SentBackBanner component**: Fetches latest `kpi_queries` record with `query_type = 'send_back'`, displays reason, sender name, and date
-- **SelfReviewSheet**: Uses `SentBackBanner` instead of generic text
-- **KpiDetailsTable**: Shows "Sent Back" badge for KPIs at `kra_set` with prior submissions
-
-### 3. Send-back queries created from all reviewer levels
-UnifiedScorecard's send-back mutation now creates `kpi_queries` records (like `useSendBackKpi` already did), ensuring send-back reasons are always discoverable.
-
-| File | Change |
-|---|---|
-| `SentBackBanner.tsx` | New component — fetches & displays send-back reason |
-| `SelfReviewSheet.tsx` | Uses SentBackBanner |
-| `KpiDetailsTable.tsx` | Added "Sent Back" badge for sent-back KPIs at kra_set |
-| `UnifiedScorecard.tsx` | Creates kpi_queries record on send-back; invalidates kpi-queries cache |
+Tracks every propagation event for audit:
+```sql
+CREATE TABLE template_change_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  template_id uuid REFERENCES kpi_templates(id) NOT NULL,
+  changed_by uuid NOT NULL,
+  effective_month text NOT NULL,
+  effective_year integer NOT NULL,
+  fields_changed jsonb NOT NULL,  -- {field: {old, new}}
+  employees_affected integer DEFAULT 0,
+  kpis_updated integer DEFAULT 0,
+  scope text DEFAULT 'all',  -- 'all' | 'selected'
+  selected_employee_ids uuid[] DEFAULT '{}',
+  created_at timestamptz DEFAULT now()
+);
+ALTER TABLE template_change_logs ENABLE ROW LEVEL SECURITY;
+-- Admin-only access
+CREATE POLICY "Admins can manage template change logs"
+  ON template_change_logs FOR ALL TO authenticated
+  USING (has_role(auth.uid(), 'admin'));
+```
 
 ---
 
-# Audit Fix: Send-Back Gaps Across Levels — IMPLEMENTED ✅
+### Phase 2: Backend Edge Function — `propagate-template-change`
 
-## Gaps Fixed
+A new edge function that:
 
-### 1. ManagementScorecard now creates `kpi_queries` record on send-back
-Previously only an audit log was created. Now a `kpi_queries` record with `query_type: 'send_back'` is inserted, making the reason discoverable by the `SentBackBanner`.
-
-### 2. SentBackBanner shown to all reviewer levels
-The `SentBackBanner` is now rendered in both `UnifiedScorecard` (manager, auditor, skip-level, HR PMS) and `ManagementScorecard` review sheets. It auto-hides when no send-back record exists.
-
-### 3. SentBackBanner conditionally renders
-Returns `null` when no send-back query is found, so it doesn't show an empty banner.
-
-| File | Change |
-|---|---|
-| `ManagementScorecard.tsx` | Added `kpi_queries` insert + `SentBackBanner` in review sheet |
-| `UnifiedScorecard.tsx` | Added `SentBackBanner` in review sheet |
-| `SentBackBanner.tsx` | Returns null when no data (safe for unconditional rendering) |
+1. Receives: `template_id`, changed fields (old/new values), `effective_month`, `effective_year`, `employee_ids` (optional — empty means all linked)
+2. Queries all KPIs linked via `source_template_id` where `review_period` falls on or after the effective month
+3. Only updates **structural fields** (never touches scores/submissions): `target_value`, `weightage`, `uom`, `criteria`, `r5-r0`, `source_of_data`, `frequency`, `uom_type`, `qualitative_options`, `threshold_mode`, `kra_name`, `kpi_name`
+4. Filters by employee_ids if provided
+5. Skips KPIs with status `'approved'` (already finalized)
+6. Returns a summary: count of KPIs updated, employees affected, any skipped records
+7. Logs the change to `template_change_logs`
 
 ---
 
-# Fix: Stale `final_score` in Fallback Chains — IMPLEMENTED ✅
+### Phase 3: Enhanced KRA Library UI
 
-## Problem
-9 files used `final_score ?? management_score ?? ...` fallback chains without checking KPI approval status, causing stale imported `final_score` values to override actual reviewer scores.
+**3A: "Linked Employees" column in template table**
 
-## Fix Applied
-Gated `final_score` behind `status === 'approved'` check in all fallback chains:
+- Show count of live KPIs linked to each template (via `source_template_id`)
+- Clickable to expand and see employee names
+
+**3B: "Edit & Propagate" action on each template**
+
+When editing a template, the dialog gains a new **Propagation Settings** section (below the form):
+
+```
+┌─────────────────────────────────────────────────┐
+│  Propagation Settings                           │
+│                                                 │
+│  ☑ Propagate changes to linked KPIs             │
+│                                                 │
+│  Effective From: [March ▼] [2026 ▼]             │
+│                                                 │
+│  Scope: ○ All linked employees (47)             │
+│         ○ Selected employees only               │
+│         ┌──────────────────────────────┐        │
+│         │ ☑ Ankit Choudhary            │        │
+│         │ ☑ Rahul Sharma               │        │
+│         │ ☐ Priya Singh                 │        │
+│         └──────────────────────────────┘        │
+│                                                 │
+│  Fields that changed:                           │
+│  • Target Value: 7 → 10                         │
+│  • R5: 10 → 12                                  │
+│                                                 │
+│  [Preview Impact]  [Save & Propagate]           │
+└─────────────────────────────────────────────────┘
+```
+
+**3C: "Preview Impact" dry-run**
+
+Before applying, show a summary table:
+- How many KPIs will be updated
+- Which months will be affected
+- Which employees
+- Which KPIs are skipped (already approved)
+
+**3D: Template Change History**
+
+A new dropdown action "View Change History" per template, showing a timeline of all propagation events from `template_change_logs`.
+
+---
+
+### Phase 4: Safeguards & Edge Cases
+
+| Scenario | Handling |
+|----------|----------|
+| KPI already approved | Skipped — never modify finalized KPIs |
+| KPI has active scores (self_score etc.) | Only structural fields updated, scores untouched |
+| Org-level KPI | Propagates to ALL employees who have that KPI (via `is_org_level` + name matching) |
+| Employee not linked to template | Offer option to also create new KPI for unlinked employees |
+| Frequency change | Handled with `resolveToActiveMonth` to avoid period conflicts |
+| KRA/KPI name change | Updates all linked KPIs AND their `review_submissions` references |
+| Duplicate constraint violation | Caught and reported per-employee in the summary |
+
+---
+
+### Files to Create/Modify
 
 | File | Change |
 |------|--------|
-| `DirectReporteesMonitor.tsx` | Added `status` to query select; gated fallback |
-| `ManagementDashboard.tsx` | Gated `getScore()` helper |
-| `PerformanceReport.tsx` | Gated category scores + avg score |
-| `EmployeePerformanceSummary.tsx` | Gated both fallback chains (lines 180, 288) |
-| `KpiDetailReport.tsx` | Added `status` param to `resolveFinalScore()` |
-| `KpiHistoryCard.tsx` | Gated history chart scores |
-| `KpiReviewPanel.tsx` | Gated `baseScore` prop |
-| `KpiTrackerModal.tsx` | Gated `finalScore` display |
-| `ImportData.tsx` | Gated export rating column |
+| **New migration** | Add `source_template_id` to `kpis`, backfill, create `template_change_logs` |
+| **`supabase/functions/propagate-template-change/index.ts`** | New edge function for batch propagation |
+| **`src/hooks/useKpiTemplates.ts`** | Add `useLinkedKpiCount()` hook, `usePropagateTemplateChange()` mutation |
+| **`src/components/admin/TemplateFormDialog.tsx`** | Add propagation settings section with employee selector + effective month |
+| **`src/components/admin/TemplatePropagationPreview.tsx`** | New: dry-run preview dialog |
+| **`src/components/admin/TemplateChangeHistory.tsx`** | New: change log timeline component |
+| **`src/pages/admin/KRALibrary.tsx`** | Add "Linked" column, "View History" action, enhanced stats cards |
+| **`src/components/admin/BulkTemplateAssignDialog.tsx`** | Set `source_template_id` when assigning |
+| **`src/components/admin/BundleAssignDialog.tsx`** | Set `source_template_id` when assigning |
+| **`src/components/admin/SmartAssignmentDialog.tsx`** | Set `source_template_id` when assigning |
+| **`src/components/admin/AdminKpiCreateDialog.tsx`** | Set `source_template_id` if created from template |
+
+### Execution Order
+
+1. Database migration (schema + backfill)
+2. Edge function for propagation
+3. Update all assignment flows to write `source_template_id`
+4. Enhanced TemplateFormDialog with propagation UI
+5. Preview and history components
+6. KRALibrary page enhancements
 
