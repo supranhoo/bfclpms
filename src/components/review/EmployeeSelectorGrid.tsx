@@ -167,10 +167,16 @@ export function EmployeeSelectorGrid({
   // Fix 2: Derive employee IDs from the full visible list, not just periodKpis.
   // This ensures workflowMap has stages for ALL panel employees, not only those with KPIs in the selected range.
   const allEmployeeIds = useMemo(() => {
+    if (viewLevel === 'team' && !isFullAccess) {
+      // Merge direct + indirect IDs so workflowMap covers all visible employees
+      const directIds = (teamMembers || []).map(p => p.id);
+      const indirectIds = (skipLevelMembers || []).map(p => p.id);
+      return [...new Set([...directIds, ...indirectIds])];
+    }
     const source = requiredStage ? stageFilteredProfiles : (isFullAccess ? allProfiles : teamMembers);
     if (!source) return [];
     return source.map((p: { id: string }) => p.id);
-  }, [requiredStage, stageFilteredProfiles, isFullAccess, allProfiles, teamMembers]);
+  }, [viewLevel, requiredStage, stageFilteredProfiles, isFullAccess, allProfiles, teamMembers, skipLevelMembers]);
 
   const { data: workflowMap } = useBulkEmployeeWorkflows(allEmployeeIds, selectedPeriod, selectedYear);
 
