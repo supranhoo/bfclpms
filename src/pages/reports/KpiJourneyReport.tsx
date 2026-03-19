@@ -145,6 +145,11 @@ export default function KpiJourneyReport() {
         'Status': r.isNa ? 'N/A' : (STATUS_LABELS[r.status] ?? r.status),
         'Timeline Compliant': r.isCompliant ? 'Yes' : 'No',
         'Type': r.isOrgKpi ? 'Org KPI' : 'Individual',
+        'Send-Back Count': r.sendBackCount ?? 0,
+        'Send-Back History': (r.sendBacks ?? []).map((sb: any) => {
+          const d = sb.date ? format(new Date(sb.date), 'dd-MMM-yyyy') : '';
+          return `${d} by ${sb.raisedBy}: ${sb.reason}`;
+        }).join('; '),
       }));
 
       const ws = XLSX.utils.json_to_sheet(exportData);
