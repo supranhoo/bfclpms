@@ -84,7 +84,7 @@ export function useKpiJourneyReport(
       return {
         rows: result.rows ?? [],
         totalCount: result.totalCount ?? 0,
-        summary: result.summary ?? { total: 0, pending: 0, avgToSelf: 0, avgToFinal: 0 },
+        summary: result.summary ?? { total: 0, pending: 0, avgToSelf: 0, avgToFinal: 0, totalSendBacks: 0 },
       };
     },
     enabled: !!selectedPeriod && !!selectedYear,
