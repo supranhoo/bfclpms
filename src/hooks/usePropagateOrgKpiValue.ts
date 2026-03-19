@@ -83,6 +83,7 @@ function buildRatingsPayload(
           achieved_value: achievedValue,
           self_score: directRating,
           self_rating: scoreToRating(directRating),
+          evidence_url: evidenceUrl || null,
         });
       } else {
         const thresholds: RatingThresholds = {
