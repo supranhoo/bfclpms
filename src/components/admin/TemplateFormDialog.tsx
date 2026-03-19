@@ -884,7 +884,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
             Cancel
           </Button>
           <Button
-            onClick={handleSubmit}
+            onClick={handleSubmitClick}
             disabled={isSubmitting || !formData.title || !formData.kra_name || !formData.kpi_name}
           >
             {isSubmitting ? (
@@ -899,5 +899,36 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Confirmation dialog for propagation */}
+    <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Confirm Propagation</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2">
+              <p>This will update:</p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li><strong>{Object.keys(propagationChangedFields).length}</strong> field{Object.keys(propagationChangedFields).length !== 1 ? 's' : ''} ({Object.keys(propagationChangedFields).map(f => f.replace(/_/g, ' ')).join(', ')})</li>
+                <li>
+                  {propagationScope === 'all' 
+                    ? `Across all linked employees (${linkedCount})`
+                    : `Across ${selectedEmployeeIds.size} selected employee${selectedEmployeeIds.size !== 1 ? 's' : ''}`}
+                </li>
+                <li>Effective from <strong>{effectiveMonth} {effectiveYear}</strong></li>
+              </ul>
+              <p className="text-sm text-destructive font-medium mt-2">This action cannot be undone.</p>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={() => { setShowConfirmDialog(false); handleSubmit(); }}>
+            Propagate Now
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
