@@ -95,8 +95,8 @@ export function useKpiJourneyReport(selectedPeriod: string, selectedYear: string
       // Submissions: 1 row per KPI, fetch in single batched calls outside the loop
       const submissionsPromise = (async () => {
         const allSubs: any[] = [];
-        for (let i = 0; i < kpiIds.length; i += 1000) {
-          const batch = kpiIds.slice(i, i + 1000);
+        for (let i = 0; i < kpiIds.length; i += 300) {
+          const batch = kpiIds.slice(i, i + 300);
           const { data } = await supabase
             .from('review_submissions')
             .select('kpi_id, submitted_at, self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na')
