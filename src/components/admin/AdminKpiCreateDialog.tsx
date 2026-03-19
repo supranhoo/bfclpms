@@ -302,6 +302,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
           require_resubmit_reason: requireResubmitReason,
           day_count_type: frequency === 'Daily' ? dayCountType : null,
           threshold_mode: uomType === 'numeric' ? thresholdMode : null,
+          source_template_id: selectedTemplateId || null,
         },
         errorContext: {
           frequency,
