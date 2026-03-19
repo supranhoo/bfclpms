@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-16  
-> **Version:** 1.54.1 — Centralized duplicate KPI error handling: created `kpiErrorUtils.ts` utility, fixed all 6 insert paths (AdminKpiCreateDialog, BulkTemplateAssignDialog, SmartAssignmentDialog, BundleAssignDialog, CopyKrasDialog) with friendly error messages including resolved effective month, fixed duplicate pre-check in BulkTemplateAssignDialog to query resolved period
+> **Last Updated:** 2026-03-19  
+> **Version:** 1.55.0 — Fixed template save nullification bug (binary/tiered UOM fields were forced to NULL on save), added "Check Template-KPI Sync" tool in KRA Library for detecting and fixing drift between templates and live KPIs, back-filled corrupted template data from linked KPIs
 > **Maintainer:** Lovable AI
 
 ---
