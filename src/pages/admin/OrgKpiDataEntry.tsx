@@ -550,6 +550,7 @@ export default function OrgKpiDataEntry() {
         isNa: values.isNa,
         naRemarks: values.naRemarks,
         remarks: values.remarks || undefined,
+        evidenceUrl: values.evidenceUrl || undefined,
       });
       totalPropagated = result.propagatedCount;
       propagatedScopeIds.push('organization');
