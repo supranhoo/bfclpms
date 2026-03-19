@@ -37,6 +37,20 @@ export interface KpiTemplate {
   } | null;
 }
 
+export interface TemplateChangeLog {
+  id: string;
+  template_id: string;
+  changed_by: string;
+  effective_month: string;
+  effective_year: number;
+  fields_changed: Record<string, { old: any; new: any }>;
+  employees_affected: number;
+  kpis_updated: number;
+  scope: string;
+  selected_employee_ids: string[];
+  created_at: string;
+}
+
 export function useKpiTemplates() {
   return useQuery({
     queryKey: ['kpi-templates'],
@@ -51,6 +65,128 @@ export function useKpiTemplates() {
 
       if (error) throw error;
       return data as KpiTemplate[];
+    },
+  });
+}
+
+export function useLinkedKpiCounts() {
+  return useQuery({
+    queryKey: ['template-linked-counts'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kpis')
+        .select('source_template_id')
+        .not('source_template_id', 'is', null);
+
+      if (error) throw error;
+
+      const counts: Record<string, number> = {};
+      (data || []).forEach(kpi => {
+        const tid = kpi.source_template_id as string;
+        counts[tid] = (counts[tid] || 0) + 1;
+      });
+      return counts;
+    },
+  });
+}
+
+export function useLinkedEmployees(templateId: string | null) {
+  return useQuery({
+    queryKey: ['template-linked-employees', templateId],
+    enabled: !!templateId,
+    queryFn: async () => {
+      if (!templateId) return [];
+      const { data, error } = await supabase
+        .from('kpis')
+        .select('employee_id, review_period, review_year, status, profiles!kpis_employee_id_fkey(id, full_name, employee_code)')
+        .eq('source_template_id', templateId);
+
+      if (error) throw error;
+
+      // Group by employee
+      const employeeMap = new Map<string, { id: string; name: string; code: string; kpi_count: number; statuses: string[] }>();
+      (data || []).forEach((kpi: any) => {
+        const emp = kpi.profiles;
+        if (!emp) return;
+        const existing = employeeMap.get(emp.id);
+        if (existing) {
+          existing.kpi_count++;
+          if (kpi.status && !existing.statuses.includes(kpi.status)) {
+            existing.statuses.push(kpi.status);
+          }
+        } else {
+          employeeMap.set(emp.id, {
+            id: emp.id,
+            name: emp.full_name || emp.employee_code || 'Unknown',
+            code: emp.employee_code || '',
+            kpi_count: 1,
+            statuses: kpi.status ? [kpi.status] : [],
+          });
+        }
+      });
+      return Array.from(employeeMap.values());
+    },
+  });
+}
+
+export function useTemplateChangeHistory(templateId: string | null) {
+  return useQuery({
+    queryKey: ['template-change-history', templateId],
+    enabled: !!templateId,
+    queryFn: async () => {
+      if (!templateId) return [];
+      const { data, error } = await supabase
+        .from('template_change_logs')
+        .select('*')
+        .eq('template_id', templateId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      return data as TemplateChangeLog[];
+    },
+  });
+}
+
+export function usePropagateTemplateChange() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (params: {
+      template_id: string;
+      fields_changed: Record<string, { old: any; new: any }>;
+      effective_month: string;
+      effective_year: number;
+      employee_ids?: string[];
+      dry_run?: boolean;
+    }) => {
+      const { data, error } = await supabase.functions.invoke('propagate-template-change', {
+        body: params,
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      if (!variables.dry_run) {
+        queryClient.invalidateQueries({ queryKey: ['kpis'] });
+        queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+        queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
+        queryClient.invalidateQueries({ queryKey: ['template-linked-counts'] });
+        queryClient.invalidateQueries({ queryKey: ['template-change-history'] });
+        toast({
+          title: 'Changes Propagated',
+          description: `Updated ${data.kpis_updated} KPIs across ${data.employees_affected} employees`,
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: 'Propagation Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
     },
   });
 }

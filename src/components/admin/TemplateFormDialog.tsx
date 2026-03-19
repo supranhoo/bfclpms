@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,13 +8,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useKraCategories } from '@/hooks/useOrganization';
-import { KpiTemplate, useCreateKpiTemplate, useUpdateKpiTemplate } from '@/hooks/useKpiTemplates';
+import { KpiTemplate, useCreateKpiTemplate, useUpdateKpiTemplate, useLinkedEmployees, usePropagateTemplateChange } from '@/hooks/useKpiTemplates';
 import { UomTypeSelector } from './UomTypeSelector';
 import { TieredOptionsBuilder } from './TieredOptionsBuilder';
 import { UomType, QualitativeOption, BINARY_OPTIONS, BINARY_OPTIONS_INVERTED, isBinaryInverted } from '@/lib/qualitativeUom';
 import { Separator } from '@/components/ui/separator';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
+import { TemplatePropagationPreview } from './TemplatePropagationPreview';
+import { Card, CardContent } from '@/components/ui/card';
+import { ArrowRight, Loader2, Users } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 interface TemplateFormDialogProps {
   isOpen: boolean;
@@ -26,6 +33,18 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
   const { data: categories } = useKraCategories();
   const createTemplate = useCreateKpiTemplate();
   const updateTemplate = useUpdateKpiTemplate();
+  const propagate = usePropagateTemplateChange();
+
+  // Propagation state
+  const [shouldPropagate, setShouldPropagate] = useState(false);
+  const [effectiveMonth, setEffectiveMonth] = useState(() => MONTH_NAMES[new Date().getMonth()]);
+  const [effectiveYear, setEffectiveYear] = useState(() => new Date().getFullYear());
+  const [propagationScope, setPropagationScope] = useState<'all' | 'selected'>('all');
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(new Set());
+  const [previewData, setPreviewData] = useState<any>(null);
+  const [showPreview, setShowPreview] = useState(false);
+
+  const { data: linkedEmployees } = useLinkedEmployees(template?.id || null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -86,6 +105,9 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
         day_count_type: (template as any).day_count_type || 'working_days',
         threshold_mode: (template as any).threshold_mode || 'absolute',
       });
+      setShouldPropagate(false);
+      setShowPreview(false);
+      setPreviewData(null);
     } else {
       resetForm();
     }
@@ -120,11 +142,71 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
       day_count_type: 'working_days',
       threshold_mode: 'absolute',
     });
+    setShouldPropagate(false);
+    setShowPreview(false);
+    setPreviewData(null);
+    setSelectedEmployeeIds(new Set());
   };
+
+  // Detect which fields changed compared to original template
+  const changedFields = useMemo(() => {
+    if (!template) return {};
+    const changes: Record<string, { old: any; new: any }> = {};
+
+    const compareMap: Record<string, { formKey: keyof typeof formData; templateKey: keyof KpiTemplate; isNumeric?: boolean }> = {
+      kra_name: { formKey: 'kra_name', templateKey: 'kra_name' },
+      kpi_name: { formKey: 'kpi_name', templateKey: 'kpi_name' },
+      target_value: { formKey: 'target_value', templateKey: 'target_value', isNumeric: true },
+      weightage: { formKey: 'weightage', templateKey: 'weightage', isNumeric: true },
+      uom: { formKey: 'uom', templateKey: 'uom' },
+      criteria: { formKey: 'criteria', templateKey: 'criteria' },
+      frequency: { formKey: 'frequency', templateKey: 'frequency' },
+      source_of_data: { formKey: 'source_of_data', templateKey: 'source_of_data' },
+      r5: { formKey: 'r5', templateKey: 'r5' },
+      r4: { formKey: 'r4', templateKey: 'r4' },
+      r3: { formKey: 'r3', templateKey: 'r3' },
+      r2: { formKey: 'r2', templateKey: 'r2' },
+      r1: { formKey: 'r1', templateKey: 'r1' },
+      r0: { formKey: 'r0', templateKey: 'r0' },
+      uom_type: { formKey: 'uom_type', templateKey: 'uom_type' as any },
+      threshold_mode: { formKey: 'threshold_mode', templateKey: 'threshold_mode' as any },
+    };
+
+    for (const [field, config] of Object.entries(compareMap)) {
+      const oldVal = (template as any)[config.templateKey];
+      let newVal: any = formData[config.formKey];
+      if (config.isNumeric) {
+        newVal = newVal ? parseFloat(newVal) : null;
+      }
+      const normalizedOld = oldVal ?? null;
+      const normalizedNew = newVal === '' ? null : newVal;
+      if (String(normalizedOld) !== String(normalizedNew)) {
+        changes[field] = { old: normalizedOld, new: normalizedNew };
+      }
+    }
+
+    return changes;
+  }, [template, formData]);
+
+  const hasChanges = Object.keys(changedFields).length > 0;
 
   const handleClose = () => {
     resetForm();
     onClose();
+  };
+
+  const handlePreview = async () => {
+    if (!template || !hasChanges) return;
+    const result = await propagate.mutateAsync({
+      template_id: template.id,
+      fields_changed: changedFields,
+      effective_month: effectiveMonth,
+      effective_year: effectiveYear,
+      employee_ids: propagationScope === 'selected' ? Array.from(selectedEmployeeIds) : undefined,
+      dry_run: true,
+    });
+    setPreviewData(result);
+    setShowPreview(true);
   };
 
   const handleSubmit = async () => {
@@ -163,6 +245,18 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
     try {
       if (template) {
         await updateTemplate.mutateAsync({ id: template.id, ...payload } as any);
+
+        // Propagate if requested and there are changes
+        if (shouldPropagate && hasChanges) {
+          await propagate.mutateAsync({
+            template_id: template.id,
+            fields_changed: changedFields,
+            effective_month: effectiveMonth,
+            effective_year: effectiveYear,
+            employee_ids: propagationScope === 'selected' ? Array.from(selectedEmployeeIds) : undefined,
+            dry_run: false,
+          });
+        }
       } else {
         await createTemplate.mutateAsync(payload as any);
       }
@@ -172,7 +266,17 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
     }
   };
 
-  const isSubmitting = createTemplate.isPending || updateTemplate.isPending;
+  const isSubmitting = createTemplate.isPending || updateTemplate.isPending || propagate.isPending;
+  const linkedCount = linkedEmployees?.length || 0;
+
+  const toggleEmployee = (empId: string) => {
+    setSelectedEmployeeIds(prev => {
+      const next = new Set(prev);
+      if (next.has(empId)) next.delete(empId);
+      else next.add(empId);
+      return next;
+    });
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -544,6 +648,147 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                 />
               </div>
             </div>
+
+            {/* Propagation Settings — only in edit mode with linked employees */}
+            {template && linkedCount > 0 && (
+              <>
+                <Separator />
+                <div className="p-4 border rounded-lg border-primary/30 bg-primary/5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-sm flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        Propagate Changes to Linked KPIs
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {linkedCount} employee{linkedCount !== 1 ? 's' : ''} linked to this template
+                      </p>
+                    </div>
+                    <Switch
+                      checked={shouldPropagate}
+                      onCheckedChange={setShouldPropagate}
+                      disabled={!hasChanges}
+                    />
+                  </div>
+
+                  {!hasChanges && (
+                    <p className="text-xs text-muted-foreground italic">
+                      Make changes to the template fields above to enable propagation.
+                    </p>
+                  )}
+
+                  {shouldPropagate && hasChanges && (
+                    <div className="space-y-4">
+                      {/* Effective Month */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs">Effective From Month</Label>
+                          <Select value={effectiveMonth} onValueChange={setEffectiveMonth}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {MONTH_NAMES.map(m => (
+                                <SelectItem key={m} value={m}>{m}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Year</Label>
+                          <Select value={String(effectiveYear)} onValueChange={v => setEffectiveYear(Number(v))}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {[2025, 2026, 2027].map(y => (
+                                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* Scope */}
+                      <div>
+                        <Label className="text-xs mb-2 block">Scope</Label>
+                        <RadioGroup value={propagationScope} onValueChange={(v: 'all' | 'selected') => setPropagationScope(v)}>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="all" id="scope-all" />
+                            <Label htmlFor="scope-all" className="text-sm font-normal">
+                              All linked employees ({linkedCount})
+                            </Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="selected" id="scope-selected" />
+                            <Label htmlFor="scope-selected" className="text-sm font-normal">
+                              Selected employees only
+                            </Label>
+                          </div>
+                        </RadioGroup>
+                      </div>
+
+                      {/* Employee selector */}
+                      {propagationScope === 'selected' && linkedEmployees && (
+                        <ScrollArea className="max-h-[150px] border rounded-md p-2">
+                          <div className="space-y-1">
+                            {linkedEmployees.map(emp => (
+                              <div key={emp.id} className="flex items-center gap-2 py-1">
+                                <Checkbox
+                                  checked={selectedEmployeeIds.has(emp.id)}
+                                  onCheckedChange={() => toggleEmployee(emp.id)}
+                                />
+                                <span className="text-sm">{emp.name}</span>
+                                <Badge variant="secondary" className="text-xs ml-auto">{emp.kpi_count} KPIs</Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                      )}
+
+                      {/* Changed fields summary */}
+                      <div>
+                        <Label className="text-xs mb-1 block">Fields That Changed</Label>
+                        <div className="space-y-1">
+                          {Object.entries(changedFields).map(([field, change]) => (
+                            <div key={field} className="text-xs flex items-center gap-1">
+                              <span className="font-medium capitalize">{field.replace(/_/g, ' ')}</span>
+                              <span className="text-muted-foreground line-through">{String(change.old ?? '—')}</span>
+                              <ArrowRight className="h-3 w-3" />
+                              <span className="font-medium">{String(change.new ?? '—')}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Preview button */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handlePreview}
+                        disabled={propagate.isPending}
+                      >
+                        {propagate.isPending ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                            Calculating...
+                          </>
+                        ) : 'Preview Impact'}
+                      </Button>
+
+                      {/* Preview results */}
+                      {showPreview && previewData && (
+                        <Card>
+                          <CardContent className="pt-4">
+                            <TemplatePropagationPreview data={previewData} isLoading={false} />
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </ScrollArea>
 
@@ -555,7 +800,14 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
             onClick={handleSubmit}
             disabled={isSubmitting || !formData.title || !formData.kra_name || !formData.kpi_name}
           >
-            {isSubmitting ? 'Saving...' : template ? 'Update Template' : 'Create Template'}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                {propagate.isPending ? 'Propagating...' : 'Saving...'}
+              </>
+            ) : template 
+              ? (shouldPropagate && hasChanges ? 'Save & Propagate' : 'Update Template') 
+              : 'Create Template'}
           </Button>
         </DialogFooter>
       </DialogContent>

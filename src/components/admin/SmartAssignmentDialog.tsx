@@ -246,6 +246,7 @@ export function SmartAssignmentDialog({
           review_year: currentYear,
           status: 'kra_set' as const,
           is_org_level: false,
+          source_template_id: item.kpi_templates.id,
         };
       });
 
@@ -331,6 +332,7 @@ export function SmartAssignmentDialog({
           review_year: currentYear,
           is_org_level: false,
           status: 'kra_set' as const,
+          source_template_id: template.id,
         };
       });
 

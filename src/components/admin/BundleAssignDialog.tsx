@@ -136,6 +136,7 @@ export function BundleAssignDialog({ isOpen, onClose, preselectedEmployeeId }: B
             review_period: resolvedPeriod,
             review_year: currentYear,
             status: 'kra_set',
+            source_template_id: template.id,
           });
         }
       }

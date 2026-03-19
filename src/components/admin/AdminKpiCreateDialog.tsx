@@ -99,6 +99,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
   const [thresholdMode, setThresholdMode] = useState<'absolute' | 'ratio'>('absolute');
   const [isOrgLevel, setIsOrgLevel] = useState(false);
   const [orgLevelScope, setOrgLevelScope] = useState('organization');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   // Period - prefer explicit defaults from props, then system settings
   const [reviewPeriod, setReviewPeriod] = useState(defaultReviewPeriod || settings.current_review_period);
@@ -193,6 +194,9 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
   const applyTemplate = (kpiNameValue: string) => {
     const tpl = filteredKpiTemplates.find(t => t.kpi_name === kpiNameValue);
     if (!tpl) return;
+    // Track template link - only real templates (from kpi_templates table) have created_by or applicable_roles
+    const isRealTemplate = (templates || []).some(t => t.id === tpl.id);
+    setSelectedTemplateId(isRealTemplate ? tpl.id : null);
     if (tpl.uom_type) setUomType(tpl.uom_type as UomType);
     if (tpl.uom) setUom(tpl.uom);
     if (tpl.criteria) setCriteria(tpl.criteria);
@@ -298,6 +302,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
           require_resubmit_reason: requireResubmitReason,
           day_count_type: frequency === 'Daily' ? dayCountType : null,
           threshold_mode: uomType === 'numeric' ? thresholdMode : null,
+          source_template_id: selectedTemplateId || null,
         },
         errorContext: {
           frequency,

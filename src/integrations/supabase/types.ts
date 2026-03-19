@@ -1151,6 +1151,7 @@ export type Database = {
           review_period: string | null
           review_year: number | null
           source_of_data: string | null
+          source_template_id: string | null
           status: Database["public"]["Enums"]["review_status"] | null
           sub_frequency: string | null
           target_value: number | null
@@ -1188,6 +1189,7 @@ export type Database = {
           review_period?: string | null
           review_year?: number | null
           source_of_data?: string | null
+          source_template_id?: string | null
           status?: Database["public"]["Enums"]["review_status"] | null
           sub_frequency?: string | null
           target_value?: number | null
@@ -1225,6 +1227,7 @@ export type Database = {
           review_period?: string | null
           review_year?: number | null
           source_of_data?: string | null
+          source_template_id?: string | null
           status?: Database["public"]["Enums"]["review_status"] | null
           sub_frequency?: string | null
           target_value?: number | null
@@ -1255,6 +1258,13 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpis_source_template_id_fkey"
+            columns: ["source_template_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_templates"
             referencedColumns: ["id"]
           },
         ]
@@ -3016,6 +3026,56 @@ export type Database = {
             columns: ["department_id"]
             isOneToOne: false
             referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      template_change_logs: {
+        Row: {
+          changed_by: string
+          created_at: string | null
+          effective_month: string
+          effective_year: number
+          employees_affected: number | null
+          fields_changed: Json
+          id: string
+          kpis_updated: number | null
+          scope: string | null
+          selected_employee_ids: string[] | null
+          template_id: string
+        }
+        Insert: {
+          changed_by: string
+          created_at?: string | null
+          effective_month: string
+          effective_year: number
+          employees_affected?: number | null
+          fields_changed: Json
+          id?: string
+          kpis_updated?: number | null
+          scope?: string | null
+          selected_employee_ids?: string[] | null
+          template_id: string
+        }
+        Update: {
+          changed_by?: string
+          created_at?: string | null
+          effective_month?: string
+          effective_year?: number
+          employees_affected?: number | null
+          fields_changed?: Json
+          id?: string
+          kpis_updated?: number | null
+          scope?: string | null
+          selected_employee_ids?: string[] | null
+          template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_change_logs_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_templates"
             referencedColumns: ["id"]
           },
         ]
