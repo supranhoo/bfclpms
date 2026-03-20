@@ -522,6 +522,7 @@ export function AdminDataEntryDialog({
       rating: submitRating,
       score: submitScore,
       remarks: remarks || null,
+      evidence_url: evidenceUrl || null,
       is_na: isNa,
       reason: reason.trim(),
       kpi_name: kpi.kpi_name,
