@@ -1,37 +1,12 @@
 
+## Completed: Query Feature End-to-End Repairs (v1.56.0)
 
-## Fix: Clarify Propagation Toast Message
+All 5 fixes implemented and deployed:
 
-### Problem
-The toast "Updated 2 KPIs across 1 employees" is misleading when propagating to 1 employee with 1 KPI definition — the "2" refers to 2 monthly KPI records (e.g., Feb + March) but reads as if 2 different KPIs were changed.
+1. ✅ RLS policy added for `raised_by` to UPDATE `kpi_queries` (Accept Response fix)
+2. ✅ Evidence upload added to Raise Query dialogs in both UnifiedScorecard and EmployeeScorecard
+3. ✅ Notifications inserted on query respond and accept actions
+4. ✅ Raise Query expanded to all reviewer roles (manager, auditor, skip_level, hr_pms, management)
+5. ✅ Inline respond-to-query section added to SelfReviewSheet
 
-### Fix
-Update the success toast in `useKpiTemplates.ts` to show month context:
-
-**Current:**
-```
-Updated 2 KPIs across 1 employees
-```
-
-**Proposed:**
-```
-Updated 2 KPI records for 1 employee (across multiple review periods)
-```
-
-When count > employees (meaning multiple periods per employee), append the clarification. Also fix the plural: "1 employee" not "1 employees".
-
-### File Changed
-- `src/hooks/useKpiTemplates.ts` — `usePropagateTemplateChange` `onSuccess` toast message (line ~148)
-
-### Detail
-```typescript
-// Fix grammar + add context
-const periodsNote = data.kpis_updated > data.employees_affected 
-  ? ' (across multiple review periods)' 
-  : '';
-toast({
-  title: 'Changes Propagated',
-  description: `Updated ${data.kpis_updated} KPI record${data.kpis_updated !== 1 ? 's' : ''} for ${data.employees_affected} employee${data.employees_affected !== 1 ? 's' : ''}${periodsNote}`,
-});
-```
-
+Note: Query raise notifications were already handled by the existing `notify_on_query_raised` database trigger.
