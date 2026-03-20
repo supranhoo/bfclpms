@@ -411,6 +411,7 @@ export function AdminDataEntryDialog({
       setCalculatedScore(null);
       setCalculatedRatingLevel(null);
       setIsAutoCalculated(false);
+      setEvidenceUrl(null);
     }
   }, [isOpen]);
 
