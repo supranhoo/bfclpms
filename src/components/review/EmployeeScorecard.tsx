@@ -546,9 +546,11 @@ export function EmployeeScorecard({
     });
   };
 
+  const [queryEvidenceUrl, setQueryEvidenceUrl] = useState('');
   const openQueryDialog = (kpi: KPI) => {
     setSelectedKpi(kpi);
     setQueryReason('');
+    setQueryEvidenceUrl('');
     setQueryDialogOpen(true);
   };
 
@@ -559,8 +561,9 @@ export function EmployeeScorecard({
       raised_to: employee.id,
       reason: queryReason,
       entity_type: 'kpi',
+      evidence_url: queryEvidenceUrl || undefined,
     }, {
-      onSuccess: () => setQueryDialogOpen(false),
+      onSuccess: () => { setQueryDialogOpen(false); setQueryEvidenceUrl(''); },
     });
   };
 
