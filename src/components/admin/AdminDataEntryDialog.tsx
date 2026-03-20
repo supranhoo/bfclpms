@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
