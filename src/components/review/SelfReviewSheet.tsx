@@ -180,6 +180,19 @@ export function SelfReviewSheet({
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [trackerModalOpen, setTrackerModalOpen] = useState(false);
 
+  // Inline query response state
+  const kpiIdsForQueries = useMemo(() => selectedKpi ? [selectedKpi.id] : [], [selectedKpi]);
+  const { data: openQueries } = useKpiQueries(kpiIdsForQueries);
+  const respondToQuery = useRespondToQuery();
+  const [queryResponseText, setQueryResponseText] = useState('');
+  const [queryResponseEvidence, setQueryResponseEvidence] = useState('');
+  const [respondingToQueryId, setRespondingToQueryId] = useState<string | null>(null);
+
+  const myOpenQueries = useMemo(() => {
+    if (!openQueries || !profile?.id) return [];
+    return openQueries.filter(q => q.raised_to === profile.id && q.status === 'open');
+  }, [openQueries, profile?.id]);
+
   // Auto-open query history if requested
   useEffect(() => {
     if (autoOpenQueryHistory && selectedKpi && open) {
