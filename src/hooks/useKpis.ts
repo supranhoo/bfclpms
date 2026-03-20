@@ -920,6 +920,24 @@ export function useRaiseQuery() {
         metadata: { query_id: data.id },
       });
 
+      // Notify the recipient
+      const [kpiRes, profileRes] = await Promise.all([
+        supabase.from('kpis').select('kpi_name').eq('id', kpi_id).single(),
+        supabase.from('profiles').select('full_name').eq('id', user.id).single(),
+      ]);
+      const kpiName = kpiRes.data?.kpi_name || 'a KPI';
+      const raiserName = profileRes.data?.full_name || 'A reviewer';
+
+      await supabase.from('notifications').insert({
+        user_id: raised_to,
+        type: 'query_raised',
+        title: 'New Query Raised',
+        message: `${raiserName} raised a query on "${kpiName}": ${reason.slice(0, 120)}`,
+        kpi_id,
+        related_user_id: user.id,
+        metadata: { query_id: data.id },
+      });
+
       return data;
     },
     onSuccess: () => {
