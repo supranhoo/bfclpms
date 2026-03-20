@@ -350,6 +350,9 @@ export function AdminDataEntryDialog({
       setRemarks(remarksVal || '');
     };
 
+    const evidenceKey = roleLevel === 'self' ? 'self_evidence_url' : `${roleLevel}_evidence_url`;
+    setEvidenceUrl((existingSubmission as any)[evidenceKey] || null);
+
     switch (roleLevel) {
       case 'self':
         loadLevel(existingSubmission.achieved_value, existingSubmission.self_rating, existingSubmission.self_score, existingSubmission.self_remarks);
