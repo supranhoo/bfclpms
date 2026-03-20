@@ -1728,8 +1728,8 @@ export function UnifiedScorecard({
       </Sheet>
       )}
 
-      {/* Query Dialog (Manager only) */}
-      {viewLevel === 'manager' && (
+      {/* Query Dialog */}
+      {['manager', 'auditor', 'skip_level', 'hr_pms', 'management'].includes(viewLevel) && (
         <Dialog open={queryDialogOpen} onOpenChange={setQueryDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -1748,6 +1748,14 @@ export function UnifiedScorecard({
                   rows={3}
                 />
               </div>
+              {user?.id && selectedKpi && (
+                <EvidenceUpload
+                  userId={user.id}
+                  kpiId={selectedKpi.id}
+                  existingUrl={queryEvidenceUrl || null}
+                  onUploadComplete={setQueryEvidenceUrl}
+                />
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setQueryDialogOpen(false)}>Cancel</Button>

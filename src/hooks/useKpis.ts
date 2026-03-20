@@ -885,11 +885,13 @@ export function useRaiseQuery() {
       raised_to,
       reason,
       entity_type = 'kpi',
+      evidence_url,
     }: {
       kpi_id: string;
       raised_to: string;
       reason: string;
       entity_type?: 'kra' | 'kpi';
+      evidence_url?: string;
     }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
@@ -902,6 +904,7 @@ export function useRaiseQuery() {
           reason,
           entity_type,
           status: 'open',
+          evidence_url: evidence_url || null,
         })
         .select()
         .single();
@@ -913,7 +916,7 @@ export function useRaiseQuery() {
         kpi_id,
         action: 'QUERY_RAISED',
         performed_by: user.id,
-        new_value: { reason, raised_to },
+        new_value: { reason, raised_to, evidence_url },
         metadata: { query_id: data.id },
       });
 
@@ -922,6 +925,7 @@ export function useRaiseQuery() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kpi-queries'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
       toast({ title: 'Query raised successfully' });
     },
     onError: (error: Error) => {
