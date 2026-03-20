@@ -34,6 +34,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { KpiReviewPanel } from './KpiReviewPanel';
 import { QueryHistoryDialog } from './QueryHistoryDialog';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
+import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 
 import { SubPeriodSelector } from './SubPeriodSelector';
 import { FrequencyLockedOverlay, FrequencyLockBadge } from './FrequencyLockedOverlay';
