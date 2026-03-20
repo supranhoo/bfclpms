@@ -1052,6 +1052,14 @@ export function EmployeeScorecard({
                 rows={3}
               />
             </div>
+            {user?.id && selectedKpi && (
+              <EvidenceUpload
+                userId={user.id}
+                kpiId={selectedKpi.id}
+                existingUrl={queryEvidenceUrl || null}
+                onUploadComplete={setQueryEvidenceUrl}
+              />
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setQueryDialogOpen(false)}>Cancel</Button>
