@@ -298,6 +298,7 @@ export function AdminDataEntryDialog({
       setIsNa(false);
       setCalculatedScore(null);
       setCalculatedRatingLevel(null);
+      setEvidenceUrl(null);
       return;
     }
 
