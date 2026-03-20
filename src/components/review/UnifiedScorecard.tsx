@@ -1146,7 +1146,8 @@ export function UnifiedScorecard({
     });
   };
 
-  // Handle raise query (manager only)
+  // Handle raise query
+  const [queryEvidenceUrl, setQueryEvidenceUrl] = useState('');
   const handleRaiseQuery = () => {
     if (!selectedKpi || !queryReason.trim()) return;
     raiseQuery.mutate({
@@ -1154,8 +1155,9 @@ export function UnifiedScorecard({
       raised_to: employee.id,
       reason: queryReason,
       entity_type: 'kpi',
+      evidence_url: queryEvidenceUrl || undefined,
     }, {
-      onSuccess: () => setQueryDialogOpen(false),
+      onSuccess: () => { setQueryDialogOpen(false); setQueryEvidenceUrl(''); },
     });
   };
 
