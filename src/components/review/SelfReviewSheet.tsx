@@ -3,7 +3,8 @@ import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { safeParseFloat } from '@/lib/utils';
 import { openStorageFile } from '@/lib/storageDownload';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSubmitSelfReview, RatingLevel, KPI, OrgLevelScope, ReviewSubmission } from '@/hooks/useKpis';
+import { useSubmitSelfReview, RatingLevel, KPI, OrgLevelScope, ReviewSubmission, useKpiQueries } from '@/hooks/useKpis';
+import { useRespondToQuery } from '@/hooks/useQueryWorkflow';
 import { useRemarksMandatorySettings, useOrgKpiSelfEntryAllowed } from '@/hooks/useWorkflowSettings';
 import { useIsOrgKpiDataOwner, useOrgKpiOwners } from '@/hooks/useOrgKpiDataOwner';
 import { useToast } from '@/hooks/use-toast';
@@ -33,6 +34,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { KpiReviewPanel } from './KpiReviewPanel';
 import { QueryHistoryDialog } from './QueryHistoryDialog';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
+import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 
 import { SubPeriodSelector } from './SubPeriodSelector';
 import { FrequencyLockedOverlay, FrequencyLockBadge } from './FrequencyLockedOverlay';
@@ -177,6 +179,19 @@ export function SelfReviewSheet({
   const [queryHistoryOpen, setQueryHistoryOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [trackerModalOpen, setTrackerModalOpen] = useState(false);
+
+  // Inline query response state
+  const kpiIdsForQueries = useMemo(() => selectedKpi ? [selectedKpi.id] : [], [selectedKpi]);
+  const { data: openQueries } = useKpiQueries(kpiIdsForQueries);
+  const respondToQuery = useRespondToQuery();
+  const [queryResponseText, setQueryResponseText] = useState('');
+  const [queryResponseEvidence, setQueryResponseEvidence] = useState('');
+  const [respondingToQueryId, setRespondingToQueryId] = useState<string | null>(null);
+
+  const myOpenQueries = useMemo(() => {
+    if (!openQueries || !profile?.id) return [];
+    return openQueries.filter(q => q.raised_to === profile.id && q.status === 'open');
+  }, [openQueries, profile?.id]);
 
   // Auto-open query history if requested
   useEffect(() => {
@@ -577,8 +592,97 @@ export function SelfReviewSheet({
               workflowStages={effectiveStages}
             />
 
+            {/* Inline Query Response Section */}
+            {myOpenQueries.length > 0 && (
+              <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    Open Queries ({myOpenQueries.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {myOpenQueries.map(q => (
+                    <div key={q.id} className="p-3 border rounded-lg bg-background space-y-2">
+                      <p className="text-sm font-medium">Query: {q.reason}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Raised on {new Date(q.created_at).toLocaleDateString()}
+                      </p>
+                      {respondingToQueryId === q.id ? (
+                        <div className="space-y-2 pt-2 border-t">
+                          <Textarea
+                            value={queryResponseText}
+                            onChange={(e) => setQueryResponseText(e.target.value)}
+                            placeholder="Type your response..."
+                            rows={2}
+                            className="text-sm"
+                            autoFocus
+                          />
+                          {profile?.id && selectedKpi && (
+                            <EvidenceUpload
+                              userId={profile.id}
+                              kpiId={selectedKpi.id}
+                              existingUrl={queryResponseEvidence || null}
+                              onUploadComplete={setQueryResponseEvidence}
+                            />
+                          )}
+                          <div className="flex items-center gap-2 justify-end">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setRespondingToQueryId(null);
+                                setQueryResponseText('');
+                                setQueryResponseEvidence('');
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              disabled={!queryResponseText.trim() || respondToQuery.isPending}
+                              onClick={() => {
+                                respondToQuery.mutate({
+                                  query_id: q.id,
+                                  kpi_id: q.kpi_id,
+                                  resolution_notes: queryResponseText,
+                                  resolution_evidence_url: queryResponseEvidence || undefined,
+                                }, {
+                                  onSuccess: () => {
+                                    setRespondingToQueryId(null);
+                                    setQueryResponseText('');
+                                    setQueryResponseEvidence('');
+                                  },
+                                });
+                              }}
+                            >
+                              <Send className="h-3 w-3 mr-1" />
+                              {respondToQuery.isPending ? 'Sending...' : 'Submit Response'}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-1"
+                          onClick={() => {
+                            setRespondingToQueryId(q.id);
+                            setQueryResponseText('');
+                            setQueryResponseEvidence('');
+                          }}
+                        >
+                          <Send className="h-3 w-3 mr-1" />
+                          Respond
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
 
-            {/* Daily Submission Summary */}
+
             {selectedKpi?.frequency === 'Daily' && selectedKpiSubPeriods.length > 0 && (
               <DailySubmissionSummary
                 kpiId={selectedKpi.id}

@@ -28,6 +28,7 @@ import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
 import { WorkflowProgressTracker } from '@/components/review/WorkflowProgressTracker';
 import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
+import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { QueryHistoryDialog } from '@/components/review/QueryHistoryDialog';
@@ -1146,7 +1147,8 @@ export function UnifiedScorecard({
     });
   };
 
-  // Handle raise query (manager only)
+  // Handle raise query
+  const [queryEvidenceUrl, setQueryEvidenceUrl] = useState('');
   const handleRaiseQuery = () => {
     if (!selectedKpi || !queryReason.trim()) return;
     raiseQuery.mutate({
@@ -1154,8 +1156,9 @@ export function UnifiedScorecard({
       raised_to: employee.id,
       reason: queryReason,
       entity_type: 'kpi',
+      evidence_url: queryEvidenceUrl || undefined,
     }, {
-      onSuccess: () => setQueryDialogOpen(false),
+      onSuccess: () => { setQueryDialogOpen(false); setQueryEvidenceUrl(''); },
     });
   };
 
@@ -1642,13 +1645,14 @@ export function UnifiedScorecard({
                     <Undo2 className="h-4 w-4 mr-2" />
                     Send Back
                   </Button>
-                  {viewLevel === 'manager' && (
+                  {['manager', 'auditor', 'skip_level', 'hr_pms', 'management'].includes(viewLevel) && (
                     <Button
                       variant="outline"
                       className="w-full sm:w-auto border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
                       onClick={() => {
                         if (selectedKpi) {
                           setQueryReason('');
+                          setQueryEvidenceUrl('');
                           setQueryDialogOpen(true);
                         }
                       }}
@@ -1725,8 +1729,8 @@ export function UnifiedScorecard({
       </Sheet>
       )}
 
-      {/* Query Dialog (Manager only) */}
-      {viewLevel === 'manager' && (
+      {/* Query Dialog */}
+      {['manager', 'auditor', 'skip_level', 'hr_pms', 'management'].includes(viewLevel) && (
         <Dialog open={queryDialogOpen} onOpenChange={setQueryDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -1745,6 +1749,14 @@ export function UnifiedScorecard({
                   rows={3}
                 />
               </div>
+              {user?.id && selectedKpi && (
+                <EvidenceUpload
+                  userId={user.id}
+                  kpiId={selectedKpi.id}
+                  existingUrl={queryEvidenceUrl || null}
+                  onUploadComplete={setQueryEvidenceUrl}
+                />
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setQueryDialogOpen(false)}>Cancel</Button>

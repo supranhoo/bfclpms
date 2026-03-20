@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-19  
-> **Version:** 1.55.0 — Fixed template save nullification bug (binary/tiered UOM fields were forced to NULL on save), added "Check Template-KPI Sync" tool in KRA Library for detecting and fixing drift between templates and live KPIs, back-filled corrupted template data from linked KPIs
+> **Last Updated:** 2026-03-20  
+> **Version:** 1.56.0 — Query feature end-to-end repairs: RLS fix for raiser accept response, evidence upload on raise query, notifications on query raise/respond/accept, expanded query access to all reviewer roles, inline respond from SelfReviewSheet
 > **Maintainer:** Lovable AI
 
 ---

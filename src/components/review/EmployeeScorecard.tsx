@@ -30,6 +30,7 @@ import { KpiReviewPanel } from '@/components/review/KpiReviewPanel';
 import { WorkflowProgressTracker } from '@/components/review/WorkflowProgressTracker';
 import { AchievedValueScoreInput } from '@/components/review/AchievedValueScoreInput';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
+import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
 import { KpiLogicModal } from '@/components/dashboard/KpiLogicModal';
 import { KpiSortControl } from '@/components/ui/KpiSortControl';
 import { QueryHistoryDialog } from '@/components/review/QueryHistoryDialog';
@@ -545,9 +546,11 @@ export function EmployeeScorecard({
     });
   };
 
+  const [queryEvidenceUrl, setQueryEvidenceUrl] = useState('');
   const openQueryDialog = (kpi: KPI) => {
     setSelectedKpi(kpi);
     setQueryReason('');
+    setQueryEvidenceUrl('');
     setQueryDialogOpen(true);
   };
 
@@ -558,8 +561,9 @@ export function EmployeeScorecard({
       raised_to: employee.id,
       reason: queryReason,
       entity_type: 'kpi',
+      evidence_url: queryEvidenceUrl || undefined,
     }, {
-      onSuccess: () => setQueryDialogOpen(false),
+      onSuccess: () => { setQueryDialogOpen(false); setQueryEvidenceUrl(''); },
     });
   };
 
@@ -1048,6 +1052,14 @@ export function EmployeeScorecard({
                 rows={3}
               />
             </div>
+            {user?.id && selectedKpi && (
+              <EvidenceUpload
+                userId={user.id}
+                kpiId={selectedKpi.id}
+                existingUrl={queryEvidenceUrl || null}
+                onUploadComplete={setQueryEvidenceUrl}
+              />
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setQueryDialogOpen(false)}>Cancel</Button>

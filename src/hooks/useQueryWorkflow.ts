@@ -76,11 +76,53 @@ export function useRespondToQuery() {
         });
       }
     },
-    onSuccess: () => {
+    onSuccess: async (_data, variables) => {
+      // Notify the raiser that a response was submitted
+      try {
+        // Get the query to find the raiser
+        const { data: queryRecord } = await supabase
+          .from('kpi_queries')
+          .select('raised_by, kpi_id')
+          .eq('id', variables.query_id)
+          .single();
+
+        if (queryRecord && user?.id) {
+          const { data: kpiRecord } = await supabase
+            .from('kpis')
+            .select('kpi_name')
+            .eq('id', queryRecord.kpi_id)
+            .single();
+
+          const { data: responderProfile } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', user.id)
+            .single();
+
+          const responderName = responderProfile?.full_name || responderProfile?.email || 'Employee';
+
+          await supabase.from('notifications').insert({
+            user_id: queryRecord.raised_by,
+            type: 'query_response_submitted',
+            title: 'Query Response Received',
+            message: `${responderName} responded to your query on KPI: ${kpiRecord?.kpi_name || 'Unknown'}`,
+            kpi_id: queryRecord.kpi_id,
+            related_user_id: user.id,
+            metadata: {
+              query_id: variables.query_id,
+              resolution_notes: variables.resolution_notes,
+            },
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to send query response notification', e);
+      }
+
       queryClient.invalidateQueries({ queryKey: ['my-queries'] });
       queryClient.invalidateQueries({ queryKey: ['kpi-queries'] });
       queryClient.invalidateQueries({ queryKey: ['subordinate-queries'] });
       queryClient.invalidateQueries({ queryKey: ['query-history'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
       toast({ title: 'Response submitted successfully', description: 'Awaiting acceptance from query raiser' });
     },
     onError: (error: Error) => {
@@ -124,11 +166,49 @@ export function useAcceptQueryResponse() {
         });
       }
     },
-    onSuccess: () => {
+    onSuccess: async (_data, variables) => {
+      // Notify the responder that their response was accepted
+      try {
+        const { data: queryRecord } = await supabase
+          .from('kpi_queries')
+          .select('raised_to, kpi_id')
+          .eq('id', variables.query_id)
+          .single();
+
+        if (queryRecord && user?.id) {
+          const { data: kpiRecord } = await supabase
+            .from('kpis')
+            .select('kpi_name')
+            .eq('id', queryRecord.kpi_id)
+            .single();
+
+          const { data: accepterProfile } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', user.id)
+            .single();
+
+          const accepterName = accepterProfile?.full_name || accepterProfile?.email || 'Manager';
+
+          await supabase.from('notifications').insert({
+            user_id: queryRecord.raised_to,
+            type: 'query_resolved',
+            title: 'Query Resolved',
+            message: `${accepterName} accepted your response on KPI: ${kpiRecord?.kpi_name || 'Unknown'}`,
+            kpi_id: queryRecord.kpi_id,
+            related_user_id: user.id,
+            metadata: { query_id: variables.query_id },
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to send query resolution notification', e);
+      }
+
       queryClient.invalidateQueries({ queryKey: ['my-queries'] });
       queryClient.invalidateQueries({ queryKey: ['kpi-queries'] });
       queryClient.invalidateQueries({ queryKey: ['subordinate-queries'] });
       queryClient.invalidateQueries({ queryKey: ['query-history'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
       toast({ title: 'Response accepted', description: 'Query has been resolved' });
     },
     onError: (error: Error) => {
