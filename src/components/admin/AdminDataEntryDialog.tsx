@@ -802,6 +802,16 @@ export function AdminDataEntryDialog({
                   rows={2}
                 />
               </div>
+
+              {/* Evidence Upload */}
+              {kpi && (
+                <EvidenceUpload
+                  userId={employeeId}
+                  kpiId={kpi.id}
+                  onUploadComplete={(url) => setEvidenceUrl(url || null)}
+                  existingUrl={evidenceUrl}
+                />
+              )}
             </div>
 
             {/* Advance Workflow Status Toggle */}
