@@ -127,7 +127,7 @@ export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: stri
   return useQuery({
     queryKey: ['overdue-team-review-kpis', deadlineDay, filterMonth, filterYear],
     queryFn: async () => {
-      const { data: kpis, error } = await supabase
+      let query = supabase
         .from('kpis')
         .select(`
           id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, is_org_level,
@@ -140,6 +140,7 @@ export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: stri
       if (filterMonth) query = query.eq('review_period', filterMonth);
       if (filterYear) query = query.eq('review_year', filterYear);
 
+      const { data: kpis, error } = await query;
       if (error) throw error;
 
       const now = new Date();
