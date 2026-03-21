@@ -228,6 +228,9 @@ export function EmployeeSelectorGrid({
       hr_pms: 'hr_pms',
       audit: 'auditor',
       management: 'management',
+      pending_self_review: 'hr_pms',
+      pending_manager_review: 'hr_pms',
+      pending_skip_review: 'hr_pms',
     };
     return map[viewLevel] || 'manager';
   };
