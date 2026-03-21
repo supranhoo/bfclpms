@@ -643,7 +643,7 @@ export function EmployeeSelectorGrid({
       return (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-          <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="amber" subtitle="Awaiting HR PMS review" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
+          <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="amber" subtitle="In pipeline for HR PMS" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
           <StatCard icon={FileCheck} label="In Review" value={stats.stat2} color="purple" subtitle="Currently in HR PMS" onClick={() => toggleStatusFilter('in_review')} active={statusFilter === 'in_review'} />
           <StatCard icon={CheckCircle2} label="Reviewed" value={stats.stat3} color="green" subtitle="HR PMS completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} />
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
