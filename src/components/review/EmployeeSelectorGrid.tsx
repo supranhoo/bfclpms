@@ -611,8 +611,8 @@ export function EmployeeSelectorGrid({
         if (hrIdx === -1) return;
         if (k.status === 'hr_pms_review') inReview++;
         else {
-          const beforeHr = stages.slice(0, hrIdx);
-          if (beforeHr.includes(k.status || '') && k.status !== 'kra_set') pending++;
+          const hrReviewable = resolveReviewableStatuses('hr_pms', stages);
+          if (hrReviewable.includes(k.status || '') && k.status !== 'hr_pms_review') pending++;
           const afterHr = stages.slice(hrIdx + 1);
           if (afterHr.includes(k.status || '')) forwarded++;
         }
