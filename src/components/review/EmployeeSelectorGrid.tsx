@@ -730,10 +730,13 @@ export function EmployeeSelectorGrid({
       );
     } else if (viewLevel === 'pending_self_review' || viewLevel === 'pending_manager_review' || viewLevel === 'pending_skip_review') {
       const labelMap = { pending_self_review: 'Pending Self Review', pending_manager_review: 'Pending Manager Review', pending_skip_review: 'Pending Skip Mgr Review' };
+      const pendingSubtitle = viewLevel === 'pending_self_review' && (stats.stat2 > 0 || stats.stat3 > 0)
+        ? [stats.stat2 > 0 ? `${stats.stat2} org KPI` : '', stats.stat3 > 0 ? `${stats.stat3} bi-monthly/quarterly` : ''].filter(Boolean).join(' · ')
+        : 'KPIs at this stage';
       return (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-          <StatCard icon={Clock} label={labelMap[viewLevel]} value={stats.stat1} color="amber" subtitle="KPIs at this stage" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
+          <StatCard icon={Clock} label={labelMap[viewLevel]} value={stats.stat1} color="amber" subtitle={pendingSubtitle} onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
         </div>
       );
