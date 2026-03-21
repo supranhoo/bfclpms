@@ -66,9 +66,9 @@ export function usePendingReviewSettings() {
 
 const ELIGIBLE_FREQUENCIES = ['Monthly', 'Daily', 'Weekly'];
 
-export function useOverdueKraSetKpis(deadlineDay: number) {
+export function useOverdueKraSetKpis(deadlineDay: number, filterMonth?: string, filterYear?: number) {
   return useQuery({
-    queryKey: ['overdue-kra-set-kpis', deadlineDay],
+    queryKey: ['overdue-kra-set-kpis', deadlineDay, filterMonth, filterYear],
     queryFn: async () => {
       const { data: kpis, error } = await supabase
         .from('kpis')
