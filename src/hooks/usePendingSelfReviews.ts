@@ -136,6 +136,9 @@ export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: stri
         .eq('is_org_level', false)
         .in('frequency', ELIGIBLE_FREQUENCIES);
 
+      if (filterMonth) query = query.eq('review_period', filterMonth);
+      if (filterYear) query = query.eq('review_year', filterYear);
+
       if (error) throw error;
 
       const now = new Date();

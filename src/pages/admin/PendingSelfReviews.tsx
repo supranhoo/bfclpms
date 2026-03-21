@@ -150,6 +150,14 @@ export default function PendingSelfReviews() {
         )}
       </Card>
 
+      {/* Month-Year Filter */}
+      <EffectiveMonthSelector
+        selectedMonth={selectedMonth}
+        selectedYear={selectedYear}
+        onMonthChange={setSelectedMonth}
+        onYearChange={setSelectedYear}
+      />
+
       {/* Tabs */}
       <Tabs defaultValue="self-review">
         <TabsList>
