@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-21  
-> **Version:** 1.59.0 — "Rated by System" orange badge on KPI dashboard rows for auto-advanced KPIs
+> **Version:** 1.60.0 — Consolidated "System Auto-Scored" email notification to employee & manager
 > **Maintainer:** Lovable AI
 
 ---
