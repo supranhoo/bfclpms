@@ -362,6 +362,7 @@ export function EmployeeSelectorGrid({
         badge1: pendingKpis.length,
         badge2: 0, badge3: 0, total: empKpis.length, clearedKraSet,
         orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
+        nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
     } else if (viewLevel === 'pending_manager_review') {
       return {
@@ -893,6 +894,11 @@ export function EmployeeSelectorGrid({
             {viewLevel === 'pending_self_review' && (kpiStats as any).orgKpiCount > 0 && (
               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
                 {(kpiStats as any).orgKpiCount} org KPI
+              </Badge>
+            )}
+            {viewLevel === 'pending_self_review' && (kpiStats as any).nonMonthlyCount > 0 && (
+              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">
+                {(kpiStats as any).nonMonthlyCount} bi-monthly/quarterly
               </Badge>
             )}
           </>
