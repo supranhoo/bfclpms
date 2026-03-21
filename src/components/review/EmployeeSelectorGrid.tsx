@@ -358,17 +358,17 @@ export function EmployeeSelectorGrid({
       };
     } else if (viewLevel === 'pending_self_review') {
       return {
-        badge1: empKpis.filter(k => k.status === 'self_review').length,
+        badge1: empKpis.filter(k => k.status === 'kra_set').length,
         badge2: 0, badge3: 0, total: empKpis.length, clearedKraSet,
       };
     } else if (viewLevel === 'pending_manager_review') {
       return {
-        badge1: empKpis.filter(k => k.status === 'manager_check').length,
+        badge1: empKpis.filter(k => k.status === 'self_review').length,
         badge2: 0, badge3: 0, total: empKpis.length, clearedKraSet,
       };
     } else if (viewLevel === 'pending_skip_review') {
       return {
-        badge1: empKpis.filter(k => k.status === 'skip_level_check').length,
+        badge1: empKpis.filter(k => k.status === 'manager_check').length,
         badge2: 0, badge3: 0, total: empKpis.length, clearedKraSet,
       };
     } else {
@@ -480,15 +480,15 @@ export function EmployeeSelectorGrid({
             }
           }
         } else if (viewLevel === 'pending_self_review') {
-          if (statusFilter === 'pending' && kpi.status === 'self_review') {
+          if (statusFilter === 'pending' && kpi.status === 'kra_set') {
             employeeIds.add(kpi.employee_id);
           }
         } else if (viewLevel === 'pending_manager_review') {
-          if (statusFilter === 'pending' && kpi.status === 'manager_check') {
+          if (statusFilter === 'pending' && kpi.status === 'self_review') {
             employeeIds.add(kpi.employee_id);
           }
         } else if (viewLevel === 'pending_skip_review') {
-          if (statusFilter === 'pending' && kpi.status === 'skip_level_check') {
+          if (statusFilter === 'pending' && kpi.status === 'manager_check') {
             employeeIds.add(kpi.employee_id);
           }
         } else if (viewLevel === 'management') {
@@ -585,9 +585,8 @@ export function EmployeeSelectorGrid({
         if (k.status === 'audit') inAudit++;
         else if (['management_review', 'approved'].includes(k.status || '')) forwarded++;
         else {
-          // Count all KPIs in stages before 'audit' (excluding kra_set) as pending
-          const beforeAudit = stages.slice(0, auditIdx);
-          if (beforeAudit.includes(k.status || '') && k.status !== 'kra_set') pending++;
+          const auditReviewable = resolveReviewableStatuses('auditor', stages);
+          if (auditReviewable.includes(k.status || '') && k.status !== 'audit') pending++;
         }
       });
       return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
@@ -619,13 +618,13 @@ export function EmployeeSelectorGrid({
       });
       return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inReview, stat3: forwarded, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_self_review') {
-      const pendingCount = relevantKpis.filter(k => k.status === 'self_review').length;
+      const pendingCount = relevantKpis.filter(k => k.status === 'kra_set').length;
       return { totalEmployees: demographicFilteredMembers.length, stat1: pendingCount, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_manager_review') {
-      const pendingCount = relevantKpis.filter(k => k.status === 'manager_check').length;
+      const pendingCount = relevantKpis.filter(k => k.status === 'self_review').length;
       return { totalEmployees: demographicFilteredMembers.length, stat1: pendingCount, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_skip_review') {
-      const pendingCount = relevantKpis.filter(k => k.status === 'skip_level_check').length;
+      const pendingCount = relevantKpis.filter(k => k.status === 'manager_check').length;
       return { totalEmployees: demographicFilteredMembers.length, stat1: pendingCount, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else {
       return {
