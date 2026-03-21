@@ -1051,6 +1051,7 @@ const colorMap: Record<StatCardProps['color'], { border: string; bg: string; tex
   blue: { border: 'border-l-blue-500', bg: 'bg-blue-500/10', text: 'text-blue-600' },
   amber: { border: 'border-l-amber-500', bg: 'bg-amber-500/10', text: 'text-amber-600' },
   emerald: { border: 'border-l-emerald-500', bg: 'bg-emerald-500/10', text: 'text-emerald-600' },
+  orange: { border: 'border-l-orange-500', bg: 'bg-orange-500/10', text: 'text-orange-600' },
 };
 
 function StatCard({ icon: Icon, label, value, color, subtitle, className = '', onClick, active }: StatCardProps) {
