@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Settings, AlertTriangle, Users } from 'lucide-react';
+import { Loader2, Settings, AlertTriangle, Users, Undo2, Mail } from 'lucide-react';
 import { EffectiveMonthSelector } from '@/components/admin/EffectiveMonthSelector';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUpdateSystemSetting } from '@/hooks/useSystemSettings';
@@ -19,7 +19,10 @@ import {
   useOverdueTeamReviewKpis,
   useBulkAutoScore,
   useBulkManagerPenalty,
+  useSentBackKpisTab,
+  useSendReminder,
   OverdueKpi,
+  SentBackKpi,
 } from '@/hooks/usePendingSelfReviews';
 import { useToast } from '@/hooks/use-toast';
 
