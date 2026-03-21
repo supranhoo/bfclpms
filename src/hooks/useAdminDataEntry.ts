@@ -701,6 +701,7 @@ export function useAdminFastTrackApprove() {
         final_score: score,
         kpi_status: 'submitted' as const,
         updated_at: new Date().toISOString(),
+        auto_advance_reason: `Fast-tracked to Approved by Admin. Reason: ${reason}`,
       };
 
       for (const stage of remaining_stages) {
