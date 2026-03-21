@@ -357,9 +357,11 @@ export function EmployeeSelectorGrid({
         clearedKraSet,
       };
     } else if (viewLevel === 'pending_self_review') {
+      const pendingKpis = empKpis.filter(k => k.status === 'kra_set');
       return {
-        badge1: empKpis.filter(k => k.status === 'kra_set').length,
+        badge1: pendingKpis.length,
         badge2: 0, badge3: 0, total: empKpis.length, clearedKraSet,
+        orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
       };
     } else if (viewLevel === 'pending_manager_review') {
       return {
