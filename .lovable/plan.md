@@ -1,20 +1,39 @@
 
 
-## Completed: Fix N/A Display on Dashboard + Pending Reviews False-Positive
+## Show Org KPI Count on Employee Cards (Pending Self Review)
 
-### Changes Made
+### What
+Add an "org KPI" count badge next to the existing "pending self" badge on each employee card in the `pending_self_review` view. For example, if an employee has "7 pending self" and 5 of those are org-level KPIs, the card will show: `7 pending self` `5 org KPI`.
 
-#### `src/components/review/KpiDetailsTable.tsx`
-- **Added** `isStageAtOrBeforeCurrent()` helper to check if a workflow stage has been reached (at or past current status)
-- **Fixed** score cell rendering: N/A badge now shows when `is_na = true`, score is null, and the stage has been reached — not just when stage is completed
-- Previously N/A only showed after status moved past the stage; now it correctly shows at the current stage too
+### How
 
-#### `src/hooks/usePendingSelfReviews.ts`
-- **Fixed** manager pending filter: Changed from `.not('manager_score', 'is', null)` to `.or('manager_score.not.is.null,is_na.eq.true')` — excludes N/A-marked KPIs from pending list
-- **Fixed** skip-level pending filter: Same pattern applied for `skip_level_score`
+#### File: `src/components/review/EmployeeSelectorGrid.tsx`
 
-### Previous: Fix Manager Review False-Positive + Add Skip-Level Tab
-- Fixed `useOverdueTeamReviewKpis`: excludes KPIs where `manager_score IS NOT NULL`
-- Added `useOverdueSkipLevelKpis` hook and Pending Skip-Level Review tab
+**1. Update `getEmployeeKpiStats` for `pending_self_review` (line 359-363)**
+Add a new field `orgKpiCount` that counts KPIs at `kra_set` status where `is_org_level === true`:
+```typescript
+} else if (viewLevel === 'pending_self_review') {
+  const pendingKpis = empKpis.filter(k => k.status === 'kra_set');
+  return {
+    badge1: pendingKpis.length,
+    badge2: 0, badge3: 0, total: empKpis.length, clearedKraSet,
+    orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
+  };
+}
+```
+
+**2. Update `renderEmployeeBadges` for `pending_self_review` (line 876-886)**
+After the existing "pending self" badge, render a second badge showing org KPI count (only if > 0):
+```
+{kpiStats.orgKpiCount > 0 && (
+  <Badge className="bg-blue-50 text-blue-700 border-blue-200 ...">
+    {kpiStats.orgKpiCount} org KPI
+  </Badge>
+)}
+```
+
+**3. Update the return type of `getEmployeeKpiStats`**
+Add `orgKpiCount` (default 0) to the base return so it doesn't break other view levels.
 
 ### No database changes needed
+
