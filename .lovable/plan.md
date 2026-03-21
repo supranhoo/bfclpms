@@ -1,39 +1,29 @@
 
 
-## Show Org KPI Count on Employee Cards (Pending Self Review)
+## Add Non-Monthly KPI Count Badge on Employee Cards (Pending Self Review)
 
 ### What
-Add an "org KPI" count badge next to the existing "pending self" badge on each employee card in the `pending_self_review` view. For example, if an employee has "7 pending self" and 5 of those are org-level KPIs, the card will show: `7 pending self` `5 org KPI`.
+Next to the existing "X org KPI" badge on each employee card, add a third badge showing the count of non-monthly (bi-monthly, quarterly, half-yearly, yearly) KPIs that are pending self review. Example: `7 pending self` `1 org KPI` `3 bi-monthly/quarterly`.
 
-### How
+### File: `src/components/review/EmployeeSelectorGrid.tsx`
 
-#### File: `src/components/review/EmployeeSelectorGrid.tsx`
-
-**1. Update `getEmployeeKpiStats` for `pending_self_review` (line 359-363)**
-Add a new field `orgKpiCount` that counts KPIs at `kra_set` status where `is_org_level === true`:
+**1. Update `getEmployeeKpiStats` for `pending_self_review` (line 359-365)**
+Add `nonMonthlyCount` field counting pending KPIs where frequency is not "monthly" or "daily" or "weekly":
 ```typescript
-} else if (viewLevel === 'pending_self_review') {
-  const pendingKpis = empKpis.filter(k => k.status === 'kra_set');
-  return {
-    badge1: pendingKpis.length,
-    badge2: 0, badge3: 0, total: empKpis.length, clearedKraSet,
-    orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
-  };
-}
+nonMonthlyCount: pendingKpis.filter(k => 
+  k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())
+).length,
 ```
 
-**2. Update `renderEmployeeBadges` for `pending_self_review` (line 876-886)**
-After the existing "pending self" badge, render a second badge showing org KPI count (only if > 0):
-```
-{kpiStats.orgKpiCount > 0 && (
-  <Badge className="bg-blue-50 text-blue-700 border-blue-200 ...">
-    {kpiStats.orgKpiCount} org KPI
+**2. Update `renderEmployeeBadges` (after line 897)**
+Add a new badge after the org KPI badge:
+```tsx
+{viewLevel === 'pending_self_review' && (kpiStats as any).nonMonthlyCount > 0 && (
+  <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 ...">
+    {(kpiStats as any).nonMonthlyCount} bi-monthly/quarterly
   </Badge>
 )}
 ```
-
-**3. Update the return type of `getEmployeeKpiStats`**
-Add `orgKpiCount` (default 0) to the base return so it doesn't break other view levels.
 
 ### No database changes needed
 
