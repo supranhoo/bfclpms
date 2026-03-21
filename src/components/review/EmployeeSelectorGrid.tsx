@@ -362,6 +362,7 @@ export function EmployeeSelectorGrid({
         badge1: pendingKpis.length,
         badge2: 0, badge3: 0, total: empKpis.length, clearedKraSet,
         orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
+        nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
       };
     } else if (viewLevel === 'pending_manager_review') {
       return {
