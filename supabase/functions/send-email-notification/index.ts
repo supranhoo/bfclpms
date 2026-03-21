@@ -757,8 +757,8 @@ const buildEmailHtml = (
       <div class="container">
         <div class="header">
           <table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-            <td style="text-align:left;vertical-align:middle;"><h1 style="margin:0;font-size:22px;">${style.emoji} ${style.title}</h1></td>
             ${logoHtml}
+            <td style="text-align:right;vertical-align:middle;"><h1 style="margin:0;font-size:22px;">${style.emoji} ${style.title}</h1></td>
           </tr></table>
         </div>
         <div class="content">
