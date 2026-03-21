@@ -313,6 +313,11 @@ const App = () => (
                     <Suspense fallback={<PageFallback />}><KpiWeightageDashboard /></Suspense>
                   </ProtectedRoute>
                 } />
+                <Route path="/admin/pending-reviews" element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <Suspense fallback={<PageFallback />}><PendingSelfReviews /></Suspense>
+                  </ProtectedRoute>
+                } />
               </Route>
               <Route path="*" element={<Suspense fallback={<PageFallback />}><NotFound /></Suspense>} />
             </Routes>
