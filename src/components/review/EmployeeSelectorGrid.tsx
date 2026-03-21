@@ -58,9 +58,7 @@ const STATUS_OPTIONS_BY_LEVEL: Record<Exclude<ViewMode, 'self'>, Array<{ value: 
   ],
   hr_pms: [
     { value: 'all', label: 'All Employees' },
-    { value: 'pending_self', label: 'Pending Self Review' },
-    { value: 'pending_manager', label: 'Pending Manager Review' },
-    { value: 'pending_skip', label: 'Pending Skip Mgr Review' },
+    { value: 'pending', label: 'Pending Review' },
     { value: 'in_review', label: 'In HR PMS Review' },
     { value: 'reviewed', label: 'Reviewed' },
   ],
@@ -75,6 +73,18 @@ const STATUS_OPTIONS_BY_LEVEL: Record<Exclude<ViewMode, 'self'>, Array<{ value: 
     { value: 'all', label: 'All Employees' },
     { value: 'pending', label: 'With Pending Reviews' },
     { value: 'approved', label: 'Approved' },
+  ],
+  pending_self_review: [
+    { value: 'all', label: 'All Employees' },
+    { value: 'pending', label: 'Pending Self Review' },
+  ],
+  pending_manager_review: [
+    { value: 'all', label: 'All Employees' },
+    { value: 'pending', label: 'Pending Manager Review' },
+  ],
+  pending_skip_review: [
+    { value: 'all', label: 'All Employees' },
+    { value: 'pending', label: 'Pending Skip Mgr Review' },
   ],
 };
 
