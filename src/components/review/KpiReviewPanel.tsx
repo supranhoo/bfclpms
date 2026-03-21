@@ -5,6 +5,7 @@ import { KpiMetricsSection } from './KpiMetricsSection';
 import { KpiJourneySection } from './KpiJourneySection';
 import { KpiHistoryCard } from './KpiHistoryCard';
 import { KpiObservationsSection } from './KpiObservationsSection';
+import { ManagerKpiBenchmark } from './ManagerKpiBenchmark';
 
 export type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
 
