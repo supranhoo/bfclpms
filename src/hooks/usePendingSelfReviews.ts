@@ -496,6 +496,7 @@ export function useSentBackKpisTab(filterMonth?: string, filterYear?: number) {
         `)
         .in('id', kpiIds)
         .eq('is_org_level', false)
+        .eq('status', 'kra_set')
         .in('frequency', ['Monthly', 'Daily', 'Weekly']);
 
       if (filterMonth) kpiQuery = kpiQuery.eq('review_period', filterMonth);
