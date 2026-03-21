@@ -645,11 +645,13 @@ export function EmployeeSelectorGrid({
       );
     } else if (viewLevel === 'hr_pms') {
       return (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-          <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="amber" subtitle="In pipeline for HR PMS" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
-          <StatCard icon={FileCheck} label="In Review" value={stats.stat2} color="purple" subtitle="Currently in HR PMS" onClick={() => toggleStatusFilter('in_review')} active={statusFilter === 'in_review'} />
-          <StatCard icon={CheckCircle2} label="Reviewed" value={stats.stat3} color="green" subtitle="HR PMS completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} />
+          <StatCard icon={Clock} label="Pending Self Review" value={stats.stat1} color="yellow" subtitle="At self review stage" onClick={() => toggleStatusFilter('pending_self')} active={statusFilter === 'pending_self'} />
+          <StatCard icon={Briefcase} label="Pending Manager Review" value={stats.stat2} color="amber" subtitle="At manager check stage" onClick={() => toggleStatusFilter('pending_manager')} active={statusFilter === 'pending_manager'} />
+          <StatCard icon={UserCheck} label="Pending Skip Mgr Review" value={stats.stat3} color="orange" subtitle="At skip-level stage" onClick={() => toggleStatusFilter('pending_skip')} active={statusFilter === 'pending_skip'} />
+          <StatCard icon={FileCheck} label="In HR PMS Review" value={stats.stat4} color="purple" subtitle="Currently in HR PMS" onClick={() => toggleStatusFilter('in_review')} active={statusFilter === 'in_review'} />
+          <StatCard icon={CheckCircle2} label="HR PMS Reviewed" value={stats.stat5 || 0} color="green" subtitle="HR PMS completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} />
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
         </div>
       );
