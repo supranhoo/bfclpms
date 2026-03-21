@@ -10,6 +10,7 @@ interface Profile {
   employee_code: string | null;
   pms_grade: string | null;
   department_id: string | null;
+  reporting_manager_id: string | null;
 }
 
 interface Department {
