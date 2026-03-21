@@ -81,6 +81,7 @@ export function KpiReviewPanel({
 
         {/* RIGHT COLUMN (60%) - Review Journey & Observations */}
         <div className="md:col-span-3 space-y-3 sm:space-y-4">
+          <ManagerKpiBenchmark kpi={kpi} />
           <KpiJourneySection
             kpi={kpi}
             submission={submission}
