@@ -86,10 +86,24 @@ export function useOverdueKraSetKpis(deadlineDay: number, filterMonth?: string, 
       const { data: kpis, error } = await query;
       if (error) throw error;
 
+      // Exclude KPIs with open send_back queries (Option A)
+      const kpiIds = (kpis || []).map(k => k.id);
+      let sentBackIds = new Set<string>();
+      if (kpiIds.length > 0) {
+        const { data: sentBack } = await supabase
+          .from('kpi_queries')
+          .select('kpi_id')
+          .in('kpi_id', kpiIds)
+          .eq('query_type', 'send_back')
+          .eq('status', 'open');
+        sentBackIds = new Set((sentBack || []).map(r => r.kpi_id));
+      }
+
       const now = new Date();
       const results: OverdueKpi[] = [];
 
       for (const kpi of kpis || []) {
+        if (sentBackIds.has(kpi.id)) continue;
         if (!kpi.review_period || !kpi.review_year) continue;
         const deadline = getDeadlineDate(kpi.review_period, kpi.review_year, deadlineDay);
         if (now <= deadline) continue;
@@ -432,6 +446,139 @@ export function useBulkManagerPenalty() {
       queryClient.invalidateQueries({ queryKey: ['overdue-team-review-kpis'] });
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       toast({ title: 'Manager Penalty Complete', description: `${count} manager KPI(s) penalized.` });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+// ─── Sent-Back KPIs Tab (Tab 3) ───
+
+export interface SentBackKpi {
+  kpiId: string;
+  queryId: string;
+  employeeId: string;
+  employeeName: string;
+  employeeCode: string;
+  employeeEmail: string;
+  departmentName: string;
+  kpiName: string;
+  kraName: string;
+  reviewPeriod: string;
+  reviewYear: number;
+  sentBackBy: string;
+  reason: string;
+  sentBackDate: string;
+}
+
+export function useSentBackKpisTab(filterMonth?: string, filterYear?: number) {
+  return useQuery({
+    queryKey: ['sent-back-kpis-tab', filterMonth, filterYear],
+    queryFn: async () => {
+      // Fetch open send_back queries
+      const { data: queries, error: qError } = await supabase
+        .from('kpi_queries')
+        .select('id, kpi_id, reason, created_at, raised_by')
+        .eq('query_type', 'send_back')
+        .eq('status', 'open');
+      if (qError) throw qError;
+      if (!queries || queries.length === 0) return [];
+
+      const kpiIds = queries.map(q => q.kpi_id);
+
+      // Fetch matching KPIs
+      let kpiQuery = supabase
+        .from('kpis')
+        .select(`
+          id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, is_org_level,
+          profiles!kpis_employee_id_fkey ( full_name, employee_code, email, department_id, departments ( name ) )
+        `)
+        .in('id', kpiIds)
+        .eq('is_org_level', false)
+        .in('frequency', ['Monthly', 'Daily', 'Weekly']);
+
+      if (filterMonth) kpiQuery = kpiQuery.eq('review_period', filterMonth);
+      if (filterYear) kpiQuery = kpiQuery.eq('review_year', filterYear);
+
+      const { data: kpis, error: kError } = await kpiQuery;
+      if (kError) throw kError;
+
+      const kpiMap = new Map((kpis || []).map(k => [k.id, k]));
+
+      // Fetch sender names
+      const senderIds = [...new Set(queries.map(q => q.raised_by))];
+      let senderMap: Record<string, string> = {};
+      if (senderIds.length > 0) {
+        const { data: senders } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', senderIds);
+        for (const s of senders || []) {
+          senderMap[s.id] = s.full_name || 'Unknown';
+        }
+      }
+
+      const results: SentBackKpi[] = [];
+      for (const q of queries) {
+        const kpi = kpiMap.get(q.kpi_id);
+        if (!kpi) continue;
+        const profile = kpi.profiles as any;
+        results.push({
+          kpiId: kpi.id,
+          queryId: q.id,
+          employeeId: kpi.employee_id,
+          employeeName: profile?.full_name || 'Unknown',
+          employeeCode: profile?.employee_code || '',
+          employeeEmail: profile?.email || '',
+          departmentName: profile?.departments?.name || '',
+          kpiName: kpi.kpi_name,
+          kraName: kpi.kra_name,
+          reviewPeriod: kpi.review_period || '',
+          reviewYear: kpi.review_year || 0,
+          sentBackBy: senderMap[q.raised_by] || 'Unknown',
+          reason: (q.reason || '').replace(/^\[SENT BACK\]\s*/i, ''),
+          sentBackDate: q.created_at,
+        });
+      }
+
+      return results;
+    },
+  });
+}
+
+export function useSendReminder() {
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ items }: { items: SentBackKpi[] }) => {
+      let sent = 0;
+      for (const item of items) {
+        try {
+          await supabase.functions.invoke('send-email-notification', {
+            body: {
+              event_type: 'pending_review_reminder',
+              recipient_email: item.employeeEmail,
+              recipient_name: item.employeeName,
+              metadata: {
+                kpi_name: item.kpiName,
+                kra_name: item.kraName,
+                review_period: item.reviewPeriod,
+                review_year: item.reviewYear,
+                sent_back_by: item.sentBackBy,
+                reason: item.reason,
+              },
+            },
+          });
+          sent++;
+        } catch (e) {
+          console.error(`Failed to send reminder for ${item.employeeEmail}:`, e);
+        }
+      }
+      return sent;
+    },
+    onSuccess: (count) => {
+      toast({ title: 'Reminders Sent', description: `${count} reminder(s) sent successfully.` });
     },
     onError: (error: Error) => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });

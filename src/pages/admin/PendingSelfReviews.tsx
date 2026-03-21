@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Settings, AlertTriangle, Users } from 'lucide-react';
+import { Loader2, Settings, AlertTriangle, Users, Undo2, Mail } from 'lucide-react';
 import { EffectiveMonthSelector } from '@/components/admin/EffectiveMonthSelector';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUpdateSystemSetting } from '@/hooks/useSystemSettings';
@@ -19,7 +19,10 @@ import {
   useOverdueTeamReviewKpis,
   useBulkAutoScore,
   useBulkManagerPenalty,
+  useSentBackKpisTab,
+  useSendReminder,
   OverdueKpi,
+  SentBackKpi,
 } from '@/hooks/usePendingSelfReviews';
 import { useToast } from '@/hooks/use-toast';
 
@@ -39,13 +42,16 @@ export default function PendingSelfReviews() {
 
   const { data: overdueKraSet = [], isLoading: kraSetLoading } = useOverdueKraSetKpis(deadlineDay, selectedMonth, selectedYear);
   const { data: overdueTeamReview = [], isLoading: teamReviewLoading } = useOverdueTeamReviewKpis(deadlineDay, selectedMonth, selectedYear);
+  const { data: sentBackKpis = [], isLoading: sentBackLoading } = useSentBackKpisTab(selectedMonth, selectedYear);
 
   const updateSetting = useUpdateSystemSetting();
   const bulkAutoScore = useBulkAutoScore();
   const bulkManagerPenalty = useBulkManagerPenalty();
+  const sendReminder = useSendReminder();
 
   const [selectedKraSet, setSelectedKraSet] = useState<Set<string>>(new Set());
   const [selectedTeamReview, setSelectedTeamReview] = useState<Set<string>>(new Set());
+  const [selectedSentBack, setSelectedSentBack] = useState<Set<string>>(new Set());
 
   const handleSaveSettings = async () => {
     try {
@@ -82,6 +88,19 @@ export default function PendingSelfReviews() {
     if (!user?.id || overdueTeamReview.length === 0) return;
     bulkManagerPenalty.mutate({ items: overdueTeamReview, remark: managerRemark, adminId: user.id });
     setSelectedTeamReview(new Set());
+  };
+
+  const handleSendReminderSelected = () => {
+    if (selectedSentBack.size === 0) return;
+    const items = sentBackKpis.filter(k => selectedSentBack.has(k.kpiId));
+    sendReminder.mutate({ items });
+    setSelectedSentBack(new Set());
+  };
+
+  const handleSendReminderAll = () => {
+    if (sentBackKpis.length === 0) return;
+    sendReminder.mutate({ items: sentBackKpis });
+    setSelectedSentBack(new Set());
   };
 
   const toggleSelection = (set: Set<string>, setFn: (s: Set<string>) => void, id: string) => {
@@ -168,6 +187,10 @@ export default function PendingSelfReviews() {
           <TabsTrigger value="team-review" className="gap-1.5">
             <Users className="h-3.5 w-3.5" />
             Pending Manager Review ({overdueTeamReview.length})
+          </TabsTrigger>
+          <TabsTrigger value="sent-back" className="gap-1.5">
+            <Undo2 className="h-3.5 w-3.5" />
+            Sent Back KPIs ({sentBackKpis.length})
           </TabsTrigger>
         </TabsList>
 
@@ -299,6 +322,79 @@ export default function PendingSelfReviews() {
                               {item.daysOverdue} days
                             </Badge>
                           </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 3: Sent Back KPIs */}
+        <TabsContent value="sent-back">
+          <Card>
+            <CardContent className="pt-4 space-y-4">
+              <div className="flex gap-2 flex-wrap">
+                <Button size="sm" onClick={handleSendReminderSelected} disabled={selectedSentBack.size === 0 || sendReminder.isPending}>
+                  {sendReminder.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                  <Mail className="h-3.5 w-3.5 mr-1" />
+                  Send Reminder ({selectedSentBack.size})
+                </Button>
+                <Button size="sm" variant="secondary" onClick={handleSendReminderAll} disabled={sentBackKpis.length === 0 || sendReminder.isPending}>
+                  Send Reminder All ({sentBackKpis.length})
+                </Button>
+              </div>
+
+              {sentBackLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              ) : sentBackKpis.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4">No sent-back KPIs found.</p>
+              ) : (
+                <div className="rounded-md border overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10">
+                          <Checkbox
+                            checked={selectedSentBack.size === sentBackKpis.length && sentBackKpis.length > 0}
+                            onCheckedChange={() => {
+                              if (selectedSentBack.size === sentBackKpis.length) {
+                                setSelectedSentBack(new Set());
+                              } else {
+                                setSelectedSentBack(new Set(sentBackKpis.map(i => i.kpiId)));
+                              }
+                            }}
+                          />
+                        </TableHead>
+                        <TableHead>Employee</TableHead>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Department</TableHead>
+                        <TableHead>KPI</TableHead>
+                        <TableHead>KRA</TableHead>
+                        <TableHead>Sent Back By</TableHead>
+                        <TableHead>Reason</TableHead>
+                        <TableHead>Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sentBackKpis.map(item => (
+                        <TableRow key={item.kpiId}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedSentBack.has(item.kpiId)}
+                              onCheckedChange={() => toggleSelection(selectedSentBack, setSelectedSentBack, item.kpiId)}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">{item.employeeName}</TableCell>
+                          <TableCell>{item.employeeCode}</TableCell>
+                          <TableCell>{item.departmentName}</TableCell>
+                          <TableCell>{item.kpiName}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{item.kraName}</TableCell>
+                          <TableCell>{item.sentBackBy}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{item.reason}</TableCell>
+                          <TableCell>{format(new Date(item.sentBackDate), 'dd MMM yyyy')}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

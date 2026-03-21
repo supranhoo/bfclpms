@@ -607,6 +607,20 @@ You have {{pending_count}} pending organization KPI(s) that require data entry f
 
 Please log in and enter the required data at your earliest convenience.`,
   },
+  pending_review_reminder: {
+    subject: '[PMS] Reminder: KPI Sent Back for Correction - {{kpi_name}}',
+    body: `Hi {{recipient_name}},
+
+This is a reminder that your KPI has been sent back for correction and is still pending your action.
+
+KRA: {{kra_name}}
+KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
+Sent Back By: {{sent_back_by}}
+Reason: {{reason}}
+
+Please log in and complete the required corrections at your earliest convenience.`,
+  },
 };
 
 const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string }> = {
@@ -640,6 +654,7 @@ const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string
   observation_resolved: { color: '#10b981', emoji: '✅', title: 'Observation Resolved' },
   observation_mention: { color: '#3b82f6', emoji: '@', title: 'Mentioned in Observation' },
   org_kpi_pending_reminder: { color: '#f97316', emoji: '⏳', title: 'Pending KPI Reminder' },
+  pending_review_reminder: { color: '#f59e0b', emoji: '🔔', title: 'Sent-Back KPI Reminder' },
 };
 
 // Build KRA table HTML for batch assignment emails
