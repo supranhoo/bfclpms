@@ -413,8 +413,14 @@ export function EmployeeSelectorGrid({
             }
           }
         } else if (viewLevel === 'hr_pms') {
-          if (statusFilter === 'pending' && reviewableStatuses.includes(kpi.status || '') && kpi.status !== 'hr_pms_review') {
-            employeeIds.add(kpi.employee_id);
+          if (statusFilter === 'pending') {
+            const hrIdx = stages.indexOf('hr_pms_review');
+            if (hrIdx >= 0) {
+              const beforeHr = stages.slice(0, hrIdx);
+              if (beforeHr.includes(kpi.status || '') && kpi.status !== 'kra_set') {
+                employeeIds.add(kpi.employee_id);
+              }
+            }
           } else if (statusFilter === 'in_review' && kpi.status === 'hr_pms_review') {
             employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'reviewed') {
