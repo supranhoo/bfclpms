@@ -1,43 +1,30 @@
 
 
-## Persist Dashboard View Mode Across Page Refresh
+## Fix: Sent-Back KPIs Tab Should Only Show Unresubmitted KPIs
 
-### Problem
-When a user is on any dashboard tab (e.g., Team Reviews, HR PMS, Audit) and refreshes the page, the URL is just `/dashboard` with no `view` parameter, so `viewMode` resets to `'self'`.
+### Root Cause
 
-### Solution
-Sync the `viewMode` state to the URL query parameter `?view=...`. When the user switches tabs, update the URL. On page load/refresh, read the `view` param and restore the tab.
+The "Sent Back KPIs" tab (Tab 3 in Pending Self Reviews) queries `kpi_queries` with `query_type = 'send_back'` and `status = 'open'`, then joins to the `kpis` table — but does **not** check the KPI's current workflow status. So if a KPI was sent back, the employee resubmitted it (moving it to `self_review` → `manager_check` → ... → `audit`), and the send_back query was never formally resolved, the KPI still appears in the Sent Back tab even though the employee has already acted on it.
 
-### Implementation — `src/pages/Dashboard.tsx`
+The dashboard views (Self Review, Manager Review, Audit, etc.) are **not affected** — they filter purely by KPI status and have no send-back exclusion logic. So the KPI correctly appears at its actual level (e.g., audit). The problem is only in Tab 3.
 
-**1. When `viewMode` changes, write it to the URL:**
-Add a `useEffect` that sets `?view=<mode>` in the search params whenever `viewMode` changes. For `'self'`, remove the param to keep the URL clean.
+### Fix
+
+**Modified: `src/hooks/usePendingSelfReviews.ts`** — `useSentBackKpisTab` function
+
+Add `.eq('status', 'kra_set')` to the KPI query (line ~498) so that only KPIs still waiting for employee resubmission appear in the Sent Back tab. Once the employee resubmits (status moves past `kra_set`), the KPI disappears from this tab and flows through the normal workflow dashboards.
 
 ```typescript
-useEffect(() => {
-  setSearchParams((prev) => {
-    const next = new URLSearchParams(prev);
-    if (viewMode === 'self') {
-      next.delete('view');
-    } else {
-      next.set('view', viewMode);
-    }
-    return next;
-  }, { replace: true });
-}, [viewMode]);
+// Line ~498: add status filter
+.eq('is_org_level', false)
+.eq('status', 'kra_set')          // ← ADD THIS
+.in('frequency', ['Monthly', 'Daily', 'Weekly']);
 ```
 
-**2. Update `handleModeChange`:**
-No change needed — it already calls `setViewMode`, which will trigger the effect above.
+### Impact
+- Tab 1 (Overdue Self Review): Unchanged — sent-back KPIs at `kra_set` remain excluded as before
+- Tab 3 (Sent Back): Now only shows KPIs the employee has **not yet resubmitted**
+- Dashboard views: Unaffected — KPIs show at their actual workflow level regardless of send-back query status
 
-**3. Existing URL-read logic (line 72-81):**
-Already reads `?view=` and sets mode — this handles the refresh case. No change needed.
-
-### Adverse Impact Analysis
-- **None on deep-links** — existing `?kpi=`, `?employee=`, `?panel=` params coexist with `?view=` since we use `URLSearchParams` (additive).
-- **None on bookmarking** — URLs become bookmarkable per tab, which is a benefit.
-- **Minor**: if a user shares a `/dashboard?view=hr_pms` link with someone who doesn't have the `hr_pms` role, the guard at line 77 (`availableModes.includes(mappedMode)`) already handles this — it simply won't apply the mode and falls back to `'self'`.
-- **Browser back/forward**: Using `replace: true` avoids polluting browser history with every tab switch, so back button behavior is unaffected.
-
-### Single file change, no database changes.
+### No database changes needed
 
