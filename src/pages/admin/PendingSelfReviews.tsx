@@ -42,13 +42,16 @@ export default function PendingSelfReviews() {
 
   const { data: overdueKraSet = [], isLoading: kraSetLoading } = useOverdueKraSetKpis(deadlineDay, selectedMonth, selectedYear);
   const { data: overdueTeamReview = [], isLoading: teamReviewLoading } = useOverdueTeamReviewKpis(deadlineDay, selectedMonth, selectedYear);
+  const { data: sentBackKpis = [], isLoading: sentBackLoading } = useSentBackKpisTab(selectedMonth, selectedYear);
 
   const updateSetting = useUpdateSystemSetting();
   const bulkAutoScore = useBulkAutoScore();
   const bulkManagerPenalty = useBulkManagerPenalty();
+  const sendReminder = useSendReminder();
 
   const [selectedKraSet, setSelectedKraSet] = useState<Set<string>>(new Set());
   const [selectedTeamReview, setSelectedTeamReview] = useState<Set<string>>(new Set());
+  const [selectedSentBack, setSelectedSentBack] = useState<Set<string>>(new Set());
 
   const handleSaveSettings = async () => {
     try {
