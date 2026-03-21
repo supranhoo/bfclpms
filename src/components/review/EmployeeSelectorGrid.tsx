@@ -542,23 +542,21 @@ export function EmployeeSelectorGrid({
       });
       return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'hr_pms') {
-      let pending = 0, inReview = 0, forwarded = 0;
+      let pendingSelf = 0, pendingManager = 0, pendingSkip = 0, inReview = 0, forwarded = 0;
       relevantKpis.forEach(k => {
         const stages = getStages(k.employee_id);
         const hrIdx = stages.indexOf('hr_pms_review');
         if (hrIdx === -1) return;
         if (k.status === 'hr_pms_review') inReview++;
+        else if (k.status === 'self_review') pendingSelf++;
+        else if (k.status === 'manager_check') pendingManager++;
+        else if (k.status === 'skip_level_check') pendingSkip++;
         else {
           const afterHr = stages.slice(hrIdx + 1);
           if (afterHr.includes(k.status || '')) forwarded++;
-          else {
-            // Count all KPIs in stages before 'hr_pms_review' (excluding kra_set) as pending
-            const beforeHr = stages.slice(0, hrIdx);
-            if (beforeHr.includes(k.status || '') && k.status !== 'kra_set') pending++;
-          }
         }
       });
-      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inReview, stat3: forwarded, stat4: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat1: pendingSelf, stat2: pendingManager, stat3: pendingSkip, stat4: inReview, stat5: forwarded, totalKpis: relevantKpis.length };
     } else {
       return {
         totalEmployees: demographicFilteredMembers.length,
