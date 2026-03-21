@@ -1,20 +1,33 @@
 
 
-## Fix: KPI Mapping Matrix Report Redirects Non-Admin Users
+## Add "Rated by System" Badge to KPI Dashboard Rows
 
-### Problem
-The KPI Mapping Matrix report card on the Reports Hub is visible to `manager`, `auditor`, `hr_pms`, and `management` roles (because it shares `reportKey: 'kpi-detail'`). However, the route `/admin/kpi-mapping` is protected with `allowedRoles={['admin']}`, so clicking it redirects non-admin users to `/dashboard`.
+### What Changes
+Add an orange "Rated by System" badge next to any KPI whose submission has an `auto_advance_reason` value. This provides at-a-glance visibility that the system auto-scored/auto-advanced the KPI, similar to how Org KPIs show a distinctive indicator.
 
-### Fix
+### Files Modified
 
-**File: `src/App.tsx` (line 307)**
-Expand `allowedRoles` for the `/admin/kpi-mapping` route to include all roles that can view the report:
+#### 1. `src/components/review/KpiDetailsTable.tsx`
+- After the existing "Sent Back" badges (line ~391), add a new badge that checks `submission?.auto_advance_reason`:
+```tsx
+{submission?.auto_advance_reason && (
+  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-600 dark:bg-orange-900/20 dark:text-orange-400 gap-0.5">
+    <Zap className="h-2.5 w-2.5" />
+    Rated by System
+  </Badge>
+)}
+```
+- Import `Zap` icon from lucide-react (or `Bot` — whichever fits better visually)
 
-```typescript
-<ProtectedRoute allowedRoles={['admin', 'manager', 'auditor', 'hr_pms', 'management']}>
+#### 2. `src/components/dashboard/MobileKpiCard.tsx`
+- After the KRA/KPI name lines (line ~96), add the same orange badge when submission has `auto_advance_reason`:
+```tsx
+{submission?.auto_advance_reason && (
+  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-orange-300 bg-orange-50 text-orange-700 ...">
+    Rated by System
+  </Badge>
+)}
 ```
 
-This aligns route access with the report visibility rules already defined in the Reports Hub (`reportKey: 'kpi-detail'` grants view to these roles).
-
-### No other files changed. No database changes needed.
+### No database changes needed.
 
