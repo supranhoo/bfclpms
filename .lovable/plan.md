@@ -1,91 +1,42 @@
 
 
-## Add 3 Sub-Stage Tiles to HR PMS View + Fix Pending Count
+## Revert HR PMS 7 Tiles + Add Dedicated Dashboard Views
 
-### Problem
-The HR PMS "Pending Review" tile shows 194, which is the **sum** of KPIs at `self_review` + `manager_check` + `skip_level_check`. The user wants this broken into 3 granular tiles and the original "Pending Review" tile corrected to show only KPIs genuinely pending at HR PMS level (i.e. none for Feb).
+### What Changes
+1. **Revert HR PMS tiles** back to standard 5-tile pattern (Total Employees, Pending Review, In HR PMS Review, Reviewed, Total KPIs) — "Pending Review" shows only KPIs at the stage immediately before `hr_pms_review` (not the broad sum of all earlier stages)
+2. **Add 3 new ViewMode tabs** visible to HR PMS / admin roles: "Self Review", "Manager Review", "Skip Mgr Review" — each showing only employees whose KPIs are pending at that specific workflow stage
 
-### Changes
+### Files Modified
 
-**Modified: `src/components/review/EmployeeSelectorGrid.tsx`**
+#### 1. `src/components/review/ViewModeToggle.tsx`
+- Add 3 new `ViewMode` values to the type: `'pending_self_review' | 'pending_manager_review' | 'pending_skip_review'`
+- Add `modeConfig` entries with labels "Self Review", "Manager Review", "Skip Mgr Review" and appropriate icons
 
-#### 1. Stats computation (line 544-561)
-Split the single `pending` counter into 3 sub-counters + keep a true HR-pending count:
+#### 2. `src/pages/Dashboard.tsx`
+- Add the 3 new modes to `availableModes` for `hr_pms` and `admin` roles
+- Map these modes to appropriate `viewLevel` values when passing to `EmployeeSelectorGrid` and `UnifiedScorecard`
 
-```typescript
-let pendingSelf = 0, pendingManager = 0, pendingSkip = 0, inReview = 0, forwarded = 0;
-relevantKpis.forEach(k => {
-  const stages = getStages(k.employee_id);
-  const hrIdx = stages.indexOf('hr_pms_review');
-  if (hrIdx === -1) return;
-  if (k.status === 'hr_pms_review') inReview++;
-  else if (k.status === 'self_review') pendingSelf++;
-  else if (k.status === 'manager_check') pendingManager++;
-  else if (k.status === 'skip_level_check') pendingSkip++;
-  else {
-    const afterHr = stages.slice(hrIdx + 1);
-    if (afterHr.includes(k.status || '')) forwarded++;
-  }
-});
-```
+#### 3. `src/components/review/EmployeeSelectorGrid.tsx`
 
-Extend the stats return to include `stat5`, `stat6`, `stat7` for the 3 sub-counts:
-- `stat1`: pendingSelf
-- `stat2`: pendingManager
-- `stat3`: pendingSkip
-- `stat4`: inReview
-- `stat5`: forwarded
+**a) Revert HR PMS stats** (line 545-560):
+- Go back to using `resolveReviewableStatuses('hr_pms', stages)` for the "Pending" count (only KPIs at the stage just before `hr_pms_review`)
+- Standard 5-tile layout: Total Employees, Pending Review, In HR PMS Review, Reviewed, Total KPIs
 
-#### 2. Stat tiles rendering (line 648-657)
-Replace the HR PMS section with 8 tiles in a responsive grid (`grid-cols-2 lg:grid-cols-4 xl:grid-cols-8`):
+**b) Revert HR PMS status options** (line 59-66):
+- Back to: `all`, `pending`, `in_review`, `reviewed`
 
-| Tile | Label | Count | Filter Value | Color |
-|------|-------|-------|--------------|-------|
-| Total Employees | stats.totalEmployees | `all` | primary |
-| Pending Self Review | pendingSelf | `pending_self` | yellow |
-| Pending Manager Review | pendingManager | `pending_manager` | amber |
-| Pending Skip Manager Review | pendingSkip | `pending_skip` | orange |
-| Pending HR PMS | inReview count=0 for Feb | `pending_hr` | purple |
-| In Review (HR PMS) | inReview | `in_review` | purple |
-| Reviewed | forwarded | `reviewed` | green |
-| Total KPIs | totalKpis | — | blue |
+**c) Revert HR PMS filter logic** (line 417-432):
+- `pending`: use `resolveReviewableStatuses` (not broad sub-stage matching)
+- `in_review`: `hr_pms_review`
+- `reviewed`: after `hr_pms_review`
 
-Wait — the user said "correct existing HR PMS tile" meaning the current "Pending Review" tile should show only KPIs actually at `hr_pms_review` stage or just before it (not the broad sum). Since `In Review` already covers `hr_pms_review`, the corrected "Pending Review" for HR PMS should be 0 for Feb (no KPIs at stages immediately before HR PMS that HR PMS can act on). 
+**d) Add 3 new viewLevel handlers** for `pending_self_review`, `pending_manager_review`, `pending_skip_review`:
+- Each fetches all employees (like HR PMS does — all profiles)
+- Stats: Total Employees, Pending (at that stage), Total KPIs
+- Filter: `pending` matches `kpi.status === 'self_review'` / `'manager_check'` / `'skip_level_check'` respectively
+- Simple 3-tile layout: Total Employees, Pending at Level, Total KPIs
 
-Simplified tile layout (7 tiles):
+**e) Data fetching**: These new views use the same `useProfilesByWorkflowStage` / `useProfiles` as HR PMS (all employees visible), so add them to the existing conditional that enables full-org fetch.
 
-| # | Label | Value | Filter | Color |
-|---|-------|-------|--------|-------|
-| 1 | Total Employees | totalEmployees | `all` | primary |
-| 2 | Pending Self Review | pendingSelf | `pending_self` | yellow |
-| 3 | Pending Manager Review | pendingManager | `pending_manager` | amber |
-| 4 | Pending Skip Mgr Review | pendingSkip | `pending_skip` | orange |
-| 5 | In HR PMS Review | inReview | `in_review` | purple |
-| 6 | HR PMS Reviewed | forwarded | `reviewed` | green |
-| 7 | Total KPIs | totalKpis | — | blue |
-
-The old broad "Pending Review" tile is removed — replaced by the 3 granular sub-stage tiles.
-
-#### 3. Employee list filter (line 415-432)
-Add 3 new filter branches for the new tile filters:
-
-```typescript
-} else if (viewLevel === 'hr_pms') {
-  if (statusFilter === 'pending_self' && kpi.status === 'self_review') {
-    employeeIds.add(kpi.employee_id);
-  } else if (statusFilter === 'pending_manager' && kpi.status === 'manager_check') {
-    employeeIds.add(kpi.employee_id);
-  } else if (statusFilter === 'pending_skip' && kpi.status === 'skip_level_check') {
-    employeeIds.add(kpi.employee_id);
-  } else if (statusFilter === 'in_review' && kpi.status === 'hr_pms_review') {
-    employeeIds.add(kpi.employee_id);
-  } else if (statusFilter === 'reviewed') {
-    // existing logic for after hr_pms_review
-  }
-}
-```
-
-Remove the old broad `pending` filter for HR PMS.
-
-### No other files changed. No database changes needed.
+### No database changes needed
 
