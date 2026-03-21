@@ -630,8 +630,9 @@ export function EmployeeSelectorGrid({
       const pendingKpis = relevantKpis.filter(k => k.status === 'kra_set');
       const pendingCount = pendingKpis.length;
       const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
-      const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly'].includes(k.frequency.toLowerCase())).length;
-      return { totalEmployees: demographicFilteredMembers.length, stat1: pendingCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())).length;
+      const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
+      return { totalEmployees: demographicFilteredMembers.length, stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_manager_review') {
       const pendingCount = relevantKpis.filter(k => k.status === 'self_review').length;
       return { totalEmployees: demographicFilteredMembers.length, stat1: pendingCount, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
@@ -892,7 +893,7 @@ export function EmployeeSelectorGrid({
         const stageLabel = viewLevel === 'pending_self_review' ? 'pending self' : viewLevel === 'pending_manager_review' ? 'pending mgr' : 'pending skip';
         return (
           <>
-            {kpiStats.badge1 > 0 && (
+            {(kpiStats.badge1 > 0 || (viewLevel === 'pending_self_review' && ((kpiStats as any).orgKpiCount > 0 || (kpiStats as any).nonMonthlyCount > 0))) && (
               <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800">
                 {kpiStats.badge1} {stageLabel}
               </Badge>
