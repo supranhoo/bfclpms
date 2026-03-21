@@ -164,6 +164,7 @@ export function useAdminSubmitReviewData() {
           { 
             kpi_id, 
             ...updateFields,
+            auto_advance_reason: `Scored by Admin on behalf of ${role_level}`,
             updated_at: new Date().toISOString(),
           }, 
           { onConflict: 'kpi_id' }
