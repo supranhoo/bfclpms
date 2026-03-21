@@ -16,6 +16,7 @@ interface MobileKpiCardProps {
     final_score?: number | null;
     self_score?: number | null;
     achieved_value?: number | null;
+    auto_advance_reason?: string | null;
   };
   statusColors: Record<string, string>;
   statusLabels: Record<string, string>;
