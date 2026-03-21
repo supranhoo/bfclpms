@@ -90,6 +90,19 @@ export default function PendingSelfReviews() {
     setSelectedTeamReview(new Set());
   };
 
+  const handleSendReminderSelected = () => {
+    if (selectedSentBack.size === 0) return;
+    const items = sentBackKpis.filter(k => selectedSentBack.has(k.kpiId));
+    sendReminder.mutate({ items });
+    setSelectedSentBack(new Set());
+  };
+
+  const handleSendReminderAll = () => {
+    if (sentBackKpis.length === 0) return;
+    sendReminder.mutate({ items: sentBackKpis });
+    setSelectedSentBack(new Set());
+  };
+
   const toggleSelection = (set: Set<string>, setFn: (s: Set<string>) => void, id: string) => {
     const next = new Set(set);
     next.has(id) ? next.delete(id) : next.add(id);
