@@ -1071,7 +1071,7 @@ export function useOverdueSkipLevelKpis(deadlineDay: number, filterMonth?: strin
           .from('review_submissions')
           .select('kpi_id')
           .in('kpi_id', allKpiIds)
-          .not('skip_level_score', 'is', null);
+          .or('skip_level_score.not.is.null,is_na.eq.true');
         alreadyReviewedIds = new Set((reviewed || []).map(r => r.kpi_id));
       }
 
