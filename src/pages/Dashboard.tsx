@@ -45,12 +45,12 @@ export default function Dashboard() {
   const availableModes = useMemo(() => {
     const modes: ViewMode[] = ['self'];
     if (['manager', 'admin', 'management'].includes(role || '') || hasSkipLevelSubordinates) modes.push('team');
-    if (role === 'hr_pms' || role === 'admin') modes.push('hr_pms');
-    if (['auditor', 'admin'].includes(role || '')) modes.push('audit');
-    if (['management', 'admin'].includes(role || '')) modes.push('management');
     if (role === 'hr_pms' || role === 'admin') {
       modes.push('pending_self_review', 'pending_manager_review', 'pending_skip_review');
     }
+    if (role === 'hr_pms' || role === 'admin') modes.push('hr_pms');
+    if (['auditor', 'admin'].includes(role || '')) modes.push('audit');
+    if (['management', 'admin'].includes(role || '')) modes.push('management');
     return modes;
   }, [role, hasSkipLevelSubordinates]);
 
