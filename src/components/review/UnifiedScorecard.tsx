@@ -1231,6 +1231,9 @@ export function UnifiedScorecard({
               </div>
               <p className="text-xs sm:text-sm text-muted-foreground truncate">
                 {employee.designation || 'Employee'}
+                {employee.departments?.name && (
+                  <span><span className="text-border"> | </span>{employee.departments.name}</span>
+                )}
               </p>
             </div>
           </div>
