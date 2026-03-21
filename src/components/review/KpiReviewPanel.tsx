@@ -5,6 +5,7 @@ import { KpiMetricsSection } from './KpiMetricsSection';
 import { KpiJourneySection } from './KpiJourneySection';
 import { KpiHistoryCard } from './KpiHistoryCard';
 import { KpiObservationsSection } from './KpiObservationsSection';
+import { ManagerKpiBenchmark } from './ManagerKpiBenchmark';
 
 export type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
 
@@ -80,6 +81,7 @@ export function KpiReviewPanel({
 
         {/* RIGHT COLUMN (60%) - Review Journey & Observations */}
         <div className="md:col-span-3 space-y-3 sm:space-y-4">
+          <ManagerKpiBenchmark kpi={kpi} />
           <KpiJourneySection
             kpi={kpi}
             submission={submission}
