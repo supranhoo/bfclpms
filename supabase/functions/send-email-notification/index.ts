@@ -1291,6 +1291,15 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       }
     }
 
+    // For system_auto_scored sent to manager (employee_name present), override subject & body
+    if (event_type === 'system_auto_scored' && employee_name) {
+      template.subject = `[PMS] KPI(s) of {{employee_name}} Have Been Rated by System`;
+      template.body = template.body
+        .replace(/Your following KPI\(s\)/i, 'The following KPI(s) of your team member {{employee_name}}')
+        .replace(/your KPI/gi, 'the KPI(s) of {{employee_name}}');
+      placeholderData.employee_name = employee_name;
+    }
+
     // Replace placeholders in subject and body
     const subject = replacePlaceholders(template.subject, placeholderData);
     const bodyContent = replacePlaceholders(template.body, placeholderData);
