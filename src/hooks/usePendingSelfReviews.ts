@@ -382,13 +382,13 @@ export function useBulkManagerPenalty() {
                 self_remarks: remark,
                 final_score: 0,
                 final_rating: 'red',
-                kpi_status: 'approved',
+                kpi_status: 'submitted',
               })
               .eq('id', existing.id);
           } else {
             await supabase
               .from('review_submissions')
-              .insert({
+              .insert([{
                 kpi_id: mgrKpi.id,
                 achieved_value: 0,
                 self_score: 0,
@@ -396,8 +396,8 @@ export function useBulkManagerPenalty() {
                 self_remarks: remark,
                 final_score: 0,
                 final_rating: 'red',
-                kpi_status: 'approved',
-              });
+                kpi_status: 'submitted',
+              }]);
           }
 
           // Audit log
