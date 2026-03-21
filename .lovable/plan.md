@@ -1,19 +1,20 @@
 
 
-## Completed: Fix Manager Review False-Positive + Add Skip-Level Tab
+## Completed: Fix N/A Display on Dashboard + Pending Reviews False-Positive
 
 ### Changes Made
 
+#### `src/components/review/KpiDetailsTable.tsx`
+- **Added** `isStageAtOrBeforeCurrent()` helper to check if a workflow stage has been reached (at or past current status)
+- **Fixed** score cell rendering: N/A badge now shows when `is_na = true`, score is null, and the stage has been reached — not just when stage is completed
+- Previously N/A only showed after status moved past the stage; now it correctly shows at the current stage too
+
 #### `src/hooks/usePendingSelfReviews.ts`
-- **Fixed** `useOverdueTeamReviewKpis`: Now queries `review_submissions` after fetching KPIs at `manager_check` and excludes those where `manager_score IS NOT NULL` (already reviewed by manager)
-- **Added** `useOverdueSkipLevelKpis(deadlineDay, filterMonth, filterYear)`: New hook that queries KPIs at `skip_level_check` status, excludes those where `skip_level_score IS NOT NULL`, resolves manager and skip-level manager names via profile chain
+- **Fixed** manager pending filter: Changed from `.not('manager_score', 'is', null)` to `.or('manager_score.not.is.null,is_na.eq.true')` — excludes N/A-marked KPIs from pending list
+- **Fixed** skip-level pending filter: Same pattern applied for `skip_level_score`
 
-#### `src/pages/admin/PendingSelfReviews.tsx`
-- Added **Pending Skip-Level Review** tab with read-only table showing: Employee, Code, Department, KPI, KRA, Manager, Skip-Level Manager, Days Overdue
-- No auto-penalty action for skip-level — purely informational visibility
-
-### Previous: Rollback + Effective From Month for Pending Reviews
-- Added `useAutoScoredKpis()`, `usePenalizedManagerKpis()`, `useRollbackAutoScore()`, `useRollbackManagerPenalty()`
-- Added Rollback tab and Effective From Month setting
+### Previous: Fix Manager Review False-Positive + Add Skip-Level Tab
+- Fixed `useOverdueTeamReviewKpis`: excludes KPIs where `manager_score IS NOT NULL`
+- Added `useOverdueSkipLevelKpis` hook and Pending Skip-Level Review tab
 
 ### No database changes needed
