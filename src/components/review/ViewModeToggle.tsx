@@ -1,8 +1,8 @@
-import { Home, Users, Shield, Briefcase, UserCheck, ClipboardCheck } from 'lucide-react';
+import { Home, Users, Shield, Briefcase, UserCheck, ClipboardCheck, UserCircle, UserCog, UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-export type ViewMode = 'self' | 'team' | 'skip_level' | 'hr_pms' | 'audit' | 'management';
+export type ViewMode = 'self' | 'team' | 'skip_level' | 'hr_pms' | 'audit' | 'management' | 'pending_self_review' | 'pending_manager_review' | 'pending_skip_review';
 
 interface ViewModeToggleProps {
   currentMode: ViewMode;
@@ -13,10 +13,13 @@ interface ViewModeToggleProps {
 const modeConfig: Record<ViewMode, { label: string; icon: React.ElementType; description: string }> = {
   self: { label: 'My Dashboard', icon: Home, description: 'View your own KPIs' },
   team: { label: 'Team Reviews', icon: Users, description: 'Review direct & indirect reports' },
-  skip_level: { label: 'Team Reviews', icon: UserCheck, description: 'Skip-level review' }, // hidden from toggle, kept for internal use
+  skip_level: { label: 'Team Reviews', icon: UserCheck, description: 'Skip-level review' },
   hr_pms: { label: 'HR PMS', icon: ClipboardCheck, description: 'HR PMS team review' },
   audit: { label: 'Audit', icon: Shield, description: 'Audit performance evaluations' },
   management: { label: 'Management', icon: Briefcase, description: 'Final management review' },
+  pending_self_review: { label: 'Self Review', icon: UserCircle, description: 'Employees pending self review' },
+  pending_manager_review: { label: 'Manager Review', icon: UserCog, description: 'Employees pending manager review' },
+  pending_skip_review: { label: 'Skip Mgr Review', icon: UserCheck, description: 'Employees pending skip-level review' },
 };
 
 export function ViewModeToggle({ currentMode, availableModes, onModeChange }: ViewModeToggleProps) {
