@@ -1,26 +1,19 @@
 
 
-## Revised Plan: Pending Reviews — Manager + Skip-Level Tabs Only
+## Completed: Fix Manager Review False-Positive + Add Skip-Level Tab
 
-### Scope
-- **Pending Manager Review**: Fix false-positive (exclude KPIs where `manager_score IS NOT NULL`). Already planned.
-- **Pending Skip-Level Review**: New tab showing KPIs at `skip_level_check` where `skip_level_score IS NULL`. Only populated for employees whose workflow includes the `skip_level_check` stage.
+### Changes Made
 
-### Behavior when skip-level stage is absent
-If an employee's workflow goes `manager_check → hr_pms_review` or `manager_check → audit` (no `skip_level_check` stage), their KPIs will never reach `skip_level_check` status. The Skip-Level tab will simply show "No pending items" for those workflows. This is correct — no false data is displayed.
+#### `src/hooks/usePendingSelfReviews.ts`
+- **Fixed** `useOverdueTeamReviewKpis`: Now queries `review_submissions` after fetching KPIs at `manager_check` and excludes those where `manager_score IS NOT NULL` (already reviewed by manager)
+- **Added** `useOverdueSkipLevelKpis(deadlineDay, filterMonth, filterYear)`: New hook that queries KPIs at `skip_level_check` status, excludes those where `skip_level_score IS NOT NULL`, resolves manager and skip-level manager names via profile chain
 
-HR PMS and Audit pending tracking is excluded from this scope and can be added later.
+#### `src/pages/admin/PendingSelfReviews.tsx`
+- Added **Pending Skip-Level Review** tab with read-only table showing: Employee, Code, Department, KPI, KRA, Manager, Skip-Level Manager, Days Overdue
+- No auto-penalty action for skip-level — purely informational visibility
 
-### Files Modified
-
-#### 1. `src/hooks/usePendingSelfReviews.ts`
-- **Fix** `useOverdueTeamReviewKpis`: After fetching KPIs at `manager_check`, query `review_submissions` and exclude those with `manager_score IS NOT NULL`
-- **Add** `useOverdueSkipLevelKpis(deadlineDay, filterMonth, filterYear)`: Query KPIs at `status = 'skip_level_check'`, exclude those with `skip_level_score IS NOT NULL`, apply same deadline logic, resolve skip-level manager name via profile chain
-
-#### 2. `src/pages/admin/PendingSelfReviews.tsx`
-- Add "Pending Skip-Level Review (N)" tab after Manager Review tab
-- Table columns: Employee, Code, Department, KPI, KRA, Manager, Skip-Level Manager, Days Overdue
-- Read-only visibility for now (no auto-penalty action)
+### Previous: Rollback + Effective From Month for Pending Reviews
+- Added `useAutoScoredKpis()`, `usePenalizedManagerKpis()`, `useRollbackAutoScore()`, `useRollbackManagerPenalty()`
+- Added Rollback tab and Effective From Month setting
 
 ### No database changes needed
-

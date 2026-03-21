@@ -157,6 +157,18 @@ export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: stri
       const { data: kpis, error } = await query;
       if (error) throw error;
 
+      // Exclude KPIs where manager has already scored (false-positive fix)
+      const allKpiIds = (kpis || []).map(k => k.id);
+      let alreadyReviewedIds = new Set<string>();
+      if (allKpiIds.length > 0) {
+        const { data: reviewed } = await supabase
+          .from('review_submissions')
+          .select('kpi_id')
+          .in('kpi_id', allKpiIds)
+          .not('manager_score', 'is', null);
+        alreadyReviewedIds = new Set((reviewed || []).map(r => r.kpi_id));
+      }
+
       const now = new Date();
       const results: OverdueKpi[] = [];
 
@@ -167,6 +179,7 @@ export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: stri
       const rawItems: Array<{ kpi: any; profile: any; daysOverdue: number }> = [];
 
       for (const kpi of kpis || []) {
+        if (alreadyReviewedIds.has(kpi.id)) continue;
         if (!kpi.review_period || !kpi.review_year) continue;
         const deadline = getDeadlineDate(kpi.review_period, kpi.review_year, deadlineDay);
         if (now <= deadline) continue;
@@ -1025,5 +1038,120 @@ export function useRollbackManagerPenalty() {
     onError: (error: Error) => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     },
+  });
+}
+
+// ─── Pending Skip-Level Review ───
+
+export function useOverdueSkipLevelKpis(deadlineDay: number, filterMonth?: string, filterYear?: number) {
+  return useQuery({
+    queryKey: ['overdue-skip-level-kpis', deadlineDay, filterMonth, filterYear],
+    queryFn: async () => {
+      let query = supabase
+        .from('kpis')
+        .select(`
+          id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, is_org_level,
+          profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, reporting_manager_id, departments ( name ) )
+        `)
+        .eq('status', 'skip_level_check')
+        .eq('is_org_level', false)
+        .in('frequency', ELIGIBLE_FREQUENCIES);
+
+      if (filterMonth) query = query.eq('review_period', filterMonth);
+      if (filterYear) query = query.eq('review_year', filterYear);
+
+      const { data: kpis, error } = await query;
+      if (error) throw error;
+
+      // Exclude KPIs where skip-level has already scored
+      const allKpiIds = (kpis || []).map(k => k.id);
+      let alreadyReviewedIds = new Set<string>();
+      if (allKpiIds.length > 0) {
+        const { data: reviewed } = await supabase
+          .from('review_submissions')
+          .select('kpi_id')
+          .in('kpi_id', allKpiIds)
+          .not('skip_level_score', 'is', null);
+        alreadyReviewedIds = new Set((reviewed || []).map(r => r.kpi_id));
+      }
+
+      const now = new Date();
+      const managerIds = new Set<string>();
+      const rawItems: Array<{ kpi: any; profile: any; daysOverdue: number }> = [];
+
+      for (const kpi of kpis || []) {
+        if (alreadyReviewedIds.has(kpi.id)) continue;
+        if (!kpi.review_period || !kpi.review_year) continue;
+        const deadline = getDeadlineDate(kpi.review_period, kpi.review_year, deadlineDay);
+        if (now <= deadline) continue;
+
+        const diffMs = now.getTime() - deadline.getTime();
+        const daysOverdue = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const profile = kpi.profiles as any;
+        if (profile?.reporting_manager_id) {
+          managerIds.add(profile.reporting_manager_id);
+        }
+        rawItems.push({ kpi, profile, daysOverdue });
+      }
+
+      // Fetch manager names + their reporting_manager (skip-level)
+      const allManagerIds = [...managerIds];
+      let managerMap: Record<string, string> = {};
+      let managerToSkip: Record<string, string> = {};
+      const skipManagerIds = new Set<string>();
+
+      if (allManagerIds.length > 0) {
+        const { data: managers } = await supabase
+          .from('profiles')
+          .select('id, full_name, reporting_manager_id')
+          .in('id', allManagerIds);
+        for (const m of managers || []) {
+          managerMap[m.id] = m.full_name || 'Unknown';
+          if (m.reporting_manager_id) {
+            managerToSkip[m.id] = m.reporting_manager_id;
+            skipManagerIds.add(m.reporting_manager_id);
+          }
+        }
+      }
+
+      let skipMap: Record<string, string> = {};
+      const allSkipIds = [...skipManagerIds];
+      if (allSkipIds.length > 0) {
+        const { data: skips } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', allSkipIds);
+        for (const s of skips || []) {
+          skipMap[s.id] = s.full_name || 'Unknown';
+        }
+      }
+
+      const results: OverdueKpi[] = [];
+      for (const { kpi, profile, daysOverdue } of rawItems) {
+        const mgrId = profile?.reporting_manager_id || null;
+        const skipId = mgrId ? managerToSkip[mgrId] || null : null;
+
+        results.push({
+          kpiId: kpi.id,
+          employeeId: kpi.employee_id,
+          employeeName: profile?.full_name || 'Unknown',
+          employeeCode: profile?.employee_code || '',
+          departmentName: profile?.departments?.name || '',
+          kpiName: kpi.kpi_name,
+          kraName: kpi.kra_name,
+          reviewPeriod: kpi.review_period,
+          reviewYear: kpi.review_year,
+          frequency: kpi.frequency || '',
+          daysOverdue,
+          reportingManagerId: mgrId,
+          reportingManagerName: mgrId ? managerMap[mgrId] || null : null,
+          skipLevelManagerId: skipId,
+          skipLevelManagerName: skipId ? skipMap[skipId] || null : null,
+        });
+      }
+
+      return results.sort((a, b) => b.daysOverdue - a.daysOverdue);
+    },
+    enabled: deadlineDay > 0,
   });
 }

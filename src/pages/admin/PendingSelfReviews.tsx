@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Settings, AlertTriangle, Users, Undo2, Mail, RotateCcw } from 'lucide-react';
+import { Loader2, Settings, AlertTriangle, Users, Undo2, Mail, RotateCcw, UserCheck } from 'lucide-react';
 import { EffectiveMonthSelector } from '@/components/admin/EffectiveMonthSelector';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUpdateSystemSetting, useSystemSetting } from '@/hooks/useSystemSettings';
@@ -18,6 +18,7 @@ import {
   usePendingReviewSettings,
   useOverdueKraSetKpis,
   useOverdueTeamReviewKpis,
+  useOverdueSkipLevelKpis,
   useBulkAutoScore,
   useBulkManagerPenalty,
   useSentBackKpisTab,
@@ -67,6 +68,7 @@ export default function PendingSelfReviews() {
   const { data: sentBackKpis = [], isLoading: sentBackLoading } = useSentBackKpisTab(selectedMonth, selectedYear);
   const { data: autoScoredKpis = [], isLoading: autoScoredLoading } = useAutoScoredKpis(selectedMonth, selectedYear);
   const { data: penalizedKpis = [], isLoading: penalizedLoading } = usePenalizedManagerKpis(selectedMonth, selectedYear);
+  const { data: overdueSkipLevel = [], isLoading: skipLevelLoading } = useOverdueSkipLevelKpis(deadlineDay, selectedMonth, selectedYear);
 
   const updateSetting = useUpdateSystemSetting();
   const bulkAutoScore = useBulkAutoScore();
@@ -280,6 +282,10 @@ export default function PendingSelfReviews() {
             <Users className="h-3.5 w-3.5" />
             Pending Manager Review ({overdueTeamReview.length})
           </TabsTrigger>
+          <TabsTrigger value="skip-level" className="gap-1.5">
+            <UserCheck className="h-3.5 w-3.5" />
+            Pending Skip-Level Review ({overdueSkipLevel.length})
+          </TabsTrigger>
           <TabsTrigger value="sent-back" className="gap-1.5">
             <Undo2 className="h-3.5 w-3.5" />
             Sent Back KPIs ({sentBackKpis.length})
@@ -410,6 +416,56 @@ export default function PendingSelfReviews() {
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
                           <TableCell>{item.kpiName}</TableCell>
+                          <TableCell>{item.reportingManagerName || '—'}</TableCell>
+                          <TableCell>{item.skipLevelManagerName || '—'}</TableCell>
+                          <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
+                          <TableCell>
+                            <Badge variant={item.daysOverdue > 15 ? 'destructive' : 'secondary'}>
+                              {item.daysOverdue} days
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab: Pending Skip-Level Review */}
+        <TabsContent value="skip-level">
+          <Card>
+            <CardContent className="pt-4 space-y-4">
+              {skipLevelLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              ) : overdueSkipLevel.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4">No pending skip-level review KPIs found.</p>
+              ) : (
+                <div className="rounded-md border overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Employee</TableHead>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Department</TableHead>
+                        <TableHead>KPI</TableHead>
+                        <TableHead>KRA</TableHead>
+                        <TableHead>Manager</TableHead>
+                        <TableHead>Skip-Level Manager</TableHead>
+                        <TableHead>Period</TableHead>
+                        <TableHead>Days Overdue</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {overdueSkipLevel.map(item => (
+                        <TableRow key={item.kpiId}>
+                          <TableCell className="font-medium">{item.employeeName}</TableCell>
+                          <TableCell>{item.employeeCode}</TableCell>
+                          <TableCell>{item.departmentName}</TableCell>
+                          <TableCell>{item.kpiName}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{item.kraName}</TableCell>
                           <TableCell>{item.reportingManagerName || '—'}</TableCell>
                           <TableCell>{item.skipLevelManagerName || '—'}</TableCell>
                           <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
