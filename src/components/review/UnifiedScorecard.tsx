@@ -1208,6 +1208,7 @@ export function UnifiedScorecard({
               avatar_url: employee.avatar_url,
               email: employee.email,
             }}
+            department={employee.departments?.name}
             compact
           />
         ) : (
