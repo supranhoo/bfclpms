@@ -88,7 +88,7 @@ export default function Dashboard() {
       const fetchAndSelectEmployee = async () => {
         const { data: empProfile } = await supabase
           .from('profiles')
-          .select('id, full_name, email, designation, employee_code, avatar_url, department_id, reporting_manager_id')
+          .select('id, full_name, email, designation, employee_code, avatar_url, department_id, reporting_manager_id, departments(id, name, code)')
           .eq('id', employeeParam)
           .single();
 
