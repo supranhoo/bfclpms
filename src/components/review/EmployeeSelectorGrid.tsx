@@ -160,6 +160,9 @@ export function EmployeeSelectorGrid({
     audit: 'audit',
     management: 'management_review',
     skip_level: 'skip_level_check',
+    pending_self_review: 'self_review',
+    pending_manager_review: 'manager_check',
+    pending_skip_review: 'skip_level_check',
   };
   const requiredStage = PANEL_REQUIRED_STAGE[viewLevel] ?? null;
 
