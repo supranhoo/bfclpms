@@ -90,6 +90,7 @@ interface EmployeeProfile {
   employee_code: string | null;
   avatar_url: string | null;
   department_id: string | null;
+  departments?: { id: string; name: string; code: string | null } | null;
 }
 
 // Import PeriodSelection type
@@ -1207,6 +1208,7 @@ export function UnifiedScorecard({
               avatar_url: employee.avatar_url,
               email: employee.email,
             }}
+            department={employee.departments?.name}
             compact
           />
         ) : (
@@ -1229,6 +1231,9 @@ export function UnifiedScorecard({
               </div>
               <p className="text-xs sm:text-sm text-muted-foreground truncate">
                 {employee.designation || 'Employee'}
+                {employee.departments?.name && (
+                  <span><span className="text-border"> | </span>{employee.departments.name}</span>
+                )}
               </p>
             </div>
           </div>
