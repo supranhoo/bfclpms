@@ -157,6 +157,18 @@ export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: stri
       const { data: kpis, error } = await query;
       if (error) throw error;
 
+      // Exclude KPIs where manager has already scored (false-positive fix)
+      const allKpiIds = (kpis || []).map(k => k.id);
+      let alreadyReviewedIds = new Set<string>();
+      if (allKpiIds.length > 0) {
+        const { data: reviewed } = await supabase
+          .from('review_submissions')
+          .select('kpi_id')
+          .in('kpi_id', allKpiIds)
+          .not('manager_score', 'is', null);
+        alreadyReviewedIds = new Set((reviewed || []).map(r => r.kpi_id));
+      }
+
       const now = new Date();
       const results: OverdueKpi[] = [];
 
@@ -167,6 +179,7 @@ export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: stri
       const rawItems: Array<{ kpi: any; profile: any; daysOverdue: number }> = [];
 
       for (const kpi of kpis || []) {
+        if (alreadyReviewedIds.has(kpi.id)) continue;
         if (!kpi.review_period || !kpi.review_year) continue;
         const deadline = getDeadlineDate(kpi.review_period, kpi.review_year, deadlineDay);
         if (now <= deadline) continue;
