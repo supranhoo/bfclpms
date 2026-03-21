@@ -1,22 +1,32 @@
 
 
-## Add Evidence Upload to Admin Data Entry Dialog
+## Roll Back Reconciled February KPIs to Audit Stage
 
-### Problem
-The Admin Data Entry dialog (screenshot) has no file attachment option. Unlike other review interfaces (SelfReviewSheet, Query dialogs, Org KPI Entry), the admin override form only has text fields for Remarks and Reason — no way to upload supporting evidence.
+### Scope
+- **18 KPIs** for **1 employee** (Y R V S Murthy, 200493) — February 2026 only
+- January KPIs are left untouched
 
-### Fix
-Add the `EvidenceUpload` component to `AdminDataEntryDialog.tsx`, placed between the Remarks textarea and the "Advance workflow status" toggle. Wire the uploaded URL into the submission payload via the existing `evidence_url` field on `review_submissions`.
+### What Happened
+On March 13, the Workflow Reconciliation tool auto-advanced these 18 KPIs from `audit` → `approved`, setting `final_score` from the skip-level fallback. The employee's workflow still includes the `audit` stage, so these need to go back.
 
-### Changes
+### Correction Steps
 
-**`src/components/admin/AdminDataEntryDialog.tsx`**:
-1. Import `EvidenceUpload` from `@/components/ui/EvidenceUpload`
-2. Add `evidenceUrl` state variable
-3. Place `<EvidenceUpload>` after the Remarks field, passing `userId={kpi.user_id}`, `kpiId={kpi.id}`, and `existingUrl` from the loaded submission
-4. Include `evidence_url: evidenceUrl` in both `handleSubmit` and `handleFastTrack` payloads
-5. Reset `evidenceUrl` when the dialog opens/closes
+**Database updates (via insert/update tool):**
 
-**`src/hooks/useAdminDataEntry.ts`** (if needed):
-- Ensure the mutation accepts and saves `evidence_url` to the `review_submissions` upsert
+1. **`kpis` table** — For the 18 affected KPI IDs:
+   - Set `status` = `'audit'`
+   - Clear `final_score` = NULL, `final_rating` = NULL
+
+2. **`review_submissions` table** — For matching submissions:
+   - Set `kpi_status` = `'audit_review'` (the enum value for audit stage in submissions)
+   - Clear `final_score` = NULL, `final_rating` = NULL
+
+3. **`kpi_audit_logs`** — Insert a log entry for each KPI:
+   - `action` = `'RECONCILIATION_REVERSED'`
+   - `old_value` = `{"status": "approved"}`
+   - `new_value` = `{"status": "audit"}`
+   - `performed_by` = admin user ID
+
+### Files Changed
+None — this is a data-only correction using the database update tool.
 
