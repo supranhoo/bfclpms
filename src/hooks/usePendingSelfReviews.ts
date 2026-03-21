@@ -250,6 +250,102 @@ export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: stri
   });
 }
 
+/**
+ * Send one consolidated email per employee (and their manager) for system auto-scored KPIs.
+ */
+async function sendConsolidatedAutoScoreEmails(
+  kpiDetails: Array<{ kpiId: string; kpiName: string; employeeId: string; reviewPeriod: string; reviewYear: number }>,
+  autoScoreReason: string
+): Promise<void> {
+  // Group by employee
+  const byEmployee = new Map<string, { kpiNames: string[]; reviewPeriod: string; reviewYear: number }>();
+  for (const detail of kpiDetails) {
+    const existing = byEmployee.get(detail.employeeId);
+    if (existing) {
+      existing.kpiNames.push(detail.kpiName);
+    } else {
+      byEmployee.set(detail.employeeId, {
+        kpiNames: [detail.kpiName],
+        reviewPeriod: detail.reviewPeriod,
+        reviewYear: detail.reviewYear,
+      });
+    }
+  }
+
+  // Fetch profiles for all employees
+  const employeeIds = Array.from(byEmployee.keys());
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, full_name, email, reporting_manager_id')
+    .in('id', employeeIds);
+
+  if (!profiles || profiles.length === 0) return;
+
+  // Fetch manager profiles
+  const managerIds = profiles
+    .map(p => p.reporting_manager_id)
+    .filter((id): id is string => !!id);
+  const uniqueManagerIds = [...new Set(managerIds)];
+
+  let managerProfiles: Array<{ id: string; full_name: string | null; email: string | null }> = [];
+  if (uniqueManagerIds.length > 0) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', uniqueManagerIds);
+    managerProfiles = data || [];
+  }
+
+  const managerMap = new Map(managerProfiles.map(m => [m.id, m]));
+
+  const emailPromises: Promise<any>[] = [];
+
+  for (const profile of profiles) {
+    const empData = byEmployee.get(profile.id);
+    if (!empData || !profile.email) continue;
+
+    const kpiListStr = empData.kpiNames.map(n => `• ${n}`).join('\n');
+
+    // Email to employee
+    emailPromises.push(
+      supabase.functions.invoke('send-email-notification', {
+        body: {
+          event_type: 'system_auto_scored',
+          recipient_email: profile.email,
+          recipient_name: profile.full_name || 'Employee',
+          review_period: empData.reviewPeriod,
+          review_year: empData.reviewYear,
+          auto_score_reason: autoScoreReason,
+          kpi_list: empData.kpiNames,
+        },
+      })
+    );
+
+    // Email to reporting manager
+    if (profile.reporting_manager_id) {
+      const manager = managerMap.get(profile.reporting_manager_id);
+      if (manager?.email) {
+        emailPromises.push(
+          supabase.functions.invoke('send-email-notification', {
+            body: {
+              event_type: 'system_auto_scored',
+              recipient_email: manager.email,
+              recipient_name: manager.full_name || 'Manager',
+              employee_name: profile.full_name || 'Employee',
+              review_period: empData.reviewPeriod,
+              review_year: empData.reviewYear,
+              auto_score_reason: autoScoreReason,
+              kpi_list: empData.kpiNames,
+            },
+          })
+        );
+      }
+    }
+  }
+
+  await Promise.allSettled(emailPromises);
+}
+
 export function useBulkAutoScore() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
