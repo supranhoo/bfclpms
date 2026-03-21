@@ -282,6 +282,10 @@ export default function PendingSelfReviews() {
             <Users className="h-3.5 w-3.5" />
             Pending Manager Review ({overdueTeamReview.length})
           </TabsTrigger>
+          <TabsTrigger value="skip-level" className="gap-1.5">
+            <UserCheck className="h-3.5 w-3.5" />
+            Pending Skip-Level Review ({overdueSkipLevel.length})
+          </TabsTrigger>
           <TabsTrigger value="sent-back" className="gap-1.5">
             <Undo2 className="h-3.5 w-3.5" />
             Sent Back KPIs ({sentBackKpis.length})
