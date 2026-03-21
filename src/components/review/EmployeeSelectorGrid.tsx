@@ -620,8 +620,11 @@ export function EmployeeSelectorGrid({
       });
       return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inReview, stat3: forwarded, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_self_review') {
-      const pendingCount = relevantKpis.filter(k => k.status === 'kra_set').length;
-      return { totalEmployees: demographicFilteredMembers.length, stat1: pendingCount, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      const pendingKpis = relevantKpis.filter(k => k.status === 'kra_set');
+      const pendingCount = pendingKpis.length;
+      const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
+      const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly'].includes(k.frequency.toLowerCase())).length;
+      return { totalEmployees: demographicFilteredMembers.length, stat1: pendingCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_manager_review') {
       const pendingCount = relevantKpis.filter(k => k.status === 'self_review').length;
       return { totalEmployees: demographicFilteredMembers.length, stat1: pendingCount, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
@@ -727,10 +730,13 @@ export function EmployeeSelectorGrid({
       );
     } else if (viewLevel === 'pending_self_review' || viewLevel === 'pending_manager_review' || viewLevel === 'pending_skip_review') {
       const labelMap = { pending_self_review: 'Pending Self Review', pending_manager_review: 'Pending Manager Review', pending_skip_review: 'Pending Skip Mgr Review' };
+      const pendingSubtitle = viewLevel === 'pending_self_review' && (stats.stat2 > 0 || stats.stat3 > 0)
+        ? [stats.stat2 > 0 ? `${stats.stat2} org KPI` : '', stats.stat3 > 0 ? `${stats.stat3} bi-monthly/quarterly` : ''].filter(Boolean).join(' · ')
+        : 'KPIs at this stage';
       return (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-          <StatCard icon={Clock} label={labelMap[viewLevel]} value={stats.stat1} color="amber" subtitle="KPIs at this stage" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
+          <StatCard icon={Clock} label={labelMap[viewLevel]} value={stats.stat1} color="amber" subtitle={pendingSubtitle} onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
         </div>
       );
