@@ -52,6 +52,16 @@ function isStageCompleted(columnKey: string, kpiStatus: string, stages: string[]
   return statusIdx > stageIdx;
 }
 
+/** Check if a stage is at or before the current status (i.e. the stage has been reached) */
+function isStageAtOrBeforeCurrent(columnKey: string, kpiStatus: string, stages: string[]): boolean {
+  const stageName = COLUMN_TO_STAGE[columnKey];
+  if (!stageName) return false;
+  const stageIdx = stages.indexOf(stageName);
+  const statusIdx = stages.indexOf(kpiStatus);
+  if (stageIdx === -1 || statusIdx === -1) return false;
+  return stageIdx <= statusIdx;
+}
+
 /** Build dynamic score columns from workflow stages. Final is always appended. */
 function buildScoreColumns(stages: string[]): { key: string; label: string }[] {
   const cols: { key: string; label: string }[] = [];
