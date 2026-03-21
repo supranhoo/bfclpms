@@ -86,10 +86,24 @@ export function useOverdueKraSetKpis(deadlineDay: number, filterMonth?: string, 
       const { data: kpis, error } = await query;
       if (error) throw error;
 
+      // Exclude KPIs with open send_back queries (Option A)
+      const kpiIds = (kpis || []).map(k => k.id);
+      let sentBackIds = new Set<string>();
+      if (kpiIds.length > 0) {
+        const { data: sentBack } = await supabase
+          .from('kpi_queries')
+          .select('kpi_id')
+          .in('kpi_id', kpiIds)
+          .eq('query_type', 'send_back')
+          .eq('status', 'open');
+        sentBackIds = new Set((sentBack || []).map(r => r.kpi_id));
+      }
+
       const now = new Date();
       const results: OverdueKpi[] = [];
 
       for (const kpi of kpis || []) {
+        if (sentBackIds.has(kpi.id)) continue;
         if (!kpi.review_period || !kpi.review_year) continue;
         const deadline = getDeadlineDate(kpi.review_period, kpi.review_year, deadlineDay);
         if (now <= deadline) continue;
