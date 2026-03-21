@@ -896,6 +896,11 @@ export function EmployeeSelectorGrid({
                 {(kpiStats as any).orgKpiCount} org KPI
               </Badge>
             )}
+            {viewLevel === 'pending_self_review' && (kpiStats as any).nonMonthlyCount > 0 && (
+              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">
+                {(kpiStats as any).nonMonthlyCount} bi-monthly/quarterly
+              </Badge>
+            )}
           </>
         );
       } else {
