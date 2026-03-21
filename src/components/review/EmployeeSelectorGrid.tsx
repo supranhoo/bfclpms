@@ -893,7 +893,7 @@ export function EmployeeSelectorGrid({
         const stageLabel = viewLevel === 'pending_self_review' ? 'pending self' : viewLevel === 'pending_manager_review' ? 'pending mgr' : 'pending skip';
         return (
           <>
-            {kpiStats.badge1 > 0 && (
+            {(kpiStats.badge1 > 0 || (viewLevel === 'pending_self_review' && ((kpiStats as any).orgKpiCount > 0 || (kpiStats as any).nonMonthlyCount > 0))) && (
               <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800">
                 {kpiStats.badge1} {stageLabel}
               </Badge>
