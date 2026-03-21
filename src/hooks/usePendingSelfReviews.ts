@@ -66,11 +66,11 @@ export function usePendingReviewSettings() {
 
 const ELIGIBLE_FREQUENCIES = ['Monthly', 'Daily', 'Weekly'];
 
-export function useOverdueKraSetKpis(deadlineDay: number) {
+export function useOverdueKraSetKpis(deadlineDay: number, filterMonth?: string, filterYear?: number) {
   return useQuery({
-    queryKey: ['overdue-kra-set-kpis', deadlineDay],
+    queryKey: ['overdue-kra-set-kpis', deadlineDay, filterMonth, filterYear],
     queryFn: async () => {
-      const { data: kpis, error } = await supabase
+      let query = supabase
         .from('kpis')
         .select(`
           id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, is_org_level,
@@ -80,6 +80,10 @@ export function useOverdueKraSetKpis(deadlineDay: number) {
         .eq('is_org_level', false)
         .in('frequency', ELIGIBLE_FREQUENCIES);
 
+      if (filterMonth) query = query.eq('review_period', filterMonth);
+      if (filterYear) query = query.eq('review_year', filterYear);
+
+      const { data: kpis, error } = await query;
       if (error) throw error;
 
       const now = new Date();
@@ -119,11 +123,11 @@ export function useOverdueKraSetKpis(deadlineDay: number) {
   });
 }
 
-export function useOverdueTeamReviewKpis(deadlineDay: number) {
+export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: string, filterYear?: number) {
   return useQuery({
-    queryKey: ['overdue-team-review-kpis', deadlineDay],
+    queryKey: ['overdue-team-review-kpis', deadlineDay, filterMonth, filterYear],
     queryFn: async () => {
-      const { data: kpis, error } = await supabase
+      let query = supabase
         .from('kpis')
         .select(`
           id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, is_org_level,
@@ -133,6 +137,10 @@ export function useOverdueTeamReviewKpis(deadlineDay: number) {
         .eq('is_org_level', false)
         .in('frequency', ELIGIBLE_FREQUENCIES);
 
+      if (filterMonth) query = query.eq('review_period', filterMonth);
+      if (filterYear) query = query.eq('review_year', filterYear);
+
+      const { data: kpis, error } = await query;
       if (error) throw error;
 
       const now = new Date();

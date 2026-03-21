@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { format, subMonths } from 'date-fns';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Settings, AlertTriangle, Users } from 'lucide-react';
+import { EffectiveMonthSelector } from '@/components/admin/EffectiveMonthSelector';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUpdateSystemSetting } from '@/hooks/useSystemSettings';
 import {
@@ -26,13 +28,17 @@ export default function PendingSelfReviews() {
   const { toast } = useToast();
   const { deadlineDay, employeeRemark, managerRemark, isLoading: settingsLoading } = usePendingReviewSettings();
 
+  const prevMonth = subMonths(new Date(), 1);
+  const [selectedMonth, setSelectedMonth] = useState<string>(format(prevMonth, 'MMMM'));
+  const [selectedYear, setSelectedYear] = useState<number>(prevMonth.getFullYear());
+
   const [editDay, setEditDay] = useState<string>('');
   const [editEmpRemark, setEditEmpRemark] = useState<string>('');
   const [editMgrRemark, setEditMgrRemark] = useState<string>('');
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const { data: overdueKraSet = [], isLoading: kraSetLoading } = useOverdueKraSetKpis(deadlineDay);
-  const { data: overdueTeamReview = [], isLoading: teamReviewLoading } = useOverdueTeamReviewKpis(deadlineDay);
+  const { data: overdueKraSet = [], isLoading: kraSetLoading } = useOverdueKraSetKpis(deadlineDay, selectedMonth, selectedYear);
+  const { data: overdueTeamReview = [], isLoading: teamReviewLoading } = useOverdueTeamReviewKpis(deadlineDay, selectedMonth, selectedYear);
 
   const updateSetting = useUpdateSystemSetting();
   const bulkAutoScore = useBulkAutoScore();
@@ -143,6 +149,14 @@ export default function PendingSelfReviews() {
           </CardContent>
         )}
       </Card>
+
+      {/* Month-Year Filter */}
+      <EffectiveMonthSelector
+        selectedMonth={selectedMonth}
+        selectedYear={selectedYear}
+        onMonthChange={setSelectedMonth}
+        onYearChange={setSelectedYear}
+      />
 
       {/* Tabs */}
       <Tabs defaultValue="self-review">
