@@ -304,7 +304,7 @@ const App = () => (
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/kpi-mapping" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin', 'manager', 'auditor', 'hr_pms', 'management']}>
                     <Suspense fallback={<PageFallback />}><KpiMappingMatrix /></Suspense>
                   </ProtectedRoute>
                 } />
