@@ -129,6 +129,19 @@ export default function Dashboard() {
     }
   }, [searchParams]);
 
+  // Sync viewMode to URL query param for refresh persistence
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (viewMode === 'self') {
+        next.delete('view');
+      } else {
+        next.set('view', viewMode);
+      }
+      return next;
+    }, { replace: true });
+  }, [viewMode]);
+
   // Handle mode change
   const handleModeChange = useCallback((mode: ViewMode) => {
     setViewMode(mode);
