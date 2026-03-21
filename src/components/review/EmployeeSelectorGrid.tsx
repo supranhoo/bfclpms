@@ -884,6 +884,11 @@ export function EmployeeSelectorGrid({
                 {kpiStats.badge1} {stageLabel}
               </Badge>
             )}
+            {viewLevel === 'pending_self_review' && (kpiStats as any).orgKpiCount > 0 && (
+              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                {(kpiStats as any).orgKpiCount} org KPI
+              </Badge>
+            )}
           </>
         );
       } else {
