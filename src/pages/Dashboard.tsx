@@ -48,6 +48,9 @@ export default function Dashboard() {
     if (role === 'hr_pms' || role === 'admin') modes.push('hr_pms');
     if (['auditor', 'admin'].includes(role || '')) modes.push('audit');
     if (['management', 'admin'].includes(role || '')) modes.push('management');
+    if (role === 'hr_pms' || role === 'admin') {
+      modes.push('pending_self_review', 'pending_manager_review', 'pending_skip_review');
+    }
     return modes;
   }, [role, hasSkipLevelSubordinates]);
 
@@ -150,7 +153,7 @@ export default function Dashboard() {
       if (viewMode === 'team' && selectedEmployee.relationship === 'indirect') {
         viewLevelForScorecard = 'skip_level';
       } else {
-        const viewLevelMap: Record<string, string> = { team: 'manager', audit: 'auditor', skip_level: 'skip_level', hr_pms: 'hr_pms', management: 'management' };
+        const viewLevelMap: Record<string, string> = { team: 'manager', audit: 'auditor', skip_level: 'skip_level', hr_pms: 'hr_pms', management: 'management', pending_self_review: 'hr_pms', pending_manager_review: 'hr_pms', pending_skip_review: 'hr_pms' };
         viewLevelForScorecard = viewLevelMap[viewMode] || viewMode;
       }
       return (
