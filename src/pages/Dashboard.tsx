@@ -20,6 +20,7 @@ interface EmployeeProfile {
   department_id: string | null;
   reporting_manager_id: string | null;
   relationship?: 'direct' | 'indirect';
+  departments?: { id: string; name: string; code: string | null } | null;
 }
 
 export default function Dashboard() {
