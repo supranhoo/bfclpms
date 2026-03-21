@@ -716,3 +716,314 @@ export function useSendReminder() {
     },
   });
 }
+
+// ─── Rollback Types & Hooks ───
+
+export interface AutoScoredKpi {
+  kpiId: string;
+  auditLogId: string;
+  employeeId: string;
+  employeeName: string;
+  employeeCode: string;
+  departmentName: string;
+  kpiName: string;
+  kraName: string;
+  reviewPeriod: string;
+  reviewYear: number;
+  scoredAt: string;
+  scoredBy: string;
+}
+
+export interface PenalizedManagerKpi {
+  kpiId: string;
+  auditLogId: string;
+  managerId: string;
+  managerName: string;
+  managerCode: string;
+  departmentName: string;
+  kpiName: string;
+  kraName: string;
+  reviewPeriod: string;
+  reviewYear: number;
+  oldStatus: string;
+  scoredAt: string;
+  scoredBy: string;
+}
+
+export function useAutoScoredKpis(filterMonth?: string, filterYear?: number) {
+  return useQuery({
+    queryKey: ['auto-scored-kpis-rollback', filterMonth, filterYear],
+    queryFn: async () => {
+      // Get audit logs for system auto-scored
+      const { data: logs, error: logErr } = await supabase
+        .from('kpi_audit_logs')
+        .select('id, kpi_id, performed_by, created_at, old_value, new_value, metadata')
+        .eq('action', 'SYSTEM_AUTO_SCORED');
+      if (logErr) throw logErr;
+      if (!logs || logs.length === 0) return [];
+
+      // Filter by source
+      const validLogs = logs.filter(l => {
+        const meta = l.metadata as any;
+        return meta?.source === 'pending_reviews_admin';
+      });
+      if (validLogs.length === 0) return [];
+
+      const kpiIds = validLogs.map(l => l.kpi_id);
+
+      // Get KPIs that are still at approved (rollbackable)
+      let kpiQuery = supabase
+        .from('kpis')
+        .select(`
+          id, employee_id, kpi_name, kra_name, review_period, review_year, status,
+          profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, departments ( name ) )
+        `)
+        .in('id', kpiIds)
+        .eq('status', 'approved');
+
+      if (filterMonth) kpiQuery = kpiQuery.eq('review_period', filterMonth);
+      if (filterYear) kpiQuery = kpiQuery.eq('review_year', filterYear);
+
+      const { data: kpis, error: kErr } = await kpiQuery;
+      if (kErr) throw kErr;
+
+      const kpiMap = new Map((kpis || []).map(k => [k.id, k]));
+
+      // Fetch admin names
+      const adminIds = [...new Set(validLogs.map(l => l.performed_by))];
+      let adminMap: Record<string, string> = {};
+      if (adminIds.length > 0) {
+        const { data: admins } = await supabase.from('profiles').select('id, full_name').in('id', adminIds);
+        for (const a of admins || []) adminMap[a.id] = a.full_name || 'Unknown';
+      }
+
+      const results: AutoScoredKpi[] = [];
+      for (const log of validLogs) {
+        const kpi = kpiMap.get(log.kpi_id);
+        if (!kpi) continue;
+        const profile = kpi.profiles as any;
+        results.push({
+          kpiId: kpi.id,
+          auditLogId: log.id,
+          employeeId: kpi.employee_id,
+          employeeName: profile?.full_name || 'Unknown',
+          employeeCode: profile?.employee_code || '',
+          departmentName: profile?.departments?.name || '',
+          kpiName: kpi.kpi_name,
+          kraName: kpi.kra_name,
+          reviewPeriod: kpi.review_period || '',
+          reviewYear: kpi.review_year || 0,
+          scoredAt: log.created_at,
+          scoredBy: adminMap[log.performed_by] || 'System',
+        });
+      }
+
+      return results;
+    },
+  });
+}
+
+export function usePenalizedManagerKpis(filterMonth?: string, filterYear?: number) {
+  return useQuery({
+    queryKey: ['penalized-manager-kpis-rollback', filterMonth, filterYear],
+    queryFn: async () => {
+      const { data: logs, error: logErr } = await supabase
+        .from('kpi_audit_logs')
+        .select('id, kpi_id, performed_by, created_at, old_value, new_value, metadata')
+        .eq('action', 'MANAGER_PENALTY_SCORED');
+      if (logErr) throw logErr;
+      if (!logs || logs.length === 0) return [];
+
+      const validLogs = logs.filter(l => {
+        const meta = l.metadata as any;
+        return meta?.source === 'pending_reviews_admin';
+      });
+      if (validLogs.length === 0) return [];
+
+      const kpiIds = validLogs.map(l => l.kpi_id);
+
+      let kpiQuery = supabase
+        .from('kpis')
+        .select(`
+          id, employee_id, kpi_name, kra_name, review_period, review_year, status,
+          profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, departments ( name ) )
+        `)
+        .in('id', kpiIds)
+        .eq('status', 'approved');
+
+      if (filterMonth) kpiQuery = kpiQuery.eq('review_period', filterMonth);
+      if (filterYear) kpiQuery = kpiQuery.eq('review_year', filterYear);
+
+      const { data: kpis, error: kErr } = await kpiQuery;
+      if (kErr) throw kErr;
+
+      const kpiMap = new Map((kpis || []).map(k => [k.id, k]));
+
+      const adminIds = [...new Set(validLogs.map(l => l.performed_by))];
+      let adminMap: Record<string, string> = {};
+      if (adminIds.length > 0) {
+        const { data: admins } = await supabase.from('profiles').select('id, full_name').in('id', adminIds);
+        for (const a of admins || []) adminMap[a.id] = a.full_name || 'Unknown';
+      }
+
+      const results: PenalizedManagerKpi[] = [];
+      for (const log of validLogs) {
+        const kpi = kpiMap.get(log.kpi_id);
+        if (!kpi) continue;
+        const profile = kpi.profiles as any;
+        const oldVal = log.old_value as any;
+        results.push({
+          kpiId: kpi.id,
+          auditLogId: log.id,
+          managerId: kpi.employee_id,
+          managerName: profile?.full_name || 'Unknown',
+          managerCode: profile?.employee_code || '',
+          departmentName: profile?.departments?.name || '',
+          kpiName: kpi.kpi_name,
+          kraName: kpi.kra_name,
+          reviewPeriod: kpi.review_period || '',
+          reviewYear: kpi.review_year || 0,
+          oldStatus: oldVal?.status || 'kra_set',
+          scoredAt: log.created_at,
+          scoredBy: adminMap[log.performed_by] || 'System',
+        });
+      }
+
+      return results;
+    },
+  });
+}
+
+export function useRollbackAutoScore() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ kpiIds, adminId }: { kpiIds: string[]; adminId: string }) => {
+      let rolled = 0;
+      for (const kpiId of kpiIds) {
+        try {
+          // Revert KPI status to kra_set
+          await supabase
+            .from('kpis')
+            .update({ status: 'kra_set' })
+            .eq('id', kpiId);
+
+          // Clear submission scores
+          const { data: sub } = await supabase
+            .from('review_submissions')
+            .select('id')
+            .eq('kpi_id', kpiId)
+            .maybeSingle();
+
+          if (sub) {
+            await supabase
+              .from('review_submissions')
+              .update({
+                achieved_value: null,
+                self_score: null,
+                self_rating: null,
+                self_remarks: null,
+                final_score: null,
+                final_rating: null,
+                auto_advance_reason: null,
+                kpi_status: 'open',
+              })
+              .eq('id', sub.id);
+          }
+
+          // Audit log
+          await supabase.from('kpi_audit_logs').insert({
+            kpi_id: kpiId,
+            performed_by: adminId,
+            action: 'SYSTEM_AUTO_SCORE_ROLLBACK',
+            old_value: { status: 'approved' },
+            new_value: { status: 'kra_set' },
+            metadata: { source: 'pending_reviews_admin' },
+          });
+
+          rolled++;
+        } catch (e) {
+          console.error(`Failed to rollback auto-score for ${kpiId}:`, e);
+        }
+      }
+      return rolled;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ['auto-scored-kpis-rollback'] });
+      queryClient.invalidateQueries({ queryKey: ['overdue-kra-set-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      toast({ title: 'Rollback Complete', description: `${count} auto-scored KPI(s) reverted to KRA Set.` });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+export function useRollbackManagerPenalty() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ items, adminId }: { items: PenalizedManagerKpi[]; adminId: string }) => {
+      let rolled = 0;
+      for (const item of items) {
+        try {
+          // Revert to old status
+          const targetStatus = item.oldStatus || 'kra_set';
+          await supabase
+            .from('kpis')
+            .update({ status: targetStatus as any })
+            .eq('id', item.kpiId);
+
+          // Clear submission
+          const { data: sub } = await supabase
+            .from('review_submissions')
+            .select('id')
+            .eq('kpi_id', item.kpiId)
+            .maybeSingle();
+
+          if (sub) {
+            await supabase
+              .from('review_submissions')
+              .update({
+                achieved_value: null,
+                self_score: null,
+                self_rating: null,
+                self_remarks: null,
+                final_score: null,
+                final_rating: null,
+                auto_advance_reason: null,
+                kpi_status: 'open',
+              })
+              .eq('id', sub.id);
+          }
+
+          await supabase.from('kpi_audit_logs').insert({
+            kpi_id: item.kpiId,
+            performed_by: adminId,
+            action: 'MANAGER_PENALTY_ROLLBACK',
+            old_value: { status: 'approved' },
+            new_value: { status: targetStatus },
+            metadata: { source: 'pending_reviews_admin' },
+          });
+
+          rolled++;
+        } catch (e) {
+          console.error(`Failed to rollback penalty for ${item.kpiId}:`, e);
+        }
+      }
+      return rolled;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ['penalized-manager-kpis-rollback'] });
+      queryClient.invalidateQueries({ queryKey: ['overdue-team-review-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      toast({ title: 'Rollback Complete', description: `${count} manager penalty KPI(s) reverted.` });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+}
