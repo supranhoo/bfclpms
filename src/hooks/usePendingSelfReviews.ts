@@ -80,6 +80,9 @@ export function useOverdueKraSetKpis(deadlineDay: number, filterMonth?: string, 
         .eq('is_org_level', false)
         .in('frequency', ELIGIBLE_FREQUENCIES);
 
+      if (filterMonth) query = query.eq('review_period', filterMonth);
+      if (filterYear) query = query.eq('review_year', filterYear);
+
       if (error) throw error;
 
       const now = new Date();
