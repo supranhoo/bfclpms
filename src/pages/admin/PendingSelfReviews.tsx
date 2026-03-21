@@ -68,6 +68,7 @@ export default function PendingSelfReviews() {
   const { data: sentBackKpis = [], isLoading: sentBackLoading } = useSentBackKpisTab(selectedMonth, selectedYear);
   const { data: autoScoredKpis = [], isLoading: autoScoredLoading } = useAutoScoredKpis(selectedMonth, selectedYear);
   const { data: penalizedKpis = [], isLoading: penalizedLoading } = usePenalizedManagerKpis(selectedMonth, selectedYear);
+  const { data: overdueSkipLevel = [], isLoading: skipLevelLoading } = useOverdueSkipLevelKpis(deadlineDay, selectedMonth, selectedYear);
 
   const updateSetting = useUpdateSystemSetting();
   const bulkAutoScore = useBulkAutoScore();
