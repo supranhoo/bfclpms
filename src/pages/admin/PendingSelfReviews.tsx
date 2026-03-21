@@ -9,10 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Settings, AlertTriangle, Users, Undo2, Mail } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2, Settings, AlertTriangle, Users, Undo2, Mail, RotateCcw } from 'lucide-react';
 import { EffectiveMonthSelector } from '@/components/admin/EffectiveMonthSelector';
 import { useAuth } from '@/contexts/AuthContext';
-import { useUpdateSystemSetting } from '@/hooks/useSystemSettings';
+import { useUpdateSystemSetting, useSystemSetting } from '@/hooks/useSystemSettings';
 import {
   usePendingReviewSettings,
   useOverdueKraSetKpis,
@@ -21,10 +22,21 @@ import {
   useBulkManagerPenalty,
   useSentBackKpisTab,
   useSendReminder,
+  useAutoScoredKpis,
+  usePenalizedManagerKpis,
+  useRollbackAutoScore,
+  useRollbackManagerPenalty,
   OverdueKpi,
   SentBackKpi,
+  AutoScoredKpi,
+  PenalizedManagerKpi,
 } from '@/hooks/usePendingSelfReviews';
 import { useToast } from '@/hooks/use-toast';
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
 
 export default function PendingSelfReviews() {
   const { user } = useAuth();
@@ -40,24 +52,46 @@ export default function PendingSelfReviews() {
   const [editMgrRemark, setEditMgrRemark] = useState<string>('');
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Effective from month setting
+  const { data: effectiveFromSetting } = useSystemSetting('pending_review_effective_from_month');
+  const effectiveFrom = effectiveFromSetting?.setting_value
+    ? (typeof effectiveFromSetting.setting_value === 'string'
+      ? JSON.parse(effectiveFromSetting.setting_value)
+      : effectiveFromSetting.setting_value) as { month: string; year: number }
+    : null;
+  const [editEffMonth, setEditEffMonth] = useState<string>('');
+  const [editEffYear, setEditEffYear] = useState<string>('');
+
   const { data: overdueKraSet = [], isLoading: kraSetLoading } = useOverdueKraSetKpis(deadlineDay, selectedMonth, selectedYear);
   const { data: overdueTeamReview = [], isLoading: teamReviewLoading } = useOverdueTeamReviewKpis(deadlineDay, selectedMonth, selectedYear);
   const { data: sentBackKpis = [], isLoading: sentBackLoading } = useSentBackKpisTab(selectedMonth, selectedYear);
+  const { data: autoScoredKpis = [], isLoading: autoScoredLoading } = useAutoScoredKpis(selectedMonth, selectedYear);
+  const { data: penalizedKpis = [], isLoading: penalizedLoading } = usePenalizedManagerKpis(selectedMonth, selectedYear);
 
   const updateSetting = useUpdateSystemSetting();
   const bulkAutoScore = useBulkAutoScore();
   const bulkManagerPenalty = useBulkManagerPenalty();
   const sendReminder = useSendReminder();
+  const rollbackAutoScore = useRollbackAutoScore();
+  const rollbackManagerPenalty = useRollbackManagerPenalty();
 
   const [selectedKraSet, setSelectedKraSet] = useState<Set<string>>(new Set());
   const [selectedTeamReview, setSelectedTeamReview] = useState<Set<string>>(new Set());
   const [selectedSentBack, setSelectedSentBack] = useState<Set<string>>(new Set());
+  const [selectedAutoScored, setSelectedAutoScored] = useState<Set<string>>(new Set());
+  const [selectedPenalized, setSelectedPenalized] = useState<Set<string>>(new Set());
 
   const handleSaveSettings = async () => {
     try {
       if (editDay) await updateSetting.mutateAsync({ key: 'pending_review_deadline_day', value: editDay });
       if (editEmpRemark) await updateSetting.mutateAsync({ key: 'pending_review_auto_remark', value: editEmpRemark });
       if (editMgrRemark) await updateSetting.mutateAsync({ key: 'manager_penalty_auto_remark', value: editMgrRemark });
+      if (editEffMonth && editEffYear) {
+        await updateSetting.mutateAsync({
+          key: 'pending_review_effective_from_month',
+          value: JSON.stringify({ month: editEffMonth, year: parseInt(editEffYear) }),
+        });
+      }
       toast({ title: 'Settings Saved' });
       setSettingsOpen(false);
     } catch (e: any) {
@@ -106,13 +140,38 @@ export default function PendingSelfReviews() {
     setSelectedSentBack(new Set());
   };
 
+  const handleRollbackAutoScoreSelected = () => {
+    if (!user?.id || selectedAutoScored.size === 0) return;
+    rollbackAutoScore.mutate({ kpiIds: [...selectedAutoScored], adminId: user.id });
+    setSelectedAutoScored(new Set());
+  };
+
+  const handleRollbackAutoScoreAll = () => {
+    if (!user?.id || autoScoredKpis.length === 0) return;
+    rollbackAutoScore.mutate({ kpiIds: autoScoredKpis.map(k => k.kpiId), adminId: user.id });
+    setSelectedAutoScored(new Set());
+  };
+
+  const handleRollbackPenaltySelected = () => {
+    if (!user?.id || selectedPenalized.size === 0) return;
+    const items = penalizedKpis.filter(k => selectedPenalized.has(k.kpiId));
+    rollbackManagerPenalty.mutate({ items, adminId: user.id });
+    setSelectedPenalized(new Set());
+  };
+
+  const handleRollbackPenaltyAll = () => {
+    if (!user?.id || penalizedKpis.length === 0) return;
+    rollbackManagerPenalty.mutate({ items: penalizedKpis, adminId: user.id });
+    setSelectedPenalized(new Set());
+  };
+
   const toggleSelection = (set: Set<string>, setFn: (s: Set<string>) => void, id: string) => {
     const next = new Set(set);
     next.has(id) ? next.delete(id) : next.add(id);
     setFn(next);
   };
 
-  const toggleAll = (items: OverdueKpi[], set: Set<string>, setFn: (s: Set<string>) => void) => {
+  const toggleAll = (items: Array<{ kpiId: string }>, set: Set<string>, setFn: (s: Set<string>) => void) => {
     if (set.size === items.length) {
       setFn(new Set());
     } else {
@@ -139,6 +198,8 @@ export default function PendingSelfReviews() {
             setEditDay(String(deadlineDay));
             setEditEmpRemark(employeeRemark);
             setEditMgrRemark(managerRemark);
+            setEditEffMonth(effectiveFrom?.month || '');
+            setEditEffYear(effectiveFrom?.year ? String(effectiveFrom.year) : '');
           }
           setSettingsOpen(!settingsOpen);
         }}>
@@ -146,11 +207,14 @@ export default function PendingSelfReviews() {
             <Settings className="h-4 w-4" />
             Settings
             <Badge variant="outline" className="ml-2">Deadline: {deadlineDay}th</Badge>
+            {effectiveFrom && (
+              <Badge variant="outline" className="ml-1">Effective From: {effectiveFrom.month} {effectiveFrom.year}</Badge>
+            )}
           </CardTitle>
         </CardHeader>
         {settingsOpen && (
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="space-y-1.5">
                 <Label>Deadline Day (of following month)</Label>
                 <Input type="number" min={1} max={28} value={editDay} onChange={e => setEditDay(e.target.value)} />
@@ -162,6 +226,31 @@ export default function PendingSelfReviews() {
               <div className="space-y-1.5">
                 <Label>Manager Penalty Remark</Label>
                 <Input value={editMgrRemark} onChange={e => setEditMgrRemark(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Effective From Month</Label>
+                <div className="flex gap-2">
+                  <Select value={editEffMonth} onValueChange={setEditEffMonth}>
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="Month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTHS.map(m => (
+                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={editEffYear} onValueChange={setEditEffYear}>
+                    <SelectTrigger className="w-[90px] h-8">
+                      <SelectValue placeholder="Year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(y => (
+                        <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
             <Button size="sm" onClick={handleSaveSettings} disabled={updateSetting.isPending}>
@@ -182,7 +271,7 @@ export default function PendingSelfReviews() {
 
       {/* Tabs */}
       <Tabs defaultValue="self-review">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="self-review" className="gap-1.5">
             <AlertTriangle className="h-3.5 w-3.5" />
             Pending Self-Review ({overdueKraSet.length})
@@ -194,6 +283,10 @@ export default function PendingSelfReviews() {
           <TabsTrigger value="sent-back" className="gap-1.5">
             <Undo2 className="h-3.5 w-3.5" />
             Sent Back KPIs ({sentBackKpis.length})
+          </TabsTrigger>
+          <TabsTrigger value="rollback" className="gap-1.5">
+            <RotateCcw className="h-3.5 w-3.5" />
+            Rollback ({autoScoredKpis.length + penalizedKpis.length})
           </TabsTrigger>
         </TabsList>
 
@@ -362,13 +455,7 @@ export default function PendingSelfReviews() {
                         <TableHead className="w-10">
                           <Checkbox
                             checked={selectedSentBack.size === sentBackKpis.length && sentBackKpis.length > 0}
-                            onCheckedChange={() => {
-                              if (selectedSentBack.size === sentBackKpis.length) {
-                                setSelectedSentBack(new Set());
-                              } else {
-                                setSelectedSentBack(new Set(sentBackKpis.map(i => i.kpiId)));
-                              }
-                            }}
+                            onCheckedChange={() => toggleAll(sentBackKpis, selectedSentBack, setSelectedSentBack)}
                           />
                         </TableHead>
                         <TableHead>Employee</TableHead>
@@ -398,6 +485,153 @@ export default function PendingSelfReviews() {
                           <TableCell>{item.sentBackBy}</TableCell>
                           <TableCell className="max-w-[200px] truncate">{item.reason}</TableCell>
                           <TableCell>{format(new Date(item.sentBackDate), 'dd MMM yyyy')}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 4: Rollback */}
+        <TabsContent value="rollback" className="space-y-6">
+          {/* Auto-Scored Rollback */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <RotateCcw className="h-4 w-4" />
+                Auto-Scored KPIs ({autoScoredKpis.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2 flex-wrap">
+                <Button size="sm" variant="outline" onClick={handleRollbackAutoScoreSelected} disabled={selectedAutoScored.size === 0 || rollbackAutoScore.isPending}>
+                  {rollbackAutoScore.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                  Rollback Selected ({selectedAutoScored.size})
+                </Button>
+                <Button size="sm" variant="destructive" onClick={handleRollbackAutoScoreAll} disabled={autoScoredKpis.length === 0 || rollbackAutoScore.isPending}>
+                  Rollback All ({autoScoredKpis.length})
+                </Button>
+              </div>
+
+              {autoScoredLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              ) : autoScoredKpis.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4">No auto-scored KPIs available for rollback.</p>
+              ) : (
+                <div className="rounded-md border overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10">
+                          <Checkbox
+                            checked={selectedAutoScored.size === autoScoredKpis.length && autoScoredKpis.length > 0}
+                            onCheckedChange={() => toggleAll(autoScoredKpis, selectedAutoScored, setSelectedAutoScored)}
+                          />
+                        </TableHead>
+                        <TableHead>Employee</TableHead>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Department</TableHead>
+                        <TableHead>KPI</TableHead>
+                        <TableHead>KRA</TableHead>
+                        <TableHead>Period</TableHead>
+                        <TableHead>Scored At</TableHead>
+                        <TableHead>Scored By</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {autoScoredKpis.map(item => (
+                        <TableRow key={item.kpiId}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedAutoScored.has(item.kpiId)}
+                              onCheckedChange={() => toggleSelection(selectedAutoScored, setSelectedAutoScored, item.kpiId)}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">{item.employeeName}</TableCell>
+                          <TableCell>{item.employeeCode}</TableCell>
+                          <TableCell>{item.departmentName}</TableCell>
+                          <TableCell>{item.kpiName}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{item.kraName}</TableCell>
+                          <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
+                          <TableCell>{format(new Date(item.scoredAt), 'dd MMM yyyy HH:mm')}</TableCell>
+                          <TableCell>{item.scoredBy}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Manager Penalty Rollback */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <RotateCcw className="h-4 w-4" />
+                Manager Penalty KPIs ({penalizedKpis.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2 flex-wrap">
+                <Button size="sm" variant="outline" onClick={handleRollbackPenaltySelected} disabled={selectedPenalized.size === 0 || rollbackManagerPenalty.isPending}>
+                  {rollbackManagerPenalty.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                  Rollback Selected ({selectedPenalized.size})
+                </Button>
+                <Button size="sm" variant="destructive" onClick={handleRollbackPenaltyAll} disabled={penalizedKpis.length === 0 || rollbackManagerPenalty.isPending}>
+                  Rollback All ({penalizedKpis.length})
+                </Button>
+              </div>
+
+              {penalizedLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              ) : penalizedKpis.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4">No penalized manager KPIs available for rollback.</p>
+              ) : (
+                <div className="rounded-md border overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10">
+                          <Checkbox
+                            checked={selectedPenalized.size === penalizedKpis.length && penalizedKpis.length > 0}
+                            onCheckedChange={() => toggleAll(penalizedKpis, selectedPenalized, setSelectedPenalized)}
+                          />
+                        </TableHead>
+                        <TableHead>Manager</TableHead>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Department</TableHead>
+                        <TableHead>KPI</TableHead>
+                        <TableHead>KRA</TableHead>
+                        <TableHead>Period</TableHead>
+                        <TableHead>Previous Status</TableHead>
+                        <TableHead>Scored At</TableHead>
+                        <TableHead>Scored By</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {penalizedKpis.map(item => (
+                        <TableRow key={item.kpiId}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedPenalized.has(item.kpiId)}
+                              onCheckedChange={() => toggleSelection(selectedPenalized, setSelectedPenalized, item.kpiId)}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">{item.managerName}</TableCell>
+                          <TableCell>{item.managerCode}</TableCell>
+                          <TableCell>{item.departmentName}</TableCell>
+                          <TableCell>{item.kpiName}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{item.kraName}</TableCell>
+                          <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{item.oldStatus.replace(/_/g, ' ')}</Badge>
+                          </TableCell>
+                          <TableCell>{format(new Date(item.scoredAt), 'dd MMM yyyy HH:mm')}</TableCell>
+                          <TableCell>{item.scoredBy}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
