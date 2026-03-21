@@ -434,6 +434,56 @@ export default function PendingSelfReviews() {
           </Card>
         </TabsContent>
 
+        {/* Tab: Pending Skip-Level Review */}
+        <TabsContent value="skip-level">
+          <Card>
+            <CardContent className="pt-4 space-y-4">
+              {skipLevelLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              ) : overdueSkipLevel.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4">No pending skip-level review KPIs found.</p>
+              ) : (
+                <div className="rounded-md border overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Employee</TableHead>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Department</TableHead>
+                        <TableHead>KPI</TableHead>
+                        <TableHead>KRA</TableHead>
+                        <TableHead>Manager</TableHead>
+                        <TableHead>Skip-Level Manager</TableHead>
+                        <TableHead>Period</TableHead>
+                        <TableHead>Days Overdue</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {overdueSkipLevel.map(item => (
+                        <TableRow key={item.kpiId}>
+                          <TableCell className="font-medium">{item.employeeName}</TableCell>
+                          <TableCell>{item.employeeCode}</TableCell>
+                          <TableCell>{item.departmentName}</TableCell>
+                          <TableCell>{item.kpiName}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{item.kraName}</TableCell>
+                          <TableCell>{item.reportingManagerName || '—'}</TableCell>
+                          <TableCell>{item.skipLevelManagerName || '—'}</TableCell>
+                          <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
+                          <TableCell>
+                            <Badge variant={item.daysOverdue > 15 ? 'destructive' : 'secondary'}>
+                              {item.daysOverdue} days
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Tab 3: Sent Back KPIs */}
         <TabsContent value="sent-back">
           <Card>
