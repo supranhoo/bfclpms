@@ -512,10 +512,15 @@ export function EmployeeSelectorGrid({
       let pending = 0, inAudit = 0, forwarded = 0;
       relevantKpis.forEach(k => {
         const stages = getStages(k.employee_id);
-        const reviewable = resolveReviewableStatuses('auditor', stages);
-        if (reviewable.includes(k.status || '') && k.status !== 'audit') pending++;
-        else if (k.status === 'audit') inAudit++;
+        const auditIdx = stages.indexOf('audit');
+        if (auditIdx === -1) return;
+        if (k.status === 'audit') inAudit++;
         else if (['management_review', 'approved'].includes(k.status || '')) forwarded++;
+        else {
+          // Count all KPIs in stages before 'audit' (excluding kra_set) as pending
+          const beforeAudit = stages.slice(0, auditIdx);
+          if (beforeAudit.includes(k.status || '') && k.status !== 'kra_set') pending++;
+        }
       });
       return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'skip_level') {
@@ -534,14 +539,16 @@ export function EmployeeSelectorGrid({
       let pending = 0, inReview = 0, forwarded = 0;
       relevantKpis.forEach(k => {
         const stages = getStages(k.employee_id);
-        const reviewable = resolveReviewableStatuses('hr_pms', stages);
-        if (reviewable.includes(k.status || '') && k.status !== 'hr_pms_review') pending++;
-        else if (k.status === 'hr_pms_review') inReview++;
+        const hrIdx = stages.indexOf('hr_pms_review');
+        if (hrIdx === -1) return;
+        if (k.status === 'hr_pms_review') inReview++;
         else {
-          const hrIdx = stages.indexOf('hr_pms_review');
-          if (hrIdx >= 0) {
-            const afterHr = stages.slice(hrIdx + 1);
-            if (afterHr.includes(k.status || '')) forwarded++;
+          const afterHr = stages.slice(hrIdx + 1);
+          if (afterHr.includes(k.status || '')) forwarded++;
+          else {
+            // Count all KPIs in stages before 'hr_pms_review' (excluding kra_set) as pending
+            const beforeHr = stages.slice(0, hrIdx);
+            if (beforeHr.includes(k.status || '') && k.status !== 'kra_set') pending++;
           }
         }
       });
@@ -636,7 +643,7 @@ export function EmployeeSelectorGrid({
       return (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-          <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="amber" subtitle="Awaiting HR PMS review" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
+          <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="amber" subtitle="In pipeline for HR PMS" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
           <StatCard icon={FileCheck} label="In Review" value={stats.stat2} color="purple" subtitle="Currently in HR PMS" onClick={() => toggleStatusFilter('in_review')} active={statusFilter === 'in_review'} />
           <StatCard icon={CheckCircle2} label="Reviewed" value={stats.stat3} color="green" subtitle="HR PMS completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} />
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
@@ -646,7 +653,7 @@ export function EmployeeSelectorGrid({
       return (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-          <StatCard icon={Clock} label="Pending Audit" value={stats.stat1} color="amber" subtitle="KPIs awaiting audit" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
+          <StatCard icon={Clock} label="Pending Audit" value={stats.stat1} color="amber" subtitle="In pipeline for audit" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
           <StatCard icon={FileCheck} label="In Audit" value={stats.stat2} color="purple" subtitle="Currently reviewing" onClick={() => toggleStatusFilter('in_audit')} active={statusFilter === 'in_audit'} />
           <StatCard icon={CheckCircle2} label="Forwarded" value={stats.stat3} color="green" subtitle="Sent for management" onClick={() => toggleStatusFilter('forwarded')} active={statusFilter === 'forwarded'} />
           <StatCard icon={Target} label="My KPIs" value={myKpiLevelData?.totalAssignedKpis || 0} color="blue" subtitle="KPIs assigned to you" onClick={() => toggleStatusFilter('my_assigned')} active={statusFilter === 'my_assigned'} />
