@@ -512,6 +512,7 @@ export function EmployeeSelectorGrid({
         stat2: skipPending,
         stat3: reviewed,
         stat4: relevantKpis.length,
+        stat5: 0,
         totalKpis: relevantKpis.length,
       };
     } else if (viewLevel === 'audit') {
