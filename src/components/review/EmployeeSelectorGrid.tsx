@@ -480,15 +480,15 @@ export function EmployeeSelectorGrid({
             }
           }
         } else if (viewLevel === 'pending_self_review') {
-          if (statusFilter === 'pending' && kpi.status === 'self_review') {
+          if (statusFilter === 'pending' && kpi.status === 'kra_set') {
             employeeIds.add(kpi.employee_id);
           }
         } else if (viewLevel === 'pending_manager_review') {
-          if (statusFilter === 'pending' && kpi.status === 'manager_check') {
+          if (statusFilter === 'pending' && kpi.status === 'self_review') {
             employeeIds.add(kpi.employee_id);
           }
         } else if (viewLevel === 'pending_skip_review') {
-          if (statusFilter === 'pending' && kpi.status === 'skip_level_check') {
+          if (statusFilter === 'pending' && kpi.status === 'manager_check') {
             employeeIds.add(kpi.employee_id);
           }
         } else if (viewLevel === 'management') {
