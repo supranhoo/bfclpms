@@ -1,34 +1,36 @@
 
 
-## Add Month-Year Filter to Pending Self-Reviews Page
+## Updated Plan: Preserve Existing Remarks on Manager Penalty KPI
 
-### What
-Add a month/year selector to the Pending Self-Reviews admin page so the admin can filter overdue KPIs by a specific review period instead of seeing all overdue KPIs across all months.
+### Change
+When penalizing a manager's "Implementation of common - policies / systems / processes" KPI, if a `review_submission` already exists with a non-empty `self_remarks`, the system-generated remark should be **appended** to the existing remark rather than overwriting it.
 
-### Changes
+### Implementation
 
-**Modified: `src/pages/admin/PendingSelfReviews.tsx`**
-- Import `EffectiveMonthSelector` (already exists at `src/components/admin/EffectiveMonthSelector.tsx`)
-- Add `selectedMonth` and `selectedYear` state (defaulting to previous month and its year)
-- Place the selector between the Settings card and the Tabs
-- Pass `selectedMonth` and `selectedYear` to both hooks so data is filtered client-side
+**Modified: `src/hooks/usePendingSelfReviews.ts`** — in `useBulkManagerPenalty` mutation:
 
-**Modified: `src/hooks/usePendingSelfReviews.ts`**
-- Add optional `filterMonth` and `filterYear` parameters to `useOverdueKraSetKpis` and `useOverdueTeamReviewKpis`
-- Add `.eq('review_period', filterMonth).eq('review_year', filterYear)` to the Supabase queries when provided, reducing data fetched
-- Include filter values in query keys for proper cache invalidation
+Current code (line ~377-395) fetches existing submission but only checks for `id`. Change to also fetch `self_remarks`:
 
-### UI Layout
-```text
-┌─ Pending Reviews ──────────────────────────────┐
-│ ⚙ Settings [...]                               │
-│                                                 │
-│ 📅 Effective Month: [February ▼]  Year: [2026 ▼]│
-│                                                 │
-│ Tab 1: Pending Self-Review (3)                  │
-│ Tab 2: Pending Manager Review (5)               │
-└─────────────────────────────────────────────────┘
+```typescript
+const { data: existing } = await supabase
+  .from('review_submissions')
+  .select('id, self_remarks')
+  .eq('kpi_id', mgrKpi.id)
+  .maybeSingle();
 ```
 
-### No database changes needed
+Then when updating, append the system remark:
+
+```typescript
+if (existing) {
+  const combinedRemark = existing.self_remarks
+    ? `${existing.self_remarks}\n[System] ${remark}`
+    : remark;
+  // use combinedRemark instead of remark in the update
+}
+```
+
+For new inserts (no existing submission), just use the system remark as-is.
+
+### No other files changed
 
