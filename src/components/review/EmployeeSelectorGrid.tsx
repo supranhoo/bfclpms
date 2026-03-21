@@ -358,11 +358,17 @@ export function EmployeeSelectorGrid({
       };
     } else if (viewLevel === 'pending_self_review') {
       const pendingKpis = empKpis.filter(k => k.status === 'kra_set');
+      const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
+      const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length;
+      const regularCount = pendingKpis.filter(k =>
+        !k.is_org_level &&
+        (!k.frequency || ['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase()))
+      ).length;
       return {
-        badge1: pendingKpis.length,
+        badge1: regularCount,
         badge2: 0, badge3: 0, total: empKpis.length, clearedKraSet,
-        orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
-        nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
+        orgKpiCount,
+        nonMonthlyCount,
       };
     } else if (viewLevel === 'pending_manager_review') {
       return {
