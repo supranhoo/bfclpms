@@ -653,7 +653,7 @@ export function EmployeeSelectorGrid({
       return (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-          <StatCard icon={Clock} label="Pending Audit" value={stats.stat1} color="amber" subtitle="KPIs awaiting audit" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
+          <StatCard icon={Clock} label="Pending Audit" value={stats.stat1} color="amber" subtitle="In pipeline for audit" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
           <StatCard icon={FileCheck} label="In Audit" value={stats.stat2} color="purple" subtitle="Currently reviewing" onClick={() => toggleStatusFilter('in_audit')} active={statusFilter === 'in_audit'} />
           <StatCard icon={CheckCircle2} label="Forwarded" value={stats.stat3} color="green" subtitle="Sent for management" onClick={() => toggleStatusFilter('forwarded')} active={statusFilter === 'forwarded'} />
           <StatCard icon={Target} label="My KPIs" value={myKpiLevelData?.totalAssignedKpis || 0} color="blue" subtitle="KPIs assigned to you" onClick={() => toggleStatusFilter('my_assigned')} active={statusFilter === 'my_assigned'} />
