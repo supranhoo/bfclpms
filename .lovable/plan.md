@@ -1,32 +1,38 @@
 
 
-## Roll Back Reconciled February KPIs to Audit Stage
+## Show Reporting Manager's KPI Score in View KPI Details
 
-### Scope
-- **18 KPIs** for **1 employee** (Y R V S Murthy, 200493) — February 2026 only
-- January KPIs are left untouched
+### What
+Add a small info card near the "Review Journey" section showing the reporting manager's rating and achieved value for the **same KPI**, but only when:
+1. The employee has a reporting manager
+2. The manager has the same KPI (matched by `kpi_name`, `review_period`, `review_year`)
+3. The manager's KPI status is `approved`
 
-### What Happened
-On March 13, the Workflow Reconciliation tool auto-advanced these 18 KPIs from `audit` → `approved`, setting `final_score` from the skip-level fallback. The employee's workflow still includes the `audit` stage, so these need to go back.
+### UI Design
+A compact card placed **above** the Review Journey section, styled as an info banner:
+```text
+┌─────────────────────────────────────────────────┐
+│ 👤 Manager's Score (Satyendra Kumar Singh)      │
+│   Value: 100    Rating: 5 - Outstanding         │
+└─────────────────────────────────────────────────┘
+```
+- Uses existing `RatingBadge` for the rating display
+- Muted background, subtle border — not attention-grabbing, just informational
+- Hidden entirely when conditions aren't met
 
-### Correction Steps
+### Changes
 
-**Database updates (via insert/update tool):**
+**New hook: `src/hooks/useManagerKpiScore.ts`**
+- Accepts `kpi` object (needs `employee_id`, `kpi_name`, `review_period`, `review_year`)
+- Step 1: Fetch reporting manager ID from `profiles` table
+- Step 2: Query `kpis` table for manager's matching KPI where `status = 'approved'`, matched on `kpi_name`, `review_period`, `review_year` (no `kra_name` matching)
+- Step 3: Fetch `review_submissions` for that KPI to get `final_score`, `achieved_value`
+- Returns: `{ managerName, finalScore, achievedValue, isLoading }`
 
-1. **`kpis` table** — For the 18 affected KPI IDs:
-   - Set `status` = `'audit'`
-   - Clear `final_score` = NULL, `final_rating` = NULL
+**New component: `src/components/review/ManagerKpiBenchmark.tsx`**
+- Takes the hook's output, renders the info card with `RatingBadge`
+- Returns `null` when no matching manager KPI exists
 
-2. **`review_submissions` table** — For matching submissions:
-   - Set `kpi_status` = `'audit_review'` (the enum value for audit stage in submissions)
-   - Clear `final_score` = NULL, `final_rating` = NULL
-
-3. **`kpi_audit_logs`** — Insert a log entry for each KPI:
-   - `action` = `'RECONCILIATION_REVERSED'`
-   - `old_value` = `{"status": "approved"}`
-   - `new_value` = `{"status": "audit"}`
-   - `performed_by` = admin user ID
-
-### Files Changed
-None — this is a data-only correction using the database update tool.
+**Modified: `src/components/review/KpiReviewPanel.tsx`**
+- Import and render `ManagerKpiBenchmark` above `KpiJourneySection` in the right column
 
