@@ -255,7 +255,12 @@ export function useBulkAutoScore() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ kpiIds, remark, adminId }: { kpiIds: string[]; remark: string; adminId: string }) => {
+    mutationFn: async ({ kpiIds, remark, adminId, kpiDetails }: {
+      kpiIds: string[];
+      remark: string;
+      adminId: string;
+      kpiDetails?: Array<{ kpiId: string; kpiName: string; employeeId: string; reviewPeriod: string; reviewYear: number }>;
+    }) => {
       let scored = 0;
       for (const kpiId of kpiIds) {
         try {
@@ -317,6 +322,14 @@ export function useBulkAutoScore() {
           console.error(`Failed to auto-score KPI ${kpiId}:`, e);
         }
       }
+
+      // Send consolidated emails (fire-and-forget)
+      if (kpiDetails && kpiDetails.length > 0) {
+        sendConsolidatedAutoScoreEmails(kpiDetails, 'delayed self review').catch(err =>
+          console.error('Failed to send auto-score emails:', err)
+        );
+      }
+
       return scored;
     },
     onSuccess: (count) => {
