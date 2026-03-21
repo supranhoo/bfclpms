@@ -1,20 +1,19 @@
 
 
-## Completed: Rollback + Effective From Month for Pending Reviews
+## Completed: Fix Manager Review False-Positive + Add Skip-Level Tab
 
 ### Changes Made
 
 #### `src/hooks/usePendingSelfReviews.ts`
-- Added `useAutoScoredKpis()` — queries `kpi_audit_logs` for `SYSTEM_AUTO_SCORED` actions, joins with KPIs still at `approved` status
-- Added `usePenalizedManagerKpis()` — same for `MANAGER_PENALTY_SCORED` actions
-- Added `useRollbackAutoScore()` — reverts KPI to `kra_set`, clears submission scores, logs `SYSTEM_AUTO_SCORE_ROLLBACK`
-- Added `useRollbackManagerPenalty()` — reverts to previous status from audit log, clears scores, logs `MANAGER_PENALTY_ROLLBACK`
-- Exported new types: `AutoScoredKpi`, `PenalizedManagerKpi`
+- **Fixed** `useOverdueTeamReviewKpis`: Now queries `review_submissions` after fetching KPIs at `manager_check` and excludes those where `manager_score IS NOT NULL` (already reviewed by manager)
+- **Added** `useOverdueSkipLevelKpis(deadlineDay, filterMonth, filterYear)`: New hook that queries KPIs at `skip_level_check` status, excludes those where `skip_level_score IS NOT NULL`, resolves manager and skip-level manager names via profile chain
 
 #### `src/pages/admin/PendingSelfReviews.tsx`
-- Added **Rollback tab** with two sub-sections: Auto-Scored KPIs and Manager Penalty KPIs
-- Each section has table with checkbox selection, "Rollback Selected" and "Rollback All" buttons
-- Added **Effective From Month** selector in Settings panel (month + year dropdowns)
-- Saves to `pending_review_effective_from_month` system setting
+- Added **Pending Skip-Level Review** tab with read-only table showing: Employee, Code, Department, KPI, KRA, Manager, Skip-Level Manager, Days Overdue
+- No auto-penalty action for skip-level — purely informational visibility
+
+### Previous: Rollback + Effective From Month for Pending Reviews
+- Added `useAutoScoredKpis()`, `usePenalizedManagerKpis()`, `useRollbackAutoScore()`, `useRollbackManagerPenalty()`
+- Added Rollback tab and Effective From Month setting
 
 ### No database changes needed
