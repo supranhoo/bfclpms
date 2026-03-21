@@ -17,7 +17,7 @@ import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { canReviewKpi as workflowCanReview, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { 
   Info, Lock, CheckCircle2, Calendar, ChevronDown, ChevronUp, Undo2, Eye, 
-  Building2, Users, User, FileCheck, Clock, UserPlus
+  Building2, Users, User, FileCheck, Clock, UserPlus, Zap
 } from 'lucide-react';
 import { AuditKpiAssignPopover } from '@/components/review/AuditKpiAssignPopover';
 import type { AuditKpiAssignment } from '@/hooks/useAuditKpiAssignments';
@@ -387,6 +387,12 @@ export function KpiDetailsTable({
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-600 dark:bg-amber-900/20 dark:text-amber-400 gap-0.5">
                           <Undo2 className="h-2.5 w-2.5" />
                           Sent Back
+                        </Badge>
+                      )}
+                      {submission?.auto_advance_reason && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-600 dark:bg-orange-900/20 dark:text-orange-400 gap-0.5">
+                          <Zap className="h-2.5 w-2.5" />
+                          Rated by System
                         </Badge>
                       )}
                     </div>

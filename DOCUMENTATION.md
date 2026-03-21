@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-21  
-> **Version:** 1.58.0 — Sent-back KPI exclusion from overdue list, dedicated Sent Back tab with email reminders, pending_review_reminder email template
+> **Version:** 1.59.0 — "Rated by System" orange badge on KPI dashboard rows for auto-advanced KPIs
 > **Maintainer:** Lovable AI
 
 ---

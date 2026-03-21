@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Info, BarChart3, ClipboardEdit, Building2, Users, User } from 'lucide-react';
+import { Info, BarChart3, ClipboardEdit, Building2, Users, User, Zap } from 'lucide-react';
 import { KPI } from '@/hooks/useKpis';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
@@ -16,6 +16,7 @@ interface MobileKpiCardProps {
     final_score?: number | null;
     self_score?: number | null;
     achieved_value?: number | null;
+    auto_advance_reason?: string | null;
   };
   statusColors: Record<string, string>;
   statusLabels: Record<string, string>;
@@ -94,6 +95,12 @@ export function MobileKpiCard({
       {/* KRA/KPI names */}
       <p className="font-medium text-sm mb-1 line-clamp-1 whitespace-pre-wrap">{renderBoldKpiText(kpi.kra_name)}</p>
       <p className="text-xs text-muted-foreground mb-1 line-clamp-2 whitespace-pre-wrap">{renderBoldKpiText(kpi.kpi_name)}</p>
+      {submission?.auto_advance_reason && (
+        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-600 dark:bg-orange-900/20 dark:text-orange-400 gap-0.5 mb-1">
+          <Zap className="h-2.5 w-2.5" />
+          Rated by System
+        </Badge>
+      )}
 
       {/* Org KPI badges */}
       {kpi.is_org_level && (

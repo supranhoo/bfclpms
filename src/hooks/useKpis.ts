@@ -112,6 +112,7 @@ export interface ReviewSubmission {
   final_score: number | null;
   kpi_status: KpiStatus;
   is_na: boolean;
+  auto_advance_reason: string | null;
 }
 
 export interface KpiQuery {
