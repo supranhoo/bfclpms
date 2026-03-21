@@ -1,29 +1,43 @@
 
 
-## Reorder Dashboard View Mode Tabs
+## Persist Dashboard View Mode Across Page Refresh
 
-### Change
-Reorder the `availableModes` array in `src/pages/Dashboard.tsx` to match the requested sequence:
+### Problem
+When a user is on any dashboard tab (e.g., Team Reviews, HR PMS, Audit) and refreshes the page, the URL is just `/dashboard` with no `view` parameter, so `viewMode` resets to `'self'`.
 
-**My Dashboard → Team Reviews → Self Review → Manager Review → Skip Mgr Review → HR PMS → Audit → Management**
+### Solution
+Sync the `viewMode` state to the URL query parameter `?view=...`. When the user switches tabs, update the URL. On page load/refresh, read the `view` param and restore the tab.
 
-### Modified: `src/pages/Dashboard.tsx` (lines 45-54)
+### Implementation — `src/pages/Dashboard.tsx`
 
-Change the order modes are pushed:
+**1. When `viewMode` changes, write it to the URL:**
+Add a `useEffect` that sets `?view=<mode>` in the search params whenever `viewMode` changes. For `'self'`, remove the param to keep the URL clean.
 
 ```typescript
-const availableModes = useMemo(() => {
-  const modes: ViewMode[] = ['self'];
-  if (['manager', 'admin', 'management'].includes(role || '') || hasSkipLevelSubordinates) modes.push('team');
-  if (role === 'hr_pms' || role === 'admin') {
-    modes.push('pending_self_review', 'pending_manager_review', 'pending_skip_review');
-  }
-  if (role === 'hr_pms' || role === 'admin') modes.push('hr_pms');
-  if (['auditor', 'admin'].includes(role || '')) modes.push('audit');
-  if (['management', 'admin'].includes(role || '')) modes.push('management');
-  return modes;
-}, [role, hasSkipLevelSubordinates]);
+useEffect(() => {
+  setSearchParams((prev) => {
+    const next = new URLSearchParams(prev);
+    if (viewMode === 'self') {
+      next.delete('view');
+    } else {
+      next.set('view', viewMode);
+    }
+    return next;
+  }, { replace: true });
+}, [viewMode]);
 ```
 
-### No other files changed. No database changes needed.
+**2. Update `handleModeChange`:**
+No change needed — it already calls `setViewMode`, which will trigger the effect above.
+
+**3. Existing URL-read logic (line 72-81):**
+Already reads `?view=` and sets mode — this handles the refresh case. No change needed.
+
+### Adverse Impact Analysis
+- **None on deep-links** — existing `?kpi=`, `?employee=`, `?panel=` params coexist with `?view=` since we use `URLSearchParams` (additive).
+- **None on bookmarking** — URLs become bookmarkable per tab, which is a benefit.
+- **Minor**: if a user shares a `/dashboard?view=hr_pms` link with someone who doesn't have the `hr_pms` role, the guard at line 77 (`availableModes.includes(mappedMode)`) already handles this — it simply won't apply the mode and falls back to `'self'`.
+- **Browser back/forward**: Using `replace: true` avoids polluting browser history with every tab switch, so back button behavior is unaffected.
+
+### Single file change, no database changes.
 
