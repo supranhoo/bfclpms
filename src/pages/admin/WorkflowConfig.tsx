@@ -144,7 +144,7 @@ export default function WorkflowConfig() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, email, employee_code, pms_grade, department_id')
+        .select('id, full_name, email, employee_code, pms_grade, department_id, reporting_manager_id')
         .order('full_name');
       if (error) throw error;
       return data;
