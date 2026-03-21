@@ -446,12 +446,12 @@ export function EmployeeSelectorGrid({
             }
           }
         } else if (viewLevel === 'hr_pms') {
-          if (statusFilter === 'pending_self' && kpi.status === 'self_review') {
-            employeeIds.add(kpi.employee_id);
-          } else if (statusFilter === 'pending_manager' && kpi.status === 'manager_check') {
-            employeeIds.add(kpi.employee_id);
-          } else if (statusFilter === 'pending_skip' && kpi.status === 'skip_level_check') {
-            employeeIds.add(kpi.employee_id);
+          if (statusFilter === 'pending') {
+            // Pending = KPIs at stages before hr_pms_review (using resolveReviewableStatuses but excluding hr_pms_review itself)
+            const hrReviewable = resolveReviewableStatuses('hr_pms', stages);
+            if (hrReviewable.includes(kpi.status || '') && kpi.status !== 'hr_pms_review') {
+              employeeIds.add(kpi.employee_id);
+            }
           } else if (statusFilter === 'in_review' && kpi.status === 'hr_pms_review') {
             employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'reviewed') {
@@ -460,6 +460,18 @@ export function EmployeeSelectorGrid({
               const afterHr = stages.slice(hrIdx + 1);
               if (afterHr.includes(kpi.status || '')) employeeIds.add(kpi.employee_id);
             }
+          }
+        } else if (viewLevel === 'pending_self_review') {
+          if (statusFilter === 'pending' && kpi.status === 'self_review') {
+            employeeIds.add(kpi.employee_id);
+          }
+        } else if (viewLevel === 'pending_manager_review') {
+          if (statusFilter === 'pending' && kpi.status === 'manager_check') {
+            employeeIds.add(kpi.employee_id);
+          }
+        } else if (viewLevel === 'pending_skip_review') {
+          if (statusFilter === 'pending' && kpi.status === 'skip_level_check') {
+            employeeIds.add(kpi.employee_id);
           }
         } else if (viewLevel === 'management') {
           if (statusFilter === 'pending' && kpi.status === 'management_review') {
