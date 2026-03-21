@@ -1265,6 +1265,16 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       placeholderData.kra_table = buildKraTableHtml(kra_list);
     }
 
+    // For system_auto_scored, inject kpi_list and auto_score_reason
+    if (event_type === 'system_auto_scored') {
+      placeholderData.auto_score_reason = auto_score_reason || 'delayed review';
+      if (typeof kpi_list === 'string') {
+        placeholderData.kpi_list = kpi_list;
+      } else if (Array.isArray(kpi_list)) {
+        placeholderData.kpi_list = kpi_list.map((k: string) => `• ${k}`).join('\n');
+      }
+    }
+
     // Replace placeholders in subject and body
     const subject = replacePlaceholders(template.subject, placeholderData);
     const bodyContent = replacePlaceholders(template.body, placeholderData);
