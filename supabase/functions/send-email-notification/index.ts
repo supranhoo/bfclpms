@@ -607,6 +607,16 @@ You have {{pending_count}} pending organization KPI(s) that require data entry f
 
 Please log in and enter the required data at your earliest convenience.`,
   },
+  system_auto_scored: {
+    subject: '[PMS] Your KPI(s) Have Been Rated by System',
+    body: `Dear {{recipient_name}},
+
+Your following KPI(s) for {{review_period}} {{review_year}} have been reviewed by the system due to {{auto_score_reason}}.
+
+{{kpi_list}}
+
+Kindly check your KPIs for more details.`,
+  },
   pending_review_reminder: {
     subject: '[PMS] Reminder: KPI Sent Back for Correction - {{kpi_name}}',
     body: `Hi {{recipient_name}},
