@@ -1,33 +1,23 @@
 
 
-## Add "Rated by System" Badge to KPI Dashboard Rows
+## Fix: Show "Rated by System" Badge for Admin-Scored KPIs
 
-### What Changes
-Add an orange "Rated by System" badge next to any KPI whose submission has an `auto_advance_reason` value. This provides at-a-glance visibility that the system auto-scored/auto-advanced the KPI, similar to how Org KPIs show a distinctive indicator.
+### Root Cause
+The "Rated by System" badge checks `submission.auto_advance_reason`, but this field is only set by the `auto-lock-review-periods` edge function. When an admin scores a KPI via the Admin Data Entry dialog or Fast Track Approve, `auto_advance_reason` is never written to the submission.
 
-### Files Modified
+### Fix — Single file: `src/hooks/useAdminDataEntry.ts`
 
-#### 1. `src/components/review/KpiDetailsTable.tsx`
-- After the existing "Sent Back" badges (line ~391), add a new badge that checks `submission?.auto_advance_reason`:
-```tsx
-{submission?.auto_advance_reason && (
-  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-600 dark:bg-orange-900/20 dark:text-orange-400 gap-0.5">
-    <Zap className="h-2.5 w-2.5" />
-    Rated by System
-  </Badge>
-)}
-```
-- Import `Zap` icon from lucide-react (or `Bot` — whichever fits better visually)
-
-#### 2. `src/components/dashboard/MobileKpiCard.tsx`
-- After the KRA/KPI name lines (line ~96), add the same orange badge when submission has `auto_advance_reason`:
-```tsx
-{submission?.auto_advance_reason && (
-  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-orange-300 bg-orange-50 text-orange-700 ...">
-    Rated by System
-  </Badge>
-)}
+**1. `useAdminSubmitReviewData` (line ~165)** — When upserting the submission, add `auto_advance_reason`:
+```typescript
+auto_advance_reason: `Scored by Admin on behalf of ${role_level}`,
 ```
 
-### No database changes needed.
+**2. `useAdminFastTrackApprove` (line ~702)** — Add to `updateFields`:
+```typescript
+auto_advance_reason: `Fast-tracked to Approved by Admin. Reason: ${reason}`,
+```
+
+This ensures the orange badge appears on any KPI where admin intervened, whether through single-level data entry or fast-track approval.
+
+### No other files changed. No database changes needed.
 
