@@ -1,29 +1,36 @@
 
 
-## Add Non-Monthly KPI Count Badge on Employee Cards (Pending Self Review)
+## Show "Regular" Pending Count (Excluding Org KPI and Non-Monthly)
 
 ### What
-Next to the existing "X org KPI" badge on each employee card, add a third badge showing the count of non-monthly (bi-monthly, quarterly, half-yearly, yearly) KPIs that are pending self review. Example: `7 pending self` `1 org KPI` `3 bi-monthly/quarterly`.
+Change the "pending self" badge count to exclude org KPIs and bi-monthly/quarterly KPIs, so it only shows "regular" monthly KPIs. The three badges will then represent mutually exclusive groups:
+- **X pending self** — regular monthly KPIs only
+- **Y org KPI** — org-level KPIs
+- **Z bi-monthly/quarterly** — non-monthly frequency KPIs
 
 ### File: `src/components/review/EmployeeSelectorGrid.tsx`
 
-**1. Update `getEmployeeKpiStats` for `pending_self_review` (line 359-365)**
-Add `nonMonthlyCount` field counting pending KPIs where frequency is not "monthly" or "daily" or "weekly":
+**1. Update `getEmployeeKpiStats` (line 360-366)**
+Change `badge1` from total pending to only regular (non-org, monthly) KPIs:
 ```typescript
-nonMonthlyCount: pendingKpis.filter(k => 
-  k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())
-).length,
+const pendingKpis = empKpis.filter(k => k.status === 'kra_set');
+const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
+const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())).length;
+const regularCount = pendingKpis.length - orgKpiCount - nonMonthlyCount;
+// Avoid double-subtract if a KPI is both org AND non-monthly
 ```
 
-**2. Update `renderEmployeeBadges` (after line 897)**
-Add a new badge after the org KPI badge:
-```tsx
-{viewLevel === 'pending_self_review' && (kpiStats as any).nonMonthlyCount > 0 && (
-  <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 ...">
-    {(kpiStats as any).nonMonthlyCount} bi-monthly/quarterly
-  </Badge>
-)}
+Need to handle overlap (KPI that is both org-level AND non-monthly). Use proper set subtraction:
+```typescript
+const regularCount = pendingKpis.filter(k => 
+  !k.is_org_level && 
+  (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))
+).length;
 ```
+
+Set `badge1: regularCount`.
+
+**2. No UI changes needed** — the badge already renders `kpiStats.badge1` with label "pending self". It will now show only regular KPIs.
 
 ### No database changes needed
 
