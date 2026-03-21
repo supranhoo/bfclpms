@@ -551,6 +551,25 @@ export function useBulkManagerPenalty() {
           console.error(`Failed to penalize manager ${managerId}:`, e);
         }
       }
+
+      // Send consolidated emails for manager penalty (fire-and-forget)
+      // Build kpiDetails from the penalized managers
+      const penaltyKpiDetails: Array<{ kpiId: string; kpiName: string; employeeId: string; reviewPeriod: string; reviewYear: number }> = [];
+      for (const { managerId, reviewPeriod, reviewYear } of unique.values()) {
+        penaltyKpiDetails.push({
+          kpiId: managerId, // not used for email, just satisfying the interface
+          kpiName: PENALTY_KRA_NAME,
+          employeeId: managerId,
+          reviewPeriod,
+          reviewYear,
+        });
+      }
+      if (penaltyKpiDetails.length > 0) {
+        sendConsolidatedAutoScoreEmails(penaltyKpiDetails, "delayed team's review").catch(err =>
+          console.error('Failed to send manager penalty emails:', err)
+        );
+      }
+
       return penalized;
     },
     onSuccess: (count) => {
