@@ -565,6 +565,7 @@ export function EmployeeSelectorGrid({
         stat2: relevantKpis.filter(k => k.status === 'approved').length,
         stat3: relevantKpis.length,
         stat4: 0,
+        stat5: 0,
         totalKpis: relevantKpis.length,
       };
     }
