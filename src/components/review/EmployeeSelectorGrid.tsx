@@ -585,9 +585,8 @@ export function EmployeeSelectorGrid({
         if (k.status === 'audit') inAudit++;
         else if (['management_review', 'approved'].includes(k.status || '')) forwarded++;
         else {
-          // Count all KPIs in stages before 'audit' (excluding kra_set) as pending
-          const beforeAudit = stages.slice(0, auditIdx);
-          if (beforeAudit.includes(k.status || '') && k.status !== 'kra_set') pending++;
+          const auditReviewable = resolveReviewableStatuses('auditor', stages);
+          if (auditReviewable.includes(k.status || '') && k.status !== 'audit') pending++;
         }
       });
       return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
