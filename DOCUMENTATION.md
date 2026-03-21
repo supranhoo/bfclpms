@@ -4059,4 +4059,29 @@ Both exceptions set `isGovernanceLocked = false`, allowing the employee to enter
 
 ---
 
+### Pending Self-Reviews Admin Page
+
+**Route:** `/admin/pending-reviews`  
+**Files:** `src/pages/admin/PendingSelfReviews.tsx`, `src/hooks/usePendingSelfReviews.ts`
+
+Admin-only page with two tabs for managing overdue KPIs:
+
+**Tab 1 — Pending Self-Review (status = `kra_set`):**
+- Lists KPIs where `status = kra_set`, `is_org_level = false`, frequency is Monthly/Daily/Weekly, past the configurable deadline day of the following month
+- Bulk "Auto-Score" sets `final_score = 0`, `final_rating = red`, `status = approved` with a configurable system remark
+- Inserts `kpi_audit_logs` with action `SYSTEM_AUTO_SCORED`
+
+**Tab 2 — Pending Manager Review (status = `manager_check`):**
+- Lists KPIs where `status = manager_check` (same exclusions as Tab 1)
+- "Penalize Managers" finds the reporting manager's and skip-level manager's KPI with `kra_name = 'Implementation of common - policies / systems / processes'` for the same period
+- Sets that penalty KPI to `final_score = 0`, `status = approved` with a configurable manager remark
+- Inserts `kpi_audit_logs` with action `MANAGER_PENALTY_SCORED`
+
+**Configurable Settings (system_settings table):**
+- `pending_review_deadline_day` — default 10 (admin can change)
+- `pending_review_auto_remark` — default "KPI not self reviewed by due date, score given by system"
+- `manager_penalty_auto_remark` — default "KRA of team not reviewed by due date"
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
