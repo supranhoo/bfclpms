@@ -1,12 +1,29 @@
 
 
-## Revert HR PMS 7 Tiles + Add Dedicated Dashboard Views (IMPLEMENTED)
+## Reorder Dashboard View Mode Tabs
 
-### What Changed
-1. **Reverted HR PMS tiles** back to standard 5-tile pattern (Total Employees, Pending Review, In HR PMS Review, Reviewed, Total KPIs) — "Pending Review" now correctly shows only KPIs at stages before `hr_pms_review` (not the broad sum that was previously shown as 194)
-2. **Added 3 new ViewMode tabs** visible to HR PMS / admin roles: "Self Review", "Manager Review", "Skip Mgr Review" — each showing only employees whose KPIs are pending at that specific workflow stage
+### Change
+Reorder the `availableModes` array in `src/pages/Dashboard.tsx` to match the requested sequence:
 
-### Files Modified
-- `src/components/review/ViewModeToggle.tsx` — Added 3 new ViewMode values and config entries
-- `src/pages/Dashboard.tsx` — Added new modes to availableModes for hr_pms/admin roles
-- `src/components/review/EmployeeSelectorGrid.tsx` — Reverted HR PMS to 5-tile, added 3 new viewLevel handlers with stats, filters, badges, and data fetching
+**My Dashboard → Team Reviews → Self Review → Manager Review → Skip Mgr Review → HR PMS → Audit → Management**
+
+### Modified: `src/pages/Dashboard.tsx` (lines 45-54)
+
+Change the order modes are pushed:
+
+```typescript
+const availableModes = useMemo(() => {
+  const modes: ViewMode[] = ['self'];
+  if (['manager', 'admin', 'management'].includes(role || '') || hasSkipLevelSubordinates) modes.push('team');
+  if (role === 'hr_pms' || role === 'admin') {
+    modes.push('pending_self_review', 'pending_manager_review', 'pending_skip_review');
+  }
+  if (role === 'hr_pms' || role === 'admin') modes.push('hr_pms');
+  if (['auditor', 'admin'].includes(role || '')) modes.push('audit');
+  if (['management', 'admin'].includes(role || '')) modes.push('management');
+  return modes;
+}, [role, hasSkipLevelSubordinates]);
+```
+
+### No other files changed. No database changes needed.
+
