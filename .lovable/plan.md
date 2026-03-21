@@ -1,31 +1,33 @@
 
 
-## Add "Reporting Manager" Column to Workflow Configuration Report
+## RCA: Wrong Email Sent on System Auto-Score
 
-### What Changes
-Add a "Reporting Manager" column to the Employee Overrides sheet showing the manager's name resolved from `reporting_manager_id`.
+### Root Cause
 
-### Files Modified
+When `useBulkAutoScore` updates a KPI's status from `kra_set` → `approved`, the **database trigger** `notify_on_kpi_status_change()` fires automatically. This trigger doesn't distinguish between a normal workflow transition and a system auto-score. It sees `kra_set → self_review/manager_check` (CASE 1) or the status jump and creates a `kpi_submitted` notification with incomplete data (no `related_user_id`, no actor context).
 
-#### 1. `src/pages/admin/WorkflowConfig.tsx` (line 147)
-Add `reporting_manager_id` to the profiles select query:
+That notification then triggers `send_email_on_notification()`, which maps `kpi_submitted` → the "New KPI Submitted for Review" template — producing the email you see with all N/A values.
+
+**Result**: Two emails are sent — the wrong one from the trigger chain, and the correct `system_auto_scored` one from the hook's `sendConsolidatedAutoScoreEmails`.
+
+### Fix
+
+Update the `notify_on_kpi_status_change()` database trigger to **skip notification** when the status jumps directly from `kra_set` to `approved` (which only happens during system auto-scoring). This is a single-line guard at the top of the function.
+
+**Database migration** — Add guard to the trigger:
+
+```sql
+-- At the very top of the function body, after variable declarations:
+-- Skip notification when jumping directly to approved from kra_set 
+-- (system auto-score handles its own notification)
+IF OLD.status = 'kra_set' AND NEW.status = 'approved' THEN
+  RETURN NEW;
+END IF;
 ```
-.select('id, full_name, email, employee_code, pms_grade, department_id, reporting_manager_id')
-```
 
-#### 2. `src/components/admin/WorkflowConfigExport.tsx`
+This prevents the spurious `kpi_submitted` notification+email while preserving all normal workflow notifications. The correct `system_auto_scored` email continues to be sent by the hook.
 
-**a) Profile interface** — add `reporting_manager_id: string | null`
-
-**b) Employee Overrides row mapping** — resolve manager name via `profileMap`:
-```typescript
-const manager = p?.reporting_manager_id ? profileMap.get(p.reporting_manager_id) : null;
-// Add column:
-'Reporting Manager': manager?.full_name || '—',
-```
-Place after "Department" column.
-
-**c) Column widths** — add `{ wch: 22 }` for the new column.
-
-### No database changes needed.
+### Files Changed
+- **1 database migration**: Update `notify_on_kpi_status_change()` trigger function
+- No code file changes needed
 
