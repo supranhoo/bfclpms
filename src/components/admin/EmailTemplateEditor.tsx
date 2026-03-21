@@ -458,7 +458,7 @@ const PLACEHOLDERS = [
   { key: '{{login_url}}', description: 'Application login URL (password rollout only)' },
   { key: '{{kra_count}}', description: 'Number of KRAs assigned (batch assignment only)' },
   { key: '{{kra_table}}', description: 'Auto-generated HTML table of assigned KRAs (batch assignment only, not editable)' },
-  { key: '{{employee_name}}', description: 'Name of employee receiving KRAs (batch assignment only)' },
+  { key: '{{employee_name}}', description: 'Name of the employee (used in batch assignment & manager auto-score emails)' },
   { key: '{{total_weightage}}', description: 'Total weightage of assigned KRAs (batch assignment only)' },
   { key: '{{auto_score_reason}}', description: 'Reason for system auto-score (e.g. delayed self review)' },
   { key: '{{kpi_list}}', description: 'Bullet list of auto-scored KPI names (system auto-score only)' },
