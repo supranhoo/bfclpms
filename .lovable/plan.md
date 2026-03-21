@@ -1,38 +1,41 @@
 
 
-## Show Reporting Manager's KPI Score in View KPI Details
+## Implementing: Pending Self-Reviews Admin Page with Manager/Skip-Level KRA Penalty
 
-### What
-Add a small info card near the "Review Journey" section showing the reporting manager's rating and achieved value for the **same KPI**, but only when:
-1. The employee has a reporting manager
-2. The manager has the same KPI (matched by `kpi_name`, `review_period`, `review_year`)
-3. The manager's KPI status is `approved`
+### Summary
+Build a new admin page at `/admin/pending-reviews` with two tabs:
+- **Tab 1**: Employee KPIs stuck at `kra_set` past the configurable deadline (default 10th of following month)
+- **Tab 2**: Employee KPIs stuck at `team_review` — triggers penalty on manager/skip-level manager's KRA "Implementation of common - policies / systems / processes"
 
-### UI Design
-A compact card placed **above** the Review Journey section, styled as an info banner:
-```text
-┌─────────────────────────────────────────────────┐
-│ 👤 Manager's Score (Satyendra Kumar Singh)      │
-│   Value: 100    Rating: 5 - Outstanding         │
-└─────────────────────────────────────────────────┘
-```
-- Uses existing `RatingBadge` for the rating display
-- Muted background, subtle border — not attention-grabbing, just informational
-- Hidden entirely when conditions aren't met
+Configurable settings for deadline day and auto-remark texts.
 
-### Changes
+### Implementation Steps
 
-**New hook: `src/hooks/useManagerKpiScore.ts`**
-- Accepts `kpi` object (needs `employee_id`, `kpi_name`, `review_period`, `review_year`)
-- Step 1: Fetch reporting manager ID from `profiles` table
-- Step 2: Query `kpis` table for manager's matching KPI where `status = 'approved'`, matched on `kpi_name`, `review_period`, `review_year` (no `kra_name` matching)
-- Step 3: Fetch `review_submissions` for that KPI to get `final_score`, `achieved_value`
-- Returns: `{ managerName, finalScore, achievedValue, isLoading }`
+#### 1. Insert System Settings (data-only, via insert tool)
+Insert 3 rows into `system_settings`:
+- `pending_review_deadline_day` → `10`
+- `pending_review_auto_remark` → `"KPI not self reviewed by due date, score given by system"`
+- `manager_penalty_auto_remark` → `"KRA of team not reviewed by due date"`
 
-**New component: `src/components/review/ManagerKpiBenchmark.tsx`**
-- Takes the hook's output, renders the info card with `RatingBadge`
-- Returns `null` when no matching manager KPI exists
+#### 2. New Hook: `src/hooks/usePendingSelfReviews.ts`
+- Fetches KPIs where `status = 'kra_set'`, `is_org_level = false`, frequency is Monthly/Daily/Weekly, past deadline
+- Fetches KPIs where `status = 'team_review'` (same exclusions) for manager penalty tab
+- Joins `profiles` for employee name, code, department; joins `departments` for department name
+- For Tab 2: resolves `reporting_manager_id` and skip-level manager via `get_skip_level_manager`
+- Mutation: bulk auto-score (update `kpis` status to `approved`, `final_score = 0`, `final_rating = 'red'`; upsert `review_submissions`; insert audit logs)
+- Mutation: manager penalty (find manager's KPI by `kra_name`, zero-score it similarly)
+- Reads configurable deadline/remark settings from `system_settings`
 
-**Modified: `src/components/review/KpiReviewPanel.tsx`**
-- Import and render `ManagerKpiBenchmark` above `KpiJourneySection` in the right column
+#### 3. New Page: `src/pages/admin/PendingSelfReviews.tsx`
+- Settings panel at top: editable deadline day, employee remark, manager remark (with Save button using `useUpdateSystemSetting`)
+- Two tabs with tables showing overdue KPIs
+- Checkbox selection + "Auto-Score Selected" / "Auto-Score All" / "Penalize Managers" bulk buttons
+- Columns: Employee Name, Code, Department, KPI Name, KRA, Review Period, Days Overdue
+
+#### 4. Route & Sidebar
+- `src/App.tsx`: Add lazy import and route `/admin/pending-reviews` inside admin ProtectedRoute
+- `src/components/layout/AppSidebar.tsx`: Add `{ title: 'Pending Reviews', icon: ClipboardCheck, path: '/admin/pending-reviews', roles: ['admin'] }` to admin section
+
+### No database schema changes needed
+All tables and columns already exist. Only data inserts to `system_settings`.
 
