@@ -67,13 +67,16 @@ export default function PendingSelfReviews() {
 
   const handleAutoScoreSelected = () => {
     if (!user?.id || selectedKraSet.size === 0) return;
-    bulkAutoScore.mutate({ kpiIds: [...selectedKraSet], remark: employeeRemark, adminId: user.id });
+    const selectedItems = overdueKraSet.filter(k => selectedKraSet.has(k.kpiId));
+    const kpiDetails = selectedItems.map(k => ({ kpiId: k.kpiId, kpiName: k.kpiName, employeeId: k.employeeId, reviewPeriod: k.reviewPeriod, reviewYear: k.reviewYear }));
+    bulkAutoScore.mutate({ kpiIds: [...selectedKraSet], remark: employeeRemark, adminId: user.id, kpiDetails });
     setSelectedKraSet(new Set());
   };
 
   const handleAutoScoreAll = () => {
     if (!user?.id || overdueKraSet.length === 0) return;
-    bulkAutoScore.mutate({ kpiIds: overdueKraSet.map(k => k.kpiId), remark: employeeRemark, adminId: user.id });
+    const kpiDetails = overdueKraSet.map(k => ({ kpiId: k.kpiId, kpiName: k.kpiName, employeeId: k.employeeId, reviewPeriod: k.reviewPeriod, reviewYear: k.reviewYear }));
+    bulkAutoScore.mutate({ kpiIds: overdueKraSet.map(k => k.kpiId), remark: employeeRemark, adminId: user.id, kpiDetails });
     setSelectedKraSet(new Set());
   };
 

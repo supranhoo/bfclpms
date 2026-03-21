@@ -607,6 +607,16 @@ You have {{pending_count}} pending organization KPI(s) that require data entry f
 
 Please log in and enter the required data at your earliest convenience.`,
   },
+  system_auto_scored: {
+    subject: '[PMS] Your KPI(s) Have Been Rated by System',
+    body: `Dear {{recipient_name}},
+
+Your following KPI(s) for {{review_period}} {{review_year}} have been reviewed by the system due to {{auto_score_reason}}.
+
+{{kpi_list}}
+
+Kindly check your KPIs for more details.`,
+  },
   pending_review_reminder: {
     subject: '[PMS] Reminder: KPI Sent Back for Correction - {{kpi_name}}',
     body: `Hi {{recipient_name}},
@@ -654,6 +664,7 @@ const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string
   observation_resolved: { color: '#10b981', emoji: '✅', title: 'Observation Resolved' },
   observation_mention: { color: '#3b82f6', emoji: '@', title: 'Mentioned in Observation' },
   org_kpi_pending_reminder: { color: '#f97316', emoji: '⏳', title: 'Pending KPI Reminder' },
+  system_auto_scored: { color: '#f97316', emoji: '⚡', title: 'System Auto-Score' },
   pending_review_reminder: { color: '#f59e0b', emoji: '🔔', title: 'Sent-Back KPI Reminder' },
 };
 
@@ -1096,7 +1107,8 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       send_back_reason, generated_password, login_email, employee_code, app_name,
       kra_list, kra_count, employee_name, total_weightage,
       old_email, new_email,
-      observation_title, observation_type, observation_description, reply_content } = body;
+      observation_title, observation_type, observation_description, reply_content,
+      auto_score_reason, kpi_list } = body;
 
     // Check if email notifications are enabled
     const { data: enabledSetting } = await supabase
@@ -1251,6 +1263,16 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     // For kra_batch_assigned, inject the KRA table HTML into the placeholder
     if (event_type === 'kra_batch_assigned' && Array.isArray(kra_list)) {
       placeholderData.kra_table = buildKraTableHtml(kra_list);
+    }
+
+    // For system_auto_scored, inject kpi_list and auto_score_reason
+    if (event_type === 'system_auto_scored') {
+      placeholderData.auto_score_reason = auto_score_reason || 'delayed review';
+      if (typeof kpi_list === 'string') {
+        placeholderData.kpi_list = kpi_list;
+      } else if (Array.isArray(kpi_list)) {
+        placeholderData.kpi_list = kpi_list.map((k: string) => `• ${k}`).join('\n');
+      }
     }
 
     // Replace placeholders in subject and body

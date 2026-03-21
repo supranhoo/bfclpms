@@ -415,6 +415,21 @@ Please log in to review the assignments.`,
     color: '#3b82f6',
     emoji: '📋',
   },
+  {
+    key: 'system_auto_scored',
+    label: 'System Auto-Score',
+    description: 'Sent to employee & manager when system auto-scores KPIs due to overdue review',
+    subject: '[PMS] Your KPI(s) Have Been Rated by System',
+    bodyTemplate: `Dear {{recipient_name}},
+
+Your following KPI(s) for {{review_period}} {{review_year}} have been reviewed by the system due to {{auto_score_reason}}.
+
+{{kpi_list}}
+
+Kindly check your KPIs for more details.`,
+    color: '#f97316',
+    emoji: '⚡',
+  },
 ];
 
 const PLACEHOLDERS = [
@@ -445,6 +460,8 @@ const PLACEHOLDERS = [
   { key: '{{kra_table}}', description: 'Auto-generated HTML table of assigned KRAs (batch assignment only, not editable)' },
   { key: '{{employee_name}}', description: 'Name of employee receiving KRAs (batch assignment only)' },
   { key: '{{total_weightage}}', description: 'Total weightage of assigned KRAs (batch assignment only)' },
+  { key: '{{auto_score_reason}}', description: 'Reason for system auto-score (e.g. delayed self review)' },
+  { key: '{{kpi_list}}', description: 'Bullet list of auto-scored KPI names (system auto-score only)' },
 ];
 
 export function EmailTemplateEditor() {

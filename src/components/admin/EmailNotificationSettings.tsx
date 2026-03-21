@@ -53,6 +53,7 @@ const EMAIL_EVENTS: { key: EmailEventType; label: string; description: string }[
   { key: 'rollback_approved', label: 'Rollback Approved', description: 'Notify requester when their rollback request is approved' },
   { key: 'rollback_rejected', label: 'Rollback Dismissed', description: 'Notify requester when their rollback request is dismissed' },
   { key: 'org_kpi_pending_reminder', label: 'Pending KPI Reminder', description: 'Send pending report to data owners with outstanding KPIs' },
+  { key: 'system_auto_scored', label: 'System Auto-Score', description: 'Notify employee & manager when system auto-scores KPIs due to overdue review' },
 ];
 
 export function EmailNotificationSettings() {
