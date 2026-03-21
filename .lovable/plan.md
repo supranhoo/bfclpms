@@ -1,19 +1,35 @@
 
 
-## Completed: Fix Manager Review False-Positive + Add Skip-Level Tab
+## Fix: N/A Display on Dashboard + Pending Reviews False-Positive
 
-### Changes Made
+### Two Issues Found
 
-#### `src/hooks/usePendingSelfReviews.ts`
-- **Fixed** `useOverdueTeamReviewKpis`: Now queries `review_submissions` after fetching KPIs at `manager_check` and excludes those where `manager_score IS NOT NULL` (already reviewed by manager)
-- **Added** `useOverdueSkipLevelKpis(deadlineDay, filterMonth, filterYear)`: New hook that queries KPIs at `skip_level_check` status, excludes those where `skip_level_score IS NOT NULL`, resolves manager and skip-level manager names via profile chain
+**Issue 1 — Score columns show "—" instead of "N/A"**
+In `KpiDetailsTable.tsx`, the N/A badge only appears when a stage is *completed* (status has moved past it) and score is null. But when a reviewer marks N/A at their own stage, the KPI status stays at that stage (e.g., `manager_check`), so the stage isn't "completed" — the cell shows "—" instead of "N/A".
 
-#### `src/pages/admin/PendingSelfReviews.tsx`
-- Added **Pending Skip-Level Review** tab with read-only table showing: Employee, Code, Department, KPI, KRA, Manager, Skip-Level Manager, Days Overdue
-- No auto-penalty action for skip-level — purely informational visibility
+**Fix**: Check `submission.is_na` alongside the existing `stageCompleted` check. If `is_na = true` and the score for that column is null and the stage is at or past the current status, show "N/A".
 
-### Previous: Rollback + Effective From Month for Pending Reviews
-- Added `useAutoScoredKpis()`, `usePenalizedManagerKpis()`, `useRollbackAutoScore()`, `useRollbackManagerPenalty()`
-- Added Rollback tab and Effective From Month setting
+**Issue 2 — Pending Reviews false-positive for N/A KPIs**
+The filter in `usePendingSelfReviews.ts` only excludes KPIs where the score column is not null. N/A KPIs have null scores, so they appear as "pending" even though they've been reviewed.
+
+**Fix**: Change the query filter from `.not('manager_score', 'is', null)` to `.or('manager_score.not.is.null,is_na.eq.true')` — same for skip-level.
+
+### Files Modified
+
+#### 1. `src/components/review/KpiDetailsTable.tsx` (lines 460-473)
+Update the score cell rendering logic to check `submission?.is_na`:
+```
+// Current:
+const showNA = score === null && stageCompleted;
+
+// Fixed:
+const showNA = score === null && (stageCompleted || (submission?.is_na && isStageCompleted_or_current));
+```
+Specifically: if `is_na = true`, score is null, and the stage index ≤ current status index (stage is at or past), show "N/A" badge.
+
+#### 2. `src/hooks/usePendingSelfReviews.ts`
+- **Line 168**: Change `.not('manager_score', 'is', null)` → `.or('manager_score.not.is.null,is_na.eq.true')`
+- **Line 1074**: Change `.not('skip_level_score', 'is', null)` → `.or('skip_level_score.not.is.null,is_na.eq.true')`
 
 ### No database changes needed
+
