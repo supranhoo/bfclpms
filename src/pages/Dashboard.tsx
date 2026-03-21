@@ -48,6 +48,9 @@ export default function Dashboard() {
     if (role === 'hr_pms' || role === 'admin') modes.push('hr_pms');
     if (['auditor', 'admin'].includes(role || '')) modes.push('audit');
     if (['management', 'admin'].includes(role || '')) modes.push('management');
+    if (role === 'hr_pms' || role === 'admin') {
+      modes.push('pending_self_review', 'pending_manager_review', 'pending_skip_review');
+    }
     return modes;
   }, [role, hasSkipLevelSubordinates]);
 
