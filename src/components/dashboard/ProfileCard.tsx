@@ -40,7 +40,11 @@ export function ProfileCard({ profile, department, division, onViewHistory, comp
         </Avatar>
         <div>
           <h2 className="text-base font-semibold text-foreground">{displayName}</h2>
-          <p className="text-sm text-muted-foreground">{profile.designation}</p>
+          <p className="text-sm text-muted-foreground">
+            {profile.designation}
+            {profile.designation && department && <span className="text-border"> | </span>}
+            {department}
+          </p>
         </div>
       </div>
     );
