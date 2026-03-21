@@ -724,7 +724,7 @@ const buildEmailHtml = (
 ): string => {
   const style = EVENT_STYLES[eventType] || { color: '#6366f1', emoji: '📬', title: 'Notification' };
   const logoHtml = customization.logoUrl 
-    ? `<td style="text-align:right;vertical-align:middle;width:60px;"><img src="${customization.logoUrl}" alt="Company Logo" style="max-height:50px;max-width:60px;" /></td>`
+    ? `<td style="text-align:left;vertical-align:middle;width:60px;"><img src="${customization.logoUrl}" alt="Company Logo" style="max-height:50px;max-width:60px;" /></td>`
     : '';
   const customFooterHtml = customization.footerText 
     ? `<p style="margin-top: 10px;">${customization.footerText}</p>`
