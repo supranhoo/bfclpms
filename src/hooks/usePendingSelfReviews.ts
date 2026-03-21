@@ -298,6 +298,7 @@ export function useBulkAutoScore() {
                 final_score: 0,
                 final_rating: 'red',
                 kpi_status: 'submitted',
+                auto_advance_reason: 'Auto-scored with zero by System (overdue self-review)',
               }]);
           }
 
