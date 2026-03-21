@@ -1266,12 +1266,28 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     }
 
     // For system_auto_scored, inject kpi_list and auto_score_reason
-    if (event_type === 'system_auto_scored') {
-      placeholderData.auto_score_reason = auto_score_reason || 'delayed review';
+    // Always normalize kpi_list into a readable string before placeholder replacement
+    if (auto_score_reason) {
+      placeholderData.auto_score_reason = auto_score_reason;
+    }
+    if (kpi_list) {
+      let renderedKpiList: string;
       if (typeof kpi_list === 'string') {
-        placeholderData.kpi_list = kpi_list;
+        renderedKpiList = kpi_list;
       } else if (Array.isArray(kpi_list)) {
-        placeholderData.kpi_list = kpi_list.map((k: string) => `• ${k}`).join('\n');
+        // Extract just the first line of each KPI name (before any \r\n description)
+        const kpiNames = kpi_list.map((k: string) => {
+          const firstLine = String(k).split(/\r?\n/)[0].trim();
+          return `• ${firstLine}`;
+        });
+        renderedKpiList = kpiNames.join('\n');
+      } else {
+        renderedKpiList = String(kpi_list);
+      }
+      placeholderData.kpi_list = renderedKpiList;
+      // Also set kpi_name from first KPI as fallback for simpler templates
+      if (!placeholderData.kpi_name && Array.isArray(kpi_list) && kpi_list.length > 0) {
+        placeholderData.kpi_name = String(kpi_list[0]).split(/\r?\n/)[0].trim();
       }
     }
 

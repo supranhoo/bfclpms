@@ -591,7 +591,7 @@ export function EmailTemplateEditor() {
   const renderPreview = () => {
     if (!currentTemplate || !currentEdited) return null;
     
-    const sampleData = {
+    const sampleData: Record<string, string> = {
       '{{recipient_name}}': 'John Doe',
       '{{actor_name}}': 'Jane Smith',
       '{{kra_name}}': 'Sales Performance',
@@ -600,6 +600,14 @@ export function EmailTemplateEditor() {
       '{{review_year}}': '2024',
       '{{query_reason}}': 'Please provide supporting documents',
       '{{resolution_notes}}': 'Documents have been uploaded and verified',
+      '{{auto_score_reason}}': 'delayed self review',
+      '{{kpi_list}}': '• Monthly Sales Target\n• Customer Satisfaction Score\n• Revenue Growth Rate',
+      '{{employee_name}}': 'John Doe',
+      '{{observation_title}}': 'Target Shortfall',
+      '{{observation_type}}': 'negative',
+      '{{observation_description}}': 'Missed the quarterly target by 15%',
+      '{{send_back_reason}}': 'Please provide supporting evidence',
+      '{{rollback_reason}}': 'Incorrect data entry needs correction',
     };
     
     let previewSubject = currentEdited.subject;
