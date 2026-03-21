@@ -620,8 +620,11 @@ export function EmployeeSelectorGrid({
       });
       return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inReview, stat3: forwarded, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_self_review') {
-      const pendingCount = relevantKpis.filter(k => k.status === 'kra_set').length;
-      return { totalEmployees: demographicFilteredMembers.length, stat1: pendingCount, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+      const pendingKpis = relevantKpis.filter(k => k.status === 'kra_set');
+      const pendingCount = pendingKpis.length;
+      const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
+      const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly'].includes(k.frequency.toLowerCase())).length;
+      return { totalEmployees: demographicFilteredMembers.length, stat1: pendingCount, stat2: orgKpiCount, stat3: nonMonthlyCount, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'pending_manager_review') {
       const pendingCount = relevantKpis.filter(k => k.status === 'self_review').length;
       return { totalEmployees: demographicFilteredMembers.length, stat1: pendingCount, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
