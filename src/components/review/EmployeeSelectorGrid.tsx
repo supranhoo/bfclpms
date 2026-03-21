@@ -512,10 +512,15 @@ export function EmployeeSelectorGrid({
       let pending = 0, inAudit = 0, forwarded = 0;
       relevantKpis.forEach(k => {
         const stages = getStages(k.employee_id);
-        const reviewable = resolveReviewableStatuses('auditor', stages);
-        if (reviewable.includes(k.status || '') && k.status !== 'audit') pending++;
-        else if (k.status === 'audit') inAudit++;
+        const auditIdx = stages.indexOf('audit');
+        if (auditIdx === -1) return;
+        if (k.status === 'audit') inAudit++;
         else if (['management_review', 'approved'].includes(k.status || '')) forwarded++;
+        else {
+          // Count all KPIs in stages before 'audit' (excluding kra_set) as pending
+          const beforeAudit = stages.slice(0, auditIdx);
+          if (beforeAudit.includes(k.status || '') && k.status !== 'kra_set') pending++;
+        }
       });
       return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'skip_level') {
