@@ -28,13 +28,17 @@ export default function PendingSelfReviews() {
   const { toast } = useToast();
   const { deadlineDay, employeeRemark, managerRemark, isLoading: settingsLoading } = usePendingReviewSettings();
 
+  const prevMonth = subMonths(new Date(), 1);
+  const [selectedMonth, setSelectedMonth] = useState<string>(format(prevMonth, 'MMMM'));
+  const [selectedYear, setSelectedYear] = useState<number>(prevMonth.getFullYear());
+
   const [editDay, setEditDay] = useState<string>('');
   const [editEmpRemark, setEditEmpRemark] = useState<string>('');
   const [editMgrRemark, setEditMgrRemark] = useState<string>('');
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const { data: overdueKraSet = [], isLoading: kraSetLoading } = useOverdueKraSetKpis(deadlineDay);
-  const { data: overdueTeamReview = [], isLoading: teamReviewLoading } = useOverdueTeamReviewKpis(deadlineDay);
+  const { data: overdueKraSet = [], isLoading: kraSetLoading } = useOverdueKraSetKpis(deadlineDay, selectedMonth, selectedYear);
+  const { data: overdueTeamReview = [], isLoading: teamReviewLoading } = useOverdueTeamReviewKpis(deadlineDay, selectedMonth, selectedYear);
 
   const updateSetting = useUpdateSystemSetting();
   const bulkAutoScore = useBulkAutoScore();
