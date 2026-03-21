@@ -331,6 +331,79 @@ export default function PendingSelfReviews() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Tab 3: Sent Back KPIs */}
+        <TabsContent value="sent-back">
+          <Card>
+            <CardContent className="pt-4 space-y-4">
+              <div className="flex gap-2 flex-wrap">
+                <Button size="sm" onClick={handleSendReminderSelected} disabled={selectedSentBack.size === 0 || sendReminder.isPending}>
+                  {sendReminder.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                  <Mail className="h-3.5 w-3.5 mr-1" />
+                  Send Reminder ({selectedSentBack.size})
+                </Button>
+                <Button size="sm" variant="secondary" onClick={handleSendReminderAll} disabled={sentBackKpis.length === 0 || sendReminder.isPending}>
+                  Send Reminder All ({sentBackKpis.length})
+                </Button>
+              </div>
+
+              {sentBackLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              ) : sentBackKpis.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4">No sent-back KPIs found.</p>
+              ) : (
+                <div className="rounded-md border overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10">
+                          <Checkbox
+                            checked={selectedSentBack.size === sentBackKpis.length && sentBackKpis.length > 0}
+                            onCheckedChange={() => {
+                              if (selectedSentBack.size === sentBackKpis.length) {
+                                setSelectedSentBack(new Set());
+                              } else {
+                                setSelectedSentBack(new Set(sentBackKpis.map(i => i.kpiId)));
+                              }
+                            }}
+                          />
+                        </TableHead>
+                        <TableHead>Employee</TableHead>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Department</TableHead>
+                        <TableHead>KPI</TableHead>
+                        <TableHead>KRA</TableHead>
+                        <TableHead>Sent Back By</TableHead>
+                        <TableHead>Reason</TableHead>
+                        <TableHead>Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sentBackKpis.map(item => (
+                        <TableRow key={item.kpiId}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedSentBack.has(item.kpiId)}
+                              onCheckedChange={() => toggleSelection(selectedSentBack, setSelectedSentBack, item.kpiId)}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">{item.employeeName}</TableCell>
+                          <TableCell>{item.employeeCode}</TableCell>
+                          <TableCell>{item.departmentName}</TableCell>
+                          <TableCell>{item.kpiName}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{item.kraName}</TableCell>
+                          <TableCell>{item.sentBackBy}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{item.reason}</TableCell>
+                          <TableCell>{format(new Date(item.sentBackDate), 'dd MMM yyyy')}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );
