@@ -52,6 +52,16 @@ function isStageCompleted(columnKey: string, kpiStatus: string, stages: string[]
   return statusIdx > stageIdx;
 }
 
+/** Check if a stage is at or before the current status (i.e. the stage has been reached) */
+function isStageAtOrBeforeCurrent(columnKey: string, kpiStatus: string, stages: string[]): boolean {
+  const stageName = COLUMN_TO_STAGE[columnKey];
+  if (!stageName) return false;
+  const stageIdx = stages.indexOf(stageName);
+  const statusIdx = stages.indexOf(kpiStatus);
+  if (stageIdx === -1 || statusIdx === -1) return false;
+  return stageIdx <= statusIdx;
+}
+
 /** Build dynamic score columns from workflow stages. Final is always appended. */
 function buildScoreColumns(stages: string[]): { key: string; label: string }[] {
   const cols: { key: string; label: string }[] = [];
@@ -460,9 +470,11 @@ export function KpiDetailsTable({
                 {scoreColumns.map(col => {
                   const score = getScoreForColumn(submission, col.key, kpi.status || 'kra_set');
                   const stageCompleted = isStageCompleted(col.key, kpi.status || 'kra_set', effectiveStages);
-                  const showNA = score === null && stageCompleted;
+                  const stageReached = isStageAtOrBeforeCurrent(col.key, kpi.status || 'kra_set', effectiveStages);
+                  // Show N/A if: (1) stage completed with no score, OR (2) KPI is marked N/A, no score, and stage has been reached
+                  const showNA = score === null && (stageCompleted || (submission?.is_na && stageReached));
                   return (
-              <TableCell key={col.key} className="text-center">
+                    <TableCell key={col.key} className="text-center">
                       {showNA ? (
                         <Badge variant="outline" className="bg-muted/50 text-muted-foreground text-xs">N/A</Badge>
                       ) : (
