@@ -376,18 +376,21 @@ export function useBulkManagerPenalty() {
           // Upsert submission
           const { data: existing } = await supabase
             .from('review_submissions')
-            .select('id')
+            .select('id, self_remarks')
             .eq('kpi_id', mgrKpi.id)
             .maybeSingle();
 
           if (existing) {
+            const combinedRemark = existing.self_remarks
+              ? `${existing.self_remarks}\n[System] ${remark}`
+              : remark;
             await supabase
               .from('review_submissions')
               .update({
                 achieved_value: 0,
                 self_score: 0,
                 self_rating: 'red',
-                self_remarks: remark,
+                self_remarks: combinedRemark,
                 final_score: 0,
                 final_rating: 'red',
                 kpi_status: 'submitted',
