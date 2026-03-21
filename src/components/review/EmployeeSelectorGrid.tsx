@@ -586,21 +586,29 @@ export function EmployeeSelectorGrid({
       });
       return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'hr_pms') {
-      let pendingSelf = 0, pendingManager = 0, pendingSkip = 0, inReview = 0, forwarded = 0;
+      let pending = 0, inReview = 0, forwarded = 0;
       relevantKpis.forEach(k => {
         const stages = getStages(k.employee_id);
         const hrIdx = stages.indexOf('hr_pms_review');
         if (hrIdx === -1) return;
         if (k.status === 'hr_pms_review') inReview++;
-        else if (k.status === 'self_review') pendingSelf++;
-        else if (k.status === 'manager_check') pendingManager++;
-        else if (k.status === 'skip_level_check') pendingSkip++;
         else {
+          const beforeHr = stages.slice(0, hrIdx);
+          if (beforeHr.includes(k.status || '') && k.status !== 'kra_set') pending++;
           const afterHr = stages.slice(hrIdx + 1);
           if (afterHr.includes(k.status || '')) forwarded++;
         }
       });
-      return { totalEmployees: demographicFilteredMembers.length, stat1: pendingSelf, stat2: pendingManager, stat3: pendingSkip, stat4: inReview, stat5: forwarded, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inReview, stat3: forwarded, stat4: relevantKpis.length, stat5: 0, totalKpis: relevantKpis.length };
+    } else if (viewLevel === 'pending_self_review') {
+      const pendingCount = relevantKpis.filter(k => k.status === 'self_review').length;
+      return { totalEmployees: demographicFilteredMembers.length, stat1: pendingCount, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+    } else if (viewLevel === 'pending_manager_review') {
+      const pendingCount = relevantKpis.filter(k => k.status === 'manager_check').length;
+      return { totalEmployees: demographicFilteredMembers.length, stat1: pendingCount, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
+    } else if (viewLevel === 'pending_skip_review') {
+      const pendingCount = relevantKpis.filter(k => k.status === 'skip_level_check').length;
+      return { totalEmployees: demographicFilteredMembers.length, stat1: pendingCount, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else {
       return {
         totalEmployees: demographicFilteredMembers.length,
