@@ -358,17 +358,17 @@ export function EmployeeSelectorGrid({
       };
     } else if (viewLevel === 'pending_self_review') {
       return {
-        badge1: empKpis.filter(k => k.status === 'self_review').length,
+        badge1: empKpis.filter(k => k.status === 'kra_set').length,
         badge2: 0, badge3: 0, total: empKpis.length, clearedKraSet,
       };
     } else if (viewLevel === 'pending_manager_review') {
       return {
-        badge1: empKpis.filter(k => k.status === 'manager_check').length,
+        badge1: empKpis.filter(k => k.status === 'self_review').length,
         badge2: 0, badge3: 0, total: empKpis.length, clearedKraSet,
       };
     } else if (viewLevel === 'pending_skip_review') {
       return {
-        badge1: empKpis.filter(k => k.status === 'skip_level_check').length,
+        badge1: empKpis.filter(k => k.status === 'manager_check').length,
         badge2: 0, badge3: 0, total: empKpis.length, clearedKraSet,
       };
     } else {
