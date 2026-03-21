@@ -1,44 +1,45 @@
 
 
-## Exclude Sent-Back KPIs + Add Sent-Back Tab
+## Root Cause Analysis: HR PMS Pending Review — 194 Count but Empty Employee List
 
-### Changes
+### The Bug
 
-**1. Modified: `src/hooks/usePendingSelfReviews.ts`**
+Two different counting logics are used for the same "Pending Review" concept in the HR PMS view:
 
-**a) Exclude sent-back KPIs from Tab 1 (Option A — open send-backs only):**
-In `useOverdueKraSetKpis`, after fetching KPIs at `kra_set` (line ~86-88):
-- Collect all KPI IDs
-- Query `kpi_queries` where `kpi_id IN (...)`, `query_type = 'send_back'`, `status = 'open'`
-- Build a `Set<string>` of sent-back IDs
-- Skip those IDs in the results loop (`if (sentBackIds.has(kpi.id)) continue;`)
+**Stat card** (line 538-555) counts "pending" broadly:
+- All KPIs in stages *before* `hr_pms_review` (excluding `kra_set`)
+- This includes: `self_review`, `manager_check`, `skip_level_check`
+- Result: **194 KPIs**
 
-**b) New hook `useSentBackKpis` for Tab 3:**
-- Query `kpi_queries` where `query_type = 'send_back'`, `status = 'open'`
-- Join to `kpis` (for kpi_name, kra_name, review_period, review_year, employee_id) filtered by month/year and eligible frequencies, `is_org_level = false`
-- Join to `profiles` for employee name, code, department
-- Also fetch the sender name from `profiles` using `raised_by`
-- Export a `SentBackKpi` interface with: kpiId, employeeName, employeeCode, departmentName, kpiName, kraName, reviewPeriod, reviewYear, sentBackBy (name), reason, sentBackDate
-- Add `useSendReminder` mutation that calls `send-email-notification` edge function with `pending_review_reminder` event type for selected employee emails
+**Employee list filter** (line 415-417) counts "pending" narrowly:
+- Uses `resolveReviewableStatuses('hr_pms', stages)` which returns `[skip_level_check, hr_pms_review]`
+- Then excludes `hr_pms_review` itself
+- So only matches KPIs at exactly `skip_level_check`
+- Result: **0 employees** (all 194 are at `self_review` or `manager_check`, not `skip_level_check`)
 
-**2. Modified: `src/pages/admin/PendingSelfReviews.tsx`**
-- Import new `useSentBackKpis` and `useSendReminder`
-- Add third tab "Sent Back KPIs (N)" with `Undo2` icon
-- Table columns: Checkbox, Employee, Code, Department, KPI, KRA, Sent Back By, Reason, Date
-- Buttons: "Send Reminder Selected" and "Send Reminder All"
-- Selection state for sent-back tab (`selectedSentBack`)
+### The Fix
 
-**3. Modified: `supabase/functions/send-email-notification/index.ts`**
-- Add `pending_review_reminder` event handler with a template reminding the employee about their pending correction
+Align the `displayMembers` filter logic (line 415-417) with the stat card logic (line 538-555). When `statusFilter === 'pending'` for HR PMS:
 
-### UI Layout (Tab 3)
-```text
-Tab 3: Sent Back KPIs (2)
-[Send Reminder Selected (1)] [Send Reminder All (2)]
-┌──┬──────────┬─────┬───────┬─────┬────────┬────────┬──────┐
-│☑ │ Employee │Code │ KPI   │ KRA │ By     │ Reason │ Date │
-└──┴──────────┴─────┴───────┴─────┴────────┴────────┴──────┘
+**Modified: `src/components/review/EmployeeSelectorGrid.tsx`**
+
+Replace the HR PMS pending filter (line 415-417):
+```typescript
+// CURRENT (broken): only matches skip_level_check
+if (statusFilter === 'pending' && reviewableStatuses.includes(kpi.status || '') && kpi.status !== 'hr_pms_review') {
+
+// FIX: match all stages before hr_pms_review, excluding kra_set (same as stat card)
+if (statusFilter === 'pending') {
+  const hrIdx = stages.indexOf('hr_pms_review');
+  if (hrIdx >= 0) {
+    const beforeHr = stages.slice(0, hrIdx);
+    if (beforeHr.includes(kpi.status || '') && kpi.status !== 'kra_set') {
+      employeeIds.add(kpi.employee_id);
+    }
+  }
+}
 ```
 
-### No database changes needed
+### No other files changed
+This is a single-location fix in the `displayMembers` memo of `EmployeeSelectorGrid.tsx`.
 
