@@ -122,9 +122,9 @@ export function useOverdueKraSetKpis(deadlineDay: number, filterMonth?: string, 
   });
 }
 
-export function useOverdueTeamReviewKpis(deadlineDay: number) {
+export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: string, filterYear?: number) {
   return useQuery({
-    queryKey: ['overdue-team-review-kpis', deadlineDay],
+    queryKey: ['overdue-team-review-kpis', deadlineDay, filterMonth, filterYear],
     queryFn: async () => {
       const { data: kpis, error } = await supabase
         .from('kpis')
