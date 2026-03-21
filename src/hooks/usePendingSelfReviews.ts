@@ -165,7 +165,7 @@ export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: stri
           .from('review_submissions')
           .select('kpi_id')
           .in('kpi_id', allKpiIds)
-          .not('manager_score', 'is', null);
+          .or('manager_score.not.is.null,is_na.eq.true');
         alreadyReviewedIds = new Set((reviewed || []).map(r => r.kpi_id));
       }
 
