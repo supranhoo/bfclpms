@@ -390,10 +390,7 @@ export function KpiDetailsTable({
                         </Badge>
                       )}
                       {submission?.auto_advance_reason && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-600 dark:bg-orange-900/20 dark:text-orange-400 gap-0.5">
-                          <Zap className="h-2.5 w-2.5" />
-                          Rated by System
-                        </Badge>
+                        <Zap className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0" />
                       )}
                     </div>
                     <div className="relative">
