@@ -539,14 +539,16 @@ export function EmployeeSelectorGrid({
       let pending = 0, inReview = 0, forwarded = 0;
       relevantKpis.forEach(k => {
         const stages = getStages(k.employee_id);
-        const reviewable = resolveReviewableStatuses('hr_pms', stages);
-        if (reviewable.includes(k.status || '') && k.status !== 'hr_pms_review') pending++;
-        else if (k.status === 'hr_pms_review') inReview++;
+        const hrIdx = stages.indexOf('hr_pms_review');
+        if (hrIdx === -1) return;
+        if (k.status === 'hr_pms_review') inReview++;
         else {
-          const hrIdx = stages.indexOf('hr_pms_review');
-          if (hrIdx >= 0) {
-            const afterHr = stages.slice(hrIdx + 1);
-            if (afterHr.includes(k.status || '')) forwarded++;
+          const afterHr = stages.slice(hrIdx + 1);
+          if (afterHr.includes(k.status || '')) forwarded++;
+          else {
+            // Count all KPIs in stages before 'hr_pms_review' (excluding kra_set) as pending
+            const beforeHr = stages.slice(0, hrIdx);
+            if (beforeHr.includes(k.status || '') && k.status !== 'kra_set') pending++;
           }
         }
       });
