@@ -664,6 +664,7 @@ const EVENT_STYLES: Record<string, { color: string; emoji: string; title: string
   observation_resolved: { color: '#10b981', emoji: '✅', title: 'Observation Resolved' },
   observation_mention: { color: '#3b82f6', emoji: '@', title: 'Mentioned in Observation' },
   org_kpi_pending_reminder: { color: '#f97316', emoji: '⏳', title: 'Pending KPI Reminder' },
+  system_auto_scored: { color: '#f97316', emoji: '⚡', title: 'System Auto-Score' },
   pending_review_reminder: { color: '#f59e0b', emoji: '🔔', title: 'Sent-Back KPI Reminder' },
 };
 
