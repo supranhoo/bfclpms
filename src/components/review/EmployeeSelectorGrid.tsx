@@ -1036,7 +1036,7 @@ interface StatCardProps {
   icon: React.ElementType;
   label: string;
   value: number;
-  color: 'primary' | 'purple' | 'yellow' | 'green' | 'blue' | 'amber' | 'emerald';
+  color: 'primary' | 'purple' | 'yellow' | 'green' | 'blue' | 'amber' | 'emerald' | 'orange';
   subtitle?: string;
   className?: string;
   onClick?: () => void;
