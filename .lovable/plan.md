@@ -1,41 +1,34 @@
 
 
-## Implementing: Pending Self-Reviews Admin Page with Manager/Skip-Level KRA Penalty
+## Add Month-Year Filter to Pending Self-Reviews Page
 
-### Summary
-Build a new admin page at `/admin/pending-reviews` with two tabs:
-- **Tab 1**: Employee KPIs stuck at `kra_set` past the configurable deadline (default 10th of following month)
-- **Tab 2**: Employee KPIs stuck at `team_review` — triggers penalty on manager/skip-level manager's KRA "Implementation of common - policies / systems / processes"
+### What
+Add a month/year selector to the Pending Self-Reviews admin page so the admin can filter overdue KPIs by a specific review period instead of seeing all overdue KPIs across all months.
 
-Configurable settings for deadline day and auto-remark texts.
+### Changes
 
-### Implementation Steps
+**Modified: `src/pages/admin/PendingSelfReviews.tsx`**
+- Import `EffectiveMonthSelector` (already exists at `src/components/admin/EffectiveMonthSelector.tsx`)
+- Add `selectedMonth` and `selectedYear` state (defaulting to previous month and its year)
+- Place the selector between the Settings card and the Tabs
+- Pass `selectedMonth` and `selectedYear` to both hooks so data is filtered client-side
 
-#### 1. Insert System Settings (data-only, via insert tool)
-Insert 3 rows into `system_settings`:
-- `pending_review_deadline_day` → `10`
-- `pending_review_auto_remark` → `"KPI not self reviewed by due date, score given by system"`
-- `manager_penalty_auto_remark` → `"KRA of team not reviewed by due date"`
+**Modified: `src/hooks/usePendingSelfReviews.ts`**
+- Add optional `filterMonth` and `filterYear` parameters to `useOverdueKraSetKpis` and `useOverdueTeamReviewKpis`
+- Add `.eq('review_period', filterMonth).eq('review_year', filterYear)` to the Supabase queries when provided, reducing data fetched
+- Include filter values in query keys for proper cache invalidation
 
-#### 2. New Hook: `src/hooks/usePendingSelfReviews.ts`
-- Fetches KPIs where `status = 'kra_set'`, `is_org_level = false`, frequency is Monthly/Daily/Weekly, past deadline
-- Fetches KPIs where `status = 'team_review'` (same exclusions) for manager penalty tab
-- Joins `profiles` for employee name, code, department; joins `departments` for department name
-- For Tab 2: resolves `reporting_manager_id` and skip-level manager via `get_skip_level_manager`
-- Mutation: bulk auto-score (update `kpis` status to `approved`, `final_score = 0`, `final_rating = 'red'`; upsert `review_submissions`; insert audit logs)
-- Mutation: manager penalty (find manager's KPI by `kra_name`, zero-score it similarly)
-- Reads configurable deadline/remark settings from `system_settings`
+### UI Layout
+```text
+┌─ Pending Reviews ──────────────────────────────┐
+│ ⚙ Settings [...]                               │
+│                                                 │
+│ 📅 Effective Month: [February ▼]  Year: [2026 ▼]│
+│                                                 │
+│ Tab 1: Pending Self-Review (3)                  │
+│ Tab 2: Pending Manager Review (5)               │
+└─────────────────────────────────────────────────┘
+```
 
-#### 3. New Page: `src/pages/admin/PendingSelfReviews.tsx`
-- Settings panel at top: editable deadline day, employee remark, manager remark (with Save button using `useUpdateSystemSetting`)
-- Two tabs with tables showing overdue KPIs
-- Checkbox selection + "Auto-Score Selected" / "Auto-Score All" / "Penalize Managers" bulk buttons
-- Columns: Employee Name, Code, Department, KPI Name, KRA, Review Period, Days Overdue
-
-#### 4. Route & Sidebar
-- `src/App.tsx`: Add lazy import and route `/admin/pending-reviews` inside admin ProtectedRoute
-- `src/components/layout/AppSidebar.tsx`: Add `{ title: 'Pending Reviews', icon: ClipboardCheck, path: '/admin/pending-reviews', roles: ['admin'] }` to admin section
-
-### No database schema changes needed
-All tables and columns already exist. Only data inserts to `system_settings`.
+### No database changes needed
 
