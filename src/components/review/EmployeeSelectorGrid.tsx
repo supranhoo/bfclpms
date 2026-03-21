@@ -120,6 +120,24 @@ const HEADER_CONFIG: Record<Exclude<ViewMode, 'self'>, { icon: React.ElementType
     description: 'Final review and approval of performance evaluations',
     gradient: 'from-emerald-500 to-teal-600'
   },
+  pending_self_review: {
+    icon: Users,
+    title: 'Pending Self Review',
+    description: 'Employees with KPIs pending self review',
+    gradient: 'from-yellow-500 to-amber-600'
+  },
+  pending_manager_review: {
+    icon: Users,
+    title: 'Pending Manager Review',
+    description: 'Employees with KPIs pending manager review',
+    gradient: 'from-amber-500 to-orange-600'
+  },
+  pending_skip_review: {
+    icon: UserCheck,
+    title: 'Pending Skip Mgr Review',
+    description: 'Employees with KPIs pending skip-level review',
+    gradient: 'from-orange-500 to-red-600'
+  },
 };
 
 export function EmployeeSelectorGrid({
