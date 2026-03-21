@@ -1107,7 +1107,8 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       send_back_reason, generated_password, login_email, employee_code, app_name,
       kra_list, kra_count, employee_name, total_weightage,
       old_email, new_email,
-      observation_title, observation_type, observation_description, reply_content } = body;
+      observation_title, observation_type, observation_description, reply_content,
+      auto_score_reason, kpi_list } = body;
 
     // Check if email notifications are enabled
     const { data: enabledSetting } = await supabase
