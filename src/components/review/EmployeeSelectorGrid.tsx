@@ -58,7 +58,9 @@ const STATUS_OPTIONS_BY_LEVEL: Record<Exclude<ViewMode, 'self'>, Array<{ value: 
   ],
   hr_pms: [
     { value: 'all', label: 'All Employees' },
-    { value: 'pending', label: 'Pending HR PMS Review' },
+    { value: 'pending_self', label: 'Pending Self Review' },
+    { value: 'pending_manager', label: 'Pending Manager Review' },
+    { value: 'pending_skip', label: 'Pending Skip Mgr Review' },
     { value: 'in_review', label: 'In HR PMS Review' },
     { value: 'reviewed', label: 'Reviewed' },
   ],
@@ -413,14 +415,12 @@ export function EmployeeSelectorGrid({
             }
           }
         } else if (viewLevel === 'hr_pms') {
-          if (statusFilter === 'pending') {
-            const hrIdx = stages.indexOf('hr_pms_review');
-            if (hrIdx >= 0) {
-              const beforeHr = stages.slice(0, hrIdx);
-              if (beforeHr.includes(kpi.status || '') && kpi.status !== 'kra_set') {
-                employeeIds.add(kpi.employee_id);
-              }
-            }
+          if (statusFilter === 'pending_self' && kpi.status === 'self_review') {
+            employeeIds.add(kpi.employee_id);
+          } else if (statusFilter === 'pending_manager' && kpi.status === 'manager_check') {
+            employeeIds.add(kpi.employee_id);
+          } else if (statusFilter === 'pending_skip' && kpi.status === 'skip_level_check') {
+            employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'in_review' && kpi.status === 'hr_pms_review') {
             employeeIds.add(kpi.employee_id);
           } else if (statusFilter === 'reviewed') {
@@ -481,7 +481,7 @@ export function EmployeeSelectorGrid({
   // Calculate stats using per-employee workflow-aware resolution
   const stats = useMemo(() => {
     if (!periodKpis || !demographicFilteredMembers) {
-      return { totalEmployees: 0, stat1: 0, stat2: 0, stat3: 0, stat4: 0, totalKpis: 0 };
+      return { totalEmployees: 0, stat1: 0, stat2: 0, stat3: 0, stat4: 0, stat5: 0, totalKpis: 0 };
     }
 
     const memberIds = new Set(demographicFilteredMembers.map(m => m.id));
@@ -512,6 +512,7 @@ export function EmployeeSelectorGrid({
         stat2: skipPending,
         stat3: reviewed,
         stat4: relevantKpis.length,
+        stat5: 0,
         totalKpis: relevantKpis.length,
       };
     } else if (viewLevel === 'audit') {
@@ -528,7 +529,7 @@ export function EmployeeSelectorGrid({
           if (beforeAudit.includes(k.status || '') && k.status !== 'kra_set') pending++;
         }
       });
-      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inAudit, stat3: forwarded, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'skip_level') {
       let pending = 0, reviewed = 0;
       relevantKpis.forEach(k => {
@@ -540,25 +541,23 @@ export function EmployeeSelectorGrid({
           if (slIdx >= 0 && stages.slice(slIdx).includes(k.status || '')) reviewed++;
         }
       });
-      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: reviewed, stat3: relevantKpis.length, stat4: 0, stat5: 0, totalKpis: relevantKpis.length };
     } else if (viewLevel === 'hr_pms') {
-      let pending = 0, inReview = 0, forwarded = 0;
+      let pendingSelf = 0, pendingManager = 0, pendingSkip = 0, inReview = 0, forwarded = 0;
       relevantKpis.forEach(k => {
         const stages = getStages(k.employee_id);
         const hrIdx = stages.indexOf('hr_pms_review');
         if (hrIdx === -1) return;
         if (k.status === 'hr_pms_review') inReview++;
+        else if (k.status === 'self_review') pendingSelf++;
+        else if (k.status === 'manager_check') pendingManager++;
+        else if (k.status === 'skip_level_check') pendingSkip++;
         else {
           const afterHr = stages.slice(hrIdx + 1);
           if (afterHr.includes(k.status || '')) forwarded++;
-          else {
-            // Count all KPIs in stages before 'hr_pms_review' (excluding kra_set) as pending
-            const beforeHr = stages.slice(0, hrIdx);
-            if (beforeHr.includes(k.status || '') && k.status !== 'kra_set') pending++;
-          }
         }
       });
-      return { totalEmployees: demographicFilteredMembers.length, stat1: pending, stat2: inReview, stat3: forwarded, stat4: 0, totalKpis: relevantKpis.length };
+      return { totalEmployees: demographicFilteredMembers.length, stat1: pendingSelf, stat2: pendingManager, stat3: pendingSkip, stat4: inReview, stat5: forwarded, totalKpis: relevantKpis.length };
     } else {
       return {
         totalEmployees: demographicFilteredMembers.length,
@@ -566,6 +565,7 @@ export function EmployeeSelectorGrid({
         stat2: relevantKpis.filter(k => k.status === 'approved').length,
         stat3: relevantKpis.length,
         stat4: 0,
+        stat5: 0,
         totalKpis: relevantKpis.length,
       };
     }
@@ -647,11 +647,13 @@ export function EmployeeSelectorGrid({
       );
     } else if (viewLevel === 'hr_pms') {
       return (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-          <StatCard icon={Clock} label="Pending Review" value={stats.stat1} color="amber" subtitle="In pipeline for HR PMS" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} />
-          <StatCard icon={FileCheck} label="In Review" value={stats.stat2} color="purple" subtitle="Currently in HR PMS" onClick={() => toggleStatusFilter('in_review')} active={statusFilter === 'in_review'} />
-          <StatCard icon={CheckCircle2} label="Reviewed" value={stats.stat3} color="green" subtitle="HR PMS completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} />
+          <StatCard icon={Clock} label="Pending Self Review" value={stats.stat1} color="yellow" subtitle="At self review stage" onClick={() => toggleStatusFilter('pending_self')} active={statusFilter === 'pending_self'} />
+          <StatCard icon={Briefcase} label="Pending Manager Review" value={stats.stat2} color="amber" subtitle="At manager check stage" onClick={() => toggleStatusFilter('pending_manager')} active={statusFilter === 'pending_manager'} />
+          <StatCard icon={UserCheck} label="Pending Skip Mgr Review" value={stats.stat3} color="orange" subtitle="At skip-level stage" onClick={() => toggleStatusFilter('pending_skip')} active={statusFilter === 'pending_skip'} />
+          <StatCard icon={FileCheck} label="In HR PMS Review" value={stats.stat4} color="purple" subtitle="Currently in HR PMS" onClick={() => toggleStatusFilter('in_review')} active={statusFilter === 'in_review'} />
+          <StatCard icon={CheckCircle2} label="HR PMS Reviewed" value={stats.stat5 || 0} color="green" subtitle="HR PMS completed" onClick={() => toggleStatusFilter('reviewed')} active={statusFilter === 'reviewed'} />
           <StatCard icon={Target} label="Total KPIs" value={stats.totalKpis} color="blue" subtitle="This period" />
         </div>
       );
@@ -1036,7 +1038,7 @@ interface StatCardProps {
   icon: React.ElementType;
   label: string;
   value: number;
-  color: 'primary' | 'purple' | 'yellow' | 'green' | 'blue' | 'amber' | 'emerald';
+  color: 'primary' | 'purple' | 'yellow' | 'green' | 'blue' | 'amber' | 'emerald' | 'orange';
   subtitle?: string;
   className?: string;
   onClick?: () => void;
@@ -1051,6 +1053,7 @@ const colorMap: Record<StatCardProps['color'], { border: string; bg: string; tex
   blue: { border: 'border-l-blue-500', bg: 'bg-blue-500/10', text: 'text-blue-600' },
   amber: { border: 'border-l-amber-500', bg: 'bg-amber-500/10', text: 'text-amber-600' },
   emerald: { border: 'border-l-emerald-500', bg: 'bg-emerald-500/10', text: 'text-emerald-600' },
+  orange: { border: 'border-l-orange-500', bg: 'bg-orange-500/10', text: 'text-orange-600' },
 };
 
 function StatCard({ icon: Icon, label, value, color, subtitle, className = '', onClick, active }: StatCardProps) {
