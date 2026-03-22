@@ -314,6 +314,7 @@ export default function ManagementDashboard() {
       const ratingCounts = { band5: 0, band4: 0, band3: 0, band2: 0, band1: 0 };
       const employeeScoreMap = new Map<string, { total: number; count: number; weightage: number }>();
       kpis.forEach(kpi => {
+        if (kpi.status !== 'approved') return;
         const s = getScore(kpi);
         if (s === null) return;
         const w = kpi.weightage ?? 100;
