@@ -660,12 +660,12 @@ export function useSentBackKpisTab(filterMonth?: string, filterYear?: number) {
       let kpiQuery = supabase
         .from('kpis')
         .select(`
-          id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, is_org_level,
+          id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, is_org_level, status,
           profiles!kpis_employee_id_fkey ( full_name, employee_code, email, department_id, departments ( name ) )
         `)
         .in('id', kpiIds)
         .eq('is_org_level', false)
-        .eq('status', 'kra_set')
+        .not('status', 'eq', 'approved')
         .in('frequency', ['Monthly', 'Daily', 'Weekly']);
 
       if (filterMonth) kpiQuery = kpiQuery.eq('review_period', filterMonth);
