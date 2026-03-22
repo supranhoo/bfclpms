@@ -443,7 +443,7 @@ export default function ManagementDashboard() {
       // We can't filter by updated_at in our existing query, so approximate from what we have
       // Count KPIs stuck in intermediate stages  
       const overdueReviews = kpis.filter(k => 
-        k.status && !['approved', 'kra_set'].includes(k.status)
+        k.status && !['approved', 'kra_set'].includes(k.status) && isKpiOverdue(k)
       ).length;
 
       return {
