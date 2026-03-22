@@ -612,6 +612,11 @@ export default function PendingSelfReviews() {
                   <FastForward className="h-3.5 w-3.5 mr-1" />
                   Push All ({overdueSkipLevel.length})
                 </Button>
+                <div className="h-6 w-px bg-border mx-1" />
+                <Button size="sm" variant="outline" onClick={() => handleExportExcel('Skip Level', 'Skip-Level Manager', overdueSkipLevel)} disabled={overdueSkipLevel.length === 0}>
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                  Export Excel
+                </Button>
               </div>
 
               {skipLevelLoading ? (
