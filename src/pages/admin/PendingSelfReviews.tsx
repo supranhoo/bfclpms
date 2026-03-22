@@ -251,18 +251,26 @@ export default function PendingSelfReviews() {
 
   const handleExportSentBack = () => {
     if (sentBackKpis.length === 0) return;
+    const statusLabel: Record<string, string> = {
+      kra_set: 'With Employee',
+      self_review: 'With Manager',
+      manager_check: 'With Skip-Level',
+      skip_level_check: 'With Skip-Level',
+      audit: 'With Auditor',
+      management_review: 'With Management',
+    };
     const rows = sentBackKpis.map(k => ({
       'Employee': k.employeeName,
       'Code': k.employeeCode,
       'Department': k.departmentName,
       'KPI': k.kpiName,
-      'KRA': k.kraName,
+      'Current Status': statusLabel[k.currentStatus] || k.currentStatus,
       'Sent Back By': k.sentBackBy,
       'Reason': k.reason,
       'Date': format(new Date(k.sentBackDate), 'dd MMM yyyy'),
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{ wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 25 }, { wch: 20 }, { wch: 30 }, { wch: 14 }];
+    ws['!cols'] = [{ wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 18 }, { wch: 20 }, { wch: 30 }, { wch: 14 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sent Back');
     XLSX.writeFile(wb, `Pending_Reviews_Sent_Back_${selectedMonth}_${selectedYear}.xlsx`);
