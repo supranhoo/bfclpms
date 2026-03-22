@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-22  
-> **Version:** 1.65.0 — Workflow-aware filtering for Pending Manager/Skip-Level tabs + golden system-forwarded icon
+> **Version:** 1.66.0 — Bottleneck report filters to overdue KPIs only; top/bottom performers use approved KPIs (10 each)
 > **Maintainer:** Lovable AI
 
 ---
