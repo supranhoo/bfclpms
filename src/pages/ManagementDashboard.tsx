@@ -373,7 +373,7 @@ export default function ManagementDashboard() {
           return { employeeId: eid, name: p?.full_name || 'Unknown', department: (p?.departments as any)?.name || '-', score: weightage > 0 ? (total / weightage) : 0 };
         })
         .sort((a, b) => a.score - b.score)
-        .slice(0, 5);
+        .slice(0, 10);
 
       // Performance trend by period — only months with actual scored submissions
       const periodScores = new Map<string, { total: number; weightage: number; hasScores: boolean }>();
