@@ -271,7 +271,13 @@ export default function ManagementDashboard() {
       };
 
       // Pending management reviews grouped by employee
-      const managementPendingKpis = kpis.filter(k => k.status === 'management_review');
+      const overdueToday = new Date();
+      const isKpiOverdue = (kpi: any) => {
+        const dueDate = getKpiDueDate(kpi.frequency, kpi.review_period, kpi.review_year);
+        if (!dueDate) return true;
+        return overdueToday >= dueDate;
+      };
+      const managementPendingKpis = kpis.filter(k => k.status === 'management_review' && isKpiOverdue(k));
       const employeePendingMap = new Map<string, { kpiCount: number; totalScore: number; totalWeightage: number }>();
       managementPendingKpis.forEach(kpi => {
         const score = getScoreOrZero(kpi);
