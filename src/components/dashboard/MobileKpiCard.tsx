@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Info, BarChart3, ClipboardEdit, Building2, Users, User, Zap } from 'lucide-react';
+import { Info, BarChart3, ClipboardEdit, Building2, Users, User, Zap, FastForward } from 'lucide-react';
 import { KPI } from '@/hooks/useKpis';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
