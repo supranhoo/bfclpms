@@ -890,7 +890,7 @@ export function usePenalizedManagerKpis(filterMonth?: string, filterYear?: numbe
       let kpiQuery = supabase
         .from('kpis')
         .select(`
-          id, employee_id, kpi_name, kra_name, review_period, review_year, status,
+          id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, status,
           profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, departments ( name ) )
         `)
         .in('id', kpiIds)
