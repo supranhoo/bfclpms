@@ -158,8 +158,32 @@ export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: stri
       const { data: kpis, error } = await query;
       if (error) throw error;
 
+      // Workflow-aware filter: only keep KPIs where the employee's workflow
+      // has 'manager_check' as the stage immediately after 'self_review'
+      const uniqueEmployeeIds = [...new Set((kpis || []).map(k => k.employee_id))];
+      const workflowCache: Record<string, string[]> = {};
+      for (const empId of uniqueEmployeeIds) {
+        // Use first KPI's period/year for workflow resolution
+        const sampleKpi = (kpis || []).find(k => k.employee_id === empId);
+        if (sampleKpi?.review_period && sampleKpi?.review_year) {
+          const { data: wf } = await supabase.rpc('get_employee_workflow', {
+            employee_uuid: empId,
+            p_review_period: sampleKpi.review_period,
+            p_review_year: sampleKpi.review_year,
+          });
+          if (wf && Array.isArray(wf)) workflowCache[empId] = wf as string[];
+        }
+      }
+      const workflowFilteredKpis = (kpis || []).filter(kpi => {
+        const stages = workflowCache[kpi.employee_id];
+        if (!stages) return false;
+        const selfIdx = stages.indexOf('self_review');
+        if (selfIdx === -1) return false;
+        return stages[selfIdx + 1] === 'manager_check';
+      });
+
       // Exclude KPIs where manager has already scored (false-positive fix)
-      const allKpiIds = (kpis || []).map(k => k.id);
+      const allKpiIds = workflowFilteredKpis.map(k => k.id);
       let alreadyReviewedIds = new Set<string>();
       if (allKpiIds.length > 0) {
         const { data: reviewed } = await supabase
@@ -179,7 +203,7 @@ export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: stri
 
       const rawItems: Array<{ kpi: any; profile: any; daysOverdue: number }> = [];
 
-      for (const kpi of kpis || []) {
+      for (const kpi of workflowFilteredKpis) {
         if (alreadyReviewedIds.has(kpi.id)) continue;
         if (!kpi.review_period || !kpi.review_year) continue;
         const deadline = getDeadlineDate(kpi.review_period, kpi.review_year, deadlineDay);
@@ -1064,8 +1088,31 @@ export function useOverdueSkipLevelKpis(deadlineDay: number, filterMonth?: strin
       const { data: kpis, error } = await query;
       if (error) throw error;
 
+      // Workflow-aware filter: only keep KPIs where the employee's workflow
+      // has 'skip_level_check' as the stage immediately after 'manager_check'
+      const uniqueEmployeeIds = [...new Set((kpis || []).map(k => k.employee_id))];
+      const workflowCache: Record<string, string[]> = {};
+      for (const empId of uniqueEmployeeIds) {
+        const sampleKpi = (kpis || []).find(k => k.employee_id === empId);
+        if (sampleKpi?.review_period && sampleKpi?.review_year) {
+          const { data: wf } = await supabase.rpc('get_employee_workflow', {
+            employee_uuid: empId,
+            p_review_period: sampleKpi.review_period,
+            p_review_year: sampleKpi.review_year,
+          });
+          if (wf && Array.isArray(wf)) workflowCache[empId] = wf as string[];
+        }
+      }
+      const workflowFilteredKpis = (kpis || []).filter(kpi => {
+        const stages = workflowCache[kpi.employee_id];
+        if (!stages) return false;
+        const mgrIdx = stages.indexOf('manager_check');
+        if (mgrIdx === -1) return false;
+        return stages[mgrIdx + 1] === 'skip_level_check';
+      });
+
       // Exclude KPIs where skip-level has already scored
-      const allKpiIds = (kpis || []).map(k => k.id);
+      const allKpiIds = workflowFilteredKpis.map(k => k.id);
       let alreadyReviewedIds = new Set<string>();
       if (allKpiIds.length > 0) {
         const { data: reviewed } = await supabase
@@ -1080,7 +1127,7 @@ export function useOverdueSkipLevelKpis(deadlineDay: number, filterMonth?: strin
       const managerIds = new Set<string>();
       const rawItems: Array<{ kpi: any; profile: any; daysOverdue: number }> = [];
 
-      for (const kpi of kpis || []) {
+      for (const kpi of workflowFilteredKpis) {
         if (alreadyReviewedIds.has(kpi.id)) continue;
         if (!kpi.review_period || !kpi.review_year) continue;
         const deadline = getDeadlineDate(kpi.review_period, kpi.review_year, deadlineDay);
