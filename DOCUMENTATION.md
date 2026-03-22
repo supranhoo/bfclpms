@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-22  
-> **Version:** 1.63.0 — Add pending KPI Excel export to all reviewer dashboards
+> **Version:** 1.64.0 — Add "Push to Next Level" bulk action on Pending Reviews + system-forwarded KPI indicators
 > **Maintainer:** Lovable AI
 
 ---
@@ -4081,6 +4081,23 @@ Admin-only page with two tabs for managing overdue KPIs:
 - `pending_review_deadline_day` — default 10 (admin can change)
 - `pending_review_auto_remark` — default "KPI not self reviewed by due date, score given by system"
 - `manager_penalty_auto_remark` — default "KRA of team not reviewed by due date"
+
+---
+
+### Push to Next Level (System Forward)
+
+Administrators can push pending KPIs to any subsequent workflow level without assigning a score. This is available on all three pending tabs (Self-Review, Manager Review, Skip-Level Review) via a "Forward To" dropdown and "Push Selected"/"Push All" buttons.
+
+**Behavior:**
+- Updates `kpis.status` to the chosen target level
+- Sets `review_submissions.auto_advance_reason` to `"System-forwarded to {target} (skipped {current} review)"` — no scores are assigned
+- Logs `SYSTEM_FORWARDED` action in `kpi_audit_logs`
+- On employee dashboards, system-forwarded KPIs display a blue `FastForward` icon (distinct from the orange `Zap` for auto-scored KPIs)
+
+**Target options per tab:**
+- **Pending Self-Review**: Manager, Skip Manager, HR PMS, Audit, Management
+- **Pending Manager Review**: Skip Manager, HR PMS, Audit, Management
+- **Pending Skip-Level**: HR PMS, Audit, Management
 
 ---
 

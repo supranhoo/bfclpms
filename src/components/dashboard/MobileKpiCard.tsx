@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Info, BarChart3, ClipboardEdit, Building2, Users, User, Zap } from 'lucide-react';
+import { Info, BarChart3, ClipboardEdit, Building2, Users, User, Zap, FastForward } from 'lucide-react';
 import { KPI } from '@/hooks/useKpis';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
@@ -95,9 +95,11 @@ export function MobileKpiCard({
       {/* KRA/KPI names */}
       <p className="font-medium text-sm mb-1 line-clamp-1 whitespace-pre-wrap">{renderBoldKpiText(kpi.kra_name)}</p>
       <p className="text-xs text-muted-foreground mb-1 line-clamp-2 whitespace-pre-wrap">{renderBoldKpiText(kpi.kpi_name)}</p>
-      {submission?.auto_advance_reason && (
+      {submission?.auto_advance_reason?.startsWith('System-forwarded') ? (
+        <FastForward className="h-4 w-4 text-blue-500 dark:text-blue-400 shrink-0 mb-1" />
+      ) : submission?.auto_advance_reason ? (
         <Zap className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0 mb-1" />
-      )}
+      ) : null}
 
       {/* Org KPI badges */}
       {kpi.is_org_level && (

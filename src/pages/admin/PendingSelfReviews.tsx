@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Settings, AlertTriangle, Users, Undo2, Mail, RotateCcw, UserCheck } from 'lucide-react';
+import { Loader2, Settings, AlertTriangle, Users, Undo2, Mail, RotateCcw, UserCheck, FastForward } from 'lucide-react';
 import { EffectiveMonthSelector } from '@/components/admin/EffectiveMonthSelector';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUpdateSystemSetting, useSystemSetting } from '@/hooks/useSystemSettings';
@@ -27,6 +27,7 @@ import {
   usePenalizedManagerKpis,
   useRollbackAutoScore,
   useRollbackManagerPenalty,
+  useBulkPushForward,
   OverdueKpi,
   SentBackKpi,
   AutoScoredKpi,
@@ -76,12 +77,19 @@ export default function PendingSelfReviews() {
   const sendReminder = useSendReminder();
   const rollbackAutoScore = useRollbackAutoScore();
   const rollbackManagerPenalty = useRollbackManagerPenalty();
+  const bulkPushForward = useBulkPushForward();
 
   const [selectedKraSet, setSelectedKraSet] = useState<Set<string>>(new Set());
   const [selectedTeamReview, setSelectedTeamReview] = useState<Set<string>>(new Set());
   const [selectedSentBack, setSelectedSentBack] = useState<Set<string>>(new Set());
   const [selectedAutoScored, setSelectedAutoScored] = useState<Set<string>>(new Set());
   const [selectedPenalized, setSelectedPenalized] = useState<Set<string>>(new Set());
+  const [selectedSkipLevel, setSelectedSkipLevel] = useState<Set<string>>(new Set());
+
+  // Push forward targets per tab
+  const [selfForwardTarget, setSelfForwardTarget] = useState<string>('self_review');
+  const [mgrForwardTarget, setMgrForwardTarget] = useState<string>('manager_check');
+  const [skipForwardTarget, setSkipForwardTarget] = useState<string>('hr_pms_review');
 
   const handleSaveSettings = async () => {
     try {
@@ -165,6 +173,37 @@ export default function PendingSelfReviews() {
     if (!user?.id || penalizedKpis.length === 0) return;
     rollbackManagerPenalty.mutate({ items: penalizedKpis, adminId: user.id });
     setSelectedPenalized(new Set());
+  };
+  // Push forward handlers
+  const handlePushForwardSelected = (
+    items: OverdueKpi[],
+    selected: Set<string>,
+    setSelected: (s: Set<string>) => void,
+    targetStatus: string,
+    currentStatusLabel: string
+  ) => {
+    if (!user?.id || selected.size === 0) return;
+    bulkPushForward.mutate({
+      kpiIds: [...selected],
+      targetStatus,
+      adminId: user.id,
+      currentStatusLabel,
+    });
+    setSelected(new Set());
+  };
+
+  const handlePushForwardAll = (
+    items: OverdueKpi[],
+    targetStatus: string,
+    currentStatusLabel: string
+  ) => {
+    if (!user?.id || items.length === 0) return;
+    bulkPushForward.mutate({
+      kpiIds: items.map(k => k.kpiId),
+      targetStatus,
+      adminId: user.id,
+      currentStatusLabel,
+    });
   };
 
   const toggleSelection = (set: Set<string>, setFn: (s: Set<string>) => void, id: string) => {
@@ -300,13 +339,34 @@ export default function PendingSelfReviews() {
         <TabsContent value="self-review">
           <Card>
             <CardContent className="pt-4 space-y-4">
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap items-center">
                 <Button size="sm" onClick={handleAutoScoreSelected} disabled={selectedKraSet.size === 0 || bulkAutoScore.isPending}>
                   {bulkAutoScore.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
                   Auto-Score Selected ({selectedKraSet.size})
                 </Button>
                 <Button size="sm" variant="destructive" onClick={handleAutoScoreAll} disabled={overdueKraSet.length === 0 || bulkAutoScore.isPending}>
                   Auto-Score All ({overdueKraSet.length})
+                </Button>
+                <div className="h-6 w-px bg-border mx-1" />
+                <Select value={selfForwardTarget} onValueChange={setSelfForwardTarget}>
+                  <SelectTrigger className="h-8 w-[160px]">
+                    <SelectValue placeholder="Forward to..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="self_review">Manager</SelectItem>
+                    <SelectItem value="manager_check">Skip Manager</SelectItem>
+                    <SelectItem value="hr_pms_review">HR PMS</SelectItem>
+                    <SelectItem value="audit">Audit</SelectItem>
+                    <SelectItem value="management_review">Management</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button size="sm" variant="outline" onClick={() => handlePushForwardSelected(overdueKraSet, selectedKraSet, setSelectedKraSet, selfForwardTarget, 'Self Review')} disabled={selectedKraSet.size === 0 || bulkPushForward.isPending}>
+                  {bulkPushForward.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <FastForward className="h-3.5 w-3.5 mr-1" />}
+                  Push Selected
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handlePushForwardAll(overdueKraSet, selfForwardTarget, 'Self Review')} disabled={overdueKraSet.length === 0 || bulkPushForward.isPending}>
+                  <FastForward className="h-3.5 w-3.5 mr-1" />
+                  Push All
                 </Button>
               </div>
 
@@ -368,13 +428,33 @@ export default function PendingSelfReviews() {
         <TabsContent value="team-review">
           <Card>
             <CardContent className="pt-4 space-y-4">
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap items-center">
                 <Button size="sm" onClick={handlePenalizeSelected} disabled={selectedTeamReview.size === 0 || bulkManagerPenalty.isPending}>
                   {bulkManagerPenalty.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
                   Penalize Managers ({selectedTeamReview.size})
                 </Button>
                 <Button size="sm" variant="destructive" onClick={handlePenalizeAll} disabled={overdueTeamReview.length === 0 || bulkManagerPenalty.isPending}>
                   Penalize All ({overdueTeamReview.length})
+                </Button>
+                <div className="h-6 w-px bg-border mx-1" />
+                <Select value={mgrForwardTarget} onValueChange={setMgrForwardTarget}>
+                  <SelectTrigger className="h-8 w-[160px]">
+                    <SelectValue placeholder="Forward to..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manager_check">Skip Manager</SelectItem>
+                    <SelectItem value="hr_pms_review">HR PMS</SelectItem>
+                    <SelectItem value="audit">Audit</SelectItem>
+                    <SelectItem value="management_review">Management</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button size="sm" variant="outline" onClick={() => handlePushForwardSelected(overdueTeamReview, selectedTeamReview, setSelectedTeamReview, mgrForwardTarget, 'Manager Review')} disabled={selectedTeamReview.size === 0 || bulkPushForward.isPending}>
+                  {bulkPushForward.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <FastForward className="h-3.5 w-3.5 mr-1" />}
+                  Push Selected
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handlePushForwardAll(overdueTeamReview, mgrForwardTarget, 'Manager Review')} disabled={overdueTeamReview.length === 0 || bulkPushForward.isPending}>
+                  <FastForward className="h-3.5 w-3.5 mr-1" />
+                  Push All
                 </Button>
               </div>
 
@@ -438,6 +518,27 @@ export default function PendingSelfReviews() {
         <TabsContent value="skip-level">
           <Card>
             <CardContent className="pt-4 space-y-4">
+              <div className="flex gap-2 flex-wrap items-center">
+                <Select value={skipForwardTarget} onValueChange={setSkipForwardTarget}>
+                  <SelectTrigger className="h-8 w-[160px]">
+                    <SelectValue placeholder="Forward to..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hr_pms_review">HR PMS</SelectItem>
+                    <SelectItem value="audit">Audit</SelectItem>
+                    <SelectItem value="management_review">Management</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button size="sm" variant="outline" onClick={() => handlePushForwardSelected(overdueSkipLevel, selectedSkipLevel, setSelectedSkipLevel, skipForwardTarget, 'Skip-Level Review')} disabled={selectedSkipLevel.size === 0 || bulkPushForward.isPending}>
+                  {bulkPushForward.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <FastForward className="h-3.5 w-3.5 mr-1" />}
+                  Push Selected ({selectedSkipLevel.size})
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handlePushForwardAll(overdueSkipLevel, skipForwardTarget, 'Skip-Level Review')} disabled={overdueSkipLevel.length === 0 || bulkPushForward.isPending}>
+                  <FastForward className="h-3.5 w-3.5 mr-1" />
+                  Push All ({overdueSkipLevel.length})
+                </Button>
+              </div>
+
               {skipLevelLoading ? (
                 <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
               ) : overdueSkipLevel.length === 0 ? (
@@ -447,6 +548,12 @@ export default function PendingSelfReviews() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-10">
+                          <Checkbox
+                            checked={selectedSkipLevel.size === overdueSkipLevel.length && overdueSkipLevel.length > 0}
+                            onCheckedChange={() => toggleAll(overdueSkipLevel, selectedSkipLevel, setSelectedSkipLevel)}
+                          />
+                        </TableHead>
                         <TableHead>Employee</TableHead>
                         <TableHead>Code</TableHead>
                         <TableHead>Department</TableHead>
@@ -461,6 +568,12 @@ export default function PendingSelfReviews() {
                     <TableBody>
                       {overdueSkipLevel.map(item => (
                         <TableRow key={item.kpiId}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedSkipLevel.has(item.kpiId)}
+                              onCheckedChange={() => toggleSelection(selectedSkipLevel, setSelectedSkipLevel, item.kpiId)}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium">{item.employeeName}</TableCell>
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>

@@ -17,7 +17,7 @@ import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { canReviewKpi as workflowCanReview, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { 
   Info, Lock, CheckCircle2, Calendar, ChevronDown, ChevronUp, Undo2, Eye, 
-  Building2, Users, User, FileCheck, Clock, UserPlus, Zap
+  Building2, Users, User, FileCheck, Clock, UserPlus, Zap, FastForward
 } from 'lucide-react';
 import { AuditKpiAssignPopover } from '@/components/review/AuditKpiAssignPopover';
 import type { AuditKpiAssignment } from '@/hooks/useAuditKpiAssignments';
@@ -399,9 +399,18 @@ export function KpiDetailsTable({
                           Sent Back
                         </Badge>
                       )}
-                      {submission?.auto_advance_reason && (
+                      {submission?.auto_advance_reason?.startsWith('System-forwarded') ? (
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <FastForward className="h-4 w-4 text-blue-500 dark:text-blue-400 shrink-0" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs">{submission.auto_advance_reason}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : submission?.auto_advance_reason ? (
                         <Zap className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0" />
-                      )}
+                      ) : null}
                     </div>
                     <div className="relative">
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap">
