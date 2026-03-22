@@ -547,11 +547,8 @@ export default function PendingSelfReviews() {
                         <TableHead>Code</TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>KPI</TableHead>
-                        <TableHead>KRA</TableHead>
-                        <TableHead>Manager</TableHead>
-                        <TableHead>Skip-Level Manager</TableHead>
+                        <TableHead>Pending With</TableHead>
                         <TableHead>Period</TableHead>
-                        <TableHead>Days Overdue</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
