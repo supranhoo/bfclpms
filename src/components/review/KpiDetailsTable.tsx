@@ -17,7 +17,7 @@ import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { canReviewKpi as workflowCanReview, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { 
   Info, Lock, CheckCircle2, Calendar, ChevronDown, ChevronUp, Undo2, Eye, 
-  Building2, Users, User, FileCheck, Clock, UserPlus, Zap
+  Building2, Users, User, FileCheck, Clock, UserPlus, Zap, FastForward
 } from 'lucide-react';
 import { AuditKpiAssignPopover } from '@/components/review/AuditKpiAssignPopover';
 import type { AuditKpiAssignment } from '@/hooks/useAuditKpiAssignments';
