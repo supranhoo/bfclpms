@@ -650,8 +650,9 @@ export default function PendingSelfReviews() {
                         <TableHead>Code</TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>KPI</TableHead>
-                        <TableHead>Pending With</TableHead>
-                        <TableHead>Period</TableHead>
+                         <TableHead>Pending With</TableHead>
+                         <TableHead>Reviewer</TableHead>
+                         <TableHead>Period</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
