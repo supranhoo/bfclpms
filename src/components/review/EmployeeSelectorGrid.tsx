@@ -372,14 +372,32 @@ export function EmployeeSelectorGrid({
         nonMonthlyCount,
       };
     } else if (viewLevel === 'pending_manager_review') {
+      const pendingKpis = empKpis.filter(k => k.status === 'self_review');
+      const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
+      const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length;
+      const regularCount = pendingKpis.filter(k =>
+        !k.is_org_level &&
+        (!k.frequency || ['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase()))
+      ).length;
       return {
-        badge1: empKpis.filter(k => k.status === 'self_review').length,
+        badge1: regularCount,
         badge2: 0, badge3: 0, total: empKpis.length, clearedKraSet,
+        orgKpiCount,
+        nonMonthlyCount,
       };
     } else if (viewLevel === 'pending_skip_review') {
+      const pendingKpis = empKpis.filter(k => k.status === 'manager_check');
+      const orgKpiCount = pendingKpis.filter(k => k.is_org_level).length;
+      const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length;
+      const regularCount = pendingKpis.filter(k =>
+        !k.is_org_level &&
+        (!k.frequency || ['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase()))
+      ).length;
       return {
-        badge1: empKpis.filter(k => k.status === 'manager_check').length,
+        badge1: regularCount,
         badge2: 0, badge3: 0, total: empKpis.length, clearedKraSet,
+        orgKpiCount,
+        nonMonthlyCount,
       };
     } else {
       const pending = empKpis.filter(k => k.status === 'management_review').length;
