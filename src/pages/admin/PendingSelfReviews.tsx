@@ -677,6 +677,11 @@ export default function PendingSelfReviews() {
                   <Mail className="h-3.5 w-3.5 mr-1" />
                   Send Reminder ({selectedSentBack.size})
                 </Button>
+                <div className="h-6 w-px bg-border mx-1" />
+                <Button size="sm" variant="outline" onClick={handleExportRollback} disabled={autoScoredKpis.length === 0 && penalizedKpis.length === 0}>
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                  Export Excel
+                </Button>
                 <Button size="sm" variant="secondary" onClick={handleSendReminderAll} disabled={sentBackKpis.length === 0 || sendReminder.isPending}>
                   Send Reminder All ({sentBackKpis.length})
                 </Button>
