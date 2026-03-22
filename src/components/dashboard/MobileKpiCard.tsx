@@ -96,7 +96,7 @@ export function MobileKpiCard({
       <p className="font-medium text-sm mb-1 line-clamp-1 whitespace-pre-wrap">{renderBoldKpiText(kpi.kra_name)}</p>
       <p className="text-xs text-muted-foreground mb-1 line-clamp-2 whitespace-pre-wrap">{renderBoldKpiText(kpi.kpi_name)}</p>
       {submission?.auto_advance_reason?.startsWith('System-forwarded') ? (
-        <FastForward className="h-4 w-4 text-blue-500 dark:text-blue-400 shrink-0 mb-1" title={submission.auto_advance_reason} />
+        <FastForward className="h-4 w-4 text-blue-500 dark:text-blue-400 shrink-0 mb-1" />
       ) : submission?.auto_advance_reason ? (
         <Zap className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0 mb-1" />
       ) : null}
