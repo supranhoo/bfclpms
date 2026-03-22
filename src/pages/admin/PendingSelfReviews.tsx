@@ -173,8 +173,39 @@ export default function PendingSelfReviews() {
     rollbackManagerPenalty.mutate({ items: penalizedKpis, adminId: user.id });
     setSelectedPenalized(new Set());
   };
+  // Push forward handlers
+  const handlePushForwardSelected = (
+    items: OverdueKpi[],
+    selected: Set<string>,
+    setSelected: (s: Set<string>) => void,
+    targetStatus: string,
+    currentStatusLabel: string
+  ) => {
+    if (!user?.id || selected.size === 0) return;
+    bulkPushForward.mutate({
+      kpiIds: [...selected],
+      targetStatus,
+      adminId: user.id,
+      currentStatusLabel,
+    });
+    setSelected(new Set());
+  };
 
-  const toggleSelection = (set: Set<string>, setFn: (s: Set<string>) => void, id: string) => {
+  const handlePushForwardAll = (
+    items: OverdueKpi[],
+    targetStatus: string,
+    currentStatusLabel: string
+  ) => {
+    if (!user?.id || items.length === 0) return;
+    bulkPushForward.mutate({
+      kpiIds: items.map(k => k.kpiId),
+      targetStatus,
+      adminId: user.id,
+      currentStatusLabel,
+    });
+  };
+
+
     const next = new Set(set);
     next.has(id) ? next.delete(id) : next.add(id);
     setFn(next);
