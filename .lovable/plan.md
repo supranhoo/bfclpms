@@ -1,45 +1,39 @@
 
 
-## Apply Overdue Due-Date Filter Across Management Dashboard
+## Fix: Hide UUIDs in MentionTextarea (Always Show Clean Text)
 
 ### Problem
-The Management Dashboard counts and displays ALL pending KPIs regardless of whether they are actually overdue. The frequency-based due date logic (already implemented in the Bottleneck Report) needs to be applied everywhere pending KPIs are counted or listed.
+When the textarea is focused, the raw mention markup `@[Umesh Kumar Mehta](adfab1e8-fc45-...)` is visible to the user. UUIDs should never be shown — the user should always see just `@Umesh Kumar Mehta`.
 
-### Due Date Rule (recap)
-- Monthly/Daily/Weekly: 1st of next month
-- Bi-Monthly: 1st of month after cycle end
-- Quarterly: 1st of month after quarter end
-- Half-Yearly/Yearly: 1st of month after period end
+### Root Cause
+Line 160 of `MentionTextarea.tsx`: when focused, the textarea value is the raw `value` (containing `@[Name](uuid)` markup). This was done to fix a cursor alignment issue, but it exposes internal markup to users.
 
-Only KPIs where `today >= dueDate` are considered "pending/overdue".
+### Solution
+Always display clean text (no UUIDs) in the textarea. Map user edits from display-text coordinates back to raw-text coordinates using a position mapping utility.
 
 ### Changes
 
-#### 1. Extract `getKpiDueDate` to shared utility
-**File: `src/lib/frequencyUtils.ts`**
-- Move the `getKpiDueDate` function from `src/hooks/useBottleneckReport.ts` to `src/lib/frequencyUtils.ts` so it can be reused.
+#### File: `src/lib/mentionUtils.ts`
 
-**File: `src/hooks/useBottleneckReport.ts`**
-- Remove the local `getKpiDueDate` and import it from `@/lib/frequencyUtils`.
+Add two new utility functions:
 
-#### 2. Apply overdue filter in Management Dashboard
-**File: `src/pages/ManagementDashboard.tsx`**
+1. **`buildDisplayToRawMap(rawText)`** — Scans the raw text for mention patterns and builds an array that maps each display-text character index to its corresponding raw-text index. Mentions like `@[Name](uuid)` (raw) map to `@Name` (display), so display indices within a mention map to the mention's start in raw text.
 
-The KPI query (line 182) needs `frequency` added to the select. Then apply the overdue filter at these points:
+2. **`applyDisplayEditToRaw(oldRaw, oldDisplay, newDisplay, cursorInNew)`** — Given the old raw text, old display text, new display text (after user edit), and cursor position, determines what changed (insertion, deletion, or replacement) and applies the equivalent edit to the raw text. If an edit touches part of a mention token, the entire mention is removed from raw text.
 
-1. **Add `frequency` to KPI select** (line 182): Add `frequency` to the query fields.
+#### File: `src/components/ui/MentionTextarea.tsx`
 
-2. **Import `getKpiDueDate`** from `@/lib/frequencyUtils`.
+1. **Remove `isFocused` state** — no longer needed since text appearance is the same focused or not.
 
-3. **`overdueReviews` calculation (lines 431-433)**: Replace current logic with frequency-aware due date check — only count non-approved KPIs where `today >= getKpiDueDate(kpi.frequency, kpi.review_period, kpi.review_year)`.
+2. **Textarea value**: Always show `getDisplayText(value)` — never the raw value.
 
-4. **`managementPendingKpis` (line 266)**: Add overdue filter — only include `management_review` KPIs that are past their due date.
+3. **Overlay**: Always show `renderMentionText(value)` overlay with `pointer-events-none`, textarea text always transparent. Cursor is visible via `caret-foreground`. Since display text and overlay now have identical character lengths, the cursor aligns perfectly.
 
-5. **`pendingReviews` table (line 276)**: Automatically fixed since it's derived from `managementPendingKpis`.
+4. **`handleInput`**: Instead of `onChange(newValue)` directly, use `applyDisplayEditToRaw(value, oldDisplayText, newDisplayText, cursor)` to compute the new raw value, then call `onChange(newRawValue)`. Store old display text in a ref for diffing.
 
-6. **`managementPending` in `calculateMetrics` (line 230)**: Add overdue filter to the management_review count.
+5. **`selectUser`**: After `insertMention` produces new raw text, compute the display-text cursor position (raw cursor minus the UUID overhead) and set selection accordingly.
 
-7. **`divisionPerformance.pendingReviews` (line 298)**: Add overdue filter to the per-division management_review count.
+6. **`@` trigger detection**: The trigger detection logic works on the display text (textarea value), which is fine since `@` characters are preserved in display text.
 
 ### No database changes needed
 
