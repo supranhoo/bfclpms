@@ -273,12 +273,13 @@ export default function PendingSelfReviews() {
       'Code': k.employeeCode,
       'Department': k.departmentName,
       'KPI': k.kpiName,
+      'Frequency': k.frequency || '-',
       'Pending With': pendingWith,
       'Reviewer': getReviewerName(k, pendingWith),
       'Period': `${k.reviewPeriod} ${k.reviewYear}`,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{ wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 18 }, { wch: 22 }, { wch: 18 }];
+    ws['!cols'] = [{ wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 18 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, tabName);
     XLSX.writeFile(wb, `Pending_Reviews_${tabName.replace(/\s+/g, '_')}_${selectedMonth}_${selectedYear}.xlsx`);
@@ -299,13 +300,14 @@ export default function PendingSelfReviews() {
       'Code': k.employeeCode,
       'Department': k.departmentName,
       'KPI': k.kpiName,
+      'Frequency': k.frequency || '-',
       'Current Status': statusLabel[k.currentStatus] || k.currentStatus,
       'Sent Back By': k.sentBackBy,
       'Reason': k.reason,
       'Date': format(new Date(k.sentBackDate), 'dd MMM yyyy'),
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{ wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 18 }, { wch: 20 }, { wch: 30 }, { wch: 14 }];
+    ws['!cols'] = [{ wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 30 }, { wch: 14 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sent Back');
     XLSX.writeFile(wb, `Pending_Reviews_Sent_Back_${selectedMonth}_${selectedYear}.xlsx`);
@@ -322,12 +324,13 @@ export default function PendingSelfReviews() {
         'Department': k.departmentName,
         'KPI': k.kpiName,
         'KRA': k.kraName,
+        'Frequency': k.frequency || '-',
         'Period': `${k.reviewPeriod} ${k.reviewYear}`,
         'Scored At': format(new Date(k.scoredAt), 'dd MMM yyyy HH:mm'),
         'Scored By': k.scoredBy,
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
-      ws['!cols'] = [{ wch: 14 }, { wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 25 }, { wch: 18 }, { wch: 20 }, { wch: 20 }];
+      ws['!cols'] = [{ wch: 14 }, { wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 25 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 20 }];
       XLSX.utils.book_append_sheet(wb, ws, 'Auto-Scored');
     }
     if (penalizedKpis.length > 0) {
@@ -338,13 +341,14 @@ export default function PendingSelfReviews() {
         'Department': k.departmentName,
         'KPI': k.kpiName,
         'KRA': k.kraName,
+        'Frequency': k.frequency || '-',
         'Period': `${k.reviewPeriod} ${k.reviewYear}`,
         'Previous Status': k.oldStatus.replace(/_/g, ' '),
         'Scored At': format(new Date(k.scoredAt), 'dd MMM yyyy HH:mm'),
         'Scored By': k.scoredBy,
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
-      ws['!cols'] = [{ wch: 16 }, { wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 25 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 20 }];
+      ws['!cols'] = [{ wch: 16 }, { wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 25 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 20 }];
       XLSX.utils.book_append_sheet(wb, ws, 'Manager Penalty');
     }
     XLSX.writeFile(wb, `Pending_Reviews_Rollback_${selectedMonth}_${selectedYear}.xlsx`);

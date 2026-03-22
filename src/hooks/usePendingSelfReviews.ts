@@ -633,6 +633,7 @@ export interface SentBackKpi {
   departmentName: string;
   kpiName: string;
   kraName: string;
+  frequency: string;
   reviewPeriod: string;
   reviewYear: number;
   sentBackBy: string;
@@ -704,6 +705,7 @@ export function useSentBackKpisTab(filterMonth?: string, filterYear?: number) {
           departmentName: profile?.departments?.name || '',
           kpiName: kpi.kpi_name,
           kraName: kpi.kra_name,
+          frequency: kpi.frequency || '',
           reviewPeriod: kpi.review_period || '',
           reviewYear: kpi.review_year || 0,
           sentBackBy: senderMap[q.raised_by] || 'Unknown',
@@ -768,6 +770,7 @@ export interface AutoScoredKpi {
   departmentName: string;
   kpiName: string;
   kraName: string;
+  frequency: string;
   reviewPeriod: string;
   reviewYear: number;
   scoredAt: string;
@@ -783,6 +786,7 @@ export interface PenalizedManagerKpi {
   departmentName: string;
   kpiName: string;
   kraName: string;
+  frequency: string;
   reviewPeriod: string;
   reviewYear: number;
   oldStatus: string;
@@ -815,7 +819,7 @@ export function useAutoScoredKpis(filterMonth?: string, filterYear?: number) {
       let kpiQuery = supabase
         .from('kpis')
         .select(`
-          id, employee_id, kpi_name, kra_name, review_period, review_year, status,
+          id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, status,
           profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, departments ( name ) )
         `)
         .in('id', kpiIds)
@@ -851,6 +855,7 @@ export function useAutoScoredKpis(filterMonth?: string, filterYear?: number) {
           departmentName: profile?.departments?.name || '',
           kpiName: kpi.kpi_name,
           kraName: kpi.kra_name,
+          frequency: (kpi as any).frequency || '',
           reviewPeriod: kpi.review_period || '',
           reviewYear: kpi.review_year || 0,
           scoredAt: log.created_at,
@@ -885,7 +890,7 @@ export function usePenalizedManagerKpis(filterMonth?: string, filterYear?: numbe
       let kpiQuery = supabase
         .from('kpis')
         .select(`
-          id, employee_id, kpi_name, kra_name, review_period, review_year, status,
+          id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, status,
           profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, departments ( name ) )
         `)
         .in('id', kpiIds)
@@ -921,6 +926,7 @@ export function usePenalizedManagerKpis(filterMonth?: string, filterYear?: numbe
           departmentName: profile?.departments?.name || '',
           kpiName: kpi.kpi_name,
           kraName: kpi.kra_name,
+          frequency: (kpi as any).frequency || '',
           reviewPeriod: kpi.review_period || '',
           reviewYear: kpi.review_year || 0,
           oldStatus: oldVal?.status || 'kra_set',
