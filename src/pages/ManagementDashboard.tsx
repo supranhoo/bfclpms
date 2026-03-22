@@ -358,6 +358,7 @@ export default function ManagementDashboard() {
       
       const bottomEmployeeScores = new Map<string, { total: number; weightage: number }>();
       kpis.forEach(kpi => {
+        if (kpi.status !== 'approved') return;
         if (!recentMonthsForBottom.includes(kpi.review_period)) return;
         const score = getScore(kpi);
         if (score === null) return;
