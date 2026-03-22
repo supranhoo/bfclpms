@@ -721,6 +721,7 @@ const buildEmailHtml = (
   customization: {
     logoUrl?: string;
     footerText?: string;
+    finalScore?: string;
   }
 ): string => {
   const style = EVENT_STYLES[eventType] || { color: '#6366f1', emoji: '📬', title: 'Notification' };
@@ -742,20 +743,62 @@ const buildEmailHtml = (
     return `<p>${linked}</p>`;
   }).join('');
 
+  // Build sparkle celebration HTML for score 5 (Outstanding)
+  let sparkleStyleBlock = '';
+  let sparkleBannerHtml = '';
+  if (eventType === 'final_approved' && customization.finalScore === '5') {
+    const sparkleEmojis = ['✨', '⭐', '🌟', '✨', '⭐', '🌟', '✨', '⭐', '🌟', '✨'];
+    const positions = [5, 15, 25, 35, 45, 55, 65, 75, 85, 92];
+    const durations = [3.5, 4.2, 3.8, 5.0, 4.5, 3.2, 4.8, 3.6, 5.2, 4.0];
+    const delays = [0, 0.8, 1.5, 0.3, 2.0, 1.2, 0.5, 2.5, 1.8, 3.0];
+    const sizes = [20, 16, 24, 18, 22, 14, 20, 16, 24, 18];
+
+    sparkleStyleBlock = `
+        @keyframes sparkle-float {
+          0% { transform: translateY(0) rotate(0deg) scale(0.5); opacity: 0; }
+          10% { opacity: 1; transform: translateY(-30px) rotate(45deg) scale(1); }
+          50% { opacity: 0.8; }
+          90% { opacity: 0.6; }
+          100% { transform: translateY(-350px) rotate(720deg) scale(0.3); opacity: 0; }
+        }
+        @keyframes sparkle-sway {
+          0%, 100% { margin-left: 0; }
+          25% { margin-left: 15px; }
+          75% { margin-left: -15px; }
+        }
+    `;
+
+    const sparkleElements = sparkleEmojis.map((emoji, i) => 
+      `<span style="position:absolute;left:${positions[i]}%;bottom:0;font-size:${sizes[i]}px;animation:sparkle-float ${durations[i]}s ${delays[i]}s infinite linear, sparkle-sway ${durations[i] * 0.7}s ${delays[i]}s infinite ease-in-out;pointer-events:none;">${emoji}</span>`
+    ).join('');
+
+    sparkleBannerHtml = `
+      <div style="position:relative;overflow:hidden;height:120px;background:linear-gradient(135deg, #fbbf24, #f59e0b, #d97706);border-radius:8px 8px 0 0;text-align:center;padding:20px;">
+        ${sparkleElements}
+        <div style="position:relative;z-index:1;">
+          <p style="font-size:36px;margin:0;line-height:1;">🎉</p>
+          <h2 style="margin:8px 0 0;font-size:20px;font-weight:bold;color:#ffffff;text-shadow:0 1px 3px rgba(0,0,0,0.3);">Congratulations! Outstanding Performance!</h2>
+        </div>
+      </div>
+    `;
+  }
+
   return `
     <html>
     <head>
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, ${style.color}, ${style.color}dd); color: white; padding: 30px; border-radius: 8px 8px 0 0; }
+        .header { background: linear-gradient(135deg, ${style.color}, ${style.color}dd); color: white; padding: 30px; border-radius: ${sparkleBannerHtml ? '0' : '8px 8px 0 0'}; }
         .content { background: #f8fafc; padding: 30px; border: 1px solid #e2e8f0; }
         .content p { margin: 0 0 10px 0; }
         .footer { background: #f1f5f9; padding: 20px; text-align: center; font-size: 12px; color: #64748b; border-radius: 0 0 8px 8px; }
+        ${sparkleStyleBlock}
       </style>
     </head>
     <body>
       <div class="container">
+        ${sparkleBannerHtml}
         <div class="header">
           <table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
             ${logoHtml}
