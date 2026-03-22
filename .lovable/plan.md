@@ -1,39 +1,24 @@
 
 
-## Fix: "Pending Self" Count Not Excluding Org/Non-Monthly KPIs
+## Show Last Self-Review Submission Date on KPI Details Header
 
-### Root Cause
-Two issues found:
+### What
+Add a date indicator to the left of "KRA Export" button showing when the employee last submitted a self-review for regular KPIs (excluding org KPIs and bi-monthly/quarterly/half-yearly/yearly KPIs). This helps reviewers quickly see when the employee completed their self-review.
 
-1. **Tile-level stat (line 633)**: The `nonMonthlyCount` filter only excludes `'monthly'` but misses `'daily'` and `'weekly'`, making the non-monthly count too high and inconsistent with the card-level logic.
+### Files to Modify
 
-2. **Card-level badge (lines 363-368)**: The logic is actually correct — `badge1` uses `regularCount` which properly excludes org and non-monthly KPIs. However, if `regularCount` is 0, the badge is hidden entirely (line 895: `badge1 > 0`), which may confuse users. We should show "0 pending self" when other badges are visible, so users understand the breakdown.
+#### 1. `src/hooks/useKpis.ts` (line 116)
+Add `submitted_at` and `updated_at` to the `ReviewSubmission` interface — the query already fetches `*` so data is available, just not typed.
 
-### Fix
+#### 2. `src/components/review/UnifiedScorecard.tsx` (lines 1357-1373)
+Compute the last submission date from regular KPIs:
+- Filter `kpis` to exclude `is_org_level` and non-monthly frequencies
+- Filter to only KPIs past `kra_set` status (i.e., self-review done)
+- Get their submissions from `submissionMap`, find the max `submitted_at`
+- Display as a small badge/text like `Self reviewed: 15 Mar` to the left of the KRA Export button
 
-#### File: `src/components/review/EmployeeSelectorGrid.tsx`
-
-**1. Fix tile-level nonMonthlyCount (line 633)**
-Change:
-```typescript
-const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly'].includes(k.frequency.toLowerCase())).length;
-```
-To:
-```typescript
-const nonMonthlyCount = pendingKpis.filter(k => k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())).length;
-```
-
-Also update `stat1` to show only regular count (excluding org and non-monthly), matching the card behavior:
-```typescript
-const regularCount = pendingKpis.filter(k => !k.is_org_level && (!k.frequency || ['monthly','daily','weekly'].includes(k.frequency.toLowerCase()))).length;
-return { ..., stat1: regularCount, stat2: orgKpiCount, stat3: nonMonthlyCount, ... };
-```
-
-**2. Show "0 pending self" badge when org/non-monthly badges exist (line 895)**
-Change `{kpiStats.badge1 > 0 && (` to always show the badge in `pending_self_review` view when there are org or non-monthly KPIs:
-```typescript
-{(kpiStats.badge1 > 0 || (viewLevel === 'pending_self_review' && ((kpiStats as any).orgKpiCount > 0 || (kpiStats as any).nonMonthlyCount > 0))) && (
-```
+### UI
+A subtle text/badge with a calendar icon showing the date, positioned left of the KRA Export button in the header row. Only shown when a date exists.
 
 ### No database changes needed
 
