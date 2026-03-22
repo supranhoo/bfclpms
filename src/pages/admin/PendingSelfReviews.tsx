@@ -549,7 +549,13 @@ export default function PendingSelfReviews() {
                           <TableCell className="font-medium">{item.employeeName}</TableCell>
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
-                          <TableCell>{item.kpiName}</TableCell>
+                          <TableCell>
+                            <span className="inline-flex items-center gap-1.5 flex-wrap">
+                              {item.kpiName}
+                              {item.frequency === 'Bi-Monthly' && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-violet-300 text-violet-700">Bi-Monthly</Badge>}
+                              {item.frequency === 'Quarterly' && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-teal-300 text-teal-700">Quarterly</Badge>}
+                            </span>
+                          </TableCell>
                            <TableCell><Badge variant="outline">Employee</Badge></TableCell>
                            <TableCell>{item.reportingManagerName || '-'}</TableCell>
                            <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
@@ -642,7 +648,13 @@ export default function PendingSelfReviews() {
                           <TableCell className="font-medium">{item.employeeName}</TableCell>
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
-                          <TableCell>{item.kpiName}</TableCell>
+                          <TableCell>
+                            <span className="inline-flex items-center gap-1.5 flex-wrap">
+                              {item.kpiName}
+                              {item.frequency === 'Bi-Monthly' && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-violet-300 text-violet-700">Bi-Monthly</Badge>}
+                              {item.frequency === 'Quarterly' && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-teal-300 text-teal-700">Quarterly</Badge>}
+                            </span>
+                          </TableCell>
                            <TableCell><Badge variant="outline">Manager</Badge></TableCell>
                            <TableCell>{item.reportingManagerName || '-'}</TableCell>
                            <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
@@ -726,7 +738,13 @@ export default function PendingSelfReviews() {
                           <TableCell className="font-medium">{item.employeeName}</TableCell>
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
-                          <TableCell>{item.kpiName}</TableCell>
+                          <TableCell>
+                            <span className="inline-flex items-center gap-1.5 flex-wrap">
+                              {item.kpiName}
+                              {item.frequency === 'Bi-Monthly' && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-violet-300 text-violet-700">Bi-Monthly</Badge>}
+                              {item.frequency === 'Quarterly' && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-teal-300 text-teal-700">Quarterly</Badge>}
+                            </span>
+                          </TableCell>
                            <TableCell><Badge variant="outline">Skip-Level Manager</Badge></TableCell>
                            <TableCell>{item.skipLevelManagerName || '-'}</TableCell>
                            <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
@@ -811,7 +829,13 @@ export default function PendingSelfReviews() {
                           <TableCell className="font-medium">{item.employeeName}</TableCell>
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
-                          <TableCell>{item.kpiName}</TableCell>
+                          <TableCell>
+                            <span className="inline-flex items-center gap-1.5 flex-wrap">
+                              {item.kpiName}
+                              {item.frequency === 'Bi-Monthly' && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-violet-300 text-violet-700">Bi-Monthly</Badge>}
+                              {item.frequency === 'Quarterly' && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-teal-300 text-teal-700">Quarterly</Badge>}
+                            </span>
+                          </TableCell>
                           <TableCell>
                             <Badge variant="outline">{statusLabel[item.currentStatus] || item.currentStatus}</Badge>
                           </TableCell>
@@ -887,7 +911,13 @@ export default function PendingSelfReviews() {
                           <TableCell className="font-medium">{item.employeeName}</TableCell>
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
-                          <TableCell>{item.kpiName}</TableCell>
+                          <TableCell>
+                            <span className="inline-flex items-center gap-1.5 flex-wrap">
+                              {item.kpiName}
+                              {item.frequency === 'Bi-Monthly' && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-violet-300 text-violet-700">Bi-Monthly</Badge>}
+                              {item.frequency === 'Quarterly' && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-teal-300 text-teal-700">Quarterly</Badge>}
+                            </span>
+                          </TableCell>
                           <TableCell className="max-w-[200px] truncate">{item.kraName}</TableCell>
                           <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
                           <TableCell>{format(new Date(item.scoredAt), 'dd MMM yyyy HH:mm')}</TableCell>
@@ -958,7 +988,13 @@ export default function PendingSelfReviews() {
                           <TableCell className="font-medium">{item.managerName}</TableCell>
                           <TableCell>{item.managerCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
-                          <TableCell>{item.kpiName}</TableCell>
+                          <TableCell>
+                            <span className="inline-flex items-center gap-1.5 flex-wrap">
+                              {item.kpiName}
+                              {item.frequency === 'Bi-Monthly' && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-violet-300 text-violet-700">Bi-Monthly</Badge>}
+                              {item.frequency === 'Quarterly' && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-teal-300 text-teal-700">Quarterly</Badge>}
+                            </span>
+                          </TableCell>
                           <TableCell className="max-w-[200px] truncate">{item.kraName}</TableCell>
                           <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
                           <TableCell>
