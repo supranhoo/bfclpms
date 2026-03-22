@@ -534,7 +534,7 @@ export default function PendingSelfReviews() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {overdueKraSet.map(item => (
+                      {sortItems(overdueKraSet, 'self').map(item => (
                         <TableRow key={item.kpiId}>
                           <TableCell>
                             <Checkbox
