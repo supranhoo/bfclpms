@@ -4092,12 +4092,18 @@ Administrators can push pending KPIs to any subsequent workflow level without as
 - Updates `kpis.status` to the chosen target level
 - Sets `review_submissions.auto_advance_reason` to `"System-forwarded to {target} (skipped {current} review)"` — no scores are assigned
 - Logs `SYSTEM_FORWARDED` action in `kpi_audit_logs`
-- On employee dashboards, system-forwarded KPIs display a blue `FastForward` icon (distinct from the orange `Zap` for auto-scored KPIs)
+- On employee dashboards, system-forwarded KPIs display a golden `FastForward` icon (distinct from the orange `Zap` for auto-scored KPIs)
 
 **Target options per tab:**
 - **Pending Self-Review**: Manager, Skip Manager, HR PMS, Audit, Management
 - **Pending Manager Review**: Skip Manager, HR PMS, Audit, Management
 - **Pending Skip-Level**: HR PMS, Audit, Management
+
+### 4.XX.6 Workflow-Aware Pending Tab Filtering
+
+The "Pending Manager Review" and "Pending Skip-Level Review" tabs now filter KPIs by the employee's actual workflow stages (fetched via `get_employee_workflow` RPC). A KPI at `self_review` status only appears in the Manager tab if `manager_check` is the immediate next stage in that employee's workflow. Similarly, a KPI at `manager_check` only appears in the Skip-Level tab if `skip_level_check` follows. This prevents employees with shorter workflows (e.g., `self_review → audit`) from incorrectly appearing in the Manager tab.
+
+The "Pending With" column displays a static badge per tab (`Employee`, `Manager`, `Skip-Level Manager`) since all KPIs in a given tab are guaranteed to be pending at that level after filtering.
 
 ---
 
