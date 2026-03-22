@@ -709,6 +709,7 @@ export function useSentBackKpisTab(filterMonth?: string, filterYear?: number) {
           sentBackBy: senderMap[q.raised_by] || 'Unknown',
           reason: (q.reason || '').replace(/^\[SENT BACK\]\s*/i, ''),
           sentBackDate: q.created_at,
+          currentStatus: (kpi as any).status || 'unknown',
         });
       }
 
