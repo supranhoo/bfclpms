@@ -181,7 +181,7 @@ export default function ManagementDashboard() {
               let query = supabase
                 .from('kpis')
                 .select(`
-                  id, employee_id, status, weightage, review_period, review_year,
+                  id, employee_id, status, weightage, review_period, review_year, frequency,
                   review_submissions ( final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score )
                 `)
                 .eq('review_year', calYear)
