@@ -1,20 +1,15 @@
 
 
-## Add Sorting on Code and Reviewer Columns in Pending Review Tables
+## Fix: "Cannot coerce the result to a single JSON object" Error
 
-### Changes
+### Root Cause
+`useSystemSetting()` in `src/hooks/useSystemSettings.ts` (line 55) uses `.single()` which throws when 0 rows are returned. If a setting key like `pending_review_deadline_day` doesn't exist yet in the `system_settings` table, this crashes.
 
-#### File: `src/pages/admin/PendingSelfReviews.tsx`
+### Fix
 
-1. **Add sorting state**: A `sortField` (`'code' | 'reviewer' | null`) and `sortDirection` (`'asc' | 'desc'`) state pair, shared across tabs.
+**File: `src/hooks/useSystemSettings.ts`, line 55**
 
-2. **Add sort helper**: A `sortItems` function that takes an `OverdueKpi[]` array and returns a sorted copy based on `sortField`/`sortDirection`:
-   - `code`: sort by `item.employeeCode`
-   - `reviewer`: sort by `item.reportingManagerName` (or `item.skipLevelManagerName` for the skip-level tab)
-
-3. **Make column headers clickable**: Replace plain `<TableHead>Code</TableHead>` and `<TableHead>Reviewer</TableHead>` with clickable headers showing an arrow icon (ArrowUpDown/ArrowUp/ArrowDown) in all three pending tabs (Self-Review, Manager Review, Skip-Level Review).
-
-4. **Apply sorting**: Wrap each tab's data array through the sort function before mapping rows: `sortItems(overdueKraSet, 'self')`, `sortItems(overdueTeamReview, 'manager')`, `sortItems(overdueSkipLevel, 'skip')`.
+Change `.single()` to `.maybeSingle()`. All consumers already handle `data` being null/undefined via optional chaining and defaults.
 
 ### No database changes needed
 
