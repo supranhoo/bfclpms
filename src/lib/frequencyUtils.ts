@@ -636,6 +636,41 @@ export function hasMultiMonthCycle(rawFrequency: FrequencyType | string | null):
  * Used by KRA Issuance to fetch non-monthly KPIs whose cycle includes the selected month.
  * E.g. for "February" → ['February', 'Q1', 'Q3', 'Q4', 'H1', 'H2', 'Jan-Dec', 'Apr-Mar', 'Jul-Jun', 'Jan-Feb', 'Feb-Mar']
  */
+/**
+ * Calculate the due date for a KPI based on its frequency and review period.
+ * Returns the date after which the KPI is considered overdue.
+ */
+export function getKpiDueDate(frequency: string | null, reviewPeriod: string | null, reviewYear: number | null): Date | null {
+  if (!reviewPeriod || reviewPeriod === '-' || !reviewYear) return null;
+
+  const monthNum = getMonthNumber(reviewPeriod); // 1-12
+  const norm = normalizeFrequency(frequency);
+
+  switch (norm) {
+    case 'Bi-Monthly': {
+      const cycleEnd = monthNum % 2 === 0 ? monthNum : monthNum + 1;
+      if (cycleEnd >= 12) return new Date(reviewYear + 1, 0, 1);
+      return new Date(reviewYear, cycleEnd, 1);
+    }
+    case 'Quarterly': {
+      const qEnd = Math.ceil(monthNum / 3) * 3;
+      if (qEnd >= 12) return new Date(reviewYear + 1, 0, 1);
+      return new Date(reviewYear, qEnd, 1);
+    }
+    case 'Half-Yearly': {
+      if (monthNum <= 6) return new Date(reviewYear, 6, 1);
+      return new Date(reviewYear + 1, 0, 1);
+    }
+    case 'Yearly': {
+      return new Date(reviewYear + 1, 0, 1);
+    }
+    default: {
+      if (monthNum >= 12) return new Date(reviewYear + 1, 0, 1);
+      return new Date(reviewYear, monthNum, 1);
+    }
+  }
+}
+
 export function getAllPeriodsForMonth(monthName: string): string[] {
   const periods: string[] = [monthName];
   const monthNum = getMonthNumber(monthName);

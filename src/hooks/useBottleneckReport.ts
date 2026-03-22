@@ -9,42 +9,7 @@ import {
   resolveResponsiblePerson,
   type ResolvedStageKey,
 } from '@/lib/bottleneckResolver';
-import { getMonthNumber, normalizeFrequency } from '@/lib/frequencyUtils';
-
-/**
- * Calculate the due date for a KPI based on its frequency and review period.
- * Returns the date after which the KPI is considered overdue.
- */
-function getKpiDueDate(frequency: string | null, reviewPeriod: string | null, reviewYear: number | null): Date | null {
-  if (!reviewPeriod || reviewPeriod === '-' || !reviewYear) return null;
-
-  const monthNum = getMonthNumber(reviewPeriod); // 1-12
-  const norm = normalizeFrequency(frequency);
-
-  switch (norm) {
-    case 'Bi-Monthly': {
-      const cycleEnd = monthNum % 2 === 0 ? monthNum : monthNum + 1;
-      if (cycleEnd >= 12) return new Date(reviewYear + 1, 0, 1);
-      return new Date(reviewYear, cycleEnd, 1);
-    }
-    case 'Quarterly': {
-      const qEnd = Math.ceil(monthNum / 3) * 3;
-      if (qEnd >= 12) return new Date(reviewYear + 1, 0, 1);
-      return new Date(reviewYear, qEnd, 1);
-    }
-    case 'Half-Yearly': {
-      if (monthNum <= 6) return new Date(reviewYear, 6, 1);
-      return new Date(reviewYear + 1, 0, 1);
-    }
-    case 'Yearly': {
-      return new Date(reviewYear + 1, 0, 1);
-    }
-    default: {
-      if (monthNum >= 12) return new Date(reviewYear + 1, 0, 1);
-      return new Date(reviewYear, monthNum, 1);
-    }
-  }
-}
+import { getKpiDueDate } from '@/lib/frequencyUtils';
 // The resolved stage keys used for grouping / filtering
 export type StageKey = ResolvedStageKey;
 
