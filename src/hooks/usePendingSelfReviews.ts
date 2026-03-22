@@ -203,7 +203,7 @@ export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: stri
 
       const rawItems: Array<{ kpi: any; profile: any; daysOverdue: number }> = [];
 
-      for (const kpi of kpis || []) {
+      for (const kpi of workflowFilteredKpis) {
         if (alreadyReviewedIds.has(kpi.id)) continue;
         if (!kpi.review_period || !kpi.review_year) continue;
         const deadline = getDeadlineDate(kpi.review_period, kpi.review_year, deadlineDay);
