@@ -84,6 +84,7 @@ export default function PendingSelfReviews() {
   const [selectedSentBack, setSelectedSentBack] = useState<Set<string>>(new Set());
   const [selectedAutoScored, setSelectedAutoScored] = useState<Set<string>>(new Set());
   const [selectedPenalized, setSelectedPenalized] = useState<Set<string>>(new Set());
+  const [selectedSkipLevel, setSelectedSkipLevel] = useState<Set<string>>(new Set());
 
   // Push forward targets per tab
   const [selfForwardTarget, setSelfForwardTarget] = useState<string>('self_review');
