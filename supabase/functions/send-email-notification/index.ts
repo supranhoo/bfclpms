@@ -304,7 +304,7 @@ Period: {{review_period}} {{review_year}}
 Resolution: {{resolution_notes}}`,
   },
   final_approved: {
-    subject: '[PMS] 🎉 Your KPI Has Been Finalized',
+    subject: '[PMS] 🎉 Your KPI Has Been Finalized — Score: {{final_score}}/5',
     body: `Hi {{recipient_name}},
 
 Congratulations! Your KPI has received final approval and is now complete.
@@ -312,6 +312,7 @@ Congratulations! Your KPI has received final approval and is now complete.
 KRA: {{kra_name}}
 KPI: {{kpi_name}}
 Period: {{review_period}} {{review_year}}
+Final Score: {{final_score}} / 5 — {{score_label}}
 
 Thank you for your contribution!`,
   },
