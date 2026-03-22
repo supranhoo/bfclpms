@@ -746,7 +746,7 @@ const buildEmailHtml = (
   // Build sparkle celebration HTML for score 5 (Outstanding)
   let sparkleStyleBlock = '';
   let sparkleBannerHtml = '';
-  if (eventType === 'final_approved' && customization.finalScore === '5') {
+  if (eventType === 'final_approved' && customization.finalScore && parseFloat(customization.finalScore) >= 4) {
     const sparkleEmojis = ['✨', '⭐', '🌟', '✨', '⭐', '🌟', '✨', '⭐', '🌟', '✨'];
     const positions = [5, 15, 25, 35, 45, 55, 65, 75, 85, 92];
     const durations = [3.5, 4.2, 3.8, 5.0, 4.5, 3.2, 4.8, 3.6, 5.2, 4.0];
@@ -777,7 +777,7 @@ const buildEmailHtml = (
         ${sparkleElements}
         <div style="position:relative;z-index:1;">
           <p style="font-size:36px;margin:0;line-height:1;">🎉</p>
-          <h2 style="margin:8px 0 0;font-size:20px;font-weight:bold;color:#ffffff;text-shadow:0 1px 3px rgba(0,0,0,0.3);">Congratulations! Outstanding Performance!</h2>
+          <h2 style="margin:8px 0 0;font-size:20px;font-weight:bold;color:#ffffff;text-shadow:0 1px 3px rgba(0,0,0,0.3);">Congratulations! Exceptional Performance!</h2>
         </div>
       </div>
     `;

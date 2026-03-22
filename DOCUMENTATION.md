@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-22  
-> **Version:** 1.68.0 — KPI Finalized email now shows final score (0-5) with label; score 5 triggers animated floating sparkle celebration
+> **Version:** 1.69.0 — KPI Finalized email sparkle celebration now triggers for scores 4+ (was 5 only)
 > **Maintainer:** Lovable AI
 
 ---
