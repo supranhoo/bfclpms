@@ -345,7 +345,7 @@ export default function ManagementDashboard() {
         const p = profileMap.get(eid);
         return { employeeId: eid, name: p?.full_name || 'Unknown', department: (p?.departments as any)?.name || '-', score: weightage > 0 ? (total / weightage) : 0 };
       }).sort((a, b) => b.score - a.score);
-      const topPerformers = employeePerformers.slice(0, 5);
+      const topPerformers = employeePerformers.slice(0, 10);
 
       // Bottom performers: last 3 months with actual data, weighted average
       const monthsWithScores = new Set<string>();
