@@ -31,6 +31,7 @@ export function MentionTextarea({
   const [triggerStart, setTriggerStart] = useState<number | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [isFocused, setIsFocused] = useState(false);
 
   const { results, isLoading } = useMentionSearch(showDropdown ? mentionQuery : '', kpiId);
 
