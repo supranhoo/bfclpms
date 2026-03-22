@@ -855,6 +855,7 @@ export function useAutoScoredKpis(filterMonth?: string, filterYear?: number) {
           departmentName: profile?.departments?.name || '',
           kpiName: kpi.kpi_name,
           kraName: kpi.kra_name,
+          frequency: (kpi as any).frequency || '',
           reviewPeriod: kpi.review_period || '',
           reviewYear: kpi.review_year || 0,
           scoredAt: log.created_at,
