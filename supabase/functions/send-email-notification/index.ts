@@ -1152,7 +1152,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       kra_list, kra_count, employee_name, total_weightage,
       old_email, new_email,
       observation_title, observation_type, observation_description, reply_content,
-      auto_score_reason, kpi_list } = body;
+      auto_score_reason, kpi_list, final_score } = body;
 
     // Check if email notifications are enabled
     const { data: enabledSetting } = await supabase
