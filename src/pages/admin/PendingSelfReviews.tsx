@@ -77,12 +77,18 @@ export default function PendingSelfReviews() {
   const sendReminder = useSendReminder();
   const rollbackAutoScore = useRollbackAutoScore();
   const rollbackManagerPenalty = useRollbackManagerPenalty();
+  const bulkPushForward = useBulkPushForward();
 
   const [selectedKraSet, setSelectedKraSet] = useState<Set<string>>(new Set());
   const [selectedTeamReview, setSelectedTeamReview] = useState<Set<string>>(new Set());
   const [selectedSentBack, setSelectedSentBack] = useState<Set<string>>(new Set());
   const [selectedAutoScored, setSelectedAutoScored] = useState<Set<string>>(new Set());
   const [selectedPenalized, setSelectedPenalized] = useState<Set<string>>(new Set());
+
+  // Push forward targets per tab
+  const [selfForwardTarget, setSelfForwardTarget] = useState<string>('self_review');
+  const [mgrForwardTarget, setMgrForwardTarget] = useState<string>('manager_check');
+  const [skipForwardTarget, setSkipForwardTarget] = useState<string>('hr_pms_review');
 
   const handleSaveSettings = async () => {
     try {
