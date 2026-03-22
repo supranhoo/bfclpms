@@ -314,6 +314,7 @@ export default function ManagementDashboard() {
       const ratingCounts = { band5: 0, band4: 0, band3: 0, band2: 0, band1: 0 };
       const employeeScoreMap = new Map<string, { total: number; count: number; weightage: number }>();
       kpis.forEach(kpi => {
+        if (kpi.status !== 'approved') return;
         const s = getScore(kpi);
         if (s === null) return;
         const w = kpi.weightage ?? 100;
@@ -344,7 +345,7 @@ export default function ManagementDashboard() {
         const p = profileMap.get(eid);
         return { employeeId: eid, name: p?.full_name || 'Unknown', department: (p?.departments as any)?.name || '-', score: weightage > 0 ? (total / weightage) : 0 };
       }).sort((a, b) => b.score - a.score);
-      const topPerformers = employeePerformers.slice(0, 5);
+      const topPerformers = employeePerformers.slice(0, 10);
 
       // Bottom performers: last 3 months with actual data, weighted average
       const monthsWithScores = new Set<string>();
@@ -357,6 +358,7 @@ export default function ManagementDashboard() {
       
       const bottomEmployeeScores = new Map<string, { total: number; weightage: number }>();
       kpis.forEach(kpi => {
+        if (kpi.status !== 'approved') return;
         if (!recentMonthsForBottom.includes(kpi.review_period)) return;
         const score = getScore(kpi);
         if (score === null) return;
@@ -371,7 +373,7 @@ export default function ManagementDashboard() {
           return { employeeId: eid, name: p?.full_name || 'Unknown', department: (p?.departments as any)?.name || '-', score: weightage > 0 ? (total / weightage) : 0 };
         })
         .sort((a, b) => a.score - b.score)
-        .slice(0, 5);
+        .slice(0, 10);
 
       // Performance trend by period — only months with actual scored submissions
       const periodScores = new Map<string, { total: number; weightage: number; hasScores: boolean }>();
