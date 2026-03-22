@@ -324,12 +324,13 @@ export default function PendingSelfReviews() {
         'Department': k.departmentName,
         'KPI': k.kpiName,
         'KRA': k.kraName,
+        'Frequency': k.frequency || '-',
         'Period': `${k.reviewPeriod} ${k.reviewYear}`,
         'Scored At': format(new Date(k.scoredAt), 'dd MMM yyyy HH:mm'),
         'Scored By': k.scoredBy,
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
-      ws['!cols'] = [{ wch: 14 }, { wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 25 }, { wch: 18 }, { wch: 20 }, { wch: 20 }];
+      ws['!cols'] = [{ wch: 14 }, { wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 25 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 20 }];
       XLSX.utils.book_append_sheet(wb, ws, 'Auto-Scored');
     }
     if (penalizedKpis.length > 0) {
