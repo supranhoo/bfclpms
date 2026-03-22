@@ -1195,7 +1195,7 @@ export function useBulkPushForward() {
           // Fetch workflow stages once per employee
           const { data: stagesData } = await supabase
             .rpc('get_employee_workflow', { employee_uuid: employeeId });
-          const stages: string[] = Array.isArray(stagesData) ? stagesData : DEFAULT_WORKFLOW_STAGES;
+          const stages: string[] = Array.isArray(stagesData) ? (stagesData as string[]) : DEFAULT_WORKFLOW_STAGES;
 
           // Validate targetStatus exists in this employee's workflow
           const targetIdx = stages.indexOf(targetStatus);
