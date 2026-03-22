@@ -205,7 +205,7 @@ export default function PendingSelfReviews() {
     });
   };
 
-
+  const toggleSelection = (set: Set<string>, setFn: (s: Set<string>) => void, id: string) => {
     const next = new Set(set);
     next.has(id) ? next.delete(id) : next.add(id);
     setFn(next);
