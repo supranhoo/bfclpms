@@ -395,6 +395,23 @@ export function UnifiedScorecard({
     return kraCategories.filter((cat: any) => kpis?.some(k => k.category_id === cat.id));
   }, [isSelfMode, kraCategories, kpis]);
 
+  // Last self-review submission date (regular KPIs only: exclude org & non-monthly)
+  const lastSelfReviewDate = useMemo(() => {
+    if (!kpis || !submissions) return null;
+    const regularKpis = kpis.filter(k =>
+      !k.is_org_level &&
+      (!k.frequency || ['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())) &&
+      k.status !== 'kra_set'
+    );
+    let maxDate: string | null = null;
+    for (const k of regularKpis) {
+      const sub = submissionMap.get(k.id);
+      const d = sub?.submitted_at || sub?.updated_at;
+      if (d && (!maxDate || d > maxDate)) maxDate = d;
+    }
+    return maxDate;
+  }, [kpis, submissions, submissionMap]);
+
   // Pending period alerts (self mode)
   const MONTH_ORDER_SELF = ['January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'];
