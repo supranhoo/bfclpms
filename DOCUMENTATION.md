@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-22  
-> **Version:** 1.62.0 — Show all categories in bar chart including 0/NA/unscored
+> **Version:** 1.63.0 — Add pending KPI Excel export to all reviewer dashboards
 > **Maintainer:** Lovable AI
 
 ---
