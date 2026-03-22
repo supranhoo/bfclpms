@@ -183,8 +183,11 @@ export default function PendingSelfReviews() {
     currentStatusLabel: string
   ) => {
     if (!user?.id || selected.size === 0) return;
+    const kpiItems = items
+      .filter(k => selected.has(k.kpiId))
+      .map(k => ({ kpiId: k.kpiId, employeeId: k.employeeId }));
     bulkPushForward.mutate({
-      kpiIds: [...selected],
+      kpiItems,
       targetStatus,
       adminId: user.id,
       currentStatusLabel,
@@ -199,7 +202,7 @@ export default function PendingSelfReviews() {
   ) => {
     if (!user?.id || items.length === 0) return;
     bulkPushForward.mutate({
-      kpiIds: items.map(k => k.kpiId),
+      kpiItems: items.map(k => ({ kpiId: k.kpiId, employeeId: k.employeeId })),
       targetStatus,
       adminId: user.id,
       currentStatusLabel,
