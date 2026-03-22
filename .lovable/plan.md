@@ -1,36 +1,33 @@
 
 
-## Add Frequency Badge Next to KPI Name in Pending Review Tables
+## RCA: Cursor Misalignment in Add Observation Dialog
 
-### Summary
-Show a small colored badge (Bi-Monthly / Quarterly) next to the KPI name in all pending review table rows, matching the existing dashboard styling. Only non-monthly frequencies get a badge.
+### Root Cause
 
-### Changes
+The `MentionTextarea` component (`src/components/ui/MentionTextarea.tsx`) uses a **transparent-textarea-over-visual-overlay** pattern:
 
-#### File: `src/pages/admin/PendingSelfReviews.tsx`
+- A `<div>` overlay (line 146-156) renders formatted text using `renderMentionText(value)` — this converts raw mention markup like `@[John Doe](uuid-123)` into styled `<span>` elements showing just "John Doe".
+- A `<textarea>` (line 157-169) sits on top with `text-transparent` (invisible text) but `caret-foreground` (visible cursor).
 
-1. **Add Badge import** (already imported).
+**The problem**: The raw text in the textarea (e.g. `@[John Doe](abc-123-uuid) please check`) has a completely different character count and width than what the overlay renders (e.g. `John Doe please check`). So:
 
-2. **Replace plain KPI text cells** in all five tabs (Self-Review, Manager Review, Skip-Level, Sent Back, Rollback) from:
-   ```tsx
-   <TableCell>{item.kpiName}</TableCell>
-   ```
-   To:
-   ```tsx
-   <TableCell>
-     <span className="inline-flex items-center gap-1.5 flex-wrap">
-       {item.kpiName}
-       {item.frequency === 'Bi-Monthly' && (
-         <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-violet-300 text-violet-700">Bi-Monthly</Badge>
-       )}
-       {item.frequency === 'Quarterly' && (
-         <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-teal-300 text-teal-700">Quarterly</Badge>
-       )}
-     </span>
-   </TableCell>
-   ```
+- The **caret** is positioned based on the raw textarea string (which includes `@[...](uuid)` markup).
+- The **visible text** is rendered by the overlay using the short display names.
 
-3. **Verify `frequency` field exists** on all interfaces (`OverdueKpi`, `SentBackKpi`, `AutoScoredKpi`, `PenalizedManagerKpi`) — already added in the previous change.
+After any mention is inserted, the caret jumps ahead (because the raw string is longer), while the visible text is shorter — creating the "cursor is somewhere else, typing happens somewhere else" effect.
+
+### Fix
+
+**File: `src/components/ui/MentionTextarea.tsx`**
+
+Replace the overlay approach with a simpler one: make the textarea text **visible** (not transparent) and only show the formatted overlay when the textarea is **not focused**. When focused, the user sees the raw text with the caret in the correct position. When blurred, the overlay shows the pretty-formatted mentions.
+
+Changes:
+1. Add a `isFocused` state (default `false`).
+2. On the textarea: add `onFocus` / `onBlur` handlers to toggle `isFocused`.
+3. When focused: textarea uses normal `text-foreground` (visible text, visible caret), overlay is hidden.
+4. When blurred: textarea uses `text-transparent`, overlay is shown with formatted mentions.
+5. This ensures the caret always matches the visible text while editing.
 
 ### No database changes needed
 
