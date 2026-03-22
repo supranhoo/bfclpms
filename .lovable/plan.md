@@ -1,35 +1,42 @@
 
 
-## Exclude Sent-Back KPIs from "Self Reviewed" Date
+## Root Cause Analysis: Pending Manager/Skip-Level Review Shows 0
 
 ### Problem
-The "Self reviewed: [date]" indicator should not include KPIs that have been sent back for revision, as they haven't completed a valid self-review cycle.
+The "Pending Manager Review" and "Pending Skip-Level Review" tabs show 0 KPIs despite many being pending.
+
+### Root Cause: Wrong Status Filters
+
+The workflow status represents the **completed stage**, not the pending one:
+- `kra_set` → employee needs to self-review
+- `self_review` → manager needs to review
+- `manager_check` → skip-level needs to review
+
+The hooks are filtering on the **wrong status values**:
+
+| Tab | Current (wrong) | Correct |
+|-----|-----------------|---------|
+| Pending Manager Review | `manager_check` (line 150) | `self_review` |
+| Pending Skip-Level Review | `skip_level_check` (line 1056) | `manager_check` |
 
 ### Fix
 
-#### File: `src/components/review/UnifiedScorecard.tsx` (lines 399-413)
+#### File: `src/hooks/usePendingSelfReviews.ts`
 
-Add a check in the `lastSelfReviewDate` computation to skip KPIs where the submission's `kpi_status` is `'sent_back'`:
-
+**1. Line 150** — Change `useOverdueTeamReviewKpis` status filter:
 ```typescript
-const lastSelfReviewDate = useMemo(() => {
-  if (!kpis || !submissions) return null;
-  const regularKpis = kpis.filter(k =>
-    !k.is_org_level &&
-    (!k.frequency || ['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())) &&
-    k.status !== 'kra_set'
-  );
-  let maxDate: string | null = null;
-  for (const k of regularKpis) {
-    const sub = submissionMap.get(k.id);
-    if (!sub) continue;
-    // Exclude sent-back KPIs
-    if (sub.kpi_status === 'sent_back') continue;
-    const d = sub.submitted_at || sub.updated_at;
-    if (d && (!maxDate || d > maxDate)) maxDate = d;
-  }
-  return maxDate;
-}, [kpis, submissions, submissionMap]);
+// FROM:
+.eq('status', 'manager_check')
+// TO:
+.eq('status', 'self_review')
+```
+
+**2. Line 1056** — Change `useOverdueSkipLevelKpis` status filter:
+```typescript
+// FROM:
+.eq('status', 'skip_level_check')
+// TO:
+.eq('status', 'manager_check')
 ```
 
 ### No database changes needed
