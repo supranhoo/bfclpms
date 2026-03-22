@@ -406,7 +406,8 @@ export function UnifiedScorecard({
     let maxDate: string | null = null;
     for (const k of regularKpis) {
       const sub = submissionMap.get(k.id);
-      const d = sub?.submitted_at || sub?.updated_at;
+      if (!sub || sub.kpi_status === 'sent_back') continue;
+      const d = sub.submitted_at || sub.updated_at;
       if (d && (!maxDate || d > maxDate)) maxDate = d;
     }
     return maxDate;
