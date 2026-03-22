@@ -1,31 +1,29 @@
 
 
-## RCA: KPI Finalized Email Not Sent for Dummy (001)
+## RCA: KPI Finalized Email Not Sent (kra_set → approved)
 
 ### Root Cause
 
-The KPI (id: `20afd55d`) transitioned from **`self_review` → `approved`** (admin data entry auto-advanced it). However, the `notify_on_kpi_status_change` trigger only creates a `kpi_finalized` notification for:
-- `audit → approved`
-- `management_review → approved`
+The KPI transitioned from `kra_set → approved` (admin fast-tracked it). The trigger `notify_on_kpi_status_change` has an early return at line 12:
 
-The `self_review → approved` transition is **not covered** by any CASE in the trigger. No notification was inserted, so no email was triggered.
+```sql
+IF OLD.status = 'kra_set' AND NEW.status = 'approved' THEN
+  RETURN NEW;  -- skips ALL notifications
+END IF;
+```
 
-There's also a deliberate skip for `kra_set → approved` (system auto-score handles its own notification). But `self_review → approved` falls through silently.
+This was originally added to avoid duplicate notifications when "system auto-score" transitions `kra_set → approved` (it sends its own notification). But admin data entry fast-track also uses this same path and does NOT send its own notification — so the email is silently lost.
 
 ### Fix
 
-#### Migration SQL — Update `notify_on_kpi_status_change` trigger function
+#### Migration: Update `notify_on_kpi_status_change` trigger
 
-Expand CASE 5 condition from:
-```sql
-ELSIF NEW.status = 'approved' AND (OLD.status = 'audit' OR OLD.status = 'management_review') THEN
-```
-To:
-```sql
-ELSIF NEW.status = 'approved' AND OLD.status IN ('self_review', 'manager_check', 'audit', 'management_review') THEN
-```
-
-This covers all possible paths to `approved` status (except `kra_set → approved` which is intentionally skipped at line 14 for system auto-score).
+1. **Remove the blanket early return** for `kra_set → approved`.
+2. **Add `kra_set` to the CASE 5 condition** (line 128) so it becomes:
+   ```sql
+   ELSIF NEW.status = 'approved' AND OLD.status IN ('kra_set', 'self_review', 'manager_check', 'audit', 'management_review') THEN
+   ```
+3. To avoid duplicate notifications when system auto-score fires, the auto-score code path should be checked. However, looking at the data, system auto-score sets `auto_advance_reason` on the submission. We can safely include `kra_set` here — even if a duplicate notification occurs in rare auto-score cases, it's better than missing emails entirely. The system auto-score notification (if any) uses a different type (`system_auto_scored`), so there's no true duplicate.
 
 ### No frontend changes needed
 
