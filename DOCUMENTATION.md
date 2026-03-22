@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-22  
-> **Version:** 1.67.0 — Overdue due-date filter applied across entire Management Dashboard; getKpiDueDate extracted to shared utility
+> **Version:** 1.68.0 — KPI Finalized email now shows final score (0-5) with label; score 5 triggers animated floating sparkle celebration
 > **Maintainer:** Lovable AI
 
 ---
