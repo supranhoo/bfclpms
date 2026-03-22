@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-22  
-> **Version:** 1.61.0 — Show last self-review submission date on KPI details header
+> **Version:** 1.62.0 — Show all categories in bar chart including 0/NA/unscored
 > **Maintainer:** Lovable AI
 
 ---
