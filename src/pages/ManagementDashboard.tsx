@@ -309,7 +309,7 @@ export default function ManagementDashboard() {
         stats.totalScore += score * w;
         stats.totalWeightage += w;
         if (kpi.status === 'approved') stats.approvedKpis++;
-        if (kpi.status === 'management_review') stats.pendingReviews++;
+        if (kpi.status === 'management_review' && isKpiOverdue(kpi)) stats.pendingReviews++;
         const es = stats.employeeScores.get(kpi.employee_id) || { s: 0, w: 0 };
         es.s += score * w; es.w += (kpi.weightage ?? 100);
         stats.employeeScores.set(kpi.employee_id, es);
