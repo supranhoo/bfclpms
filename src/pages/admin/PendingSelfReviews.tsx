@@ -87,6 +87,41 @@ export default function PendingSelfReviews() {
   const [selectedPenalized, setSelectedPenalized] = useState<Set<string>>(new Set());
   const [selectedSkipLevel, setSelectedSkipLevel] = useState<Set<string>>(new Set());
 
+  // Sorting state for Code and Reviewer columns
+  const [sortField, setSortField] = useState<'code' | 'reviewer' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const handleSortClick = (field: 'code' | 'reviewer') => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (field: 'code' | 'reviewer') => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 text-muted-foreground" />;
+    return sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+  };
+
+  const sortItems = (items: OverdueKpi[], tabType: 'self' | 'manager' | 'skip'): OverdueKpi[] => {
+    if (!sortField) return items;
+    return [...items].sort((a, b) => {
+      const dir = sortDirection === 'asc' ? 1 : -1;
+      let valA = '';
+      let valB = '';
+      if (sortField === 'code') {
+        valA = a.employeeCode || '';
+        valB = b.employeeCode || '';
+      } else {
+        valA = tabType === 'skip' ? (a.skipLevelManagerName || '') : (a.reportingManagerName || '');
+        valB = tabType === 'skip' ? (b.skipLevelManagerName || '') : (b.reportingManagerName || '');
+      }
+      return valA.localeCompare(valB) * dir;
+    });
+  };
+
   // Push forward targets per tab
   const [selfForwardTarget, setSelfForwardTarget] = useState<string>('self_review');
   const [mgrForwardTarget, setMgrForwardTarget] = useState<string>('manager_check');
