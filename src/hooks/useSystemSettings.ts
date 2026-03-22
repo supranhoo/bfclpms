@@ -52,7 +52,7 @@ export function useSystemSetting(key: string) {
         .from('system_settings')
         .select('*')
         .eq('setting_key', key)
-        .single();
+        .maybeSingle();
       
       if (error) throw error;
       return data as SystemSetting;
