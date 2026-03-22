@@ -668,8 +668,9 @@ export default function PendingSelfReviews() {
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
                           <TableCell>{item.kpiName}</TableCell>
-                          <TableCell><Badge variant="outline">Skip-Level Manager</Badge></TableCell>
-                          <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
+                           <TableCell><Badge variant="outline">Skip-Level Manager</Badge></TableCell>
+                           <TableCell>{item.skipLevelManagerName || '-'}</TableCell>
+                           <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
