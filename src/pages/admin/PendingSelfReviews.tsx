@@ -224,6 +224,13 @@ export default function PendingSelfReviews() {
     }
   };
 
+  const getReviewerName = (item: OverdueKpi, pendingWith: string): string => {
+    if (pendingWith === 'Employee') return item.reportingManagerName || '-';
+    if (pendingWith === 'Manager') return item.reportingManagerName || '-';
+    if (pendingWith === 'Skip-Level Manager') return item.skipLevelManagerName || '-';
+    return '-';
+  };
+
   const handleExportExcel = (tabName: string, pendingWith: string, data: OverdueKpi[]) => {
     if (data.length === 0) return;
     const rows = data.map(k => ({
@@ -232,10 +239,11 @@ export default function PendingSelfReviews() {
       'Department': k.departmentName,
       'KPI': k.kpiName,
       'Pending With': pendingWith,
+      'Reviewer': getReviewerName(k, pendingWith),
       'Period': `${k.reviewPeriod} ${k.reviewYear}`,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{ wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 18 }, { wch: 18 }];
+    ws['!cols'] = [{ wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 18 }, { wch: 22 }, { wch: 18 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, tabName);
     XLSX.writeFile(wb, `Pending_Reviews_${tabName.replace(/\s+/g, '_')}_${selectedMonth}_${selectedYear}.xlsx`);
@@ -473,8 +481,9 @@ export default function PendingSelfReviews() {
                         <TableHead>Code</TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>KPI</TableHead>
-                        <TableHead>Pending With</TableHead>
-                        <TableHead>Period</TableHead>
+                         <TableHead>Pending With</TableHead>
+                         <TableHead>Reviewer</TableHead>
+                         <TableHead>Period</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -490,8 +499,9 @@ export default function PendingSelfReviews() {
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
                           <TableCell>{item.kpiName}</TableCell>
-                          <TableCell><Badge variant="outline">Employee</Badge></TableCell>
-                          <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
+                           <TableCell><Badge variant="outline">Employee</Badge></TableCell>
+                           <TableCell>{item.reportingManagerName || '-'}</TableCell>
+                           <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -560,8 +570,9 @@ export default function PendingSelfReviews() {
                         <TableHead>Code</TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>KPI</TableHead>
-                        <TableHead>Pending With</TableHead>
-                        <TableHead>Period</TableHead>
+                         <TableHead>Pending With</TableHead>
+                         <TableHead>Reviewer</TableHead>
+                         <TableHead>Period</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -577,8 +588,9 @@ export default function PendingSelfReviews() {
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
                           <TableCell>{item.kpiName}</TableCell>
-                          <TableCell><Badge variant="outline">Manager</Badge></TableCell>
-                          <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
+                           <TableCell><Badge variant="outline">Manager</Badge></TableCell>
+                           <TableCell>{item.reportingManagerName || '-'}</TableCell>
+                           <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -638,8 +650,9 @@ export default function PendingSelfReviews() {
                         <TableHead>Code</TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>KPI</TableHead>
-                        <TableHead>Pending With</TableHead>
-                        <TableHead>Period</TableHead>
+                         <TableHead>Pending With</TableHead>
+                         <TableHead>Reviewer</TableHead>
+                         <TableHead>Period</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -655,8 +668,9 @@ export default function PendingSelfReviews() {
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
                           <TableCell>{item.kpiName}</TableCell>
-                          <TableCell><Badge variant="outline">Skip-Level Manager</Badge></TableCell>
-                          <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
+                           <TableCell><Badge variant="outline">Skip-Level Manager</Badge></TableCell>
+                           <TableCell>{item.skipLevelManagerName || '-'}</TableCell>
+                           <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
