@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-22  
-> **Version:** 1.70.0 — Fix: KPI finalized notification now triggers for all paths to approved (self_review, manager_check, audit, management_review)
+> **Version:** 1.71.0 — Fix: Remove blanket kra_set→approved early return so admin fast-track approvals also trigger kpi_finalized email
 > **Maintainer:** Lovable AI
 
 ---
