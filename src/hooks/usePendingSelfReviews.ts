@@ -926,6 +926,7 @@ export function usePenalizedManagerKpis(filterMonth?: string, filterYear?: numbe
           departmentName: profile?.departments?.name || '',
           kpiName: kpi.kpi_name,
           kraName: kpi.kra_name,
+          frequency: (kpi as any).frequency || '',
           reviewPeriod: kpi.review_period || '',
           reviewYear: kpi.review_year || 0,
           oldStatus: oldVal?.status || 'kra_set',
