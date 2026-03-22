@@ -1,43 +1,44 @@
 
 
-## Root Cause Analysis: Pending Manager/Skip-Level Review Shows 0
+## Make Push Forward Workflow-Aware (Employee-Level)
 
-### Problem
-The "Pending Manager Review" and "Pending Skip-Level Review" tabs show 0 KPIs despite many being pending.
+### Key Insight
+Workflow is **per-employee**, not per-KPI. All KPIs for the same employee share the same workflow stages. This simplifies the validation — we fetch the workflow once per unique employee, not per KPI.
 
-### Root Cause: Wrong Status Filters
+### Changes
 
-The workflow status represents the **completed stage**, not the pending one:
-- `kra_set` → employee needs to self-review
-- `self_review` → manager needs to review
-- `manager_check` → skip-level needs to review
+#### 1. `src/hooks/usePendingSelfReviews.ts` — `useBulkPushForward`
 
-The hooks are filtering on the **wrong status values**:
+Update the mutation to:
+- Group incoming KPI IDs by `employeeId` (requires passing employee info)
+- For each **unique employee**, call `get_employee_workflow` RPC once to get their stages
+- Validate that `targetStatus` exists in that employee's workflow and is ahead of the current status
+- Skip all KPIs for employees whose workflow doesn't include the target stage
+- Return `{ forwarded, skipped }` counts
 
-| Tab | Current (wrong) | Correct |
-|-----|-----------------|---------|
-| Pending Manager Review | `manager_check` (line 150) | `self_review` |
-| Pending Skip-Level Review | `skip_level_check` (line 1056) | `manager_check` |
-
-### Fix
-
-#### File: `src/hooks/usePendingSelfReviews.ts`
-
-**1. Line 150** — Change `useOverdueTeamReviewKpis` status filter:
-```typescript
-// FROM:
-.eq('status', 'manager_check')
-// TO:
-.eq('status', 'self_review')
+Change the mutation signature from:
+```
+{ kpiIds, targetStatus, adminId, currentStatusLabel }
+```
+to:
+```
+{ kpiItems: Array<{ kpiId: string; employeeId: string }>, targetStatus, adminId, currentStatusLabel }
 ```
 
-**2. Line 1056** — Change `useOverdueSkipLevelKpis` status filter:
-```typescript
-// FROM:
-.eq('status', 'skip_level_check')
-// TO:
-.eq('status', 'manager_check')
+Core logic per unique employee:
+```text
+1. Fetch workflow stages via RPC (once per employee)
+2. Check if targetStatus exists in stages
+3. Check if targetStatus is ahead of current KPI status
+4. If invalid → skip all that employee's KPIs, increment skipped count
+5. If valid → push all that employee's KPIs forward
 ```
+
+Update toast to show: `"Pushed X KPI(s) forward. Y skipped (workflow mismatch)."`
+
+#### 2. `src/pages/admin/PendingSelfReviews.tsx` — Handlers
+
+Update `handlePushForwardSelected` and `handlePushForwardAll` to pass `kpiItems` (with `employeeId` from `OverdueKpi`) instead of just `kpiIds`. The `OverdueKpi` interface already has `employeeId`.
 
 ### No database changes needed
 
