@@ -698,16 +698,20 @@ export default function PendingSelfReviews() {
                           />
                         </TableHead>
                         <TableHead>Employee</TableHead>
-                        <TableHead>Code</TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => handleSortClick('code')}>
+                          <span className="inline-flex items-center gap-1">Code {getSortIcon('code')}</span>
+                        </TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>KPI</TableHead>
                          <TableHead>Pending With</TableHead>
-                         <TableHead>Reviewer</TableHead>
+                         <TableHead className="cursor-pointer select-none" onClick={() => handleSortClick('reviewer')}>
+                           <span className="inline-flex items-center gap-1">Reviewer {getSortIcon('reviewer')}</span>
+                         </TableHead>
                          <TableHead>Period</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {overdueSkipLevel.map(item => (
+                      {sortItems(overdueSkipLevel, 'skip').map(item => (
                         <TableRow key={item.kpiId}>
                           <TableCell>
                             <Checkbox
