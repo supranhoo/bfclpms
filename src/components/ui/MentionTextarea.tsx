@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useMentionSearch, type MentionUser } from '@/hooks/useMentionSearch';
-import { insertMention, parseMentions, renderMentionText } from '@/lib/mentionUtils';
+import { insertMention, parseMentions, renderMentionText, getDisplayText } from '@/lib/mentionUtils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Loader2 } from 'lucide-react';
 
