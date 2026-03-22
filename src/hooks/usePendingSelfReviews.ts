@@ -638,6 +638,7 @@ export interface SentBackKpi {
   sentBackBy: string;
   reason: string;
   sentBackDate: string;
+  currentStatus: string;
 }
 
 export function useSentBackKpisTab(filterMonth?: string, filterYear?: number) {
