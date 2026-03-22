@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
 import { useKpiFilters } from '@/hooks/useKpiFilters';
+import { getKpiDueDate } from '@/lib/frequencyUtils';
 import { KpiFilterBar } from '@/components/ui/KpiFilterBar';
 import { useRollbackStatusCounts } from '@/hooks/useAllRollbackRequests';
 import { PerformanceTrendChart } from '@/components/management/PerformanceTrendChart';
