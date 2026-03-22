@@ -491,14 +491,8 @@ export default function PendingSelfReviews() {
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
                           <TableCell>{item.kpiName}</TableCell>
-                          <TableCell>{item.reportingManagerName || '—'}</TableCell>
-                          <TableCell>{item.skipLevelManagerName || '—'}</TableCell>
+                          <TableCell><Badge variant="outline">Manager</Badge></TableCell>
                           <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
-                          <TableCell>
-                            <Badge variant={item.daysOverdue > 15 ? 'destructive' : 'secondary'}>
-                              {item.daysOverdue} days
-                            </Badge>
-                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
