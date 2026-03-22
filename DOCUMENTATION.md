@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-22  
-> **Version:** 1.69.0 — KPI Finalized email sparkle celebration now triggers for scores 4+ (was 5 only)
+> **Version:** 1.70.0 — Fix: KPI finalized notification now triggers for all paths to approved (self_review, manager_check, audit, management_review)
 > **Maintainer:** Lovable AI
 
 ---
