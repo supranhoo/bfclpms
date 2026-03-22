@@ -447,6 +447,11 @@ export default function PendingSelfReviews() {
                   <FastForward className="h-3.5 w-3.5 mr-1" />
                   Push All
                 </Button>
+                <div className="h-6 w-px bg-border mx-1" />
+                <Button size="sm" variant="outline" onClick={() => handleExportExcel('Self Review', 'Employee', overdueKraSet)} disabled={overdueKraSet.length === 0}>
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                  Export Excel
+                </Button>
               </div>
 
               {kraSetLoading ? (
