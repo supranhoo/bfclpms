@@ -1,24 +1,45 @@
 
 
-## Show Last Self-Review Submission Date on KPI Details Header
+## Fix: Show All Categories in Bar Chart (Including 0/NA/Unscored)
 
-### What
-Add a date indicator to the left of "KRA Export" button showing when the employee last submitted a self-review for regular KPIs (excluding org KPIs and bi-monthly/quarterly/half-yearly/yearly KPIs). This helps reviewers quickly see when the employee completed their self-review.
+### Root Cause
+Line 513: `if (!submission || submission.is_na) return;` skips KPIs without submissions or marked N/A. If an entire category only has such KPIs, it never gets added to `categoryMap` and doesn't appear in the chart.
 
-### Files to Modify
+### Fix
 
-#### 1. `src/hooks/useKpis.ts` (line 116)
-Add `submitted_at` and `updated_at` to the `ReviewSubmission` interface — the query already fetches `*` so data is available, just not typed.
+#### File: `src/components/review/UnifiedScorecard.tsx` (lines 511-537)
 
-#### 2. `src/components/review/UnifiedScorecard.tsx` (lines 1357-1373)
-Compute the last submission date from regular KPIs:
-- Filter `kpis` to exclude `is_org_level` and non-monthly frequencies
-- Filter to only KPIs past `kra_set` status (i.e., self-review done)
-- Get their submissions from `submissionMap`, find the max `submitted_at`
-- Display as a small badge/text like `Self reviewed: 15 Mar` to the left of the KRA Export button
+**Change**: Always add every KPI's category to the map, but only contribute to score numerator/denominator for scored KPIs.
 
-### UI
-A subtle text/badge with a calendar icon showing the date, positioned left of the KRA Export button in the header row. Only shown when a date exists.
+```typescript
+displayKpis.forEach(kpi => {
+  const submission = submissionMap.get(kpi.id);
+  const categoryName = kpi.kra_categories?.name || 'Other';
+  const categoryColor = kpi.kra_categories?.color || null;
+  
+  const existing = categoryMap.get(categoryName) || { 
+    totalScore: 0, totalWeight: 0, color: categoryColor, dynamicWeightage: 0
+  };
+  
+  const weight = kpi.weightage || 0;
+  existing.dynamicWeightage += weight;
+  
+  // Only contribute to scores if submission exists and not NA
+  if (submission && !submission.is_na) {
+    const score = getRelevantScore(submission, kpi.status);
+    if (weight > 0) {
+      totalWeightedScore += score * weight;
+      totalWeight += weight;
+      existing.totalScore += score * weight;
+      existing.totalWeight += weight;
+    }
+  }
+  
+  categoryMap.set(categoryName, existing);
+});
+```
+
+This ensures every category appears on the Y-axis with its weightage, showing 0% if no KPIs are scored yet.
 
 ### No database changes needed
 
