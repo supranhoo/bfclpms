@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-21  
-> **Version:** 1.60.0 — Consolidated "System Auto-Scored" email notification to employee & manager
+> **Last Updated:** 2026-03-22  
+> **Version:** 1.61.0 — Show last self-review submission date on KPI details header
 > **Maintainer:** Lovable AI
 
 ---

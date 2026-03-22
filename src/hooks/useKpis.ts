@@ -113,6 +113,8 @@ export interface ReviewSubmission {
   kpi_status: KpiStatus;
   is_na: boolean;
   auto_advance_reason: string | null;
+  submitted_at: string | null;
+  updated_at: string | null;
 }
 
 export interface KpiQuery {

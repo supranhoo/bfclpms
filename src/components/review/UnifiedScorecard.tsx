@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { formatDate } from '@/lib/dateUtils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -393,6 +394,23 @@ export function UnifiedScorecard({
     if (!isSelfMode || !kraCategories) return [];
     return kraCategories.filter((cat: any) => kpis?.some(k => k.category_id === cat.id));
   }, [isSelfMode, kraCategories, kpis]);
+
+  // Last self-review submission date (regular KPIs only: exclude org & non-monthly)
+  const lastSelfReviewDate = useMemo(() => {
+    if (!kpis || !submissions) return null;
+    const regularKpis = kpis.filter(k =>
+      !k.is_org_level &&
+      (!k.frequency || ['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())) &&
+      k.status !== 'kra_set'
+    );
+    let maxDate: string | null = null;
+    for (const k of regularKpis) {
+      const sub = submissionMap.get(k.id);
+      const d = sub?.submitted_at || sub?.updated_at;
+      if (d && (!maxDate || d > maxDate)) maxDate = d;
+    }
+    return maxDate;
+  }, [kpis, submissions, submissionMap]);
 
   // Pending period alerts (self mode)
   const MONTH_ORDER_SELF = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -1360,6 +1378,12 @@ export function UnifiedScorecard({
               <CardDescription>Click on a KPI to review and update scores</CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              {lastSelfReviewDate && (
+                <span className="hidden sm:inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  Self reviewed: {formatDate(lastSelfReviewDate)}
+                </span>
+              )}
               <KraExportMenu
                 kpis={kpis || []}
                 employeeProfile={{
