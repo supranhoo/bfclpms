@@ -1115,6 +1115,10 @@ export function EmployeeSelectorGrid({
         </div>
         
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleExportPendingKpis} className="gap-1.5">
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Export Pending</span>
+          </Button>
           {viewLevel === 'audit' && (
             <Button variant="outline" size="sm" onClick={() => setAssignmentDialogOpen(true)}>
               <Settings2 className="h-4 w-4 mr-1.5" />
