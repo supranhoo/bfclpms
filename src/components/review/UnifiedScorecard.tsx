@@ -510,10 +510,6 @@ export function UnifiedScorecard({
     
     displayKpis.forEach(kpi => {
       const submission = submissionMap.get(kpi.id);
-      if (!submission || submission.is_na) return; // Skip unsubmitted & NA KPIs
-      
-      const score = getRelevantScore(submission, kpi.status);
-      const weight = kpi.weightage || 0;
       const categoryName = kpi.kra_categories?.name || 'Other';
       const categoryColor = kpi.kra_categories?.color || null;
       
@@ -524,13 +520,18 @@ export function UnifiedScorecard({
         dynamicWeightage: 0
       };
       
-      if (weight > 0) {
-        existing.dynamicWeightage += weight;
-        // Always include non-NA KPIs in both numerator and denominator
-        totalWeightedScore += score * weight;
-        totalWeight += weight;
-        existing.totalScore += score * weight;
-        existing.totalWeight += weight;
+      const weight = kpi.weightage || 0;
+      existing.dynamicWeightage += weight;
+      
+      // Only contribute to scores if submission exists and not NA
+      if (submission && !submission.is_na) {
+        const score = getRelevantScore(submission, kpi.status);
+        if (weight > 0) {
+          totalWeightedScore += score * weight;
+          totalWeight += weight;
+          existing.totalScore += score * weight;
+          existing.totalWeight += weight;
+        }
       }
       
       categoryMap.set(categoryName, existing);
