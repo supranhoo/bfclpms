@@ -101,7 +101,8 @@ export function useOverdueKraSetKpis(deadlineDay: number, filterMonth?: string, 
       }
 
       const now = new Date();
-      const results: OverdueKpi[] = [];
+      const managerIds = new Set<string>();
+      const rawItems: Array<{ kpi: any; profile: any; daysOverdue: number }> = [];
 
       for (const kpi of kpis || []) {
         if (sentBackIds.has(kpi.id)) continue;
@@ -112,6 +113,48 @@ export function useOverdueKraSetKpis(deadlineDay: number, filterMonth?: string, 
         const diffMs = now.getTime() - deadline.getTime();
         const daysOverdue = Math.floor(diffMs / (1000 * 60 * 60 * 24));
         const profile = kpi.profiles as any;
+        if (profile?.reporting_manager_id) {
+          managerIds.add(profile.reporting_manager_id);
+        }
+        rawItems.push({ kpi, profile, daysOverdue });
+      }
+
+      // Fetch manager names + their reporting_manager_id for skip-level
+      const allManagerIds = [...managerIds];
+      let managerMap: Record<string, string> = {};
+      let managerToSkip: Record<string, string> = {};
+      const skipManagerIds = new Set<string>();
+      if (allManagerIds.length > 0) {
+        const { data: managers } = await supabase
+          .from('profiles')
+          .select('id, full_name, reporting_manager_id')
+          .in('id', allManagerIds);
+        for (const m of managers || []) {
+          managerMap[m.id] = m.full_name || 'Unknown';
+          if (m.reporting_manager_id) {
+            skipManagerIds.add(m.reporting_manager_id);
+            managerToSkip[m.id] = m.reporting_manager_id;
+          }
+        }
+      }
+
+      // Fetch skip-level manager names
+      const allSkipIds = [...skipManagerIds];
+      let skipMap: Record<string, string> = {};
+      if (allSkipIds.length > 0) {
+        const { data: skips } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', allSkipIds);
+        for (const s of skips || []) {
+          skipMap[s.id] = s.full_name || 'Unknown';
+        }
+      }
+
+      const results: OverdueKpi[] = [];
+      for (const { kpi, profile, daysOverdue } of rawItems) {
+        const mgrId = profile?.reporting_manager_id || null;
+        const skipId = mgrId ? managerToSkip[mgrId] || null : null;
 
         results.push({
           kpiId: kpi.id,
@@ -125,10 +168,10 @@ export function useOverdueKraSetKpis(deadlineDay: number, filterMonth?: string, 
           reviewYear: kpi.review_year,
           frequency: kpi.frequency || '',
           daysOverdue,
-          reportingManagerId: null,
-          reportingManagerName: null,
-          skipLevelManagerId: null,
-          skipLevelManagerName: null,
+          reportingManagerId: mgrId,
+          reportingManagerName: mgrId ? managerMap[mgrId] || null : null,
+          skipLevelManagerId: skipId,
+          skipLevelManagerName: skipId ? skipMap[skipId] || null : null,
         });
       }
 
