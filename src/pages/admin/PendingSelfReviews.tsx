@@ -224,6 +224,81 @@ export default function PendingSelfReviews() {
     }
   };
 
+  const handleExportExcel = (tabName: string, pendingWith: string, data: OverdueKpi[]) => {
+    if (data.length === 0) return;
+    const rows = data.map(k => ({
+      'Employee': k.employeeName,
+      'Code': k.employeeCode,
+      'Department': k.departmentName,
+      'KPI': k.kpiName,
+      'Pending With': pendingWith,
+      'Period': `${k.reviewPeriod} ${k.reviewYear}`,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 18 }, { wch: 18 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, tabName);
+    XLSX.writeFile(wb, `Pending_Reviews_${tabName.replace(/\s+/g, '_')}_${selectedMonth}_${selectedYear}.xlsx`);
+  };
+
+  const handleExportSentBack = () => {
+    if (sentBackKpis.length === 0) return;
+    const rows = sentBackKpis.map(k => ({
+      'Employee': k.employeeName,
+      'Code': k.employeeCode,
+      'Department': k.departmentName,
+      'KPI': k.kpiName,
+      'KRA': k.kraName,
+      'Sent Back By': k.sentBackBy,
+      'Reason': k.reason,
+      'Date': format(new Date(k.sentBackDate), 'dd MMM yyyy'),
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 25 }, { wch: 20 }, { wch: 30 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sent Back');
+    XLSX.writeFile(wb, `Pending_Reviews_Sent_Back_${selectedMonth}_${selectedYear}.xlsx`);
+  };
+
+  const handleExportRollback = () => {
+    if (autoScoredKpis.length === 0 && penalizedKpis.length === 0) return;
+    const wb = XLSX.utils.book_new();
+    if (autoScoredKpis.length > 0) {
+      const rows = autoScoredKpis.map(k => ({
+        'Type': 'Auto-Scored',
+        'Employee': k.employeeName,
+        'Code': k.employeeCode,
+        'Department': k.departmentName,
+        'KPI': k.kpiName,
+        'KRA': k.kraName,
+        'Period': `${k.reviewPeriod} ${k.reviewYear}`,
+        'Scored At': format(new Date(k.scoredAt), 'dd MMM yyyy HH:mm'),
+        'Scored By': k.scoredBy,
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [{ wch: 14 }, { wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 25 }, { wch: 18 }, { wch: 20 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(wb, ws, 'Auto-Scored');
+    }
+    if (penalizedKpis.length > 0) {
+      const rows = penalizedKpis.map(k => ({
+        'Type': 'Manager Penalty',
+        'Manager': k.managerName,
+        'Code': k.managerCode,
+        'Department': k.departmentName,
+        'KPI': k.kpiName,
+        'KRA': k.kraName,
+        'Period': `${k.reviewPeriod} ${k.reviewYear}`,
+        'Previous Status': k.oldStatus.replace(/_/g, ' '),
+        'Scored At': format(new Date(k.scoredAt), 'dd MMM yyyy HH:mm'),
+        'Scored By': k.scoredBy,
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [{ wch: 16 }, { wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 25 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(wb, ws, 'Manager Penalty');
+    }
+    XLSX.writeFile(wb, `Pending_Reviews_Rollback_${selectedMonth}_${selectedYear}.xlsx`);
+  };
+
   if (settingsLoading) {
     return (
       <div className="flex items-center justify-center min-h-[200px]">
