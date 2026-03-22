@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Settings, AlertTriangle, Users, Undo2, Mail, RotateCcw, UserCheck, FastForward, Download } from 'lucide-react';
+import { Loader2, Settings, AlertTriangle, Users, Undo2, Mail, RotateCcw, UserCheck, FastForward, Download, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { EffectiveMonthSelector } from '@/components/admin/EffectiveMonthSelector';
 import { useAuth } from '@/contexts/AuthContext';
@@ -86,6 +86,41 @@ export default function PendingSelfReviews() {
   const [selectedAutoScored, setSelectedAutoScored] = useState<Set<string>>(new Set());
   const [selectedPenalized, setSelectedPenalized] = useState<Set<string>>(new Set());
   const [selectedSkipLevel, setSelectedSkipLevel] = useState<Set<string>>(new Set());
+
+  // Sorting state for Code and Reviewer columns
+  const [sortField, setSortField] = useState<'code' | 'reviewer' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const handleSortClick = (field: 'code' | 'reviewer') => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (field: 'code' | 'reviewer') => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 text-muted-foreground" />;
+    return sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+  };
+
+  const sortItems = (items: OverdueKpi[], tabType: 'self' | 'manager' | 'skip'): OverdueKpi[] => {
+    if (!sortField) return items;
+    return [...items].sort((a, b) => {
+      const dir = sortDirection === 'asc' ? 1 : -1;
+      let valA = '';
+      let valB = '';
+      if (sortField === 'code') {
+        valA = a.employeeCode || '';
+        valB = b.employeeCode || '';
+      } else {
+        valA = tabType === 'skip' ? (a.skipLevelManagerName || '') : (a.reportingManagerName || '');
+        valB = tabType === 'skip' ? (b.skipLevelManagerName || '') : (b.reportingManagerName || '');
+      }
+      return valA.localeCompare(valB) * dir;
+    });
+  };
 
   // Push forward targets per tab
   const [selfForwardTarget, setSelfForwardTarget] = useState<string>('self_review');
@@ -486,16 +521,20 @@ export default function PendingSelfReviews() {
                           />
                         </TableHead>
                         <TableHead>Employee</TableHead>
-                        <TableHead>Code</TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => handleSortClick('code')}>
+                          <span className="inline-flex items-center gap-1">Code {getSortIcon('code')}</span>
+                        </TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>KPI</TableHead>
                          <TableHead>Pending With</TableHead>
-                         <TableHead>Reviewer</TableHead>
+                         <TableHead className="cursor-pointer select-none" onClick={() => handleSortClick('reviewer')}>
+                           <span className="inline-flex items-center gap-1">Reviewer {getSortIcon('reviewer')}</span>
+                         </TableHead>
                          <TableHead>Period</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {overdueKraSet.map(item => (
+                      {sortItems(overdueKraSet, 'self').map(item => (
                         <TableRow key={item.kpiId}>
                           <TableCell>
                             <Checkbox
@@ -575,16 +614,20 @@ export default function PendingSelfReviews() {
                           />
                         </TableHead>
                         <TableHead>Employee</TableHead>
-                        <TableHead>Code</TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => handleSortClick('code')}>
+                          <span className="inline-flex items-center gap-1">Code {getSortIcon('code')}</span>
+                        </TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>KPI</TableHead>
                          <TableHead>Pending With</TableHead>
-                         <TableHead>Reviewer</TableHead>
+                         <TableHead className="cursor-pointer select-none" onClick={() => handleSortClick('reviewer')}>
+                           <span className="inline-flex items-center gap-1">Reviewer {getSortIcon('reviewer')}</span>
+                         </TableHead>
                          <TableHead>Period</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {overdueTeamReview.map(item => (
+                      {sortItems(overdueTeamReview, 'manager').map(item => (
                         <TableRow key={item.kpiId}>
                           <TableCell>
                             <Checkbox
@@ -655,16 +698,20 @@ export default function PendingSelfReviews() {
                           />
                         </TableHead>
                         <TableHead>Employee</TableHead>
-                        <TableHead>Code</TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => handleSortClick('code')}>
+                          <span className="inline-flex items-center gap-1">Code {getSortIcon('code')}</span>
+                        </TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>KPI</TableHead>
                          <TableHead>Pending With</TableHead>
-                         <TableHead>Reviewer</TableHead>
+                         <TableHead className="cursor-pointer select-none" onClick={() => handleSortClick('reviewer')}>
+                           <span className="inline-flex items-center gap-1">Reviewer {getSortIcon('reviewer')}</span>
+                         </TableHead>
                          <TableHead>Period</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {overdueSkipLevel.map(item => (
+                      {sortItems(overdueSkipLevel, 'skip').map(item => (
                         <TableRow key={item.kpiId}>
                           <TableCell>
                             <Checkbox
