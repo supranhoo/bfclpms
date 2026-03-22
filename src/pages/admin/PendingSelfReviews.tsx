@@ -392,9 +392,8 @@ export default function PendingSelfReviews() {
                         <TableHead>Code</TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>KPI</TableHead>
-                        <TableHead>KRA</TableHead>
+                        <TableHead>Pending With</TableHead>
                         <TableHead>Period</TableHead>
-                        <TableHead>Days Overdue</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -410,13 +409,8 @@ export default function PendingSelfReviews() {
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
                           <TableCell>{item.kpiName}</TableCell>
-                          <TableCell className="max-w-[200px] truncate">{item.kraName}</TableCell>
+                          <TableCell><Badge variant="outline">Employee</Badge></TableCell>
                           <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
-                          <TableCell>
-                            <Badge variant={item.daysOverdue > 15 ? 'destructive' : 'secondary'}>
-                              {item.daysOverdue} days
-                            </Badge>
-                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -480,10 +474,8 @@ export default function PendingSelfReviews() {
                         <TableHead>Code</TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>KPI</TableHead>
-                        <TableHead>Manager</TableHead>
-                        <TableHead>Skip Manager</TableHead>
+                        <TableHead>Pending With</TableHead>
                         <TableHead>Period</TableHead>
-                        <TableHead>Days Overdue</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -499,14 +491,8 @@ export default function PendingSelfReviews() {
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
                           <TableCell>{item.kpiName}</TableCell>
-                          <TableCell>{item.reportingManagerName || '—'}</TableCell>
-                          <TableCell>{item.skipLevelManagerName || '—'}</TableCell>
+                          <TableCell><Badge variant="outline">Manager</Badge></TableCell>
                           <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
-                          <TableCell>
-                            <Badge variant={item.daysOverdue > 15 ? 'destructive' : 'secondary'}>
-                              {item.daysOverdue} days
-                            </Badge>
-                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -561,11 +547,8 @@ export default function PendingSelfReviews() {
                         <TableHead>Code</TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>KPI</TableHead>
-                        <TableHead>KRA</TableHead>
-                        <TableHead>Manager</TableHead>
-                        <TableHead>Skip-Level Manager</TableHead>
+                        <TableHead>Pending With</TableHead>
                         <TableHead>Period</TableHead>
-                        <TableHead>Days Overdue</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -581,15 +564,8 @@ export default function PendingSelfReviews() {
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
                           <TableCell>{item.kpiName}</TableCell>
-                          <TableCell className="max-w-[200px] truncate">{item.kraName}</TableCell>
-                          <TableCell>{item.reportingManagerName || '—'}</TableCell>
-                          <TableCell>{item.skipLevelManagerName || '—'}</TableCell>
+                          <TableCell><Badge variant="outline">Skip-Level Manager</Badge></TableCell>
                           <TableCell>{item.reviewPeriod} {item.reviewYear}</TableCell>
-                          <TableCell>
-                            <Badge variant={item.daysOverdue > 15 ? 'destructive' : 'secondary'}>
-                              {item.daysOverdue} days
-                            </Badge>
-                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
