@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useMentionSearch, type MentionUser } from '@/hooks/useMentionSearch';
-import { insertMention, parseMentions, renderMentionText, getDisplayText } from '@/lib/mentionUtils';
+import { insertMention, parseMentions, renderMentionText, getDisplayText, applyDisplayEditToRaw, displayPosToRawPos } from '@/lib/mentionUtils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Loader2 } from 'lucide-react';
 
@@ -27,30 +27,44 @@ export function MentionTextarea({
 }: MentionTextareaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const [mentionQuery, setMentionQuery] = useState('');
   const [triggerStart, setTriggerStart] = useState<number | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [isFocused, setIsFocused] = useState(false);
+
+  // Keep a ref of the previous display text for diffing edits
+  const prevDisplayRef = useRef(getDisplayText(value));
+
+  const displayText = getDisplayText(value);
+
+  // Sync ref whenever value changes externally
+  useEffect(() => {
+    prevDisplayRef.current = getDisplayText(value);
+  }, [value]);
 
   const { results, isLoading } = useMentionSearch(showDropdown ? mentionQuery : '', kpiId);
 
-  // Detect @ trigger on input change
+  // Handle user typing — map display-text edits back to raw text
   const handleInput = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const newValue = e.target.value;
-      const cursor = e.target.selectionStart ?? newValue.length;
-      onChange(newValue);
+      const newDisplayText = e.target.value;
+      const cursor = e.target.selectionStart ?? newDisplayText.length;
+      const oldDisplay = prevDisplayRef.current;
 
-      // Look backwards from cursor for an @ trigger
-      const textBeforeCursor = newValue.slice(0, cursor);
+      // Compute the new raw value by applying the display-level edit to the raw text
+      const newRaw = applyDisplayEditToRaw(value, oldDisplay, newDisplayText, cursor);
+      prevDisplayRef.current = newDisplayText;
+      onChange(newRaw);
+
+      // Detect @ trigger in the display text
+      const textBeforeCursor = newDisplayText.slice(0, cursor);
       const atIndex = textBeforeCursor.lastIndexOf('@');
 
       if (atIndex >= 0) {
         const charBefore = atIndex > 0 ? textBeforeCursor[atIndex - 1] : ' ';
         const queryText = textBeforeCursor.slice(atIndex + 1);
 
-        // Only trigger if @ is at start or preceded by whitespace, and query has no spaces at end
         if ((charBefore === ' ' || charBefore === '\n' || atIndex === 0) && !queryText.includes('\n')) {
           setTriggerStart(atIndex);
           setMentionQuery(queryText);
@@ -64,14 +78,19 @@ export function MentionTextarea({
       setMentionQuery('');
       setTriggerStart(null);
     },
-    [onChange]
+    [onChange, value]
   );
 
   const selectUser = useCallback(
     (user: MentionUser) => {
       if (triggerStart === null) return;
-      const cursor = textareaRef.current?.selectionStart ?? value.length;
-      const { newText, newCursorPos } = insertMention(value, cursor, triggerStart, {
+      const cursor = textareaRef.current?.selectionStart ?? displayText.length;
+
+      // Map display-text positions to raw-text positions
+      const rawTriggerStart = displayPosToRawPos(value, triggerStart);
+      const rawCursor = displayPosToRawPos(value, cursor);
+
+      const { newText } = insertMention(value, rawCursor, rawTriggerStart, {
         id: user.id,
         name: user.full_name || user.email,
       });
@@ -84,15 +103,22 @@ export function MentionTextarea({
       const mentions = parseMentions(newText);
       onMentionsChange?.(mentions.map((m) => m.userId));
 
-      // Restore cursor
+      // Compute display-text cursor position
+      const newDisplay = getDisplayText(newText);
+      prevDisplayRef.current = newDisplay;
+
+      // The mention in display is `@Name `, find its end
+      const mentionDisplayStr = `@${user.full_name || user.email} `;
+      const mentionDisplayEnd = triggerStart + mentionDisplayStr.length;
+
       requestAnimationFrame(() => {
         if (textareaRef.current) {
           textareaRef.current.focus();
-          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+          textareaRef.current.setSelectionRange(mentionDisplayEnd, mentionDisplayEnd);
         }
       });
     },
-    [triggerStart, value, onChange, onMentionsChange]
+    [triggerStart, value, onChange, onMentionsChange, displayText]
   );
 
   // Keyboard navigation
@@ -132,8 +158,6 @@ export function MentionTextarea({
     return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  const overlayRef = useRef<HTMLDivElement>(null);
-
   const handleScroll = useCallback(() => {
     if (overlayRef.current && textareaRef.current) {
       overlayRef.current.scrollTop = textareaRef.current.scrollTop;
@@ -142,8 +166,8 @@ export function MentionTextarea({
 
   return (
     <div className="relative">
-      {/* Visual overlay - shown only when not focused */}
-      {!isFocused && value && (
+      {/* Visual overlay — always shown, renders styled mentions */}
+      {value && (
         <div
           ref={overlayRef}
           aria-hidden="true"
@@ -157,17 +181,15 @@ export function MentionTextarea({
       )}
       <textarea
         ref={textareaRef}
-        value={isFocused ? value : (value ? getDisplayText(value) : '')}
+        value={displayText}
         onChange={handleInput}
         onKeyDown={handleKeyDown}
         onScroll={handleScroll}
-        onFocus={() => setIsFocused(true)}
-        onBlur={() => setIsFocused(false)}
         placeholder={placeholder}
         rows={rows}
         className={cn(
-          'flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 relative z-10',
-          isFocused ? 'text-foreground' : 'text-transparent',
+          'flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 relative z-10 caret-foreground',
+          value ? 'text-transparent' : 'text-foreground',
           className
         )}
       />
