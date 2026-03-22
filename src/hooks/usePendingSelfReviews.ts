@@ -786,6 +786,7 @@ export interface PenalizedManagerKpi {
   departmentName: string;
   kpiName: string;
   kraName: string;
+  frequency: string;
   reviewPeriod: string;
   reviewYear: number;
   oldStatus: string;
