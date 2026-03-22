@@ -1360,6 +1360,12 @@ export function UnifiedScorecard({
               <CardDescription>Click on a KPI to review and update scores</CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              {lastSelfReviewDate && (
+                <span className="hidden sm:inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  Self reviewed: {formatDate(lastSelfReviewDate)}
+                </span>
+              )}
               <KraExportMenu
                 kpis={kpis || []}
                 employeeProfile={{
