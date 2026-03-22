@@ -1053,7 +1053,7 @@ export function useOverdueSkipLevelKpis(deadlineDay: number, filterMonth?: strin
           id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, is_org_level,
           profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, reporting_manager_id, departments ( name ) )
         `)
-        .eq('status', 'skip_level_check')
+        .eq('status', 'manager_check')
         .eq('is_org_level', false)
         .in('frequency', ELIGIBLE_FREQUENCIES);
 
