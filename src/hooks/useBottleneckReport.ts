@@ -119,8 +119,16 @@ export function useBottleneckReport() {
   const allRows = useMemo(() => {
     if (!allKpis || !profilesMap) return [];
 
+    const today = new Date();
+
     return allKpis
-      .filter(kpi => kpi.status !== 'approved')
+      .filter(kpi => {
+        if (kpi.status === 'approved') return false;
+        // Only show overdue KPIs — those past their due date
+        const dueDate = getKpiDueDate(kpi.frequency, kpi.review_period, kpi.review_year);
+        if (!dueDate) return true; // If we can't determine due date, include it
+        return today >= dueDate;
+      })
       .map((kpi): BottleneckRow | null => {
         const rawStatus = kpi.status as string;
 
