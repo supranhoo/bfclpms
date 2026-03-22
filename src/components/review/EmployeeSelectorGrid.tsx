@@ -18,7 +18,8 @@ import { EmployeeFilters } from '@/components/review/EmployeeFilters';
 import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { supabase } from '@/integrations/supabase/client';
 import { formatEmployeeName } from '@/lib/utils';
-import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2 } from 'lucide-react';
+import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { ViewMode } from './ViewModeToggle';
 
 interface EmployeeProfile {
@@ -697,6 +698,87 @@ export function EmployeeSelectorGrid({
     return formatEmployeeName(mgr.full_name, mgr.email, mgr.employee_code);
   };
 
+  // --- Export Pending KPIs to Excel ---
+  const handleExportPendingKpis = () => {
+    if (!periodKpis || !displayMembers || displayMembers.length === 0) return;
+
+    const profileMap = new Map((allProfiles || []).map(p => [p.id, p]));
+    const deptMap = new Map((departments || []).map(d => [d.id, d.name]));
+    const skipIds = new Set(skipLevelMembers?.map(m => m.id) || []);
+
+    const getPendingKpis = (employeeId: string, relationship?: 'direct' | 'indirect'): KPI[] => {
+      const empKpis = periodKpis.filter(k => k.employee_id === employeeId);
+      const stages = getStages(employeeId);
+
+      if (viewLevel === 'pending_self_review') return empKpis.filter(k => k.status === 'kra_set');
+      if (viewLevel === 'pending_manager_review') return empKpis.filter(k => k.status === 'self_review');
+      if (viewLevel === 'pending_skip_review') return empKpis.filter(k => k.status === 'manager_check');
+      if (viewLevel === 'team') {
+        const isIndirect = relationship === 'indirect' || skipIds.has(employeeId);
+        if (isIndirect) {
+          const reviewable = resolveReviewableStatuses('skip_level', stages);
+          return empKpis.filter(k => reviewable.includes(k.status || ''));
+        }
+        return empKpis.filter(k => k.status === 'self_review');
+      }
+      if (viewLevel === 'skip_level') {
+        const reviewable = resolveReviewableStatuses('skip_level', stages);
+        return empKpis.filter(k => reviewable.includes(k.status || ''));
+      }
+      if (viewLevel === 'hr_pms') {
+        const reviewable = resolveReviewableStatuses('hr_pms', stages);
+        return empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'hr_pms_review');
+      }
+      if (viewLevel === 'audit') {
+        const reviewable = resolveReviewableStatuses('auditor', stages);
+        return empKpis.filter(k => reviewable.includes(k.status || '') && k.status !== 'audit');
+      }
+      if (viewLevel === 'management') return empKpis.filter(k => k.status === 'management_review');
+      return [];
+    };
+
+    const rows: Record<string, string | number | null>[] = [];
+
+    displayMembers.forEach(member => {
+      const pending = getPendingKpis(member.id, member.relationship);
+      if (pending.length === 0) return;
+
+      const managerProfile = member.reporting_manager_id ? profileMap.get(member.reporting_manager_id) : null;
+      const skipManagerProfile = managerProfile?.reporting_manager_id ? profileMap.get(managerProfile.reporting_manager_id) : null;
+      const deptName = member.department_id ? (deptMap.get(member.department_id) || '') : (member.departments?.name || '');
+
+      pending.forEach(kpi => {
+        rows.push({
+          'Employee Code': member.employee_code || '',
+          'Employee Name': member.full_name || '',
+          'Designation': member.designation || '',
+          'PMS Grade': member.pms_grade || '',
+          'Department': deptName,
+          'Category': (kpi as any).kra_categories?.name || '',
+          'KRA Name': kpi.kra_name || '',
+          'KPI Name': kpi.kpi_name || '',
+          'Review Period': kpi.review_period || '',
+          'Review Year': kpi.review_year || null,
+          'Status': kpi.status || '',
+          'Reporting Manager': managerProfile?.full_name || '',
+          'Skip Manager': skipManagerProfile?.full_name || '',
+        });
+      });
+    });
+
+    if (rows.length === 0) return;
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 14 }, { wch: 24 }, { wch: 20 }, { wch: 12 }, { wch: 20 },
+      { wch: 18 }, { wch: 22 }, { wch: 30 }, { wch: 14 }, { wch: 10 },
+      { wch: 16 }, { wch: 24 }, { wch: 24 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, 'Pending KPIs');
+    XLSX.writeFile(wb, `Pending_KPIs_${headerConfig.title.replace(/\s+/g, '_')}_${selectedPeriod}_${selectedYear}.xlsx`);
+  };
+
   const headerConfig = HEADER_CONFIG[viewLevel];
   const HeaderIcon = headerConfig.icon;
   const statusOptions = STATUS_OPTIONS_BY_LEVEL[viewLevel];
@@ -1033,6 +1115,10 @@ export function EmployeeSelectorGrid({
         </div>
         
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleExportPendingKpis} className="gap-1.5">
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Export Pending</span>
+          </Button>
           {viewLevel === 'audit' && (
             <Button variant="outline" size="sm" onClick={() => setAssignmentDialogOpen(true)}>
               <Settings2 className="h-4 w-4 mr-1.5" />
