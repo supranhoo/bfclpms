@@ -777,7 +777,7 @@ const buildEmailHtml = (
         ${sparkleElements}
         <div style="position:relative;z-index:1;">
           <p style="font-size:36px;margin:0;line-height:1;">🎉</p>
-          <h2 style="margin:8px 0 0;font-size:20px;font-weight:bold;color:#ffffff;text-shadow:0 1px 3px rgba(0,0,0,0.3);">Congratulations! Outstanding Performance!</h2>
+          <h2 style="margin:8px 0 0;font-size:20px;font-weight:bold;color:#ffffff;text-shadow:0 1px 3px rgba(0,0,0,0.3);">Congratulations! Exceptional Performance!</h2>
         </div>
       </div>
     `;
