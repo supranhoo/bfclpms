@@ -1304,6 +1304,22 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       reply_content: reply_content ? stripMentionSyntax(reply_content) : reply_content,
     };
 
+    // For final_approved, inject final_score and score_label
+    if (event_type === 'final_approved') {
+      const scoreLabels: Record<string, string> = {
+        '5': 'Outstanding',
+        '4': 'Exceeds Expectations',
+        '3': 'Meets Expectations',
+        '2': 'Needs Improvement',
+        '1': 'Below Expectations',
+        '0': 'Not Achieved',
+      };
+      const scoreStr = final_score != null ? String(final_score) : 'N/A';
+      const roundedScore = Math.round(Number(scoreStr)).toString();
+      placeholderData.final_score = scoreStr !== 'N/A' ? scoreStr : 'N/A';
+      placeholderData.score_label = scoreLabels[roundedScore] || 'N/A';
+    }
+
     // For kra_batch_assigned, inject the KRA table HTML into the placeholder
     if (event_type === 'kra_batch_assigned' && Array.isArray(kra_list)) {
       placeholderData.kra_table = buildKraTableHtml(kra_list);
@@ -1347,7 +1363,9 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     // Replace placeholders in subject and body
     const subject = replacePlaceholders(template.subject, placeholderData);
     const bodyContent = replacePlaceholders(template.body, placeholderData);
-    const html = buildEmailHtml(event_type, bodyContent, { logoUrl, footerText });
+    const finalScoreStr = final_score != null ? String(final_score) : undefined;
+    const roundedFinalScore = finalScoreStr ? String(Math.round(Number(finalScoreStr))) : undefined;
+    const html = buildEmailHtml(event_type, bodyContent, { logoUrl, footerText, finalScore: roundedFinalScore });
 
     console.log(`Sending ${event_type} email via ${provider} to ${recipient_email}`);
 
