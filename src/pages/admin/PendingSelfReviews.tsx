@@ -338,13 +338,34 @@ export default function PendingSelfReviews() {
         <TabsContent value="self-review">
           <Card>
             <CardContent className="pt-4 space-y-4">
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap items-center">
                 <Button size="sm" onClick={handleAutoScoreSelected} disabled={selectedKraSet.size === 0 || bulkAutoScore.isPending}>
                   {bulkAutoScore.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
                   Auto-Score Selected ({selectedKraSet.size})
                 </Button>
                 <Button size="sm" variant="destructive" onClick={handleAutoScoreAll} disabled={overdueKraSet.length === 0 || bulkAutoScore.isPending}>
                   Auto-Score All ({overdueKraSet.length})
+                </Button>
+                <div className="h-6 w-px bg-border mx-1" />
+                <Select value={selfForwardTarget} onValueChange={setSelfForwardTarget}>
+                  <SelectTrigger className="h-8 w-[160px]">
+                    <SelectValue placeholder="Forward to..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="self_review">Manager</SelectItem>
+                    <SelectItem value="manager_check">Skip Manager</SelectItem>
+                    <SelectItem value="hr_pms_review">HR PMS</SelectItem>
+                    <SelectItem value="audit">Audit</SelectItem>
+                    <SelectItem value="management_review">Management</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button size="sm" variant="outline" onClick={() => handlePushForwardSelected(overdueKraSet, selectedKraSet, setSelectedKraSet, selfForwardTarget, 'Self Review')} disabled={selectedKraSet.size === 0 || bulkPushForward.isPending}>
+                  {bulkPushForward.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <FastForward className="h-3.5 w-3.5 mr-1" />}
+                  Push Selected
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handlePushForwardAll(overdueKraSet, selfForwardTarget, 'Self Review')} disabled={overdueKraSet.length === 0 || bulkPushForward.isPending}>
+                  <FastForward className="h-3.5 w-3.5 mr-1" />
+                  Push All
                 </Button>
               </div>
 
