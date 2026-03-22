@@ -1,33 +1,36 @@
 
 
-## Fix: Reviewer Name Missing in Self-Review Tab (All Months)
+## Add Frequency Badge Next to KPI Name in Pending Review Tables
 
-### Root Cause
+### Summary
+Show a small colored badge (Bi-Monthly / Quarterly) next to the KPI name in all pending review table rows, matching the existing dashboard styling. Only non-monthly frequencies get a badge.
 
-In `src/hooks/usePendingSelfReviews.ts`, the `useOverdueKraSetKpis` hook (Self-Review tab):
+### Changes
 
-1. **Line 78**: The Supabase query does NOT select `reporting_manager_id` from profiles — it only fetches `full_name, employee_code, department_id, departments(name)`
-2. **Lines 128-131**: All manager/skip-level fields are hardcoded to `null`
+#### File: `src/pages/admin/PendingSelfReviews.tsx`
 
-The Manager Review and Skip-Level tabs correctly fetch `reporting_manager_id` and resolve names (lines 149, 200-282). The Self-Review tab was never updated to do the same.
+1. **Add Badge import** (already imported).
 
-### Fix
-
-#### File: `src/hooks/usePendingSelfReviews.ts`
-
-1. **Line 78**: Add `reporting_manager_id` to the profiles select:
+2. **Replace plain KPI text cells** in all five tabs (Self-Review, Manager Review, Skip-Level, Sent Back, Rollback) from:
+   ```tsx
+   <TableCell>{item.kpiName}</TableCell>
    ```
-   profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, reporting_manager_id, departments ( name ) )
+   To:
+   ```tsx
+   <TableCell>
+     <span className="inline-flex items-center gap-1.5 flex-wrap">
+       {item.kpiName}
+       {item.frequency === 'Bi-Monthly' && (
+         <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-violet-300 text-violet-700">Bi-Monthly</Badge>
+       )}
+       {item.frequency === 'Quarterly' && (
+         <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-teal-300 text-teal-700">Quarterly</Badge>
+       )}
+     </span>
+   </TableCell>
    ```
 
-2. **Lines 103-133**: Replace the simple loop with the same manager/skip-level name resolution pattern used in `useOverdueTeamReviewKpis`:
-   - Collect unique `reporting_manager_id` values from profiles
-   - Batch-fetch manager names from `profiles`
-   - Derive skip-level manager IDs from managers' `reporting_manager_id`
-   - Batch-fetch skip-level names
-   - Populate `reportingManagerName` and `skipLevelManagerName` in each result
-
-This ensures the Reviewer column works across all tabs and all months.
+3. **Verify `frequency` field exists** on all interfaces (`OverdueKpi`, `SentBackKpi`, `AutoScoredKpi`, `PenalizedManagerKpi`) — already added in the previous change.
 
 ### No database changes needed
 
