@@ -456,7 +456,6 @@ export default function PendingSelfReviews() {
                   Push All
                 </Button>
               </div>
-              </div>
 
               {teamReviewLoading ? (
                 <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
