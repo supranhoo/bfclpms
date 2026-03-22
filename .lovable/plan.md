@@ -1,39 +1,55 @@
 
 
-## Fix: Hide UUIDs in MentionTextarea (Always Show Clean Text)
+## Add Final Score + Animated Sparkles to KPI Finalized Email
 
 ### Problem
-When the textarea is focused, the raw mention markup `@[Umesh Kumar Mehta](adfab1e8-fc45-...)` is visible to the user. UUIDs should never be shown — the user should always see just `@Umesh Kumar Mehta`.
+1. The `final_approved` email template doesn't show the final score.
+2. The previous plan called for static sparkles for score 5 — the user wants them to be **floating/animated** every time the email is opened.
 
-### Root Cause
-Line 160 of `MentionTextarea.tsx`: when focused, the textarea value is the raw `value` (containing `@[Name](uuid)` markup). This was done to fix a cursor alignment issue, but it exposes internal markup to users.
+### Approach
 
-### Solution
-Always display clean text (no UUIDs) in the textarea. Map user edits from display-text coordinates back to raw-text coordinates using a position mapping utility.
+Email clients have limited CSS animation support, but `@keyframes` with `animation` works in Apple Mail, iOS Mail, Outlook.com, and many webmail clients (Gmail strips it, but the email still looks fine with static fallback). We'll use CSS `@keyframes` for floating sparkle emojis.
 
 ### Changes
 
-#### File: `src/lib/mentionUtils.ts`
+#### File: `supabase/functions/send-email-notification/index.ts`
 
-Add two new utility functions:
+**1. Update `final_approved` template (lines 306-317)**
+- Add `Final Score: {{final_score}} / 5 — {{score_label}}` line after the Period line.
+- Template body remains generic; the score-5 celebration is handled in `buildEmailHtml`.
 
-1. **`buildDisplayToRawMap(rawText)`** — Scans the raw text for mention patterns and builds an array that maps each display-text character index to its corresponding raw-text index. Mentions like `@[Name](uuid)` (raw) map to `@Name` (display), so display indices within a mention map to the mention's start in raw text.
+**2. Add score-to-label mapping + placeholder injection (before line 1304)**
+- When `event_type === 'final_approved'` and `final_score` is provided in the request body:
+  - Map score to label: `{ '5': 'Outstanding', '4': 'Exceeds Expectations', '3': 'Meets Expectations', '2': 'Needs Improvement', '1': 'Below Expectations', '0': 'Not Achieved' }`
+  - Set `placeholderData.final_score` and `placeholderData.score_label`
+  - If score is missing, default to `'N/A'`
 
-2. **`applyDisplayEditToRaw(oldRaw, oldDisplay, newDisplay, cursorInNew)`** — Given the old raw text, old display text, new display text (after user edit), and cursor position, determines what changed (insertion, deletion, or replacement) and applies the equivalent edit to the raw text. If an edit touches part of a mention token, the entire mention is removed from raw text.
+**3. Update `buildEmailHtml` (lines 717-775)**
+- Accept optional `finalScore` parameter in the customization object.
+- When `eventType === 'final_approved'` and `finalScore === '5'`:
+  - Add CSS `@keyframes` for floating animation: stars/sparkles float upward, fade in/out, and drift side to side at different speeds.
+  - Inject ~8-10 absolutely-positioned sparkle emoji elements (`✨`, `⭐`, `🌟`) with varying `animation-delay`, `animation-duration`, and `left` positions across the email width.
+  - Add a gold-gradient "🎉 Congratulations! Outstanding Performance! 🎉" banner above the content area.
+  - The sparkle container uses `overflow: hidden` and `position: relative` so sparkles float within the email boundaries.
+  - For email clients that strip `@keyframes` (Gmail), the sparkles degrade gracefully to static positioned emojis — still celebratory, just not animated.
 
-#### File: `src/components/ui/MentionTextarea.tsx`
+**4. Pass `finalScore` to `buildEmailHtml` call (line 1306)**
+- Extract `final_score` from request body and pass it: `buildEmailHtml(event_type, bodyContent, { logoUrl, footerText, finalScore: final_score })`
 
-1. **Remove `isFocused` state** — no longer needed since text appearance is the same focused or not.
-
-2. **Textarea value**: Always show `getDisplayText(value)` — never the raw value.
-
-3. **Overlay**: Always show `renderMentionText(value)` overlay with `pointer-events-none`, textarea text always transparent. Cursor is visible via `caret-foreground`. Since display text and overlay now have identical character lengths, the cursor aligns perfectly.
-
-4. **`handleInput`**: Instead of `onChange(newValue)` directly, use `applyDisplayEditToRaw(value, oldDisplayText, newDisplayText, cursor)` to compute the new raw value, then call `onChange(newRawValue)`. Store old display text in a ref for diffing.
-
-5. **`selectUser`**: After `insertMention` produces new raw text, compute the display-text cursor position (raw cursor minus the UUID overhead) and set selection accordingly.
-
-6. **`@` trigger detection**: The trigger detection logic works on the display text (textarea value), which is fine since `@` characters are preserved in display text.
+### CSS Animation Detail
+```css
+@keyframes float-up {
+  0% { transform: translateY(0) rotate(0deg); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(-400px) rotate(720deg); opacity: 0; }
+}
+@keyframes sway {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(20px); }
+}
+```
+Each sparkle element combines both animations with different durations (3-6s) and delays (0-4s), set to `infinite` so they keep floating every time the email is viewed.
 
 ### No database changes needed
 
