@@ -1,23 +1,33 @@
 
 
-## Add Frequency Column to Excel Exports Only
+## Fix: Reviewer Name Missing in Self-Review Tab (All Months)
 
-### Changes
+### Root Cause
 
-#### File: `src/pages/admin/PendingSelfReviews.tsx`
+In `src/hooks/usePendingSelfReviews.ts`, the `useOverdueKraSetKpis` hook (Self-Review tab):
 
-1. **`handleExportExcel`** (line 271): Add `'Frequency': k.frequency || '-'` to the row object.
-2. **`handleExportSentBack`** (line 297): Add `'Frequency'` — requires adding `frequency` to `SentBackKpi` interface and mapping.
-3. **`handleExportRollback`** (lines 318, 334): Add `'Frequency'` — requires adding `frequency` to `AutoScoredKpi` and `PenalizedManagerKpi` interfaces and mappings.
-4. Update `!cols` widths in all three export functions to include the new column.
+1. **Line 78**: The Supabase query does NOT select `reporting_manager_id` from profiles — it only fetches `full_name, employee_code, department_id, departments(name)`
+2. **Lines 128-131**: All manager/skip-level fields are hardcoded to `null`
+
+The Manager Review and Skip-Level tabs correctly fetch `reporting_manager_id` and resolve names (lines 149, 200-282). The Self-Review tab was never updated to do the same.
+
+### Fix
 
 #### File: `src/hooks/usePendingSelfReviews.ts`
 
-1. **`SentBackKpi` interface** (line 626): Add `frequency: string`.
-2. **Sent-back mapping** (line 697): Add `frequency: kpi.frequency || ''`. The query already selects `frequency` from kpis.
-3. **`AutoScoredKpi` interface** (line 762): Add `frequency: string`.
-4. **`PenalizedManagerKpi` interface** (line 777): Add `frequency: string`.
-5. **Auto-scored mapping** and **penalized mapping**: Add `frequency` from the kpi record. Verify the queries select `frequency` — if not, add it.
+1. **Line 78**: Add `reporting_manager_id` to the profiles select:
+   ```
+   profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, reporting_manager_id, departments ( name ) )
+   ```
+
+2. **Lines 103-133**: Replace the simple loop with the same manager/skip-level name resolution pattern used in `useOverdueTeamReviewKpis`:
+   - Collect unique `reporting_manager_id` values from profiles
+   - Batch-fetch manager names from `profiles`
+   - Derive skip-level manager IDs from managers' `reporting_manager_id`
+   - Batch-fetch skip-level names
+   - Populate `reportingManagerName` and `skipLevelManagerName` in each result
+
+This ensures the Reviewer column works across all tabs and all months.
 
 ### No database changes needed
 
