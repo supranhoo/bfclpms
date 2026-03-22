@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
 > **Last Updated:** 2026-03-22  
-> **Version:** 1.66.0 — Bottleneck report filters to overdue KPIs only; top/bottom performers use approved KPIs (10 each)
+> **Version:** 1.67.0 — Overdue due-date filter applied across entire Management Dashboard; getKpiDueDate extracted to shared utility
 > **Maintainer:** Lovable AI
 
 ---
