@@ -518,6 +518,27 @@ export default function PendingSelfReviews() {
         <TabsContent value="skip-level">
           <Card>
             <CardContent className="pt-4 space-y-4">
+              <div className="flex gap-2 flex-wrap items-center">
+                <Select value={skipForwardTarget} onValueChange={setSkipForwardTarget}>
+                  <SelectTrigger className="h-8 w-[160px]">
+                    <SelectValue placeholder="Forward to..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hr_pms_review">HR PMS</SelectItem>
+                    <SelectItem value="audit">Audit</SelectItem>
+                    <SelectItem value="management_review">Management</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button size="sm" variant="outline" onClick={() => handlePushForwardSelected(overdueSkipLevel, selectedSkipLevel, setSelectedSkipLevel, skipForwardTarget, 'Skip-Level Review')} disabled={selectedSkipLevel.size === 0 || bulkPushForward.isPending}>
+                  {bulkPushForward.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <FastForward className="h-3.5 w-3.5 mr-1" />}
+                  Push Selected ({selectedSkipLevel.size})
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handlePushForwardAll(overdueSkipLevel, skipForwardTarget, 'Skip-Level Review')} disabled={overdueSkipLevel.length === 0 || bulkPushForward.isPending}>
+                  <FastForward className="h-3.5 w-3.5 mr-1" />
+                  Push All ({overdueSkipLevel.length})
+                </Button>
+              </div>
+
               {skipLevelLoading ? (
                 <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
               ) : overdueSkipLevel.length === 0 ? (
@@ -527,6 +548,12 @@ export default function PendingSelfReviews() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-10">
+                          <Checkbox
+                            checked={selectedSkipLevel.size === overdueSkipLevel.length && overdueSkipLevel.length > 0}
+                            onCheckedChange={() => toggleAll(overdueSkipLevel, selectedSkipLevel, setSelectedSkipLevel)}
+                          />
+                        </TableHead>
                         <TableHead>Employee</TableHead>
                         <TableHead>Code</TableHead>
                         <TableHead>Department</TableHead>
@@ -541,6 +568,12 @@ export default function PendingSelfReviews() {
                     <TableBody>
                       {overdueSkipLevel.map(item => (
                         <TableRow key={item.kpiId}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedSkipLevel.has(item.kpiId)}
+                              onCheckedChange={() => toggleSelection(selectedSkipLevel, setSelectedSkipLevel, item.kpiId)}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium">{item.employeeName}</TableCell>
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
