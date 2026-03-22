@@ -402,7 +402,7 @@ export function KpiDetailsTable({
                       {submission?.auto_advance_reason?.startsWith('System-forwarded') ? (
                         <Tooltip>
                           <TooltipTrigger>
-                            <FastForward className="h-4 w-4 text-blue-500 dark:text-blue-400 shrink-0" />
+                            <FastForward className="h-4 w-4 text-amber-500 dark:text-amber-400 shrink-0" />
                           </TooltipTrigger>
                           <TooltipContent>
                             <p className="text-xs">{submission.auto_advance_reason}</p>
