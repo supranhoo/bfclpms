@@ -167,7 +167,7 @@ export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: stri
         const sampleKpi = (kpis || []).find(k => k.employee_id === empId);
         if (sampleKpi?.review_period && sampleKpi?.review_year) {
           const { data: wf } = await supabase.rpc('get_employee_workflow', {
-            p_employee_id: empId,
+            employee_uuid: empId,
             p_review_period: sampleKpi.review_period,
             p_review_year: sampleKpi.review_year,
           });
