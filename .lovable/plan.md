@@ -1,31 +1,31 @@
 
 
-## Add Final Score + Animated Sparkles to KPI Finalized Email (Updated)
+## RCA: KPI Finalized Email Not Sent for Dummy (001)
 
-### Problem
-1. The `final_approved` email template doesn't show the final score.
-2. When score is **4 or more**, the email should have floating/animated sparkles and a congratulations banner.
+### Root Cause
 
-### Changes
+The KPI (id: `20afd55d`) transitioned from **`self_review` → `approved`** (admin data entry auto-advanced it). However, the `notify_on_kpi_status_change` trigger only creates a `kpi_finalized` notification for:
+- `audit → approved`
+- `management_review → approved`
 
-#### File: `supabase/functions/send-email-notification/index.ts`
+The `self_review → approved` transition is **not covered** by any CASE in the trigger. No notification was inserted, so no email was triggered.
 
-**1. Update `final_approved` template** — Add `Final Score: {{final_score}} / 5 — {{score_label}}` line after the Period line.
+There's also a deliberate skip for `kra_set → approved` (system auto-score handles its own notification). But `self_review → approved` falls through silently.
 
-**2. Score-to-label mapping + placeholder injection** — When `event_type === 'final_approved'` and `final_score` is provided:
-- Map: `{ '5': 'Outstanding', '4': 'Exceeds Expectations', '3': 'Meets Expectations', '2': 'Needs Improvement', '1': 'Below Expectations', '0': 'Not Achieved' }`
-- Set `placeholderData.final_score` and `placeholderData.score_label`
+### Fix
 
-**3. Update `buildEmailHtml`** — Accept optional `finalScore` parameter. When `eventType === 'final_approved'` and `parseFloat(finalScore) >= 4`:
-- Add CSS `@keyframes sparkle-float` and `sparkle-sway` animations
-- Inject ~10 absolutely-positioned sparkle emoji elements (`✨`, `⭐`, `🌟`) with varying delays and durations for continuous floating
-- Add gold-gradient "🎉 Congratulations!" banner
-- Graceful degradation for Gmail (static emojis)
+#### Migration SQL — Update `notify_on_kpi_status_change` trigger function
 
-**4. Pass `finalScore` to `buildEmailHtml` call** from the request body.
+Expand CASE 5 condition from:
+```sql
+ELSIF NEW.status = 'approved' AND (OLD.status = 'audit' OR OLD.status = 'management_review') THEN
+```
+To:
+```sql
+ELSIF NEW.status = 'approved' AND OLD.status IN ('self_review', 'manager_check', 'audit', 'management_review') THEN
+```
 
-### Key difference from previous implementation
-The sparkle condition changes from `finalScore === '5'` to `parseFloat(finalScore) >= 4`, so both scores 4 and 5 trigger the celebration.
+This covers all possible paths to `approved` status (except `kra_set → approved` which is intentionally skipped at line 14 for system auto-score).
 
-### No database changes needed
+### No frontend changes needed
 
