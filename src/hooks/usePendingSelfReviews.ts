@@ -633,6 +633,7 @@ export interface SentBackKpi {
   departmentName: string;
   kpiName: string;
   kraName: string;
+  frequency: string;
   reviewPeriod: string;
   reviewYear: number;
   sentBackBy: string;
