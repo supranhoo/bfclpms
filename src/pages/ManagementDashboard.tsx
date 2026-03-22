@@ -228,7 +228,14 @@ export default function ManagementDashboard() {
       const calculateMetrics = (kpiList: any[]) => {
         const stageCounts: Record<string, number> = {};
         kpiList.forEach(kpi => { const stage = kpi.status || 'kra_set'; stageCounts[stage] = (stageCounts[stage] || 0) + 1; });
-        const managementPending = kpiList.filter(k => k.status === 'management_review').length;
+        const today = new Date();
+        const isOverdue = (kpi: any) => {
+          if (kpi.status === 'approved' || kpi.status === 'kra_set') return false;
+          const dueDate = getKpiDueDate(kpi.frequency, kpi.review_period, kpi.review_year);
+          if (!dueDate) return true;
+          return today >= dueDate;
+        };
+        const managementPending = kpiList.filter(k => k.status === 'management_review' && isOverdue(k)).length;
         const approvedKpis = stageCounts['approved'] || 0;
         const completionRate = kpiList.length > 0 ? (approvedKpis / kpiList.length) * 100 : 0;
         let totalScore = 0, totalWeightage = 0;
