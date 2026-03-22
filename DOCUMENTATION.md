@@ -4084,4 +4084,21 @@ Admin-only page with two tabs for managing overdue KPIs:
 
 ---
 
+### Push to Next Level (System Forward)
+
+Administrators can push pending KPIs to any subsequent workflow level without assigning a score. This is available on all three pending tabs (Self-Review, Manager Review, Skip-Level Review) via a "Forward To" dropdown and "Push Selected"/"Push All" buttons.
+
+**Behavior:**
+- Updates `kpis.status` to the chosen target level
+- Sets `review_submissions.auto_advance_reason` to `"System-forwarded to {target} (skipped {current} review)"` — no scores are assigned
+- Logs `SYSTEM_FORWARDED` action in `kpi_audit_logs`
+- On employee dashboards, system-forwarded KPIs display a blue `FastForward` icon (distinct from the orange `Zap` for auto-scored KPIs)
+
+**Target options per tab:**
+- **Pending Self-Review**: Manager, Skip Manager, HR PMS, Audit, Management
+- **Pending Manager Review**: Skip Manager, HR PMS, Audit, Management
+- **Pending Skip-Level**: HR PMS, Audit, Management
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
