@@ -770,6 +770,7 @@ export interface AutoScoredKpi {
   departmentName: string;
   kpiName: string;
   kraName: string;
+  frequency: string;
   reviewPeriod: string;
   reviewYear: number;
   scoredAt: string;
