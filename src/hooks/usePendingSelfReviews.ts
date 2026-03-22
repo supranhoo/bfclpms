@@ -705,6 +705,7 @@ export function useSentBackKpisTab(filterMonth?: string, filterYear?: number) {
           departmentName: profile?.departments?.name || '',
           kpiName: kpi.kpi_name,
           kraName: kpi.kra_name,
+          frequency: kpi.frequency || '',
           reviewPeriod: kpi.review_period || '',
           reviewYear: kpi.review_year || 0,
           sentBackBy: senderMap[q.raised_by] || 'Unknown',
