@@ -1155,3 +1155,99 @@ export function useOverdueSkipLevelKpis(deadlineDay: number, filterMonth?: strin
     enabled: deadlineDay > 0,
   });
 }
+
+// ─── Bulk Push Forward (no scoring) ───
+
+const TARGET_STATUS_MAP: Record<string, { status: string; label: string }> = {
+  self_review: { status: 'self_review', label: 'Manager Review' },
+  manager_check: { status: 'manager_check', label: 'Skip-Level Review' },
+  skip_level_check: { status: 'skip_level_check', label: 'HR PMS Review' },
+  hr_pms_review: { status: 'hr_pms_review', label: 'Audit' },
+  audit: { status: 'audit', label: 'Audit' },
+  management_review: { status: 'management_review', label: 'Management Review' },
+};
+
+export function useBulkPushForward() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ kpiIds, targetStatus, adminId, currentStatusLabel }: {
+      kpiIds: string[];
+      targetStatus: string;
+      adminId: string;
+      currentStatusLabel: string;
+    }) => {
+      const targetLabel = TARGET_STATUS_MAP[targetStatus]?.label || targetStatus.replace(/_/g, ' ');
+      let forwarded = 0;
+
+      for (const kpiId of kpiIds) {
+        try {
+          // Get current status
+          const { data: kpi } = await supabase
+            .from('kpis')
+            .select('status')
+            .eq('id', kpiId)
+            .single();
+
+          const oldStatus = kpi?.status || 'unknown';
+
+          // Update KPI status
+          await supabase
+            .from('kpis')
+            .update({ status: targetStatus as any })
+            .eq('id', kpiId);
+
+          // Upsert review submission with auto_advance_reason
+          const reason = `System-forwarded to ${targetLabel} (skipped ${currentStatusLabel})`;
+          const { data: existing } = await supabase
+            .from('review_submissions')
+            .select('id')
+            .eq('kpi_id', kpiId)
+            .maybeSingle();
+
+          if (existing) {
+            await supabase
+              .from('review_submissions')
+              .update({ auto_advance_reason: reason })
+              .eq('id', existing.id);
+          } else {
+            await supabase
+              .from('review_submissions')
+              .insert([{
+                kpi_id: kpiId,
+                auto_advance_reason: reason,
+                kpi_status: 'open',
+              }]);
+          }
+
+          // Audit log
+          await supabase.from('kpi_audit_logs').insert({
+            kpi_id: kpiId,
+            performed_by: adminId,
+            action: 'SYSTEM_FORWARDED',
+            old_value: { status: oldStatus },
+            new_value: { status: targetStatus },
+            metadata: { reason, source: 'pending_reviews_admin' },
+          });
+
+          forwarded++;
+        } catch (e) {
+          console.error(`Failed to push forward KPI ${kpiId}:`, e);
+        }
+      }
+
+      return forwarded;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ['overdue-kra-set-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['overdue-team-review-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['overdue-skip-level-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      toast({ title: 'Push Forward Complete', description: `${count} KPI(s) forwarded to next level.` });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+}
