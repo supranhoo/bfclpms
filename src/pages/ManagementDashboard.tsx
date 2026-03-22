@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
 import { useKpiFilters } from '@/hooks/useKpiFilters';
+import { getKpiDueDate } from '@/lib/frequencyUtils';
 import { KpiFilterBar } from '@/components/ui/KpiFilterBar';
 import { useRollbackStatusCounts } from '@/hooks/useAllRollbackRequests';
 import { PerformanceTrendChart } from '@/components/management/PerformanceTrendChart';
@@ -180,7 +181,7 @@ export default function ManagementDashboard() {
               let query = supabase
                 .from('kpis')
                 .select(`
-                  id, employee_id, status, weightage, review_period, review_year,
+                  id, employee_id, status, weightage, review_period, review_year, frequency,
                   review_submissions ( final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score )
                 `)
                 .eq('review_year', calYear)
@@ -227,7 +228,14 @@ export default function ManagementDashboard() {
       const calculateMetrics = (kpiList: any[]) => {
         const stageCounts: Record<string, number> = {};
         kpiList.forEach(kpi => { const stage = kpi.status || 'kra_set'; stageCounts[stage] = (stageCounts[stage] || 0) + 1; });
-        const managementPending = kpiList.filter(k => k.status === 'management_review').length;
+        const today = new Date();
+        const isOverdue = (kpi: any) => {
+          if (kpi.status === 'approved' || kpi.status === 'kra_set') return false;
+          const dueDate = getKpiDueDate(kpi.frequency, kpi.review_period, kpi.review_year);
+          if (!dueDate) return true;
+          return today >= dueDate;
+        };
+        const managementPending = kpiList.filter(k => k.status === 'management_review' && isOverdue(k)).length;
         const approvedKpis = stageCounts['approved'] || 0;
         const completionRate = kpiList.length > 0 ? (approvedKpis / kpiList.length) * 100 : 0;
         let totalScore = 0, totalWeightage = 0;
@@ -263,7 +271,13 @@ export default function ManagementDashboard() {
       };
 
       // Pending management reviews grouped by employee
-      const managementPendingKpis = kpis.filter(k => k.status === 'management_review');
+      const overdueToday = new Date();
+      const isKpiOverdue = (kpi: any) => {
+        const dueDate = getKpiDueDate(kpi.frequency, kpi.review_period, kpi.review_year);
+        if (!dueDate) return true;
+        return overdueToday >= dueDate;
+      };
+      const managementPendingKpis = kpis.filter(k => k.status === 'management_review' && isKpiOverdue(k));
       const employeePendingMap = new Map<string, { kpiCount: number; totalScore: number; totalWeightage: number }>();
       managementPendingKpis.forEach(kpi => {
         const score = getScoreOrZero(kpi);
@@ -295,7 +309,7 @@ export default function ManagementDashboard() {
         stats.totalScore += score * w;
         stats.totalWeightage += w;
         if (kpi.status === 'approved') stats.approvedKpis++;
-        if (kpi.status === 'management_review') stats.pendingReviews++;
+        if (kpi.status === 'management_review' && isKpiOverdue(kpi)) stats.pendingReviews++;
         const es = stats.employeeScores.get(kpi.employee_id) || { s: 0, w: 0 };
         es.s += score * w; es.w += (kpi.weightage ?? 100);
         stats.employeeScores.set(kpi.employee_id, es);
@@ -429,7 +443,7 @@ export default function ManagementDashboard() {
       // We can't filter by updated_at in our existing query, so approximate from what we have
       // Count KPIs stuck in intermediate stages  
       const overdueReviews = kpis.filter(k => 
-        k.status && !['approved', 'kra_set'].includes(k.status)
+        k.status && !['approved', 'kra_set'].includes(k.status) && isKpiOverdue(k)
       ).length;
 
       return {
