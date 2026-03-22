@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useMentionSearch, type MentionUser } from '@/hooks/useMentionSearch';
-import { insertMention, parseMentions, renderMentionText } from '@/lib/mentionUtils';
+import { insertMention, parseMentions, renderMentionText, getDisplayText } from '@/lib/mentionUtils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Loader2 } from 'lucide-react';
 
@@ -31,6 +31,7 @@ export function MentionTextarea({
   const [triggerStart, setTriggerStart] = useState<number | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [isFocused, setIsFocused] = useState(false);
 
   const { results, isLoading } = useMentionSearch(showDropdown ? mentionQuery : '', kpiId);
 
@@ -141,29 +142,32 @@ export function MentionTextarea({
 
   return (
     <div className="relative">
-      {/* Visual overlay - renders formatted text behind transparent textarea */}
-      <div
-        ref={overlayRef}
-        aria-hidden="true"
-        className={cn(
-          'absolute inset-0 min-h-[80px] w-full rounded-md px-3 py-2 text-sm text-muted-foreground pointer-events-none overflow-hidden whitespace-pre-wrap break-words',
-          className
-        )}
-      >
-        {value ? renderMentionText(value) : (
-          <span className="text-muted-foreground">{placeholder}</span>
-        )}
-      </div>
+      {/* Visual overlay - shown only when not focused */}
+      {!isFocused && value && (
+        <div
+          ref={overlayRef}
+          aria-hidden="true"
+          className={cn(
+            'absolute inset-0 min-h-[80px] w-full rounded-md px-3 py-2 text-sm text-foreground pointer-events-none overflow-hidden whitespace-pre-wrap break-words z-20',
+            className
+          )}
+        >
+          {renderMentionText(value)}
+        </div>
+      )}
       <textarea
         ref={textareaRef}
-        value={value}
+        value={isFocused ? value : (value ? getDisplayText(value) : '')}
         onChange={handleInput}
         onKeyDown={handleKeyDown}
         onScroll={handleScroll}
-        placeholder={value ? undefined : placeholder}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        placeholder={placeholder}
         rows={rows}
         className={cn(
-          'flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm text-transparent caret-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 relative z-10',
+          'flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 relative z-10',
+          isFocused ? 'text-foreground' : 'text-transparent',
           className
         )}
       />
