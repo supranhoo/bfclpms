@@ -10,7 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Settings, AlertTriangle, Users, Undo2, Mail, RotateCcw, UserCheck, FastForward } from 'lucide-react';
+import { Loader2, Settings, AlertTriangle, Users, Undo2, Mail, RotateCcw, UserCheck, FastForward, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { EffectiveMonthSelector } from '@/components/admin/EffectiveMonthSelector';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUpdateSystemSetting, useSystemSetting } from '@/hooks/useSystemSettings';
@@ -223,6 +224,81 @@ export default function PendingSelfReviews() {
     }
   };
 
+  const handleExportExcel = (tabName: string, pendingWith: string, data: OverdueKpi[]) => {
+    if (data.length === 0) return;
+    const rows = data.map(k => ({
+      'Employee': k.employeeName,
+      'Code': k.employeeCode,
+      'Department': k.departmentName,
+      'KPI': k.kpiName,
+      'Pending With': pendingWith,
+      'Period': `${k.reviewPeriod} ${k.reviewYear}`,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 18 }, { wch: 18 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, tabName);
+    XLSX.writeFile(wb, `Pending_Reviews_${tabName.replace(/\s+/g, '_')}_${selectedMonth}_${selectedYear}.xlsx`);
+  };
+
+  const handleExportSentBack = () => {
+    if (sentBackKpis.length === 0) return;
+    const rows = sentBackKpis.map(k => ({
+      'Employee': k.employeeName,
+      'Code': k.employeeCode,
+      'Department': k.departmentName,
+      'KPI': k.kpiName,
+      'KRA': k.kraName,
+      'Sent Back By': k.sentBackBy,
+      'Reason': k.reason,
+      'Date': format(new Date(k.sentBackDate), 'dd MMM yyyy'),
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 25 }, { wch: 20 }, { wch: 30 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sent Back');
+    XLSX.writeFile(wb, `Pending_Reviews_Sent_Back_${selectedMonth}_${selectedYear}.xlsx`);
+  };
+
+  const handleExportRollback = () => {
+    if (autoScoredKpis.length === 0 && penalizedKpis.length === 0) return;
+    const wb = XLSX.utils.book_new();
+    if (autoScoredKpis.length > 0) {
+      const rows = autoScoredKpis.map(k => ({
+        'Type': 'Auto-Scored',
+        'Employee': k.employeeName,
+        'Code': k.employeeCode,
+        'Department': k.departmentName,
+        'KPI': k.kpiName,
+        'KRA': k.kraName,
+        'Period': `${k.reviewPeriod} ${k.reviewYear}`,
+        'Scored At': format(new Date(k.scoredAt), 'dd MMM yyyy HH:mm'),
+        'Scored By': k.scoredBy,
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [{ wch: 14 }, { wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 25 }, { wch: 18 }, { wch: 20 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(wb, ws, 'Auto-Scored');
+    }
+    if (penalizedKpis.length > 0) {
+      const rows = penalizedKpis.map(k => ({
+        'Type': 'Manager Penalty',
+        'Manager': k.managerName,
+        'Code': k.managerCode,
+        'Department': k.departmentName,
+        'KPI': k.kpiName,
+        'KRA': k.kraName,
+        'Period': `${k.reviewPeriod} ${k.reviewYear}`,
+        'Previous Status': k.oldStatus.replace(/_/g, ' '),
+        'Scored At': format(new Date(k.scoredAt), 'dd MMM yyyy HH:mm'),
+        'Scored By': k.scoredBy,
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [{ wch: 16 }, { wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 25 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(wb, ws, 'Manager Penalty');
+    }
+    XLSX.writeFile(wb, `Pending_Reviews_Rollback_${selectedMonth}_${selectedYear}.xlsx`);
+  };
+
   if (settingsLoading) {
     return (
       <div className="flex items-center justify-center min-h-[200px]">
@@ -371,6 +447,11 @@ export default function PendingSelfReviews() {
                   <FastForward className="h-3.5 w-3.5 mr-1" />
                   Push All
                 </Button>
+                <div className="h-6 w-px bg-border mx-1" />
+                <Button size="sm" variant="outline" onClick={() => handleExportExcel('Self Review', 'Employee', overdueKraSet)} disabled={overdueKraSet.length === 0}>
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                  Export Excel
+                </Button>
               </div>
 
               {kraSetLoading ? (
@@ -453,6 +534,11 @@ export default function PendingSelfReviews() {
                   <FastForward className="h-3.5 w-3.5 mr-1" />
                   Push All
                 </Button>
+                <div className="h-6 w-px bg-border mx-1" />
+                <Button size="sm" variant="outline" onClick={() => handleExportExcel('Manager Review', 'Manager', overdueTeamReview)} disabled={overdueTeamReview.length === 0}>
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                  Export Excel
+                </Button>
               </div>
 
               {teamReviewLoading ? (
@@ -526,6 +612,11 @@ export default function PendingSelfReviews() {
                   <FastForward className="h-3.5 w-3.5 mr-1" />
                   Push All ({overdueSkipLevel.length})
                 </Button>
+                <div className="h-6 w-px bg-border mx-1" />
+                <Button size="sm" variant="outline" onClick={() => handleExportExcel('Skip Level', 'Skip-Level Manager', overdueSkipLevel)} disabled={overdueSkipLevel.length === 0}>
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                  Export Excel
+                </Button>
               </div>
 
               {skipLevelLoading ? (
@@ -586,8 +677,18 @@ export default function PendingSelfReviews() {
                   <Mail className="h-3.5 w-3.5 mr-1" />
                   Send Reminder ({selectedSentBack.size})
                 </Button>
+                <div className="h-6 w-px bg-border mx-1" />
+                <Button size="sm" variant="outline" onClick={handleExportRollback} disabled={autoScoredKpis.length === 0 && penalizedKpis.length === 0}>
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                  Export Excel
+                </Button>
                 <Button size="sm" variant="secondary" onClick={handleSendReminderAll} disabled={sentBackKpis.length === 0 || sendReminder.isPending}>
                   Send Reminder All ({sentBackKpis.length})
+                </Button>
+                <div className="h-6 w-px bg-border mx-1" />
+                <Button size="sm" variant="outline" onClick={handleExportSentBack} disabled={sentBackKpis.length === 0}>
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                  Export Excel
                 </Button>
               </div>
 
