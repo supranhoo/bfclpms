@@ -725,14 +725,23 @@ export default function PendingSelfReviews() {
                         <TableHead>Code</TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>KPI</TableHead>
-                        <TableHead>KRA</TableHead>
+                        <TableHead>Current Status</TableHead>
                         <TableHead>Sent Back By</TableHead>
                         <TableHead>Reason</TableHead>
                         <TableHead>Date</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {sentBackKpis.map(item => (
+                      {sentBackKpis.map(item => {
+                        const statusLabel: Record<string, string> = {
+                          kra_set: 'With Employee',
+                          self_review: 'With Manager',
+                          manager_check: 'With Skip-Level',
+                          skip_level_check: 'With Skip-Level',
+                          audit: 'With Auditor',
+                          management_review: 'With Management',
+                        };
+                        return (
                         <TableRow key={item.kpiId}>
                           <TableCell>
                             <Checkbox
@@ -744,12 +753,15 @@ export default function PendingSelfReviews() {
                           <TableCell>{item.employeeCode}</TableCell>
                           <TableCell>{item.departmentName}</TableCell>
                           <TableCell>{item.kpiName}</TableCell>
-                          <TableCell className="max-w-[200px] truncate">{item.kraName}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{statusLabel[item.currentStatus] || item.currentStatus}</Badge>
+                          </TableCell>
                           <TableCell>{item.sentBackBy}</TableCell>
                           <TableCell className="max-w-[200px] truncate">{item.reason}</TableCell>
                           <TableCell>{format(new Date(item.sentBackDate), 'dd MMM yyyy')}</TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
