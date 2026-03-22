@@ -273,12 +273,13 @@ export default function PendingSelfReviews() {
       'Code': k.employeeCode,
       'Department': k.departmentName,
       'KPI': k.kpiName,
+      'Frequency': k.frequency || '-',
       'Pending With': pendingWith,
       'Reviewer': getReviewerName(k, pendingWith),
       'Period': `${k.reviewPeriod} ${k.reviewYear}`,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{ wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 18 }, { wch: 22 }, { wch: 18 }];
+    ws['!cols'] = [{ wch: 25 }, { wch: 14 }, { wch: 20 }, { wch: 35 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 18 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, tabName);
     XLSX.writeFile(wb, `Pending_Reviews_${tabName.replace(/\s+/g, '_')}_${selectedMonth}_${selectedYear}.xlsx`);
