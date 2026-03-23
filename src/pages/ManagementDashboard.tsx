@@ -21,6 +21,7 @@ import { TopBottomPerformers } from '@/components/management/TopBottomPerformers
 import { ActionItemsCards } from '@/components/management/ActionItemsCards';
 import { ReviewerAnalyticsTable } from '@/components/management/ReviewerAnalyticsTable';
 import { TrainingGapSummary } from '@/components/management/TrainingGapSummary';
+import { ManagerReviewDeviationTable } from '@/components/management/ManagerReviewDeviationTable';
 import { RecentAuditLog } from '@/components/management/RecentAuditLog';
 import { ReviewPeriodStatusWidget } from '@/components/management/ReviewPeriodStatusWidget';
 import { DirectReporteesMonitor } from '@/components/management/DirectReporteesMonitor';
