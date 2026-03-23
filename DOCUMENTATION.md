@@ -1,7 +1,7 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-03-22  
-> **Version:** 1.71.0 — Fix: Remove blanket kra_set→approved early return so admin fast-track approvals also trigger kpi_finalized email
+> **Last Updated:** 2026-03-23  
+> **Version:** 1.72.0 — Fix: Admin data entry now resolves period-specific workflows; auditor fallback changed to 'approved'
 > **Maintainer:** Lovable AI
 
 ---

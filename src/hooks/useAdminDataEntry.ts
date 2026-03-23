@@ -245,9 +245,22 @@ export function useAdminSubmitReviewData() {
           }
           // If already at self_review or beyond, leave newStatus = null → no status update
         } else {
+          // Fetch KPI's review period context for accurate workflow resolution
+          const { data: kpiPeriod } = await supabase
+            .from('kpis')
+            .select('review_period, review_year')
+            .eq('id', kpi_id)
+            .single();
+
+          const rpcParams: Record<string, unknown> = { employee_uuid: employee_id };
+          if (kpiPeriod?.review_period && kpiPeriod?.review_year) {
+            rpcParams.p_review_period = kpiPeriod.review_period;
+            rpcParams.p_review_year = kpiPeriod.review_year;
+          }
+
           // Fetch employee's workflow stages to determine correct forward status
           const { data: stagesData } = await supabase
-            .rpc('get_employee_workflow', { employee_uuid: employee_id });
+            .rpc('get_employee_workflow', rpcParams as any);
           const stages = (stagesData as string[]) || undefined;
           newStatus = resolveForwardStatus(role_level, stages);
         }
