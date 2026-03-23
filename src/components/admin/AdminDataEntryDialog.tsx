@@ -125,7 +125,7 @@ export function AdminDataEntryDialog({
   const [advanceStatus, setAdvanceStatus] = useState<boolean>(true);
   const [isAutoCalculated, setIsAutoCalculated] = useState<boolean>(false);
   const [adminOverrideConfirmed, setAdminOverrideConfirmed] = useState<boolean>(false);
-  const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
+  const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   // Fast Track state
   const [fastTrackRating, setFastTrackRating] = useState<string>('0');
   const [fastTrackScore, setFastTrackScore] = useState<string>('0');
