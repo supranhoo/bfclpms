@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { EvidenceUpload } from '@/components/ui/EvidenceUpload';
+import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
@@ -125,7 +125,7 @@ export function AdminDataEntryDialog({
   const [advanceStatus, setAdvanceStatus] = useState<boolean>(true);
   const [isAutoCalculated, setIsAutoCalculated] = useState<boolean>(false);
   const [adminOverrideConfirmed, setAdminOverrideConfirmed] = useState<boolean>(false);
-  const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
+  const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   // Fast Track state
   const [fastTrackRating, setFastTrackRating] = useState<string>('0');
   const [fastTrackScore, setFastTrackScore] = useState<string>('0');
@@ -298,7 +298,7 @@ export function AdminDataEntryDialog({
       setIsNa(false);
       setCalculatedScore(null);
       setCalculatedRatingLevel(null);
-      setEvidenceUrl(null);
+      setEvidenceUrls([]);
       return;
     }
 
@@ -350,8 +350,18 @@ export function AdminDataEntryDialog({
       setRemarks(remarksVal || '');
     };
 
-    const evidenceKey = roleLevel === 'self' ? 'self_evidence_url' : `${roleLevel}_evidence_url`;
-    setEvidenceUrl((existingSubmission as any)[evidenceKey] || null);
+    // Load multi-file evidence URLs, fall back to legacy single URL
+    const evidenceUrlsKey = roleLevel === 'self' ? 'self_evidence_urls' : `${roleLevel}_evidence_urls`;
+    const evidenceLegacyKey = roleLevel === 'self' ? 'self_evidence_url' : `${roleLevel}_evidence_url`;
+    const storedUrls = (existingSubmission as any)[evidenceUrlsKey];
+    const legacyUrl = (existingSubmission as any)[evidenceLegacyKey];
+    if (Array.isArray(storedUrls) && storedUrls.length > 0) {
+      setEvidenceUrls(storedUrls);
+    } else if (legacyUrl) {
+      setEvidenceUrls([legacyUrl]);
+    } else {
+      setEvidenceUrls([]);
+    }
 
     switch (roleLevel) {
       case 'self':
@@ -415,7 +425,7 @@ export function AdminDataEntryDialog({
       setCalculatedScore(null);
       setCalculatedRatingLevel(null);
       setIsAutoCalculated(false);
-      setEvidenceUrl(null);
+      setEvidenceUrls([]);
     }
   }, [isOpen]);
 
@@ -526,7 +536,8 @@ export function AdminDataEntryDialog({
       rating: submitRating,
       score: submitScore,
       remarks: remarks || null,
-      evidence_url: evidenceUrl || null,
+      evidence_url: evidenceUrls.length > 0 ? evidenceUrls[evidenceUrls.length - 1] : null,
+      evidence_urls: evidenceUrls.length > 0 ? evidenceUrls : null,
       is_na: isNa,
       reason: reason.trim(),
       kpi_name: kpi.kpi_name,
@@ -809,11 +820,14 @@ export function AdminDataEntryDialog({
 
               {/* Evidence Upload */}
               {kpi && (
-                <EvidenceUpload
+                <MultiFileUpload
                   userId={employeeId}
-                  kpiId={kpi.id}
-                  onUploadComplete={(url) => setEvidenceUrl(url || null)}
-                  existingUrl={evidenceUrl}
+                  contextId={kpi.id}
+                  folder={roleLevel === 'self' ? 'self-evidence' : `${roleLevel}-evidence`}
+                  existingUrls={evidenceUrls}
+                  onUploadComplete={setEvidenceUrls}
+                  maxFiles={5}
+                  label="Evidence Attachments"
                 />
               )}
             </div>

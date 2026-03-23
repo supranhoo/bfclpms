@@ -20,6 +20,7 @@ export interface AdminDataEntryParams {
   score?: number | null;
   remarks?: string | null;
   evidence_url?: string | null;
+  evidence_urls?: string[] | null;
   is_na?: boolean; // Explicit N/A toggle
   reason: string; // Mandatory for audit
   kpi_name: string; // For notification message
@@ -49,6 +50,7 @@ function buildUpdateFields(
     score?: number | null;
     remarks?: string | null;
     evidence_url?: string | null;
+    evidence_urls?: string[] | null;
   }
 ): Record<string, unknown> {
   const prefix = roleLevel === 'self' ? '' : `${roleLevel}_`;
@@ -78,8 +80,13 @@ function buildUpdateFields(
     fields[roleLevel === 'self' ? 'self_remarks' : `${roleLevel}_remarks`] = data.remarks;
   }
 
-  // Handle evidence
-  if (data.evidence_url !== undefined) {
+  // Handle evidence (multi-file)
+  if (data.evidence_urls !== undefined && data.evidence_urls !== null) {
+    fields[roleLevel === 'self' ? 'self_evidence_urls' : `${roleLevel}_evidence_urls`] = data.evidence_urls;
+    // Sync legacy single-url column with the most recent upload
+    fields[roleLevel === 'self' ? 'self_evidence_url' : `${roleLevel}_evidence_url`] =
+      data.evidence_urls.length > 0 ? data.evidence_urls[data.evidence_urls.length - 1] : null;
+  } else if (data.evidence_url !== undefined) {
     fields[roleLevel === 'self' ? 'self_evidence_url' : `${roleLevel}_evidence_url`] = data.evidence_url;
   }
 
@@ -107,6 +114,7 @@ export function useAdminSubmitReviewData() {
       score,
       remarks,
       evidence_url,
+      evidence_urls,
       is_na,
       reason,
       kpi_name,
@@ -128,6 +136,7 @@ export function useAdminSubmitReviewData() {
         score,
         remarks,
         evidence_url,
+        evidence_urls,
       });
 
       // 2b. Handle is_na flag: explicit toggle takes priority,
