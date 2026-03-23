@@ -861,7 +861,7 @@ export function EmployeeSelectorGrid({
       );
     } else if (viewLevel === 'pending_self_review' || viewLevel === 'pending_manager_review' || viewLevel === 'pending_skip_review') {
       const labelMap = { pending_self_review: 'Pending Self Review', pending_manager_review: 'Pending Manager Review', pending_skip_review: 'Pending Skip Mgr Review' };
-      const pendingSubtitle = viewLevel === 'pending_self_review' && (stats.stat2 > 0 || stats.stat3 > 0)
+      const pendingSubtitle = (stats.stat2 > 0 || stats.stat3 > 0)
         ? [stats.stat2 > 0 ? `${stats.stat2} org KPI` : '', stats.stat3 > 0 ? `${stats.stat3} bi-monthly/quarterly` : ''].filter(Boolean).join(' · ')
         : 'KPIs at this stage';
       return (
