@@ -85,10 +85,16 @@ export default function Dashboard() {
     const kpiParam = searchParams.get('kpi');
     const panelParam = searchParams.get('panel');
     const employeeParam = searchParams.get('employee');
+    const periodParam = searchParams.get('period');
+    const yearParam = searchParams.get('year');
 
     // Cross-user deep-link (reviewer flow)
     if (employeeParam && kpiParam) {
       const fetchAndSelectEmployee = async () => {
+        if (periodParam && yearParam) {
+          setPeriodSelection({ period: periodParam, year: parseInt(yearParam, 10) });
+        }
+
         const { data: empProfile } = await supabase
           .from('profiles')
           .select('id, full_name, email, designation, employee_code, avatar_url, department_id, reporting_manager_id, departments(id, name, code)')
@@ -110,6 +116,43 @@ export default function Dashboard() {
           next.delete('kpi');
           next.delete('panel');
           next.delete('employee');
+          next.delete('period');
+          next.delete('year');
+          return next;
+        }, { replace: true });
+      };
+      fetchAndSelectEmployee();
+      return;
+    }
+
+    // Employee-only deep-link (e.g. from Direct Reportees monitor)
+    if (employeeParam && !kpiParam) {
+      const fetchAndSelectEmployee = async () => {
+        if (periodParam && yearParam) {
+          setPeriodSelection({ period: periodParam, year: parseInt(yearParam, 10) });
+        }
+
+        const { data: empProfile } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, designation, employee_code, avatar_url, department_id, reporting_manager_id, departments(id, name, code)')
+          .eq('id', employeeParam)
+          .single();
+
+        if (empProfile) {
+          const viewParam = searchParams.get('view') as ViewMode | null;
+          if (viewParam && availableModes.includes(viewParam)) {
+            setViewMode(viewParam);
+          } else if (viewMode === 'self') {
+            setViewMode('team');
+          }
+          handleSelectEmployee(empProfile as EmployeeProfile);
+        }
+
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('employee');
+          next.delete('period');
+          next.delete('year');
           return next;
         }, { replace: true });
       };
