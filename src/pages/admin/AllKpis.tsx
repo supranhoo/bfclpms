@@ -907,6 +907,17 @@ export default function AllKpis() {
               </TableBody>
             </Table>
           </div>
+          {visibleCount < employeeData.length && (
+            <div className="flex justify-center py-4 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setVisibleCount(prev => prev + 50)}
+              >
+                Load more ({employeeData.length - visibleCount} remaining)
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
