@@ -205,6 +205,7 @@ export function useKpisByPeriod(selectedPeriod: string | undefined, selectedYear
   return useQuery({
     queryKey: ['kpis-by-period', selectedPeriod, selectedYear],
     enabled: !!selectedPeriod && !!selectedYear,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const allKpis: any[] = [];
       let from = 0;
@@ -214,11 +215,7 @@ export function useKpisByPeriod(selectedPeriod: string | undefined, selectedYear
       while (hasMore) {
       let query = supabase
           .from('kpis')
-          .select(`
-            *,
-            kra_categories (id, name, color, weightage),
-            profiles:employee_id (id, full_name, email, employee_code, department_id, reporting_manager_id)
-          `)
+          .select(SLIM_KPI_SELECT)
           .eq('review_year', selectedYear as number);
 
       // Only filter by review_period server-side for non-month values (e.g. Q3, H1).
