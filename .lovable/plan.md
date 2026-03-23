@@ -1,65 +1,36 @@
 
 
-## Performance Optimization Plan
+## Add Filters and Average Column to Direct Reportees Score Trend
 
 ### Problem
-The Management Dashboard, All KPIs page, and review grids are slow because they fetch excessive data (full `*` columns), perform heavy client-side computation on large datasets, and lack query deduplication.
-
-### Root Causes Identified
-
-1. **Over-fetching columns**: `useAllKpis()` and `useKpisByPeriod()` select `*` from kpis (30+ columns) when most consumers only need 10-15 fields. The ManagementDashboard only uses ~8 fields but fetches everything.
-
-2. **ManagementDashboard fetches ALL profiles**: Loads every profile in the org (`profiles` table) even when hierarchy filters are active.
-
-3. **Duplicate data fetching**: AllKpis page calls both `useKpisByPeriod()` AND `useAllKpis()` simultaneously (line 90). The `useAllKpis` query runs unconditionally.
-
-4. **No pagination on employee tables**: AllKpis renders all employees at once (potentially 400+ rows).
-
-5. **Heavy `useMemo` chains**: Multiple expensive `useMemo` computations run on every render cycle in ManagementDashboard (division stats, rating distribution, trend data).
+The Direct Reportees monitor currently shows only the logged-in user's direct reports with no filtering. The user wants:
+1. **Reporting Manager filter** — view any manager's team, not just own
+2. **Business Unit filter** — filter employees by business unit
+3. **Period (month/year) filter** — independent month/year selection for this widget
+4. **Average column** — show the weighted average across all displayed months
 
 ### Changes
 
-#### 1. `src/hooks/useKpis.ts` — Slim column selection for bulk queries
+#### `src/components/management/DirectReporteesMonitor.tsx`
 
-**`useAllKpis()`**: Replace `*` with only the columns actually used by consumers:
-```sql
-id, employee_id, category_id, kra_name, kpi_name, status, weightage,
-review_period, review_year, frequency, is_org_level, org_level_scope,
-uom, uom_type, criteria, target_value, r5, r4, r3, r2, r1, r0,
-sub_frequency, frequency_cycle_start, source_template_id, threshold_mode,
-kra_categories (id, name, color, weightage),
-profiles:employee_id (id, full_name, email, employee_code, department_id, reporting_manager_id)
-```
+1. **Add filter state** — `reportingManagerId`, `businessUnitId` as local state with dropdowns. Use the existing `selectedMonths` and `fiscalStartYear` from props (already controlled by the parent dashboard).
 
-**`useKpisByPeriod()`**: Same slim select.
+2. **Fetch filter options** — Query `profiles` for distinct reporting managers (who have reports) and `business_units` for the BU dropdown. Only admins/management roles see the reporting manager filter; regular managers see only their own team.
 
-**`useKpisByPeriodRanges()`**: Same slim select.
+3. **Update the main query**:
+   - When `reportingManagerId` is set, query `profiles` with `.eq('reporting_manager_id', reportingManagerId)` instead of `user.id`.
+   - When `businessUnitId` is set, join through `profiles → departments → business_units` to filter employees by BU. Specifically: fetch department IDs for the selected BU, then add `.in('department_id', deptIds)` to the profiles query.
 
-#### 2. `src/pages/ManagementDashboard.tsx` — Optimize the dashboard query
+4. **Add "Avg" column** — After the monthly columns, add a final `TableHead` "Avg". For each employee row, compute the average of non-null monthly scores and display it with the same color-coded badge. This is a simple client-side calculation from the existing `scores` object.
 
-- **Slim KPI select**: The `fetchFiscalData` inner function selects only `id, employee_id, status, weightage, review_period, review_year, frequency` + `review_submissions(...)`. This is already lean — no change needed there.
-- **Filter profiles server-side**: When hierarchy filters are active, filter the profiles query by department/division instead of fetching all 450+ profiles.
-- **Add `placeholderData: keepPreviousData`** to the main dashboard query to prevent blank flashes when filters change.
+5. **Filter UI** — Render a compact filter bar above the table inside the card:
+   ```
+   [Reporting Manager ▼]  [Business Unit ▼]
+   ```
+   Use existing `Select` components. Keep it minimal — 1-2 lines.
 
-#### 3. `src/pages/admin/AllKpis.tsx` — Stop dual-fetching
+6. **Sort by average** — Default sort employees by their average score (descending) so top performers appear first.
 
-- Guard `useAllKpis()` with `enabled: isAllPeriods` so it only runs when "all periods" is actually selected (line 90). Currently it always fetches.
-- Add client-side pagination (show 50 employees at a time with "Load more" button) to reduce DOM size.
-
-#### 4. `src/components/review/EmployeeSelectorGrid.tsx` — Reduce re-renders
-
-- Wrap employee card rendering in `React.memo` to prevent re-renders when sibling state changes.
-- Add `placeholderData: keepPreviousData` to the `useKpisByPeriodRanges` call to prevent flash on period change.
-
-#### 5. Global query config — Add `keepPreviousData` pattern
-
-Update key data-fetching hooks (`useAllKpis`, `useKpisByPeriod`, `useKpisByPeriodRanges`) to include `placeholderData: keepPreviousData` from TanStack Query, so stale data stays visible while fresh data loads.
-
-### Expected Impact
-- **~40-60% reduction in payload size** for KPI list queries (removing 15+ unused columns per row × 1000+ rows)
-- **Elimination of redundant AllKpis fetch** (currently loads all KPIs even when period-filtered)
-- **Smoother UI transitions** with keepPreviousData (no blank states between filter changes)
-- **Reduced DOM nodes** on AllKpis page via pagination
-
-### No database changes needed
+### No database or backend changes needed
+All data is already accessible via existing RLS policies. The profiles and business_units tables are readable by authenticated users.
 
