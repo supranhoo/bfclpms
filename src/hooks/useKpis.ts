@@ -154,9 +154,23 @@ export function useMyKpis() {
   });
 }
 
-export function useAllKpis() {
+// Slim column selection for bulk queries — avoids fetching unused columns
+const SLIM_KPI_SELECT = `
+  id, employee_id, category_id, kra_name, kpi_name, status, weightage,
+  review_period, review_year, frequency, is_org_level, org_level_scope,
+  uom, uom_type, criteria, target_value, r5, r4, r3, r2, r1, r0,
+  sub_frequency, frequency_cycle_start, source_template_id, threshold_mode,
+  source_of_data, qualitative_options, is_issued, ref_code,
+  is_frequency_locked, require_resubmit_reason, day_count_type, created_at, updated_at,
+  kra_categories (id, name, color, weightage),
+  profiles:employee_id (id, full_name, email, employee_code, department_id, reporting_manager_id)
+`;
+
+export function useAllKpis(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['all-kpis'],
+    placeholderData: keepPreviousData,
+    enabled: options?.enabled !== false,
     queryFn: async () => {
       // Fetch all KPIs by paginating through results (Supabase default limit is 1000)
       const allKpis: any[] = [];
@@ -167,11 +181,7 @@ export function useAllKpis() {
       while (hasMore) {
         const { data, error } = await supabase
           .from('kpis')
-          .select(`
-            *,
-            kra_categories (id, name, color, weightage),
-            profiles:employee_id (id, full_name, email, employee_code, department_id, reporting_manager_id)
-          `)
+          .select(SLIM_KPI_SELECT)
           .order('created_at', { ascending: false })
           .range(from, from + pageSize - 1);
 
