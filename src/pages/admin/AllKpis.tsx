@@ -87,7 +87,7 @@ export default function AllKpis() {
     isAllPeriods ? undefined : selectedPeriod === 'all' ? undefined : selectedPeriod,
     isAllPeriods ? undefined : selectedYear === 'all' ? undefined : parseInt(selectedYear),
   );
-  const { data: allKpisData, isLoading: allKpisLoading } = useAllKpis();
+  const { data: allKpisData, isLoading: allKpisLoading } = useAllKpis({ enabled: isAllPeriods });
 
   // Use period-scoped data when available, fall back to all
   const kpis = isAllPeriods ? allKpisData : periodKpis;
