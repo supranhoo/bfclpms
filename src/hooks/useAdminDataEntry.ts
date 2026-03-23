@@ -20,6 +20,7 @@ export interface AdminDataEntryParams {
   score?: number | null;
   remarks?: string | null;
   evidence_url?: string | null;
+  evidence_urls?: string[] | null;
   is_na?: boolean; // Explicit N/A toggle
   reason: string; // Mandatory for audit
   kpi_name: string; // For notification message
