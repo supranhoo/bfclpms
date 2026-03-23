@@ -1,62 +1,65 @@
 
 
-## Add Org KPI + Bi-Monthly/Quarterly Badges to All Reviewer Employee Cards
+## Performance Optimization Plan
 
 ### Problem
-The "pending self", "org KPI", and "bi-monthly/quarterly" count badges on employee cards currently only appear in the `pending_self_review`, `pending_manager_review`, and `pending_skip_review` monitoring views. They are missing from:
-- **Team Reviews** (`team`)
-- **Skip-Level** (`skip_level`)
-- **HR PMS** (`hr_pms`)
-- **Audit** (`audit`)
-- **Management** (`management` — the else branch)
+The Management Dashboard, All KPIs page, and review grids are slow because they fetch excessive data (full `*` columns), perform heavy client-side computation on large datasets, and lack query deduplication.
 
-Additionally, the stat card subtitle breakdown (showing org KPI and bi-monthly/quarterly counts) only works for `pending_self_review` — it should also work for `pending_manager_review` and `pending_skip_review`.
+### Root Causes Identified
 
-### Changes — `src/components/review/EmployeeSelectorGrid.tsx`
+1. **Over-fetching columns**: `useAllKpis()` and `useKpisByPeriod()` select `*` from kpis (30+ columns) when most consumers only need 10-15 fields. The ManagementDashboard only uses ~8 fields but fetches everything.
 
-#### 1. Compute `orgKpiCount` and `nonMonthlyCount` for all view levels
+2. **ManagementDashboard fetches ALL profiles**: Loads every profile in the org (`profiles` table) even when hierarchy filters are active.
 
-Update `getEmployeeKpiStats` for `team`, `skip_level`, `hr_pms`, `audit`, and the `else` (management) branches to also compute and return `orgKpiCount` and `nonMonthlyCount` from the pending KPIs relevant to that view level:
+3. **Duplicate data fetching**: AllKpis page calls both `useKpisByPeriod()` AND `useAllKpis()` simultaneously (line 90). The `useAllKpis` query runs unconditionally.
 
-- **team (direct)**: pending = `self_review` status KPIs
-- **team (indirect)**: pending = reviewable statuses for skip_level
-- **skip_level**: pending = reviewable statuses
-- **hr_pms**: pending = badge1 + badge2 KPIs (before and in HR PMS)
-- **audit**: pending = badge1 + badge2 KPIs (before and in audit)
-- **management (else)**: pending = `management_review` KPIs
+4. **No pagination on employee tables**: AllKpis renders all employees at once (potentially 400+ rows).
 
-For each, add:
-```typescript
-orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
-nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly','daily','weekly'].includes(k.frequency.toLowerCase())).length,
+5. **Heavy `useMemo` chains**: Multiple expensive `useMemo` computations run on every render cycle in ManagementDashboard (division stats, rating distribution, trend data).
+
+### Changes
+
+#### 1. `src/hooks/useKpis.ts` — Slim column selection for bulk queries
+
+**`useAllKpis()`**: Replace `*` with only the columns actually used by consumers:
+```sql
+id, employee_id, category_id, kra_name, kpi_name, status, weightage,
+review_period, review_year, frequency, is_org_level, org_level_scope,
+uom, uom_type, criteria, target_value, r5, r4, r3, r2, r1, r0,
+sub_frequency, frequency_cycle_start, source_template_id, threshold_mode,
+kra_categories (id, name, color, weightage),
+profiles:employee_id (id, full_name, email, employee_code, department_id, reporting_manager_id)
 ```
 
-#### 2. Render badges in all employee card badge sections
+**`useKpisByPeriod()`**: Same slim select.
 
-For each view level's badge rendering block (`team`, `skip_level`, `hr_pms`, `audit`, `management`), append the org KPI and non-monthly badges after the existing badges:
+**`useKpisByPeriodRanges()`**: Same slim select.
 
-```tsx
-{(kpiStats as any).orgKpiCount > 0 && (
-  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs ...">
-    {(kpiStats as any).orgKpiCount} org KPI
-  </Badge>
-)}
-{(kpiStats as any).nonMonthlyCount > 0 && (
-  <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs ...">
-    {(kpiStats as any).nonMonthlyCount} bi-monthly/quarterly
-  </Badge>
-)}
-```
+#### 2. `src/pages/ManagementDashboard.tsx` — Optimize the dashboard query
 
-#### 3. Fix stat card subtitle for `pending_manager_review` and `pending_skip_review`
+- **Slim KPI select**: The `fetchFiscalData` inner function selects only `id, employee_id, status, weightage, review_period, review_year, frequency` + `review_submissions(...)`. This is already lean — no change needed there.
+- **Filter profiles server-side**: When hierarchy filters are active, filter the profiles query by department/division instead of fetching all 450+ profiles.
+- **Add `placeholderData: keepPreviousData`** to the main dashboard query to prevent blank flashes when filters change.
 
-Update line 847 to remove the `viewLevel === 'pending_self_review'` restriction:
+#### 3. `src/pages/admin/AllKpis.tsx` — Stop dual-fetching
 
-```typescript
-const pendingSubtitle = (stats.stat2 > 0 || stats.stat3 > 0)
-  ? [stats.stat2 > 0 ? `${stats.stat2} org KPI` : '', stats.stat3 > 0 ? `${stats.stat3} bi-monthly/quarterly` : ''].filter(Boolean).join(' · ')
-  : 'KPIs at this stage';
-```
+- Guard `useAllKpis()` with `enabled: isAllPeriods` so it only runs when "all periods" is actually selected (line 90). Currently it always fetches.
+- Add client-side pagination (show 50 employees at a time with "Load more" button) to reduce DOM size.
+
+#### 4. `src/components/review/EmployeeSelectorGrid.tsx` — Reduce re-renders
+
+- Wrap employee card rendering in `React.memo` to prevent re-renders when sibling state changes.
+- Add `placeholderData: keepPreviousData` to the `useKpisByPeriodRanges` call to prevent flash on period change.
+
+#### 5. Global query config — Add `keepPreviousData` pattern
+
+Update key data-fetching hooks (`useAllKpis`, `useKpisByPeriod`, `useKpisByPeriodRanges`) to include `placeholderData: keepPreviousData` from TanStack Query, so stale data stays visible while fresh data loads.
+
+### Expected Impact
+- **~40-60% reduction in payload size** for KPI list queries (removing 15+ unused columns per row × 1000+ rows)
+- **Elimination of redundant AllKpis fetch** (currently loads all KPIs even when period-filtered)
+- **Smoother UI transitions** with keepPreviousData (no blank states between filter changes)
+- **Reduced DOM nodes** on AllKpis page via pagination
 
 ### No database changes needed
 
