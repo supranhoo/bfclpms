@@ -350,8 +350,18 @@ export function AdminDataEntryDialog({
       setRemarks(remarksVal || '');
     };
 
-    const evidenceKey = roleLevel === 'self' ? 'self_evidence_url' : `${roleLevel}_evidence_url`;
-    setEvidenceUrl((existingSubmission as any)[evidenceKey] || null);
+    // Load multi-file evidence URLs, fall back to legacy single URL
+    const evidenceUrlsKey = roleLevel === 'self' ? 'self_evidence_urls' : `${roleLevel}_evidence_urls`;
+    const evidenceLegacyKey = roleLevel === 'self' ? 'self_evidence_url' : `${roleLevel}_evidence_url`;
+    const storedUrls = (existingSubmission as any)[evidenceUrlsKey];
+    const legacyUrl = (existingSubmission as any)[evidenceLegacyKey];
+    if (Array.isArray(storedUrls) && storedUrls.length > 0) {
+      setEvidenceUrls(storedUrls);
+    } else if (legacyUrl) {
+      setEvidenceUrls([legacyUrl]);
+    } else {
+      setEvidenceUrls([]);
+    }
 
     switch (roleLevel) {
       case 'self':
