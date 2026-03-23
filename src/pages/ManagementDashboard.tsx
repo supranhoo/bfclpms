@@ -906,11 +906,14 @@ export default function ManagementDashboard() {
         </CardContent>
       </Card>
 
-      {/* Reviewer Analytics + Training Gap */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      {/* Reviewer Analytics + Manager Deviation + Training Gap */}
+      <div className="grid gap-4 lg:grid-cols-3">
         <ReviewerAnalyticsTable
           data={dashboardData?.reviewerAnalytics || []}
           orgMean={dashboardData?.orgMeanPct || 0}
+        />
+        <ManagerReviewDeviationTable
+          data={dashboardData?.managerReviewDeviation || []}
         />
         <TrainingGapSummary
           reviewPeriod={isSingleMonth ? selectedMonths[0] : undefined}
