@@ -4107,4 +4107,18 @@ The "Pending With" column displays a static badge per tab (`Employee`, `Manager`
 
 ---
 
+### 4.XX.7 Auto-Advance Zero — Sent-Back KPI Exclusion
+
+The `auto_advance_zero` rule in `auto-lock-review-periods` edge function now excludes KPIs that were sent back by any reviewer. Detection checks **both** sources:
+
+1. `kpi_queries` where `query_type = 'send_back'` — covers manager/employee send-backs
+2. `kpi_audit_logs` where `action ILIKE '%SENT_BACK%'` — covers auditor, HR PMS, skip-level, and management send-backs
+
+KPIs matching either source are excluded from auto-scoring, preventing false zero penalties on KPIs legitimately under revision.
+
+**Rollback History:**
+- 2026-03-23: Rolled back 16 KPIs across 8 employees (100012, 100426, 100840, 100856, 101680, 101773, 101902) that were incorrectly auto-scored zero despite being sent-back cases. Root cause: initial rollback only checked `kpi_queries`, missing auditor/management send-backs recorded only in `kpi_audit_logs`.
+
+---
+
 *This documentation is automatically maintained alongside the codebase.*
